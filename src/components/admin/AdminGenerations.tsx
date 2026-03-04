@@ -294,8 +294,8 @@ export function AdminGenerations() {
                       paddingAngle={3}
                       dataKey="value"
                       strokeWidth={0}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      labelLine={false}
+                      label={({ name, percent }) => percent > 0 ? `${name} ${(percent * 100).toFixed(0)}%` : ""}
+                      labelLine={true}
                     >
                       {pieData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />

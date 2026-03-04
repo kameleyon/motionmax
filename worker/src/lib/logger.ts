@@ -14,8 +14,22 @@ interface LogPayload {
   details?: Record<string, any>;
 }
 
+// New API Logging Format
+interface ApiCallPayload {
+  userId?: string;
+  projectId?: string;
+  generationId?: string;
+  provider: "openrouter" | "hypereal" | "elevenlabs" | "replicate" | "google_tts";
+  model: string;
+  status: "success" | "error";
+  durationMs: number;
+  cost: number;
+  requestDetails?: any;
+  responseDetails?: any;
+  error?: string;
+}
+
 export async function writeSystemLog(payload: LogPayload) {
-  // Always log to standard console for raw Render debug streams
   const logPrefix = `[${payload.category.toUpperCase()}] [${payload.eventType}]`;
   if (payload.category === "system_error") {
     console.error(logPrefix, payload.message, payload.details || "");
@@ -26,7 +40,6 @@ export async function writeSystemLog(payload: LogPayload) {
   }
 
   try {
-    // We insert straight into the system_logs table which the Admin UI reads
     await supabase.from("system_logs").insert({
       id: uuidv4(),
       user_id: payload.userId || null,
@@ -43,7 +56,28 @@ export async function writeSystemLog(payload: LogPayload) {
       created_at: new Date().toISOString()
     });
   } catch (dbError) {
-    // If the DB logging fails, at least the console has it
     console.error("CRITICAL: Failed to write system log to database:", dbError);
+  }
+}
+
+export async function writeApiLog(payload: ApiCallPayload) {
+  try {
+    await supabase.from("api_call_logs").insert({
+      id: uuidv4(),
+      user_id: payload.userId || null,
+      project_id: payload.projectId || null,
+      generation_id: payload.generationId || null,
+      provider: payload.provider,
+      model: payload.model,
+      status: payload.status,
+      duration_ms: payload.durationMs,
+      estimated_cost: payload.cost,
+      request_details: payload.requestDetails || {},
+      response_details: Object.keys(payload.responseDetails || {}).length > 0 ? payload.responseDetails : undefined,
+      error_message: payload.error || null,
+      created_at: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error("CRITICAL: Failed to write API log:", error);
   }
 }

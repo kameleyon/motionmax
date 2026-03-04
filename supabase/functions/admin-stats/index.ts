@@ -682,7 +682,7 @@ serve(async (req) => {
           userStatus,
           recentGenerations: generations,
           flags,
-          recentTransactions: transactions,
+          recentTransactions: transactions,`n          recentUserLogs: userLogs,
         };
         break;
       }

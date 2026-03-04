@@ -53,7 +53,7 @@ interface UserDetails {
     created_at: string;
     resolved_at: string | null;
   }>;
-  recentTransactions: Array<{
+  recentUserLogs: Array<{id: string; category: string; event_type: string; message: string; details: any; created_at: string;}>;`n  recentTransactions: Array<{
     id: string;
     amount: number;
     transaction_type: string;
@@ -325,6 +325,43 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
           </div>
         </Card>
       </div>
+
+      {/* Worker System Logs */}
+      {data.recentUserLogs && data.recentUserLogs.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Worker System Logs (Errors & Status)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Event</TableHead>
+                  <TableHead>Message</TableHead>
+                  <TableHead>Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.recentUserLogs.slice(0, 15).map((log) => (
+                  <TableRow key={log.id}>
+                    <TableCell>
+                      <Badge variant={log.category === "system_error" ? "destructive" : log.category === "system_warning" ? "secondary" : "default"}>
+                        {log.category.replace("system_", "")}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">{log.event_type}</TableCell>
+                    <TableCell className="text-muted-foreground text-xs">{log.message}</TableCell>
+                    <TableCell className="text-muted-foreground whitespace-nowrap">
+                      {format(new Date(log.created_at), "MMM d HH:mm:ss")}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Recent Transactions */}
       {data.recentTransactions && data.recentTransactions.length > 0 && (

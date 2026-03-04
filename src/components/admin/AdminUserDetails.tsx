@@ -53,7 +53,8 @@ interface UserDetails {
     created_at: string;
     resolved_at: string | null;
   }>;
-  recentUserLogs: Array<{id: string; category: string; event_type: string; message: string; details: any; created_at: string;}>;`n  recentTransactions: Array<{
+  recentUserLogs: Array<{id: string; category: string; event_type: string; message: string; details: any; created_at: string;}>;
+  recentTransactions: Array<{
     id: string;
     amount: number;
     transaction_type: string;

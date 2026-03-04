@@ -1,6 +1,7 @@
 import { supabase } from "./lib/supabase.js";
 import { Job } from "./types/job.js";
 import { handleGenerateVideo } from "./handlers/generateVideo.js";
+import { handleExportVideo } from "./handlers/exportVideo.js";
 import { writeSystemLog } from "./lib/logger.js";
 
 async function processJob(job: Job) {
@@ -14,6 +15,8 @@ async function processJob(job: Job) {
     message: `Worker picked up job ${job.id}` 
   });
   
+  let finalPayload = { ...job.payload };
+
   try {
     await supabase
       .from('video_generation_jobs')
@@ -22,6 +25,9 @@ async function processJob(job: Job) {
 
     if (job.task_type === 'generate_video') {
       await handleGenerateVideo(job.id, job.payload, job.user_id);
+    } else if (job.task_type === 'export_video' as any) {
+      const exportResult = await handleExportVideo(job.id, job.payload, job.user_id);
+      finalPayload.finalUrl = exportResult.url;
     } else {
       await writeSystemLog({ 
         jobId: job.id, 
@@ -43,7 +49,12 @@ async function processJob(job: Job) {
 
     await supabase
       .from('video_generation_jobs')
-      .update({ status: 'completed', progress: 100, updated_at: new Date().toISOString() })
+      .update({ 
+          status: 'completed', 
+          progress: 100, 
+          payload: finalPayload, 
+          updated_at: new Date().toISOString() 
+      })
       .eq('id', job.id);
 
   } catch (error) {

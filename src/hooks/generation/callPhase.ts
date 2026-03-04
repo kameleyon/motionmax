@@ -15,24 +15,20 @@ export async function getFreshSession(): Promise<string> {
 
 export async function callPhase(
   body: Record<string, unknown>,
-  timeoutMs: number = 120000,
+  timeoutMs: number = 300000, // 5 minutes max wait for video to render
   endpoint: string = DEFAULT_ENDPOINT
 ): Promise<any> {
-  // If endpoint is not generate-video, keep using the standard edge function HTTP call.
-  // Example: generate-cinematic, customer-portal, etc.
   if (endpoint !== "generate-video") {
      return legacyCallPhase(body, timeoutMs, endpoint);
   }
 
-  // --- NEW WORKER QUEUE LOGIC ---
   const phase = body.phase || "unknown";
   console.log(LOG, `[WORKER QUEUE] Firing job queue for generate-video. Phase: ${phase}`, body);
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
-  // Prevent multiple inserts if the app retries a phase loop
-  // But for now, we drop the generation job ticket in DB:
+  // Queue Job
   const { data: job, error: insertError } = await supabase
     .from("video_generation_jobs")
     .insert({
@@ -50,37 +46,49 @@ export async function callPhase(
       throw new Error(`Failed to queue video job: ${insertError.message}`);
   }
 
-  console.log(LOG, `[WORKER QUEUE] Job ${job.id} queued successfully. Polling for completion...`);
+  console.log(LOG, `[WORKER QUEUE] Job ${job.id} queued successfully. Connecting to Realtime...`);
 
-  // Start polling the DB table for progress instead of waiting on the HTTP buffer
-  const startTime = Date.now();
-  
-  while ((Date.now() - startTime) < timeoutMs) {
-      await sleep(2000); // Check every 2 seconds
+  // Switch to Supabase Realtime instead of ugly HTTP polling intervals
+  return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+          supabase.removeChannel(channel);
+          reject(new Error(`Realtime WebSocket timed out after ${timeoutMs / 1000}s.`));
+      }, timeoutMs);
 
-      const { data: currentJob, error: checkError } = await supabase
-        .from('video_generation_jobs')
-        .select('*')
-        .eq('id', job.id)
-        .single();
-        
-      if (checkError) continue;
-
-      // Realtime UI progress could be dispatched here based on currentJob.progress
-
-      if (currentJob.status === "completed") {
-         console.log(LOG, `[WORKER QUEUE] Job ${job.id} marked completed!`);
-         // Return mock successful result mimicking Edge func for frontend parser
-         return { success: true, hasMore: false, job: currentJob };
-      }
-
-      if (currentJob.status === "failed") {
-          console.error(LOG, `[WORKER QUEUE] Job ${job.id} failed:`, currentJob.error_message);
-          throw new Error(currentJob.error_message || "Worker job failed during processing");
-      }
-  }
-
-  throw new Error(`Queue polling timed out after ${timeoutMs / 1000}s. The worker is still running!`);
+      const channel = supabase
+        .channel(`job_${job.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'video_generation_jobs',
+            filter: `id=eq.${job.id}`
+          },
+          (payload) => {
+            const updatedJob = payload.new;
+            console.log(LOG, `[REALTIME] Job update: ${updatedJob.status} | Progress: ${updatedJob.progress}%`);
+            
+            if (updatedJob.status === "completed") {
+                clearTimeout(timeoutId);
+                supabase.removeChannel(channel);
+                resolve({ success: true, hasMore: false, job: updatedJob, payload: updatedJob.payload });
+            } else if (updatedJob.status === "failed") {
+                clearTimeout(timeoutId);
+                supabase.removeChannel(channel);
+                reject(new Error(updatedJob.error_message || "Worker job failed during processing"));
+            }
+          }
+        )
+        .subscribe((status, err) => {
+            if (status === 'SUBSCRIBED') {
+                console.log(LOG, `[REALTIME] Successfully attached to job ${job.id} channel.`);
+            } else if (status === 'CHANNEL_ERROR') {
+                console.error(LOG, `[REALTIME] Connection dropped - fallback required.`, err);
+                // Real system should fallback to interval polling here if WS fails
+            }
+        });
+  });
 }
 
 // Fallback logic for non-video endpoints (cinematics, payments, etc.)

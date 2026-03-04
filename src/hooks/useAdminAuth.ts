@@ -6,10 +6,6 @@ export function useAdminAuth() {
   const { user, session, loading: authLoading } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
-  
-  // Use ref to track the session for stable callback
-  const sessionRef = useRef(session);
-  sessionRef.current = session;
 
   useEffect(() => {
     const checkAdminStatus = async () => {
@@ -20,7 +16,6 @@ export function useAdminAuth() {
       }
 
       try {
-        // Check admin status via the user_roles table directly
         const { data, error } = await supabase
           .from("user_roles")
           .select("role")
@@ -46,8 +41,8 @@ export function useAdminAuth() {
 
   // Stable callback that won't change between renders
   const callAdminApi = useCallback(async (action: string, params?: Record<string, unknown>) => {
-    const currentSession = sessionRef.current;
-    if (!currentSession) {
+    const { data: { session: freshSession } } = await supabase.auth.getSession();
+    if (!freshSession) {
       throw new Error("Not authenticated");
     }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Mail, Lock, ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,8 @@ export default function Auth() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnUrl = new URLSearchParams(location.search).get('returnUrl') || '/app';
   const { signIn, signUp, resetPassword, updatePassword } = useAuth();
   const { toast } = useToast();
 
@@ -55,7 +57,7 @@ export default function Auth() {
           toast({ variant: "destructive", title: "Sign in failed", description: getAuthErrorMessage(error.message) });
           return;
         }
-        navigate("/app");
+        navigate(returnUrl);
         return;
       }
 
@@ -106,7 +108,7 @@ export default function Auth() {
       window.history.replaceState({}, document.title, window.location.pathname);
 
       toast({ title: "Password updated", description: "You're signed in." });
-      navigate("/app");
+      navigate(returnUrl);
     } finally {
       setIsLoading(false);
     }

@@ -319,7 +319,7 @@ export function AdminLogs() {
                   <span className={`shrink-0 font-bold text-sm ${getLogColor(log.category)}`}>
                     {getLogPrefix(log.category)}
                   </span>
-                  <span className="text-white break-all font-medium">{log.message}</span>
+                  <span className="text-white text-wrap font-medium flex-1">{log.message}</span>
                 </div>
 
                 {/* Expanded Details - CLEARER FORMATTING */}

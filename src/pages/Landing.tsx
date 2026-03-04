@@ -8,7 +8,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import featuresBackgroundDark from "@/assets/features-bg-dark.png";
 import motionmaxLogo from "@/assets/motionmax-logo.png";
 import motionMaxHeroLogo from "@/assets/motionmax-hero-logo.png";
-import heroPromoVideo from "@/assets/hero-promo.mp4";
+import heroPromoVideo from "@/assets/hero-promo-optimized.mp4";
 import heroVideoPoster from "@/assets/hero-video-poster.png";
 
 const features = [

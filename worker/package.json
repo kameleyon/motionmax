@@ -1,0 +1,25 @@
+{
+  "name": "motionmax-worker",
+  "version": "1.0.0",
+  "description": "Background worker for processing video generation jobs on Render.",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.6",
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "fluent-ffmpeg": "^2.1.3",
+    "openai": "^4.77.0",
+    "uuid": "^11.0.3"
+  },
+  "devDependencies": {
+    "@types/fluent-ffmpeg": "^2.1.27",
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

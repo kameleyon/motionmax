@@ -1,5 +1,6 @@
 import fetch from "node-fetch";
 
+import { writeApiLog } from "../lib/logger.js";
 export async function extractScriptWithOpenRouter(
   prompt: string,
   style: string,

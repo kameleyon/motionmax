@@ -30,7 +30,7 @@ export function useAuth() {
   }, []);
 
   const signUp = useCallback(async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({ options: { emailRedirectTo: `${window.location.origin}/app` },
       email,
       password,
     });

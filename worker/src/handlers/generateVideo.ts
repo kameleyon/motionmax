@@ -1,59 +1,118 @@
 import { supabase } from "../lib/supabase.js";
 import fetch from "node-fetch";
+import fs from "fs";
+import path from "path";
+import os from "os";
+import ffmpeg from "fluent-ffmpeg";
+import { v4 as uuidv4 } from "uuid";
+import { extractScriptWithOpenRouter } from "../services/openrouter.js";
+import { generateSpeechUrl } from "../services/elevenlabs.js";
+import { generateImage, generateVideoFromImage } from "../services/hypereal.js";
 
-// This will house the core script parsing and video processing logic
-// migrated from the Deno edge function
+// Helper to download a file from a URL to a local path
+async function downloadFile(url: string, destPath: string): Promise<void> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Failed to download ${url}: ${response.statusText}`);
+  const buffer = await response.buffer();
+  await fs.promises.writeFile(destPath, buffer);
+}
+
+// Helper to upload a local file to Supabase Storage
+async function uploadToSupabase(localPath: string, fileName: string): Promise<string> {
+  const fileBuffer = await fs.promises.readFile(localPath);
+  
+  const { data, error } = await supabase.storage
+    .from('videos')
+    .upload(`generated/${fileName}`, fileBuffer, {
+      contentType: 'video/mp4',
+      upsert: true
+    });
+
+  if (error) throw new Error(`Supabase upload failed: ${error.message}`);
+
+  const { data: publicData } = supabase.storage.from('videos').getPublicUrl(`generated/${fileName}`);
+  return publicData.publicUrl;
+}
+
+// Helper to merge video and audio using FFmpeg
+function mergeAudioVideo(videoPath: string, audioPath: string, outputPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    ffmpeg()
+      .addInput(videoPath)
+      .addInput(audioPath)
+      .outputOptions([
+        '-c:v copy',      // Copy video codec (no re-encoding)
+        '-c:a aac',       // Encode audio to AAC
+        '-map 0:v:0',     // Take video from first input
+        '-map 1:a:0',     // Take audio from second input
+        '-shortest'       // End when the shortest input ends
+      ])
+      .save(outputPath)
+      .on('end', () => resolve())
+      .on('error', (err) => reject(new Error(`FFmpeg Error: ${err.message}`)));
+  });
+}
 
 export async function handleGenerateVideo(jobId: string, payload: any) {
   console.log(`[GenerateVideo] Starting processing for job ${jobId}`);
-  console.log(`[GenerateVideo] Payload details:`, payload);
-
-  const {
-    content,
-    style,
-    voice_id,
-    user_id,
-    project_id,
-    generation_id
-  } = payload;
-
+  
+  const { prompt, style, voice_id, project_id, generation_id } = payload;
+  const tempDir = path.join(os.tmpdir(), `motionmax_${jobId}`);
+  
   try {
-    // 1. Fetch project details
-    const { data: project, error: projError } = await supabase
-      .from('projects')
-      .select('*')
-      .eq('id', project_id)
-      .single();
-
-    if (projError) throw new Error(`Project ${project_id} not found: ${projError.message}`);
-
-    // Update job status
-    await supabase.from('video_generation_jobs').update({
-      status: 'processing',
-      progress: 5,
-      updated_at: new Date().toISOString()
-    }).eq('id', jobId);
-
-    // 2. Here we will plug in the Hypereal / OpenRouter logic
-    // For now we simulate the heavy API sequence so we can test the pipeline
-    console.log(`[GenerateVideo] Extracting script from LLM...`);
-    await new Promise(r => setTimeout(r, 2000));
+    // 1. Setup Workspace
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
     
-    console.log(`[GenerateVideo] Generating audio with Voice ID: ${voice_id}...`);
-    await new Promise(r => setTimeout(r, 2000));
+    // Update progress
+    await supabase.from('video_generation_jobs').update({ progress: 10, status: 'processing' }).eq('id', jobId);
 
-    console.log(`[GenerateVideo] Generating images via Hypereal for style: ${style}...`);
-    await new Promise(r => setTimeout(r, 2000));
+    // 2. Extract Script
+    // Using dummy values for API keys here; in production, these come from environment variables or the database
+    const openRouterApiKey = process.env.OPENROUTER_API_KEY || "";
+    const hyperealApiKey = process.env.HYPEREAL_API_KEY || "";
+    const elevenLabsApiKey = process.env.ELEVENLABS_API_KEY || "";
 
-    console.log(`[GenerateVideo] Rendering video via FFmpeg...`);
-    await new Promise(r => setTimeout(r, 2000));
+    /* --- COMMENTED OUT ACTUAL API CALLS FOR SAFETY DURING SCAFFOLD ---
+    const script = await extractScriptWithOpenRouter(prompt, style, 15, openRouterApiKey);
+    const scene = script.scenes[0]; // Process first scene for now
 
-    const finalVideoUrl = "https://example.com/mock-video-output.mp4";
-
-    // 3. Mark completion
-    console.log(`[GenerateVideo] Job ${jobId} successfully completed.`);
+    // 3. Generate Assets
+    await supabase.from('video_generation_jobs').update({ progress: 30 }).eq('id', jobId);
+    const audioUrl = await generateSpeechUrl(scene.narration, voice_id, elevenLabsApiKey);
     
-    // Update generation record if it exists
+    await supabase.from('video_generation_jobs').update({ progress: 50 }).eq('id', jobId);
+    const imageUrl = await generateImage(scene.visual_prompt, hyperealApiKey, "16:9");
+    const videoUrl = await generateVideoFromImage(imageUrl, scene.visual_prompt, hyperealApiKey);
+    */
+
+    // DUMMY URLS for scaffold testing
+    const videoUrl = "https://raw.githubusercontent.com/bower-media-samples/big-buck-bunny-1080p-60fps-30s/master/video.mp4";
+    const audioUrl = "https://raw.githubusercontent.com/mathiasbynens/small/master/mp3.mp3";
+
+    // 4. Download Assets to Temp Disk
+    console.log(`[GenerateVideo] Downloading assets to ${tempDir}`);
+    await supabase.from('video_generation_jobs').update({ progress: 70 }).eq('id', jobId);
+    
+    const localVideoPath = path.join(tempDir, 'scene.mp4');
+    const localAudioPath = path.join(tempDir, 'audio.mp3');
+    const finalOutputPath = path.join(tempDir, 'final_output.mp4');
+
+    await downloadFile(videoUrl, localVideoPath);
+    await downloadFile(audioUrl, localAudioPath);
+
+    // 5. Merge with FFmpeg
+    console.log(`[GenerateVideo] Merging video and audio via FFmpeg...`);
+    await supabase.from('video_generation_jobs').update({ progress: 85 }).eq('id', jobId);
+    await mergeAudioVideo(localVideoPath, localAudioPath, finalOutputPath);
+
+    // 6. Upload Result
+    console.log(`[GenerateVideo] Uploading final video to Supabase Storage...`);
+    const finalFileName = `${project_id}_${Date.now()}.mp4`;
+    const finalVideoUrl = await uploadToSupabase(finalOutputPath, finalFileName);
+
+    console.log(`[GenerateVideo] Job ${jobId} successfully completed. URL: ${finalVideoUrl}`);
+    
+    // 7. Update Records
     if (generation_id) {
         await supabase.from('generations').update({
             status: 'completed',
@@ -61,11 +120,17 @@ export async function handleGenerateVideo(jobId: string, payload: any) {
             updated_at: new Date().toISOString()
         }).eq('id', generation_id);
     }
-    
+
     return { success: true, url: finalVideoUrl };
 
   } catch (error) {
     console.error(`[GenerateVideo] Job ${jobId} failed:`, error);
-    throw error; // Rethrow to let the main loop catch it and mark failed
+    throw error;
+  } finally {
+    // 8. Cleanup Temp Files
+    if (fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      console.log(`[GenerateVideo] Cleaned up temporary directory ${tempDir}`);
+    }
   }
 }

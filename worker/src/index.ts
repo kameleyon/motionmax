@@ -1,5 +1,6 @@
-import { supabase } from "../lib/supabase";
-import { Job } from "../types/job";
+import { supabase } from "./lib/supabase.js";
+import { Job } from "./types/job.js";
+import { handleGenerateVideo } from "./handlers/generateVideo.js";
 
 async function processJob(job: Job) {
   console.log(`[Worker] Started processing job ${job.id} for project ${job.project_id}`);
@@ -12,8 +13,11 @@ async function processJob(job: Job) {
 
     console.log(`[Worker] Task type: ${job.task_type}`);
     
-    // Simulate long running task for scaffold
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    if (job.task_type === 'generate_video') {
+      await handleGenerateVideo(job.id, job.payload);
+    } else {
+      console.log(`[Worker] No handler for task type: ${job.task_type}`);
+    }
     
     console.log(`[Worker] Completed job ${job.id}`);
     await supabase

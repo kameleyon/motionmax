@@ -175,7 +175,7 @@ serve(async (req) => {
             openrouter: totalOpenRouterCost,
             replicate: totalReplicateCost,
             hypereal: totalHyperealCost,
-            googleTts: totalGoogleTtsCost,
+            googleTts: totalGoogleTtsCost,`n              elevenlabs: 0, // Placeholder until ElevenLabs cost integration is added
             total: totalSpent,
           },
           revenue: {

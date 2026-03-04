@@ -1,0 +1,204 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* MotionMax Design System - Teal & Mist Theme
+   Elegant, Minimal, Sophisticated */
+
+@layer base {
+  :root {
+    /* Teal & Mist Color Palette */
+    --brand-dark: 200 9% 6%; /* #0F1112 - Carbon Black */
+    --brand-primary: 186 76% 21%; /* #0D565F - Dark Teal */
+    --brand-secondary: 178 40% 29%; /* #2D6967 - Stormy Teal */
+    --brand-accent: 170 36% 48%; /* #4EA69A - Ocean Mist */
+    --brand-light: 168 47% 67%; /* #86D2CA - Pearl Aqua */
+    --brand-pop: 179 40% 60%; /* #71C0C2 - Tropical Teal */
+    --brand-surface: 165 43% 89%; /* #DAEEE9 - Frozen Water */
+
+    /* Semantic Tokens - Light Mode */
+    --background: 0 0% 99%;
+    --foreground: 200 9% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 200 9% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 200 9% 12%;
+
+    /* Unified teal green - #49cdbf */
+    --primary: 170 55% 54%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 170 50% 48%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 180 10% 95%;
+    --muted-foreground: 200 9% 35%;
+
+    /* Lighter teal for hover states - use dark text for readability */
+    --accent: 170 55% 58%;
+    --accent-foreground: 200 9% 10%;
+
+    /* Using muted amber for warnings instead of red */
+    --destructive: 170 55% 54%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 180 10% 90%;
+    --input: 180 10% 92%;
+    --ring: 170 55% 54%;
+
+    --radius: 0.75rem;
+
+    /* UI surfaces */
+    /* Light: subtle dark overlay. Dark: requested white/15 thumbnail surface */
+    --thumbnail-surface: 0 0% 0% / 0.04;
+
+    /* Sidebar Tokens - Light - Slightly different from main bg */
+    --sidebar-background: 180 10% 97%;
+    --sidebar-foreground: 180 7% 15%;
+    --sidebar-primary: 170 55% 54%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 180 10% 93%;
+    --sidebar-accent-foreground: 180 7% 15%;
+    --sidebar-border: 180 10% 90%;
+    --sidebar-ring: 170 55% 54%;
+  }
+
+  .dark {
+    /* Dark Mode - Teal & Mist - Using #0F1112 base */
+    --background: 200 9% 6%;
+    --foreground: 0 0% 96%;
+
+    /* Cards slightly lighter for visibility */
+    --card: 200 8% 20%;
+    --card-foreground: 0 0% 96%;
+
+    --popover: 200 8% 20%;
+    --popover-foreground: 0 0% 96%;
+
+    /* Unified teal green - #49cdbf */
+    --primary: 170 55% 54%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 170 50% 48%;
+    --secondary-foreground: 0 0% 96%;
+
+    --muted: 200 8% 14%;
+    --muted-foreground: 200 8% 60%;
+
+    /* Lighter teal for hover states - use dark text for readability */
+    --accent: 170 55% 60%;
+    --accent-foreground: 200 9% 10%;
+
+    --destructive: 170 55% 54%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 200 8% 18%;
+    --input: 200 8% 14%;
+    --ring: 170 55% 54%;
+
+    /* Sidebar Tokens - Dark - Slightly lighter than main bg for contrast */
+    --sidebar-background: 200 8% 10%;
+    --sidebar-foreground: 0 0% 96%;
+    --sidebar-primary: 170 55% 54%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 200 8% 14%;
+    --sidebar-accent-foreground: 0 0% 96%;
+    --sidebar-border: 200 8% 16%;
+    --sidebar-ring: 170 55% 54%;
+
+    /* UI surfaces */
+    --thumbnail-surface: 0 0% 100% / 0.15;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary)) transparent;
+  }
+
+  html::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  html::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  html::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.6);
+    border-radius: 3px;
+  }
+
+  html::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary));
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+@layer utilities {
+  .glass-effect {
+    @apply backdrop-blur-md bg-white/80 dark:bg-card/80;
+  }
+}
+
+/* Custom Scrollbar Styles - Green/Teal Theme */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--primary)) transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 2px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.6);
+  border-radius: 2px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary));
+}
+
+/* Sidebar Recent Projects Scrollbar */
+.sidebar-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--primary) / 0.4) transparent;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar {
+  width: 3px;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.4);
+  border-radius: 2px;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.7);
+}

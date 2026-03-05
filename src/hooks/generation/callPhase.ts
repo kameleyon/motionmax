@@ -32,7 +32,7 @@ export async function callPhase(
   const { data: job, error: insertError } = await supabase
     .from("video_generation_jobs")
     .insert({
-       project_id: body.projectId as string,
+       project_id: (body.projectId || body.project_id || `temp_${Date.now()}`) as string,
        user_id: user.id,
        task_type: "generate_video",
        payload: body,

@@ -3,6 +3,12 @@ import { sleep, DEFAULT_ENDPOINT } from "./types";
 
 const LOG = "[Pipeline:Network]";
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidUUID(value: unknown): value is string {
+  return typeof value === "string" && UUID_REGEX.test(value);
+}
+
 export async function getFreshSession(): Promise<string> {
   const { data: { session }, error } = await supabase.auth.getSession();
   if (error || !session) {
@@ -28,10 +34,14 @@ export async function callPhase(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
-  // Determine Project ID. If it doesn't exist (e.g. first Script phase), create a project container.
-  let resolvedProjectId = body.projectId || body.project_id;
-  
+  // Determine Project ID. Must be a valid UUID — temp/placeholder IDs are rejected and trigger project creation.
+  const rawProjectId = body.projectId || body.project_id;
+  let resolvedProjectId: string | undefined = isValidUUID(rawProjectId) ? (rawProjectId as string) : undefined;
+
   if (!resolvedProjectId) {
+    if (rawProjectId) {
+      console.warn(LOG, `Ignoring invalid project ID "${rawProjectId}" — not a valid UUID. Creating new project.`);
+    }
     console.log(LOG, "No target project ID provided. Creating temporary project binding...");
     const { data: newProject, error: projErr } = await supabase.from("projects").insert({
       user_id: user.id,

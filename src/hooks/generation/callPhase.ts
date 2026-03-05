@@ -28,11 +28,29 @@ export async function callPhase(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
-  // Queue Job
+  // Determine Project ID. If it doesn't exist (e.g. first Script phase), create a project container.
+  let resolvedProjectId = body.projectId || body.project_id;
+  
+  if (!resolvedProjectId) {
+    console.log(LOG, "No target project ID provided. Creating temporary project binding...");
+    const { data: newProject, error: projErr } = await supabase.from("projects").insert({
+      user_id: user.id,
+      title: "New Generation " + new Date().toLocaleTimeString(),
+      project_type: "storytelling"
+    }).select().single();
+    
+    if (projErr) {
+        console.error(LOG, "Failed to create parent project wrapper:", projErr);
+        throw new Error("Failed to create parent project: " + projErr.message);
+    }
+    resolvedProjectId = newProject.id;
+  }
+
+  // Queue Job with validated Project UUID
   const { data: job, error: insertError } = await supabase
     .from("video_generation_jobs")
     .insert({
-       project_id: (body.projectId || body.project_id || `temp_${Date.now()}`) as string,
+       project_id: resolvedProjectId as string,
        user_id: user.id,
        task_type: "generate_video",
        payload: body,
@@ -48,7 +66,6 @@ export async function callPhase(
 
   console.log(LOG, `[WORKER QUEUE] Job ${job.id} queued successfully. Connecting to Realtime...`);
 
-  // Switch to Supabase Realtime instead of ugly HTTP polling intervals
   return new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
           supabase.removeChannel(channel);
@@ -85,13 +102,11 @@ export async function callPhase(
                 console.log(LOG, `[REALTIME] Successfully attached to job ${job.id} channel.`);
             } else if (status === 'CHANNEL_ERROR') {
                 console.error(LOG, `[REALTIME] Connection dropped - fallback required.`, err);
-                // Real system should fallback to interval polling here if WS fails
             }
         });
   });
 }
 
-// Fallback logic for non-video endpoints (cinematics, payments, etc.)
 async function legacyCallPhase(body: Record<string, unknown>, timeoutMs: number, endpoint: string): Promise<any> {
   const MAX_ATTEMPTS = 3;
   const phase = body.phase || "unknown";

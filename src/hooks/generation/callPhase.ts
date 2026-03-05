@@ -38,7 +38,7 @@ export async function callPhase(
   const rawProjectId = body.projectId || body.project_id;
   let resolvedProjectId: string | undefined = isValidUUID(rawProjectId) ? (rawProjectId as string) : undefined;
 
-  if (!resolvedProjectId) {
+  if (!resolvedProjectId || String(resolvedProjectId).startsWith("temp_")) {
     if (rawProjectId) {
       console.warn(LOG, `Ignoring invalid project ID "${rawProjectId}" — not a valid UUID. Creating new project.`);
     }

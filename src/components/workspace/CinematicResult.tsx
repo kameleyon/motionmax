@@ -456,7 +456,7 @@ export function CinematicResult({
       audioUrl: s.audioUrl,
       imageUrl: s.imageUrl,
     }));
-    void exportVideo(exportScenes, format).catch(() => {
+    void exportVideo(exportScenes, format, undefined, projectId).catch(() => {
       setExportLogsVersion((v) => v + 1);
     });
   }, [localScenes, format, exportVideo]);

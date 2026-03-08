@@ -24,10 +24,11 @@ export function useVideoExport() {
     async (
       scenes: Scene[],
       format: "landscape" | "portrait" | "square",
-      brandMark?: string
+      brandMark?: string,
+      projectId?: string
     ) => {
       abortRef.current = false;
-      log("Starting Render Server export", { scenes: scenes.length, format, brandMark: brandMark || "(none)" });
+      log("Starting Render Server export", { scenes: scenes.length, format, brandMark: brandMark || "(none)", projectId: projectId || "(none)" });
       
       setState({ status: "loading", progress: 0 });
 
@@ -35,8 +36,8 @@ export function useVideoExport() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("Not authenticated");
 
-        // Generate a proper UUID for the export job trace
-        const projectIdTrace = crypto.randomUUID();
+        // Use the real project ID from the generation, or generate a UUID trace
+        const resolvedProjectId = projectId || crypto.randomUUID();
 
         log("Dropping export job into queue...");
         setState({ status: "rendering", progress: 5, warning: "Sending media to Render Node..." });
@@ -44,10 +45,10 @@ export function useVideoExport() {
         const { data: job, error: insertError } = await supabase
           .from("video_generation_jobs")
           .insert({
-             project_id: projectIdTrace,
+             project_id: resolvedProjectId,
              user_id: user.id,
              task_type: "export_video",
-             payload: { scenes, format, brandMark, project_id: projectIdTrace },
+             payload: { scenes, format, brandMark, project_id: resolvedProjectId },
              status: "pending"
           })
           .select()

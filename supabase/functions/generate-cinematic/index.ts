@@ -725,7 +725,7 @@ QUALITY REQUIREMENTS:
           body: JSON.stringify({
             prompt: imagePrompt,
             model: "gemini-3-1-flash-t2i",
-            resolution: "4k",
+            resolution: "1K",
             aspect_ratio: aspectRatio,
             output_format: "png",
           }),

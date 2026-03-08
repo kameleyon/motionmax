@@ -687,7 +687,7 @@ async function generateImageWithHypereal(
           prompt,
           model: hyperealModel,
           aspect_ratio: aspectRatio,
-          resolution: "4k",
+          resolution: "1K",
           output_format: "png",
         }),
       });

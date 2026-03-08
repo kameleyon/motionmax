@@ -45,7 +45,8 @@ export async function callPhase(
     console.log(LOG, "No target project ID provided. Creating temporary project binding...");
     const { data: newProject, error: projErr } = await supabase.from("projects").insert({
       user_id: user.id,
-      title: "New Generation " + new Date().toLocaleTimeString(),
+      title: (body.title as string) || "New Generation " + new Date().toLocaleTimeString(),
+      content: (body.content as string) || "",
       project_type: "storytelling"
     }).select().single();
     

@@ -37,16 +37,19 @@ function createVideoFromImageAudio(
   return new Promise((resolve, reject) => {
     ffmpeg()
       .addInput(imagePath)
-      .inputOptions(['-loop 1', '-framerate 1'])
+      .inputOptions(['-loop 1', '-framerate 24'])
       .addInput(audioPath)
+      .videoFilters('scale=trunc(iw/2)*2:trunc(ih/2)*2')
       .outputOptions([
         '-c:v libx264',
+        '-preset fast',
         '-tune stillimage',
         '-c:a aac',
         '-b:a 192k',
         '-pix_fmt yuv420p',
         '-shortest',
         `-t ${Math.ceil(duration)}`,
+        '-movflags +faststart',
       ])
       .save(outputPath)
       .on('end', () => resolve())
@@ -101,8 +104,9 @@ export async function handleExportVideo(jobId: string, payload: any, userId?: st
           await new Promise<void>((resolve, reject) => {
             ffmpeg()
               .addInput(imgPath)
-              .inputOptions(['-loop 1', '-framerate 1'])
-              .outputOptions(['-c:v libx264', '-tune stillimage', '-pix_fmt yuv420p', `-t ${duration}`])
+              .inputOptions(['-loop 1', '-framerate 24'])
+              .videoFilters('scale=trunc(iw/2)*2:trunc(ih/2)*2')
+              .outputOptions(['-c:v libx264', '-preset fast', '-tune stillimage', '-pix_fmt yuv420p', `-t ${duration}`, '-movflags +faststart'])
               .save(localPath)
               .on('end', () => resolve())
               .on('error', (err) => reject(new Error(`FFmpeg silent: ${err.message}`)));

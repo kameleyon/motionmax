@@ -35,9 +35,8 @@ export function useVideoExport() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("Not authenticated");
 
-        // The project_id is usually extracted from the first scene or ambient state. 
-        // For now, we generate a trace id to keep the queue organized.
-        const projectIdTrace = `export_${Date.now()}`;
+        // Generate a proper UUID for the export job trace
+        const projectIdTrace = crypto.randomUUID();
 
         log("Dropping export job into queue...");
         setState({ status: "rendering", progress: 5, warning: "Sending media to Render Node..." });

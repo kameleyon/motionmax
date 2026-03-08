@@ -27,6 +27,33 @@ async function uploadToSupabase(localPath: string, fileName: string): Promise<st
   return publicData.publicUrl;
 }
 
+/** Create a video from a still image + audio using FFmpeg */
+function createVideoFromImageAudio(
+  imagePath: string,
+  audioPath: string,
+  outputPath: string,
+  duration: number
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    ffmpeg()
+      .addInput(imagePath)
+      .inputOptions(['-loop 1', '-framerate 1'])
+      .addInput(audioPath)
+      .outputOptions([
+        '-c:v libx264',
+        '-tune stillimage',
+        '-c:a aac',
+        '-b:a 192k',
+        '-pix_fmt yuv420p',
+        '-shortest',
+        `-t ${Math.ceil(duration)}`,
+      ])
+      .save(outputPath)
+      .on('end', () => resolve())
+      .on('error', (err) => reject(new Error(`FFmpeg image→video: ${err.message}`)));
+  });
+}
+
 export async function handleExportVideo(jobId: string, payload: any, userId?: string) {
   const { scenes, format, brandMark, project_id } = payload;
   
@@ -41,18 +68,49 @@ export async function handleExportVideo(jobId: string, payload: any, userId?: st
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
     await supabase.from('video_generation_jobs').update({ progress: 10, status: 'processing' }).eq('id', jobId);
 
-    // 1. Download all scene MP4s
+    // 1. Download/create scene MP4s (supports both video scenes and image+audio scenes)
     const downloadedFiles: string[] = [];
     for (let i = 0; i < scenes.length; i++) {
         const scene = scenes[i];
-        if (!scene.videoUrl) continue;
+        const localPath = path.join(tempDir, `scene_${i}.mp4`);
 
         await supabase.from('video_generation_jobs').update({ progress: Math.floor(10 + (i/scenes.length)*40) }).eq('id', jobId);
-        
-        const localPath = path.join(tempDir, `scene_${i}.mp4`);
-        console.log(`[ExportVideo] Downloading scene ${i} from ${scene.videoUrl}`);
-        await downloadFile(scene.videoUrl, localPath);
-        downloadedFiles.push(localPath);
+
+        if (scene.videoUrl) {
+          // Cinematic: download pre-rendered video
+          console.log(`[ExportVideo] Downloading scene ${i} video from ${scene.videoUrl}`);
+          await downloadFile(scene.videoUrl, localPath);
+          downloadedFiles.push(localPath);
+        } else if (scene.imageUrl && scene.audioUrl) {
+          // Standard: create video from image + audio
+          const imgPath = path.join(tempDir, `scene_${i}_img.png`);
+          const audPath = path.join(tempDir, `scene_${i}_aud.mp3`);
+          console.log(`[ExportVideo] Scene ${i}: creating video from image + audio`);
+          await downloadFile(scene.imageUrl, imgPath);
+          await downloadFile(scene.audioUrl, audPath);
+          const duration = scene.duration || 10;
+          await createVideoFromImageAudio(imgPath, audPath, localPath, duration);
+          downloadedFiles.push(localPath);
+          console.log(`[ExportVideo] Scene ${i}: image→video created (${duration}s)`);
+        } else if (scene.imageUrl) {
+          // Image only (no audio): create silent video
+          const imgPath = path.join(tempDir, `scene_${i}_img.png`);
+          console.log(`[ExportVideo] Scene ${i}: creating silent video from image`);
+          await downloadFile(scene.imageUrl, imgPath);
+          const duration = scene.duration || 5;
+          await new Promise<void>((resolve, reject) => {
+            ffmpeg()
+              .addInput(imgPath)
+              .inputOptions(['-loop 1', '-framerate 1'])
+              .outputOptions(['-c:v libx264', '-tune stillimage', '-pix_fmt yuv420p', `-t ${duration}`])
+              .save(localPath)
+              .on('end', () => resolve())
+              .on('error', (err) => reject(new Error(`FFmpeg silent: ${err.message}`)));
+          });
+          downloadedFiles.push(localPath);
+        } else {
+          console.warn(`[ExportVideo] Scene ${i}: no videoUrl, imageUrl, or audioUrl — skipping`);
+        }
     }
 
     if (downloadedFiles.length === 0) throw new Error("No video scenes provided to stitch.");

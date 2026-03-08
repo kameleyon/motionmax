@@ -401,7 +401,7 @@ const PRICING = {
   audioPerSecond: 0.002, // fallback estimate
   // Images - Hypereal gemini-3-1-flash-t2i pricing
   imageNanoBanana: 0.04, // $0.04 per image (google/nano-banana-2 on Replicate fallback)
-  imageNanoBananaPro: 0.05, // $0.05 per image (nano-banana-pro higher res - legacy)
+  imageNanoBananaPro: 0.04, // $0.04 per image (google/nano-banana-2 at 1K resolution)
   imageNanoBanana2: 0.04, // $0.04 per image (gemini-3-1-flash-t2i on Hypereal)
 };
 
@@ -475,7 +475,7 @@ async function callLLMWithFallback(
 
 // ============= API CALL LOGGING =============
 // OpenRouter is used for script generation with google/gemini-3.1-pro-preview
-// Replicate is used for image generation (nano-banana) and audio (Chatterbox)
+// Replicate is used for image generation (google/nano-banana-2) and audio (Chatterbox)
 interface ApiCallLogParams {
   supabase: any;
   userId: string;
@@ -617,11 +617,11 @@ const STYLE_PROMPTS: Record<string, string> = {
 
 const TEXT_OVERLAY_STYLES = ["minimalist", "doodle", "stick"];
 
-// Styles that ALWAYS use premium image generation (Replicate nano-banana-pro)
+// Styles that ALWAYS use premium image generation (Replicate nano-banana-2 at 1K)
 // These styles require higher quality rendering regardless of subscription tier
 const PREMIUM_REQUIRED_STYLES = ["sketch"]; // Papercut 3D style
 
-// Pro/Enterprise tiers that get Replicate nano-banana-pro access (fallback only; Hypereal uses gemini-3-1-flash-t2i for all)
+// Pro/Enterprise tiers that get Replicate nano-banana-2 access (fallback only; Hypereal uses gemini-3-1-flash-t2i for all)
 const PRO_TIER_PLANS = ["professional", "enterprise"];
 
 // ============= SUBSCRIPTION TIER CHECK =============
@@ -2281,7 +2281,7 @@ async function generateSceneAudio(
   return result;
 }
 
-// ============= IMAGE GENERATION WITH NANO BANANA (Pro uses nano-banana-pro at 1K) =============
+// ============= IMAGE GENERATION WITH NANO BANANA 2 (all tiers use nano-banana-2 at 1K) =============
 const MAX_IMAGE_RETRIES = 4;
 
 async function generateImageWithReplicate(
@@ -2293,17 +2293,15 @@ async function generateImageWithReplicate(
   { ok: true; bytes: Uint8Array } | { ok: false; error: string; status?: number; retryAfterSeconds?: number }
 > {
   const aspectRatio = format === "portrait" ? "9:16" : format === "square" ? "1:1" : "16:9";
-  const modelPath = useProModel ? "google/nano-banana-pro" : "google/nano-banana-2";
-  const modelName = useProModel ? "Nano Banana Pro (1K)" : "Nano Banana 2";
+  const modelPath = "google/nano-banana-2";
+  const modelName = "Nano Banana 2 (1K)";
 
   const input: Record<string, unknown> = {
     prompt,
     aspect_ratio: aspectRatio,
     output_format: "png",
+    resolution: "1K",
   };
-  if (useProModel) {
-    input.resolution = "1K";
-  }
 
   let lastError = "Unknown error";
   let lastStatus: number | undefined;
@@ -2408,7 +2406,7 @@ async function generateImageWithReplicate(
   return { ok: false, error: lastError, status: lastStatus };
 }
 
-// ============= TRUE IMAGE EDITING WITH REPLICATE NANO BANANA (PRO or standard based on plan) =============
+// ============= TRUE IMAGE EDITING WITH REPLICATE NANO BANANA 2 (all tiers use nano-banana-2 at 1K) =============
 async function editImageWithReplicatePro(
   sourceImageUrl: string,
   editPrompt: string,
@@ -2418,14 +2416,14 @@ async function editImageWithReplicatePro(
   overlayText?: { title?: string; subtitle?: string },
   useProModel: boolean = true,
 ): Promise<{ ok: true; bytes: Uint8Array } | { ok: false; error: string }> {
-  const editModelPath = useProModel ? "google/nano-banana-pro" : "google/nano-banana-2";
-  const editModelLabel = useProModel ? "Nano Banana Pro" : "Nano Banana 2";
+  const editModelPath = "google/nano-banana-2";
+  const editModelLabel = "Nano Banana 2 (1K)";
   try {
     console.log(`[editImage] Starting image edit with Replicate ${editModelLabel}...`);
     console.log(`[editImage] Source URL: ${sourceImageUrl.substring(0, 80)}...`);
     console.log(`[editImage] Edit prompt: ${editPrompt}`);
 
-    // Map format to nano-banana supported aspect ratios
+    // Map format to nano-banana-2 supported aspect ratios
     const aspectRatio = format === "portrait" ? "9:16" : format === "square" ? "1:1" : "16:9";
 
     // Build the modification prompt with style and overlay text consideration
@@ -2459,7 +2457,7 @@ STYLE CONTEXT: ${styleDescription}`;
       image_input: [sourceImageUrl], // Pass source image URL for editing
       aspect_ratio: aspectRatio,
       output_format: "png",
-      resolution: useProModel ? "1K" : undefined, // Pro model supports 1K resolution
+      resolution: "1K",
     };
 
     console.log(`[editImage] Calling Replicate ${editModelLabel} with image_input...`);
@@ -3913,7 +3911,7 @@ async function handleAudioPhase(
 
 // Images phase now processes in chunks to avoid request timeouts.
 // IMPORTANT: Smaller chunk size (4) prevents "failed to fetch" timeouts during image generation.
-// Pro model (nano-banana-pro 1K) is slower, so we keep chunks small and manageable.
+// nano-banana-2 at 1K res, so we keep chunks small and manageable.
 const MAX_IMAGES_PER_CALL_DEFAULT = 4;
 
 async function handleImagesPhase(
@@ -3944,14 +3942,14 @@ async function handleImagesPhase(
   // Check if user is Pro/Enterprise tier — affects Replicate fallback model choice
   const isProUser = await isProOrEnterpriseTier(supabase, user.id);
 
-  // Pro/Enterprise users OR premium-required styles get nano-banana-pro on Replicate fallback
+  // All tiers use nano-banana-2 on Replicate fallback
   const useProModel = isProUser || isPremiumRequiredStyle;
 
   const maxImagesPerCall = MAX_IMAGES_PER_CALL_DEFAULT;
 
   // Hypereal always uses gemini-3-1-flash-t2i for all tiers
   console.log(
-    `[IMAGES] Using Hypereal gemini-3-1-flash-t2i (Replicate fallback: ${useProModel ? "nano-banana-pro" : "nano-banana-2"}) (project type: ${generation.projects.project_type})`,
+    `[IMAGES] Using Hypereal gemini-3-1-flash-t2i (Replicate fallback: nano-banana-2 1K) (project type: ${generation.projects.project_type})`,
   );
 
   const scenes = generation.scenes as Scene[];
@@ -4143,7 +4141,7 @@ OUTPUT: Ultra high resolution, professional illustration with dynamic compositio
       totalImages,
       primaryProvider: "hypereal",
       model: "gemini-3-1-flash-t2i",
-      fallbackModel: useProModel ? "nano-banana-pro" : "nano-banana-2",
+      fallbackModel: "nano-banana-2",
       format,
       style,
     },
@@ -4167,8 +4165,8 @@ OUTPUT: Ultra high resolution, professional illustration with dynamic compositio
   let totalImagesGenerated = 0;
 
   // Process this chunk in batches.
-  // Use smaller batch size (3) for nano-banana-pro to avoid rate limits
-  const BATCH_SIZE = useProModel ? 3 : 5;
+  // Use smaller batch size for nano-banana-2 to avoid rate limits
+  const BATCH_SIZE = 4;
   for (let batchStart = 0; batchStart < tasksThisChunk.length; batchStart += BATCH_SIZE) {
     const batchEnd = Math.min(batchStart + BATCH_SIZE, tasksThisChunk.length);
 
@@ -4262,16 +4260,16 @@ OUTPUT: Ultra high resolution, professional illustration with dynamic compositio
               }
             }
             hyperealFailed = true;
-            console.warn(`[IMG] Hypereal exhausted all retries for task ${task.taskIndex}, falling back to Replicate ${useProModel ? "nano-banana-pro" : "nano-banana"}`);
+            console.warn(`[IMG] Hypereal exhausted all retries for task ${task.taskIndex}, falling back to Replicate nano-banana-2`);
           }
 
-          // Fallback to Replicate nano-banana-pro (if Hypereal key missing OR Hypereal failed all retries)
+          // Fallback to Replicate nano-banana-2 (if Hypereal key missing OR Hypereal failed all retries)
           if (!hyperealApiKey || hyperealFailed) {
-            console.log(`[IMG] Using Replicate ${useProModel ? "nano-banana-pro" : "nano-banana"} for task ${task.taskIndex}`);
+            console.log(`[IMG] Using Replicate nano-banana-2 for task ${task.taskIndex}`);
             for (let attempt = 1; attempt <= 3; attempt++) {
               const result = await generateImageWithReplicate(task.prompt, replicateApiKey, format, useProModel);
               actualProvider = "replicate";
-              actualModel = useProModel ? "google/nano-banana-pro" : "google/nano-banana";
+              actualModel = "google/nano-banana-2";
 
               if (result.ok) {
                 const imageCallDuration = Date.now() - imageCallStart;
@@ -4321,13 +4319,13 @@ OUTPUT: Ultra high resolution, professional illustration with dynamic compositio
         totalImagesGenerated++;
 
         // LOG EACH INDIVIDUAL IMAGE API CALL with accurate per-image cost
-        const perImageCost = useProModel ? PRICING.imageNanoBananaPro : PRICING.imageNanoBanana;
+        const perImageCost = PRICING.imageNanoBanana;
         await logApiCall({
           supabase,
           userId: user.id,
           generationId,
           provider: "replicate",
-          model: model || "google/nano-banana",
+          model: model || "google/nano-banana-2",
           status: "success",
           totalDurationMs: durationMs || 0,
           cost: perImageCost,
@@ -4379,10 +4377,10 @@ OUTPUT: Ultra high resolution, professional illustration with dynamic compositio
   // Update cost tracking
   costTracking.imagesGenerated = newCompletedTotal;
   costTracking.imageProvider = "replicate";
-  costTracking.imageModel = useProModel ? "google/nano-banana-pro" : "google/nano-banana";
+  costTracking.imageModel = "google/nano-banana-2";
 
   console.log(
-    `[IMG] Final stats: ${newCompletedTotal} images generated with Replicate ${useProModel ? "nano-banana-pro" : "nano-banana"}`,
+    `[IMG] Final stats: ${newCompletedTotal} images generated with Replicate nano-banana-2`,
   );
 
   // Calculate costs based on Replicate pricing
@@ -4826,17 +4824,10 @@ async function handleRegenerateImage(
   // Check if user is Pro/Enterprise tier (for logging purposes only)
   const isProUser = await isProOrEnterpriseTier(supabase, user.id);
 
-  // Pro/Enterprise users OR premium-required styles get nano-banana-pro
-  // All other tiers get standard nano-banana
+  // All tiers use nano-banana-2 at 1K resolution
   const useProModel = isProUser || isPremiumRequiredStyle;
 
-  if (useProModel) {
-    console.log(`[regenerate-image] Premium style "${projectStyle}" - will use Replicate nano-banana-pro (1K) for T2I`);
-  } else {
-    console.log(
-      `[regenerate-image] Using Replicate nano-banana for T2I regeneration (Apply Edit always uses nano-banana-pro)`,
-    );
-  }
+  console.log(`[regenerate-image] Using Replicate nano-banana-2 (1K) for T2I regeneration`);
 
   // Get existing imageUrls or create from single imageUrl
   const existingImageUrls = scene.imageUrls?.length ? [...scene.imageUrls] : scene.imageUrl ? [scene.imageUrl] : [];
@@ -4846,10 +4837,10 @@ async function handleRegenerateImage(
 
   let imageResult: { ok: true; bytes: Uint8Array } | { ok: false; error: string };
 
-  // Determine the model names based on tier
-  const replicateModel = useProModel ? "google/nano-banana-pro" : "google/nano-banana";
-  const replicateModelLabel = useProModel ? "nano-banana-pro" : "nano-banana";
-  const replicatePricing = useProModel ? PRICING.imageNanoBananaPro : PRICING.imageNanoBanana;
+  // Determine the model names
+  const replicateModel = "google/nano-banana-2";
+  const replicateModelLabel = "nano-banana-2";
+  const replicatePricing = PRICING.imageNanoBanana;
 
   // Check if we should do a full regeneration (empty imageModification) or edit
   if (!imageModification) {
@@ -4938,18 +4929,17 @@ Professional illustration with dynamic composition and clear visual hierarchy.`;
       });
     }
   } else {
-    // Apply Edit - use TRUE IMAGE EDITING with Replicate Nano Banana (Pro for pro users, standard for others)
+    // Apply Edit - use TRUE IMAGE EDITING with Replicate Nano Banana 2
     // This preserves the original image and only modifies the requested section/element
     console.log(
-      `[regenerate-image] Scene ${sceneIndex + 1}, Image ${targetImageIndex + 1} - TRUE IMAGE EDIT with Replicate ${useProModel ? "Nano Banana Pro" : "Nano Banana"}`,
+      `[regenerate-image] Scene ${sceneIndex + 1}, Image ${targetImageIndex + 1} - TRUE IMAGE EDIT with Replicate Nano Banana 2`,
     );
 
     if (!sourceImageUrl) {
       throw new Error("No source image available for editing");
     }
 
-    // Use Replicate nano-banana for true image editing (accepts image_input)
-    // Pro/Enterprise get nano-banana-pro, others get nano-banana
+    // Use Replicate nano-banana-2 for true image editing (accepts image_input)
     const editStartTime = Date.now();
     imageResult = await editImageWithReplicatePro(
       sourceImageUrl,
@@ -4962,24 +4952,24 @@ Professional illustration with dynamic composition and clear visual hierarchy.`;
     );
     const editDurationMs = Date.now() - editStartTime;
 
-    // Log the Replicate Nano Banana Pro edit API call
+    // Log the Replicate Nano Banana 2 edit API call
     await logApiCall({
       supabase,
       userId: user.id,
       generationId,
       provider: "replicate",
-      model: useProModel ? "google/nano-banana-pro" : "google/nano-banana-2",
+      model: "google/nano-banana-2",
       status: imageResult.ok ? "success" : "error",
       totalDurationMs: editDurationMs,
-      cost: imageResult.ok ? (useProModel ? PRICING.imageNanoBananaPro : PRICING.imageNanoBanana) : 0,
+      cost: imageResult.ok ? PRICING.imageNanoBanana : 0,
       errorMessage: imageResult.ok ? undefined : imageResult.error || "Unknown error",
     });
 
-    // If Replicate nano-banana-pro edit fails, fall back to text-to-image as last resort
+    // If Replicate nano-banana-2 edit fails, fall back to text-to-image as last resort
     if (!imageResult.ok) {
       const editError = imageResult.error || "Unknown edit error";
       console.log(
-        `[regenerate-image] Replicate Nano Banana Pro edit failed (${editError}), falling back to text-to-image generation`,
+        `[regenerate-image] Replicate Nano Banana 2 edit failed (${editError}), falling back to text-to-image generation`,
       );
 
       // LOG TO SYSTEM_LOGS so it shows in admin panel!
@@ -4988,7 +4978,7 @@ Professional illustration with dynamic composition and clear visual hierarchy.`;
         userId: user.id,
         eventType: "replicate_pro_edit_fallback",
         category: "system_warning",
-        message: `Replicate Nano Banana Pro image edit failed, falling back to text-to-image generation`,
+        message: `Replicate Nano Banana 2 image edit failed, falling back to text-to-image generation`,
         details: {
           sceneIndex,
           targetImageIndex,
@@ -5010,8 +5000,8 @@ STYLE: ${styleDescription}
 
 Professional illustration with dynamic composition and clear visual hierarchy. Apply the user's modification to enhance the image while maintaining consistency with the original scene concept.`;
 
-      // Use Replicate nano-banana for fallback text-to-image (plan-aware)
-      console.log(`[regenerate-image] Fallback: Using Replicate ${useProModel ? "nano-banana-pro" : "nano-banana"} for T2I`);
+      // Use Replicate nano-banana-2 for fallback text-to-image
+      console.log(`[regenerate-image] Fallback: Using Replicate nano-banana-2 for T2I`);
       const replicateStartTime = Date.now();
       imageResult = await generateImageWithReplicate(modifiedPrompt, replicateApiKey, format, useProModel);
       const replicateDurationMs = Date.now() - replicateStartTime;
@@ -5021,10 +5011,10 @@ Professional illustration with dynamic composition and clear visual hierarchy. A
         userId: user.id,
         generationId,
         provider: "replicate",
-        model: useProModel ? "google/nano-banana-pro" : "google/nano-banana",
+        model: "google/nano-banana-2",
         status: imageResult.ok ? "success" : "error",
         totalDurationMs: replicateDurationMs,
-        cost: imageResult.ok ? (useProModel ? PRICING.imageNanoBananaPro : PRICING.imageNanoBanana) : 0,
+        cost: imageResult.ok ? PRICING.imageNanoBanana : 0,
         errorMessage: imageResult.ok ? undefined : imageResult.error || "Unknown error",
       });
     }

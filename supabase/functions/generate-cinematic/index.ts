@@ -1858,7 +1858,7 @@ serve(async (req) => {
       const format = (project.format || "portrait") as "landscape" | "portrait" | "square";
       const style = project.style || "realistic";
 
-      // Use Replicate nano-banana-pro for image editing (cinematic is Pro-only)
+      // Use Replicate nano-banana-2 for image editing
       const replicateApiToken = Deno.env.get("REPLICATE_API_TOKEN") || replicateToken;
 
       const fullStylePrompt = getStylePrompt(style);
@@ -1871,7 +1871,7 @@ IMPORTANT REQUIREMENTS:
 
 STYLE CONTEXT: ${fullStylePrompt}`;
 
-      console.log(`[IMG-EDIT] Scene ${scene.number}: Applying edit via Replicate nano-banana-pro`);
+      console.log(`[IMG-EDIT] Scene ${scene.number}: Applying edit via Replicate nano-banana-2`);
 
       const editInput: Record<string, unknown> = {
         prompt: editPrompt,
@@ -1881,7 +1881,7 @@ STYLE CONTEXT: ${fullStylePrompt}`;
         resolution: "1K",
       };
 
-      const editResponse = await fetch("https://api.replicate.com/v1/models/google/nano-banana-pro/predictions", {
+      const editResponse = await fetch("https://api.replicate.com/v1/models/google/nano-banana-2/predictions", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${replicateApiToken}`,
@@ -1893,13 +1893,13 @@ STYLE CONTEXT: ${fullStylePrompt}`;
 
       if (!editResponse.ok) {
         const errText = await editResponse.text();
-        console.error(`[IMG-EDIT] Replicate nano-banana-pro failed: ${editResponse.status} - ${errText}`);
+        console.error(`[IMG-EDIT] Replicate nano-banana-2 failed: ${editResponse.status} - ${errText}`);
         throw new Error("Image editing failed");
       }
 
       let editPrediction = await editResponse.json();
       console.log(
-        `[IMG-EDIT] Nano Banana Pro prediction started: ${editPrediction.id}, status: ${editPrediction.status}`,
+        `[IMG-EDIT] Nano Banana 2 prediction started: ${editPrediction.id}, status: ${editPrediction.status}`,
       );
 
       // Poll for completion if not finished

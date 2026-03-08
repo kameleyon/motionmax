@@ -81,24 +81,32 @@ async function processJob(job: Job) {
   }
 }
 
+let pollCount = 0;
+
 async function pollQueue() {
+  pollCount++;
   try {
-    const { data: jobs, error } = await supabase
+    const { data: jobs, error, status, statusText } = await supabase
       .from('video_generation_jobs')
       .select('*')
       .eq('status', 'pending')
       .order('created_at', { ascending: true })
       .limit(1);
 
+    // Log every 12th poll (~60s) or when there's data/errors
+    const shouldLog = pollCount % 12 === 1 || (jobs && jobs.length > 0) || error;
+    if (shouldLog) {
+      console.log(`[Worker] Poll #${pollCount}: HTTP ${status} ${statusText || ''}, jobs: ${jobs?.length ?? 'null'}, error: ${error ? JSON.stringify(error) : 'none'}`);
+    }
+
     if (error) {
-      if (error.code !== '42P01') { 
-          console.error("[Worker] Error polling queue:", error);
-      }
+      console.error("[Worker] Poll error:", error.code, error.message);
       return;
     }
 
     if (jobs && jobs.length > 0) {
       const job = jobs[0] as Job;
+      console.log(`[Worker] Found job ${job.id} (type: ${job.task_type}, status: ${job.status})`);
       await processJob(job);
     }
   } catch (err) {

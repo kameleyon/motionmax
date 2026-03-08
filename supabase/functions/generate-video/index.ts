@@ -393,7 +393,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 
 // Pricing based on ACTUAL provider costs (updated to match billing)
 const PRICING = {
-  // OpenRouter (Primary for script generation) - google/gemini-3-pro-preview
+  // OpenRouter (Primary for script generation) - google/gemini-3.1-pro-preview
   scriptPerToken: 0.000003, // ~$3.00 per 1M tokens (Gemini 3 Pro via OpenRouter - higher quality)
   scriptPerCall: 0.01, // Flat estimate per script generation call
   // Audio - Chatterbox TTS on Replicate
@@ -421,7 +421,7 @@ async function callLLMWithFallback(
     model?: string;
   } = {},
 ): Promise<LLMCallResult> {
-  const model = options.model || "google/gemini-3-pro-preview";
+  const model = options.model || "google/gemini-3.1-pro-preview";
   const temperature = options.temperature ?? 0.7;
   const maxTokens = options.maxTokens ?? 8192;
 
@@ -474,7 +474,7 @@ async function callLLMWithFallback(
 }
 
 // ============= API CALL LOGGING =============
-// OpenRouter is used for script generation with google/gemini-3-pro-preview
+// OpenRouter is used for script generation with google/gemini-3.1-pro-preview
 // Replicate is used for image generation (nano-banana) and audio (Chatterbox)
 interface ApiCallLogParams {
   supabase: any;
@@ -2657,12 +2657,12 @@ IMPORTANT: Do NOT include any style description in visualPrompt - the system wil
 - Focus on CONTENT and LAYOUT only - do NOT write style descriptions`;
 
   // Call LLM for script generation via OpenRouter (primary) with Lovable AI fallback
-  console.log("Phase: SMART FLOW SCRIPT - Generating via OpenRouter with google/gemini-3-pro-preview...");
+  console.log("Phase: SMART FLOW SCRIPT - Generating via OpenRouter with google/gemini-3.1-pro-preview...");
 
   const llmResult = await callLLMWithFallback(scriptPrompt, {
     temperature: 0.7,
     maxTokens: 4000,
-    model: "google/gemini-3-pro-preview",
+    model: "google/gemini-3.1-pro-preview",
   });
 
   // Log API call
@@ -2671,7 +2671,7 @@ IMPORTANT: Do NOT include any style description in visualPrompt - the system wil
     supabase,
     userId: user.id,
     provider: llmResult.provider,
-    model: "google/gemini-3-pro-preview",
+    model: "google/gemini-3.1-pro-preview",
     status: "success",
     totalDurationMs: llmResult.durationMs,
     cost: scriptCost,
@@ -2993,12 +2993,12 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
   ]
 }`;
 
-  console.log("Phase: DOC2VIDEO SCRIPT - Generating via OpenRouter with google/gemini-3-pro-preview...");
+  console.log("Phase: DOC2VIDEO SCRIPT - Generating via OpenRouter with google/gemini-3.1-pro-preview...");
 
   const llmResult = await callLLMWithFallback(scriptPrompt, {
     temperature: 0.7,
     maxTokens: 8192,
-    model: "google/gemini-3-pro-preview",
+    model: "google/gemini-3.1-pro-preview",
   });
 
   // Log API call
@@ -3007,7 +3007,7 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
     supabase,
     userId: user.id,
     provider: llmResult.provider,
-    model: "google/gemini-3-pro-preview",
+    model: "google/gemini-3.1-pro-preview",
     status: "success",
     totalDurationMs: llmResult.durationMs,
     cost: scriptCost,
@@ -3384,12 +3384,12 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
   ]
 }`;
 
-  console.log("Phase: STORYTELLING SCRIPT - Generating via OpenRouter with google/gemini-3-pro-preview...");
+  console.log("Phase: STORYTELLING SCRIPT - Generating via OpenRouter with google/gemini-3.1-pro-preview...");
 
   const llmResult = await callLLMWithFallback(scriptPrompt, {
     temperature: 0.8, // Slightly higher for creative storytelling
     maxTokens: 12000, // More tokens for longer narratives
-    model: "google/gemini-3-pro-preview",
+    model: "google/gemini-3.1-pro-preview",
   });
 
   // Log API call
@@ -3398,7 +3398,7 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
     supabase,
     userId: user.id,
     provider: llmResult.provider,
-    model: "google/gemini-3-pro-preview",
+    model: "google/gemini-3.1-pro-preview",
     status: "success",
     totalDurationMs: llmResult.durationMs,
     cost: scriptCost,

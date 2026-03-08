@@ -590,7 +590,7 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-3-pro-preview",
+      model: "google/gemini-3.1-pro-preview",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Create a cinematic video script based on this idea:\n\n${content}` },

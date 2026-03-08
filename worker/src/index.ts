@@ -86,10 +86,11 @@ let pollCount = 0;
 async function pollQueue() {
   pollCount++;
   try {
+    // Query for pending jobs AND stale processing jobs (orphaned by worker restart)
     const { data: jobs, error, status, statusText } = await supabase
       .from('video_generation_jobs')
       .select('*')
-      .eq('status', 'pending')
+      .in('status', ['pending', 'processing'])
       .order('created_at', { ascending: true })
       .limit(1);
 

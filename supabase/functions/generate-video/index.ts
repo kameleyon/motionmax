@@ -485,12 +485,19 @@ function extractJsonFromLLMResponse(raw: string, label: string): any {
 // ============= LLM CALL HELPER (OpenRouter Only) =============
 interface LLMCallResult {
   content: string;
+  parsedContent?: unknown;
   tokensUsed: number;
   provider: "openrouter";
   durationMs: number;
+  model: string;
 }
 
-const FALLBACK_MODEL = "anthropic/claude-sonnet-4.6";
+const PRIMARY_LLM_MODEL = "anthropic/claude-sonnet-4.6";
+const FALLBACK_MODEL = "google/gemini-3.1-flash-lite-preview";
+
+function getLLMModelsToTry(primaryModel: string): string[] {
+  return Array.from(new Set([primaryModel, FALLBACK_MODEL]));
+}
 
 async function callLLMWithFallback(
   prompt: string,
@@ -498,9 +505,10 @@ async function callLLMWithFallback(
     temperature?: number;
     maxTokens?: number;
     model?: string;
+    jsonLabel?: string;
   } = {},
 ): Promise<LLMCallResult> {
-  const primaryModel = options.model || "google/gemini-3.1-pro-preview";
+  const primaryModel = options.model || PRIMARY_LLM_MODEL;
   const temperature = options.temperature ?? 0.7;
   const maxTokens = options.maxTokens ?? 8192;
 
@@ -510,17 +518,31 @@ async function callLLMWithFallback(
     throw new Error("OPENROUTER_API_KEY is not configured");
   }
 
-  // Try primary model first, then fallback on any error
-  const modelsToTry = [primaryModel, FALLBACK_MODEL];
+  // Try primary model first, then fallback on transport or parse/format errors.
+  const modelsToTry = getLLMModelsToTry(primaryModel);
   let lastError: Error | null = null;
 
-  for (const model of modelsToTry) {
+  for (let index = 0; index < modelsToTry.length; index++) {
+    const model = modelsToTry[index];
+    const nextModel = modelsToTry[index + 1];
+
     try {
       const result = await callOpenRouter(OPENROUTER_API_KEY, model, prompt, temperature, maxTokens);
+
+      if (options.jsonLabel) {
+        const parsedContent = extractJsonFromLLMResponse(result.content, options.jsonLabel);
+        return {
+          ...result,
+          parsedContent,
+        };
+      }
+
       return result;
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
-      console.warn(`[LLM] ${model} failed: ${lastError.message}. ${model === primaryModel ? `Falling back to ${FALLBACK_MODEL}...` : "No more fallbacks."}`);
+      console.warn(
+        `[LLM] ${model} failed${options.jsonLabel ? ` for ${options.jsonLabel}` : ""}: ${lastError.message}. ${nextModel ? `Falling back to ${nextModel}...` : "No more fallbacks."}`,
+      );
     }
   }
 
@@ -573,11 +595,12 @@ async function callOpenRouter(
     tokensUsed: data.usage?.total_tokens || 0,
     provider: "openrouter",
     durationMs,
+    model,
   };
 }
 
 // ============= API CALL LOGGING =============
-// OpenRouter is used for script generation with google/gemini-3.1-pro-preview
+// OpenRouter is used for script generation with anthropic/claude-sonnet-4.6
 // Replicate is used for image generation (google/nano-banana-2) and audio (Chatterbox)
 interface ApiCallLogParams {
   supabase: any;
@@ -2757,13 +2780,13 @@ IMPORTANT: Do NOT include any style description in visualPrompt - the system wil
 - Create magazine-editorial quality that looks professional
 - Focus on CONTENT and LAYOUT only - do NOT write style descriptions`;
 
-  // Call LLM for script generation via OpenRouter (primary) with Lovable AI fallback
-  console.log("Phase: SMART FLOW SCRIPT - Generating via OpenRouter with google/gemini-3.1-pro-preview...");
+  // Call LLM for script generation via OpenRouter with automatic model fallback.
+  console.log(`Phase: SMART FLOW SCRIPT - Generating via OpenRouter with ${PRIMARY_LLM_MODEL}...`);
 
   const llmResult = await callLLMWithFallback(scriptPrompt, {
     temperature: 0.7,
     maxTokens: 4000,
-    model: "google/gemini-3.1-pro-preview",
+    jsonLabel: "Smart Flow script",
   });
 
   // Log API call
@@ -2772,24 +2795,23 @@ IMPORTANT: Do NOT include any style description in visualPrompt - the system wil
     supabase,
     userId: user.id,
     provider: llmResult.provider,
-    model: "google/gemini-3.1-pro-preview",
+    model: llmResult.model,
     status: "success",
     totalDurationMs: llmResult.durationMs,
     cost: scriptCost,
   });
   console.log(
-    `[API_LOG] ${llmResult.provider} Smart Flow script: ${llmResult.tokensUsed} tokens, $${scriptCost.toFixed(4)} cost`,
+    `[API_LOG] ${llmResult.provider} Smart Flow script (${llmResult.model}): ${llmResult.tokensUsed} tokens, $${scriptCost.toFixed(4)} cost`,
   );
 
   const scriptContent = llmResult.content;
   const tokensUsed = llmResult.tokensUsed;
 
   // Parse the script using robust JSON extractor
-  let parsedScript: {
+  const parsedScript = llmResult.parsedContent as {
     title: string;
     scenes: Array<{ number: number; voiceover: string; visualPrompt: string; duration: number }>;
   };
-  parsedScript = extractJsonFromLLMResponse(scriptContent, "Smart Flow script");
 
   // Force exactly 1 scene
   if (!parsedScript.scenes || parsedScript.scenes.length === 0) {
@@ -3075,7 +3097,7 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
   ]
 }`;
 
-  console.log("Phase: DOC2VIDEO SCRIPT - Generating via OpenRouter with google/gemini-3.1-pro-preview...");
+  console.log(`Phase: DOC2VIDEO SCRIPT - Generating via OpenRouter with ${PRIMARY_LLM_MODEL}...`);
 
   // Scale maxTokens based on scene count to prevent truncation
   const doc2videoMaxTokens = length === "presentation" ? 16384 : length === "brief" ? 12000 : 8192;
@@ -3083,7 +3105,7 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
   const llmResult = await callLLMWithFallback(scriptPrompt, {
     temperature: 0.7,
     maxTokens: doc2videoMaxTokens,
-    model: "google/gemini-3.1-pro-preview",
+    jsonLabel: "Doc2Video script",
   });
 
   // Log API call
@@ -3092,13 +3114,13 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
     supabase,
     userId: user.id,
     provider: llmResult.provider,
-    model: "google/gemini-3.1-pro-preview",
+    model: llmResult.model,
     status: "success",
     totalDurationMs: llmResult.durationMs,
     cost: scriptCost,
   });
   console.log(
-    `[API_LOG] ${llmResult.provider} Doc2Video script: ${llmResult.tokensUsed} tokens, $${scriptCost.toFixed(4)} cost`,
+    `[API_LOG] ${llmResult.provider} Doc2Video script (${llmResult.model}): ${llmResult.tokensUsed} tokens, $${scriptCost.toFixed(4)} cost`,
   );
 
   const scriptContent = llmResult.content;
@@ -3106,8 +3128,7 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
 
   if (!scriptContent) throw new Error("No script content received");
 
-  let parsedScript: ScriptResponse;
-  parsedScript = extractJsonFromLLMResponse(scriptContent, "Doc2Video script") as ScriptResponse;
+  const parsedScript = llmResult.parsedContent as ScriptResponse;
 
   // Sanitize voiceovers and append style to visualPrompts for visibility
   parsedScript.scenes = parsedScript.scenes.map((s) => ({
@@ -3463,12 +3484,12 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
   ]
 }`;
 
-  console.log("Phase: STORYTELLING SCRIPT - Generating via OpenRouter with google/gemini-3.1-pro-preview...");
+  console.log(`Phase: STORYTELLING SCRIPT - Generating via OpenRouter with ${PRIMARY_LLM_MODEL}...`);
 
   const llmResult = await callLLMWithFallback(scriptPrompt, {
     temperature: 0.8, // Slightly higher for creative storytelling
     maxTokens: 12000, // More tokens for longer narratives
-    model: "google/gemini-3.1-pro-preview",
+    jsonLabel: "Storytelling script",
   });
 
   // Log API call
@@ -3477,13 +3498,13 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
     supabase,
     userId: user.id,
     provider: llmResult.provider,
-    model: "google/gemini-3.1-pro-preview",
+    model: llmResult.model,
     status: "success",
     totalDurationMs: llmResult.durationMs,
     cost: scriptCost,
   });
   console.log(
-    `[API_LOG] ${llmResult.provider} Storytelling script: ${llmResult.tokensUsed} tokens, $${scriptCost.toFixed(4)} cost`,
+    `[API_LOG] ${llmResult.provider} Storytelling script (${llmResult.model}): ${llmResult.tokensUsed} tokens, $${scriptCost.toFixed(4)} cost`,
   );
 
   const scriptContent = llmResult.content;
@@ -3491,8 +3512,7 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
 
   if (!scriptContent) throw new Error("No script content received");
 
-  let parsedScript: ScriptResponse;
-  parsedScript = extractJsonFromLLMResponse(scriptContent, "Storytelling script") as ScriptResponse;
+  const parsedScript = llmResult.parsedContent as ScriptResponse;
 
   // ============= HYPEREAL CHARACTER REFERENCE GENERATION (Pro/Enterprise only) =============
   let characterReferences: Record<string, string> = {}; // Maps character name to reference image URL

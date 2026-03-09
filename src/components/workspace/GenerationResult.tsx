@@ -608,7 +608,7 @@ export function GenerationResult({
                     onClick={() => {
                       const safeName =
                         title.replace(/[^a-z0-9]/gi, "_").slice(0, 50) || "video";
-                      downloadVideo(exportState.videoUrl!, `${safeName}.mp4`);
+                      downloadVideo(exportState.videoUrl!, `${safeName}.mp4`, true);
                     }}
                   >
                     <Download className="h-4 w-4" />

@@ -68,29 +68,36 @@ export async function shareVideo(url: string, filename = "video.mp4"): Promise<b
   return false;
 }
 
-/** Download video with platform-specific strategies — always blob-based for cross-origin */
-export async function downloadVideo(url: string, filename = "video.mp4"): Promise<void> {
+/**
+ * Download video with platform-specific strategies — always blob-based for cross-origin.
+ * @param userGesture Pass true when called from a click handler (enables Share API on mobile).
+ *                    Auto-downloads from useEffect should pass false to avoid gesture errors.
+ */
+export async function downloadVideo(url: string, filename = "video.mp4", userGesture = false): Promise<void> {
   if (!url) return;
 
   const { isIOS, isAndroid, isMacSafari, isIOSChrome, isMobile } = detectPlatform();
-  console.log(LOG, "Starting download", { filename, isIOS, isAndroid, isMacSafari, isMobile });
+  console.log(LOG, "Starting download", { filename, isIOS, isAndroid, isMacSafari, isMobile, userGesture });
 
   try {
     const blob = await fetchAsBlob(url);
 
-    // ---- iOS: prefer Share API, fallback to blob navigation ----
+    // ---- iOS ----
     if (isIOS) {
-      const file = new File([blob], filename, { type: "video/mp4" });
-      if (!shareInProgress && navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          shareInProgress = true;
-          console.log(LOG, "iOS: using Share API for save-to-files");
-          await navigator.share({ files: [file], title: filename });
-          return;
-        } catch (shareErr) {
-          console.warn(LOG, "iOS share failed:", shareErr);
-        } finally {
-          shareInProgress = false;
+      // Only try Share API if triggered by a real user gesture (tap/click)
+      if (userGesture && !shareInProgress) {
+        const file = new File([blob], filename, { type: "video/mp4" });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            shareInProgress = true;
+            console.log(LOG, "iOS: using Share API for save-to-files");
+            await navigator.share({ files: [file], title: filename });
+            return;
+          } catch (shareErr) {
+            console.warn(LOG, "iOS share cancelled:", shareErr);
+          } finally {
+            shareInProgress = false;
+          }
         }
       }
       // iOS Chrome: navigate to blob URL (triggers "Open in..." dialog)
@@ -105,19 +112,21 @@ export async function downloadVideo(url: string, filename = "video.mp4"): Promis
       return;
     }
 
-    // ---- Android: prefer Share API, fallback to blob anchor ----
+    // ---- Android ----
     if (isAndroid) {
-      const file = new File([blob], filename, { type: "video/mp4" });
-      if (!shareInProgress && navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          shareInProgress = true;
-          console.log(LOG, "Android: using Share API");
-          await navigator.share({ files: [file], title: filename });
-          return;
-        } catch (shareErr) {
-          console.warn(LOG, "Android share failed:", shareErr);
-        } finally {
-          shareInProgress = false;
+      if (userGesture && !shareInProgress) {
+        const file = new File([blob], filename, { type: "video/mp4" });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            shareInProgress = true;
+            console.log(LOG, "Android: using Share API");
+            await navigator.share({ files: [file], title: filename });
+            return;
+          } catch (shareErr) {
+            console.warn(LOG, "Android share cancelled:", shareErr);
+          } finally {
+            shareInProgress = false;
+          }
         }
       }
       console.log(LOG, "Android: blob anchor download");
@@ -125,7 +134,7 @@ export async function downloadVideo(url: string, filename = "video.mp4"): Promis
       return;
     }
 
-    // ---- macOS Safari: blob anchor (Safari ignores download attr on cross-origin) ----
+    // ---- macOS Safari: blob anchor ----
     if (isMacSafari) {
       console.log(LOG, "macOS Safari: blob anchor download");
       triggerBlobDownload(blob, filename);

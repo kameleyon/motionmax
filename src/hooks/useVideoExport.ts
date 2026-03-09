@@ -155,8 +155,8 @@ export function useVideoExport() {
     [log, err]
   );
 
-  const handleDownload = useCallback((url: string, filename: string) => {
-    return downloadVideo(url, filename);
+  const handleDownload = useCallback((url: string, filename: string, userGesture = false) => {
+    return downloadVideo(url, filename, userGesture);
   }, []);
 
   const handleShare = useCallback((url: string, filename: string) => {

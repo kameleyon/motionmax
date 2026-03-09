@@ -681,6 +681,45 @@ export type Database = {
         }
         Relationships: []
       }
+      video_generation_jobs: {
+        Row: {
+          id: string
+          project_id: string
+          user_id: string
+          task_type: string
+          status: string
+          payload: Json | null
+          progress: number | null
+          error_message: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          user_id: string
+          task_type: string
+          status?: string
+          payload?: Json | null
+          progress?: number | null
+          error_message?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          user_id?: string
+          task_type?: string
+          status?: string
+          payload?: Json | null
+          progress?: number | null
+          error_message?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       webhook_events: {
         Row: {
           event_id: string

@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from "react";
 import { type ExportState } from "./export/types";
 import { downloadVideo, shareVideo } from "./export/downloadHelpers";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import type { Scene } from "./generation/types";
 
 export type { ExportStatus } from "./export/types";
@@ -48,7 +49,7 @@ export function useVideoExport() {
              project_id: resolvedProjectId,
              user_id: user.id,
              task_type: "export_video",
-             payload: { scenes, format, brandMark, project_id: resolvedProjectId },
+             payload: { scenes, format, brandMark, project_id: resolvedProjectId } as unknown as Json,
              status: "pending"
           })
           .select()

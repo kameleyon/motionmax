@@ -148,12 +148,13 @@ async function legacyCallPhase(body: Record<string, unknown>, timeoutMs: number,
       return result;
     } catch (error) {
       clearTimeout(timeoutId);
+      const elapsedMs = Date.now() - requestStartedAt;
       console.error(LOG, "Edge function request threw", {
         requestId,
         endpoint,
         phase,
         attempt,
-        elapsedMs: Date.now() - requestStartedAt,
+        elapsedMs,
         error: error instanceof Error ? { name: error.name, message: error.message } : String(error),
       });
 
@@ -161,26 +162,43 @@ async function legacyCallPhase(body: Record<string, unknown>, timeoutMs: number,
         throw new Error(`Request timed out after ${timeoutMs / 1000}s.`);
       }
 
-      const isTransientFetch = String(error).toLowerCase().includes("failed to fetch");
+      const errorStr = String(error).toLowerCase();
+      const isTransientFetch = errorStr.includes("failed to fetch");
+      const isCorsGatewayTimeout = isTransientFetch && elapsedMs > 25000;
+
       if (isTransientFetch) {
         console.error(LOG, "Browser fetch failed before a usable response was returned", {
           requestId,
           endpoint,
           phase,
           attempt,
-          note: "This usually means a browser-level network failure, CORS-blocked gateway error, or an upstream timeout before the edge function response reached the browser.",
+          isCorsGatewayTimeout,
+          note: isCorsGatewayTimeout
+            ? "Likely a 504 Gateway Timeout from Supabase infrastructure. The edge function exceeded the gateway timeout limit. CORS headers are missing from 504 responses, causing the browser to report a CORS error."
+            : "Browser-level network failure or transient CORS issue.",
         });
       }
 
       if (attempt < MAX_ATTEMPTS && isTransientFetch) {
+        const backoffMs = isCorsGatewayTimeout
+          ? 2000 * attempt + Math.floor(Math.random() * 1000)
+          : 750 * attempt + Math.floor(Math.random() * 250);
         console.warn(LOG, "Retrying after network/fetch failure", {
           requestId,
           endpoint,
           phase,
           attempt,
+          backoffMs,
         });
-        await sleep(750 * attempt + Math.floor(Math.random() * 250));
+        await sleep(backoffMs);
         continue;
+      }
+
+      if (isCorsGatewayTimeout) {
+        throw new Error(
+          `Server timed out processing the "${phase}" phase (${Math.round(elapsedMs / 1000)}s). ` +
+          "This can happen with longer content or during high server load. Please try again."
+        );
       }
 
       throw error;

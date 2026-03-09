@@ -5466,18 +5466,33 @@ serve(async (req) => {
         requestElapsedMs: Date.now() - requestStartedAt,
       });
 
-      console.log("[generate-video] Starting moderation check", {
+      console.log("[generate-video] Starting parallel pre-flight checks (moderation + subscription + credits)", {
         userId: user.id,
         contentLength: typeof content === "string" ? content.length : 0,
       });
 
-      // ============= CONTENT MODERATION CHECK =============
-      const moderationResult = await moderateContent(content);
-      console.log("[generate-video] Moderation check completed", {
+      // ============= PARALLEL PRE-FLIGHT CHECKS =============
+      // Run moderation, subscription, and credit checks concurrently to save ~5-8s
+      const [moderationResult, subscriptionResult, creditResult] = await Promise.all([
+        moderateContent(content),
+        supabase
+          .from("subscriptions")
+          .select("plan_name, status")
+          .eq("user_id", user.id)
+          .eq("status", "active")
+          .single(),
+        supabase
+          .from("user_credits")
+          .select("credits_balance")
+          .eq("user_id", user.id)
+          .single(),
+      ]);
+
+      console.log("[generate-video] Pre-flight checks completed", {
         userId: user.id,
-        passed: moderationResult.passed,
-        reason: moderationResult.reason || null,
-        flagType: moderationResult.flagType || null,
+        moderationPassed: moderationResult.passed,
+        moderationReason: moderationResult.reason || null,
+        moderationFlagType: moderationResult.flagType || null,
         elapsedMs: Date.now() - requestStartedAt,
       });
 
@@ -5513,30 +5528,12 @@ serve(async (req) => {
         enterprise: 999,
       };
 
-      console.log("[generate-video] Loading subscription and credit data", {
-        userId: user.id,
-        projectType: body.projectType || "doc2video",
-      });
-
-      // Get user subscription and credits
-      const { data: subscriptionData } = await supabase
-        .from("subscriptions")
-        .select("plan_name, status")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .single();
-
+      const subscriptionData = subscriptionResult.data;
       const userPlan = subscriptionData?.plan_name || "free";
       const subscriptionStatus = subscriptionData?.status || null;
       const dailyLimit = PLAN_DAILY_LIMITS[userPlan] || PLAN_DAILY_LIMITS.free;
 
-      // Get user credits
-      const { data: creditData } = await supabase
-        .from("user_credits")
-        .select("credits_balance")
-        .eq("user_id", user.id)
-        .single();
-
+      const creditData = creditResult.data;
       const creditsBalance = creditData?.credits_balance || 0;
 
       // Calculate credits required based on project type and length

@@ -35,10 +35,10 @@
 
 | Severity | Count |
 |----------|-------|
-| Critical | 10 |
-| High | 22 |
-| Medium | 30 |
-| Low | 21 |
+| Critical | 11 |
+| High | 25 |
+| Medium | 34 |
+| Low | 23 |
 
 ---
 
@@ -644,6 +644,38 @@
 33. **[Low] Worker Has Compiled JS Files Alongside TypeScript Sources**
     The `worker/src/` directory contains both `.ts` source files and their compiled `.js` and `.d.ts` counterparts (e.g., `generateVideo.ts` + `generateVideo.js` + `generateVideo.d.ts`). The compiled files should be in a separate `dist/` directory and excluded from version control.
 
+### Generation Pipeline & Hooks
+
+34. **[Critical] Video Export Buffers Entire MP4 in Memory**
+    `src/workers/videoExportWorker.ts` uses `ArrayBufferTarget` from mp4-muxer to accumulate the entire video in memory before returning it. For long videos (10+ minutes at 1080p/30fps), this can exceed available memory and crash the browser tab. A streaming approach using `StreamTarget` would avoid this. This is particularly problematic on mobile devices with limited memory.
+
+35. **[High] Global Rate-Limit State Shared Across Tabs**
+    `src/hooks/generation/cinematicPipeline.ts` uses a module-level global variable `lastRateLimitTime` for rate-limit cooldown tracking. Since this is module-level state, it is shared across all components in the same tab but NOT across tabs. If a user has multiple tabs generating content, each tab independently hits rate limits without awareness of the other, leading to wasted API calls and confusing error messages.
+
+36. **[High] Database Scene Schema Inconsistency**
+    `src/hooks/generation/types.ts` reveals that `normalizeScenes()` must handle two different field naming conventions: `voiceover` vs `narration`, `imageUrl` vs `image_url`, `audioUrl` vs `audio_url`, `visualPrompt` vs `visual_prompt`. This means the database stores scenes with inconsistent field names depending on which code path created them. Every component reading scenes must account for both conventions, creating unnecessary complexity and bug surface area. A database migration should standardize all scene field names.
+
+37. **[High] `uploadStyleReference` Falls Back to Data URL on Failure**
+    `src/lib/uploadStyleReference.ts` falls back to converting the image to a base64 data URL when the Supabase storage upload fails. Data URLs for images can be several megabytes and are then passed in the API request body to the edge function. This can exceed Supabase Edge Function request body limits (typically 2MB) causing the generation to fail with an opaque error. The function should fail explicitly rather than falling back to an approach that is likely to cause a downstream failure.
+
+38. **[Medium] Cinematic Pipeline Video Retry Limited to Single Round**
+    `src/hooks/generation/cinematicPipeline.ts` comments reference "FIX 3" reducing video retries from 2 rounds to 1. If a video fails to generate on the first attempt, there is only one retry round before the scene is marked as failed. Given that video generation via Replicate/Grok can be flaky (network timeouts, model cold starts), a single retry round may be insufficient.
+
+39. **[Medium] Products Config Missing SmartFlow and Cinematic**
+    `src/config/products.ts` only defines `doc2video` and `storytelling` as products. SmartFlow and Cinematic are fully functional workspace modes but are not listed in the products config. This config appears to be used nowhere currently, but represents incomplete data that could cause issues if any code starts relying on it for feature discovery or routing.
+
+40. **[Medium] `use-mobile` Hook Returns Undefined on First Render**
+    `src/hooks/use-mobile.tsx` initializes state as `undefined` and only sets the actual value after `useEffect` runs. Components using this hook will get `false` (via `!!undefined`) on first render, then re-render with the correct value. This causes a flash where mobile layouts briefly show desktop styling.
+
+41. **[Medium] Video Export Job Lacks Idempotency Key**
+    `src/hooks/useVideoExport.ts` inserts a new `video_generation_jobs` row on each export request with no idempotency key. If a user rapidly clicks the export button, multiple identical jobs are created, consuming worker resources and potentially generating duplicate videos. A unique key based on project ID + generation ID should prevent this.
+
+42. **[Low] Video Export Debug Logs Accumulate in localStorage**
+    `src/lib/videoExportDebug.ts` keeps up to 300 log entries in localStorage. With detailed export logging, this can consume significant storage space and is never cleaned up unless the user manually clears it.
+
+43. **[Low] `useImagesZipDownload` Has Filename Collision Risk**
+    `src/hooks/useImagesZipDownload.ts` generates zip entries with filenames like `scene_01_image_1.png`. If multiple scenes share the same numbering (possible with regenerated scenes), files could overwrite each other in the zip.
+
 ---
 
 ## Assets and Static Files Audit
@@ -739,10 +771,11 @@
 8. Add React error boundaries at minimum around each workspace and the main app layout
 9. Fix `create-checkout` origin fallback from `vision-narrate-pro.lovable.app` to `motionmax.io`
 10. Fix `create-checkout` to use service role key instead of anon key
+11. Implement streaming video export (StreamTarget) to prevent browser OOM crashes on long videos
 
 ### Short-Term (High)
 
-11. Add price ID validation in `create-checkout` against known valid IDs
+12. Add price ID validation in `create-checkout` against known valid IDs
 12. Add ownership verification in `refresh-project-thumbnails`
 13. Add audio file validation (type, size) in `clone-voice`
 14. Move admin role check earlier in `admin-stats`
@@ -754,10 +787,13 @@
 20. Extract shared sidebar layout into a React Router layout route
 21. Restrict CORS origins to application domain(s) in Edge Functions
 22. Remove dead code (ContentInput upload section, temp files, compiled worker JS)
+23. Standardize database scene field names (voiceover/narration, imageUrl/image_url, etc.) via migration
+24. Fix `uploadStyleReference` to fail explicitly instead of falling back to data URL
+25. Fix global rate-limit state in cinematic pipeline (use per-instance tracking)
 
 ### Medium-Term (Medium)
 
-23. Create a single source of truth for pricing data
+26. Create a single source of truth for pricing data
 24. Standardize "smartflow" vs "smart-flow" project type with a database migration
 25. Add Content Security Policy headers
 26. Replace Google Fonts CSS @import with preload links
@@ -767,10 +803,13 @@
 30. Implement Realtime subscriptions for generation recovery instead of polling
 31. Add image format validation for style reference uploads
 32. Replace hardcoded PBKDF2 salt in manage-api-keys with per-deployment random salt
+33. Add idempotency key to video export job creation to prevent duplicates
+34. Add SmartFlow and Cinematic to products config
+35. Fix `use-mobile` hook to avoid undefined flash on first render
 
 ### Long-Term (Low)
 
-33. Add sitemap.xml and reference it in robots.txt
+36. Add sitemap.xml and reference it in robots.txt
 34. Remove unused Montserrat font import
 35. Implement URL-based pagination state for Projects page
 36. Add export functionality for billing history
@@ -778,6 +817,8 @@
 38. Evaluate replacing `node-fetch` and `axios` with native fetch in worker
 39. Add 404 analytics tracking
 40. Add legal document version history
+41. Clean up video export debug logs periodically or on session start
+42. Fix filename collision risk in image ZIP downloads
 
 ---
 

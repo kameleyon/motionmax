@@ -1,4 +1,4 @@
-import { Wand2, Pencil, Users, Camera, Palette, Laugh, PenTool, Baby, ChevronLeft, ChevronRight, Upload, X, GraduationCap, Loader2 } from "lucide-react";
+﻿import { Wand2, Pencil, Users, Camera, Palette, Laugh, PenTool, Baby, ChevronLeft, ChevronRight, Upload, X, GraduationCap, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useRef, useState, useEffect } from "react";
 import { uploadStyleReference } from "@/lib/uploadStyleReference";
+import { toast } from "sonner";
 
 // Import style preview images
 import minimalistPreview from "@/assets/styles/minimalist-preview.png";
@@ -105,8 +106,14 @@ export function SmartFlowStyleSelector({
     const file = event.target.files?.[0];
     if (!file) return;
     
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Invalid file type. Please upload an image (PNG, JPG, WEBP, etc.).");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image too large. Maximum size is 5 MB.");
+      return;
+    }
     
     setUploading(true);
     try {

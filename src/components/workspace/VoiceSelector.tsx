@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { User, UserRound, Mic, Play, Pause } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -45,7 +45,17 @@ export function VoiceSelector({ selected, onSelect }: VoiceSelectorProps) {
   const { user } = useAuth();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
-  
+
+  // Stop any playing audio and release the element when the component unmounts
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
   // Fetch user's custom voices
   const { data: customVoices = [] } = useQuery({
     queryKey: ["user-voices", user?.id],

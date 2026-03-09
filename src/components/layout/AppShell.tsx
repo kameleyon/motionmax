@@ -1,11 +1,11 @@
 import { Outlet } from "react-router-dom";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
+import { WorkspaceErrorBoundary } from "@/components/workspace/WorkspaceErrorBoundary";
 
 /**
  * Shared authenticated app shell used by simple sidebar routes (/app, /app/create, /pricing).
- * Provides SidebarProvider + AppSidebar via React Router's Outlet — eliminates per-page
- * duplication of the wrapper pattern.
+ * Provides SidebarProvider + AppSidebar + WorkspaceErrorBoundary via React Router's Outlet.
  */
 export function AppShell() {
   return (
@@ -13,7 +13,9 @@ export function AppShell() {
       <div className="flex min-h-screen w-full overflow-hidden">
         <AppSidebar />
         <main className="flex-1 min-w-0 overflow-hidden">
-          <Outlet />
+          <WorkspaceErrorBoundary>
+            <Outlet />
+          </WorkspaceErrorBoundary>
         </main>
       </div>
     </SidebarProvider>

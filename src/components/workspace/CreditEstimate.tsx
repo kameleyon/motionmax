@@ -9,7 +9,16 @@ interface CreditEstimateProps {
 }
 
 export function CreditEstimate({ projectType, length, creditsBalance }: CreditEstimateProps) {
-  const cost = getCreditsRequired(projectType, length);
+  // Guard: smartflow/cinematic return early in getCreditsRequired (length not checked).
+  // For doc2video/storytelling, an empty/invalid length would throw — default to 0 so
+  // the component renders safely while the user is still selecting options.
+  let cost = 0;
+  try {
+    cost = getCreditsRequired(projectType, length);
+  } catch {
+    cost = 0;
+  }
+
   const hasEnough = creditsBalance >= cost;
 
   return (

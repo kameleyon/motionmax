@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Download,
@@ -125,7 +125,7 @@ export function ResultActionBar({
       setShareUrl(metaUrl);
       
       // Show branded URL in the UI for better UX
-      setDisplayUrl(`https://motionmax.io/share/${token}`);
+      setDisplayUrl(`${window.location.origin}/share/${token}`);
     } catch (error) {
       console.error("Failed to create share:", error);
       toast({

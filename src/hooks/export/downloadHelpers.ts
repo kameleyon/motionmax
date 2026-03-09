@@ -6,6 +6,9 @@
 
 const LOG = "[Export:Download]";
 
+/** Guard against concurrent navigator.share() calls */
+let shareInProgress = false;
+
 /** Detect platform once */
 function detectPlatform() {
   const ua = navigator.userAgent;
@@ -42,7 +45,12 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
 /** Share video using the Web Share API (primarily for mobile) */
 export async function shareVideo(url: string, filename = "video.mp4"): Promise<boolean> {
   if (!url) return false;
+  if (shareInProgress) {
+    console.log(LOG, "Share already in progress, skipping");
+    return false;
+  }
   try {
+    shareInProgress = true;
     console.log(LOG, "Attempting share", { filename });
     const blob = await fetchAsBlob(url);
     const file = new File([blob], filename, { type: "video/mp4" });
@@ -54,6 +62,8 @@ export async function shareVideo(url: string, filename = "video.mp4"): Promise<b
     console.log(LOG, "Share API not available for this content");
   } catch (e) {
     console.warn(LOG, "Share failed:", e);
+  } finally {
+    shareInProgress = false;
   }
   return false;
 }
@@ -71,10 +81,17 @@ export async function downloadVideo(url: string, filename = "video.mp4"): Promis
     // ---- iOS: prefer Share API, fallback to blob navigation ----
     if (isIOS) {
       const file = new File([blob], filename, { type: "video/mp4" });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        console.log(LOG, "iOS: using Share API for save-to-files");
-        await navigator.share({ files: [file], title: filename });
-        return;
+      if (!shareInProgress && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          shareInProgress = true;
+          console.log(LOG, "iOS: using Share API for save-to-files");
+          await navigator.share({ files: [file], title: filename });
+          return;
+        } catch (shareErr) {
+          console.warn(LOG, "iOS share failed:", shareErr);
+        } finally {
+          shareInProgress = false;
+        }
       }
       // iOS Chrome: navigate to blob URL (triggers "Open in..." dialog)
       if (isIOSChrome) {
@@ -91,10 +108,17 @@ export async function downloadVideo(url: string, filename = "video.mp4"): Promis
     // ---- Android: prefer Share API, fallback to blob anchor ----
     if (isAndroid) {
       const file = new File([blob], filename, { type: "video/mp4" });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        console.log(LOG, "Android: using Share API");
-        await navigator.share({ files: [file], title: filename });
-        return;
+      if (!shareInProgress && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          shareInProgress = true;
+          console.log(LOG, "Android: using Share API");
+          await navigator.share({ files: [file], title: filename });
+          return;
+        } catch (shareErr) {
+          console.warn(LOG, "Android share failed:", shareErr);
+        } finally {
+          shareInProgress = false;
+        }
       }
       console.log(LOG, "Android: blob anchor download");
       triggerBlobDownload(blob, filename);

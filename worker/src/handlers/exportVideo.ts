@@ -9,6 +9,16 @@ import { writeSystemLog } from "../lib/logger.js";
 
 const FFMPEG_TIMEOUT_SEC = 120; // 2 minutes per FFmpeg operation
 
+/** Memory-safe x264 flags — keeps libx264 under ~40MB by using 1 thread + minimal buffers */
+const X264_MEM_FLAGS = [
+  '-threads 1',
+  '-refs 1',
+  '-rc-lookahead 0',
+  '-g 24',
+  '-bf 0',
+  '-x264-params rc-lookahead=0:threads=1',
+];
+
 /** Stream a URL directly to disk without buffering in Node.js heap */
 async function streamToFile(url: string, destPath: string): Promise<void> {
   const response = await fetch(url);
@@ -18,17 +28,35 @@ async function streamToFile(url: string, destPath: string): Promise<void> {
   await pipeline(response.body, dest);
 }
 
-/** Upload via streaming read instead of loading entire file into memory */
+/** Upload final MP4 to Supabase Storage using streaming REST to avoid loading into heap */
 async function uploadToSupabase(localPath: string, fileName: string): Promise<string> {
-  const fileBuffer = await fs.promises.readFile(localPath);
-  const { data, error } = await supabase.storage
-    .from('videos')
-    .upload(`exports/${fileName}`, fileBuffer, {
-      contentType: 'video/mp4',
-      upsert: true
-    });
-  if (error) throw new Error(`Supabase upload failed: ${error.message}`);
-  const { data: publicData } = supabase.storage.from('videos').getPublicUrl(`exports/${fileName}`);
+  const stat = await fs.promises.stat(localPath);
+  const stream = fs.createReadStream(localPath);
+
+  // Use Supabase Storage REST directly with a stream body to avoid buffering
+  const supabaseUrl = process.env.SUPABASE_URL!;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY!;
+  const storagePath = `exports/${fileName}`;
+
+  const uploadUrl = `${supabaseUrl}/storage/v1/object/videos/${storagePath}`;
+  const response = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${supabaseKey}`,
+      'apikey': supabaseKey,
+      'Content-Type': 'video/mp4',
+      'Content-Length': String(stat.size),
+      'x-upsert': 'true',
+    },
+    body: stream as any,
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Supabase upload failed (${response.status}): ${errText}`);
+  }
+
+  const { data: publicData } = supabase.storage.from('videos').getPublicUrl(storagePath);
   return publicData.publicUrl;
 }
 
@@ -62,6 +90,7 @@ function createVideoFromImageAudio(
         '-shortest',
         `-t ${Math.ceil(duration)}`,
         '-movflags +faststart',
+        ...X264_MEM_FLAGS,
       ])
       .save(outputPath)
       .on('end', () => { clearTimeout(timer); resolve(); })
@@ -92,6 +121,7 @@ function createSilentVideo(
         '-pix_fmt yuv420p',
         `-t ${duration}`,
         '-movflags +faststart',
+        ...X264_MEM_FLAGS,
       ])
       .save(outputPath)
       .on('end', () => { clearTimeout(timer); resolve(); })

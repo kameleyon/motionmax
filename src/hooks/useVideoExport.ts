@@ -58,8 +58,65 @@ export function useVideoExport() {
 
         return await new Promise<string>((resolve, reject) => {
             const timeoutMs = 600000; // 10 minute extreme timeout for massive renders
-            const timeoutId = setTimeout(() => {
+            let settled = false;
+
+            const cleanup = (channel: ReturnType<typeof supabase.channel>, timeoutId: NodeJS.Timeout, pollId: NodeJS.Timeout) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeoutId);
+                clearInterval(pollId);
                 supabase.removeChannel(channel);
+            };
+
+            const handleJobUpdate = (
+              updatedJob: any,
+              channel: ReturnType<typeof supabase.channel>,
+              timeoutId: NodeJS.Timeout,
+              pollId: NodeJS.Timeout,
+              source: string
+            ) => {
+                if (settled) return;
+                log(`[${source}] Render progress: ${updatedJob.progress}% | Status: ${updatedJob.status}`);
+
+                if (abortRef.current) {
+                    cleanup(channel, timeoutId, pollId);
+                    reject(new Error("Export aborted by user"));
+                    return;
+                }
+
+                if (updatedJob.status === "processing") {
+                    setState({ status: "rendering", progress: updatedJob.progress || 10, warning: updatedJob.progress > 80 ? "Stitching video blocks natively..." : undefined });
+                } else if (updatedJob.status === "completed") {
+                    cleanup(channel, timeoutId, pollId);
+                    const finalUrl = updatedJob.payload?.finalUrl;
+                    setState({ status: 'complete', progress: 100, videoUrl: finalUrl });
+                    resolve(finalUrl);
+                } else if (updatedJob.status === "failed") {
+                    cleanup(channel, timeoutId, pollId);
+                    setState({ status: 'error', progress: 0, error: updatedJob.error_message || "Render compilation failed" });
+                    reject(new Error(updatedJob.error_message || "Worker job failed during exporting"));
+                }
+            };
+
+            // Fallback poll: query the job row directly every 8s in case Realtime drops events
+            const pollId = setInterval(async () => {
+                if (settled) return;
+                try {
+                    const { data: polledJob } = await supabase
+                      .from("video_generation_jobs")
+                      .select("*")
+                      .eq("id", job.id)
+                      .single();
+                    if (polledJob) {
+                        handleJobUpdate(polledJob, channel, timeoutId, pollId, "poll");
+                    }
+                } catch (pollErr) {
+                    err("Fallback poll error:", pollErr);
+                }
+            }, 8000);
+
+            const timeoutId = setTimeout(() => {
+                cleanup(channel, timeoutId, pollId);
                 setState({ status: "error", progress: 0, error: "Render server timed out" });
                 reject(new Error("Timeout waiting for Render server"));
             }, timeoutMs);
@@ -75,34 +132,15 @@ export function useVideoExport() {
                   filter: `id=eq.${job.id}`
                 },
                 (payload) => {
-                  const updatedJob = payload.new;
-                  log(`Render progress: ${updatedJob.progress}% | Status: ${updatedJob.status}`);
-                  
-                  if (abortRef.current) {
-                      clearTimeout(timeoutId);
-                      supabase.removeChannel(channel);
-                      reject(new Error("Export aborted by user"));
-                  }
-
-                  if (updatedJob.status === "processing") {
-                      setState({ status: "rendering", progress: updatedJob.progress || 10, warning: updatedJob.progress > 80 ? "Stitching video blocks natively..." : undefined });
-                  } else if (updatedJob.status === "completed") {
-                      clearTimeout(timeoutId);
-                      supabase.removeChannel(channel);
-                      const finalUrl = updatedJob.payload.finalUrl;
-                      setState({ status: 'complete', progress: 100, videoUrl: finalUrl });
-                      resolve(finalUrl);
-                  } else if (updatedJob.status === "failed") {
-                      clearTimeout(timeoutId);
-                      supabase.removeChannel(channel);
-                      setState({ status: 'error', progress: 0, error: updatedJob.error_message || "Render compilation failed" });
-                      reject(new Error(updatedJob.error_message || "Worker job failed during exporting"));
-                  }
+                  handleJobUpdate(payload.new, channel, timeoutId, pollId, "realtime");
                 }
               )
-              .subscribe((status, err) => {
+              .subscribe((status, subErr) => {
                   if (status === 'SUBSCRIBED') {
-                      log("Listening to Render worker metrics successfully.");
+                      log("Realtime channel subscribed — listening for worker updates.");
+                  } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                      err(`Realtime channel issue: ${status}`, subErr);
+                      log("Fallback polling will continue to track job progress.");
                   }
               });
         });

@@ -614,22 +614,6 @@ export function GenerationResult({
                     <Download className="h-4 w-4" />
                     Download to Files
                   </Button>
-                  {/* Share button for iOS Save to Photos */}
-                  {typeof navigator !== "undefined" && navigator.canShare && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full gap-2"
-                      onClick={() => {
-                        const safeName =
-                          title.replace(/[^a-z0-9]/gi, "_").slice(0, 50) || "video";
-                        shareVideo(exportState.videoUrl!, `${safeName}.mp4`);
-                      }}
-                    >
-                      <Share2 className="h-4 w-4" />
-                      Share / Save to Photos
-                    </Button>
-                  )}
                 </div>
                 <Button
                   type="button"

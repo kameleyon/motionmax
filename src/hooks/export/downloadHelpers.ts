@@ -82,54 +82,29 @@ export async function downloadVideo(url: string, filename = "video.mp4", userGes
   try {
     const blob = await fetchAsBlob(url);
 
-    // ---- iOS ----
-    if (isIOS) {
-      // Only try Share API if triggered by a real user gesture (tap/click)
-      if (userGesture && !shareInProgress) {
-        const file = new File([blob], filename, { type: "video/mp4" });
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          try {
-            shareInProgress = true;
-            console.log(LOG, "iOS: using Share API for save-to-files");
-            await navigator.share({ files: [file], title: filename });
+    // ---- Mobile (iOS + Android): always use Share API for saving files ----
+    if (isMobile) {
+      const file = new File([blob], filename, { type: "video/mp4" });
+      if (!shareInProgress && navigator.share) {
+        try {
+          shareInProgress = true;
+          console.log(LOG, "Mobile: using Share API to save file");
+          await navigator.share({ files: [file], title: filename });
+          console.log(LOG, "Mobile: Share API save successful");
+          return;
+        } catch (shareErr: any) {
+          // User cancelled share dialog — not an error
+          if (shareErr?.name === 'AbortError') {
+            console.log(LOG, "Mobile: user cancelled share dialog");
             return;
-          } catch (shareErr) {
-            console.warn(LOG, "iOS share cancelled:", shareErr);
-          } finally {
-            shareInProgress = false;
           }
+          console.warn(LOG, "Mobile: Share API failed, trying blob download:", shareErr);
+        } finally {
+          shareInProgress = false;
         }
       }
-      // iOS Chrome: navigate to blob URL (triggers "Open in..." dialog)
-      if (isIOSChrome) {
-        console.log(LOG, "iOS Chrome: navigating to blob URL");
-        window.location.href = URL.createObjectURL(blob);
-        return;
-      }
-      // iOS Safari fallback: blob anchor download
-      console.log(LOG, "iOS Safari: blob anchor download");
-      triggerBlobDownload(blob, filename);
-      return;
-    }
-
-    // ---- Android ----
-    if (isAndroid) {
-      if (userGesture && !shareInProgress) {
-        const file = new File([blob], filename, { type: "video/mp4" });
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          try {
-            shareInProgress = true;
-            console.log(LOG, "Android: using Share API");
-            await navigator.share({ files: [file], title: filename });
-            return;
-          } catch (shareErr) {
-            console.warn(LOG, "Android share cancelled:", shareErr);
-          } finally {
-            shareInProgress = false;
-          }
-        }
-      }
-      console.log(LOG, "Android: blob anchor download");
+      // Fallback: blob anchor (may open in browser on iOS — only option left)
+      console.log(LOG, "Mobile: fallback blob anchor download");
       triggerBlobDownload(blob, filename);
       return;
     }

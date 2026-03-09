@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Mail, Lock, ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Mail, Lock, ArrowRight, Eye, EyeOff, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,35 @@ import { getAuthErrorMessage } from "@/lib/authErrors";
 
 type AuthMode = "login" | "signup" | "reset" | "update";
 
+// Single constant governs minimum password length across all auth flows
+const MIN_PASSWORD_LENGTH = 8;
+// Show rate-limit hint after this many consecutive login failures
+const RATE_LIMIT_HINT_THRESHOLD = 3;
+
+function AuthPageHeader({ onLogoClick }: { onLogoClick: () => void }) {
+  return (
+    <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/30 bg-background/80 backdrop-blur-md">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+        <button onClick={onLogoClick} className="flex items-center gap-2">
+          <ThemedLogo className="h-10 w-auto" />
+        </button>
+        <ThemeToggle />
+      </div>
+    </header>
+  );
+}
+
+function AuthPageFooter() {
+  return (
+    <p className="mt-6 text-center text-xs text-muted-foreground/60">
+      By continuing, you agree to our{" "}
+      <a href="/terms" className="underline hover:text-muted-foreground">Terms of Service</a>
+      {" "}and{" "}
+      <a href="/privacy" className="underline hover:text-muted-foreground">Privacy Policy</a>.
+    </p>
+  );
+}
+
 export default function Auth() {
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
@@ -22,27 +51,24 @@ export default function Auth() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showEmailSent, setShowEmailSent] = useState(false);
+  const [showRateLimitHint, setShowRateLimitHint] = useState(false);
+  const failedAttemptsRef = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
-  const returnUrl = new URLSearchParams(location.search).get('returnUrl') || '/app';
+  const returnUrl = new URLSearchParams(location.search).get("returnUrl") || "/app";
   const { signIn, signUp, resetPassword, updatePassword } = useAuth();
   const { toast } = useToast();
 
   useEffect(() => {
-    // Listen for PASSWORD_RECOVERY event from Supabase Auth
+    // Rely solely on the PASSWORD_RECOVERY event — no fragile manual hash parsing
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") {
         setMode("update");
+        // Clean the recovery hash from the URL immediately when the event fires
+        window.history.replaceState({}, document.title, window.location.pathname);
       }
     });
-
-    // Also check URL hash for recovery type (fallback)
-    const hash = window.location.hash || "";
-    const hashParams = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
-    if (hashParams.get("type") === "recovery") {
-      setMode("update");
-    }
-
     return () => subscription.unsubscribe();
   }, []);
 
@@ -54,9 +80,15 @@ export default function Auth() {
       if (mode === "login") {
         const { error } = await signIn(email, password);
         if (error) {
+          failedAttemptsRef.current += 1;
+          if (failedAttemptsRef.current >= RATE_LIMIT_HINT_THRESHOLD) {
+            setShowRateLimitHint(true);
+          }
           toast({ variant: "destructive", title: "Sign in failed", description: getAuthErrorMessage(error.message) });
           return;
         }
+        failedAttemptsRef.current = 0;
+        setShowRateLimitHint(false);
         navigate(returnUrl);
         return;
       }
@@ -67,10 +99,8 @@ export default function Auth() {
           toast({ variant: "destructive", title: "Sign up failed", description: getAuthErrorMessage(error.message) });
           return;
         }
-        toast({
-          title: "Check your email",
-          description: "We sent you a confirmation link. Please verify your email before signing in.",
-        });
+        // Show persistent confirmation screen instead of just a dismissible toast
+        setShowEmailSent(true);
         return;
       }
 
@@ -80,17 +110,14 @@ export default function Auth() {
           toast({ variant: "destructive", title: "Reset failed", description: getAuthErrorMessage(error.message) });
           return;
         }
-        toast({
-          title: "Reset link sent",
-          description: "Check your email for a password reset link.",
-        });
+        toast({ title: "Reset link sent", description: "Check your email for a password reset link." });
         setMode("login");
         return;
       }
 
       // mode === "update"
-      if (password.length < 6) {
-        toast({ variant: "destructive", title: "Password too short", description: "Use at least 6 characters." });
+      if (password.length < MIN_PASSWORD_LENGTH) {
+        toast({ variant: "destructive", title: "Password too short", description: `Use at least ${MIN_PASSWORD_LENGTH} characters.` });
         return;
       }
       if (password !== confirmPassword) {
@@ -104,9 +131,7 @@ export default function Auth() {
         return;
       }
 
-      // Clean the URL hash so refresh doesn't keep you in recovery mode.
       window.history.replaceState({}, document.title, window.location.pathname);
-
       toast({ title: "Password updated", description: "You're signed in." });
       navigate(returnUrl);
     } finally {
@@ -114,19 +139,48 @@ export default function Auth() {
     }
   };
 
+  if (showEmailSent) {
+    return (
+      <div className="flex min-h-screen flex-col bg-background">
+        <AuthPageHeader onLogoClick={() => navigate("/")} />
+        <main className="flex flex-1 items-center justify-center px-6 pt-16">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="w-full max-w-md"
+          >
+            <div className="rounded-2xl border border-border/50 bg-card/50 p-8 shadow-xl backdrop-blur-sm text-center">
+              <div className="flex items-center justify-center mb-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+                  <CheckCircle2 className="h-7 w-7 text-primary" />
+                </div>
+              </div>
+              <h1 className="text-xl font-bold text-foreground mb-2">Check your email</h1>
+              <p className="text-sm text-muted-foreground mb-1">We sent a confirmation link to</p>
+              <p className="text-sm font-semibold text-foreground mb-4 break-all">{email}</p>
+              <p className="text-xs text-muted-foreground mb-6">
+                Click the link in the email to activate your account. If you don't see it, check your spam or junk folder.
+              </p>
+              <Button
+                variant="outline"
+                className="w-full rounded-full"
+                onClick={() => { setShowEmailSent(false); setMode("login"); setPassword(""); }}
+              >
+                Back to Sign In
+              </Button>
+            </div>
+            <AuthPageFooter />
+          </motion.div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/30 bg-background/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <button onClick={() => navigate("/")} className="flex items-center gap-2">
-            <ThemedLogo className="h-10 w-auto" />
-          </button>
-          <ThemeToggle />
-        </div>
-      </header>
+      <AuthPageHeader onLogoClick={() => navigate("/")} />
 
-      {/* Main Content */}
       <main className="flex flex-1 items-center justify-center px-6 pt-16">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -134,37 +188,26 @@ export default function Auth() {
           transition={{ duration: 0.5 }}
           className="w-full max-w-md"
         >
-          {/* Card */}
           <div className="rounded-2xl border border-border/50 bg-card/50 p-8 shadow-xl backdrop-blur-sm">
-            {/* Header */}
             <div className="mb-8 text-center">
               <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                {mode === "login"
-                  ? "Welcome back"
-                  : mode === "signup"
-                    ? "Create your account"
-                    : mode === "reset"
-                      ? "Reset your password"
-                      : "Set a new password"}
+                {mode === "login" ? "Welcome back"
+                  : mode === "signup" ? "Create your account"
+                  : mode === "reset" ? "Reset your password"
+                  : "Set a new password"}
               </h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                {mode === "login"
-                  ? "Sign in to continue creating videos"
-                  : mode === "signup"
-                    ? "Start turning your knowledge into cinema"
-                    : mode === "reset"
-                      ? "We'll email you a reset link"
-                      : "Choose a new password to finish resetting"}
+                {mode === "login" ? "Sign in to continue creating videos"
+                  : mode === "signup" ? "Start turning your knowledge into cinema"
+                  : mode === "reset" ? "We'll email you a reset link"
+                  : "Choose a new password to finish resetting"}
               </p>
             </div>
 
-            {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-5">
               {mode !== "update" && (
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-sm font-medium">
-                    Email
-                  </Label>
+                  <Label htmlFor="email" className="text-sm font-medium">Email</Label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
@@ -189,11 +232,7 @@ export default function Auth() {
                     {mode === "login" && (
                       <button
                         type="button"
-                        onClick={() => {
-                          setMode("reset");
-                          setPassword("");
-                          setConfirmPassword("");
-                        }}
+                        onClick={() => { setMode("reset"); setPassword(""); setConfirmPassword(""); }}
                         className="text-xs font-medium text-primary hover:underline"
                       >
                         Forgot password?
@@ -210,7 +249,7 @@ export default function Auth() {
                       onChange={(e) => setPassword(e.target.value)}
                       className="pl-10 pr-10"
                       required
-                      minLength={6}
+                      minLength={MIN_PASSWORD_LENGTH}
                     />
                     <button
                       type="button"
@@ -220,14 +259,15 @@ export default function Auth() {
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
+                  {(mode === "signup" || mode === "update") && (
+                    <p className="text-xs text-muted-foreground">Minimum {MIN_PASSWORD_LENGTH} characters required.</p>
+                  )}
                 </div>
               )}
 
               {mode === "update" && (
                 <div className="space-y-2">
-                  <Label htmlFor="confirmPassword" className="text-sm font-medium">
-                    Confirm new password
-                  </Label>
+                  <Label htmlFor="confirmPassword" className="text-sm font-medium">Confirm new password</Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
@@ -238,7 +278,7 @@ export default function Auth() {
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       className="pl-10 pr-10"
                       required
-                      minLength={6}
+                      minLength={MIN_PASSWORD_LENGTH}
                     />
                     <button
                       type="button"
@@ -251,6 +291,12 @@ export default function Auth() {
                 </div>
               )}
 
+              {showRateLimitHint && mode === "login" && (
+                <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-lg px-3 py-2">
+                  Too many failed attempts? You may be temporarily rate-limited. Wait a few minutes before trying again.
+                </p>
+              )}
+
               <Button
                 type="submit"
                 className="w-full gap-2 rounded-full bg-primary py-5 font-medium text-primary-foreground"
@@ -260,72 +306,48 @@ export default function Auth() {
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <>
-                    {mode === "login"
-                      ? "Sign In"
-                      : mode === "signup"
-                        ? "Create Account"
-                        : mode === "reset"
-                          ? "Send Reset Link"
-                          : "Update Password"}
+                    {mode === "login" ? "Sign In"
+                      : mode === "signup" ? "Create Account"
+                      : mode === "reset" ? "Send Reset Link"
+                      : "Update Password"}
                     <ArrowRight className="h-4 w-4" />
                   </>
                 )}
               </Button>
             </form>
 
-            {/* Toggle */}
             <div className="mt-6 text-center">
               <p className="text-sm text-muted-foreground">
-{mode === "login" && (
+                {mode === "login" && (
                   <>
                     Don&apos;t have an account?{" "}
-                    <button
-                      type="button"
-                      onClick={() => setMode("signup")}
-                      className="font-medium text-primary hover:underline"
-                    >
+                    <button type="button" onClick={() => { setMode("signup"); setShowRateLimitHint(false); }} className="font-medium text-primary hover:underline">
                       Sign up
                     </button>
                   </>
                 )}
-
                 {mode === "signup" && (
                   <>
                     Already have an account?{" "}
-                    <button
-                      type="button"
-                      onClick={() => setMode("login")}
-                      className="font-medium text-primary hover:underline"
-                    >
+                    <button type="button" onClick={() => setMode("login")} className="font-medium text-primary hover:underline">
                       Sign in
                     </button>
                   </>
                 )}
-
                 {mode === "reset" && (
                   <>
                     Remembered your password?{" "}
-                    <button
-                      type="button"
-                      onClick={() => setMode("login")}
-                      className="font-medium text-primary hover:underline"
-                    >
+                    <button type="button" onClick={() => setMode("login")} className="font-medium text-primary hover:underline">
                       Sign in
                     </button>
                   </>
                 )}
-
                 {mode === "update" && (
                   <>
                     Want to go back?{" "}
                     <button
                       type="button"
-                      onClick={() => {
-                        window.history.replaceState({}, document.title, window.location.pathname);
-                        setMode("login");
-                        setPassword("");
-                        setConfirmPassword("");
-                      }}
+                      onClick={() => { window.history.replaceState({}, document.title, window.location.pathname); setMode("login"); setPassword(""); setConfirmPassword(""); }}
                       className="font-medium text-primary hover:underline"
                     >
                       Sign in
@@ -336,13 +358,7 @@ export default function Auth() {
             </div>
           </div>
 
-          {/* Footer text */}
-          <p className="mt-6 text-center text-xs text-muted-foreground/60">
-            By continuing, you agree to our{" "}
-            <a href="/terms" className="underline hover:text-muted-foreground">Terms of Service</a>
-            {" "}and{" "}
-            <a href="/privacy" className="underline hover:text-muted-foreground">Privacy Policy</a>.
-          </p>
+          <AuthPageFooter />
         </motion.div>
       </main>
     </div>

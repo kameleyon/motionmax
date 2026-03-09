@@ -12,24 +12,31 @@ const logStep = (step: string, details?: any) => {
   console.log(`[STRIPE-WEBHOOK] ${step}${detailsStr}`);
 };
 
-// Credit pack product IDs - Updated pricing
+// Credit pack product IDs - must match useSubscription.ts CREDIT_PACKS
 const creditPackProducts: Record<string, number> = {
-  "prod_TqznJ5NkfAEdUY": 15,   // 15 credits - $11.99
-  "prod_TqznSfnDazIjj2": 50,   // 50 credits - $34.99
-  "prod_Tqznn5NHeJnhS6": 150,  // 150 credits - $89.99
-  "prod_Tqznoknz2TmraQ": 500,  // 500 credits - $249.99
+  "prod_Ts3r9EBXzzKKfU": 15,   // 15 credits - $11.99
+  "prod_Tnz0B2aJPD895y": 50,   // 50 credits - $14.99
+  "prod_Tnz1CygtJnMhUz": 150,  // 150 credits - $39.99
+  "prod_Ts3rl1zDT9oLVt": 500,  // 500 credits - $249.99
   // Legacy packs (keep for existing purchases)
+  "prod_TqznJ5NkfAEdUY": 15,
+  "prod_TqznSfnDazIjj2": 50,
+  "prod_Tqznn5NHeJnhS6": 150,
+  "prod_Tqznoknz2TmraQ": 500,
   "prod_TnzLJDYSV45eEF": 10,   // 10 credits (legacy)
   "prod_TnzL0a9nwvoZKm": 50,   // 50 credits (legacy)
   "prod_TnzL2ewLWIt1hD": 150,  // 150 credits (legacy)
 };
 
-// Subscription plan product IDs - Updated tiers
+// Subscription plan product IDs - must match useSubscription.ts STRIPE_PLANS
 const subscriptionProducts: Record<string, string> = {
+  "prod_Tnyz2nMLqpHz3R": "starter",
+  "prod_Tnz0KUQX2J5VBH": "creator",
+  "prod_Tnz0BeRmJDdh0V": "professional",
+  // Legacy plans (keep for existing subscriptions)
   "prod_TqznNZmUhevHh4": "starter",
   "prod_TqznlgT1Jl6Re7": "creator",
   "prod_TqznqQYYG4UUY8": "professional",
-  // Legacy plans (keep for existing subscriptions)
   "prod_TnzLdHWPkqAiqr": "starter",   // old premium -> starter
   "prod_TnzLCasreSakEb": "creator",    // old pro -> creator
   "prod_TnzLP4tQINtak9": "professional", // old platinum -> professional
@@ -166,6 +173,8 @@ serve(async (req) => {
                   description: `Purchased ${credits} credits`,
                   stripe_payment_intent_id: paymentIntentId,
                 });
+            } else {
+              logStep("WARNING: Unknown credit pack product ID", { productId });
             }
           }
         } else if (session.mode === "subscription") {
@@ -175,7 +184,7 @@ serve(async (req) => {
           const productId = subscription.items.data[0].price.product as string;
           const planName = subscriptionProducts[productId] || "starter";
 
-          logStep("Creating subscription record", { userId, planName, subscriptionId });
+          logStep("Creating subscription record", { userId, planName, subscriptionId, productId });
 
           // Upsert subscription
           const { data: existingSub } = await supabaseAdmin

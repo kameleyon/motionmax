@@ -22,6 +22,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { useSubscription, STRIPE_PLANS, CREDIT_PACKS } from "@/hooks/useSubscription";
 import { PLAN_LIMITS } from "@/lib/planLimits";
+import { PLAN_PRICES, CREDIT_PACK_PRICES } from "@/config/products";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -39,8 +40,8 @@ const plans = [
   {
     id: "free",
     name: "Free",
-    monthlyPrice: "$0",
-    yearlyPrice: "$0",
+    monthlyPrice: PLAN_PRICES.free.monthly,
+    yearlyPrice: PLAN_PRICES.free.yearly,
     description: "Get started with basic features",
     icon: Sparkles,
     features: [
@@ -65,8 +66,8 @@ const plans = [
   {
     id: "starter",
     name: "Starter",
-    monthlyPrice: "$14.99",
-    yearlyPrice: "$9.99",
+    monthlyPrice: PLAN_PRICES.starter.monthly,
+    yearlyPrice: PLAN_PRICES.starter.yearly,
     description: "Hobbyists & social creators",
     icon: Zap,
     features: [
@@ -92,8 +93,8 @@ const plans = [
   {
     id: "creator",
     name: "Creator",
-    monthlyPrice: "$39.99",
-    yearlyPrice: "$26.66",
+    monthlyPrice: PLAN_PRICES.creator.monthly,
+    yearlyPrice: PLAN_PRICES.creator.yearly,
     description: "Content creators & small biz",
     icon: Crown,
     features: [
@@ -117,8 +118,8 @@ const plans = [
   {
     id: "professional",
     name: "Professional",
-    monthlyPrice: "$89.99",
-    yearlyPrice: "$59.99",
+    monthlyPrice: PLAN_PRICES.professional.monthly,
+    yearlyPrice: PLAN_PRICES.professional.yearly,
     description: "Agencies & marketing teams",
     icon: Gem,
     features: [
@@ -141,8 +142,8 @@ const plans = [
   {
     id: "enterprise",
     name: "Enterprise",
-    monthlyPrice: "Custom",
-    yearlyPrice: "Custom",
+    monthlyPrice: PLAN_PRICES.enterprise.monthly,
+    yearlyPrice: PLAN_PRICES.enterprise.yearly,
     description: "Large organizations",
     icon: Building2,
     features: [
@@ -168,13 +169,12 @@ const plans = [
 ];
 
 const creditPackages = [
-  { credits: 15 as const, price: "$11.99", perCredit: "$0.80", priceId: CREDIT_PACKS[15].priceId },
-  { credits: 50 as const, price: "$14.99", perCredit: "$0.30", priceId: CREDIT_PACKS[50].priceId },
-  { credits: 150 as const, price: "$39.99", perCredit: "$0.27", popular: true, bestValue: true, priceId: CREDIT_PACKS[150].priceId },
-  { credits: 500 as const, price: "$249.99", perCredit: "$0.50", priceId: CREDIT_PACKS[500].priceId },
+  { credits: 15 as const, price: CREDIT_PACK_PRICES[15].price, perCredit: CREDIT_PACK_PRICES[15].perCredit, priceId: CREDIT_PACKS[15].priceId },
+  { credits: 50 as const, price: CREDIT_PACK_PRICES[50].price, perCredit: CREDIT_PACK_PRICES[50].perCredit, priceId: CREDIT_PACKS[50].priceId },
+  { credits: 150 as const, price: CREDIT_PACK_PRICES[150].price, perCredit: CREDIT_PACK_PRICES[150].perCredit, popular: true, bestValue: true, priceId: CREDIT_PACKS[150].priceId },
+  { credits: 500 as const, price: CREDIT_PACK_PRICES[500].price, perCredit: CREDIT_PACK_PRICES[500].perCredit, priceId: CREDIT_PACKS[500].priceId },
 ];
 
-// Credit usage info
 const creditInfo = [
   { type: "Short Video (<2 min)", credits: 1 },
   { type: "Brief Video (<5 min)", credits: 2 },

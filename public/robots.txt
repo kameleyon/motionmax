@@ -1,8 +1,12 @@
 User-agent: Googlebot
 Allow: /
+Disallow: /app/
+Disallow: /auth
 
 User-agent: Bingbot
 Allow: /
+Disallow: /app/
+Disallow: /auth
 
 User-agent: Twitterbot
 Allow: /
@@ -12,3 +16,8 @@ Allow: /
 
 User-agent: *
 Allow: /
+Disallow: /app/
+Disallow: /auth
+Crawl-delay: 10
+
+Sitemap: https://motionmax.io/sitemap.xml

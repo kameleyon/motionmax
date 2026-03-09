@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useTheme } from "next-themes";
 import { motion, AnimatePresence } from "framer-motion";
 import { FileText, Volume2, Clapperboard, ArrowRight, Check, X, Sparkles, Zap, Crown, Building2, Menu } from "lucide-react";
 import { PLAN_LIMITS } from "@/lib/planLimits";
+import { PLAN_PRICES } from "@/config/products";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -33,7 +35,8 @@ const pricingPlans = [
   {
     name: "Free",
     icon: Sparkles,
-    price: "$0",
+    monthlyPrice: PLAN_PRICES.free.monthly,
+    yearlyPrice: PLAN_PRICES.free.yearly,
     description: "Get started with basic features",
     features: [
       { text: `${PLAN_LIMITS.free.creditsPerMonth} credits/month`, included: true },
@@ -55,7 +58,8 @@ const pricingPlans = [
   {
     name: "Starter",
     icon: Zap,
-    price: "$14.99",
+    monthlyPrice: PLAN_PRICES.starter.monthly,
+    yearlyPrice: PLAN_PRICES.starter.yearly,
     description: "Hobbyists & social creators",
     features: [
       { text: `${PLAN_LIMITS.starter.creditsPerMonth} credits/month`, included: true },
@@ -74,7 +78,8 @@ const pricingPlans = [
   {
     name: "Creator",
     icon: Crown,
-    price: "$39.99",
+    monthlyPrice: PLAN_PRICES.creator.monthly,
+    yearlyPrice: PLAN_PRICES.creator.yearly,
     description: "Content creators & small biz",
     features: [
       { text: `${PLAN_LIMITS.creator.creditsPerMonth} credits/month`, included: true },
@@ -93,7 +98,8 @@ const pricingPlans = [
   {
     name: "Professional",
     icon: Building2,
-    price: "$89.99",
+    monthlyPrice: PLAN_PRICES.professional.monthly,
+    yearlyPrice: PLAN_PRICES.professional.yearly,
     description: "Agencies & marketing teams",
     features: [
       { text: `${PLAN_LIMITS.professional.creditsPerMonth} credits/month`, included: true },
@@ -112,17 +118,19 @@ const pricingPlans = [
 
 export default function Landing() {
   const navigate = useNavigate();
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [billingInterval, setBillingInterval] = useState<"monthly" | "yearly">("monthly");
+  const [videoError, setVideoError] = useState(false);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[hsl(185,30%,95%)] via-[hsl(185,25%,97%)] to-[hsl(180,20%,98%)] dark:bg-none dark:bg-background">
       {/* Navigation with frosted glass effect */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/70 backdrop-blur-md border-b border-border/30">
         <div className="mx-auto flex h-16 sm:h-20 max-w-6xl items-center justify-between px-6 sm:px-8">
-          {/* Logo */}
           <img src={motionmaxLogo} alt="MotionMax" className="h-8 sm:h-10 w-auto" />
           
-          {/* Nav Links */}
           <nav className="hidden items-center gap-8 md:flex">
             <a href="#features" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
               Features
@@ -135,10 +143,8 @@ export default function Landing() {
             </a>
           </nav>
           
-          {/* Right Actions */}
           <div className="flex items-center gap-3">
             <ThemeToggle />
-            {/* Mobile: Hamburger menu */}
             <Button
               variant="ghost"
               size="icon"
@@ -148,7 +154,6 @@ export default function Landing() {
             >
               {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </Button>
-            {/* Desktop: Sign In + Get Started */}
             <Button
               variant="ghost"
               className="hidden md:flex text-sm font-medium text-muted-foreground hover:text-foreground"
@@ -165,7 +170,6 @@ export default function Landing() {
           </div>
         </div>
 
-        {/* Mobile dropdown menu */}
         <AnimatePresence>
           {mobileMenuOpen && (
             <motion.nav
@@ -203,7 +207,6 @@ export default function Landing() {
       <section className="relative min-h-screen flex items-center pt-32 md:pt-40 xl:pt-16">
         <div className="mx-auto max-w-7xl px-6 sm:px-8 w-full pb-16 md:pb-24">
           <div className="flex flex-col xl:grid xl:grid-cols-2 gap-8 xl:gap-16 items-center">
-            {/* Left Content */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -229,7 +232,7 @@ export default function Landing() {
               </Button>
             </motion.div>
 
-            {/* Right Illustration - Hero Video */}
+            {/* Hero Video with error fallback */}
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -237,34 +240,40 @@ export default function Landing() {
               className="w-full max-w-2xl"
             >
               <div className="w-full rounded-2xl shadow-2xl overflow-hidden">
-                <video
-                  src={heroPromoVideo}
-                  className="w-full h-full"
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  poster={heroVideoPoster}
-                >
-                  Your browser does not support the video tag.
-                </video>
+                {videoError ? (
+                  <img
+                    src={heroVideoPoster}
+                    alt="MotionMax — AI video creation"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <video
+                    src={heroPromoVideo}
+                    className="w-full h-full"
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    poster={heroVideoPoster}
+                    onError={() => setVideoError(true)}
+                  />
+                )}
               </div>
             </motion.div>
           </div>
         </div>
       </section>
 
-      {/* Why MotionMax Section */}
-      <section 
-        id="features" 
-        className="py-24 sm:py-32 relative overflow-hidden"
-        style={{
+      {/* Features Section — theme-aware background */}
+      <section
+        id="features"
+        className={`py-24 sm:py-32 relative overflow-hidden ${isDark ? "" : "bg-slate-900"}`}
+        style={isDark ? {
           backgroundImage: `url(${featuresBackgroundDark})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        } : {}}
       >
-        {/* No overlay needed - dark background has sufficient contrast */}
         <div className="mx-auto max-w-6xl px-6 sm:px-8 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -315,7 +324,7 @@ export default function Landing() {
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-center mb-16"
+            className="text-center mb-10"
           >
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
               Simple, transparent pricing
@@ -323,11 +332,32 @@ export default function Landing() {
             <p className="mt-4 text-lg text-muted-foreground">
               Start free, upgrade when you need more.
             </p>
+
+            {/* Billing toggle */}
+            <div className="flex items-center justify-center gap-3 mt-6">
+              <span className={`text-sm font-medium ${billingInterval === "monthly" ? "text-foreground" : "text-muted-foreground"}`}>
+                Monthly
+              </span>
+              <button
+                onClick={() => setBillingInterval(billingInterval === "monthly" ? "yearly" : "monthly")}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${billingInterval === "yearly" ? "bg-primary" : "bg-muted"}`}
+                aria-label="Toggle billing interval"
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${billingInterval === "yearly" ? "translate-x-6" : "translate-x-1"}`} />
+              </button>
+              <span className={`text-sm font-medium ${billingInterval === "yearly" ? "text-foreground" : "text-muted-foreground"}`}>
+                Yearly
+              </span>
+              <span className="bg-primary/10 text-primary text-xs font-medium px-2 py-0.5 rounded-full">
+                Save 20%
+              </span>
+            </div>
           </motion.div>
 
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {pricingPlans.map((plan, index) => {
               const IconComponent = plan.icon;
+              const displayPrice = billingInterval === "yearly" ? plan.yearlyPrice : plan.monthlyPrice;
               return (
                 <motion.div
                   key={plan.name}
@@ -335,7 +365,7 @@ export default function Landing() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: index * 0.1 }}
-                  className={`rounded-2xl border ${plan.popular ? 'border-2 border-primary' : 'border-border/50'} bg-card p-6 relative flex flex-col`}
+                  className={`rounded-2xl border ${plan.popular ? "border-2 border-primary" : "border-border/50"} bg-card p-6 relative flex flex-col`}
                 >
                   {plan.popular && (
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2">
@@ -352,12 +382,16 @@ export default function Landing() {
                     <h3 className="text-lg font-semibold text-foreground">{plan.name}</h3>
                   </div>
                   
-                  <p className="text-sm text-muted-foreground mb-4">{plan.description}</p>
+                  <p className="text-sm text-muted-foreground mb-3">{plan.description}</p>
                   
-                  <div className="mb-6">
-                    <span className="text-3xl font-bold text-foreground">{plan.price}</span>
+                  <div className="mb-1">
+                    <span className="text-3xl font-bold text-foreground">{displayPrice}</span>
                     <span className="text-muted-foreground">/month</span>
                   </div>
+                  {billingInterval === "yearly" && plan.name !== "Free" && (
+                    <p className="text-xs text-primary mb-4">Billed annually</p>
+                  )}
+                  {billingInterval === "monthly" && <div className="mb-4" />}
                   
                   <ul className="space-y-2.5 text-sm mb-6 flex-1">
                     {plan.features.map((feature, i) => (
@@ -367,7 +401,7 @@ export default function Landing() {
                         ) : (
                           <X className="h-4 w-4 text-muted-foreground/50 shrink-0 mt-0.5" />
                         )}
-                        <span className={feature.included ? 'text-muted-foreground' : 'text-muted-foreground/50'}>
+                        <span className={feature.included ? "text-muted-foreground" : "text-muted-foreground/50"}>
                           {feature.text}
                         </span>
                       </li>
@@ -388,7 +422,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Simple CTA Section */}
+      {/* CTA Section */}
       <section className="py-24 sm:py-32 border-t border-border/30">
         <div className="mx-auto max-w-3xl px-6 sm:px-8 text-center">
           <motion.div
@@ -412,11 +446,7 @@ export default function Landing() {
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
               <a href="#pricing">
-                <Button
-                  size="lg"
-                  variant="ghost"
-                  className="text-muted-foreground hover:text-foreground"
-                >
+                <Button size="lg" variant="ghost" className="text-muted-foreground hover:text-foreground">
                   View Pricing
                 </Button>
               </a>
@@ -425,7 +455,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* About Us Section */}
+      {/* About Section */}
       <section id="about" className="py-20 sm:py-24 border-t border-border/30 bg-muted/30">
         <div className="mx-auto max-w-4xl px-6 sm:px-8">
           <motion.div
@@ -449,10 +479,7 @@ export default function Landing() {
             <div className="pt-4">
               <p className="text-sm text-muted-foreground">
                 Have questions? Reach out to us at{" "}
-                <a 
-                  href="mailto:support@motionmax.io" 
-                  className="text-primary hover:underline font-medium"
-                >
+                <a href="mailto:support@motionmax.io" className="text-primary hover:underline font-medium">
                   support@motionmax.io
                 </a>
               </p>
@@ -468,6 +495,17 @@ export default function Landing() {
           <p className="text-sm text-muted-foreground">
             © 2026 MotionMax. All rights reserved.
           </p>
+          <nav className="flex items-center gap-5">
+            <a href="/terms" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+              Terms of Service
+            </a>
+            <a href="/privacy" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+              Privacy Policy
+            </a>
+            <a href="/acceptable-use" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+              Acceptable Use
+            </a>
+          </nav>
         </div>
       </footer>
     </div>

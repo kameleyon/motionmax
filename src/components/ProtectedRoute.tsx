@@ -19,7 +19,8 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to={"/auth?returnUrl="} replace />;
+    const returnUrl = encodeURIComponent(location.pathname + location.search);
+    return <Navigate to={`/auth?returnUrl=${returnUrl}`} replace />;
   }
 
   return <>{children}</>;

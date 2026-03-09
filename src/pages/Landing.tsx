@@ -1,9 +1,9 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useTheme } from "next-themes";
 import { motion, AnimatePresence } from "framer-motion";
 import { FileText, Volume2, Clapperboard, ArrowRight, Check, X, Sparkles, Zap, Crown, Building2, Menu } from "lucide-react";
 import { PLAN_LIMITS } from "@/lib/planLimits";
-import { PLAN_PRICES } from "@/config/products";
+import { PLAN_PRICES, yearlyDiscountPercent } from "@/config/products";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -349,7 +349,7 @@ export default function Landing() {
                 Yearly
               </span>
               <span className="bg-primary/10 text-primary text-xs font-medium px-2 py-0.5 rounded-full">
-                Save 20%
+                {`Save ${yearlyDiscountPercent()}%`}
               </span>
             </div>
           </motion.div>

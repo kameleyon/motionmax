@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { 
@@ -22,7 +22,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { useSubscription, STRIPE_PLANS, CREDIT_PACKS } from "@/hooks/useSubscription";
 import { PLAN_LIMITS } from "@/lib/planLimits";
-import { PLAN_PRICES, CREDIT_PACK_PRICES } from "@/config/products";
+import { PLAN_PRICES, CREDIT_PACK_PRICES, yearlyDiscountPercent } from "@/config/products";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -183,6 +183,17 @@ const creditInfo = [
   { type: "Cinematic", credits: 12 },
 ];
 
+
+function getCheckoutErrorMessage(error: unknown): string {
+  const msg = (error instanceof Error ? error.message : String(error)).toLowerCase();
+  if (msg.includes("rate") || msg.includes("too many"))
+    return "Too many attempts. Please wait a moment before trying again.";
+  if (msg.includes("already") || msg.includes("active sub") || msg.includes("existing"))
+    return "You may already have an active subscription. Visit your billing portal to manage it.";
+  if (msg.includes("network") || msg.includes("failed to fetch") || msg.includes("connection"))
+    return "Connection error. Check your internet connection and try again.";
+  return "Unable to start checkout. Please try again or contact support@motionmax.io.";
+}
 export default function Pricing() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -228,7 +239,7 @@ export default function Pricing() {
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to start checkout",
+        description: getCheckoutErrorMessage(error),
         variant: "destructive",
       });
     } finally {
@@ -253,7 +264,7 @@ export default function Pricing() {
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to start checkout",
+        description: getCheckoutErrorMessage(error),
         variant: "destructive",
       });
     } finally {
@@ -326,7 +337,7 @@ export default function Pricing() {
               <span className={cn("text-sm font-medium", billingInterval === "yearly" ? "text-foreground" : "text-muted-foreground")}>
                 Yearly
               </span>
-              <Badge variant="secondary" className="bg-primary/10 text-primary text-xs">Save 20%</Badge>
+              <Badge variant="secondary" className="bg-primary/10 text-primary text-xs">{`Save ${yearlyDiscountPercent()}%`}</Badge>
             </div>
           </div>
 

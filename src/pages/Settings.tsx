@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+﻿import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
 import { 
@@ -62,6 +62,8 @@ export default function Settings() {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [emailChangePending, setEmailChangePending] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState("");
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   const passwordStrength = useMemo(() => getPasswordStrength(newPassword), [newPassword]);
@@ -116,6 +118,8 @@ export default function Settings() {
       const { error } = await supabase.auth.updateUser({ email: newEmail });
       if (error) throw error;
       toast.success("Confirmation email sent. Check your new inbox to confirm the change.");
+      setEmailChangePending(true);
+      setPendingEmail(newEmail.trim());
       setNewEmail("");
     } catch (error: any) {
       toast.error(error.message || "Please try again.");
@@ -144,7 +148,7 @@ export default function Settings() {
   };
 
   const handleDeleteAccount = async () => {
-    if (deleteConfirmText !== "DELETE") return;
+    if (deleteConfirmText.toUpperCase() !== "DELETE") return;
     setIsDeletingAccount(true);
     try {
       // Send deletion request via support email
@@ -218,6 +222,7 @@ export default function Settings() {
                             placeholder="Enter your display name"
                             value={displayName}
                             onChange={(e) => setDisplayName(e.target.value)}
+                            maxLength={50}
                           />
                         </div>
                         <Button onClick={handleSaveDisplayName} disabled={isSavingName} className="gap-2 rounded-full">
@@ -239,6 +244,12 @@ export default function Settings() {
                             onChange={(e) => setNewEmail(e.target.value)}
                           />
                         </div>
+                        {emailChangePending && (
+                          <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700/50 px-3 py-2 text-xs text-amber-800 dark:text-amber-300 mb-3">
+                            <Mail className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                            <span>Confirmation email sent to <strong>{pendingEmail}</strong>. Check your inbox to complete the change.</span>
+                          </div>
+                        )}
                         <Button onClick={handleChangeEmail} disabled={isChangingEmail} variant="outline" className="gap-2 rounded-full">
                           {isChangingEmail && <Loader2 className="h-4 w-4 animate-spin" />}
                           Update Email
@@ -364,7 +375,7 @@ export default function Settings() {
             <AlertDialogCancel onClick={() => setDeleteConfirmText("")}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteAccount}
-              disabled={deleteConfirmText !== "DELETE" || isDeletingAccount}
+              disabled={deleteConfirmText.toUpperCase() !== "DELETE" || isDeletingAccount}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isDeletingAccount ? (

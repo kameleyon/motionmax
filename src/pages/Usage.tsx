@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+﻿import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -32,8 +32,9 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { ThemedLogo } from "@/components/ThemedLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
-import { CREDIT_COSTS } from "@/lib/planLimits";
+import { getCreditsRequired } from "@/lib/planLimits";
 import { supabase } from "@/integrations/supabase/client";
+import { normalizeProjectType } from "@/lib/projectUtils";
 import { formatDistanceToNow, format, startOfMonth, endOfMonth, subMonths, isSameMonth } from "date-fns";
 import { toast } from "sonner";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";

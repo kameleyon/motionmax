@@ -46,3 +46,13 @@ export const CREDIT_PACK_PRICES: Record<number, { price: string; perCredit: stri
   150: { price: "$39.99",  perCredit: "$0.27" },
   500: { price: "$249.99", perCredit: "$0.50" },
 };
+
+/**
+ * Computes the rounded integer discount percentage for yearly billing vs monthly.
+ * All paid plans use the same discount rate so starter is used as the reference.
+ */
+export function yearlyDiscountPercent(): number {
+  const monthly = parseFloat(PLAN_PRICES.starter.monthly.replace("$", ""));
+  const yearly  = parseFloat(PLAN_PRICES.starter.yearly.replace("$", ""));
+  return Math.round((1 - yearly / monthly) * 100);
+}

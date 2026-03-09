@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import defaultThumbnail from "@/assets/dashboard/default-thumbnail.png";
+import { normalizeProjectType } from "@/lib/projectUtils";
 
 interface Project {
   id: string;
@@ -38,27 +39,19 @@ interface ProjectsGridViewProps {
 }
 
 const getProjectIcon = (projectType?: string) => {
-  switch (projectType) {
-    case "storytelling":
-      return Clapperboard;
-    case "smartflow":
-    case "smart-flow":
-      return Wallpaper;
-    case "cinematic":
-      return Film;
-    default:
-      return Video;
+  switch (normalizeProjectType(projectType)) {
+    case "storytelling": return Clapperboard;
+    case "smartflow":    return Wallpaper;
+    case "cinematic":   return Film;
+    default:            return Video;
   }
 };
 
 const getAspectRatio = (format: string) => {
   switch (format) {
-    case "portrait":
-      return "aspect-[9/16]";
-    case "square":
-      return "aspect-square";
-    default: // landscape
-      return "aspect-video";
+    case "portrait": return "aspect-[9/16]";
+    case "square":   return "aspect-square";
+    default:         return "aspect-video";
   }
 };
 
@@ -103,36 +96,18 @@ export function ProjectsGridView({
                     alt={project.title}
                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                   />
-                  
-                  {/* Overlay on hover */}
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300" />
-                  
-                  {/* Category icon */}
                   <div className="absolute bottom-2 right-2 p-1.5 rounded-md bg-black/50 backdrop-blur-sm">
                     <ProjectIcon className="h-3.5 w-3.5 text-white" />
                   </div>
-                  
-                  {/* Favorite button */}
                   <Button
                     variant="ghost"
                     size="icon"
                     className="absolute top-2 left-2 h-7 w-7 bg-black/30 hover:bg-black/50 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleFavorite(project, e);
-                    }}
+                    onClick={(e) => { e.stopPropagation(); onToggleFavorite(project, e); }}
                   >
-                    <Star
-                      className={cn(
-                        "h-4 w-4",
-                        project.is_favorite
-                          ? "fill-primary text-primary"
-                          : "text-white"
-                      )}
-                    />
+                    <Star className={cn("h-4 w-4", project.is_favorite ? "fill-primary text-primary" : "text-white")} />
                   </Button>
-                  
-                  {/* Actions menu */}
                   <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -142,50 +117,32 @@ export function ProjectsGridView({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-48">
                         <DropdownMenuItem onClick={() => onView(project)}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          Open
+                          <Eye className="mr-2 h-4 w-4" />Open
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => onRename(project)}>
-                          <Pencil className="mr-2 h-4 w-4" />
-                          Rename
+                          <Pencil className="mr-2 h-4 w-4" />Rename
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => onShare(project)}>
-                          <Share2 className="mr-2 h-4 w-4" />
-                          Share
+                          <Share2 className="mr-2 h-4 w-4" />Share
                         </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          onClick={() => onDownload(project)}
-                          disabled={downloadingProjectId === project.id}
-                        >
-                          {downloadingProjectId === project.id ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <Download className="mr-2 h-4 w-4" />
-                          )}
-                          {downloadingProjectId === project.id ? "Downloading..." : "Download Video"}
+                        <DropdownMenuItem onClick={() => onDownload(project)} disabled={downloadingProjectId === project.id}>
+                          {downloadingProjectId === project.id
+                            ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Downloading...</>
+                            : <><Download className="mr-2 h-4 w-4" />Download Video</>
+                          }
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => onDelete(project)}
-                          className="text-muted-foreground focus:text-foreground"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
+                        <DropdownMenuItem onClick={() => onDelete(project)} className="text-muted-foreground focus:text-foreground">
+                          <Trash2 className="mr-2 h-4 w-4" />Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
                 </div>
-                
-                {/* Info */}
                 <div className="p-3">
-                  <p className="font-medium text-sm truncate group-hover:text-primary transition-colors">
-                    {project.title}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {formatTimestamp(project.updated_at)} • {project.format}
-                  </p>
+                  <p className="font-medium text-sm truncate group-hover:text-primary transition-colors">{project.title}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{formatTimestamp(project.updated_at)} • {project.format}</p>
                 </div>
               </div>
             </motion.div>

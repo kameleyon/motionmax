@@ -421,6 +421,12 @@ function extractJsonFromLLMResponse(raw: string, label: string): any {
     throw new Error(`No content to parse for ${label}`);
   }
 
+  console.log(`[JSON_EXTRACT] ${label}: starting parse`, {
+    rawLength: raw.length,
+    previewStart: raw.substring(0, 220),
+    previewEnd: raw.substring(Math.max(0, raw.length - 220)),
+  });
+
   let content = raw.trim();
 
   // Step 1: Strip markdown code fences
@@ -445,7 +451,12 @@ function extractJsonFromLLMResponse(raw: string, label: string): any {
 
   // Step 4: Try parsing
   try {
-    return JSON.parse(content);
+    const parsed = JSON.parse(content);
+    console.log(`[JSON_EXTRACT] ${label}: parse success on first attempt`, {
+      normalizedLength: content.length,
+      topLevelKeys: getTopLevelKeys(parsed),
+    });
+    return parsed;
   } catch (firstError) {
     console.warn(`[JSON_EXTRACT] ${label}: first parse attempt failed:`, (firstError as Error).message);
 
@@ -467,7 +478,10 @@ function extractJsonFromLLMResponse(raw: string, label: string): any {
 
     try {
       const result = JSON.parse(fixedContent);
-      console.log(`[JSON_EXTRACT] ${label}: recovered truncated JSON successfully`);
+      console.log(`[JSON_EXTRACT] ${label}: recovered truncated JSON successfully`, {
+        fixedLength: fixedContent.length,
+        topLevelKeys: getTopLevelKeys(result),
+      });
       return result;
     } catch (secondError) {
       console.error(
@@ -480,6 +494,14 @@ function extractJsonFromLLMResponse(raw: string, label: string): any {
       throw new Error(`Failed to parse ${label}: invalid JSON from LLM`);
     }
   }
+}
+
+function getTopLevelKeys(value: unknown): string[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return [];
+  }
+
+  return Object.keys(value as Record<string, unknown>).slice(0, 12);
 }
 
 // ============= LLM CALL HELPER (OpenRouter Only) =============
@@ -522,15 +544,39 @@ async function callLLMWithFallback(
   const modelsToTry = getLLMModelsToTry(primaryModel);
   let lastError: Error | null = null;
 
+  console.log(`[LLM] Starting request${options.jsonLabel ? ` for ${options.jsonLabel}` : ""}`, {
+    modelsToTry,
+    temperature,
+    maxTokens,
+    promptLength: prompt.length,
+    promptPreview: prompt.substring(0, 240),
+  });
+
   for (let index = 0; index < modelsToTry.length; index++) {
     const model = modelsToTry[index];
     const nextModel = modelsToTry[index + 1];
 
     try {
+      console.log(`[LLM] Attempt ${index + 1}/${modelsToTry.length}${options.jsonLabel ? ` for ${options.jsonLabel}` : ""}`, {
+        model,
+        nextModel: nextModel || null,
+      });
+
       const result = await callOpenRouter(OPENROUTER_API_KEY, model, prompt, temperature, maxTokens);
 
       if (options.jsonLabel) {
+        console.log(`[LLM] Validating JSON response from ${model} for ${options.jsonLabel}`, {
+          contentLength: result.content.length,
+          contentPreview: result.content.substring(0, 240),
+        });
+
         const parsedContent = extractJsonFromLLMResponse(result.content, options.jsonLabel);
+        console.log(`[LLM] JSON validation succeeded for ${options.jsonLabel}`, {
+          model,
+          contentLength: result.content.length,
+          topLevelKeys: getTopLevelKeys(parsedContent),
+        });
+
         return {
           ...result,
           parsedContent,
@@ -557,7 +603,12 @@ async function callOpenRouter(
   maxTokens: number,
 ): Promise<LLMCallResult> {
   const startTime = Date.now();
-  console.log(`[LLM] Calling OpenRouter with ${model}...`);
+  console.log(`[LLM] Calling OpenRouter with ${model}...`, {
+    temperature,
+    maxTokens,
+    promptLength: prompt.length,
+    promptPreview: prompt.substring(0, 240),
+  });
 
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
@@ -577,8 +628,19 @@ async function callOpenRouter(
 
   const durationMs = Date.now() - startTime;
 
+  console.log(`[LLM] OpenRouter ${model} HTTP response received`, {
+    status: response.status,
+    ok: response.ok,
+    durationMs,
+  });
+
   if (!response.ok) {
     const errText = await response.text().catch(() => "");
+    console.error(`[LLM] OpenRouter ${model} request failed`, {
+      status: response.status,
+      durationMs,
+      errorPreview: errText.substring(0, 500),
+    });
     throw new Error(`OpenRouter ${model} failed (${response.status}): ${errText.substring(0, 200)}`);
   }
 
@@ -586,10 +648,17 @@ async function callOpenRouter(
   const content = data.choices?.[0]?.message?.content;
 
   if (!content) {
+    console.error(`[LLM] OpenRouter ${model} returned empty content`, {
+      durationMs,
+      responseKeys: Object.keys(data || {}),
+    });
     throw new Error(`No content received from OpenRouter (${model})`);
   }
 
-  console.log(`[LLM] OpenRouter ${model} success: ${data.usage?.total_tokens || 0} tokens, ${durationMs}ms`);
+  console.log(`[LLM] OpenRouter ${model} success: ${data.usage?.total_tokens || 0} tokens, ${durationMs}ms`, {
+    contentLength: typeof content === "string" ? content.length : 0,
+    contentPreview: typeof content === "string" ? content.substring(0, 240) : null,
+  });
   return {
     content,
     tokensUsed: data.usage?.total_tokens || 0,
@@ -5172,7 +5241,22 @@ Professional illustration with dynamic composition and clear visual hierarchy. A
 
 // ============= MAIN HANDLER =============
 serve(async (req) => {
+  const requestStartedAt = Date.now();
+  console.log("[generate-video] Incoming request", {
+    method: req.method,
+    url: req.url,
+    origin: req.headers.get("origin"),
+    contentType: req.headers.get("content-type"),
+    authorizationPresent: Boolean(req.headers.get("authorization")),
+    userAgent: req.headers.get("user-agent"),
+  });
+
   if (req.method === "OPTIONS") {
+    console.log("[generate-video] Responding to CORS preflight", {
+      origin: req.headers.get("origin"),
+      requestedMethod: req.headers.get("access-control-request-method"),
+      requestedHeaders: req.headers.get("access-control-request-headers"),
+    });
     return new Response("ok", { headers: corsHeaders });
   }
 
@@ -5250,6 +5334,11 @@ serve(async (req) => {
       }
 
       user = { id: data.claims.sub, email: data.claims.email as string | undefined };
+      console.log("[generate-video] Auth verified", {
+        userId: user.id,
+        emailPresent: Boolean(user.email),
+        elapsedMs: Date.now() - requestStartedAt,
+      });
     } catch (authError) {
       console.error("Auth validation error:", authError);
       return new Response(
@@ -5278,6 +5367,16 @@ serve(async (req) => {
     if (GOOGLE_TTS_API_KEY_3) googleApiKeys.push(GOOGLE_TTS_API_KEY_3);
     if (GOOGLE_TTS_API_KEY_2) googleApiKeys.push(GOOGLE_TTS_API_KEY_2);
     if (GOOGLE_TTS_API_KEY) googleApiKeys.push(GOOGLE_TTS_API_KEY);
+
+    console.log("[generate-video] Runtime configuration summary", {
+      hasSupabaseUrl: Boolean(SUPABASE_URL),
+      hasAnonKey: Boolean(SUPABASE_ANON_KEY),
+      hasServiceRoleKey: Boolean(SUPABASE_SERVICE_ROLE_KEY),
+      hasOpenRouterKey: Boolean(Deno.env.get("OPENROUTER_API_KEY")),
+      hasReplicateKey: Boolean(REPLICATE_API_KEY),
+      googleTtsKeyCount: googleApiKeys.length,
+      elapsedMs: Date.now() - requestStartedAt,
+    });
 
     // Parse and validate request body with comprehensive input validation
     let rawBody: unknown;
@@ -5311,6 +5410,21 @@ serve(async (req) => {
       );
     }
 
+    console.log("[generate-video] Request body validated", {
+      phase: body.phase || "script",
+      projectType: body.projectType || "doc2video",
+      generationId: body.generationId || null,
+      projectId: body.projectId || null,
+      format: body.format || null,
+      length: body.length || null,
+      style: body.style || null,
+      contentLength: typeof body.content === "string" ? body.content.length : 0,
+      hasBrandMark: Boolean(body.brandMark),
+      hasPresenterFocus: Boolean(body.presenterFocus),
+      hasCharacterDescription: Boolean(body.characterDescription),
+      skipAudio: body.skipAudio || false,
+    });
+
     const {
       phase,
       generationId,
@@ -5341,8 +5455,32 @@ serve(async (req) => {
         });
       }
 
+      console.log("[generate-video] Script phase accepted", {
+        userId: user.id,
+        projectType: body.projectType || "doc2video",
+        format,
+        length,
+        style,
+        contentLength: typeof content === "string" ? content.length : 0,
+        openRouterConfigured: Boolean(Deno.env.get("OPENROUTER_API_KEY")),
+        requestElapsedMs: Date.now() - requestStartedAt,
+      });
+
+      console.log("[generate-video] Starting moderation check", {
+        userId: user.id,
+        contentLength: typeof content === "string" ? content.length : 0,
+      });
+
       // ============= CONTENT MODERATION CHECK =============
       const moderationResult = await moderateContent(content);
+      console.log("[generate-video] Moderation check completed", {
+        userId: user.id,
+        passed: moderationResult.passed,
+        reason: moderationResult.reason || null,
+        flagType: moderationResult.flagType || null,
+        elapsedMs: Date.now() - requestStartedAt,
+      });
+
       if (!moderationResult.passed) {
         console.log(`[MODERATION] Content rejected for user ${user.id}: ${moderationResult.reason}`);
 
@@ -5375,6 +5513,11 @@ serve(async (req) => {
         enterprise: 999,
       };
 
+      console.log("[generate-video] Loading subscription and credit data", {
+        userId: user.id,
+        projectType: body.projectType || "doc2video",
+      });
+
       // Get user subscription and credits
       const { data: subscriptionData } = await supabase
         .from("subscriptions")
@@ -5404,6 +5547,17 @@ serve(async (req) => {
         presentation: 4,
       };
       const creditsRequired = projectType === "smartflow" ? 1 : CREDIT_COSTS[length] || 1;
+
+      console.log("[generate-video] Subscription and credit data resolved", {
+        userId: user.id,
+        userPlan,
+        subscriptionStatus,
+        dailyLimit,
+        creditsBalance,
+        creditsRequired,
+        projectType,
+        elapsedMs: Date.now() - requestStartedAt,
+      });
 
       // ============= PLAN RESTRICTION VALIDATION =============
 
@@ -5576,6 +5730,14 @@ serve(async (req) => {
         console.log(
           `[generate-video] Routing to SMART FLOW pipeline (single infographic, skipAudio=${body.skipAudio ?? false})`,
         );
+        console.log("[generate-video] Invoking Smart Flow script handler", {
+          userId: user.id,
+          format,
+          style,
+          skipAudio: body.skipAudio ?? false,
+          contentLength: typeof content === "string" ? content.length : 0,
+          elapsedMs: Date.now() - requestStartedAt,
+        });
         return await handleSmartFlowScriptPhase(
           supabase,
           user,
@@ -5593,6 +5755,15 @@ serve(async (req) => {
 
       if (body.projectType === "storytelling") {
         console.log(`[generate-video] Routing to STORYTELLING pipeline`);
+        console.log("[generate-video] Invoking Storytelling script handler", {
+          userId: user.id,
+          format,
+          length,
+          style,
+          hasCharacterDescription: Boolean(body.characterDescription),
+          characterConsistencyEnabled: body.characterConsistencyEnabled ?? false,
+          elapsedMs: Date.now() - requestStartedAt,
+        });
         return await handleStorytellingScriptPhase(
           supabase,
           user,
@@ -5616,6 +5787,15 @@ serve(async (req) => {
       }
 
       // Default: Doc2Video pipeline
+      console.log("[generate-video] Invoking Doc2Video script handler", {
+        userId: user.id,
+        format,
+        length,
+        style,
+        hasPresenterFocus: Boolean(body.presenterFocus),
+        hasCharacterDescription: Boolean(body.characterDescription),
+        elapsedMs: Date.now() - requestStartedAt,
+      });
       return await handleScriptPhase(
         supabase,
         user,
@@ -5705,6 +5885,10 @@ serve(async (req) => {
     }
   } catch (error) {
     console.error("Generation error:", error);
+    console.error("[generate-video] Request failed", {
+      elapsedMs: Date.now() - requestStartedAt,
+      error: error instanceof Error ? { name: error.name, message: error.message } : String(error),
+    });
 
     // Try to log the error to system_logs (best-effort)
     try {

@@ -405,6 +405,83 @@ const PRICING = {
   imageNanoBanana2: 0.04, // $0.04 per image (gemini-3-1-flash-t2i on Hypereal)
 };
 
+// ============= ROBUST JSON EXTRACTION FROM LLM RESPONSES =============
+
+/**
+ * Extract and parse JSON from LLM response content.
+ * Handles common LLM output issues:
+ * - Markdown code fences (```json ... ```)
+ * - Leading/trailing text around JSON
+ * - Trailing commas before ] and }
+ * - Truncated responses (attempts to close open structures)
+ */
+function extractJsonFromLLMResponse(raw: string, label: string): any {
+  if (!raw || typeof raw !== "string") {
+    console.error(`[JSON_EXTRACT] ${label}: empty or non-string input`);
+    throw new Error(`No content to parse for ${label}`);
+  }
+
+  let content = raw.trim();
+
+  // Step 1: Strip markdown code fences
+  if (content.startsWith("```")) {
+    content = content
+      .replace(/^```[a-z]*\n?/i, "")
+      .replace(/\n?```\s*$/i, "")
+      .trim();
+  }
+
+  // Step 2: Extract JSON between first { and last }
+  const firstBrace = content.indexOf("{");
+  const lastBrace = content.lastIndexOf("}");
+  if (firstBrace === -1 || lastBrace <= firstBrace) {
+    console.error(`[JSON_EXTRACT] ${label}: no JSON object found. Raw (first 500 chars):`, content.substring(0, 500));
+    throw new Error(`Failed to parse ${label}: no JSON object found in response`);
+  }
+  content = content.slice(firstBrace, lastBrace + 1);
+
+  // Step 3: Fix trailing commas (common LLM issue)
+  content = content.replace(/,\s*([\]}])/g, "$1");
+
+  // Step 4: Try parsing
+  try {
+    return JSON.parse(content);
+  } catch (firstError) {
+    console.warn(`[JSON_EXTRACT] ${label}: first parse attempt failed:`, (firstError as Error).message);
+
+    // Step 5: Attempt to fix truncated JSON by closing open structures
+    let fixedContent = content;
+    const openBraces = (fixedContent.match(/{/g) || []).length;
+    const closeBraces = (fixedContent.match(/}/g) || []).length;
+    const openBrackets = (fixedContent.match(/\[/g) || []).length;
+    const closeBrackets = (fixedContent.match(/]/g) || []).length;
+
+    // Remove any trailing partial key-value pair (e.g., truncated mid-string)
+    fixedContent = fixedContent.replace(/,\s*"[^"]*"?\s*:?\s*"?[^"]*$/, "");
+    // Also remove trailing comma after cleanup
+    fixedContent = fixedContent.replace(/,\s*$/, "");
+
+    // Close unclosed brackets and braces
+    for (let i = 0; i < openBrackets - closeBrackets; i++) fixedContent += "]";
+    for (let i = 0; i < openBraces - closeBraces; i++) fixedContent += "}";
+
+    try {
+      const result = JSON.parse(fixedContent);
+      console.log(`[JSON_EXTRACT] ${label}: recovered truncated JSON successfully`);
+      return result;
+    } catch (secondError) {
+      console.error(
+        `[JSON_EXTRACT] ${label}: all parse attempts failed.`,
+        `\nFirst error: ${(firstError as Error).message}`,
+        `\nSecond error: ${(secondError as Error).message}`,
+        `\nRaw content (first 800 chars): ${raw.substring(0, 800)}`,
+        `\nRaw content (last 300 chars): ${raw.substring(Math.max(0, raw.length - 300))}`,
+      );
+      throw new Error(`Failed to parse ${label}: invalid JSON from LLM`);
+    }
+  }
+}
+
 // ============= LLM CALL HELPER (OpenRouter Only) =============
 interface LLMCallResult {
   content: string;
@@ -412,6 +489,8 @@ interface LLMCallResult {
   provider: "openrouter";
   durationMs: number;
 }
+
+const FALLBACK_MODEL = "anthropic/claude-sonnet-4.6";
 
 async function callLLMWithFallback(
   prompt: string,
@@ -421,7 +500,7 @@ async function callLLMWithFallback(
     model?: string;
   } = {},
 ): Promise<LLMCallResult> {
-  const model = options.model || "google/gemini-3.1-pro-preview";
+  const primaryModel = options.model || "google/gemini-3.1-pro-preview";
   const temperature = options.temperature ?? 0.7;
   const maxTokens = options.maxTokens ?? 8192;
 
@@ -431,6 +510,30 @@ async function callLLMWithFallback(
     throw new Error("OPENROUTER_API_KEY is not configured");
   }
 
+  // Try primary model first, then fallback on any error
+  const modelsToTry = [primaryModel, FALLBACK_MODEL];
+  let lastError: Error | null = null;
+
+  for (const model of modelsToTry) {
+    try {
+      const result = await callOpenRouter(OPENROUTER_API_KEY, model, prompt, temperature, maxTokens);
+      return result;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      console.warn(`[LLM] ${model} failed: ${lastError.message}. ${model === primaryModel ? `Falling back to ${FALLBACK_MODEL}...` : "No more fallbacks."}`);
+    }
+  }
+
+  throw lastError || new Error("All LLM models failed");
+}
+
+async function callOpenRouter(
+  apiKey: string,
+  model: string,
+  prompt: string,
+  temperature: number,
+  maxTokens: number,
+): Promise<LLMCallResult> {
   const startTime = Date.now();
   console.log(`[LLM] Calling OpenRouter with ${model}...`);
 
@@ -438,7 +541,7 @@ async function callLLMWithFallback(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
       "HTTP-Referer": "https://audiomax.lovable.app",
       "X-Title": "AudioMax",
     },
@@ -454,17 +557,17 @@ async function callLLMWithFallback(
 
   if (!response.ok) {
     const errText = await response.text().catch(() => "");
-    throw new Error(`OpenRouter failed (${response.status}): ${errText.substring(0, 200)}`);
+    throw new Error(`OpenRouter ${model} failed (${response.status}): ${errText.substring(0, 200)}`);
   }
 
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content;
 
   if (!content) {
-    throw new Error("No content received from OpenRouter");
+    throw new Error(`No content received from OpenRouter (${model})`);
   }
 
-  console.log(`[LLM] OpenRouter success: ${data.usage?.total_tokens || 0} tokens, ${durationMs}ms`);
+  console.log(`[LLM] OpenRouter ${model} success: ${data.usage?.total_tokens || 0} tokens, ${durationMs}ms`);
   return {
     content,
     tokensUsed: data.usage?.total_tokens || 0,
@@ -2681,31 +2784,12 @@ IMPORTANT: Do NOT include any style description in visualPrompt - the system wil
   const scriptContent = llmResult.content;
   const tokensUsed = llmResult.tokensUsed;
 
-  // Parse the script
+  // Parse the script using robust JSON extractor
   let parsedScript: {
     title: string;
     scenes: Array<{ number: number; voiceover: string; visualPrompt: string; duration: number }>;
   };
-  try {
-    // Strip markdown code blocks if present
-    let cleanedContent = scriptContent.trim();
-    if (cleanedContent.startsWith("```")) {
-      cleanedContent = cleanedContent
-        .replace(/^```[a-z]*\n?/i, "")
-        .replace(/\n?```$/i, "")
-        .trim();
-    }
-    // Extract JSON between first { and last }
-    const firstBrace = cleanedContent.indexOf("{");
-    const lastBrace = cleanedContent.lastIndexOf("}");
-    if (firstBrace !== -1 && lastBrace > firstBrace) {
-      cleanedContent = cleanedContent.slice(firstBrace, lastBrace + 1);
-    }
-    parsedScript = JSON.parse(cleanedContent);
-  } catch (parseError) {
-    console.error("[generate-video] Smart Flow script parsing failed:", parseError);
-    throw new Error("Failed to parse Smart Flow script - invalid JSON response");
-  }
+  parsedScript = extractJsonFromLLMResponse(scriptContent, "Smart Flow script");
 
   // Force exactly 1 scene
   if (!parsedScript.scenes || parsedScript.scenes.length === 0) {
@@ -2993,9 +3077,12 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
 
   console.log("Phase: DOC2VIDEO SCRIPT - Generating via OpenRouter with google/gemini-3.1-pro-preview...");
 
+  // Scale maxTokens based on scene count to prevent truncation
+  const doc2videoMaxTokens = length === "presentation" ? 16384 : length === "brief" ? 12000 : 8192;
+
   const llmResult = await callLLMWithFallback(scriptPrompt, {
     temperature: 0.7,
-    maxTokens: 8192,
+    maxTokens: doc2videoMaxTokens,
     model: "google/gemini-3.1-pro-preview",
   });
 
@@ -3020,13 +3107,7 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
   if (!scriptContent) throw new Error("No script content received");
 
   let parsedScript: ScriptResponse;
-  try {
-    const jsonMatch = scriptContent.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON found");
-    parsedScript = JSON.parse(jsonMatch[0]);
-  } catch {
-    throw new Error("Failed to parse script");
-  }
+  parsedScript = extractJsonFromLLMResponse(scriptContent, "Doc2Video script") as ScriptResponse;
 
   // Sanitize voiceovers and append style to visualPrompts for visibility
   parsedScript.scenes = parsedScript.scenes.map((s) => ({
@@ -3411,14 +3492,7 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
   if (!scriptContent) throw new Error("No script content received");
 
   let parsedScript: ScriptResponse;
-  try {
-    const jsonMatch = scriptContent.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON found in response");
-    parsedScript = JSON.parse(jsonMatch[0]);
-  } catch (parseError) {
-    console.error("Script parse error:", parseError, "Raw content:", scriptContent.substring(0, 500));
-    throw new Error("Failed to parse script JSON");
-  }
+  parsedScript = extractJsonFromLLMResponse(scriptContent, "Storytelling script") as ScriptResponse;
 
   // ============= HYPEREAL CHARACTER REFERENCE GENERATION (Pro/Enterprise only) =============
   let characterReferences: Record<string, string> = {}; // Maps character name to reference image URL

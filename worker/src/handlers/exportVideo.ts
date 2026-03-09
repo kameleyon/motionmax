@@ -29,29 +29,9 @@ async function streamToFile(url: string, destPath: string): Promise<void> {
 }
 
 const BUCKET_NAME = 'videos';
-let bucketVerified = false;
-
-/** Ensure the storage bucket exists (creates it once on first upload) */
-async function ensureBucket(): Promise<void> {
-  if (bucketVerified) return;
-  const { data } = await supabase.storage.getBucket(BUCKET_NAME);
-  if (!data) {
-    console.log(`[ExportVideo] Creating storage bucket "${BUCKET_NAME}"...`);
-    const { error } = await supabase.storage.createBucket(BUCKET_NAME, {
-      public: true,
-      fileSizeLimit: 524288000, // 500MB
-      allowedMimeTypes: ['video/mp4', 'video/webm', 'audio/mpeg', 'image/png', 'image/jpeg'],
-    });
-    if (error && !error.message.includes('already exists')) {
-      throw new Error(`Failed to create bucket: ${error.message}`);
-    }
-  }
-  bucketVerified = true;
-}
 
 /** Upload final MP4 to Supabase Storage using streaming REST to avoid loading into heap */
 async function uploadToSupabase(localPath: string, fileName: string): Promise<string> {
-  await ensureBucket();
   const stat = await fs.promises.stat(localPath);
   const stream = fs.createReadStream(localPath);
 

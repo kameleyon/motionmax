@@ -3,7 +3,7 @@
   "short_name": "MotionMax",
   "description": "Turn text into engaging visual contents. AI-powered video creation with voice cloning and professional quality.",
   "start_url": "/",
-  "display": "browser",
+  "display": "standalone",
   "background_color": "#0F1112",
   "theme_color": "#2D9A8C",
   "orientation": "portrait-primary",
@@ -15,19 +15,31 @@
       "src": "/favicon.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/favicon.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/apple-touch-icon.png",
       "sizes": "180x180",
       "type": "image/png",
-      "purpose": "apple touch icon"
+      "purpose": "any"
     }
   ],
   "screenshots": [

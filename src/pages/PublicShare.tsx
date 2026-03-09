@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+﻿import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -38,6 +38,9 @@ function HeaderCTA() {
     </Button>
   );
 }
+
+/** Fallback duration (seconds) when a scene has no explicit duration from backend */
+const DEFAULT_SCENE_DURATION_S = 3;
 
 export default function PublicShare() {
   const { token } = useParams<{ token: string }>();
@@ -99,7 +102,7 @@ export default function PublicShare() {
   useEffect(() => {
     if (isSingleVideo) return;
     if (scenes.length > 0) {
-      const total = scenes.reduce((acc, scene) => acc + (scene.duration || 3), 0);
+      const total = scenes.reduce((acc, scene) => acc + (scene.duration || DEFAULT_SCENE_DURATION_S), 0);
       setTotalDuration(total);
     }
   }, [isSingleVideo, scenes]);
@@ -173,7 +176,7 @@ export default function PublicShare() {
 
     const previousDuration = scenes
       .slice(0, currentSceneIndex)
-      .reduce((acc, s) => acc + (s.duration || 3), 0);
+      .reduce((acc, s) => acc + (s.duration || DEFAULT_SCENE_DURATION_S), 0);
 
     video.muted = true;
     video.src = currentScene.videoUrl;
@@ -258,14 +261,14 @@ export default function PublicShare() {
     if (!isPlaying || !currentScene) return;
     if (currentScene.videoUrl) return;
 
-    const sceneDuration = currentScene.duration || 3;
+    const sceneDuration = currentScene.duration || DEFAULT_SCENE_DURATION_S;
     const images = getCurrentSceneImages(currentScene);
     const imageCount = images.length || 1;
     const timePerImage = sceneDuration / imageCount;
 
     const previousDuration = scenes
       .slice(0, currentSceneIndex)
-      .reduce((acc, s) => acc + (s.duration || 3), 0);
+      .reduce((acc, s) => acc + (s.duration || DEFAULT_SCENE_DURATION_S), 0);
 
     const audio = audioRef.current;
 
@@ -368,7 +371,7 @@ export default function PublicShare() {
 
   const handleFullscreen = () => {
     const container = document.getElementById("share-player");
-    if (container?.requestFullscreen) container.requestFullscreen();
+    if (document.fullscreenEnabled && container?.requestFullscreen) container.requestFullscreen();
   };
 
   // Seekable slider handler
@@ -387,7 +390,7 @@ export default function PublicShare() {
     const targetTime = (pct / 100) * Math.max(totalDuration, 1);
     let accumulated = 0;
     for (let i = 0; i < scenes.length; i++) {
-      const sceneDur = scenes[i].duration || 3;
+      const sceneDur = scenes[i].duration || DEFAULT_SCENE_DURATION_S;
       if (targetTime <= accumulated + sceneDur || i === scenes.length - 1) {
         const offsetInScene = targetTime - accumulated;
         setCurrentSceneIndex(i);

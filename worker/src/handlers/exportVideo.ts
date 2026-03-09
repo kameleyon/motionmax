@@ -1,5 +1,5 @@
-import { supabase } from "../lib/supabase.js";
-import fetch from "node-fetch";
+﻿import { supabase } from "../lib/supabase.js";
+
 import fs from "fs";
 import path from "path";
 import os from "os";

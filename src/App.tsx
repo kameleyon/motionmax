@@ -1,6 +1,6 @@
-import { Toaster as Sonner } from "@/components/ui/sonner";
+﻿import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -21,7 +21,14 @@ import Privacy from "./pages/Privacy";
 import AcceptableUse from "./pages/AcceptableUse";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: (error) => console.error('[QueryClient:Query]', error),
+  }),
+  mutationCache: new MutationCache({
+    onError: (error) => console.error('[QueryClient:Mutation]', error),
+  }),
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

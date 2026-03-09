@@ -1,5 +1,4 @@
-import fetch from "node-fetch";
-
+﻿
 const HYPEREAL_IMAGE_URL = "https://hypereal.tech/api/v1/images/generate";
 const HYPEREAL_VIDEO_URL = "https://hypereal.tech/api/v1/videos/generate";
 const HYPEREAL_JOB_POLL_URL = "https://hypereal.tech/api/v1/jobs";

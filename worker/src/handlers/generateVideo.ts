@@ -1,5 +1,4 @@
-import { supabase } from "../lib/supabase.js";
-import fetch from "node-fetch";
+﻿import { supabase } from "../lib/supabase.js";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -13,7 +12,7 @@ import { writeSystemLog } from "../lib/logger.js";
 async function downloadFile(url: string, destPath: string): Promise<void> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Failed to download ${url}: ${response.statusText}`);
-  const buffer = await response.buffer();
+  const buffer = Buffer.from(await response.arrayBuffer());
   await fs.promises.writeFile(destPath, buffer);
 }
 

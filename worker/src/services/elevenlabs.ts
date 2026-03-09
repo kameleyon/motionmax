@@ -1,5 +1,4 @@
-import fetch from "node-fetch";
-import { supabase } from "../lib/supabase.js";
+﻿import { supabase } from "../lib/supabase.js";
 import { v4 as uuidv4 } from "uuid";
 
 export async function generateSpeechUrl(

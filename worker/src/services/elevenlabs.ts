@@ -1,12 +1,15 @@
 import fetch from "node-fetch";
+import { supabase } from "../lib/supabase.js";
+import { v4 as uuidv4 } from "uuid";
 
 export async function generateSpeechUrl(
   text: string,
   voiceId: string,
-  elevenLabsApiKey: string
+  elevenLabsApiKey: string,
+  projectId?: string
 ): Promise<string> {
   console.log(`[ElevenLabs] Generating audio for voice: ${voiceId}`);
-  
+
   const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
     method: "POST",
     headers: {
@@ -29,11 +32,30 @@ export async function generateSpeechUrl(
     throw new Error(`ElevenLabs API Error: ${response.status} - ${err}`);
   }
 
-  // Instead of directly using the edge stream, the worker saves it locally or uploads to Supabase Storage
-  // For the moment, we capture the buffer.
   const arrayBuffer = await response.arrayBuffer();
-  
-  // Here we will eventually upload the buffer to Supabase Storage and return the URL
-  // Return dummy URL to maintain shape in scaffolding phase
-  return "https://example.com/mock-audio.mp3";
+  const audioBuffer = Buffer.from(arrayBuffer);
+
+  if (audioBuffer.length < 100) {
+    throw new Error(`ElevenLabs returned suspiciously small audio (${audioBuffer.length} bytes)`);
+  }
+
+  // Upload to Supabase Storage
+  const fileName = `audio/${projectId || "worker"}/${uuidv4()}.mp3`;
+  const { error: uploadError } = await supabase.storage
+    .from("generation-assets")
+    .upload(fileName, audioBuffer, {
+      contentType: "audio/mpeg",
+      upsert: true,
+    });
+
+  if (uploadError) {
+    throw new Error(`Failed to upload audio to Supabase Storage: ${uploadError.message}`);
+  }
+
+  const { data: publicData } = supabase.storage
+    .from("generation-assets")
+    .getPublicUrl(fileName);
+
+  console.log(`[ElevenLabs] Audio uploaded: ${publicData.publicUrl} (${audioBuffer.length} bytes)`);
+  return publicData.publicUrl;
 }

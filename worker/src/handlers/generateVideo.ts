@@ -76,25 +76,19 @@ export async function handleGenerateVideo(jobId: string, payload: any, userId?: 
     const hyperealApiKey = process.env.HYPEREAL_API_KEY || "";
     const elevenLabsApiKey = process.env.ELEVENLABS_API_KEY || "";
 
-    // Medium Priority Task: Sanitize Prompt before sending to LLM pipeline
-    // Prevents rogue users from manipulating OpenRouter credits via prompt injection
+    // Sanitize prompt before sending to LLM pipeline
     const cleanPrompt = sanitizePrompt(prompt || "");
     await writeSystemLog({ jobId, projectId: project_id, userId, generationId: generation_id, category: "system_info", eventType: "prompt_sanitized", message: `Sanitized prompt length: ${cleanPrompt.length} chars`});
 
-    /* LIVE PRODUCTION APIS (currently commented for safety while testing worker plumbing)
     const script = await extractScriptWithOpenRouter(cleanPrompt, style, 15, openRouterApiKey);
     const scene = script.scenes[0];
-    
+
     await supabase.from('video_generation_jobs').update({ progress: 30 }).eq('id', jobId);
-    const audioUrl = await generateSpeechUrl(scene.narration, voice_id, elevenLabsApiKey);
-    
+    const audioUrl = await generateSpeechUrl(scene.narration, voice_id, elevenLabsApiKey, project_id);
+
     await supabase.from('video_generation_jobs').update({ progress: 50 }).eq('id', jobId);
     const imageUrl = await generateImage(scene.visual_prompt, hyperealApiKey, "16:9");
     const videoUrl = await generateVideoFromImage(imageUrl, scene.visual_prompt, hyperealApiKey);
-    */
-
-    const videoUrl = "https://raw.githubusercontent.com/bower-media-samples/big-buck-bunny-1080p-60fps-30s/master/video.mp4";
-    const audioUrl = "https://raw.githubusercontent.com/mathiasbynens/small/master/mp3.mp3";
 
     console.log(`[GenerateVideo] Downloading assets to ${tempDir}`);
     await writeSystemLog({ jobId, projectId: project_id, userId, generationId: generation_id, category: "system_info", eventType: "download_assets_started", message: `Downloading raw video and audio assets to Render node`});

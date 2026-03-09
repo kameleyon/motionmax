@@ -30,7 +30,7 @@ export async function extractScriptWithOpenRouter(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "openai/o3-mini",
+        model: "anthropic/claude-sonnet-4.6",
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: systemPrompt },

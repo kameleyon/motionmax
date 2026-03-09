@@ -35,10 +35,10 @@
 
 | Severity | Count |
 |----------|-------|
-| Critical | 8 |
-| High | 17 |
-| Medium | 26 |
-| Low | 19 |
+| Critical | 10 |
+| High | 22 |
+| Medium | 30 |
+| Low | 21 |
 
 ---
 
@@ -603,24 +603,45 @@
 
 ### Backend (Edge Functions)
 
-21. **[High] `generate-video/index.ts` Is Extremely Large**
+21. **[Critical] `create-checkout` Origin Fallback Points to Wrong Domain**
+    `create-checkout/index.ts` line 55 uses `"https://vision-narrate-pro.lovable.app"` as the origin fallback when the request `Origin` header is missing. This is a leftover from a previous app name/platform. If the origin header is absent (which can happen in some mobile browsers or redirect flows), Stripe checkout success/cancel URLs will redirect users to a non-existent domain. `customer-portal/index.ts` has the same issue, though its fallback is `"https://motionmax.io"` which is correct. Both should use the production domain consistently.
+
+22. **[Critical] `create-checkout` Uses Anon Key Instead of Service Role Key**
+    `create-checkout/index.ts` line 22 initializes the Supabase client with `SUPABASE_ANON_KEY` instead of `SUPABASE_SERVICE_ROLE_KEY`. This means the function operates with anonymous-level database permissions. While the function only needs to verify the user's JWT (which works with anon key), this is inconsistent with all other edge functions that use service role key. If the function ever needs to write to the database (e.g., logging checkout creation), it will silently fail due to RLS.
+
+23. **[High] `create-checkout` Does Not Validate Price IDs**
+    The `priceId` parameter from the request body is passed directly to `stripe.checkout.sessions.create()` without validation against the known set of valid price IDs. A malicious user could pass any Stripe price ID from any product in the same Stripe account, potentially purchasing items at incorrect prices or gaining access to products not intended for them.
+
+24. **[High] `manage-api-keys` Uses Hardcoded PBKDF2 Salt**
+    `manage-api-keys/index.ts` line 9 has a hardcoded salt: `"manage-api-keys-v2-salt"`. PBKDF2 salts should be random per deployment to prevent pre-computed attacks. While the 100,000 iteration count provides reasonable protection, the fixed salt weakens the key derivation.
+
+25. **[High] `refresh-project-thumbnails` Has No Ownership Verification**
+    `refresh-project-thumbnails/index.ts` refreshes signed URLs for any project IDs sent in the request, without verifying the authenticated user owns those projects. Any authenticated user could refresh (and thereby obtain) signed URLs for any other user's project thumbnails.
+
+26. **[High] `clone-voice` Has No Audio File Validation**
+    `clone-voice/index.ts` downloads user-uploaded audio from Supabase storage and forwards it to ElevenLabs without validating file type, file content, or file size. A malicious user could upload a non-audio file (or an extremely large file) that would be stored and forwarded without checks.
+
+27. **[High] `admin-stats` Admin Check Happens After Function Initialization**
+    In `admin-stats/index.ts`, the admin role verification happens after the Supabase client, Stripe client, and request body have already been processed. While no data is returned before the check, the function performs unnecessary work for unauthorized requests and could leak timing information.
+
+28. **[High] `generate-video/index.ts` Is Extremely Large**
     This single edge function file exceeds 71,000 tokens (roughly 3,000+ lines). It handles scripting, audio generation, image generation, image editing, finalization, scene regeneration — all in one function. This violates single-responsibility principle and makes the code very difficult to maintain, debug, and deploy. Individual phases should be separate functions.
 
-22. **[Medium] Deno Standard Library Version Inconsistency**
+29. **[Medium] Deno Standard Library Version Inconsistency**
     Edge functions use different Deno std versions: `std@0.168.0` in generate-video, `std@0.190.0` in stripe-webhook, `std@0.177.0` in generate-cinematic. These should all use the same version to prevent unexpected behavior differences.
 
-23. **[Medium] Supabase JS Client Version Inconsistency**
+30. **[Medium] Supabase JS Client Version Inconsistency**
     Edge functions use `@supabase/supabase-js@2.90.1`, `@supabase/supabase-js@2.57.2`, and `@supabase/supabase-js@2` across different functions. This creates risk of incompatible behaviors between functions.
 
 ### Worker Service
 
-24. **[Medium] No Job Queue System**
+31. **[Medium] No Job Queue System**
     The worker service polls the `video_generation_jobs` table for new jobs rather than using a proper job queue (Bull, BullMQ, etc.). This creates: (a) unnecessary database load from constant polling, (b) no built-in retry/backoff/dead-letter queue, (c) no job priority system, (d) potential race conditions if multiple workers poll simultaneously.
 
-25. **[Medium] No Structured Logging**
+32. **[Medium] No Structured Logging**
     Both the frontend and worker use `console.log`/`console.error` for logging. A structured logging library (pino, winston) would provide log levels, JSON output, correlation IDs, and better observability.
 
-26. **[Low] Worker Has Compiled JS Files Alongside TypeScript Sources**
+33. **[Low] Worker Has Compiled JS Files Alongside TypeScript Sources**
     The `worker/src/` directory contains both `.ts` source files and their compiled `.js` and `.d.ts` counterparts (e.g., `generateVideo.ts` + `generateVideo.js` + `generateVideo.d.ts`). The compiled files should be in a separate `dist/` directory and excluded from version control.
 
 ---
@@ -716,40 +737,47 @@
 6. Fix `characterConsistencyEnabled` not being sent to the backend in Doc2Video workspace
 7. Move `.env` to `.gitignore` and create `.env.example`
 8. Add React error boundaries at minimum around each workspace and the main app layout
+9. Fix `create-checkout` origin fallback from `vision-narrate-pro.lovable.app` to `motionmax.io`
+10. Fix `create-checkout` to use service role key instead of anon key
 
 ### Short-Term (High)
 
-9. Reconcile password minimum length (6 vs 8) across Auth and Settings pages
-10. Add user-facing error for microphone permission denial in VoiceLab
-11. Fix silent failure on custom style image upload (add toast notification)
-12. Fix SceneEditModal to use selectedImageIndex in modification/regeneration handlers
-13. Clean up audio playback in VoiceSelector on unmount
-14. Extract shared sidebar layout into a React Router layout route
-15. Restrict CORS origins to application domain(s) in Edge Functions
-16. Remove dead code (ContentInput upload section, temp files, compiled worker JS)
+11. Add price ID validation in `create-checkout` against known valid IDs
+12. Add ownership verification in `refresh-project-thumbnails`
+13. Add audio file validation (type, size) in `clone-voice`
+14. Move admin role check earlier in `admin-stats`
+15. Reconcile password minimum length (6 vs 8) across Auth and Settings pages
+16. Add user-facing error for microphone permission denial in VoiceLab
+17. Fix silent failure on custom style image upload (add toast notification)
+18. Fix SceneEditModal to use selectedImageIndex in modification/regeneration handlers
+19. Clean up audio playback in VoiceSelector on unmount
+20. Extract shared sidebar layout into a React Router layout route
+21. Restrict CORS origins to application domain(s) in Edge Functions
+22. Remove dead code (ContentInput upload section, temp files, compiled worker JS)
 
 ### Medium-Term (Medium)
 
-17. Create a single source of truth for pricing data
-18. Standardize "smartflow" vs "smart-flow" project type with a database migration
-19. Add Content Security Policy headers
-20. Replace Google Fonts CSS @import with preload links
-21. Add structured logging throughout the application
-22. Break apart the 3000+ line generate-video edge function into separate phase functions
-23. Standardize Deno std and Supabase client versions across edge functions
-24. Implement Realtime subscriptions for generation recovery instead of polling
-25. Add image format validation for style reference uploads
+23. Create a single source of truth for pricing data
+24. Standardize "smartflow" vs "smart-flow" project type with a database migration
+25. Add Content Security Policy headers
+26. Replace Google Fonts CSS @import with preload links
+27. Add structured logging throughout the application
+28. Break apart the 3000+ line generate-video edge function into separate phase functions
+29. Standardize Deno std and Supabase client versions across edge functions
+30. Implement Realtime subscriptions for generation recovery instead of polling
+31. Add image format validation for style reference uploads
+32. Replace hardcoded PBKDF2 salt in manage-api-keys with per-deployment random salt
 
 ### Long-Term (Low)
 
-26. Add sitemap.xml and reference it in robots.txt
-27. Remove unused Montserrat font import
-28. Implement URL-based pagination state for Projects page
-29. Add export functionality for billing history
-30. Replace `next-themes` with a lighter Vite-compatible alternative
-31. Evaluate replacing `node-fetch` and `axios` with native fetch in worker
-32. Add 404 analytics tracking
-33. Add legal document version history
+33. Add sitemap.xml and reference it in robots.txt
+34. Remove unused Montserrat font import
+35. Implement URL-based pagination state for Projects page
+36. Add export functionality for billing history
+37. Replace `next-themes` with a lighter Vite-compatible alternative
+38. Evaluate replacing `node-fetch` and `axios` with native fetch in worker
+39. Add 404 analytics tracking
+40. Add legal document version history
 
 ---
 

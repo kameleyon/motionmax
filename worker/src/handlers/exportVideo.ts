@@ -7,11 +7,13 @@ import ffmpeg from "fluent-ffmpeg";
 import { v4 as uuidv4 } from "uuid";
 import { writeSystemLog } from "../lib/logger.js";
 
+const FFMPEG_TIMEOUT_SEC = 120; // 2 minutes per FFmpeg operation
+
 async function downloadFile(url: string, destPath: string): Promise<void> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Failed to download ${url}: ${response.statusText}`);
-  const buffer = await response.buffer();
-  await fs.promises.writeFile(destPath, buffer);
+  const arrayBuf = await response.arrayBuffer();
+  await fs.promises.writeFile(destPath, Buffer.from(arrayBuf));
 }
 
 async function uploadToSupabase(localPath: string, fileName: string): Promise<string> {
@@ -27,7 +29,7 @@ async function uploadToSupabase(localPath: string, fileName: string): Promise<st
   return publicData.publicUrl;
 }
 
-/** Create a video from a still image + audio using FFmpeg */
+/** Create a video from a still image + audio using FFmpeg (with timeout) */
 function createVideoFromImageAudio(
   imagePath: string,
   audioPath: string,
@@ -35,7 +37,7 @@ function createVideoFromImageAudio(
   duration: number
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    ffmpeg()
+    const cmd = ffmpeg()
       .addInput(imagePath)
       .inputOptions(['-loop 1', '-framerate 24'])
       .addInput(audioPath)
@@ -52,8 +54,13 @@ function createVideoFromImageAudio(
         '-movflags +faststart',
       ])
       .save(outputPath)
-      .on('end', () => resolve())
-      .on('error', (err) => reject(new Error(`FFmpeg image→video: ${err.message}`)));
+      .on('end', () => { clearTimeout(timer); resolve(); })
+      .on('error', (err) => { clearTimeout(timer); reject(new Error(`FFmpeg image→video: ${err.message}`)); });
+
+    const timer = setTimeout(() => {
+      cmd.kill('SIGKILL');
+      reject(new Error(`FFmpeg image→video timed out after ${FFMPEG_TIMEOUT_SEC}s`));
+    }, FFMPEG_TIMEOUT_SEC * 1000);
   });
 }
 
@@ -102,14 +109,19 @@ export async function handleExportVideo(jobId: string, payload: any, userId?: st
           await downloadFile(scene.imageUrl, imgPath);
           const duration = scene.duration || 5;
           await new Promise<void>((resolve, reject) => {
-            ffmpeg()
+            const cmd = ffmpeg()
               .addInput(imgPath)
               .inputOptions(['-loop 1', '-framerate 24'])
               .videoFilters('scale=trunc(iw/2)*2:trunc(ih/2)*2')
               .outputOptions(['-c:v libx264', '-preset fast', '-tune stillimage', '-pix_fmt yuv420p', `-t ${duration}`, '-movflags +faststart'])
               .save(localPath)
-              .on('end', () => resolve())
-              .on('error', (err) => reject(new Error(`FFmpeg silent: ${err.message}`)));
+              .on('end', () => { clearTimeout(timer); resolve(); })
+              .on('error', (err) => { clearTimeout(timer); reject(new Error(`FFmpeg silent: ${err.message}`)); });
+
+            const timer = setTimeout(() => {
+              cmd.kill('SIGKILL');
+              reject(new Error(`FFmpeg silent-video timed out after ${FFMPEG_TIMEOUT_SEC}s`));
+            }, FFMPEG_TIMEOUT_SEC * 1000);
           });
           downloadedFiles.push(localPath);
         } else {
@@ -129,13 +141,18 @@ export async function handleExportVideo(jobId: string, payload: any, userId?: st
     await writeSystemLog({ jobId, projectId: project_id, userId, category: "system_info", eventType: "ffmpeg_stitch_started", message: `Starting FFmpeg concat`});
     
     await new Promise<void>((resolve: () => void, reject) => {
-        ffmpeg()
+        const cmd = ffmpeg()
           .input(fileListPath)
           .inputOptions(['-f concat', '-safe 0'])
           .outputOptions('-c copy')
           .save(finalOutputPath)
-          .on('end', resolve)
-          .on('error', (err) => reject(err));
+          .on('end', () => { clearTimeout(timer); resolve(); })
+          .on('error', (err) => { clearTimeout(timer); reject(err); });
+
+        const timer = setTimeout(() => {
+          cmd.kill('SIGKILL');
+          reject(new Error(`FFmpeg concat timed out after ${FFMPEG_TIMEOUT_SEC}s`));
+        }, FFMPEG_TIMEOUT_SEC * 1000);
     });
 
     await supabase.from('video_generation_jobs').update({ progress: 90 }).eq('id', jobId);

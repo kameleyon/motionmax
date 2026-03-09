@@ -4,15 +4,21 @@ import { handleGenerateVideo } from "./handlers/generateVideo.js";
 import { handleExportVideo } from "./handlers/exportVideo.js";
 import { writeSystemLog } from "./lib/logger.js";
 
+/* ---- Concurrency guard: prevent re-processing the same job ---- */
+const activeJobs = new Set<string>();
+let busy = false;
+
 async function processJob(job: Job) {
-  await writeSystemLog({ 
-    jobId: job.id, 
-    projectId: job.project_id, 
-    userId: job.user_id, 
+  activeJobs.add(job.id);
+
+  await writeSystemLog({
+    jobId: job.id,
+    projectId: job.project_id,
+    userId: job.user_id,
     generationId: job.payload?.generation_id,
-    category: "system_info", 
-    eventType: "job_started", 
-    message: `Worker picked up job ${job.id}` 
+    category: "system_info",
+    eventType: "job_started",
+    message: `Worker picked up job ${job.id}`
   });
   
   let finalPayload = { ...job.payload };
@@ -29,61 +35,65 @@ async function processJob(job: Job) {
       const exportResult = await handleExportVideo(job.id, job.payload, job.user_id);
       finalPayload.finalUrl = exportResult.url;
     } else {
-      await writeSystemLog({ 
-        jobId: job.id, 
-        userId: job.user_id, 
-        category: "system_warning", 
-        eventType: "unknown_task", 
-        message: `No handler for task type: ${job.task_type}` 
+      await writeSystemLog({
+        jobId: job.id,
+        userId: job.user_id,
+        category: "system_warning",
+        eventType: "unknown_task",
+        message: `No handler for task type: ${job.task_type}`
       });
     }
     
-    await writeSystemLog({ 
-      jobId: job.id, 
-      projectId: job.project_id, 
-      userId: job.user_id, 
-      category: "system_info", 
-      eventType: "job_completed", 
-      message: `Worker successfully completed job ${job.id}` 
+    await writeSystemLog({
+      jobId: job.id,
+      projectId: job.project_id,
+      userId: job.user_id,
+      category: "system_info",
+      eventType: "job_completed",
+      message: `Worker successfully completed job ${job.id}`
     });
 
     await supabase
       .from('video_generation_jobs')
-      .update({ 
-          status: 'completed', 
-          progress: 100, 
-          payload: finalPayload, 
-          updated_at: new Date().toISOString() 
+      .update({
+          status: 'completed',
+          progress: 100,
+          payload: finalPayload,
+          updated_at: new Date().toISOString()
       })
       .eq('id', job.id);
 
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
     
-    await writeSystemLog({ 
-      jobId: job.id, 
-      projectId: job.project_id, 
-      userId: job.user_id, 
-      category: "system_error", 
-      eventType: "job_failed", 
+    await writeSystemLog({
+      jobId: job.id,
+      projectId: job.project_id,
+      userId: job.user_id,
+      category: "system_error",
+      eventType: "job_failed",
       message: `Worker failed processing job ${job.id}: ${errorMsg}`,
       details: { stack: error instanceof Error ? error.stack : null }
     });
     
     await supabase
       .from('video_generation_jobs')
-      .update({ 
-        status: 'failed', 
+      .update({
+        status: 'failed',
         error_message: errorMsg,
-        updated_at: new Date().toISOString() 
+        updated_at: new Date().toISOString()
       })
       .eq('id', job.id);
+  } finally {
+    activeJobs.delete(job.id);
   }
 }
 
 let pollCount = 0;
 
 async function pollQueue() {
+  if (busy) return; // Previous poll still running — skip this tick
+  busy = true;
   pollCount++;
   try {
     // Query for pending jobs AND stale processing jobs (orphaned by worker restart)
@@ -107,11 +117,19 @@ async function pollQueue() {
 
     if (jobs && jobs.length > 0) {
       const job = jobs[0] as Job;
+
+      if (activeJobs.has(job.id)) {
+        // Already processing this job — skip
+        return;
+      }
+
       console.log(`[Worker] Found job ${job.id} (type: ${job.task_type}, status: ${job.status})`);
       await processJob(job);
     }
   } catch (err) {
     console.error("[Worker] Polling exception:", err);
+  } finally {
+    busy = false;
   }
 }
 

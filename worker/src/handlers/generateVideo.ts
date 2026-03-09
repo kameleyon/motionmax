@@ -61,11 +61,19 @@ function sanitizePrompt(prompt: string): string {
 }
 
 export async function handleGenerateVideo(jobId: string, payload: any, userId?: string) {
-  const { prompt, style, voice_id, project_id, generation_id } = payload;
+  // Client sends "content" (not "prompt"); also accept "prompt" as fallback
+  const content = payload.content || payload.prompt || "";
+  const { style, voice_id, voiceId, project_id, generation_id, format, length } = payload;
+  const resolvedVoiceId = voice_id || voiceId;
   
   await writeSystemLog({ jobId, projectId: project_id, userId, generationId: generation_id, category: "system_info", eventType: "generate_video_started", message: `Started video generation for project ${project_id}`});
   
-  console.log(`[GenerateVideo] Starting processing for job ${jobId}`);
+  console.log(`[GenerateVideo] Starting processing for job ${jobId}`, {
+    contentLength: content.length,
+    style,
+    format,
+    length,
+  });
   const tempDir = path.join(os.tmpdir(), `motionmax_${jobId}`);
   
   try {
@@ -76,18 +84,24 @@ export async function handleGenerateVideo(jobId: string, payload: any, userId?: 
     const hyperealApiKey = process.env.HYPEREAL_API_KEY || "";
     const elevenLabsApiKey = process.env.ELEVENLABS_API_KEY || "";
 
-    // Sanitize prompt before sending to LLM pipeline
-    const cleanPrompt = sanitizePrompt(prompt || "");
+    // Sanitize content before sending to LLM pipeline
+    const cleanPrompt = sanitizePrompt(content);
     await writeSystemLog({ jobId, projectId: project_id, userId, generationId: generation_id, category: "system_info", eventType: "prompt_sanitized", message: `Sanitized prompt length: ${cleanPrompt.length} chars`});
 
-    const script = await extractScriptWithOpenRouter(cleanPrompt, style, 15, openRouterApiKey);
+    const targetDuration = length === "presentation" ? 480 : length === "brief" ? 225 : 90;
+    const script = await extractScriptWithOpenRouter(cleanPrompt, style || "realistic", targetDuration, openRouterApiKey);
     const scene = script.scenes[0];
 
+    if (!scene) {
+      throw new Error("Script generation returned no scenes");
+    }
+
     await supabase.from('video_generation_jobs').update({ progress: 30 }).eq('id', jobId);
-    const audioUrl = await generateSpeechUrl(scene.narration, voice_id, elevenLabsApiKey, project_id);
+    const audioUrl = await generateSpeechUrl(scene.narration, resolvedVoiceId, elevenLabsApiKey, project_id);
 
     await supabase.from('video_generation_jobs').update({ progress: 50 }).eq('id', jobId);
-    const imageUrl = await generateImage(scene.visual_prompt, hyperealApiKey, "16:9");
+    const aspectRatio = format === "portrait" ? "9:16" : format === "square" ? "1:1" : "16:9";
+    const imageUrl = await generateImage(scene.visual_prompt, hyperealApiKey, aspectRatio);
     const videoUrl = await generateVideoFromImage(imageUrl, scene.visual_prompt, hyperealApiKey);
 
     console.log(`[GenerateVideo] Downloading assets to ${tempDir}`);

@@ -1,17 +1,50 @@
 /**
  * Platform-aware video download and share helpers.
- * Handles iOS Safari/Chrome, Android, and desktop download strategies.
+ * Handles iOS Safari/Chrome, Android, macOS Safari, and desktop strategies.
+ * Always fetches as blob to ensure cross-origin downloads work correctly.
  */
 
 const LOG = "[Export:Download]";
+
+/** Detect platform once */
+function detectPlatform() {
+  const ua = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/i.test(ua);
+  const isMacSafari = /Macintosh.*Safari/i.test(ua) && !/Chrome|CriOS|FxiOS/i.test(ua);
+  const isIOSChrome = isIOS && /CriOS/i.test(ua);
+  const isMobile = isIOS || isAndroid;
+  return { isIOS, isAndroid, isMacSafari, isIOSChrome, isMobile };
+}
+
+/** Fetch video URL as a Blob (works for cross-origin Supabase Storage URLs) */
+async function fetchAsBlob(url: string): Promise<Blob> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+  return response.blob();
+}
+
+/** Create a temporary blob anchor and trigger download */
+function triggerBlobDownload(blob: Blob, filename: string): void {
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = filename;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+  }, 3000);
+}
 
 /** Share video using the Web Share API (primarily for mobile) */
 export async function shareVideo(url: string, filename = "video.mp4"): Promise<boolean> {
   if (!url) return false;
   try {
     console.log(LOG, "Attempting share", { filename });
-    const response = await fetch(url);
-    const blob = await response.blob();
+    const blob = await fetchAsBlob(url);
     const file = new File([blob], filename, { type: "video/mp4" });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({ files: [file], title: filename });
@@ -25,117 +58,62 @@ export async function shareVideo(url: string, filename = "video.mp4"): Promise<b
   return false;
 }
 
-/** Download video with platform-specific strategies */
+/** Download video with platform-specific strategies — always blob-based for cross-origin */
 export async function downloadVideo(url: string, filename = "video.mp4"): Promise<void> {
   if (!url) return;
 
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  const isAndroid = /Android/i.test(navigator.userAgent);
-  const isIOSChrome = isIOS && /CriOS/i.test(navigator.userAgent);
+  const { isIOS, isAndroid, isMacSafari, isIOSChrome, isMobile } = detectPlatform();
+  console.log(LOG, "Starting download", { filename, isIOS, isAndroid, isMacSafari, isMobile });
 
-  console.log(LOG, "Starting download", { filename, isIOS, isAndroid, isIOSChrome });
+  try {
+    const blob = await fetchAsBlob(url);
 
-  // ---- iOS ----
-  if (isIOS) {
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
+    // ---- iOS: prefer Share API, fallback to blob navigation ----
+    if (isIOS) {
       const file = new File([blob], filename, { type: "video/mp4" });
-
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        console.log(LOG, "iOS: using Share API");
+        console.log(LOG, "iOS: using Share API for save-to-files");
         await navigator.share({ files: [file], title: filename });
         return;
       }
-    } catch (e) {
-      console.warn(LOG, "iOS share failed:", e);
-    }
-
-    // iOS Chrome: open in same tab
-    if (isIOSChrome) {
-      try {
+      // iOS Chrome: navigate to blob URL (triggers "Open in..." dialog)
+      if (isIOSChrome) {
         console.log(LOG, "iOS Chrome: navigating to blob URL");
-        const response = await fetch(url);
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        window.location.href = blobUrl;
-        return;
-      } catch (e) {
-        console.warn(LOG, "iOS Chrome blob navigation failed:", e);
-        alert("To save the video: Long-press on the video above and select 'Save Video'");
+        window.location.href = URL.createObjectURL(blob);
         return;
       }
-    }
-
-    // iOS Safari fallback: data URL
-    try {
-      console.log(LOG, "iOS Safari: using data URL fallback");
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const a = document.createElement("a");
-        a.href = reader.result as string;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        console.log(LOG, "iOS Safari: data URL download triggered");
-      };
-      reader.readAsDataURL(blob);
-      return;
-    } catch (e) {
-      console.warn(LOG, "iOS data URL download failed:", e);
-      alert("To save the video: Long-press on the video above and select 'Save Video'");
+      // iOS Safari fallback: blob anchor download
+      console.log(LOG, "iOS Safari: blob anchor download");
+      triggerBlobDownload(blob, filename);
       return;
     }
-  }
 
-  // ---- Android ----
-  if (isAndroid) {
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
+    // ---- Android: prefer Share API, fallback to blob anchor ----
+    if (isAndroid) {
       const file = new File([blob], filename, { type: "video/mp4" });
-
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         console.log(LOG, "Android: using Share API");
         await navigator.share({ files: [file], title: filename });
         return;
       }
-
-      console.log(LOG, "Android: using anchor download");
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = filename;
-      a.style.display = "none";
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-      }, 1000);
-      return;
-    } catch (e) {
-      console.warn(LOG, "Android download failed:", e);
-      alert("To save the video: Long-press on the video above and select 'Download video'");
+      console.log(LOG, "Android: blob anchor download");
+      triggerBlobDownload(blob, filename);
       return;
     }
-  }
 
-  // ---- Desktop ----
-  try {
-    console.log(LOG, "Desktop: using anchor download");
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.style.display = "none";
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => document.body.removeChild(a), 100);
+    // ---- macOS Safari: blob anchor (Safari ignores download attr on cross-origin) ----
+    if (isMacSafari) {
+      console.log(LOG, "macOS Safari: blob anchor download");
+      triggerBlobDownload(blob, filename);
+      return;
+    }
+
+    // ---- Desktop (Chrome, Firefox, Edge): blob anchor download ----
+    console.log(LOG, "Desktop: blob anchor download");
+    triggerBlobDownload(blob, filename);
+
   } catch (e) {
-    console.warn(LOG, "Desktop download failed:", e);
+    console.warn(LOG, "Download failed, opening in new tab:", e);
     window.open(url, "_blank");
   }
 }

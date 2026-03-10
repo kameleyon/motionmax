@@ -101,6 +101,14 @@ serve(async (req) => {
       );
     }
 
+    // Enforce path ownership: storagePath must start with the user's own ID
+    if (!storagePath.startsWith(`${user.id}/`)) {
+      return new Response(
+        JSON.stringify({ error: "Access denied: invalid storage path" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     console.log(`Cloning voice for user ${user.id}: ${voiceName}`);
     console.log(`Storage path: ${storagePath}`);
 
@@ -119,6 +127,22 @@ serve(async (req) => {
 
     const audioBlob = audioData;
     console.log(`Audio file size: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
+
+    // Validate file size (max 20 MB) and MIME type
+    const MAX_BYTES = 20 * 1024 * 1024;
+    if (audioBlob.size > MAX_BYTES) {
+      return new Response(
+        JSON.stringify({ error: "Audio file exceeds 20 MB limit" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const ALLOWED_TYPES = ["audio/mpeg", "audio/mp3", "audio/wav", "audio/ogg", "audio/webm", "audio/x-wav", "audio/flac", "audio/aac"];
+    if (audioBlob.type && !ALLOWED_TYPES.includes(audioBlob.type)) {
+      return new Response(
+        JSON.stringify({ error: `Unsupported audio format: ${audioBlob.type}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Prepare multipart form data for ElevenLabs
     const formData = new FormData();

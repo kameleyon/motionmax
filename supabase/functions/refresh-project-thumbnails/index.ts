@@ -95,6 +95,16 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Verify auth and extract user
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Invalid token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const { thumbnails } = await req.json() as { thumbnails: ThumbnailRequest[] };
 
     if (!Array.isArray(thumbnails) || thumbnails.length === 0) {
@@ -104,11 +114,22 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`[refresh-thumbnails] Refreshing ${thumbnails.length} thumbnails`);
+    // Verify ownership: only refresh thumbnails for projects the user owns
+    const requestedIds = thumbnails.map(t => t.projectId);
+    const { data: ownedProjects } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("user_id", user.id)
+      .in("id", requestedIds);
 
-    // Refresh all thumbnails in parallel
+    const ownedIds = new Set((ownedProjects ?? []).map((p: { id: string }) => p.id));
+    const authorizedThumbnails = thumbnails.filter(t => ownedIds.has(t.projectId));
+
+    console.log(`[refresh-thumbnails] Refreshing ${authorizedThumbnails.length}/${thumbnails.length} authorized thumbnails`);
+
+    // Refresh authorized thumbnails in parallel
     const refreshedThumbnails: ThumbnailResponse[] = await Promise.all(
-      thumbnails.map(async ({ projectId, thumbnailUrl }) => {
+      authorizedThumbnails.map(async ({ projectId, thumbnailUrl }) => {
         if (!thumbnailUrl) {
           return { projectId, thumbnailUrl: null };
         }

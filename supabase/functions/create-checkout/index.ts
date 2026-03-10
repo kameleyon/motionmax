@@ -19,7 +19,7 @@ serve(async (req) => {
 
   const supabaseClient = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
   );
 
   try {
@@ -38,6 +38,17 @@ serve(async (req) => {
 
     const { priceId, mode } = await req.json();
     if (!priceId) throw new Error("Price ID is required");
+
+    // Validate against known price IDs to prevent purchase of unintended products
+    const VALID_PRICE_IDS = new Set([
+      "price_1SqN1x6hfVkBDzkSzfLDk9eF", "price_1T2b0Q6hfVkBDzkSF4MqHPRi", // starter monthly/yearly
+      "price_1SqN2D6hfVkBDzkS6ywVTBEt", "price_1T2b0R6hfVkBDzkSFD5gowGz", // creator monthly/yearly
+      "price_1SqN2U6hfVkBDzkSNCDvRyeP", "price_1T2b0S6hfVkBDzkS4nrYAc2E", // professional monthly/yearly
+      "price_1SuJk36hfVkBDzkSCbSorQJY", "price_1SqN2q6hfVkBDzkSNbEXBWTL", // credit 15 / 50
+      "price_1SqN316hfVkBDzkSVq77cGDd", "price_1SuJk46hfVkBDzkSSkkal5QG", // credit 150 / 500
+    ]);
+    if (!VALID_PRICE_IDS.has(priceId)) throw new Error("Invalid price ID");
+
     logStep("Request params", { priceId, mode });
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
@@ -52,7 +63,7 @@ serve(async (req) => {
       logStep("Found existing customer", { customerId });
     }
 
-    const origin = req.headers.get("origin") || "https://vision-narrate-pro.lovable.app";
+    const origin = req.headers.get("origin") || "https://motionmax.io";
     
     const session = await stripe.checkout.sessions.create({
       customer: customerId,

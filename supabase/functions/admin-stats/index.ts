@@ -1,4 +1,4 @@
-﻿import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
@@ -175,7 +175,8 @@ serve(async (req) => {
             openrouter: totalOpenRouterCost,
             replicate: totalReplicateCost,
             hypereal: totalHyperealCost,
-            googleTts: totalGoogleTtsCost,`n              elevenlabs: 0, // Placeholder until ElevenLabs cost integration is added
+            googleTts: totalGoogleTtsCost,
+            elevenlabs: 0, // Placeholder until ElevenLabs cost integration is added
             total: totalSpent,
           },
           revenue: {
@@ -682,7 +683,8 @@ serve(async (req) => {
           userStatus,
           recentGenerations: generations,
           flags,
-          recentTransactions: transactions,`n          recentUserLogs: userLogs,
+          recentTransactions: transactions,
+          recentUserLogs: userLogs,
         };
         break;
       }

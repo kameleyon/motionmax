@@ -1,3 +1,12 @@
+# Migration scripts (contain DB exports with sensitive data)
+scripts/export/
+scripts/export-source-db.mjs
+scripts/export-large-tables.mjs
+scripts/fix-sql-strings.mjs
+scripts/import-to-target.mjs
+scripts/migrate-storage.mjs
+supabase/MIGRATION_GUIDE.md
+
 # Logs
 logs
 *.log

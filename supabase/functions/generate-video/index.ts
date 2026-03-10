@@ -3823,8 +3823,9 @@ async function handleAudioPhase(
   const audioUrls: (string | null)[] = scenes.map((s) => (s as any).audioUrl ?? null);
   let totalAudioSeconds = typeof costTracking.audioSeconds === "number" ? costTracking.audioSeconds : 0;
 
-  // Keep each request small to avoid network/gateway timeouts that surface as client-side "Failed to fetch".
-  const BATCH_SIZE = 1;
+  // Process up to 3 audio scenes per request so Promise.all runs them in parallel.
+  // 3 scenes × ~10s worst-case TTS = ~30s per call, well under the 300s client timeout.
+  const BATCH_SIZE = 3;
   const batchStart = Math.max(0, startIndex);
   const batchEnd = Math.min(batchStart + BATCH_SIZE, scenes.length);
 
@@ -4072,12 +4073,13 @@ async function handleAudioPhase(
   );
 }
 
-// Images phase now processes in chunks to avoid request timeouts.
-// IMPORTANT: Smaller chunk size (4) prevents "failed to fetch" timeouts during image generation.
-// Keep chunks small to stay within the Supabase gateway 150s timeout.
-// Each image can take 15-40s (with Hypereal retries up to 4 attempts),
-// so 2 images/chunk ensures completion well under the 150s limit.
-const MAX_IMAGES_PER_CALL_DEFAULT = 2;
+// Images phase processes in chunked calls to avoid gateway timeouts.
+// Chunk = MAX_IMAGES_PER_CALL_DEFAULT images per client→server round trip.
+// The internal BATCH_SIZE is 4 (parallel Promise.all), so setting the chunk size
+// to 4 means exactly 1 internal batch per call — eliminating inter-batch sleeps.
+// Worst-case per call: 40s (single slowest Hypereal image with retries).
+// 4 is well under the 150s gateway limit and halves the number of round trips.
+const MAX_IMAGES_PER_CALL_DEFAULT = 4;
 
 async function handleImagesPhase(
   supabase: any,
@@ -4503,7 +4505,7 @@ OUTPUT: Ultra high resolution, professional illustration with dynamic compositio
       console.log(`[IMG] Chunk progress: ${totalImagesGenerated} images generated so far`);
     }
 
-    if (batchEnd < tasksThisChunk.length) await sleep(1000);
+    if (batchEnd < tasksThisChunk.length) await sleep(400);
   }
 
   const newCompletedTotal = completedImagesSoFar + completedThisChunk;

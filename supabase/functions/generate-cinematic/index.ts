@@ -1829,7 +1829,7 @@ serve(async (req) => {
       }
 
       if (!videoUrl) {
-        return jsonResponse({ success: true, status: "processing", retryAfterMs: 8000, scene });
+        return jsonResponse({ success: true, status: "processing", retryAfterMs: 5000, scene });
       }
 
       scenes[idx] = { ...scene, videoUrl };

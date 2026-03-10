@@ -17,7 +17,7 @@ const LOG = "[Pipeline:Cinematic]";
 
 // Global rate-limit cooldown shared across image and video phases
 let lastRateLimitTime = 0;
-const GLOBAL_COOLDOWN_MS = 30000;
+const GLOBAL_COOLDOWN_MS = 15000;
 
 // ---- Main Pipeline ----
 
@@ -88,7 +88,9 @@ export async function runCinematicPipeline(
 async function runCinematicAudio(projectId: string, generationId: string, sceneCount: number, ctx: PipelineContext) {
   console.log(LOG, "Starting audio phase", { sceneCount });
 
-  for (let i = 0; i < sceneCount; i++) {
+  const AUDIO_CONCURRENCY = 3;
+
+  const processAudioScene = async (i: number) => {
     ctx.setState((prev) => ({
       ...prev,
       statusMessage: `Generating audio (${i + 1}/${sceneCount})...`,
@@ -117,6 +119,14 @@ async function runCinematicAudio(projectId: string, generationId: string, sceneC
       ...prev,
       progress: 10 + Math.floor(((i + 1) / sceneCount) * 25),
     }));
+  };
+
+  for (let batchStart = 0; batchStart < sceneCount; batchStart += AUDIO_CONCURRENCY) {
+    const batchEnd = Math.min(batchStart + AUDIO_CONCURRENCY, sceneCount);
+    const batch: Promise<void>[] = [];
+    for (let i = batchStart; i < batchEnd; i++) batch.push(processAudioScene(i));
+    console.log(LOG, `Processing audio batch ${batchStart + 1}–${batchEnd}`);
+    await Promise.allSettled(batch);
   }
   console.log(LOG, "Audio phase complete");
 }
@@ -171,7 +181,7 @@ async function runCinematicVideo(projectId: string, generationId: string, sceneC
   console.log(LOG, "Starting video phase", { sceneCount });
   ctx.setState((prev) => ({ ...prev, progress: 60, statusMessage: "Images complete. Generating video clips..." }));
 
-  const VIDEO_CONCURRENCY = 1;
+  const VIDEO_CONCURRENCY = 3;
   let completedVideos = 0;
 
   const generateVideoForScene = async (sceneIdx: number) => {
@@ -192,7 +202,7 @@ async function runCinematicVideo(projectId: string, generationId: string, sceneC
 
       let videoComplete = false;
       let pollAttempts = 0;
-      const MAX_POLL = 180;
+      const MAX_POLL = 120;
 
       while (!videoComplete) {
         pollAttempts++;
@@ -222,7 +232,7 @@ async function runCinematicVideo(projectId: string, generationId: string, sceneC
           videoComplete = true;
           console.log(LOG, `Video scene ${sceneIdx + 1} complete after ${pollAttempts} poll(s)`);
         } else {
-          const waitMs = vidRes.retryAfterMs || 8000;
+          const waitMs = vidRes.retryAfterMs || 6000;
           if (waitMs >= 20000) {
             lastRateLimitTime = Date.now();
             console.log(LOG, `Scene ${sceneIdx + 1}: rate limited, waiting ${waitMs / 1000}s (global cooldown set)`);
@@ -232,10 +242,6 @@ async function runCinematicVideo(projectId: string, generationId: string, sceneC
             }));
           }
           await sleep(waitMs);
-          ctx.setState((prev) => ({
-            ...prev,
-            statusMessage: `Generating clips (${completedVideos}/${sceneCount})...`,
-          }));
         }
       }
       completedVideos++;
@@ -384,8 +390,9 @@ export async function resumeCinematicPipeline(
     // Phase 2: Audio (resume)
     if (resumeFrom === "audio") {
       console.log(LOG, "Resume: starting audio phase");
-      for (let i = 0; i < sceneCount; i++) {
-        if (existingScenes[i]?.audioUrl) { console.log(LOG, `Resume: skipping audio scene ${i + 1} (done)`); continue; }
+      const AUDIO_CONCURRENCY = 3;
+      const processResumeAudio = async (i: number) => {
+        if (existingScenes[i]?.audioUrl) { console.log(LOG, `Resume: skipping audio scene ${i + 1} (done)`); return; }
         ctx.setState((prev) => ({ ...prev, statusMessage: `Resuming audio (${i + 1}/${sceneCount})...`, progress: 10 + Math.floor(((i + 0.25) / sceneCount) * 25) }));
         let audioComplete = false;
         while (!audioComplete) {
@@ -394,6 +401,11 @@ export async function resumeCinematicPipeline(
           if (audioRes.status === "complete") audioComplete = true; else await sleep(1200);
         }
         ctx.setState((prev) => ({ ...prev, progress: 10 + Math.floor(((i + 1) / sceneCount) * 25) }));
+      };
+      for (let batchStart = 0; batchStart < sceneCount; batchStart += AUDIO_CONCURRENCY) {
+        const batch: Promise<void>[] = [];
+        for (let i = batchStart; i < Math.min(batchStart + AUDIO_CONCURRENCY, sceneCount); i++) batch.push(processResumeAudio(i));
+        await Promise.allSettled(batch);
       }
     }
 
@@ -431,7 +443,7 @@ export async function resumeCinematicPipeline(
     if (resumeFrom === "audio" || resumeFrom === "images" || resumeFrom === "video") {
       console.log(LOG, "Resume: starting video phase");
       ctx.setState((prev) => ({ ...prev, progress: 60, statusMessage: "Resuming video clips..." }));
-      const VIDEO_CONCURRENCY = 1;
+      const VIDEO_CONCURRENCY = 3;
       let completedVideos = existingScenes.filter((s) => !!s.videoUrl).length;
 
       const generateVideoForScene = async (sceneIdx: number) => {
@@ -453,7 +465,7 @@ export async function resumeCinematicPipeline(
           let pollAttempts = 0;
           while (!videoComplete) {
             pollAttempts++;
-            if (pollAttempts > 180) { console.warn(LOG, `Resume video scene ${sceneIdx + 1} timed out`); return; }
+            if (pollAttempts > 120) { console.warn(LOG, `Resume video scene ${sceneIdx + 1} timed out`); return; }
 
             // Global cooldown
             const now = Date.now();
@@ -468,7 +480,7 @@ export async function resumeCinematicPipeline(
             if (vidRes.status === "complete") {
               videoComplete = true;
             } else {
-              const waitMs = vidRes.retryAfterMs || 8000;
+              const waitMs = vidRes.retryAfterMs || 6000;
               if (waitMs >= 20000) {
                 lastRateLimitTime = Date.now();
                 console.log(LOG, `Resume scene ${sceneIdx + 1}: rate limited, waiting ${waitMs / 1000}s (global cooldown set)`);
@@ -478,10 +490,6 @@ export async function resumeCinematicPipeline(
                 }));
               }
               await sleep(waitMs);
-              ctx.setState((prev) => ({
-                ...prev,
-                statusMessage: `Generating clips (${completedVideos}/${sceneCount})...`,
-              }));
             }
           }
           completedVideos++;

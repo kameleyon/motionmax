@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.admin-stats]
 verify_jwt = false
+
+[functions.migrate-storage]
+verify_jwt = false

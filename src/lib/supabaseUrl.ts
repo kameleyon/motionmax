@@ -1,15 +1,16 @@
 /**
- * Resolves the Supabase project URL in order of reliability:
- *   1. supabase.supabaseUrl  — reads from the already-configured client (has hardcoded new-project fallback)
- *   2. VITE_SUPABASE_URL    — baked-in env var (may be stale if the app was built before migration)
- *   3. hardcoded fallback   — target project URL, always correct
+ * Canonical Supabase project URL for edge-function fetch calls.
  *
- * Using the client's own URL avoids the "wrong project" problem when the env
- * var was baked into a production build before the Supabase migration.
+ * The project was migrated on 2026-03-10 to `ayjbvcikuwknqdrpsdmj`.
+ * This constant is hardcoded so that ALL edge-function calls target the
+ * new project even when an older production build has the previous project
+ * URL baked into VITE_SUPABASE_URL.
+ *
+ * VITE_SUPABASE_URL is still honoured as an override for local development
+ * but only if it contains the correct new project reference.
  */
-import { supabase } from "@/integrations/supabase/client";
+const NEW_PROJECT = "ayjbvcikuwknqdrpsdmj";
+const ENV_URL: string = import.meta.env.VITE_SUPABASE_URL ?? "";
 
 export const SUPABASE_URL: string =
-  (supabase as unknown as { supabaseUrl: string }).supabaseUrl
-  ?? import.meta.env.VITE_SUPABASE_URL
-  ?? "https://ayjbvcikuwknqdrpsdmj.supabase.co";
+  ENV_URL.includes(NEW_PROJECT) ? ENV_URL : `https://${NEW_PROJECT}.supabase.co`;

@@ -1,4 +1,4 @@
-﻿import { supabase } from "../lib/supabase.js";
+import { supabase } from "../lib/supabase.js";
 
 import fs from "fs";
 import path from "path";
@@ -18,6 +18,9 @@ const X264_MEM_FLAGS = [
   '-bf 0',
   '-x264-params rc-lookahead=0:threads=1',
 ];
+
+/** Max concurrent scene downloads/FFmpeg encodes */
+const DOWNLOAD_CONCURRENCY = 4;
 
 /** Stream a URL directly to disk without buffering in Node.js heap */
 async function streamToFile(url: string, destPath: string): Promise<void> {
@@ -154,71 +157,109 @@ function concatVideos(fileListPath: string, outputPath: string): Promise<void> {
   });
 }
 
+/**
+ * Process a single scene: download assets and produce a scene MP4.
+ * Returns the local path to the produced MP4, or null if the scene was skipped.
+ */
+async function processScene(
+  scene: any,
+  index: number,
+  tempDir: string
+): Promise<string | null> {
+  const localPath = path.join(tempDir, `scene_${index}.mp4`);
+
+  if (scene.videoUrl) {
+    console.log(`[ExportVideo] Streaming scene ${index} video to disk`);
+    await streamToFile(scene.videoUrl, localPath);
+    return localPath;
+  }
+
+  if (scene.imageUrl && scene.audioUrl) {
+    const imgPath = path.join(tempDir, `scene_${index}_img.png`);
+    const audPath = path.join(tempDir, `scene_${index}_aud.mp3`);
+    console.log(`[ExportVideo] Scene ${index}: streaming image + audio, then FFmpeg`);
+    await streamToFile(scene.imageUrl, imgPath);
+    await streamToFile(scene.audioUrl, audPath);
+    const duration = scene.duration || 10;
+    await createVideoFromImageAudio(imgPath, audPath, localPath, duration);
+    removeFiles(imgPath, audPath);
+    console.log(`[ExportVideo] Scene ${index}: done (${duration}s)`);
+    return localPath;
+  }
+
+  if (scene.imageUrl) {
+    const imgPath = path.join(tempDir, `scene_${index}_img.png`);
+    console.log(`[ExportVideo] Scene ${index}: streaming image, then silent FFmpeg`);
+    await streamToFile(scene.imageUrl, imgPath);
+    const duration = scene.duration || 5;
+    await createSilentVideo(imgPath, localPath, duration);
+    removeFiles(imgPath);
+    return localPath;
+  }
+
+  console.warn(`[ExportVideo] Scene ${index}: no videoUrl, imageUrl, or audioUrl — skipping`);
+  return null;
+}
+
 export async function handleExportVideo(jobId: string, payload: any, userId?: string) {
   const { scenes, format, brandMark, project_id } = payload;
-  
+
   await writeSystemLog({ jobId, projectId: project_id, userId, category: "system_info", eventType: "export_video_started", message: `Started video stitching for ${scenes.length} scenes`});
-  
+
   console.log(`[ExportVideo] Starting processing for job ${jobId}`);
   const tempDir = path.join(os.tmpdir(), `motionmax_export_${jobId}`);
   const fileListPath = path.join(tempDir, 'files.txt');
   const finalOutputPath = path.join(tempDir, 'final_export.mp4');
-  
+
   try {
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
     await supabase.from('video_generation_jobs').update({ progress: 10, status: 'processing' }).eq('id', jobId);
 
-    // 1. Download/create scene MP4s one at a time, clean up source files after each
-    const downloadedFiles: string[] = [];
-    for (let i = 0; i < scenes.length; i++) {
-      const scene = scenes[i];
-      const localPath = path.join(tempDir, `scene_${i}.mp4`);
+    // 1. Download/create scene MP4s in parallel batches
+    //    Process up to DOWNLOAD_CONCURRENCY scenes concurrently.
+    //    Scenes with videoUrl are pure downloads (I/O bound, safe to parallelize).
+    //    Scenes needing FFmpeg are CPU-bound but ultrafast preset is quick.
+    const downloadedFiles: (string | null)[] = new Array(scenes.length).fill(null);
 
-      await supabase.from('video_generation_jobs').update({ progress: Math.floor(10 + (i / scenes.length) * 40) }).eq('id', jobId);
+    for (let batchStart = 0; batchStart < scenes.length; batchStart += DOWNLOAD_CONCURRENCY) {
+      const batchEnd = Math.min(batchStart + DOWNLOAD_CONCURRENCY, scenes.length);
+      const batchPromises: Promise<void>[] = [];
 
-      if (scene.videoUrl) {
-        console.log(`[ExportVideo] Streaming scene ${i} video to disk`);
-        await streamToFile(scene.videoUrl, localPath);
-        downloadedFiles.push(localPath);
-      } else if (scene.imageUrl && scene.audioUrl) {
-        const imgPath = path.join(tempDir, `scene_${i}_img.png`);
-        const audPath = path.join(tempDir, `scene_${i}_aud.mp3`);
-        console.log(`[ExportVideo] Scene ${i}: streaming image + audio, then FFmpeg`);
-        await streamToFile(scene.imageUrl, imgPath);
-        await streamToFile(scene.audioUrl, audPath);
-        const duration = scene.duration || 10;
-        await createVideoFromImageAudio(imgPath, audPath, localPath, duration);
-        // Free source files immediately after FFmpeg produces the MP4
-        removeFiles(imgPath, audPath);
-        downloadedFiles.push(localPath);
-        console.log(`[ExportVideo] Scene ${i}: done (${duration}s)`);
-      } else if (scene.imageUrl) {
-        const imgPath = path.join(tempDir, `scene_${i}_img.png`);
-        console.log(`[ExportVideo] Scene ${i}: streaming image, then silent FFmpeg`);
-        await streamToFile(scene.imageUrl, imgPath);
-        const duration = scene.duration || 5;
-        await createSilentVideo(imgPath, localPath, duration);
-        removeFiles(imgPath);
-        downloadedFiles.push(localPath);
-      } else {
-        console.warn(`[ExportVideo] Scene ${i}: no videoUrl, imageUrl, or audioUrl — skipping`);
+      for (let i = batchStart; i < batchEnd; i++) {
+        batchPromises.push(
+          processScene(scenes[i], i, tempDir)
+            .then((result) => { downloadedFiles[i] = result; })
+            .catch((err) => {
+              console.error(`[ExportVideo] Scene ${i} failed:`, err);
+              downloadedFiles[i] = null;
+            })
+        );
       }
+
+      await Promise.all(batchPromises);
+
+      // Update progress after each batch
+      const progress = Math.floor(10 + (batchEnd / scenes.length) * 45);
+      await supabase.from('video_generation_jobs').update({ progress }).eq('id', jobId);
     }
 
-    if (downloadedFiles.length === 0) throw new Error("No video scenes provided to stitch.");
+    // Filter to only successfully created scene files, preserving order
+    const orderedFiles = downloadedFiles.filter((f): f is string => f !== null);
 
-    await writeSystemLog({ jobId, projectId: project_id, userId, category: "system_info", eventType: "export_download_complete", message: `Created ${downloadedFiles.length} scene videos`});
+    if (orderedFiles.length === 0) throw new Error("No video scenes provided to stitch.");
+
+    await writeSystemLog({ jobId, projectId: project_id, userId, category: "system_info", eventType: "export_download_complete", message: `Created ${orderedFiles.length} scene videos`});
     await supabase.from('video_generation_jobs').update({ progress: 60 }).eq('id', jobId);
 
     // 2. Stitch using FFmpeg concat demuxer
-    const fileContent = downloadedFiles.map(file => `file '${file.replace(/\\/g, '/')}'`).join('\n');
+    const fileContent = orderedFiles.map(file => `file '${file.replace(/\\/g, '/')}'`).join('\n');
     await fs.promises.writeFile(fileListPath, fileContent);
 
     await writeSystemLog({ jobId, projectId: project_id, userId, category: "system_info", eventType: "ffmpeg_stitch_started", message: `Starting FFmpeg concat`});
     await concatVideos(fileListPath, finalOutputPath);
 
     // Free individual scene MP4s after concat produces the final file
-    for (const f of downloadedFiles) removeFiles(f);
+    for (const f of orderedFiles) removeFiles(f);
 
     await supabase.from('video_generation_jobs').update({ progress: 90 }).eq('id', jobId);
 

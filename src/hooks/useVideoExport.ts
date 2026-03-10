@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { type ExportState } from "./export/types";
 import { downloadVideo, shareVideo } from "./export/downloadHelpers";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,11 +9,22 @@ export type { ExportStatus } from "./export/types";
 
 const LOG_PREFIX = "[VideoExport:WorkerQueue]";
 
+/**
+ * Poll interval when the tab is visible vs hidden.
+ * Safari and mobile browsers throttle setInterval to 1-60s when backgrounded,
+ * so we use a short visible interval and rely on visibilitychange to
+ * immediately poll when the user returns to the tab.
+ */
+const POLL_VISIBLE_MS = 5000;
+const POLL_HIDDEN_MS = 15000;
+
 export function useVideoExport() {
   const [state, setState] = useState<ExportState>({ status: "idle", progress: 0 });
   const abortRef = useRef(false);
   // Prevents duplicate jobs when the user clicks export multiple times in quick succession
   const isExportingRef = useRef(false);
+  // Track active job for visibility-change recovery
+  const activeJobRef = useRef<{ jobId: string; settled: boolean } | null>(null);
 
   const log = useCallback((...args: any[]) => console.log(LOG_PREFIX, ...args), []);
   const err = useCallback((...args: any[]) => console.error(LOG_PREFIX, ...args), []);
@@ -21,8 +32,47 @@ export function useVideoExport() {
   const reset = useCallback(() => {
     abortRef.current = true;
     isExportingRef.current = false;
+    activeJobRef.current = null;
     setState({ status: "idle", progress: 0 });
   }, []);
+
+  // When the tab becomes visible again, immediately poll the active job
+  // This fixes Safari/mobile backgrounding issues where Realtime drops
+  // and setInterval gets throttled to 60s+
+  useEffect(() => {
+    const onVisibilityChange = async () => {
+      if (document.visibilityState !== "visible") return;
+      const job = activeJobRef.current;
+      if (!job || job.settled) return;
+
+      log("Tab became visible — immediate poll for job", job.jobId);
+      try {
+        const { data: polledJob } = await supabase
+          .from("video_generation_jobs")
+          .select("*")
+          .eq("id", job.jobId)
+          .single();
+
+        if (!polledJob) return;
+
+        if (polledJob.status === "completed") {
+          const finalUrl = polledJob.payload?.finalUrl;
+          job.settled = true;
+          setState({ status: "complete", progress: 100, videoUrl: finalUrl as string });
+        } else if (polledJob.status === "failed") {
+          job.settled = true;
+          setState({ status: "error", progress: 0, error: polledJob.error_message || "Render compilation failed" });
+        } else if (polledJob.status === "processing") {
+          setState({ status: "rendering", progress: polledJob.progress || 10 });
+        }
+      } catch (pollErr) {
+        err("Visibility poll error:", pollErr);
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [log, err]);
 
   const exportVideo = useCallback(
     async (
@@ -39,7 +89,7 @@ export function useVideoExport() {
       isExportingRef.current = true;
       abortRef.current = false;
       log("Starting Render Server export", { scenes: scenes.length, format, brandMark: brandMark || "(none)", projectId: projectId || "(none)" });
-      
+
       setState({ status: "loading", progress: 0 });
 
       try {
@@ -66,13 +116,16 @@ export function useVideoExport() {
 
         if (insertError) throw insertError;
 
+        // Track the active job for visibility-change recovery
+        const jobTracker = { jobId: job.id, settled: false };
+        activeJobRef.current = jobTracker;
+
         const result = await new Promise<string>((resolve, reject) => {
             const timeoutMs = 600000; // 10 minute extreme timeout for massive renders
-            let settled = false;
 
             const cleanup = (channel: ReturnType<typeof supabase.channel>, timeoutId: NodeJS.Timeout, pollId: NodeJS.Timeout) => {
-                if (settled) return;
-                settled = true;
+                if (jobTracker.settled) return;
+                jobTracker.settled = true;
                 clearTimeout(timeoutId);
                 clearInterval(pollId);
                 supabase.removeChannel(channel);
@@ -85,7 +138,7 @@ export function useVideoExport() {
               pollId: NodeJS.Timeout,
               source: string
             ) => {
-                if (settled) return;
+                if (jobTracker.settled) return;
                 log(`[${source}] Render progress: ${updatedJob.progress}% | Status: ${updatedJob.status}`);
 
                 if (abortRef.current) {
@@ -108,9 +161,10 @@ export function useVideoExport() {
                 }
             };
 
-            // Fallback poll: query the job row directly every 8s in case Realtime drops events
-            const pollId = setInterval(async () => {
-                if (settled) return;
+            // Adaptive poll interval: faster when visible, slower when hidden
+            // This prevents Safari from killing the tab due to excessive background activity
+            const pollFn = async () => {
+                if (jobTracker.settled) return;
                 try {
                     const { data: polledJob } = await supabase
                       .from("video_generation_jobs")
@@ -123,9 +177,24 @@ export function useVideoExport() {
                 } catch (pollErr) {
                     err("Fallback poll error:", pollErr);
                 }
-            }, 8000);
+            };
+
+            // Use a dynamic interval — poll more frequently when visible
+            const getPollInterval = () => document.visibilityState === "visible" ? POLL_VISIBLE_MS : POLL_HIDDEN_MS;
+            let pollId = setInterval(pollFn, getPollInterval());
+
+            // Re-schedule polling when visibility changes to use the appropriate interval
+            const adjustPollRate = () => {
+                if (jobTracker.settled) return;
+                clearInterval(pollId);
+                pollId = setInterval(pollFn, getPollInterval());
+                // If we just became visible, also do an immediate poll
+                if (document.visibilityState === "visible") pollFn();
+            };
+            document.addEventListener("visibilitychange", adjustPollRate);
 
             const timeoutId = setTimeout(() => {
+                document.removeEventListener("visibilitychange", adjustPollRate);
                 cleanup(channel, timeoutId, pollId);
                 setState({ status: "error", progress: 0, error: "Render server timed out" });
                 reject(new Error("Timeout waiting for Render server"));
@@ -157,12 +226,14 @@ export function useVideoExport() {
 
         // Clear the guard on success so the user can export again later
         isExportingRef.current = false;
+        activeJobRef.current = null;
         return result;
       } catch (e: any) {
         const msg = e.message || "Unknown export error";
         err("Export Failed", e);
         setState({ status: "error", progress: 0, error: msg });
         isExportingRef.current = false;
+        activeJobRef.current = null;
         throw e;
       }
     },

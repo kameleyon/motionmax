@@ -151,16 +151,18 @@ export default function Settings() {
     if (deleteConfirmText.toUpperCase() !== "DELETE") return;
     setIsDeletingAccount(true);
     try {
-      // Send deletion request via support email
-      window.open(
-        `mailto:support@motionmax.io?subject=Account%20Deletion%20Request&body=Please%20delete%20my%20account%20associated%20with%20email%3A%20${encodeURIComponent(user?.email || "")}%0A%0AUser%20ID%3A%20${encodeURIComponent(user?.id || "")}%0A%0AI%20understand%20this%20action%20is%20permanent%20and%20all%20my%20data%20will%20be%20deleted.`,
-        "_blank"
-      );
-      toast.success("A deletion request email has been prepared. Please send it to complete your request.");
+      // Log deletion request with 7-day grace period (replaces mailto: flow)
+      const { error } = await supabase
+        .from("deletion_requests")
+        .insert({ user_id: user!.id, email: user?.email });
+      if (error) throw error;
+      toast.success("Deletion request submitted. Your account will be permanently deleted in 7 days. You have been signed out.");
       setShowDeleteDialog(false);
       setDeleteConfirmText("");
+      // Sign out immediately so the session can't be used after the request
+      await supabase.auth.signOut();
     } catch (error: any) {
-      toast.error("Failed to initiate account deletion. Please contact support directly.");
+      toast.error(error.message || "Failed to submit deletion request. Please contact support@motionmax.io.");
     } finally {
       setIsDeletingAccount(false);
     }

@@ -4369,8 +4369,8 @@ OUTPUT: Ultra high resolution, professional illustration with dynamic compositio
 
     for (let t = batchStart; t < batchEnd; t++) {
       const task = tasksThisChunk[t];
-      // Stagger requests within batch to avoid rate limits (1.5s between each)
-      const staggerDelay = (t - batchStart) * 1500;
+      // Stagger requests within batch to avoid rate limits (750ms between each)
+      const staggerDelay = (t - batchStart) * 750;
       batchPromises.push(
         (async () => {
           // Wait for stagger delay before starting this request

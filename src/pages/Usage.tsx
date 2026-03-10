@@ -32,7 +32,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { ThemedLogo } from "@/components/ThemedLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
-import { getCreditsRequired } from "@/lib/planLimits";
+import { getCreditsRequired, CREDIT_COSTS } from "@/lib/planLimits";
 import { supabase } from "@/integrations/supabase/client";
 import { normalizeProjectType } from "@/lib/projectUtils";
 import { formatDistanceToNow, format, startOfMonth, endOfMonth, subMonths, isSameMonth } from "date-fns";

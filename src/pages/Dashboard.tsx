@@ -72,12 +72,31 @@ export default function Dashboard() {
   const [currentTip, setCurrentTip] = useState(0);
   const [greetingIndex] = useState(() => Math.floor(Math.random() * GREETINGS.length));
 
-  // Rotate tips — interval accounts for animation duration so tips never pop on slow devices
+  // Rotate tips — pauses when tab is backgrounded to avoid wasted background work
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTip((prev) => (prev + 1) % TIPS.length);
-    }, TIPS_INTERVAL_MS + ANIMATION_DURATION_MS);
-    return () => clearInterval(timer);
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    const start = () => {
+      if (timer) clearInterval(timer);
+      timer = setInterval(() => {
+        setCurrentTip((prev) => (prev + 1) % TIPS.length);
+      }, TIPS_INTERVAL_MS + ANIMATION_DURATION_MS);
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        start();
+      } else {
+        if (timer) { clearInterval(timer); timer = null; }
+      }
+    };
+
+    if (document.visibilityState === "visible") start();
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      if (timer) clearInterval(timer);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, []);
 
   const { data: credits, isError: isCreditsError } = useQuery({

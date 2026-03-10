@@ -241,7 +241,17 @@ async function runCinematicVideo(projectId: string, generationId: string, sceneC
               statusMessage: `Provider busy. Pausing for ${waitMs / 1000}s (Scene ${sceneIdx + 1})...`,
             }));
           }
-          await sleep(waitMs);
+          // Safari: slow down background polling to prevent tab suspension
+          const safeSleepMs = typeof document !== "undefined" && document.visibilityState === "hidden"
+            ? Math.max(waitMs, 15000) : waitMs;
+          await sleep(safeSleepMs);
+          // After sleeping, re-read DB to catch completions that arrived while backgrounded
+          const { data: wakeCheck } = await supabase.from("generations").select("scenes").eq("id", generationId).maybeSingle();
+          const wakeScenes = normalizeScenes(wakeCheck?.scenes) ?? [];
+          if (wakeScenes[sceneIdx]?.videoUrl) {
+            console.log(LOG, `Scene ${sceneIdx + 1}: videoUrl found in DB after sleep (completed while backgrounded)`);
+            videoComplete = true;
+          }
         }
       }
       completedVideos++;
@@ -489,7 +499,17 @@ export async function resumeCinematicPipeline(
                   statusMessage: `Provider busy. Pausing for ${waitMs / 1000}s (Scene ${sceneIdx + 1})...`,
                 }));
               }
-              await sleep(waitMs);
+              // Safari: slow down background polling to prevent tab suspension
+              const safeSleepMs = typeof document !== "undefined" && document.visibilityState === "hidden"
+                ? Math.max(waitMs, 15000) : waitMs;
+              await sleep(safeSleepMs);
+              // Re-read DB after sleep to catch completions while backgrounded
+              const { data: wakeCheck } = await supabase.from("generations").select("scenes").eq("id", generationId).maybeSingle();
+              const wakeScenes = normalizeScenes(wakeCheck?.scenes) ?? [];
+              if (wakeScenes[sceneIdx]?.videoUrl) {
+                console.log(LOG, `Resume scene ${sceneIdx + 1}: videoUrl found in DB after sleep (completed while backgrounded)`);
+                videoComplete = true;
+              }
             }
           }
           completedVideos++;

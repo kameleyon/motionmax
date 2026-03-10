@@ -97,14 +97,14 @@ export function SmartFlowResult({
     setScenes(initialScenes);
   }, [initialScenes]);
 
-  // Auto-download after export completes (except iOS)
+  // Auto-download after export completes (skip on iOS or backgrounded/screen-off tabs)
   useEffect(() => {
     if (!shouldAutoDownloadRef.current) return;
     if (exportState.status !== "complete" || !exportState.videoUrl) return;
     if (lastAutoDownloadedUrlRef.current === exportState.videoUrl) return;
 
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    if (isIOS) {
+    if (isIOS || document.visibilityState !== "visible") {
       shouldAutoDownloadRef.current = false;
       lastAutoDownloadedUrlRef.current = exportState.videoUrl;
       return;

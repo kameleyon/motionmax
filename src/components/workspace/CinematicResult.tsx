@@ -182,14 +182,14 @@ export function CinematicResult({
     setLocalScenes(scenes);
   }, [scenes]);
 
-  // Auto-download when export completes (same as explainer)
+  // Auto-download when export completes (skip on iOS or backgrounded/screen-off tabs)
   useEffect(() => {
     if (!shouldAutoDownloadRef2.current) return;
     if (exportState.status !== "complete" || !exportState.videoUrl) return;
     if (lastAutoDownloadedUrlRef.current === exportState.videoUrl) return;
 
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    if (isIOS) {
+    if (isIOS || document.visibilityState !== "visible") {
       shouldAutoDownloadRef2.current = false;
       lastAutoDownloadedUrlRef.current = exportState.videoUrl;
       return;
@@ -781,7 +781,8 @@ export function CinematicResult({
                   className="w-full h-full object-cover"
                   muted
                   playsInline
-                  preload="metadata"
+                  preload="none"
+                  poster={scene.imageUrl || undefined}
                 />
               ) : scene.imageUrl ? (
                 <img

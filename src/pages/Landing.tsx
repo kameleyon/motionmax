@@ -124,6 +124,13 @@ export default function Landing() {
   const [billingInterval, setBillingInterval] = useState<"monthly" | "yearly">("monthly");
   const [videoError, setVideoError] = useState(false);
 
+  // Respect prefers-reduced-motion and data-saver preferences before autoplaying video
+  const prefersReducedMotion = typeof window !== "undefined"
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const saveData = typeof navigator !== "undefined"
+    && (navigator as unknown as { connection?: { saveData?: boolean } }).connection?.saveData === true;
+  const showVideo = !videoError && !prefersReducedMotion && !saveData;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[hsl(185,30%,95%)] via-[hsl(185,25%,97%)] to-[hsl(180,20%,98%)] dark:bg-none dark:bg-background">
       {/* Navigation with frosted glass effect */}
@@ -240,7 +247,7 @@ export default function Landing() {
               className="w-full max-w-2xl"
             >
               <div className="w-full rounded-2xl shadow-2xl overflow-hidden">
-                {videoError ? (
+                {!showVideo ? (
                   <img
                     src={heroVideoPoster}
                     alt="MotionMax — AI video creation"

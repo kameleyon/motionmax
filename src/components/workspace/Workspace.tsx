@@ -140,7 +140,7 @@ export const Workspace = forwardRef<WorkspaceHandle>(function Workspace(_, ref) 
       style,
       customStyle: style === "custom" ? customStyle : undefined,
       brandMark: brandMarkEnabled && brandMarkText.trim() ? brandMarkText.trim() : undefined,
-      presenterFocus: presenterFocus.trim() ? presenterFocus.trim().slice(0, 2000) : undefined,
+      presenterFocus: presenterFocus.trim() ? presenterFocus.trim().slice(0, 5000) : undefined,
       characterDescription: characterDescription.trim() || undefined,
       disableExpressions,
     });

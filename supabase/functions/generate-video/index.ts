@@ -18,7 +18,7 @@ const INPUT_LIMITS = {
   style: 50,
   customStyle: 2000,
   brandMark: 500,
-  presenterFocus: 2000,
+  presenterFocus: 5000,
   characterDescription: 2000,
   voiceId: 200,
   voiceName: 200,

@@ -12,6 +12,7 @@ import { FormatSelector, type VideoFormat } from "./FormatSelector";
 import { StyleSelector, type VisualStyle } from "./StyleSelector";
 import { VoiceSelector, type VoiceSelection } from "./VoiceSelector";
 import { CharacterDescriptionInput } from "./CharacterDescriptionInput";
+import { PresenterFocusInput } from "./PresenterFocusInput";
 import { InspirationSelector, type InspirationStyle } from "./InspirationSelector";
 import { ToneSelector, type StoryTone } from "./ToneSelector";
 import { GenreSelector, type StoryGenre } from "./GenreSelector";
@@ -54,6 +55,8 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
     const [customStyle, setCustomStyle] = useState("");
     const [customStyleImage, setCustomStyleImage] = useState<string | null>(null);
     const [voice, setVoice] = useState<VoiceSelection>({ type: "standard", gender: "female" });
+    const [presenterFocus, setPresenterFocus] = useState("");
+    const [presenterFocusOpen, setPresenterFocusOpen] = useState(false);
     const [characterDescription, setCharacterDescription] = useState("");
     const [characterDescOpen, setCharacterDescOpen] = useState(false);
     const [brandMarkEnabled, setBrandMarkEnabled] = useState(false);
@@ -176,6 +179,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
         customStyle: style === "custom" ? customStyle : undefined,
         customStyleImage: style === "custom" ? customStyleImage : undefined,
         brandMark: brandMarkEnabled && brandMarkText.trim() ? brandMarkText.trim() : undefined,
+        presenterFocus: presenterFocus.trim() ? presenterFocus.trim().slice(0, 5000) : undefined,
         characterDescription: characterDescription.trim() || undefined,
         projectType: "storytelling",
         inspirationStyle: inspiration !== "none" ? inspiration : undefined,
@@ -207,6 +211,8 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
       setCustomStyle("");
       setCustomStyleImage(null);
       setVoice({ type: "standard", gender: "female" });
+      setPresenterFocus("");
+      setPresenterFocusOpen(false);
       setCharacterDescription("");
       setCharacterDescOpen(false);
       setBrandMarkEnabled(false);
@@ -252,6 +258,11 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
       } else {
         setStyle("custom");
         setCustomStyle(project.style);
+      }
+
+      if (project.presenter_focus) {
+        setPresenterFocus(project.presenter_focus);
+        setPresenterFocusOpen(true);
       }
     };
 
@@ -345,6 +356,22 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
                       Include a specific brand or character name to weave into the story
                     </p>
                   </div>
+
+                  {/* Presenter Focus - Collapsible */}
+                  <Collapsible open={presenterFocusOpen} onOpenChange={setPresenterFocusOpen}>
+                    <CollapsibleTrigger className="flex w-full items-center justify-between rounded-xl sm:rounded-2xl border border-border/50 bg-card/50 p-3 sm:p-4 backdrop-blur-sm shadow-sm hover:bg-muted/30 transition-colors">
+                      <span className="text-xs sm:text-sm font-medium flex items-center gap-2">
+                        <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                        Presenter Focus
+                      </span>
+                      <ChevronDown className={`h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-200 ${presenterFocusOpen ? "rotate-180" : ""}`} />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="rounded-b-xl sm:rounded-b-2xl border border-t-0 border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm -mt-2">
+                        <PresenterFocusInput value={presenterFocus} onChange={setPresenterFocus} />
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
 
                   {/* Character Description - Collapsible */}
                   <Collapsible open={characterDescOpen} onOpenChange={setCharacterDescOpen}>

@@ -3823,9 +3823,11 @@ async function handleAudioPhase(
   const audioUrls: (string | null)[] = scenes.map((s) => (s as any).audioUrl ?? null);
   let totalAudioSeconds = typeof costTracking.audioSeconds === "number" ? costTracking.audioSeconds : 0;
 
-  // Process up to 3 audio scenes per request so Promise.all runs them in parallel.
-  // 3 scenes × ~10s worst-case TTS = ~30s per call, well under the 300s client timeout.
-  const BATCH_SIZE = 3;
+  // Haitian Creole uses Gemini TTS with up to 10 retry rounds (2 models × 5 each)
+  // which can take 50-150s per scene — unsafe to run 3 in parallel under the 150s gateway limit.
+  // All other languages use fast TTS (5-30s per scene) and are safe to batch 3 at a time.
+  const currentScene = scenes[Math.max(0, startIndex)];
+  const BATCH_SIZE = currentScene && isHaitianCreole(currentScene.voiceover || "") ? 1 : 3;
   const batchStart = Math.max(0, startIndex);
   const batchEnd = Math.min(batchStart + BATCH_SIZE, scenes.length);
 

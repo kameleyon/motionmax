@@ -52,7 +52,9 @@ async function uploadToSupabase(localPath: string, fileName: string): Promise<st
       'x-upsert': 'true',
     },
     body: stream as any,
-  });
+    // Required in Node.js 18+ when sending a streaming body via fetch()
+    duplex: 'half',
+  } as any);
 
   if (!response.ok) {
     const errText = await response.text();

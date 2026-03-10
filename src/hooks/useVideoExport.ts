@@ -12,12 +12,15 @@ const LOG_PREFIX = "[VideoExport:WorkerQueue]";
 export function useVideoExport() {
   const [state, setState] = useState<ExportState>({ status: "idle", progress: 0 });
   const abortRef = useRef(false);
+  // Prevents duplicate jobs when the user clicks export multiple times in quick succession
+  const isExportingRef = useRef(false);
 
   const log = useCallback((...args: any[]) => console.log(LOG_PREFIX, ...args), []);
   const err = useCallback((...args: any[]) => console.error(LOG_PREFIX, ...args), []);
 
   const reset = useCallback(() => {
     abortRef.current = true;
+    isExportingRef.current = false;
     setState({ status: "idle", progress: 0 });
   }, []);
 
@@ -28,6 +31,12 @@ export function useVideoExport() {
       brandMark?: string,
       projectId?: string
     ) => {
+      // Idempotency guard: drop duplicate requests while an export is already in flight
+      if (isExportingRef.current) {
+        log("Export already in progress, ignoring duplicate request");
+        return;
+      }
+      isExportingRef.current = true;
       abortRef.current = false;
       log("Starting Render Server export", { scenes: scenes.length, format, brandMark: brandMark || "(none)", projectId: projectId || "(none)" });
       
@@ -57,7 +66,7 @@ export function useVideoExport() {
 
         if (insertError) throw insertError;
 
-        return await new Promise<string>((resolve, reject) => {
+        const result = await new Promise<string>((resolve, reject) => {
             const timeoutMs = 600000; // 10 minute extreme timeout for massive renders
             let settled = false;
 
@@ -145,10 +154,15 @@ export function useVideoExport() {
                   }
               });
         });
+
+        // Clear the guard on success so the user can export again later
+        isExportingRef.current = false;
+        return result;
       } catch (e: any) {
         const msg = e.message || "Unknown export error";
         err("Export Failed", e);
         setState({ status: "error", progress: 0, error: msg });
+        isExportingRef.current = false;
         throw e;
       }
     },

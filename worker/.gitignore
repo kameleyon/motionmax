@@ -1,2 +1,10 @@
 node_modules
 .env
+dist/
+# Compiled TypeScript artifacts — these belong in dist/, not src/
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+src/**/*.d.ts.map
+# Exception: manually authored declaration files
+!src/types/*.d.ts

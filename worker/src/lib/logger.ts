@@ -29,15 +29,42 @@ interface ApiCallPayload {
   error?: string;
 }
 
-export async function writeSystemLog(payload: LogPayload) {
-  const logPrefix = `[${payload.category.toUpperCase()}] [${payload.eventType}]`;
-  if (payload.category === "system_error") {
-    console.error(logPrefix, payload.message, payload.details || "");
-  } else if (payload.category === "system_warning") {
-    console.warn(logPrefix, payload.message, payload.details || "");
-  } else {
-    console.log(logPrefix, payload.message, payload.details || "");
+/** Maps category to a standard log level string */
+function categoryToLevel(category: LogCategory): string {
+  switch (category) {
+    case "system_error":   return "error";
+    case "system_warning": return "warn";
+    default:               return "info";
   }
+}
+
+/** Emits a single JSON log line to stdout/stderr for structured parsing by log aggregators */
+function emitStructuredConsoleLog(level: string, payload: LogPayload): void {
+  const entry = JSON.stringify({
+    ts:       new Date().toISOString(),
+    level,
+    category: payload.category,
+    event:    payload.eventType,
+    message:  payload.message,
+    userId:   payload.userId,
+    projectId: payload.projectId,
+    generationId: payload.generationId,
+    jobId:    payload.jobId,
+    ...(payload.details ?? {}),
+  });
+
+  if (level === "error") {
+    console.error(entry);
+  } else if (level === "warn") {
+    console.warn(entry);
+  } else {
+    console.log(entry);
+  }
+}
+
+export async function writeSystemLog(payload: LogPayload) {
+  const level = categoryToLevel(payload.category);
+  emitStructuredConsoleLog(level, payload);
 
   try {
     await supabase.from("system_logs").insert({
@@ -56,7 +83,7 @@ export async function writeSystemLog(payload: LogPayload) {
       created_at: new Date().toISOString()
     });
   } catch (dbError) {
-    console.error("CRITICAL: Failed to write system log to database:", dbError);
+    console.error(JSON.stringify({ ts: new Date().toISOString(), level: "error", event: "db_log_failed", message: "Failed to write system log to database", error: String(dbError) }));
   }
 }
 
@@ -78,6 +105,6 @@ export async function writeApiLog(payload: ApiCallPayload) {
       created_at: new Date().toISOString()
     });
   } catch (error) {
-    console.error("CRITICAL: Failed to write API log:", error);
+    console.error(JSON.stringify({ ts: new Date().toISOString(), level: "error", event: "api_log_failed", message: "Failed to write API log", error: String(error) }));
   }
 }

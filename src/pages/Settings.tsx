@@ -1,11 +1,12 @@
 ﻿import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
-import { 
-  User, 
+import {
+  User,
   Shield,
   Loader2,
   AlertTriangle,
+  Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -152,7 +153,8 @@ export default function Settings() {
     setIsDeletingAccount(true);
     try {
       // Log deletion request with 7-day grace period (replaces mailto: flow)
-      const { error } = await supabase
+      // Cast required until types.ts is regenerated to include deletion_requests
+      const { error } = await (supabase as any)
         .from("deletion_requests")
         .insert({ user_id: user!.id, email: user?.email });
       if (error) throw error;

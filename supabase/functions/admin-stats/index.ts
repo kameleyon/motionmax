@@ -669,6 +669,14 @@ serve(async (req) => {
           .order("created_at", { ascending: false })
           .limit(20);
 
+        // Get recent system logs for this user
+        const { data: userLogs } = await supabaseAdmin
+          .from("system_logs")
+          .select("id,event_type,category,message,created_at")
+          .eq("user_id", targetUserId)
+          .order("created_at", { ascending: false })
+          .limit(20);
+
         result = {
           user: authUser?.user,
           profile,
@@ -740,7 +748,7 @@ serve(async (req) => {
         if (logsError) throw logsError;
 
         // Enrich logs with user email for display
-        const logUserIds = [...new Set((logs || []).map(l => l.user_id))];
+        const logUserIds = [...new Set<string>((logs || []).map((l: any) => String(l.user_id)))];
         let userEmailMap: Record<string, string> = {};
         if (logUserIds.length > 0) {
           const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers();

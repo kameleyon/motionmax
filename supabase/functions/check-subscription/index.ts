@@ -128,7 +128,7 @@ serve(async (req) => {
     });
 
     let plan = "free";
-    let subscriptionEnd = null;
+    let subscriptionEnd: string | null = null;
     let cancelAtPeriodEnd = false;
 
     if (subscriptions.data.length > 0) {

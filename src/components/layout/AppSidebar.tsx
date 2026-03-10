@@ -179,6 +179,10 @@ export function AppSidebar() {
 
   const deleteProjectMutation = useMutation({
     mutationFn: async (projectId: string) => {
+      // Delete associated records first to satisfy foreign key constraints
+      await supabase.from("generations").delete().eq("project_id", projectId);
+      await supabase.from("project_shares").delete().eq("project_id", projectId);
+      await supabase.from("project_characters").delete().eq("project_id", projectId);
       const { error } = await supabase.from("projects").delete().eq("id", projectId);
       if (error) throw error;
     },

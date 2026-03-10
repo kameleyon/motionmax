@@ -17,7 +17,7 @@ const LOG = "[Pipeline:Cinematic]";
 
 // Global rate-limit cooldown shared across image and video phases
 let lastRateLimitTime = 0;
-const GLOBAL_COOLDOWN_MS = 15000;
+const GLOBAL_COOLDOWN_MS = 30000;
 
 // ---- Main Pipeline ----
 
@@ -171,7 +171,7 @@ async function runCinematicVideo(projectId: string, generationId: string, sceneC
   console.log(LOG, "Starting video phase", { sceneCount });
   ctx.setState((prev) => ({ ...prev, progress: 60, statusMessage: "Images complete. Generating video clips..." }));
 
-  const VIDEO_CONCURRENCY = 3;
+  const VIDEO_CONCURRENCY = 1;
   let completedVideos = 0;
 
   const generateVideoForScene = async (sceneIdx: number) => {
@@ -192,7 +192,7 @@ async function runCinematicVideo(projectId: string, generationId: string, sceneC
 
       let videoComplete = false;
       let pollAttempts = 0;
-      const MAX_POLL = 120;
+      const MAX_POLL = 180;
 
       while (!videoComplete) {
         pollAttempts++;
@@ -222,7 +222,7 @@ async function runCinematicVideo(projectId: string, generationId: string, sceneC
           videoComplete = true;
           console.log(LOG, `Video scene ${sceneIdx + 1} complete after ${pollAttempts} poll(s)`);
         } else {
-          const waitMs = vidRes.retryAfterMs || 6000;
+          const waitMs = vidRes.retryAfterMs || 8000;
           if (waitMs >= 20000) {
             lastRateLimitTime = Date.now();
             console.log(LOG, `Scene ${sceneIdx + 1}: rate limited, waiting ${waitMs / 1000}s (global cooldown set)`);
@@ -232,6 +232,10 @@ async function runCinematicVideo(projectId: string, generationId: string, sceneC
             }));
           }
           await sleep(waitMs);
+          ctx.setState((prev) => ({
+            ...prev,
+            statusMessage: `Generating clips (${completedVideos}/${sceneCount})...`,
+          }));
         }
       }
       completedVideos++;
@@ -245,7 +249,7 @@ async function runCinematicVideo(projectId: string, generationId: string, sceneC
     }
   };
 
-  // Fire all scene video jobs concurrently (up to VIDEO_CONCURRENCY at a time)
+  // Process in concurrent batches
   for (let batchStart = 0; batchStart < sceneCount; batchStart += VIDEO_CONCURRENCY) {
     const batchEnd = Math.min(batchStart + VIDEO_CONCURRENCY, sceneCount);
     const batch = [];
@@ -427,7 +431,7 @@ export async function resumeCinematicPipeline(
     if (resumeFrom === "audio" || resumeFrom === "images" || resumeFrom === "video") {
       console.log(LOG, "Resume: starting video phase");
       ctx.setState((prev) => ({ ...prev, progress: 60, statusMessage: "Resuming video clips..." }));
-      const VIDEO_CONCURRENCY = 3;
+      const VIDEO_CONCURRENCY = 1;
       let completedVideos = existingScenes.filter((s) => !!s.videoUrl).length;
 
       const generateVideoForScene = async (sceneIdx: number) => {
@@ -449,7 +453,7 @@ export async function resumeCinematicPipeline(
           let pollAttempts = 0;
           while (!videoComplete) {
             pollAttempts++;
-            if (pollAttempts > 120) { console.warn(LOG, `Resume video scene ${sceneIdx + 1} timed out`); return; }
+            if (pollAttempts > 180) { console.warn(LOG, `Resume video scene ${sceneIdx + 1} timed out`); return; }
 
             // Global cooldown
             const now = Date.now();
@@ -464,7 +468,7 @@ export async function resumeCinematicPipeline(
             if (vidRes.status === "complete") {
               videoComplete = true;
             } else {
-              const waitMs = vidRes.retryAfterMs || 6000;
+              const waitMs = vidRes.retryAfterMs || 8000;
               if (waitMs >= 20000) {
                 lastRateLimitTime = Date.now();
                 console.log(LOG, `Resume scene ${sceneIdx + 1}: rate limited, waiting ${waitMs / 1000}s (global cooldown set)`);
@@ -474,6 +478,10 @@ export async function resumeCinematicPipeline(
                 }));
               }
               await sleep(waitMs);
+              ctx.setState((prev) => ({
+                ...prev,
+                statusMessage: `Generating clips (${completedVideos}/${sceneCount})...`,
+              }));
             }
           }
           completedVideos++;

@@ -163,12 +163,20 @@ serve(async (req) => {
       const productId = subscription.items.data[0].price.product as string;
       logStep("Active subscription found", { subscriptionId: subscription.id, productId, periodEnd: periodEndRaw });
 
-      // Map product IDs to plans - Corrected Stripe product IDs
+      // Map product IDs to plans — includes all legacy IDs to prevent false "free" downgrades
       const productToPlan: Record<string, string> = {
-        // Actual Stripe products
-        "prod_Tnyz2nMLqpHz3R": "starter",      // Premium Plan -> starter
-        "prod_Tnz0KUQX2J5VBH": "creator",      // Pro Plan -> creator
-        "prod_Tnz0BeRmJDdh0V": "professional", // Platinum Plan -> professional
+        // Current products
+        "prod_Tnyz2nMLqpHz3R": "starter",
+        "prod_Tnz0KUQX2J5VBH": "creator",
+        "prod_Tnz0BeRmJDdh0V": "professional",
+        // Legacy gen-2 products
+        "prod_TqznNZmUhevHh4": "starter",
+        "prod_TqznlgT1Jl6Re7": "creator",
+        "prod_TqznqQYYG4UUY8": "professional",
+        // Legacy gen-1 products
+        "prod_TnzLdHWPkqAiqr": "starter",
+        "prod_TnzLCasreSakEb": "creator",
+        "prod_TnzLP4tQINtak9": "professional",
       };
       plan = productToPlan[productId] || "free";
     }

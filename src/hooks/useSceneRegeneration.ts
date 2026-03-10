@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import type { Scene } from "@/hooks/useGenerationPipeline";
+import { SUPABASE_URL } from "@/lib/supabaseUrl";
 
 interface RegenerationState {
   isRegenerating: boolean;
@@ -40,7 +41,7 @@ export function useSceneRegeneration(
         if (!session) throw new Error("Not authenticated");
 
         const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-video`,
+          `${SUPABASE_URL}/functions/v1/generate-video`,
           {
             method: "POST",
             headers: {
@@ -115,7 +116,7 @@ export function useSceneRegeneration(
         if (!session) throw new Error("Not authenticated");
 
         const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-video`,
+          `${SUPABASE_URL}/functions/v1/generate-video`,
           {
             method: "POST",
             headers: {

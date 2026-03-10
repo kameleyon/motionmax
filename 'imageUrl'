@@ -1,0 +1,1 @@
+{"message":"Failed to run sql query: ERROR:  42601: syntax error at or near \"AS\"\nLINE 1: SELECT jsonb_array_elements(scenes)- AS url FROM generations WHERE scenes IS NOT NULL AND jsonb_typeof(scenes) = 'array' LIMIT 3\n                                             ^\n"}

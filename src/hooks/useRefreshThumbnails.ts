@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { SUPABASE_URL } from "@/lib/supabaseUrl";
 
 interface ThumbnailInput {
   projectId: string;
@@ -42,7 +43,7 @@ export function useRefreshThumbnails() {
         }
 
         const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/refresh-project-thumbnails`,
+          `${SUPABASE_URL}/functions/v1/refresh-project-thumbnails`,
           {
             method: "POST",
             headers: {

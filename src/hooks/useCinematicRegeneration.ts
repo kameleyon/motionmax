@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { SUPABASE_URL } from "@/lib/supabaseUrl";
 
 interface CinematicScene {
   number: number;
@@ -24,7 +25,7 @@ async function authenticatedFetch(path: string, body: Record<string, unknown>) {
   if (!session) throw new Error("Not authenticated");
 
   const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${path}`,
+    `${SUPABASE_URL}/functions/v1/${path}`,
     {
       method: "POST",
       headers: {

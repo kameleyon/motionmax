@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { sleep, DEFAULT_ENDPOINT } from "./types";
+import { SUPABASE_URL } from "@/lib/supabaseUrl";
 
 const LOG = "[Pipeline:Network]";
 
@@ -83,7 +84,7 @@ async function legacyCallPhase(body: Record<string, unknown>, timeoutMs: number,
       });
 
       const accessToken = await getFreshSession();
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${endpoint}`, {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify(body),

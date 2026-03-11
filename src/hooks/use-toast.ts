@@ -179,16 +179,13 @@ function useToast() {
 
   React.useEffect(() => {
     listeners.push(setState);
-    if (listeners.length > 3) {
-      console.warn(LOG, `Unusually high listener count (${listeners.length}). Possible multiple mount or missing cleanup.`);
-    }
     return () => {
       const index = listeners.indexOf(setState);
       if (index > -1) {
         listeners.splice(index, 1);
       }
     };
-  }, [state]);
+  }, []);
 
   return {
     ...state,

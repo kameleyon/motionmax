@@ -5004,7 +5004,7 @@ async function handleRegenerateImage(
   // Determine the source image URL for editing
   const sourceImageUrl = existingImageUrls[targetImageIndex] || scene.imageUrl;
 
-  let imageResult: { ok: true; bytes: Uint8Array } | { ok: false; error: string };
+  let imageResult: { ok: true; bytes: Uint8Array } | { ok: false; error: string } = { ok: false, error: "Not started" };
 
   // Determine the model names
   const replicateModel = "google/nano-banana-2";
@@ -5098,83 +5098,45 @@ Professional illustration with dynamic composition and clear visual hierarchy.`;
       });
     }
   } else {
-    // Apply Edit - use TRUE IMAGE EDITING with Replicate Nano Banana 2
-    // This preserves the original image and only modifies the requested section/element
+    // Apply Edit — PRIMARY: Hypereal gemini-3-1-flash-t2i (T2I with modification in prompt)
+    // FALLBACK: Replicate nano-banana-2 T2I (only if Hypereal is unavailable or fails)
     console.log(
-      `[regenerate-image] Scene ${sceneIndex + 1}, Image ${targetImageIndex + 1} - TRUE IMAGE EDIT with Replicate Nano Banana 2`,
+      `[regenerate-image] Scene ${sceneIndex + 1}, Image ${targetImageIndex + 1} - Applying edit via Hypereal T2I`,
     );
 
-    if (!sourceImageUrl) {
-      throw new Error("No source image available for editing");
-    }
-
-    // Use Replicate nano-banana-2 for true image editing (accepts image_input)
-    const editStartTime = Date.now();
-    imageResult = await editImageWithReplicatePro(
-      sourceImageUrl,
-      imageModification,
-      replicateApiKey,
-      format,
-      styleDescription,
-      scene.title || scene.subtitle ? { title: scene.title, subtitle: scene.subtitle } : undefined,
-      useProModel,
-    );
-    const editDurationMs = Date.now() - editStartTime;
-
-    // Log the Replicate Nano Banana 2 edit API call
-    await logApiCall({
-      supabase,
-      userId: user.id,
-      generationId,
-      provider: "replicate",
-      model: "google/nano-banana-2",
-      status: imageResult.ok ? "success" : "error",
-      totalDurationMs: editDurationMs,
-      cost: imageResult.ok ? PRICING.imageNanoBanana : 0,
-      errorMessage: imageResult.ok ? undefined : imageResult.error || "Unknown error",
-    });
-
-    // If Replicate nano-banana-2 edit fails, fall back to text-to-image as last resort
-    if (!imageResult.ok) {
-      const editError = imageResult.error || "Unknown edit error";
-      console.log(
-        `[regenerate-image] Replicate Nano Banana 2 edit failed (${editError}), falling back to text-to-image generation`,
-      );
-
-      // LOG TO SYSTEM_LOGS so it shows in admin panel!
-      await logSystemEvent({
-        supabase,
-        userId: user.id,
-        eventType: "replicate_pro_edit_fallback",
-        category: "system_warning",
-        message: `Replicate Nano Banana 2 image edit failed, falling back to text-to-image generation`,
-        details: {
-          sceneIndex,
-          targetImageIndex,
-          error: editError,
-          fallbackProvider: "replicate",
-          phase: "regenerate-image",
-          action: "apply_edit",
-        },
-        generationId,
-        projectId,
-      });
-
-      // Fallback to text-to-image generation with modified prompt
-      const modifiedPrompt = `${scene.visualPrompt}
+    // Inject the modification into the scene's visual prompt for Hypereal T2I
+    const editPrompt = `${scene.visualPrompt}
 
 USER MODIFICATION REQUEST: ${imageModification}
 
 STYLE: ${styleDescription}
 
-Professional illustration with dynamic composition and clear visual hierarchy. Apply the user's modification to enhance the image while maintaining consistency with the original scene concept.`;
+Professional illustration with dynamic composition and clear visual hierarchy. Apply the user's modification while maintaining consistency with the original scene concept.`;
 
-      // Use Replicate nano-banana-2 for fallback text-to-image
-      console.log(`[regenerate-image] Fallback: Using Replicate nano-banana-2 for T2I`);
+    // PRIMARY: Hypereal gemini-3-1-flash-t2i
+    const editHyperealKey = Deno.env.get("HYPEREAL_API_KEY");
+    if (editHyperealKey) {
+      const hyperealStartTime = Date.now();
+      imageResult = await generateImageWithHypereal(editPrompt, editHyperealKey, format, useProModel);
+      await logApiCall({
+        supabase,
+        userId: user.id,
+        generationId,
+        provider: "replicate" as any,
+        model: "hypereal/gemini-3-1-flash-t2i",
+        status: imageResult.ok ? "success" : "error",
+        totalDurationMs: Date.now() - hyperealStartTime,
+        cost: imageResult.ok ? PRICING.imageNanoBanana2 : 0,
+        errorMessage: imageResult.ok ? undefined : (imageResult as { ok: false; error: string }).error,
+      });
+    }
+
+    // FALLBACK: Replicate nano-banana-2 T2I (if Hypereal not available or failed)
+    if (!editHyperealKey || !imageResult.ok) {
+      const reason = !editHyperealKey ? "Hypereal not configured" : (imageResult as { ok: false; error: string }).error;
+      console.warn(`[regenerate-image] Hypereal edit unavailable/failed (${reason}), falling back to Replicate T2I`);
       const replicateStartTime = Date.now();
-      imageResult = await generateImageWithReplicate(modifiedPrompt, replicateApiKey, format, useProModel);
-      const replicateDurationMs = Date.now() - replicateStartTime;
-
+      imageResult = await generateImageWithReplicate(editPrompt, replicateApiKey, format, useProModel);
       await logApiCall({
         supabase,
         userId: user.id,
@@ -5182,7 +5144,7 @@ Professional illustration with dynamic composition and clear visual hierarchy. A
         provider: "replicate",
         model: "google/nano-banana-2",
         status: imageResult.ok ? "success" : "error",
-        totalDurationMs: replicateDurationMs,
+        totalDurationMs: Date.now() - replicateStartTime,
         cost: imageResult.ok ? PRICING.imageNanoBanana : 0,
         errorMessage: imageResult.ok ? undefined : imageResult.error || "Unknown error",
       });

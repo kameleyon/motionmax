@@ -17,6 +17,8 @@ import { CharacterConsistencyToggle } from "./CharacterConsistencyToggle";
 import { GenerationProgress } from "./GenerationProgress";
 import { GenerationResult } from "./GenerationResult";
 import { useGenerationPipeline } from "@/hooks/useGenerationPipeline";
+import { useAdminLogs } from "@/hooks/useAdminLogs";
+import { AdminLogsPanel } from "./AdminLogsPanel";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Info } from "lucide-react";
 
@@ -50,6 +52,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
     const [characterConsistencyEnabled, setCharacterConsistencyEnabled] = useState(false);
 
     const { state: generationState, startGeneration, reset, loadProject } = useGenerationPipeline();
+    const { isAdmin, adminLogs, showAdminLogs, setShowAdminLogs } = useAdminLogs(generationState.generationId ?? null, generationState.step);
 
     const canGenerate = content.trim().length > 0 && !generationState.isGenerating;
 
@@ -404,16 +407,13 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
                     scenes={generationState.scenes}
                     format={generationState.format || format}
                     onNewProject={handleNewProject}
-                    onRegenerateAll={() => {
-                      reset();
-                      runGeneration();
-                    }}
                     totalTimeMs={generationState.totalTimeMs}
                     costTracking={generationState.costTracking}
                     generationId={generationState.generationId}
                     projectId={generationState.projectId}
                     brandMark={brandMarkEnabled && brandMarkText.trim() ? brandMarkText.trim() : undefined}
                   />
+                  {isAdmin && <AdminLogsPanel logs={adminLogs} show={showAdminLogs} onToggle={() => setShowAdminLogs(!showAdminLogs)} />}
                 </motion.div>
               ) : (
                 <motion.div
@@ -424,6 +424,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
                   className="max-w-2xl mx-auto space-y-6"
                 >
                   <GenerationProgress state={generationState} />
+                  {isAdmin && <AdminLogsPanel logs={adminLogs} show={showAdminLogs} onToggle={() => setShowAdminLogs(!showAdminLogs)} />}
                 </motion.div>
               )}
             </AnimatePresence>

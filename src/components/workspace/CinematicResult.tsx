@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import {
   ChevronLeft,
   ChevronRight,
+  Clock,
   Download,
   Film,
   FolderArchive,
@@ -80,6 +81,7 @@ interface CinematicResultProps {
   finalVideoUrl?: string;
   onNewProject: () => void;
   format?: "landscape" | "portrait" | "square";
+  totalTimeMs?: number;
 }
 
 function safeFileBase(name: string) {
@@ -128,6 +130,7 @@ export function CinematicResult({
   finalVideoUrl,
   onNewProject,
   format = "landscape",
+  totalTimeMs,
 }: CinematicResultProps) {
   const navigate = useNavigate();
 
@@ -616,6 +619,17 @@ export function CinematicResult({
           Complete • {scenesWithVideo.length} clips
         </div>
 
+        {totalTimeMs && (
+          <div className="flex items-center justify-center gap-4 mb-4">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 border border-border/50">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium text-foreground">
+                {Math.floor(totalTimeMs / 60000)}m {Math.floor((totalTimeMs % 60000) / 1000)}s
+              </span>
+            </div>
+          </div>
+        )}
+
         <h2 className="text-2xl font-semibold text-foreground">{title}</h2>
 
         {/* Playback Controls */}
@@ -937,30 +951,6 @@ export function CinematicResult({
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Share</TooltipContent>
-            </Tooltip>
-
-            {/* Regenerate Clip */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => {
-                    if (projectId && generationId) {
-                      regenerateVideo(currentSceneIndex);
-                    }
-                  }}
-                  disabled={!projectId || !generationId || !!isRegenerating}
-                  className="h-10 w-10"
-                >
-                  {isRegenerating ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <RotateCcw className="h-5 w-5" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Regenerate Clip</TooltipContent>
             </Tooltip>
 
             {/* New Project */}

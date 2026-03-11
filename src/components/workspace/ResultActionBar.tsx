@@ -46,7 +46,6 @@ interface ResultActionBarProps {
   format: "landscape" | "portrait" | "square";
   onExportVideo: () => void;
   onDownloadImages: () => void;
-  onRegenerateAll?: () => void;
   onNewProject: () => void;
   isExporting?: boolean;
   isDownloadingImages?: boolean;
@@ -62,7 +61,6 @@ export function ResultActionBar({
   format,
   onExportVideo,
   onDownloadImages,
-  onRegenerateAll,
   onNewProject,
   isExporting = false,
   isDownloadingImages = false,
@@ -279,24 +277,6 @@ export function ResultActionBar({
               </TooltipTrigger>
               <TooltipContent>Share Video</TooltipContent>
             </Tooltip>
-
-            {/* Regenerate All */}
-            {onRegenerateAll && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={onRegenerateAll}
-                    className="h-10 w-10"
-                  >
-                    <RefreshCw className="h-5 w-5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Regenerate All</TooltipContent>
-              </Tooltip>
-            )}
 
             {/* Create Another */}
             <Tooltip>

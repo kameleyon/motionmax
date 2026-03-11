@@ -428,6 +428,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                     finalVideoUrl={generationState.finalVideoUrl}
                     onNewProject={handleNewProject}
                     format={format}
+                    totalTimeMs={generationState.totalTimeMs}
                   />
                   {isAdmin && <AdminLogsPanel logs={adminLogs} show={showAdminLogs} onToggle={() => setShowAdminLogs(!showAdminLogs)} />}
                 </motion.div>

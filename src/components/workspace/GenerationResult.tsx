@@ -687,7 +687,6 @@ export function GenerationResult({
           });
         }}
         onDownloadImages={() => downloadImagesAsZip(scenes, title)}
-        onRegenerateAll={onRegenerateAll}
         onNewProject={onNewProject}
         isExporting={
           exportState.status === "loading" ||

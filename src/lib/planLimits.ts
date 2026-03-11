@@ -18,7 +18,7 @@ export interface PlanLimits {
 
 export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   free: {
-    creditsPerMonth: 5,
+    creditsPerMonth: 10,
     allowedLengths: ["short"],
     allowedFormats: ["landscape", "square"],
     infographicsPerMonth: 0,

@@ -1731,7 +1731,7 @@ serve(async (req) => {
       const format = (project.format || "portrait") as "landscape" | "portrait" | "square";
       const style = project.style || "realistic";
 
-      // Use Replicate nano-banana-2 for image editing
+      // Try Replicate nano-banana-2 for true image editing; fall back to text-to-image if it fails
       const replicateApiToken = Deno.env.get("REPLICATE_API_TOKEN") || replicateToken;
 
       const fullStylePrompt = getStylePrompt(style);
@@ -1744,7 +1744,7 @@ IMPORTANT REQUIREMENTS:
 
 STYLE CONTEXT: ${fullStylePrompt}`;
 
-      console.log(`[IMG-EDIT] Scene ${scene.number}: Applying edit via Replicate nano-banana-2`);
+      console.log(`[IMG-EDIT] Scene ${scene.number}: Attempting Replicate nano-banana-2 edit`);
 
       const editInput: Record<string, unknown> = {
         prompt: editPrompt,
@@ -1753,6 +1753,9 @@ STYLE CONTEXT: ${fullStylePrompt}`;
         output_format: "png",
         resolution: "1K",
       };
+
+      let newImageUrl = "";
+      let editSucceeded = false;
 
       const editResponse = await fetch("https://api.replicate.com/v1/models/google/nano-banana-2/predictions", {
         method: "POST",
@@ -1766,61 +1769,74 @@ STYLE CONTEXT: ${fullStylePrompt}`;
 
       if (!editResponse.ok) {
         const errText = await editResponse.text();
-        console.error(`[IMG-EDIT] Replicate nano-banana-2 failed: ${editResponse.status} - ${errText}`);
-        throw new Error("Image editing failed");
-      }
+        console.warn(`[IMG-EDIT] Replicate HTTP ${editResponse.status}: ${errText} — falling back to text-to-image`);
+      } else {
+        let editPrediction = await editResponse.json();
+        console.log(`[IMG-EDIT] Nano Banana 2 prediction: ${editPrediction.id}, status: ${editPrediction.status}`);
 
-      let editPrediction = await editResponse.json();
-      console.log(
-        `[IMG-EDIT] Nano Banana 2 prediction started: ${editPrediction.id}, status: ${editPrediction.status}`,
-      );
+        while (editPrediction.status !== "succeeded" && editPrediction.status !== "failed") {
+          await sleep(2000);
+          const pollResponse = await fetch(`${REPLICATE_PREDICTIONS_URL}/${editPrediction.id}`, {
+            headers: { Authorization: `Bearer ${replicateApiToken}` },
+          });
+          editPrediction = await pollResponse.json();
+        }
 
-      // Poll for completion if not finished
-      while (editPrediction.status !== "succeeded" && editPrediction.status !== "failed") {
-        await sleep(2000);
-        const pollResponse = await fetch(`${REPLICATE_PREDICTIONS_URL}/${editPrediction.id}`, {
-          headers: { Authorization: `Bearer ${replicateApiToken}` },
-        });
-        editPrediction = await pollResponse.json();
-      }
+        if (editPrediction.status === "failed") {
+          console.warn(`[IMG-EDIT] Nano Banana 2 prediction failed: ${editPrediction.error} — falling back to text-to-image`);
+        } else {
+          const editFirst = Array.isArray(editPrediction.output) ? editPrediction.output[0] : editPrediction.output;
+          const editedImageUrl = typeof editFirst === "string" ? editFirst : editFirst?.url || null;
 
-      if (editPrediction.status === "failed") {
-        console.error(`[IMG-EDIT] Nano Banana Pro prediction failed: ${editPrediction.error}`);
-        throw new Error(editPrediction.error || "Image edit failed");
-      }
+          if (!editedImageUrl) {
+            console.warn("[IMG-EDIT] No image URL returned from Replicate — falling back to text-to-image");
+          } else {
+            const editedImgResponse = await fetch(editedImageUrl);
+            if (!editedImgResponse.ok) {
+              console.warn("[IMG-EDIT] Failed to download edited image — falling back to text-to-image");
+            } else {
+              const imageBuffer = new Uint8Array(await editedImgResponse.arrayBuffer());
+              const fileName = `cinematic-scene-edited-${Date.now()}-${scene.number}.png`;
+              let uploadOk = false;
+              const upload = await supabase.storage
+                .from("scene-images")
+                .upload(fileName, imageBuffer, { contentType: "image/png", upsert: true });
 
-      // Get image URL from output
-      const editFirst = Array.isArray(editPrediction.output) ? editPrediction.output[0] : editPrediction.output;
-      const editedImageUrl = typeof editFirst === "string" ? editFirst : editFirst?.url || null;
+              if (upload.error) {
+                try {
+                  await supabase.storage.createBucket("scene-images", { public: true });
+                  const retry = await supabase.storage
+                    .from("scene-images")
+                    .upload(fileName, imageBuffer, { contentType: "image/png", upsert: true });
+                  uploadOk = !retry.error;
+                } catch {
+                  console.warn("[IMG-EDIT] Upload failed — falling back to text-to-image");
+                }
+              } else {
+                uploadOk = true;
+              }
 
-      if (!editedImageUrl) {
-        throw new Error("No edited image returned from Replicate");
-      }
-
-      // Download and upload to storage
-      const editedImgResponse = await fetch(editedImageUrl);
-      if (!editedImgResponse.ok) throw new Error("Failed to download edited image");
-      const imageBuffer = new Uint8Array(await editedImgResponse.arrayBuffer());
-
-      const fileName = `cinematic-scene-edited-${Date.now()}-${scene.number}.png`;
-      const upload = await supabase.storage
-        .from("scene-images")
-        .upload(fileName, imageBuffer, { contentType: "image/png", upsert: true });
-
-      if (upload.error) {
-        try {
-          await supabase.storage.createBucket("scene-images", { public: true });
-          await supabase.storage
-            .from("scene-images")
-            .upload(fileName, imageBuffer, { contentType: "image/png", upsert: true });
-        } catch (e) {
-          throw new Error("Failed to upload edited image");
+              if (uploadOk) {
+                const { data: urlData } = supabase.storage.from("scene-images").getPublicUrl(fileName);
+                newImageUrl = urlData.publicUrl;
+                editSucceeded = true;
+                console.log(`[IMG-EDIT] Scene ${scene.number} edited image uploaded: ${newImageUrl}`);
+              }
+            }
+          }
         }
       }
 
-      const { data: urlData } = supabase.storage.from("scene-images").getPublicUrl(fileName);
-      const newImageUrl = urlData.publicUrl;
-      console.log(`[IMG-EDIT] Scene ${scene.number} edited image uploaded: ${newImageUrl}`);
+      // Fallback: regenerate image from scratch with modification baked into visual prompt
+      if (!editSucceeded) {
+        console.log(`[IMG-EDIT] Scene ${scene.number}: Using text-to-image fallback with modification in prompt`);
+        const sceneWithEdit = {
+          ...scene,
+          visualPrompt: `${scene.visualPrompt}\n\nUSER MODIFICATION REQUEST: ${modification}`,
+        };
+        newImageUrl = await generateSceneImage(sceneWithEdit, style, format, replicateToken, supabase);
+        console.log(`[IMG-EDIT] Scene ${scene.number} fallback image generated: ${newImageUrl}`);
+      }
 
       // Now regenerate video with the new image
       // Grok commented out for testing — use Hypereal Seedance 1.5

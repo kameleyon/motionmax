@@ -2,6 +2,7 @@ import { Outlet } from "react-router-dom";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { WorkspaceErrorBoundary } from "@/components/workspace/WorkspaceErrorBoundary";
+import { SubscriptionRenewalModal } from "@/components/workspace/SubscriptionRenewalModal";
 
 /**
  * Shared authenticated app shell used by simple sidebar routes (/app, /app/create, /pricing).
@@ -18,6 +19,7 @@ export function AppShell() {
           </WorkspaceErrorBoundary>
         </main>
       </div>
+      <SubscriptionRenewalModal />
     </SidebarProvider>
   );
 }

@@ -24,39 +24,62 @@ export function getAuthErrorMessage(raw: string | undefined): string {
     return "An account with this email already exists. Try signing in instead.";
   }
 
-  // Invalid credentials
-  if (msg.includes("invalid login credentials") || msg.includes("invalid_credentials")) {
-    return "Incorrect email or password. Please try again.";
+  // Invalid credentials — wrong email or password
+  if (
+    msg.includes("invalid login credentials") ||
+    msg.includes("invalid_credentials") ||
+    msg.includes("wrong password") ||
+    msg.includes("incorrect password") ||
+    msg.includes("password is incorrect") ||
+    msg.includes("email or password") ||
+    msg.includes("invalid email or password")
+  ) {
+    return "Incorrect email or password. Please double-check and try again.";
+  }
+
+  // User not found (Supabase may return this in some flows)
+  if (msg.includes("user not found") || msg.includes("no user found")) {
+    return "No account found with that email. Did you mean to sign up?";
   }
 
   // Weak password
-  if (msg.includes("password") && (msg.includes("weak") || msg.includes("at least") || msg.includes("too short"))) {
-    return "Your password is too weak. Use at least 6 characters with a mix of letters and numbers.";
+  if (msg.includes("password") && (msg.includes("weak") || msg.includes("at least") || msg.includes("too short") || msg.includes("characters"))) {
+    return "Password must be at least 8 characters long.";
   }
 
   // Email not confirmed
-  if (msg.includes("email not confirmed") || msg.includes("not confirmed")) {
-    return "Please verify your email address before signing in. Check your inbox for a confirmation link.";
+  if (msg.includes("email not confirmed") || msg.includes("not confirmed") || msg.includes("email_not_confirmed")) {
+    return "Please verify your email address before signing in. Check your inbox (and spam folder) for a confirmation link.";
   }
 
   // Rate limited
-  if (msg.includes("rate limit") || msg.includes("too many requests") || msg.includes("429")) {
-    return "Too many attempts. Please wait a moment and try again.";
+  if (msg.includes("rate limit") || msg.includes("too many requests") || msg.includes("429") || msg.includes("email rate limit")) {
+    return "Too many attempts. Please wait a few minutes before trying again.";
   }
 
   // Invalid email format
-  if (msg.includes("invalid email") || msg.includes("unable to validate email")) {
+  if (msg.includes("invalid email") || msg.includes("unable to validate email") || msg.includes("valid email")) {
     return "Please enter a valid email address.";
   }
 
   // Network errors
-  if (msg.includes("failed to fetch") || msg.includes("network") || msg.includes("timeout")) {
+  if (msg.includes("failed to fetch") || msg.includes("network") || msg.includes("timeout") || msg.includes("fetch error")) {
     return "Connection issue. Please check your internet and try again.";
   }
 
   // Same password as before (update flow)
-  if (msg.includes("same password") || msg.includes("different password")) {
-    return "New password must be different from your current password.";
+  if (msg.includes("same password") || msg.includes("different password") || msg.includes("should be different")) {
+    return "Your new password must be different from your current password.";
+  }
+
+  // Token / link expired
+  if (msg.includes("token") && (msg.includes("expired") || msg.includes("invalid"))) {
+    return "This link has expired. Please request a new one.";
+  }
+
+  // Signup disabled
+  if (msg.includes("signup") && msg.includes("disabled")) {
+    return "New sign-ups are temporarily disabled. Please try again later.";
   }
 
   // Fallback — if the raw message is short and non-technical, use it as-is

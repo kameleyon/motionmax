@@ -20,7 +20,7 @@ const base = (content) => `<!DOCTYPE html>
         </td></tr>
         <tr><td style="padding:36px 40px 28px;">${content}</td></tr>
         <tr><td style="padding:16px 40px 28px;border-top:1px solid #f0f0f0;">
-          <p style="margin:0;font-size:12px;color:#aaa;text-align:center;">This email was sent by MotionMax &middot; <a href="{{ .SiteURL }}" style="color:#aaa;text-decoration:none;">motionmax.io</a></p>
+          <p style="margin:0;font-size:12px;color:#aaa;text-align:center;">This email was sent by MotionMax &middot; <a href="https://motionmax.io" style="color:#aaa;text-decoration:none;">motionmax.io</a></p>
         </td></tr>
       </table>
     </td></tr>
@@ -61,7 +61,7 @@ const passwordChanged = base(`
   ${h1("Your password was changed")}
   ${p("This is a confirmation that the password for your MotionMax account was successfully updated.")}
   <p style="margin:0 0 20px;font-size:14px;color:#666;line-height:1.6;">If you made this change, no further action is needed.</p>
-  <div style="text-align:center;">${btn("{{ .SiteURL }}/auth", "Secure My Account")}</div>
+  <div style="text-align:center;">${btn("https://motionmax.io/auth", "Secure My Account")}</div>
   <p style="margin:20px 0 0;font-size:12px;color:#bbb;text-align:center;">If you didn't change your password, reset it immediately.</p>
 `);
 
@@ -70,12 +70,15 @@ const emailChanged = base(`
   ${h1("Your email was updated")}
   ${p("This is a confirmation that the email address for your MotionMax account has been changed.")}
   <p style="margin:0 0 20px;font-size:14px;color:#666;line-height:1.6;">You will now receive all account emails at your new address.</p>
-  <div style="text-align:center;">${btn("{{ .SiteURL }}/settings", "Manage Account")}</div>
+  <div style="text-align:center;">${btn("https://motionmax.io/settings", "Manage Account")}</div>
   <p style="margin:20px 0 0;font-size:12px;color:#bbb;text-align:center;">If you didn't make this change, contact support immediately.</p>
 `);
 
 // ── Apply via Management API ──
 const payload = {
+  // Lock the site URL to motionmax.io so all email links point to production
+  site_url: "https://motionmax.io",
+
   // 6-digit OTP length
   mailer_otp_length: 6,
 

@@ -312,7 +312,19 @@ You are writing prompts for a generative video AI that CANNOT do lip-sync. You m
 3. **ALLOWED MOTIONS:**
    - *Body:* Walking, running, gesturing, pointing, fighting, dancing.
    - *Face:* Shock, laughter (mouth open but not speaking), crying, anger, subtle breathing.
-   - *Camera:* Dolly zoom, tracking shot, pan, tilt, rack focus.
+   - *Camera (use the full vocabulary below — vary across scenes, never repeat the same move twice in a row):*
+     - **Pan left / Pan right** — camera pivots horizontally on fixed axis; great for sweeping reveals or following lateral subjects
+     - **Tilt up / Tilt down** — camera pivots vertically; ideal for revealing tall subjects from ground to top
+     - **Dolly in / Dolly out** — full camera moves toward/away from subject; creates parallax effect between fore/background (NOT a zoom)
+     - **Truck left / Truck right** (Tracking shot) — entire camera slides sideways; follows a walking character or moving vehicle
+     - **Pedestal up / Pedestal down** — entire camera rises or lowers vertically; creates elevation reveal effect
+     - **Orbit / Arc** — camera circles around a fixed subject; ideal for hero reveals, product showcases, dramatic moments
+     - **Crane up / Crane down** — sweeping vertical rise or descent of camera; cinematic scale-building
+     - **Handheld / Steadicam** — slight organic sway for documentary realism vs. buttery-smooth glide for elegance
+     - **Dutch angle / Roll** — camera rolls on Z-axis, tilting the horizon line; creates kinetic tension for action or music
+     - **Zoom in / Zoom out** — focal length change only, no physical movement; compresses/expands depth of field
+     - **Dolly zoom (Vertigo)** — simultaneous dolly out + zoom in; creates unsettling spatial distortion
+     - **Rack focus** — shifts focus between foreground and background subjects within the same shot
 
 4. **STATIC POSES:** For dialogue-heavy moments, use "Static pose with subtle breathing and idle movement" or "Cinematic portrait, staring intensely."
 
@@ -346,9 +358,20 @@ Your visualPrompt must be optimized for AI VIDEO generation, NOT static images. 
    - ✓ "Camera slowly pushes in as the protagonist walks forward through fog"
    - ✗ "A person standing in fog"
 
-2. **CAMERA MOVEMENT:** Specify how the camera behaves
-   - Tracking shot, Dolly in/out, Crane up, Handheld, Steady glide, Orbit around subject
-   - "Low angle drone shot tracking fast across urban rooftops at golden hour"
+2. **CAMERA MOVEMENT:** ALWAYS specify the exact camera movement for every scene. Choose from the full vocabulary — vary them to avoid repetition:
+   - **Rotational (fixed axis):** Pan left, Pan right, Tilt up, Tilt down
+   - **Translational (full camera travel):** Dolly in, Dolly out, Truck left, Truck right, Pedestal up/down, Crane up/down
+   - **Orbital:** Orbit/Arc around subject (clockwise/counter-clockwise), Drone arc
+   - **Advanced:** Handheld jitter, Steadicam glide, Dutch angle roll, Rack focus shift, Dolly zoom (Vertigo effect)
+   - **Examples:**
+     - "Camera pans right slowly, revealing the full scale of the battlefield"
+     - "Dolly in close on her face as she reads the letter — background blurs with parallax"
+     - "Smooth orbit clockwise around the hero, 180° arc, golden hour backlight"
+     - "Pedestal rising from ground level to rooftop, city expanding below"
+     - "Low-angle truck right tracking the character striding down the neon-lit alley"
+     - "Handheld close-up with slight sway — raw, intimate, documentary feel"
+     - "Dutch angle roll as the villain steps into frame — horizon tilts 15°"
+     - "Rack focus: sharp close-up of the key in the foreground, blurred figure in background snaps into focus"
 
 3. **CINEMATIC LIGHTING:** Be specific about light quality
    - "Cyberpunk neon reflections on wet pavement", "Soft rim light separating subject from background"
@@ -557,11 +580,40 @@ async function generateSceneImage(
   format: "landscape" | "portrait" | "square",
   replicateToken: string,
   supabase: ReturnType<typeof createClient>,
+  characterBible: Record<string, string> = {},
+  characterDescription: string = "",
 ): Promise<string> {
   const aspectRatio = format === "portrait" ? "9:16" : format === "square" ? "1:1" : "16:9";
 
   const styleKey = style.toLowerCase();
   const fullStylePrompt = STYLE_PROMPTS[styleKey] || STYLE_PROMPTS[style] || style;
+
+  // Build character consistency block
+  let characterConsistencyBlock = "";
+  const hasCharacterBible = Object.keys(characterBible).length > 0;
+  if (hasCharacterBible) {
+    const entries = Object.entries(characterBible)
+      .map(([name, desc]) => `- ${name}: ${desc}`)
+      .join("\n");
+    characterConsistencyBlock = `
+
+CHARACTER CONSISTENCY BIBLE (apply EXACTLY for any character in this scene):
+${entries}
+
+CRITICAL RULES:
+1. Characters MUST match their bible description exactly — do not improvise appearance
+2. Match age to temporal context (childhood scene → show as child; adult scene → show as adult)
+3. Maintain consistent ethnicity, skin tone, hair, and clothing across all scenes`;
+  } else if (characterDescription) {
+    characterConsistencyBlock = `
+
+CHARACTER APPEARANCE REQUIREMENTS (maintain across ALL scenes):
+${characterDescription}
+
+CONSISTENCY RULES:
+1. All characters MUST match the above description — do not invent different appearances
+2. Keep skin tone, hair color/style, clothing, and body type consistent throughout`;
+  }
 
   const imagePrompt = `${fullStylePrompt}
 
@@ -570,6 +622,7 @@ SCENE DESCRIPTION: ${scene.visualPrompt}
 CAMERA/SHOT STYLE: ${scene.visualStyle}
 
 FORMAT: ${format === "portrait" ? "VERTICAL 9:16 portrait orientation (tall, like a phone screen)" : format === "square" ? "SQUARE 1:1 aspect ratio (equal width and height)" : "HORIZONTAL 16:9 landscape orientation (wide, like a TV screen)"}. The image MUST be composed for this exact aspect ratio.
+${characterConsistencyBlock}
 
 QUALITY REQUIREMENTS:
 - ULTRA DETAILED with rich textures, accurate lighting, and proper shadows
@@ -1421,7 +1474,10 @@ serve(async (req) => {
 
       if (projectError || !project) throw new Error("Failed to create project");
 
-      // Create generation
+      // Create generation — store character bible in scenes[0]._characterBible for image phase
+      const scenesWithCharBible = script.scenes.map((s: any, idx: number) =>
+        idx === 0 ? { ...s, _characterBible: script.characters || {} } : s
+      );
       const { data: generation, error: genError } = await supabase
         .from("generations")
         .insert({
@@ -1429,7 +1485,7 @@ serve(async (req) => {
           project_id: project.id,
           status: "generating",
           progress: 10,
-          scenes: script.scenes,
+          scenes: scenesWithCharBible,
         })
         .select("id")
         .single();
@@ -1527,6 +1583,7 @@ serve(async (req) => {
         googleApiKeys,
         elevenLabsApiKey: Deno.env.get("ELEVENLABS_API_KEY"),
         lemonfoxApiKey: Deno.env.get("LEMONFOX_API_KEY"),
+        fishAudioApiKey: Deno.env.get("FISH_AUDIO_API_KEY"),
         supabase,
         storage: {
           bucket: "audio-files",
@@ -1567,14 +1624,17 @@ serve(async (req) => {
 
       if (scene.imageUrl) return jsonResponse({ success: true, status: "complete", scene });
 
-      // We need style + format from the project record
+      // We need style + format + character data from the project record
       const { data: project, error: projectError } = await supabase
         .from("projects")
-        .select("id, style, format")
+        .select("id, style, format, character_description")
         .eq("id", generation.project_id)
         .maybeSingle();
 
       if (projectError || !project) throw new Error("Project not found");
+
+      // Read character bible stored on scenes[0] during script phase
+      const charBible: Record<string, string> = (scenesRaw[0] as any)?._characterBible || {};
 
       const imageUrl = await generateSceneImage(
         scene,
@@ -1582,6 +1642,8 @@ serve(async (req) => {
         (project.format || "portrait") as "landscape" | "portrait" | "square",
         replicateToken,
         supabase,
+        charBible,
+        project.character_description || "",
       );
 
       scenes[idx] = { ...scene, imageUrl };
@@ -1769,21 +1831,22 @@ serve(async (req) => {
       const scene = scenes[idx];
       if (!scene) throw new Error("Scene not found");
 
-      // Get project for style/format
+      // Get project for style/format/character data
       const { data: project, error: projectError } = await supabase
         .from("projects")
-        .select("id, style, format")
+        .select("id, style, format, character_description")
         .eq("id", generation.project_id)
         .maybeSingle();
       if (projectError || !project) throw new Error("Project not found");
 
       const format = (project.format || "portrait") as "landscape" | "portrait" | "square";
       const style = project.style || "realistic";
+      const regenCharBible: Record<string, string> = (scenesRaw[0] as any)?._characterBible || {};
 
       console.log(`[IMG-REGEN] Scene ${scene.number}: Regenerating image`);
 
-      // Generate new image
-      const newImageUrl = await generateSceneImage(scene, style, format, replicateToken, supabase);
+      // Generate new image with character consistency
+      const newImageUrl = await generateSceneImage(scene, style, format, replicateToken, supabase, regenCharBible, project.character_description || "");
 
       // Grok commented out for testing — use Hypereal Seedance 1.5
       console.log(`[IMG-REGEN] Scene ${scene.number}: Starting video regeneration with Hypereal Seedance 1.5`);

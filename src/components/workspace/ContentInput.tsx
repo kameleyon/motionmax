@@ -1,6 +1,6 @@
 import { Textarea } from "@/components/ui/textarea";
 
-const MAX_CONTENT_LENGTH = 50000;
+const MAX_CONTENT_LENGTH = 500000;
 
 interface ContentInputProps {
   content: string;
@@ -20,14 +20,13 @@ Example: Paste your article, blog post, script, or any text content you want to 
         className="min-h-[180px] resize-none rounded-xl border-border bg-muted/50 dark:bg-white/10 text-sm placeholder:text-muted-foreground/60 focus:border-primary/50 focus:ring-primary/20"
         value={content}
         onChange={(e) => onContentChange(e.target.value.slice(0, MAX_CONTENT_LENGTH))}
-        maxLength={MAX_CONTENT_LENGTH}
       />
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground/60">
           Paste your content or describe what you want to create.
         </p>
         <span className={`text-[10px] ${content.length > MAX_CONTENT_LENGTH * 0.9 ? "text-destructive" : "text-muted-foreground/50"}`}>
-          {content.length.toLocaleString()} / {MAX_CONTENT_LENGTH.toLocaleString()}
+          {content.length.toLocaleString()} / {(MAX_CONTENT_LENGTH).toLocaleString()}
         </span>
       </div>
     </div>

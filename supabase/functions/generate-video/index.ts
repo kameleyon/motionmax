@@ -18,8 +18,8 @@ const INPUT_LIMITS = {
   style: 50,
   customStyle: 2000,
   brandMark: 500,
-  presenterFocus: 5000,
-  characterDescription: 2000,
+  presenterFocus: 500000,
+  characterDescription: 500000,
   voiceId: 200,
   voiceName: 200,
   inspirationStyle: 100,
@@ -1462,6 +1462,90 @@ async function generateSceneAudioLemonfox(
   return { url: null, error: `Lemonfox TTS failed after ${LEMONFOX_MAX_RETRIES} attempts` };
 }
 
+// ============= FISH AUDIO TTS (Female English — Primary) =============
+const FISH_AUDIO_TTS_URL = "https://api.fish.audio/v1/tts";
+const FISH_AUDIO_FEMALE_VOICE_ID = "57ea41ba9aa64b9c8fe2d5625c50d1b0";
+const FISH_AUDIO_MAX_RETRIES = 3;
+
+async function generateSceneAudioFishAudio(
+  scene: Scene,
+  sceneIndex: number,
+  fishAudioApiKey: string,
+  supabase: any,
+  userId: string,
+  projectId: string,
+  isRegeneration: boolean = false,
+): Promise<{ url: string | null; error?: string; durationSeconds?: number; provider?: string }> {
+  const voiceoverText = sanitizeVoiceover(scene.voiceover);
+  if (!voiceoverText || voiceoverText.length < 2) {
+    return { url: null, error: "No voiceover text" };
+  }
+
+  for (let attempt = 1; attempt <= FISH_AUDIO_MAX_RETRIES; attempt++) {
+    try {
+      console.log(`[TTS-FishAudio] Scene ${sceneIndex + 1}: attempt ${attempt}/${FISH_AUDIO_MAX_RETRIES}`);
+
+      const response = await fetch(FISH_AUDIO_TTS_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${fishAudioApiKey}`,
+          "Content-Type": "application/json",
+          "model": "s2",
+        },
+        body: JSON.stringify({
+          text: voiceoverText,
+          reference_id: FISH_AUDIO_FEMALE_VOICE_ID,
+          format: "mp3",
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => "");
+        console.error(`[TTS-FishAudio] Scene ${sceneIndex + 1}: API error ${response.status} - ${errText}`);
+        if ((response.status === 429 || response.status >= 500) && attempt < FISH_AUDIO_MAX_RETRIES) {
+          await sleep(2000 * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 1000));
+          continue;
+        }
+        return { url: null, error: `Fish Audio TTS failed: ${response.status}` };
+      }
+
+      const audioBytes = new Uint8Array(await response.arrayBuffer());
+      if (audioBytes.length < 100) {
+        return { url: null, error: "Fish Audio returned empty audio" };
+      }
+
+      const durationSeconds = Math.max(1, audioBytes.length / 16000);
+
+      const audioPath = isRegeneration
+        ? `${userId}/${projectId}/scene-${sceneIndex + 1}-${Date.now()}.mp3`
+        : `${userId}/${projectId}/scene-${sceneIndex + 1}.mp3`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("audio")
+        .upload(audioPath, audioBytes, { contentType: "audio/mpeg", upsert: true });
+
+      if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
+
+      const { data: signedData, error: signError } = await supabase.storage
+        .from("audio")
+        .createSignedUrl(audioPath, 604800);
+
+      if (signError || !signedData?.signedUrl) {
+        throw new Error(`Failed to create signed URL: ${signError?.message || "Unknown error"}`);
+      }
+
+      console.log(`[TTS-FishAudio] Scene ${sceneIndex + 1} ✅ SUCCESS (${durationSeconds.toFixed(1)}s)`);
+      return { url: signedData.signedUrl, durationSeconds, provider: "Fish Audio TTS (female)" };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Unknown Fish Audio error";
+      console.error(`[TTS-FishAudio] Scene ${sceneIndex + 1} attempt ${attempt} error:`, errorMsg);
+      if (attempt < FISH_AUDIO_MAX_RETRIES) await sleep(2000 * Math.pow(2, attempt - 1));
+    }
+  }
+
+  return { url: null, error: `Fish Audio TTS failed after ${FISH_AUDIO_MAX_RETRIES} attempts` };
+}
+
 // Generate audio with chunking for long scripts
 async function generateSceneAudioReplicateChunked(
   scene: Scene,
@@ -2451,11 +2535,24 @@ async function generateSceneAudio(
   }
 
   // ========== CASE 4: Default (English/other languages) ==========
-  // Lemonfox TTS (primary) → Chatterbox fallback
+  // Fish Audio (female primary) → Lemonfox → Chatterbox fallback
+
+  const FISH_AUDIO_API_KEY = Deno.env.get("FISH_AUDIO_API_KEY");
+  if (FISH_AUDIO_API_KEY && voiceGender === "female") {
+    console.log(`[TTS] Scene ${sceneIndex + 1}: Female voice via Fish Audio TTS (primary)`);
+    const fishResult = await generateSceneAudioFishAudio(
+      scene, sceneIndex, FISH_AUDIO_API_KEY, supabase, userId, projectId, isRegeneration,
+    );
+    if (fishResult.url) {
+      console.log(`✅ Scene ${sceneIndex + 1} SUCCEEDED with: Fish Audio TTS`);
+      return fishResult;
+    }
+    console.warn(`[TTS] Scene ${sceneIndex + 1}: Fish Audio failed (${fishResult.error}), falling back to Lemonfox`);
+  }
 
   const LEMONFOX_API_KEY = Deno.env.get("LEMONFOX_API_KEY");
   if (LEMONFOX_API_KEY) {
-    console.log(`[TTS] Scene ${sceneIndex + 1}: Trying Lemonfox TTS first`);
+    console.log(`[TTS] Scene ${sceneIndex + 1}: Voice via Lemonfox TTS`);
     const lemonfoxResult = await generateSceneAudioLemonfox(
       scene, sceneIndex, LEMONFOX_API_KEY, supabase, userId, projectId, isRegeneration, voiceGender,
     );
@@ -4096,7 +4193,7 @@ async function handleImagesPhase(
   // Fetch generation with project format and character consistency flag
   const { data: generation } = await supabase
     .from("generations")
-    .select("*, projects!inner(format, style, brand_mark, character_consistency_enabled, project_type)")
+    .select("*, projects!inner(format, style, brand_mark, character_consistency_enabled, project_type, character_description)")
     .eq("id", generationId)
     .eq("user_id", user.id)
     .single();
@@ -4142,6 +4239,9 @@ async function handleImagesPhase(
   const characterBible = meta.characterBible || {};
   const hasCharacterBible = Object.keys(characterBible).length > 0;
 
+  // User-supplied character description (all project types) — used as fallback
+  const projectCharacterDescription: string = generation.projects.character_description || "";
+
   // Get already completed images count from meta
   let completedImagesSoFar = meta.completedImages || 0;
 
@@ -4185,7 +4285,7 @@ Text must be LEGIBLE, correctly spelled, and integrated into the composition.`;
     // This ensures uniform font, size, and opacity across all styles and generations
     const brandMarkInstructions = "";
 
-    // Add character consistency instructions if we have a character bible
+    // Add character consistency instructions if we have a character bible or user description
     let characterInstructions = "";
     if (hasCharacterBible) {
       const characterDescriptions = Object.entries(characterBible)
@@ -4203,6 +4303,16 @@ CRITICAL CHARACTER RULES:
 4. VISUAL CONTINUITY: Characters at different ages must share key traits (eye color, ethnicity, facial structure) but reflect correct age
 5. ENVIRONMENTAL CONTEXT: Match clothing, hairstyles, and surroundings to the time period and location described
 6. Do NOT show a 35-year-old adult when depicting someone's childhood - show them as an actual child`;
+    } else if (projectCharacterDescription) {
+      characterInstructions = `
+
+CHARACTER APPEARANCE REQUIREMENTS (apply consistently across ALL scenes):
+${projectCharacterDescription}
+
+CONSISTENCY RULES:
+1. ALL characters in this scene MUST match the above description exactly
+2. Maintain consistent skin tone, hair color/style, clothing style, and body type across every scene
+3. Do not invent different appearances — the creator specified these traits for a reason`;
     }
 
     // Build detailed, elaborate image generation prompt

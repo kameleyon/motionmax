@@ -1,6 +1,6 @@
 import { Textarea } from "@/components/ui/textarea";
 
-const MAX_STORY_LENGTH = 50000;
+const MAX_STORY_LENGTH = 500000;
 
 interface StoryIdeaInputProps {
   value: string;
@@ -16,7 +16,6 @@ export function StoryIdeaInput({ value, onChange }: StoryIdeaInputProps) {
       <Textarea
         value={value}
         onChange={(e) => onChange(e.target.value.slice(0, MAX_STORY_LENGTH))}
-        maxLength={MAX_STORY_LENGTH}
         placeholder="Describe your story idea, concept, or theme. What's the narrative you want to tell? What emotions do you want to evoke?
 
 Example: A young entrepreneur's journey from a garage startup to building a billion-dollar company, facing setbacks, making hard decisions, and ultimately finding that success isn't just about money..."

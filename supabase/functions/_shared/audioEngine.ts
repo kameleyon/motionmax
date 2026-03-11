@@ -43,6 +43,7 @@ export interface AudioEngineConfig {
   googleApiKeys: string[];         // reverse order: [KEY_3, KEY_2, KEY_1]
   elevenLabsApiKey?: string;
   lemonfoxApiKey?: string;         // Lemonfox TTS API key
+  fishAudioApiKey?: string;        // Fish Audio TTS API key (female English primary)
   supabase: any;
   storage: StorageStrategy;
   voiceGender?: string;            // "male" | "female"
@@ -644,6 +645,64 @@ async function transformWithElevenLabsSTS(
 const LEMONFOX_TTS_URL = "https://api.lemonfox.ai/v1/audio/speech";
 const LEMONFOX_MAX_RETRIES = 3;
 
+// ============= FISH AUDIO TTS (Female English Primary) =============
+const FISH_AUDIO_TTS_URL = "https://api.fish.audio/v1/tts";
+const FISH_AUDIO_FEMALE_VOICE_ID = "57ea41ba9aa64b9c8fe2d5625c50d1b0";
+const FISH_AUDIO_MAX_RETRIES = 3;
+
+async function generateFishAudioTTS(
+  text: string,
+  sceneNumber: number,
+  fishAudioApiKey: string,
+  supabase: any,
+  storage: StorageStrategy,
+): Promise<AudioResult> {
+  for (let attempt = 1; attempt <= FISH_AUDIO_MAX_RETRIES; attempt++) {
+    try {
+      console.log(`[TTS-FishAudio] Scene ${sceneNumber}: attempt ${attempt}/${FISH_AUDIO_MAX_RETRIES}`);
+      const response = await fetch(FISH_AUDIO_TTS_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${fishAudioApiKey}`,
+          "Content-Type": "application/json",
+          "model": "s2",
+        },
+        body: JSON.stringify({
+          text,
+          reference_id: FISH_AUDIO_FEMALE_VOICE_ID,
+          format: "mp3",
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => "");
+        console.error(`[TTS-FishAudio] API error: ${response.status} - ${errText}`);
+        if ((response.status === 429 || response.status >= 500) && attempt < FISH_AUDIO_MAX_RETRIES) {
+          await sleep(2000 * Math.pow(2, attempt - 1));
+          continue;
+        }
+        return { url: null, error: `Fish Audio TTS failed: ${response.status}` };
+      }
+
+      const audioBytes = new Uint8Array(await response.arrayBuffer());
+      if (audioBytes.length < 100) {
+        return { url: null, error: "Fish Audio returned empty audio" };
+      }
+
+      const durationSeconds = Math.max(1, audioBytes.length / 16000);
+      const url = await uploadAndGetUrl(supabase, audioBytes, "audio/mpeg", storage, sceneNumber);
+
+      console.log(`[TTS-FishAudio] Scene ${sceneNumber} ✅ SUCCESS (${durationSeconds.toFixed(1)}s)`);
+      return { url, durationSeconds, provider: "Fish Audio TTS" };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      console.error(`[TTS-FishAudio] Scene ${sceneNumber} attempt ${attempt} error:`, msg);
+      if (attempt < FISH_AUDIO_MAX_RETRIES) await sleep(2000 * Math.pow(2, attempt - 1));
+    }
+  }
+  return { url: null, error: `Fish Audio TTS failed after ${FISH_AUDIO_MAX_RETRIES} attempts` };
+}
+
 async function generateLemonfoxTTS(
   scene: AudioScene,
   sceneNumber: number,
@@ -922,9 +981,24 @@ export async function generateSceneAudio(
     return stsResult;
   }
 
-  // ========== CASE 4: Default (English/other) — Lemonfox → Chatterbox → Gemini fallback ==========
+  // ========== CASE 4: Default (English/other) — Fish Audio (female) → Lemonfox → Chatterbox → Gemini fallback ==========
 
-  // Try Lemonfox first (if key available)
+  const { fishAudioApiKey } = config;
+
+  // Fish Audio: primary for female English voice
+  if (fishAudioApiKey && voiceGender === "female") {
+    console.log(`[TTS] Scene ${scene.number}: Female voice via Fish Audio TTS`);
+    const fishResult = await generateFishAudioTTS(
+      voiceoverText, scene.number, fishAudioApiKey, supabase, storage,
+    );
+    if (fishResult.url) {
+      console.log(`✅ Scene ${scene.number} SUCCEEDED: Fish Audio TTS`);
+      return fishResult;
+    }
+    console.warn(`[TTS] Scene ${scene.number}: Fish Audio failed (${fishResult.error}), falling back to Lemonfox`);
+  }
+
+  // Lemonfox fallback (or primary for male voice)
   if (lemonfoxApiKey) {
     console.log(`[TTS] Scene ${scene.number}: Standard voice via Lemonfox TTS`);
     const lemonfoxResult = await generateLemonfoxTTS(

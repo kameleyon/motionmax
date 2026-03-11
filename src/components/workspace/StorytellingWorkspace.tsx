@@ -179,7 +179,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
         customStyle: style === "custom" ? customStyle : undefined,
         customStyleImage: style === "custom" ? customStyleImage : undefined,
         brandMark: brandMarkEnabled && brandMarkText.trim() ? brandMarkText.trim() : undefined,
-        presenterFocus: presenterFocus.trim() ? presenterFocus.trim().slice(0, 15000) : undefined,
+        presenterFocus: presenterFocus.trim() ? presenterFocus.trim().slice(0, 500000) : undefined,
         characterDescription: characterDescription.trim() || undefined,
         projectType: "storytelling",
         inspirationStyle: inspiration !== "none" ? inspiration : undefined,

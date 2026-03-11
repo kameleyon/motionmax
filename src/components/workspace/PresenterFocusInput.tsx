@@ -6,7 +6,7 @@ interface PresenterFocusInputProps {
   onChange: (value: string) => void;
 }
 
-const MAX_PRESENTER_LENGTH = 15000;
+const MAX_PRESENTER_LENGTH = 500000;
 
 export function PresenterFocusInput({ value, onChange }: PresenterFocusInputProps) {
   return (
@@ -19,7 +19,6 @@ export function PresenterFocusInput({ value, onChange }: PresenterFocusInputProp
         className="min-h-[80px] resize-none rounded-xl border-border/50 bg-transparent text-sm placeholder:text-muted-foreground/50 focus-visible:ring-1 focus-visible:ring-primary"
         value={value}
         onChange={(e) => onChange(e.target.value.slice(0, MAX_PRESENTER_LENGTH))}
-        maxLength={MAX_PRESENTER_LENGTH}
       />
       <div className="text-right text-[10px] text-muted-foreground/50">
         {value.length.toLocaleString()} / {MAX_PRESENTER_LENGTH.toLocaleString()}

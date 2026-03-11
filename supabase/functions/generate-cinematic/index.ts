@@ -1746,9 +1746,33 @@ STYLE CONTEXT: ${fullStylePrompt}`;
 
       console.log(`[IMG-EDIT] Scene ${scene.number}: Attempting Replicate nano-banana-2 edit`);
 
+      // Create a signed URL so Replicate can reliably fetch the image
+      // (the public storage URL may be inaccessible from Replicate's servers if the bucket is private)
+      let sourceImageForEdit = scene.imageUrl || "";
+      if (scene.imageUrl) {
+        try {
+          const urlObj = new URL(scene.imageUrl);
+          const prefix = "/storage/v1/object/public/scene-images/";
+          const storagePath = urlObj.pathname.startsWith(prefix)
+            ? decodeURIComponent(urlObj.pathname.slice(prefix.length))
+            : null;
+          if (storagePath) {
+            const { data: signedData } = await supabase.storage
+              .from("scene-images")
+              .createSignedUrl(storagePath, 3600);
+            if (signedData?.signedUrl) {
+              sourceImageForEdit = signedData.signedUrl;
+              console.log(`[IMG-EDIT] Using signed URL for Replicate access`);
+            }
+          }
+        } catch {
+          console.warn("[IMG-EDIT] Could not create signed URL, using original URL");
+        }
+      }
+
       const editInput: Record<string, unknown> = {
         prompt: editPrompt,
-        image_input: [scene.imageUrl],
+        image_input: [sourceImageForEdit],
         aspect_ratio: format === "portrait" ? "9:16" : format === "square" ? "1:1" : "16:9",
         output_format: "png",
         resolution: "1K",
@@ -1827,15 +1851,12 @@ STYLE CONTEXT: ${fullStylePrompt}`;
         }
       }
 
-      // Fallback: regenerate image from scratch with modification baked into visual prompt
+      // If Replicate edit failed, keep the original image unchanged.
+      // Generating a brand-new image would replace the entire scene visuals, which is not desired.
       if (!editSucceeded) {
-        console.log(`[IMG-EDIT] Scene ${scene.number}: Using text-to-image fallback with modification in prompt`);
-        const sceneWithEdit = {
-          ...scene,
-          visualPrompt: `${scene.visualPrompt}\n\nUSER MODIFICATION REQUEST: ${modification}`,
-        };
-        newImageUrl = await generateSceneImage(sceneWithEdit, style, format, replicateToken, supabase);
-        console.log(`[IMG-EDIT] Scene ${scene.number} fallback image generated: ${newImageUrl}`);
+        console.warn(`[IMG-EDIT] Scene ${scene.number}: Edit failed — keeping original image, regenerating video only`);
+        newImageUrl = scene.imageUrl || "";
+        if (!newImageUrl) throw new Error("Image editing failed and no original image is available");
       }
 
       // Now regenerate video with the new image

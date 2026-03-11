@@ -151,7 +151,8 @@ serve(async (req) => {
 
           const lineItems = await stripe.checkout.sessions.listLineItems(session.id);
           for (const item of lineItems.data) {
-            const productId = item.price?.product as string;
+            const productRaw = item.price?.product;
+            const productId = typeof productRaw === "string" ? productRaw : (productRaw as any)?.id ?? "";
             const credits = creditPackProducts[productId];
             
             if (credits) {
@@ -181,7 +182,8 @@ serve(async (req) => {
           // Subscription purchase
           const subscriptionId = session.subscription as string;
           const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-          const productId = subscription.items.data[0].price.product as string;
+          const productRaw = subscription.items.data[0].price.product;
+          const productId = typeof productRaw === "string" ? productRaw : (productRaw as any)?.id ?? "";
           const planName = subscriptionProducts[productId] || "starter";
 
           logStep("Creating subscription record", { userId, planName, subscriptionId, productId });
@@ -231,7 +233,8 @@ serve(async (req) => {
           .single();
 
         if (subData) {
-          const productId = subscription.items.data[0].price.product as string;
+          const productRaw = subscription.items.data[0].price.product;
+          const productId = typeof productRaw === "string" ? productRaw : (productRaw as any)?.id ?? "";
           const planName = subscriptionProducts[productId] || "starter";
 
           // Map Stripe status to our status

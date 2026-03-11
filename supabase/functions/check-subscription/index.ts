@@ -160,7 +160,8 @@ serve(async (req) => {
       
       cancelAtPeriodEnd = subscription.cancel_at_period_end || false;
       
-      const productId = subscription.items.data[0].price.product as string;
+      const productRaw = subscription.items.data[0].price.product;
+      const productId = typeof productRaw === "string" ? productRaw : (productRaw as any)?.id ?? "";
       logStep("Active subscription found", { subscriptionId: subscription.id, productId, periodEnd: periodEndRaw });
 
       // Map product IDs to plans — includes all legacy IDs to prevent false "free" downgrades

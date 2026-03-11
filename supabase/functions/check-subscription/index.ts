@@ -3,7 +3,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") ?? "https://motionmax.io",
+  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") ?? "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
@@ -37,19 +37,11 @@ serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "");
     
-    // Create a client with the user's auth header for getClaims
-    const supabaseAuth = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    // Use getClaims to verify the JWT
-    const { data: claimsData, error: claimsError } = await supabaseAuth.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
-      // Check if it's an expired token - return 401 to trigger refresh
-      if (claimsError?.message?.toLowerCase().includes("expired") || 
-          claimsError?.message?.toLowerCase().includes("jwt")) {
+    // Verify the JWT using the admin client (standard Edge Function pattern)
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+    if (userError || !user) {
+      const msg = userError?.message?.toLowerCase() ?? "";
+      if (msg.includes("expired") || msg.includes("jwt") || msg.includes("token")) {
         logStep("Token expired, returning 401");
         return new Response(JSON.stringify({ error: "Token expired", code: "TOKEN_EXPIRED" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -58,9 +50,9 @@ serve(async (req) => {
       }
       throw new Error("Authentication error: Invalid session");
     }
-    
-    const userId = claimsData.claims.sub as string;
-    const userEmail = claimsData.claims.email as string;
+
+    const userId = user.id;
+    const userEmail = user.email as string;
     
     if (!userId || !userEmail) {
       throw new Error("User not authenticated or email not available");

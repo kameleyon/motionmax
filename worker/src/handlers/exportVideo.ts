@@ -150,7 +150,7 @@ function probeDuration(filePath: string): Promise<number> {
   });
 }
 
-/** Mux video + voice-over, stretching the video (slow-mo) to match the audio duration */
+/** Mux video + voice-over: slow-mo the video to exactly match audio duration per scene */
 async function muxVideoAudio(
   videoPath: string,
   audioPath: string,
@@ -160,14 +160,20 @@ async function muxVideoAudio(
     probeDuration(videoPath),
     probeDuration(audioPath),
   ]);
+
   const ratio = audioDur / videoDur;
-  console.log(`[ExportVideo] Video: ${videoDur.toFixed(1)}s | Audio: ${audioDur.toFixed(1)}s | Stretch: ${ratio.toFixed(2)}x`);
+  console.log(`[ExportVideo] Video: ${videoDur.toFixed(1)}s | Audio: ${audioDur.toFixed(1)}s | Slowmo: ${ratio.toFixed(2)}x`);
+
+  const filters = [
+    `setpts=${ratio.toFixed(4)}*PTS`,
+    'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+  ].join(',');
 
   return new Promise((resolve, reject) => {
     const cmd = ffmpeg()
       .addInput(videoPath)
       .addInput(audioPath)
-      .videoFilters(`setpts=${ratio.toFixed(4)}*PTS`)
+      .videoFilters(filters)
       .outputOptions([
         '-map 0:v:0',
         '-map 1:a:0',

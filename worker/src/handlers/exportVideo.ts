@@ -108,7 +108,7 @@ function createVideoFromImageAudio(
   });
 }
 
-/** Create a silent video from a still image (includes silent audio track for transition compat) */
+/** Create a silent (video-only) clip from a still image */
 function createSilentVideo(
   imagePath: string,
   outputPath: string,
@@ -118,15 +118,11 @@ function createSilentVideo(
     const cmd = ffmpeg()
       .addInput(imagePath)
       .inputOptions(['-loop 1', '-framerate 24'])
-      .addInput('anullsrc=r=44100:cl=stereo')
-      .inputOptions(['-f lavfi'])
       .videoFilters('scale=trunc(iw/2)*2:trunc(ih/2)*2')
       .outputOptions([
         '-c:v libx264',
         '-preset ultrafast',
         '-tune stillimage',
-        '-c:a aac',
-        '-b:a 64k',
         '-pix_fmt yuv420p',
         `-t ${duration}`,
         '-movflags +faststart',
@@ -264,7 +260,7 @@ async function concatWithTransitions(files: string[], outputPath: string, projec
 
 const SLIDE_TRANSITION_DURATION = 0.3; // cross-fade between sub-images within a scene
 
-/** Concat sub-image clips with a cross-fade transition between each one */
+/** Concat sub-image clips with a cross-fade transition — video only (audio added by replaceAudioTrack) */
 async function concatImagesWithFade(files: string[], outputPath: string): Promise<void> {
   if (files.length === 1) {
     await fs.promises.copyFile(files[0], outputPath);
@@ -284,9 +280,6 @@ async function concatImagesWithFade(files: string[], outputPath: string): Promis
     prevLabel = outLabel;
   }
 
-  const audioInputs = files.map((_, i) => `[${i}:a]`).join('');
-  filterComplex += `${audioInputs}concat=n=${files.length}:v=0:a=1[aout]`;
-
   return new Promise((resolve, reject) => {
     const cmd = ffmpeg();
     files.forEach(f => cmd.addInput(f));
@@ -294,12 +287,9 @@ async function concatImagesWithFade(files: string[], outputPath: string): Promis
       .complexFilter(filterComplex)
       .outputOptions([
         '-map [vout]',
-        '-map [aout]',
         '-c:v libx264',
         '-preset ultrafast',
         '-pix_fmt yuv420p',
-        '-c:a aac',
-        '-b:a 64k',
         '-movflags +faststart',
         ...X264_MEM_FLAGS,
       ])

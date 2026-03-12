@@ -303,8 +303,13 @@ export async function handleExportVideo(jobId: string, payload: any, userId?: st
     await writeSystemLog({ jobId, projectId: project_id, userId, category: "system_error", eventType: "export_video_failed", message: `Video stitching failed`, details: { error: error instanceof Error ? error.message : "Unknown" }});
     throw error;
   } finally {
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+    // Cleanup temp dir — swallow errors (EBUSY on Windows when FFmpeg still holds handles)
+    try {
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    } catch (cleanupErr) {
+      console.warn(`[ExportVideo] Temp dir cleanup skipped for ${jobId}:`, (cleanupErr as Error).message);
     }
   }
 }

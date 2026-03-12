@@ -139,24 +139,46 @@ function createSilentVideo(
   });
 }
 
-/** Mux an existing video with a separate audio track (no video re-encode, fast) */
-function muxVideoAudio(
+/** Probe media duration in seconds via ffprobe */
+function probeDuration(filePath: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(filePath, (err, metadata) => {
+      if (err) return reject(new Error(`ffprobe: ${err.message}`));
+      const dur = metadata?.format?.duration;
+      resolve(typeof dur === 'number' && dur > 0 ? dur : 10);
+    });
+  });
+}
+
+/** Mux video + voice-over, stretching the video (slow-mo) to match the audio duration */
+async function muxVideoAudio(
   videoPath: string,
   audioPath: string,
   outputPath: string
 ): Promise<void> {
+  const [videoDur, audioDur] = await Promise.all([
+    probeDuration(videoPath),
+    probeDuration(audioPath),
+  ]);
+  const ratio = audioDur / videoDur;
+  console.log(`[ExportVideo] Video: ${videoDur.toFixed(1)}s | Audio: ${audioDur.toFixed(1)}s | Stretch: ${ratio.toFixed(2)}x`);
+
   return new Promise((resolve, reject) => {
     const cmd = ffmpeg()
       .addInput(videoPath)
       .addInput(audioPath)
+      .videoFilters(`setpts=${ratio.toFixed(4)}*PTS`)
       .outputOptions([
         '-map 0:v:0',
         '-map 1:a:0',
-        '-c:v copy',
+        '-c:v libx264',
+        '-preset ultrafast',
+        '-pix_fmt yuv420p',
         '-c:a aac',
         '-b:a 128k',
-        '-shortest',
+        `-t ${audioDur}`,
         '-movflags +faststart',
+        ...X264_MEM_FLAGS,
       ])
       .save(outputPath)
       .on('end', () => { clearTimeout(timer); resolve(); })

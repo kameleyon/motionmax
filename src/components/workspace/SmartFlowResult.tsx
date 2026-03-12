@@ -420,7 +420,7 @@ export function SmartFlowResult({
           ]);
           setExportLogsVersion((v) => v + 1);
           shouldAutoDownloadRef.current = true;
-          void exportVideo(scenes, format, brandMark, projectId).catch(() => {
+          void exportVideo(scenes, format, brandMark, projectId, 'smartflow').catch(() => {
             setExportLogsVersion((v) => v + 1);
           });
         }}

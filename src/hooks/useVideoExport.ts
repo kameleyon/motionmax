@@ -135,7 +135,8 @@ export function useVideoExport() {
       scenes: Scene[],
       format: "landscape" | "portrait" | "square",
       brandMark?: string,
-      projectId?: string
+      projectId?: string,
+      projectType?: string
     ) => {
       if (isExportingRef.current) {
         log("Export already in progress, ignoring duplicate request");
@@ -162,7 +163,7 @@ export function useVideoExport() {
             project_id: resolvedProjectId,
             user_id: user.id,
             task_type: "export_video",
-            payload: { scenes, format, brandMark, project_id: resolvedProjectId } as unknown as Json,
+            payload: { scenes, format, brandMark, project_id: resolvedProjectId, project_type: projectType } as unknown as Json,
             status: "pending",
           })
           .select()

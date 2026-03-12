@@ -108,7 +108,7 @@ function createVideoFromImageAudio(
   });
 }
 
-/** Create a silent video from a still image (with timeout) */
+/** Create a silent video from a still image (includes silent audio track for transition compat) */
 function createSilentVideo(
   imagePath: string,
   outputPath: string,
@@ -118,11 +118,15 @@ function createSilentVideo(
     const cmd = ffmpeg()
       .addInput(imagePath)
       .inputOptions(['-loop 1', '-framerate 24'])
+      .addInput('anullsrc=r=44100:cl=stereo')
+      .inputOptions(['-f lavfi'])
       .videoFilters('scale=trunc(iw/2)*2:trunc(ih/2)*2')
       .outputOptions([
         '-c:v libx264',
         '-preset ultrafast',
         '-tune stillimage',
+        '-c:a aac',
+        '-b:a 64k',
         '-pix_fmt yuv420p',
         `-t ${duration}`,
         '-movflags +faststart',
@@ -197,20 +201,63 @@ async function muxVideoAudio(
   });
 }
 
-/** Stitch scene MP4s using FFmpeg concat demuxer (with timeout) */
-function concatVideos(fileListPath: string, outputPath: string): Promise<void> {
+const TRANSITION_DURATION = 0.3; // seconds — fast cut
+
+/** Pick a single consistent transition for the whole project */
+function pickTransition(projectType?: string): string {
+  if (projectType === 'cinematic' || projectType === 'storytelling') return 'fade';
+  return 'slideup'; // doc2video, smartflow, default
+}
+
+/** Stitch scene MP4s with a consistent xfade transition between each clip */
+async function concatWithTransitions(files: string[], outputPath: string, projectType?: string): Promise<void> {
+  if (files.length === 1) {
+    await fs.promises.copyFile(files[0], outputPath);
+    return;
+  }
+
+  const transition = pickTransition(projectType);
+  const durations = await Promise.all(files.map(probeDuration));
+  console.log(`[ExportVideo] Transition: ${transition} (${projectType ?? 'default'}), ${files.length} scenes`);
+
+  // Build xfade chain for video + aconcat for audio
+  let filterComplex = '';
+  let prevVLabel = '[0:v]';
+  let cumulativeOffset = 0;
+
+  for (let i = 1; i < files.length; i++) {
+    cumulativeOffset += durations[i - 1] - TRANSITION_DURATION;
+    const outLabel = i === files.length - 1 ? '[vout]' : `[vx${i}]`;
+    filterComplex += `${prevVLabel}[${i}:v]xfade=transition=${transition}:duration=${TRANSITION_DURATION}:offset=${cumulativeOffset.toFixed(3)}${outLabel};`;
+    prevVLabel = outLabel;
+  }
+
+  const audioInputs = files.map((_, i) => `[${i}:a]`).join('');
+  filterComplex += `${audioInputs}concat=n=${files.length}:v=0:a=1[aout]`;
+
   return new Promise((resolve, reject) => {
-    const cmd = ffmpeg()
-      .input(fileListPath)
-      .inputOptions(['-f concat', '-safe 0'])
-      .outputOptions('-c copy')
+    const cmd = ffmpeg();
+    files.forEach(f => cmd.addInput(f));
+    cmd
+      .complexFilter(filterComplex)
+      .outputOptions([
+        '-map [vout]',
+        '-map [aout]',
+        '-c:v libx264',
+        '-preset ultrafast',
+        '-pix_fmt yuv420p',
+        '-c:a aac',
+        '-b:a 128k',
+        '-movflags +faststart',
+        ...X264_MEM_FLAGS,
+      ])
       .save(outputPath)
       .on('end', () => { clearTimeout(timer); resolve(); })
       .on('error', (err) => { clearTimeout(timer); reject(err); });
 
     const timer = setTimeout(() => {
       cmd.kill('SIGKILL');
-      reject(new Error(`FFmpeg concat timed out after ${FFMPEG_TIMEOUT_SEC}s`));
+      reject(new Error(`FFmpeg concat+transitions timed out after ${FFMPEG_TIMEOUT_SEC}s`));
     }, FFMPEG_TIMEOUT_SEC * 1000);
   });
 }
@@ -262,13 +309,12 @@ async function processScene(
 }
 
 export async function handleExportVideo(jobId: string, payload: any, userId?: string) {
-  const { scenes, format, brandMark, project_id } = payload;
+  const { scenes, format, brandMark, project_id, project_type } = payload;
 
   await writeSystemLog({ jobId, projectId: project_id, userId, category: "system_info", eventType: "export_video_started", message: `Started video stitching for ${scenes.length} scenes` });
 
   console.log(`[ExportVideo] Starting processing for job ${jobId}`);
   const tempDir = path.join(os.tmpdir(), `motionmax_export_${jobId}`);
-  const fileListPath = path.join(tempDir, 'files.txt');
   const finalOutputPath = path.join(tempDir, 'final_export.mp4');
 
   try {
@@ -309,12 +355,9 @@ export async function handleExportVideo(jobId: string, payload: any, userId?: st
     await writeSystemLog({ jobId, projectId: project_id, userId, category: "system_info", eventType: "export_download_complete", message: `Created ${downloadedFiles.length} scene videos`});
     await supabase.from('video_generation_jobs').update({ progress: 60 }).eq('id', jobId);
 
-    // 2. Stitch using FFmpeg concat demuxer
-    const fileContent = downloadedFiles.map(file => `file '${file.replace(/\\/g, '/')}'`).join('\n');
-    await fs.promises.writeFile(fileListPath, fileContent);
-
-    await writeSystemLog({ jobId, projectId: project_id, userId, category: "system_info", eventType: "ffmpeg_stitch_started", message: `Starting FFmpeg concat`});
-    await concatVideos(fileListPath, finalOutputPath);
+    // 2. Stitch with xfade transitions
+    await writeSystemLog({ jobId, projectId: project_id, userId, category: "system_info", eventType: "ffmpeg_stitch_started", message: `Starting FFmpeg stitch with transitions`});
+    await concatWithTransitions(downloadedFiles, finalOutputPath, project_type);
 
     // Free individual scene MP4s after concat produces the final file
     for (const f of downloadedFiles) removeFiles(f);

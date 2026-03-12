@@ -322,9 +322,8 @@ You are writing prompts for a generative video AI that CANNOT do lip-sync. You m
      - **Crane up / Crane down** — sweeping vertical rise or descent of camera; cinematic scale-building
      - **Handheld / Steadicam** — slight organic sway for documentary realism vs. buttery-smooth glide for elegance
      - **Dutch angle / Roll** — camera rolls on Z-axis, tilting the horizon line; creates kinetic tension for action or music
-     - **Zoom in / Zoom out** — focal length change only, no physical movement; compresses/expands depth of field
-     - **Dolly zoom (Vertigo)** — simultaneous dolly out + zoom in; creates unsettling spatial distortion
      - **Rack focus** — shifts focus between foreground and background subjects within the same shot
+  - ⛔ **BANNED: Zoom in / Zoom out** — do NOT use any zoom effect. No "zoom in", no "zoom out", no "dolly zoom", no "Vertigo effect". Use Dolly in/out for depth movement instead.
 
 4. **STATIC POSES:** For dialogue-heavy moments, use "Static pose with subtle breathing and idle movement" or "Cinematic portrait, staring intensely."
 
@@ -362,7 +361,7 @@ Your visualPrompt must be optimized for AI VIDEO generation, NOT static images. 
    - **Rotational (fixed axis):** Pan left, Pan right, Tilt up, Tilt down
    - **Translational (full camera travel):** Dolly in, Dolly out, Truck left, Truck right, Pedestal up/down, Crane up/down
    - **Orbital:** Orbit/Arc around subject (clockwise/counter-clockwise), Drone arc
-   - **Advanced:** Handheld jitter, Steadicam glide, Dutch angle roll, Rack focus shift, Dolly zoom (Vertigo effect)
+   - **Advanced:** Handheld jitter, Steadicam glide, Dutch angle roll, Rack focus shift
    - **Examples:**
      - "Camera pans right slowly, revealing the full scale of the battlefield"
      - "Dolly in close on her face as she reads the letter — background blurs with parallax"

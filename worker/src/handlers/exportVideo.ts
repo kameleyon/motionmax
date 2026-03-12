@@ -150,6 +150,8 @@ function muxVideoAudio(
       .addInput(videoPath)
       .addInput(audioPath)
       .outputOptions([
+        '-map 0:v:0',
+        '-map 1:a:0',
         '-c:v copy',
         '-c:a aac',
         '-b:a 128k',

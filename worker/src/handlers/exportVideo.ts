@@ -139,6 +139,34 @@ function createSilentVideo(
   });
 }
 
+/** Mux an existing video with a separate audio track (no video re-encode, fast) */
+function muxVideoAudio(
+  videoPath: string,
+  audioPath: string,
+  outputPath: string
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cmd = ffmpeg()
+      .addInput(videoPath)
+      .addInput(audioPath)
+      .outputOptions([
+        '-c:v copy',
+        '-c:a aac',
+        '-b:a 128k',
+        '-shortest',
+        '-movflags +faststart',
+      ])
+      .save(outputPath)
+      .on('end', () => { clearTimeout(timer); resolve(); })
+      .on('error', (err) => { clearTimeout(timer); reject(new Error(`FFmpeg mux: ${err.message}`)); });
+
+    const timer = setTimeout(() => {
+      cmd.kill('SIGKILL');
+      reject(new Error(`FFmpeg mux timed out after ${FFMPEG_TIMEOUT_SEC}s`));
+    }, FFMPEG_TIMEOUT_SEC * 1000);
+  });
+}
+
 /** Stitch scene MP4s using FFmpeg concat demuxer (with timeout) */
 function concatVideos(fileListPath: string, outputPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -165,7 +193,16 @@ async function processScene(
 ): Promise<{ index: number; path: string | null }> {
   const localPath = path.join(tempDir, `scene_${i}.mp4`);
 
-  if (scene.videoUrl) {
+  if (scene.videoUrl && scene.audioUrl) {
+    const vidPath = path.join(tempDir, `scene_${i}_vid.mp4`);
+    const audPath = path.join(tempDir, `scene_${i}_aud.mp3`);
+    console.log(`[ExportVideo] Scene ${i}: video+audio → mux`);
+    await streamToFile(scene.videoUrl, vidPath);
+    await streamToFile(scene.audioUrl, audPath);
+    await muxVideoAudio(vidPath, audPath, localPath);
+    removeFiles(vidPath, audPath);
+    return { index: i, path: localPath };
+  } else if (scene.videoUrl) {
     console.log(`[ExportVideo] Scene ${i}: downloading video`);
     await streamToFile(scene.videoUrl, localPath);
     return { index: i, path: localPath };

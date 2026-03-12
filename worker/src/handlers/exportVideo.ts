@@ -262,6 +262,84 @@ async function concatWithTransitions(files: string[], outputPath: string, projec
   });
 }
 
+const SLIDE_TRANSITION_DURATION = 0.3; // cross-fade between sub-images within a scene
+
+/** Concat sub-image clips with a cross-fade transition between each one */
+async function concatImagesWithFade(files: string[], outputPath: string): Promise<void> {
+  if (files.length === 1) {
+    await fs.promises.copyFile(files[0], outputPath);
+    return;
+  }
+
+  const durations = await Promise.all(files.map(probeDuration));
+
+  let filterComplex = '';
+  let prevLabel = '[0:v]';
+  let cumulativeOffset = 0;
+
+  for (let i = 1; i < files.length; i++) {
+    cumulativeOffset += durations[i - 1] - SLIDE_TRANSITION_DURATION;
+    const outLabel = i === files.length - 1 ? '[vout]' : `[sv${i}]`;
+    filterComplex += `${prevLabel}[${i}:v]xfade=transition=fade:duration=${SLIDE_TRANSITION_DURATION}:offset=${cumulativeOffset.toFixed(3)}${outLabel};`;
+    prevLabel = outLabel;
+  }
+
+  const audioInputs = files.map((_, i) => `[${i}:a]`).join('');
+  filterComplex += `${audioInputs}concat=n=${files.length}:v=0:a=1[aout]`;
+
+  return new Promise((resolve, reject) => {
+    const cmd = ffmpeg();
+    files.forEach(f => cmd.addInput(f));
+    cmd
+      .complexFilter(filterComplex)
+      .outputOptions([
+        '-map [vout]',
+        '-map [aout]',
+        '-c:v libx264',
+        '-preset ultrafast',
+        '-pix_fmt yuv420p',
+        '-c:a aac',
+        '-b:a 64k',
+        '-movflags +faststart',
+        ...X264_MEM_FLAGS,
+      ])
+      .save(outputPath)
+      .on('end', () => { clearTimeout(timer); resolve(); })
+      .on('error', (err) => { clearTimeout(timer); reject(err); });
+
+    const timer = setTimeout(() => {
+      cmd.kill('SIGKILL');
+      reject(new Error(`FFmpeg slideshow-fade timed out after ${FFMPEG_TIMEOUT_SEC}s`));
+    }, FFMPEG_TIMEOUT_SEC * 1000);
+  });
+}
+
+/** Replace audio track in a video without re-encoding video (exact duration) */
+function replaceAudioTrack(videoPath: string, audioPath: string, outputPath: string, duration: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cmd = ffmpeg()
+      .addInput(videoPath)
+      .addInput(audioPath)
+      .outputOptions([
+        '-map 0:v:0',
+        '-map 1:a:0',
+        '-c:v copy',
+        '-c:a aac',
+        '-b:a 128k',
+        `-t ${duration}`,
+        '-movflags +faststart',
+      ])
+      .save(outputPath)
+      .on('end', () => { clearTimeout(timer); resolve(); })
+      .on('error', (err) => { clearTimeout(timer); reject(new Error(`FFmpeg replaceAudio: ${err.message}`)); });
+
+    const timer = setTimeout(() => {
+      cmd.kill('SIGKILL');
+      reject(new Error(`FFmpeg replaceAudio timed out after ${FFMPEG_TIMEOUT_SEC}s`));
+    }, FFMPEG_TIMEOUT_SEC * 1000);
+  });
+}
+
 /** Process a single scene: download or encode to a local MP4 */
 async function processScene(
   i: number,
@@ -283,6 +361,36 @@ async function processScene(
     console.log(`[ExportVideo] Scene ${i}: downloading video`);
     await streamToFile(scene.videoUrl, localPath);
     return { index: i, path: localPath };
+  } else if (Array.isArray(scene.imageUrls) && scene.imageUrls.length > 1 && scene.audioUrl) {
+    // Multi-image slideshow: show each sub-visual for equal time across full audio duration
+    const audPath = path.join(tempDir, `scene_${i}_aud.mp3`);
+    console.log(`[ExportVideo] Scene ${i}: ${scene.imageUrls.length} images+audio → slideshow`);
+    await streamToFile(scene.audioUrl, audPath);
+    const audioDur = await probeDuration(audPath);
+    const n = scene.imageUrls.length;
+    // Each clip must be slightly longer than audioDur/n so xfade overlaps sum correctly:
+    // n * perImgDur - (n-1) * SLIDE_TRANSITION_DURATION = audioDur
+    const perImgDur = (audioDur + (n - 1) * SLIDE_TRANSITION_DURATION) / n;
+
+    const subVids: string[] = [];
+    for (let j = 0; j < n; j++) {
+      const imgPath = path.join(tempDir, `scene_${i}_img${j}.png`);
+      const subVidPath = path.join(tempDir, `scene_${i}_sub${j}.mp4`);
+      await streamToFile(scene.imageUrls[j], imgPath);
+      await createSilentVideo(imgPath, subVidPath, perImgDur);
+      removeFiles(imgPath);
+      subVids.push(subVidPath);
+    }
+
+    const slideshowPath = path.join(tempDir, `scene_${i}_slideshow.mp4`);
+    await concatImagesWithFade(subVids, slideshowPath);
+    removeFiles(...subVids);
+
+    await replaceAudioTrack(slideshowPath, audPath, localPath, audioDur);
+    removeFiles(slideshowPath, audPath);
+    console.log(`[ExportVideo] Scene ${i}: slideshow done (${audioDur.toFixed(1)}s, ${scene.imageUrls.length} images)`);
+    return { index: i, path: localPath };
+
   } else if (scene.imageUrl && scene.audioUrl) {
     const imgPath = path.join(tempDir, `scene_${i}_img.png`);
     const audPath = path.join(tempDir, `scene_${i}_aud.mp3`);

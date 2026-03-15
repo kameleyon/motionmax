@@ -352,13 +352,15 @@ async function processScene(
     console.log(`[ExportVideo] Scene ${i}: downloading video`);
     await streamToFile(scene.videoUrl, localPath);
     return { index: i, path: localPath };
-  } else if (Array.isArray(scene.imageUrls) && scene.imageUrls.length > 1 && scene.audioUrl) {
+  } else if (Array.isArray(scene.imageUrls) && scene.imageUrls.filter(Boolean).length > 1 && scene.audioUrl) {
     // Multi-image slideshow: show each sub-visual for equal time across full audio duration
+    // Filter null slots — imageUrls[2] may be null if only 2 sub-visuals were generated.
+    const validImageUrls: string[] = scene.imageUrls.filter(Boolean);
     const audPath = path.join(tempDir, `scene_${i}_aud.mp3`);
-    console.log(`[ExportVideo] Scene ${i}: ${scene.imageUrls.length} images+audio → slideshow`);
+    console.log(`[ExportVideo] Scene ${i}: ${validImageUrls.length} images+audio → slideshow`);
     await streamToFile(scene.audioUrl, audPath);
     const audioDur = await probeDuration(audPath);
-    const n = scene.imageUrls.length;
+    const n = validImageUrls.length;
     // Each clip must be slightly longer than audioDur/n so xfade overlaps sum correctly:
     // n * perImgDur - (n-1) * SLIDE_TRANSITION_DURATION = audioDur
     const perImgDur = (audioDur + (n - 1) * SLIDE_TRANSITION_DURATION) / n;
@@ -367,7 +369,7 @@ async function processScene(
     for (let j = 0; j < n; j++) {
       const imgPath = path.join(tempDir, `scene_${i}_img${j}.png`);
       const subVidPath = path.join(tempDir, `scene_${i}_sub${j}.mp4`);
-      await streamToFile(scene.imageUrls[j], imgPath);
+      await streamToFile(validImageUrls[j], imgPath);
       await createSilentVideo(imgPath, subVidPath, perImgDur);
       removeFiles(imgPath);
       subVids.push(subVidPath);

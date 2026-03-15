@@ -33,7 +33,6 @@ export function runFfmpeg(
       }
     );
 
-    // Safety: if timeout fires, SIGKILL the process tree
     const timer = setTimeout(() => {
       proc.kill("SIGKILL");
       reject(new Error(`ffmpeg timed out after ${timeoutMs / 1000}s`));
@@ -43,7 +42,7 @@ export function runFfmpeg(
   });
 }
 
-/** Probe a media file and return its duration in seconds. */
+/** Quick metadata-based probe (can be inaccurate for VBR MP3). */
 export function probeDuration(filePath: string): Promise<number> {
   return new Promise((resolve, reject) => {
     execFile(
@@ -59,6 +58,47 @@ export function probeDuration(filePath: string): Promise<number> {
         if (error) return reject(new Error(`ffprobe: ${error.message}`));
         const dur = parseFloat(stdout?.trim() ?? "");
         resolve(Number.isFinite(dur) && dur > 0 ? dur : 10);
+      }
+    );
+  });
+}
+
+/**
+ * Get the EXACT audio duration by fully decoding the file.
+ * This is the gold-standard method — it does NOT rely on container
+ * metadata, which is often wrong for VBR MP3 from TTS APIs.
+ *
+ * Runs: ffmpeg -i file -f null -
+ * Then parses the final "time=HH:MM:SS.xx" from stderr.
+ */
+export function getExactAudioDuration(filePath: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      FFMPEG_BIN,
+      ["-i", filePath, "-f", "null", "-"],
+      { timeout: 60_000, maxBuffer: 5 * 1024 * 1024 },
+      (error, _stdout, stderr) => {
+        // ffmpeg writes progress to stderr even on success;
+        // exit code may be non-zero if file has minor issues — parse anyway
+        const output = stderr ?? "";
+        const matches = output.match(/time=(\d+):(\d+):(\d+\.\d+)/g);
+        if (matches && matches.length > 0) {
+          const last = matches[matches.length - 1];
+          const parts = last.replace("time=", "").split(":");
+          const h = parseFloat(parts[0]);
+          const m = parseFloat(parts[1]);
+          const s = parseFloat(parts[2]);
+          const total = h * 3600 + m * 60 + s;
+          if (total > 0) {
+            console.log(`[ffmpegCmd] Exact decode duration: ${total.toFixed(3)}s for ${filePath}`);
+            return resolve(total);
+          }
+        }
+        // Fallback to ffprobe if decode-parse fails
+        if (error) {
+          console.warn(`[ffmpegCmd] Decode-duration failed, falling back to ffprobe`);
+        }
+        probeDuration(filePath).then(resolve).catch(reject);
       }
     );
   });

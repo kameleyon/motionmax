@@ -119,7 +119,7 @@ async function moderateContent(content: string): Promise<ModerationResult> {
       return { passed: true };
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${geminiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
 
     const payload = {
       contents: [{
@@ -514,8 +514,8 @@ interface LLMCallResult {
   model: string;
 }
 
-const PRIMARY_LLM_MODEL = "gemini-3.1-pro-preview";
-const FALLBACK_MODEL = "gemini-3.1-flash-lite-preview";
+const PRIMARY_LLM_MODEL = "google/gemini-3.1-pro-preview";
+const FALLBACK_MODEL = "google/gemini-3.1-flash-lite-preview";
 
 function getLLMModelsToTry(primaryModel: string): string[] {
   return Array.from(new Set([primaryModel, FALLBACK_MODEL]));
@@ -534,18 +534,17 @@ async function callLLMWithFallback(
   const temperature = options.temperature ?? 0.7;
   const maxTokens = options.maxTokens ?? 8192;
 
-  // Use Google Gemini API directly via GOOGLE_TTS_API_KEY
-  const GEMINI_API_KEY = Deno.env.get("GOOGLE_TTS_API_KEY");
+  const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
 
-  if (!GEMINI_API_KEY) {
-    throw new Error("GOOGLE_TTS_API_KEY is not configured (required for Gemini script generation)");
+  if (!OPENROUTER_API_KEY) {
+    throw new Error("OPENROUTER_API_KEY is not configured");
   }
 
   // Try primary model first, then fallback on transport or parse/format errors.
   const modelsToTry = getLLMModelsToTry(primaryModel);
   let lastError: Error | null = null;
 
-  console.log(`[LLM] Starting Gemini request${options.jsonLabel ? ` for ${options.jsonLabel}` : ""}`, {
+  console.log(`[LLM] Starting request${options.jsonLabel ? ` for ${options.jsonLabel}` : ""}`, {
     modelsToTry,
     temperature,
     maxTokens,
@@ -563,7 +562,7 @@ async function callLLMWithFallback(
         nextModel: nextModel || null,
       });
 
-      const result = await callGeminiAPI(GEMINI_API_KEY, model, prompt, temperature, maxTokens);
+      const result = await callOpenRouter(OPENROUTER_API_KEY, model, prompt, temperature, maxTokens);
 
       if (options.jsonLabel) {
         console.log(`[LLM] Validating JSON response from ${model} for ${options.jsonLabel}`, {
@@ -596,7 +595,7 @@ async function callLLMWithFallback(
   throw lastError || new Error("All LLM models failed");
 }
 
-async function callGeminiAPI(
+async function callOpenRouter(
   apiKey: string,
   model: string,
   prompt: string,
@@ -604,31 +603,32 @@ async function callGeminiAPI(
   maxTokens: number,
 ): Promise<LLMCallResult> {
   const startTime = Date.now();
-  console.log(`[LLM] Calling Google Gemini API with ${model}...`, {
+  console.log(`[LLM] Calling OpenRouter with ${model}...`, {
     temperature,
     maxTokens,
     promptLength: prompt.length,
     promptPreview: prompt.substring(0, 240),
   });
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-  const response = await fetch(url, {
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+      "HTTP-Referer": "https://motionmax.io",
+      "X-Title": "MotionMax",
+    },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature,
-        maxOutputTokens: maxTokens,
-        responseMimeType: "application/json",
-      },
+      model,
+      messages: [{ role: "user", content: prompt }],
+      temperature,
+      max_tokens: maxTokens,
     }),
   });
 
   const durationMs = Date.now() - startTime;
 
-  console.log(`[LLM] Gemini ${model} HTTP response received`, {
+  console.log(`[LLM] OpenRouter ${model} HTTP response received`, {
     status: response.status,
     ok: response.ok,
     durationMs,
@@ -636,38 +636,33 @@ async function callGeminiAPI(
 
   if (!response.ok) {
     const errText = await response.text().catch(() => "");
-    console.error(`[LLM] Gemini ${model} request failed`, {
+    console.error(`[LLM] OpenRouter ${model} request failed`, {
       status: response.status,
       durationMs,
       errorPreview: errText.substring(0, 500),
     });
-    throw new Error(`Gemini ${model} failed (${response.status}): ${errText.substring(0, 200)}`);
+    throw new Error(`OpenRouter ${model} failed (${response.status}): ${errText.substring(0, 200)}`);
   }
 
   const data = await response.json();
-  const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  const content = data.choices?.[0]?.message?.content;
 
   if (!content) {
-    console.error(`[LLM] Gemini ${model} returned empty content`, {
+    console.error(`[LLM] OpenRouter ${model} returned empty content`, {
       durationMs,
       responseKeys: Object.keys(data || {}),
-      finishReason: data.candidates?.[0]?.finishReason,
     });
-    throw new Error(`No content received from Gemini (${model})`);
+    throw new Error(`No content received from OpenRouter (${model})`);
   }
 
-  const tokensUsed =
-    (data.usageMetadata?.promptTokenCount || 0) +
-    (data.usageMetadata?.candidatesTokenCount || 0);
-
-  console.log(`[LLM] Gemini ${model} success: ${tokensUsed} tokens, ${durationMs}ms`, {
+  console.log(`[LLM] OpenRouter ${model} success: ${data.usage?.total_tokens || 0} tokens, ${durationMs}ms`, {
     contentLength: typeof content === "string" ? content.length : 0,
     contentPreview: typeof content === "string" ? content.substring(0, 240) : null,
   });
   return {
     content,
-    tokensUsed,
-    provider: "openrouter", // Keep provider label for logging compatibility
+    tokensUsed: data.usage?.total_tokens || 0,
+    provider: "openrouter",
     durationMs,
     model,
   };

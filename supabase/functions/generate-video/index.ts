@@ -514,7 +514,7 @@ interface LLMCallResult {
   model: string;
 }
 
-const PRIMARY_LLM_MODEL = "anthropic/claude-sonnet-4.6";
+const PRIMARY_LLM_MODEL = "anthropic/claude-sonnet-4";
 const FALLBACK_MODEL = "google/gemini-3.1-flash-lite-preview";
 
 function getLLMModelsToTry(primaryModel: string): string[] {
@@ -533,8 +533,8 @@ async function callLLMWithFallback(
   const primaryModel = options.model || PRIMARY_LLM_MODEL;
   const temperature = options.temperature ?? 0.7;
   const maxTokens = options.maxTokens ?? 8192;
-  // Time budget: Supabase gateway kills at ~150s. We need margin for pre-flight + DB ops.
-  const GATEWAY_BUDGET_MS = 120_000;
+  // Time budget: Supabase gateway kills at ~150s. Give primary model max time.
+  const GATEWAY_BUDGET_MS = 140_000;
   const budgetStart = Date.now();
 
   const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
@@ -560,12 +560,12 @@ async function callLLMWithFallback(
     const model = modelsToTry[index];
     const nextModel = modelsToTry[index + 1];
 
-    // Compute per-attempt timeout: primary gets 80s, fallback gets rest
+    // Compute per-attempt timeout: primary gets 130s max, fallback gets rest
     const elapsed = Date.now() - budgetStart;
     const remaining = GATEWAY_BUDGET_MS - elapsed;
     const perAttemptMs = nextModel
-      ? Math.min(80_000, Math.max(20_000, remaining - 35_000))
-      : Math.max(20_000, remaining - 5_000);
+      ? Math.min(130_000, Math.max(20_000, remaining - 15_000))
+      : Math.max(15_000, remaining - 3_000);
 
     if (remaining < 10_000) {
       console.warn(`[LLM] Time budget exhausted (${remaining}ms left), skipping ${model}`);

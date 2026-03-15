@@ -153,7 +153,10 @@ async function pollQueue() {
 
 const POLL_INTERVAL_MS = 5000;
 
-/** Run once at startup to verify DB connectivity and log table state. */
+// Jobs stuck in 'processing' for longer than this are orphaned (worker crashed mid-run).
+const STALE_JOB_THRESHOLD_MS = 20 * 60 * 1000; // 20 minutes
+
+/** Run once at startup to verify DB connectivity and rescue stale jobs. */
 async function startupDiagnostic(): Promise<void> {
   try {
     const { count, error } = await supabase
@@ -162,24 +165,56 @@ async function startupDiagnostic(): Promise<void> {
 
     if (error) {
       console.error("[Worker] ❌ Startup diagnostic FAILED — cannot read video_generation_jobs:", error.code, error.message);
-    } else {
-      console.log(`[Worker] ✅ Startup diagnostic OK — video_generation_jobs has ${count ?? 0} total row(s)`);
+      return;
+    }
+    console.log(`[Worker] ✅ Startup diagnostic OK — video_generation_jobs has ${count ?? 0} total row(s)`);
+
+    // Find all 'processing' jobs
+    const { data: processingRows } = await supabase
+      .from("video_generation_jobs")
+      .select("id, status, created_at, updated_at, task_type")
+      .eq("status", "processing")
+      .order("created_at", { ascending: true });
+
+    if (processingRows && processingRows.length > 0) {
+      const now = Date.now();
+      const staleIds: string[] = [];
+
+      for (const row of processingRows as any[]) {
+        const lastUpdated = new Date(row.updated_at || row.created_at).getTime();
+        const age = now - lastUpdated;
+
+        if (age > STALE_JOB_THRESHOLD_MS) {
+          staleIds.push(row.id);
+          console.warn(
+            `[Worker] ⚠️  Stale job detected: ${row.id} (${row.task_type}, stuck ${Math.round(age / 60000)}min) → marking FAILED`,
+          );
+        }
+      }
+
+      if (staleIds.length > 0) {
+        await supabase
+          .from("video_generation_jobs")
+          .update({ status: "failed", error_message: "Worker restarted — job was stuck in processing for too long. Please retry.", updated_at: new Date().toISOString() })
+          .in("id", staleIds);
+        console.log(`[Worker] 🧹 Cleared ${staleIds.length} stale job(s)`);
+      }
     }
 
-    // Check for any pending/processing rows right now
-    const { data: pendingRows, error: pendingErr } = await supabase
+    // Show pending/processing jobs remaining after cleanup
+    const { data: pendingRows } = await supabase
       .from("video_generation_jobs")
-      .select("id, status, created_at")
+      .select("id, status, task_type, created_at")
       .in("status", ["pending", "processing"])
       .order("created_at", { ascending: true })
       .limit(5);
 
-    if (!pendingErr && pendingRows && pendingRows.length > 0) {
-      console.log(`[Worker] 📋 Found ${pendingRows.length} pending/processing job(s) at startup:`,
-        pendingRows.map((r: any) => ({ id: r.id, status: r.status, created_at: r.created_at }))
+    if (pendingRows && pendingRows.length > 0) {
+      console.log(`[Worker] 📋 ${pendingRows.length} job(s) queued:`,
+        pendingRows.map((r: any) => ({ id: r.id, task_type: r.task_type, status: r.status }))
       );
-    } else if (!pendingErr) {
-      console.log("[Worker] 📋 No pending/processing jobs at startup.");
+    } else {
+      console.log("[Worker] 📋 No pending jobs at startup.");
     }
   } catch (err) {
     console.error("[Worker] ❌ Startup diagnostic exception:", err);

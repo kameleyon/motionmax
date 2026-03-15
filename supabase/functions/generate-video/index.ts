@@ -3130,9 +3130,9 @@ async function handleScriptPhase(
   const phaseStart = Date.now();
 
   const lengthConfig: Record<string, { count: number; targetDuration: number; avgSceneDuration: number }> = {
-    short: { count: 6, targetDuration: 90, avgSceneDuration: 15 },
-    brief: { count: 12, targetDuration: 180, avgSceneDuration: 15 },
-    presentation: { count: 24, targetDuration: 360, avgSceneDuration: 15 },
+    short: { count: 12, targetDuration: 180, avgSceneDuration: 15 },
+    brief: { count: 28, targetDuration: 420, avgSceneDuration: 15 },
+    presentation: { count: 36, targetDuration: 540, avgSceneDuration: 15 },
   };
   const config = lengthConfig[length] || lengthConfig.brief;
   const sceneCount = config.count;
@@ -3304,8 +3304,8 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
 
   console.log(`Phase: DOC2VIDEO SCRIPT - Generating via OpenRouter with ${PRIMARY_LLM_MODEL}...`);
 
-  // Scale maxTokens: keep small to stay within gateway timeout (12-15s voiceover per scene)
-  const doc2videoMaxTokens = length === "presentation" ? 8192 : length === "brief" ? 6000 : 4096;
+  // Scale maxTokens based on scene count (12-15s voiceover per scene)
+  const doc2videoMaxTokens = length === "presentation" ? 12000 : length === "brief" ? 10000 : 6000;
 
   const llmResult = await callLLMWithFallback(scriptPrompt, {
     temperature: 0.7,
@@ -3477,10 +3477,10 @@ async function handleStorytellingScriptPhase(
 
   // Map storytelling lengths to scene counts
   const lengthConfig: Record<string, { count: number; targetDuration: number; avgSceneDuration: number }> = {
-    short: { count: 4, targetDuration: 60, avgSceneDuration: 15 },
-    brief: { count: 8, targetDuration: 120, avgSceneDuration: 15 },
-    extended: { count: 16, targetDuration: 240, avgSceneDuration: 15 },
-    presentation: { count: 16, targetDuration: 240, avgSceneDuration: 15 },
+    short: { count: 12, targetDuration: 180, avgSceneDuration: 15 },
+    brief: { count: 28, targetDuration: 420, avgSceneDuration: 15 },
+    extended: { count: 36, targetDuration: 540, avgSceneDuration: 15 },
+    presentation: { count: 36, targetDuration: 540, avgSceneDuration: 15 },
   };
   const config = lengthConfig[length] || lengthConfig.brief;
   const sceneCount = config.count;
@@ -3697,7 +3697,7 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
 
   const llmResult = await callLLMWithFallback(scriptPrompt, {
     temperature: 0.8, // Slightly higher for creative storytelling
-    maxTokens: 6000, // Reduced: 12-15s voiceover per scene needs fewer tokens
+    maxTokens: 10000, // Scaled for up to 36 scenes with 12-15s voiceover each
     jsonLabel: "Storytelling script",
   });
 

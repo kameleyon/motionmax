@@ -236,9 +236,9 @@ async function generateScriptWithGemini(
     string,
     { minScenes: number; maxScenes: number; targetDuration: number; maxSceneDuration: number }
   > = {
-    short: { minScenes: 11, maxScenes: 17, targetDuration: 165, maxSceneDuration: 10 },
-    brief: { minScenes: 6, maxScenes: 10, targetDuration: 150, maxSceneDuration: 10 },
-    presentation: { minScenes: 8, maxScenes: 12, targetDuration: 180, maxSceneDuration: 10 },
+    short: { minScenes: 12, maxScenes: 12, targetDuration: 180, maxSceneDuration: 15 },
+    brief: { minScenes: 28, maxScenes: 28, targetDuration: 420, maxSceneDuration: 15 },
+    presentation: { minScenes: 36, maxScenes: 36, targetDuration: 540, maxSceneDuration: 15 },
   };
   const config = lengthConfig[params.length] || lengthConfig.brief;
 

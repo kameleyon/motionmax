@@ -65,15 +65,12 @@ async function workerCallPhase(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
-  // project_id is NOT NULL in the table but the worker creates the real
-  // project during script generation, so we use a placeholder UUID here.
-  const placeholderProjectId = crypto.randomUUID();
-
+  // project_id is NULL for script phase — the worker creates the real project
   const { data: job, error: insertError } = await supabase
     .from("video_generation_jobs")
     .insert({
       user_id: user.id,
-      project_id: placeholderProjectId,
+      project_id: null,
       task_type: "generate_video",
       status: "pending",
       payload: { ...body, phase: "script" } as any,

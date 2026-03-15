@@ -134,7 +134,42 @@ async function pollQueue() {
 }
 
 const POLL_INTERVAL_MS = 5000;
-setInterval(pollQueue, POLL_INTERVAL_MS);
+
+/** Run once at startup to verify DB connectivity and log table state. */
+async function startupDiagnostic(): Promise<void> {
+  try {
+    const { count, error } = await supabase
+      .from("video_generation_jobs")
+      .select("id", { count: "exact", head: true });
+
+    if (error) {
+      console.error("[Worker] ❌ Startup diagnostic FAILED — cannot read video_generation_jobs:", error.code, error.message);
+    } else {
+      console.log(`[Worker] ✅ Startup diagnostic OK — video_generation_jobs has ${count ?? 0} total row(s)`);
+    }
+
+    // Check for any pending/processing rows right now
+    const { data: pendingRows, error: pendingErr } = await supabase
+      .from("video_generation_jobs")
+      .select("id, status, created_at")
+      .in("status", ["pending", "processing"])
+      .order("created_at", { ascending: true })
+      .limit(5);
+
+    if (!pendingErr && pendingRows && pendingRows.length > 0) {
+      console.log(`[Worker] 📋 Found ${pendingRows.length} pending/processing job(s) at startup:`,
+        pendingRows.map((r: any) => ({ id: r.id, status: r.status, created_at: r.created_at }))
+      );
+    } else if (!pendingErr) {
+      console.log("[Worker] 📋 No pending/processing jobs at startup.");
+    }
+  } catch (err) {
+    console.error("[Worker] ❌ Startup diagnostic exception:", err);
+  }
+}
 
 console.log(`[Worker] MotionMax Render Worker started. Polling every ${POLL_INTERVAL_MS}ms.`);
-pollQueue();
+startupDiagnostic().then(() => {
+  pollQueue();
+  setInterval(pollQueue, POLL_INTERVAL_MS);
+});

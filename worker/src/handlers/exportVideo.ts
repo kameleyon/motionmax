@@ -36,9 +36,8 @@ async function uploadToSupabase(localPath: string, fileName: string): Promise<st
   const stat = await fs.promises.stat(localPath);
   const stream = fs.createReadStream(localPath);
 
-  // Use Supabase Storage REST directly with a stream body to avoid buffering
-  const supabaseUrl = process.env.SUPABASE_URL!;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY!;
+  // Use validated Supabase URL from shared module (handles project migration)
+  const { WORKER_SUPABASE_URL: supabaseUrl, WORKER_SUPABASE_KEY: supabaseKey } = await import("../lib/supabase.js");
   const storagePath = `exports/${fileName}`;
 
   const uploadUrl = `${supabaseUrl}/storage/v1/object/${BUCKET_NAME}/${storagePath}`;

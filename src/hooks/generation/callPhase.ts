@@ -103,11 +103,11 @@ async function pollWorkerJob(jobId: string): Promise<any> {
 
     await sleep(POLL_INTERVAL);
 
-    // The DB has a `result` JSONB column added after the TypeScript types
-    // were generated, so we cast the query through `as any` to access it.
-    const { data: row, error: pollError } = await supabase
-      .from("video_generation_jobs")
-      .select("status, error_message, payload")
+    // The DB has a `result` JSONB column written by the worker.
+    // We cast through `as any` since the auto-generated types may lag.
+    const { data: row, error: pollError } = await (supabase
+      .from("video_generation_jobs") as any)
+      .select("status, error_message, payload, result")
       .eq("id", jobId)
       .single();
 

@@ -689,6 +689,7 @@ export type Database = {
           task_type: string
           status: string
           payload: Json | null
+          result: Json | null
           progress: number | null
           error_message: string | null
           created_at: string
@@ -701,6 +702,7 @@ export type Database = {
           task_type: string
           status?: string
           payload?: Json | null
+          result?: Json | null
           progress?: number | null
           error_message?: string | null
           created_at?: string
@@ -713,6 +715,7 @@ export type Database = {
           task_type?: string
           status?: string
           payload?: Json | null
+          result?: Json | null
           progress?: number | null
           error_message?: string | null
           created_at?: string

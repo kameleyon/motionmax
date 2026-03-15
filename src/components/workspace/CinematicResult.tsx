@@ -134,7 +134,7 @@ export function CinematicResult({
 }: CinematicResultProps) {
   const navigate = useNavigate();
 
-  // Compute aspect ratio class from format
+  // Compute aspect ratio class from format -test
   const aspectClass = format === "portrait" ? "aspect-[9/16]" : format === "square" ? "aspect-square" : "aspect-video";
 
   const [localScenes, setLocalScenes] = useState<CinematicScene[]>(scenes);

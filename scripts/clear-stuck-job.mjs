@@ -14,7 +14,7 @@ if (!key) { console.error("No key found"); process.exit(1); }
 
 const supabase = createClient(url, key);
 
-const STUCK_JOB_ID = "25be55d7-ef26-479d-b654-b3afe4e182db";
+const STUCK_JOB_ID = "eb03bea9-0489-4eec-bb25-d91abf5ee8c6";
 
 const { data, error } = await supabase
   .from("video_generation_jobs")

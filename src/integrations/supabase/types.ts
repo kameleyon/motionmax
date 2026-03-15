@@ -684,7 +684,7 @@ export type Database = {
       video_generation_jobs: {
         Row: {
           id: string
-          project_id: string
+          project_id: string | null
           user_id: string
           task_type: string
           status: string
@@ -696,7 +696,7 @@ export type Database = {
         }
         Insert: {
           id?: string
-          project_id: string
+          project_id?: string | null
           user_id: string
           task_type: string
           status?: string

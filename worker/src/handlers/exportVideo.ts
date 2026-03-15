@@ -7,8 +7,10 @@ import { pipeline } from "stream/promises";
 import ffmpeg from "fluent-ffmpeg";
 import { writeSystemLog } from "../lib/logger.js";
 
-const FFMPEG_TIMEOUT_SEC = 120; // 2 minutes per FFmpeg operation
-const SCENE_BATCH_SIZE = 4;     // scenes processed in parallel (I/O bound downloads)
+const FFMPEG_TIMEOUT_SEC = 180; // 3 minutes per FFmpeg operation
+// Process ONE scene at a time — each scene runs up to 6 FFmpeg sub-processes.
+// With 4 scenes in parallel that's 24 FFmpeg procs → OOM on Render's 512MB.
+const SCENE_BATCH_SIZE = 1;
 
 /** Memory-safe x264 flags — keeps libx264 under ~40MB by using 1 thread + minimal buffers */
 const X264_MEM_FLAGS = [

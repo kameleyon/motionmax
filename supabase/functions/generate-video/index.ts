@@ -533,6 +533,9 @@ async function callLLMWithFallback(
   const primaryModel = options.model || PRIMARY_LLM_MODEL;
   const temperature = options.temperature ?? 0.7;
   const maxTokens = options.maxTokens ?? 8192;
+  // Time budget: Supabase gateway kills at ~150s. We need margin for pre-flight + DB ops.
+  const GATEWAY_BUDGET_MS = 120_000;
+  const budgetStart = Date.now();
 
   const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
 
@@ -548,6 +551,7 @@ async function callLLMWithFallback(
     modelsToTry,
     temperature,
     maxTokens,
+    gatewayBudgetMs: GATEWAY_BUDGET_MS,
     promptLength: prompt.length,
     promptPreview: prompt.substring(0, 240),
   });
@@ -556,13 +560,27 @@ async function callLLMWithFallback(
     const model = modelsToTry[index];
     const nextModel = modelsToTry[index + 1];
 
+    // Compute per-attempt timeout: primary gets 80s, fallback gets rest
+    const elapsed = Date.now() - budgetStart;
+    const remaining = GATEWAY_BUDGET_MS - elapsed;
+    const perAttemptMs = nextModel
+      ? Math.min(80_000, Math.max(20_000, remaining - 35_000))
+      : Math.max(20_000, remaining - 5_000);
+
+    if (remaining < 10_000) {
+      console.warn(`[LLM] Time budget exhausted (${remaining}ms left), skipping ${model}`);
+      break;
+    }
+
     try {
       console.log(`[LLM] Attempt ${index + 1}/${modelsToTry.length}${options.jsonLabel ? ` for ${options.jsonLabel}` : ""}`, {
         model,
         nextModel: nextModel || null,
+        perAttemptMs,
+        remainingBudgetMs: remaining,
       });
 
-      const result = await callOpenRouter(OPENROUTER_API_KEY, model, prompt, temperature, maxTokens);
+      const result = await callOpenRouter(OPENROUTER_API_KEY, model, prompt, temperature, maxTokens, perAttemptMs);
 
       if (options.jsonLabel) {
         console.log(`[LLM] Validating JSON response from ${model} for ${options.jsonLabel}`, {
@@ -601,71 +619,88 @@ async function callOpenRouter(
   prompt: string,
   temperature: number,
   maxTokens: number,
+  timeoutMs: number = 110_000,
 ): Promise<LLMCallResult> {
   const startTime = Date.now();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
   console.log(`[LLM] Calling OpenRouter with ${model}...`, {
     temperature,
     maxTokens,
+    timeoutMs,
     promptLength: prompt.length,
     promptPreview: prompt.substring(0, 240),
   });
 
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-      "HTTP-Referer": "https://motionmax.io",
-      "X-Title": "MotionMax",
-    },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: "user", content: prompt }],
-      temperature,
-      max_tokens: maxTokens,
-    }),
-  });
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+        "HTTP-Referer": "https://motionmax.io",
+        "X-Title": "MotionMax",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: prompt }],
+        temperature,
+        max_tokens: maxTokens,
+      }),
+      signal: controller.signal,
+    });
 
-  const durationMs = Date.now() - startTime;
+    clearTimeout(timeoutId);
+    const durationMs = Date.now() - startTime;
 
-  console.log(`[LLM] OpenRouter ${model} HTTP response received`, {
-    status: response.status,
-    ok: response.ok,
-    durationMs,
-  });
-
-  if (!response.ok) {
-    const errText = await response.text().catch(() => "");
-    console.error(`[LLM] OpenRouter ${model} request failed`, {
+    console.log(`[LLM] OpenRouter ${model} HTTP response received`, {
       status: response.status,
+      ok: response.ok,
       durationMs,
-      errorPreview: errText.substring(0, 500),
     });
-    throw new Error(`OpenRouter ${model} failed (${response.status}): ${errText.substring(0, 200)}`);
-  }
 
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content;
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      console.error(`[LLM] OpenRouter ${model} request failed`, {
+        status: response.status,
+        durationMs,
+        errorPreview: errText.substring(0, 500),
+      });
+      throw new Error(`OpenRouter ${model} failed (${response.status}): ${errText.substring(0, 200)}`);
+    }
 
-  if (!content) {
-    console.error(`[LLM] OpenRouter ${model} returned empty content`, {
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+
+    if (!content) {
+      console.error(`[LLM] OpenRouter ${model} returned empty content`, {
+        durationMs,
+        responseKeys: Object.keys(data || {}),
+      });
+      throw new Error(`No content received from OpenRouter (${model})`);
+    }
+
+    console.log(`[LLM] OpenRouter ${model} success: ${data.usage?.total_tokens || 0} tokens, ${durationMs}ms`, {
+      contentLength: typeof content === "string" ? content.length : 0,
+      contentPreview: typeof content === "string" ? content.substring(0, 240) : null,
+    });
+    return {
+      content,
+      tokensUsed: data.usage?.total_tokens || 0,
+      provider: "openrouter",
       durationMs,
-      responseKeys: Object.keys(data || {}),
-    });
-    throw new Error(`No content received from OpenRouter (${model})`);
+      model,
+    };
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err instanceof Error && err.name === "AbortError") {
+      const elapsed = Date.now() - startTime;
+      console.warn(`[LLM] OpenRouter ${model} timed out after ${elapsed}ms (limit: ${timeoutMs}ms)`);
+      throw new Error(`OpenRouter ${model} timed out after ${Math.round(elapsed / 1000)}s`);
+    }
+    throw err;
   }
-
-  console.log(`[LLM] OpenRouter ${model} success: ${data.usage?.total_tokens || 0} tokens, ${durationMs}ms`, {
-    contentLength: typeof content === "string" ? content.length : 0,
-    contentPreview: typeof content === "string" ? content.substring(0, 240) : null,
-  });
-  return {
-    content,
-    tokensUsed: data.usage?.total_tokens || 0,
-    provider: "openrouter",
-    durationMs,
-    model,
-  };
 }
 
 // ============= API CALL LOGGING =============
@@ -3269,8 +3304,8 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
 
   console.log(`Phase: DOC2VIDEO SCRIPT - Generating via OpenRouter with ${PRIMARY_LLM_MODEL}...`);
 
-  // Scale maxTokens based on scene count to prevent truncation
-  const doc2videoMaxTokens = length === "presentation" ? 16384 : length === "brief" ? 12000 : 8192;
+  // Scale maxTokens: keep small to stay within gateway timeout (12-15s voiceover per scene)
+  const doc2videoMaxTokens = length === "presentation" ? 8192 : length === "brief" ? 6000 : 4096;
 
   const llmResult = await callLLMWithFallback(scriptPrompt, {
     temperature: 0.7,
@@ -3662,7 +3697,7 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
 
   const llmResult = await callLLMWithFallback(scriptPrompt, {
     temperature: 0.8, // Slightly higher for creative storytelling
-    maxTokens: 12000, // More tokens for longer narratives
+    maxTokens: 6000, // Reduced: 12-15s voiceover per scene needs fewer tokens
     jsonLabel: "Storytelling script",
   });
 

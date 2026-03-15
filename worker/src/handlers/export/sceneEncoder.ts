@@ -187,7 +187,7 @@ async function slideshowFromImages(
 
   // 2. Concatenate sub-clips
   const slideshowPath = path.join(tempDir, `scene_${sceneIndex}_slideshow.mp4`);
-  await concatFiles(subClips, slideshowPath);
+  await concatFiles(subClips, slideshowPath, true); // streamCopy=true: identical codec sub-clips
   removeFiles(...subClips);
 
   // 3. Add audio track, trim to exact audio duration

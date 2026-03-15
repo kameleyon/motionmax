@@ -1,17 +1,22 @@
 /**
  * Concatenate MP4 clips using the ffmpeg concat **demuxer**.
  *
- * Always re-encodes both video and audio to normalise all streams.
- * Stream-copy concat is risky because mismatched codecs, sample rates,
- * or frame boundaries can truncate audio at scene joins.
+ * Two modes:
+ *   • streamCopy = true  → fast, safe for clips created with identical params
+ *   • streamCopy = false → full re-encode, needed for final scene join
+ *     (normalises codecs, sample rates, frame boundaries)
  */
 import fs from "fs";
 import { runFfmpeg, X264_MEM_FLAGS } from "./ffmpegCmd.js";
 
-/** Concat MP4 files via demuxer WITH full re-encode for safety. */
+/**
+ * Concat MP4 files via demuxer.
+ * @param streamCopy  true = fast stream-copy (same-codec sub-clips); false = re-encode (default)
+ */
 export async function concatFiles(
   files: string[],
-  outputPath: string
+  outputPath: string,
+  streamCopy = false
 ): Promise<void> {
   if (files.length === 0) {
     throw new Error("concatFiles: no files to concatenate");
@@ -28,24 +33,36 @@ export async function concatFiles(
     .join("\n");
   await fs.promises.writeFile(listPath, listContent, "utf-8");
 
-  console.log(`[ConcatScenes] Joining ${files.length} clips — full re-encode for audio safety`);
+  const mode = streamCopy ? "stream-copy" : "re-encode";
+  console.log(`[ConcatScenes] Joining ${files.length} clips (${mode})`);
 
   try {
-    await runFfmpeg([
-      "-f", "concat",
-      "-safe", "0",
-      "-i", listPath,
-      "-c:v", "libx264",
-      "-preset", "ultrafast",
-      "-pix_fmt", "yuv420p",
-      "-c:a", "aac",
-      "-b:a", "128k",
-      "-ar", "44100",
-      "-ac", "2",
-      "-movflags", "+faststart",
-      ...X264_MEM_FLAGS,
-      outputPath,
-    ]);
+    if (streamCopy) {
+      await runFfmpeg([
+        "-f", "concat",
+        "-safe", "0",
+        "-i", listPath,
+        "-c", "copy",
+        "-movflags", "+faststart",
+        outputPath,
+      ]);
+    } else {
+      await runFfmpeg([
+        "-f", "concat",
+        "-safe", "0",
+        "-i", listPath,
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-ar", "44100",
+        "-ac", "2",
+        "-movflags", "+faststart",
+        ...X264_MEM_FLAGS,
+        outputPath,
+      ]);
+    }
   } finally {
     try { fs.unlinkSync(listPath); } catch { /* ignore */ }
   }

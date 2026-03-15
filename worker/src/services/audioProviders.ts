@@ -29,16 +29,25 @@ export async function uploadAudio(
 ): Promise<string> {
   const ext = contentType.includes("mpeg") ? "mp3" : "wav";
   const name = suffix ? `scene-${sceneNumber}-${suffix}-${Date.now()}.${ext}` : `scene-${sceneNumber}-${Date.now()}.${ext}`;
-  const filePath = `audio/${projectId}/${name}`;
+  // Use the same "audio" bucket + path pattern as the edge function
+  const filePath = `${projectId}/${name}`;
 
   const { error } = await supabase.storage
-    .from("generation-assets")
+    .from("audio")
     .upload(filePath, bytes, { contentType, upsert: true });
 
   if (error) throw new Error(`Audio upload failed: ${error.message}`);
 
-  const { data } = supabase.storage.from("generation-assets").getPublicUrl(filePath);
-  return data.publicUrl;
+  // Return a 7-day signed URL (matching edge function behaviour)
+  const { data: signedData, error: signError } = await supabase.storage
+    .from("audio")
+    .createSignedUrl(filePath, 604800);
+
+  if (signError || !signedData?.signedUrl) {
+    throw new Error(`Audio signed URL failed: ${signError?.message}`);
+  }
+
+  return signedData.signedUrl;
 }
 
 // ── Gemini TTS ─────────────────────────────────────────────────────

@@ -1,431 +1,41 @@
-﻿import { supabase } from "../lib/supabase.js";
-
+﻿/**
+ * Video export orchestrator.
+ *
+ * Coordinates scene encoding → concat → upload.
+ * All ffmpeg calls go through child_process.execFile (export/ffmpegCmd)
+ * using SIMPLE filters only — no -filter_complex anywhere — which
+ * eliminates the "Error initializing complex filters" crash.
+ */
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { pipeline } from "stream/promises";
-import ffmpeg from "fluent-ffmpeg";
+import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
+import { processScene } from "./export/sceneEncoder.js";
+import { concatFiles } from "./export/concatScenes.js";
+import { uploadToSupabase, removeFiles } from "./export/storageHelpers.js";
 
-const FFMPEG_TIMEOUT_SEC = 180; // 3 minutes per FFmpeg operation
-// Process ONE scene at a time — each scene runs up to 6 FFmpeg sub-processes.
-// With 4 scenes in parallel that's 24 FFmpeg procs → OOM on Render's 512MB.
+/** Process ONE scene at a time to stay within Render's 512 MB RAM. */
 const SCENE_BATCH_SIZE = 1;
 
-/** Memory-safe x264 flags — keeps libx264 under ~40MB by using 1 thread + minimal buffers */
-const X264_MEM_FLAGS = [
-  '-threads 1',
-  '-refs 1',
-  '-rc-lookahead 0',
-  '-g 24',
-  '-bf 0',
-  '-x264-params rc-lookahead=0:threads=1',
-];
-
-/** Stream a URL directly to disk without buffering in Node.js heap */
-async function streamToFile(url: string, destPath: string): Promise<void> {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Failed to download ${url}: ${response.statusText}`);
-  if (!response.body) throw new Error(`No response body for ${url}`);
-  const dest = fs.createWriteStream(destPath);
-  await pipeline(response.body, dest);
-}
-
-const BUCKET_NAME = 'videos';
-
-/** Upload final MP4 to Supabase Storage using streaming REST to avoid loading into heap */
-async function uploadToSupabase(localPath: string, fileName: string): Promise<string> {
-  const stat = await fs.promises.stat(localPath);
-  const stream = fs.createReadStream(localPath);
-
-  // Use validated Supabase URL from shared module (handles project migration)
-  const { WORKER_SUPABASE_URL: supabaseUrl, WORKER_SUPABASE_KEY: supabaseKey } = await import("../lib/supabase.js");
-  const storagePath = `exports/${fileName}`;
-
-  const uploadUrl = `${supabaseUrl}/storage/v1/object/${BUCKET_NAME}/${storagePath}`;
-  const response = await fetch(uploadUrl, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${supabaseKey}`,
-      'apikey': supabaseKey,
-      'Content-Type': 'video/mp4',
-      'Content-Length': String(stat.size),
-      'x-upsert': 'true',
-    },
-    body: stream as any,
-    // Required in Node.js 18+ when sending a streaming body via fetch()
-    duplex: 'half',
-  } as any);
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Supabase upload failed (${response.status}): ${errText}`);
-  }
-
-  const { data: publicData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(storagePath);
-  return publicData.publicUrl;
-}
-
-/** Delete files silently (cleanup helper) */
-function removeFiles(...paths: string[]) {
-  for (const p of paths) {
-    try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch { /* ignore */ }
-  }
-}
-
-/** Create a video from a still image + audio using FFmpeg (with timeout) */
-function createVideoFromImageAudio(
-  imagePath: string,
-  audioPath: string,
-  outputPath: string,
-  duration: number
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const cmd = ffmpeg()
-      .addInput(imagePath)
-      .inputOptions(['-loop 1', '-framerate 24'])
-      .addInput(audioPath)
-      .videoFilters('scale=trunc(iw/2)*2:trunc(ih/2)*2')
-      .outputOptions([
-        '-c:v libx264',
-        '-preset ultrafast',
-        '-tune stillimage',
-        '-c:a aac',
-        '-b:a 128k',
-        '-pix_fmt yuv420p',
-        '-shortest',
-        `-t ${Math.ceil(duration)}`,
-        '-movflags +faststart',
-        ...X264_MEM_FLAGS,
-      ])
-      .save(outputPath)
-      .on('end', () => { clearTimeout(timer); resolve(); })
-      .on('error', (err) => { clearTimeout(timer); reject(new Error(`FFmpeg image→video: ${err.message}`)); });
-
-    const timer = setTimeout(() => {
-      cmd.kill('SIGKILL');
-      reject(new Error(`FFmpeg image→video timed out after ${FFMPEG_TIMEOUT_SEC}s`));
-    }, FFMPEG_TIMEOUT_SEC * 1000);
-  });
-}
-
-/** Create a silent (video-only) clip from a still image */
-function createSilentVideo(
-  imagePath: string,
-  outputPath: string,
-  duration: number
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const cmd = ffmpeg()
-      .addInput(imagePath)
-      .inputOptions(['-loop 1', '-framerate 24'])
-      .videoFilters('scale=trunc(iw/2)*2:trunc(ih/2)*2')
-      .outputOptions([
-        '-c:v libx264',
-        '-preset ultrafast',
-        '-tune stillimage',
-        '-pix_fmt yuv420p',
-        `-t ${duration}`,
-        '-movflags +faststart',
-        ...X264_MEM_FLAGS,
-      ])
-      .save(outputPath)
-      .on('end', () => { clearTimeout(timer); resolve(); })
-      .on('error', (err) => { clearTimeout(timer); reject(new Error(`FFmpeg silent: ${err.message}`)); });
-
-    const timer = setTimeout(() => {
-      cmd.kill('SIGKILL');
-      reject(new Error(`FFmpeg silent-video timed out after ${FFMPEG_TIMEOUT_SEC}s`));
-    }, FFMPEG_TIMEOUT_SEC * 1000);
-  });
-}
-
-/** Probe media duration in seconds via ffprobe */
-function probeDuration(filePath: string): Promise<number> {
-  return new Promise((resolve, reject) => {
-    ffmpeg.ffprobe(filePath, (err, metadata) => {
-      if (err) return reject(new Error(`ffprobe: ${err.message}`));
-      const dur = metadata?.format?.duration;
-      resolve(typeof dur === 'number' && dur > 0 ? dur : 10);
-    });
-  });
-}
-
-/** Mux video + voice-over: slow-mo the video to exactly match audio duration per scene */
-async function muxVideoAudio(
-  videoPath: string,
-  audioPath: string,
-  outputPath: string
-): Promise<void> {
-  const [videoDur, audioDur] = await Promise.all([
-    probeDuration(videoPath),
-    probeDuration(audioPath),
-  ]);
-
-  const ratio = audioDur / videoDur;
-  console.log(`[ExportVideo] Video: ${videoDur.toFixed(1)}s | Audio: ${audioDur.toFixed(1)}s | Slowmo: ${ratio.toFixed(2)}x`);
-
-  const filters = [
-    `setpts=${ratio.toFixed(4)}*PTS`,
-    'scale=trunc(iw/2)*2:trunc(ih/2)*2',
-  ].join(',');
-
-  return new Promise((resolve, reject) => {
-    const cmd = ffmpeg()
-      .addInput(videoPath)
-      .addInput(audioPath)
-      .videoFilters(filters)
-      .outputOptions([
-        '-map 0:v:0',
-        '-map 1:a:0',
-        '-c:v libx264',
-        '-preset ultrafast',
-        '-pix_fmt yuv420p',
-        '-c:a aac',
-        '-b:a 128k',
-        `-t ${audioDur}`,
-        '-movflags +faststart',
-        ...X264_MEM_FLAGS,
-      ])
-      .save(outputPath)
-      .on('end', () => { clearTimeout(timer); resolve(); })
-      .on('error', (err) => { clearTimeout(timer); reject(new Error(`FFmpeg mux: ${err.message}`)); });
-
-    const timer = setTimeout(() => {
-      cmd.kill('SIGKILL');
-      reject(new Error(`FFmpeg mux timed out after ${FFMPEG_TIMEOUT_SEC}s`));
-    }, FFMPEG_TIMEOUT_SEC * 1000);
-  });
-}
-
-const TRANSITION_DURATION = 0.3; // seconds — fast cut
-
-/** Pick a single consistent transition for the whole project */
-function pickTransition(projectType?: string): string {
-  if (projectType === 'cinematic' || projectType === 'storytelling') return 'fade';
-  return 'slideup'; // doc2video, smartflow, default
-}
-
-/** Stitch scene MP4s with a consistent xfade transition between each clip */
-async function concatWithTransitions(files: string[], outputPath: string, projectType?: string): Promise<void> {
-  if (files.length === 1) {
-    await fs.promises.copyFile(files[0], outputPath);
-    return;
-  }
-
-  const transition = pickTransition(projectType);
-  const durations = await Promise.all(files.map(probeDuration));
-  console.log(`[ExportVideo] Transition: ${transition} (${projectType ?? 'default'}), ${files.length} scenes`);
-
-  // Build xfade chain for video + aconcat for audio
-  let filterComplex = '';
-  let prevVLabel = '[0:v]';
-  let cumulativeOffset = 0;
-
-  for (let i = 1; i < files.length; i++) {
-    cumulativeOffset += durations[i - 1] - TRANSITION_DURATION;
-    const outLabel = i === files.length - 1 ? '[vout]' : `[vx${i}]`;
-    filterComplex += `${prevVLabel}[${i}:v]xfade=transition=${transition}:duration=${TRANSITION_DURATION}:offset=${cumulativeOffset.toFixed(3)}${outLabel};`;
-    prevVLabel = outLabel;
-  }
-
-  const audioInputs = files.map((_, i) => `[${i}:a]`).join('');
-  filterComplex += `${audioInputs}concat=n=${files.length}:v=0:a=1[aout]`;
-
-  return new Promise((resolve, reject) => {
-    const cmd = ffmpeg();
-    files.forEach(f => cmd.addInput(f));
-    cmd
-      .complexFilter(filterComplex)
-      .outputOptions([
-        '-map [vout]',
-        '-map [aout]',
-        '-c:v libx264',
-        '-preset ultrafast',
-        '-pix_fmt yuv420p',
-        '-c:a aac',
-        '-b:a 128k',
-        '-movflags +faststart',
-        ...X264_MEM_FLAGS,
-      ])
-      .save(outputPath)
-      .on('end', () => { clearTimeout(timer); resolve(); })
-      .on('error', (err) => { clearTimeout(timer); reject(err); });
-
-    const timer = setTimeout(() => {
-      cmd.kill('SIGKILL');
-      reject(new Error(`FFmpeg concat+transitions timed out after ${FFMPEG_TIMEOUT_SEC}s`));
-    }, FFMPEG_TIMEOUT_SEC * 1000);
-  });
-}
-
-const SLIDE_TRANSITION_DURATION = 0.3; // cross-fade between sub-images within a scene
-
-/** Concat sub-image clips with a cross-fade transition — video only (audio added by replaceAudioTrack) */
-async function concatImagesWithFade(files: string[], outputPath: string): Promise<void> {
-  if (files.length === 1) {
-    await fs.promises.copyFile(files[0], outputPath);
-    return;
-  }
-
-  const durations = await Promise.all(files.map(probeDuration));
-
-  let filterComplex = '';
-  let prevLabel = '[0:v]';
-  let cumulativeOffset = 0;
-
-  for (let i = 1; i < files.length; i++) {
-    cumulativeOffset += durations[i - 1] - SLIDE_TRANSITION_DURATION;
-    const outLabel = i === files.length - 1 ? '[vout]' : `[sv${i}]`;
-    filterComplex += `${prevLabel}[${i}:v]xfade=transition=fade:duration=${SLIDE_TRANSITION_DURATION}:offset=${cumulativeOffset.toFixed(3)}${outLabel};`;
-    prevLabel = outLabel;
-  }
-
-  return new Promise((resolve, reject) => {
-    const cmd = ffmpeg();
-    files.forEach(f => cmd.addInput(f));
-    cmd
-      .complexFilter(filterComplex)
-      .outputOptions([
-        '-map [vout]',
-        '-c:v libx264',
-        '-preset ultrafast',
-        '-pix_fmt yuv420p',
-        '-movflags +faststart',
-        ...X264_MEM_FLAGS,
-      ])
-      .save(outputPath)
-      .on('end', () => { clearTimeout(timer); resolve(); })
-      .on('error', (err) => { clearTimeout(timer); reject(err); });
-
-    const timer = setTimeout(() => {
-      cmd.kill('SIGKILL');
-      reject(new Error(`FFmpeg slideshow-fade timed out after ${FFMPEG_TIMEOUT_SEC}s`));
-    }, FFMPEG_TIMEOUT_SEC * 1000);
-  });
-}
-
-/** Replace audio track in a video without re-encoding video (exact duration) */
-function replaceAudioTrack(videoPath: string, audioPath: string, outputPath: string, duration: number): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const cmd = ffmpeg()
-      .addInput(videoPath)
-      .addInput(audioPath)
-      .outputOptions([
-        '-map 0:v:0',
-        '-map 1:a:0',
-        '-c:v copy',
-        '-c:a aac',
-        '-b:a 128k',
-        `-t ${duration}`,
-        '-movflags +faststart',
-      ])
-      .save(outputPath)
-      .on('end', () => { clearTimeout(timer); resolve(); })
-      .on('error', (err) => { clearTimeout(timer); reject(new Error(`FFmpeg replaceAudio: ${err.message}`)); });
-
-    const timer = setTimeout(() => {
-      cmd.kill('SIGKILL');
-      reject(new Error(`FFmpeg replaceAudio timed out after ${FFMPEG_TIMEOUT_SEC}s`));
-    }, FFMPEG_TIMEOUT_SEC * 1000);
-  });
-}
-
-/** Process a single scene: download or encode to a local MP4 */
-async function processScene(
-  i: number,
-  scene: any,
-  tempDir: string
-): Promise<{ index: number; path: string | null }> {
-  const localPath = path.join(tempDir, `scene_${i}.mp4`);
-
-  if (scene.videoUrl && scene.audioUrl) {
-    const vidPath = path.join(tempDir, `scene_${i}_vid.mp4`);
-    const audPath = path.join(tempDir, `scene_${i}_aud.mp3`);
-    console.log(`[ExportVideo] Scene ${i}: video+audio → mux`);
-    await streamToFile(scene.videoUrl, vidPath);
-    await streamToFile(scene.audioUrl, audPath);
-    await muxVideoAudio(vidPath, audPath, localPath);
-    removeFiles(vidPath, audPath);
-    return { index: i, path: localPath };
-  } else if (scene.videoUrl) {
-    console.log(`[ExportVideo] Scene ${i}: downloading video`);
-    await streamToFile(scene.videoUrl, localPath);
-    return { index: i, path: localPath };
-  } else if (Array.isArray(scene.imageUrls) && scene.imageUrls.filter(Boolean).length > 1 && scene.audioUrl) {
-    // Multi-image slideshow: show each sub-visual for equal time across full audio duration
-    // Filter null slots — imageUrls[2] may be null if only 2 sub-visuals were generated.
-    const validImageUrls: string[] = scene.imageUrls.filter(Boolean);
-    const audPath = path.join(tempDir, `scene_${i}_aud.mp3`);
-    console.log(`[ExportVideo] Scene ${i}: ${validImageUrls.length} images+audio → slideshow`);
-    await streamToFile(scene.audioUrl, audPath);
-    const audioDur = await probeDuration(audPath);
-    const n = validImageUrls.length;
-    // Each clip must be slightly longer than audioDur/n so xfade overlaps sum correctly:
-    // n * perImgDur - (n-1) * SLIDE_TRANSITION_DURATION = audioDur
-    const perImgDur = (audioDur + (n - 1) * SLIDE_TRANSITION_DURATION) / n;
-
-    const subVids: string[] = [];
-    for (let j = 0; j < n; j++) {
-      const imgPath = path.join(tempDir, `scene_${i}_img${j}.png`);
-      const subVidPath = path.join(tempDir, `scene_${i}_sub${j}.mp4`);
-      await streamToFile(validImageUrls[j], imgPath);
-      await createSilentVideo(imgPath, subVidPath, perImgDur);
-      removeFiles(imgPath);
-      subVids.push(subVidPath);
-    }
-
-    const slideshowPath = path.join(tempDir, `scene_${i}_slideshow.mp4`);
-    await concatImagesWithFade(subVids, slideshowPath);
-    removeFiles(...subVids);
-
-    await replaceAudioTrack(slideshowPath, audPath, localPath, audioDur);
-    removeFiles(slideshowPath, audPath);
-    console.log(`[ExportVideo] Scene ${i}: slideshow done (${audioDur.toFixed(1)}s, ${scene.imageUrls.length} images)`);
-    return { index: i, path: localPath };
-
-  } else if (scene.imageUrl && scene.audioUrl) {
-    const imgPath = path.join(tempDir, `scene_${i}_img.png`);
-    const audPath = path.join(tempDir, `scene_${i}_aud.mp3`);
-    console.log(`[ExportVideo] Scene ${i}: image+audio → FFmpeg`);
-    await streamToFile(scene.imageUrl, imgPath);
-    await streamToFile(scene.audioUrl, audPath);
-    const duration = scene.duration || 10;
-    await createVideoFromImageAudio(imgPath, audPath, localPath, duration);
-    removeFiles(imgPath, audPath);
-    console.log(`[ExportVideo] Scene ${i}: done (${duration}s)`);
-    return { index: i, path: localPath };
-  } else if (scene.imageUrl) {
-    const imgPath = path.join(tempDir, `scene_${i}_img.png`);
-    console.log(`[ExportVideo] Scene ${i}: image → silent FFmpeg`);
-    await streamToFile(scene.imageUrl, imgPath);
-    const duration = scene.duration || 5;
-    await createSilentVideo(imgPath, localPath, duration);
-    removeFiles(imgPath);
-    return { index: i, path: localPath };
-  } else {
-    console.warn(`[ExportVideo] Scene ${i}: no usable URL — skipping`);
-    return { index: i, path: null };
-  }
-}
-
-/** Fetch scenes from the generations table as a fallback when payload.scenes is unusable */
+/** Fetch scenes from the generations table as a fallback. */
 async function fetchScenesFromDb(projectId: string): Promise<any[]> {
   const { data: gen, error } = await supabase
-    .from('generations')
-    .select('scenes')
-    .eq('project_id', projectId)
-    .order('created_at', { ascending: false })
+    .from("generations")
+    .select("scenes")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false })
     .limit(1)
     .single();
 
   if (error || !gen?.scenes) return [];
-  const rows = gen.scenes as any[];
-  // Strip _meta helper keys that the generation pipeline attaches
-  return rows.map((s: any) => { const { _meta, ...rest } = s; return rest; });
+  return (gen.scenes as any[]).map((s: any) => {
+    const { _meta, ...rest } = s;
+    return rest;
+  });
 }
 
-/** Check whether any scene in the list has at least one downloadable URL */
+/** Check whether any scene has at least one downloadable URL. */
 function hasUsableUrls(scenes: any[]): boolean {
   return scenes.some(
     (s) =>
@@ -435,118 +45,151 @@ function hasUsableUrls(scenes: any[]): boolean {
   );
 }
 
-export async function handleExportVideo(jobId: string, payload: any, userId?: string) {
-  const { format, brandMark, project_id, project_type } = payload;
-  let scenes: any[] = Array.isArray(payload.scenes) ? payload.scenes : [];
-
-  // ── Diagnostic: log what URLs each scene has ──────────────────────
-  console.log(`[ExportVideo] Payload scenes: ${scenes.length}`);
+/** Log scene URLs for diagnostics. */
+function logScenes(prefix: string, scenes: any[]): void {
+  console.log(`[ExportVideo] ${prefix}: ${scenes.length} scenes`);
   scenes.forEach((s: any, i: number) => {
     console.log(
-      `[ExportVideo]   Scene ${i}: videoUrl=${!!s.videoUrl} imageUrl=${!!s.imageUrl}` +
-      ` imageUrls=${Array.isArray(s.imageUrls) ? s.imageUrls.filter(Boolean).length : 0}` +
-      ` audioUrl=${!!s.audioUrl}`
-    );
-  });
-
-  // ── Fallback: fetch scenes from DB when payload lacks usable URLs ──
-  if (scenes.length === 0 || !hasUsableUrls(scenes)) {
-    console.warn(`[ExportVideo] Payload scenes unusable — fetching from generations table for project ${project_id}`);
-    scenes = await fetchScenesFromDb(project_id);
-    console.log(`[ExportVideo] DB scenes fetched: ${scenes.length}`);
-    scenes.forEach((s: any, i: number) => {
-      console.log(
-        `[ExportVideo]   DB Scene ${i}: videoUrl=${!!s.videoUrl} imageUrl=${!!s.imageUrl}` +
+      `[ExportVideo]   ${i}: videoUrl=${!!s.videoUrl} imageUrl=${!!s.imageUrl}` +
         ` imageUrls=${Array.isArray(s.imageUrls) ? s.imageUrls.filter(Boolean).length : 0}` +
         ` audioUrl=${!!s.audioUrl}`
-      );
-    });
+    );
+  });
+}
+
+export async function handleExportVideo(
+  jobId: string,
+  payload: any,
+  userId?: string
+) {
+  const { project_id } = payload;
+  let scenes: any[] = Array.isArray(payload.scenes) ? payload.scenes : [];
+
+  logScenes("Payload", scenes);
+
+  // Fallback: fetch from DB when payload lacks usable URLs
+  if (scenes.length === 0 || !hasUsableUrls(scenes)) {
+    console.warn(`[ExportVideo] Payload unusable — fetching from DB for ${project_id}`);
+    scenes = await fetchScenesFromDb(project_id);
+    logScenes("DB", scenes);
   }
 
   if (scenes.length === 0) {
-    throw new Error(`Export failed: no scenes found in payload or database for project ${project_id}`);
+    throw new Error(`Export failed: no scenes for project ${project_id}`);
   }
 
-  await writeSystemLog({ jobId, projectId: project_id, userId, category: "system_info", eventType: "export_video_started", message: `Started video stitching for ${scenes.length} scenes` });
+  await writeSystemLog({
+    jobId,
+    projectId: project_id,
+    userId,
+    category: "system_info",
+    eventType: "export_video_started",
+    message: `Started video export for ${scenes.length} scenes (no complex filters)`,
+  });
 
-  console.log(`[ExportVideo] Starting processing for job ${jobId}`);
   const tempDir = path.join(os.tmpdir(), `motionmax_export_${jobId}`);
-  const finalOutputPath = path.join(tempDir, 'final_export.mp4');
+  const finalOutputPath = path.join(tempDir, "final_export.mp4");
 
   try {
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-    await supabase.from('video_generation_jobs').update({ progress: 10, status: 'processing' }).eq('id', jobId);
+    await supabase
+      .from("video_generation_jobs")
+      .update({ progress: 10, status: "processing" })
+      .eq("id", jobId);
 
-    // 1. Download/encode scenes in parallel batches of SCENE_BATCH_SIZE.
-    //    Order is preserved via indexed sceneResults array.
-    //    Progress is updated once per batch (fewer DB writes).
+    // ── 1. Encode scenes in sequential batches ──────────────────────
     const sceneResults: (string | null)[] = new Array(scenes.length).fill(null);
     const sceneErrors: string[] = [];
 
-    for (let batchStart = 0; batchStart < scenes.length; batchStart += SCENE_BATCH_SIZE) {
-      const batchEnd = Math.min(batchStart + SCENE_BATCH_SIZE, scenes.length);
-      const batchPromises = [];
-      for (let i = batchStart; i < batchEnd; i++) {
-        batchPromises.push(processScene(i, scenes[i], tempDir));
+    for (let start = 0; start < scenes.length; start += SCENE_BATCH_SIZE) {
+      const end = Math.min(start + SCENE_BATCH_SIZE, scenes.length);
+      const batch = [];
+      for (let i = start; i < end; i++) {
+        batch.push(processScene(i, scenes[i], tempDir));
       }
-      const batchResults = await Promise.allSettled(batchPromises);
 
-      for (const result of batchResults) {
-        if (result.status === "fulfilled" && result.value.path) {
-          sceneResults[result.value.index] = result.value.path;
-        } else if (result.status === "rejected") {
-          const reason = result.reason instanceof Error ? result.reason.message : String(result.reason);
-          console.error(`[ExportVideo] Scene in batch ${batchStart}-${batchEnd} failed:`, reason);
-          sceneErrors.push(reason);
+      const results = await Promise.allSettled(batch);
+      for (const r of results) {
+        if (r.status === "fulfilled" && r.value.path) {
+          sceneResults[r.value.index] = r.value.path;
+        } else if (r.status === "rejected") {
+          const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+          console.error(`[ExportVideo] Scene batch ${start}-${end} error:`, msg);
+          sceneErrors.push(msg);
         }
       }
 
-      // Progress 10–60% across all batches (1 DB write per batch, not per scene)
-      const batchProgress = Math.floor(10 + (batchEnd / scenes.length) * 50);
-      await supabase.from('video_generation_jobs').update({ progress: batchProgress }).eq('id', jobId);
-      console.log(`[ExportVideo] Batch ${batchStart}-${batchEnd - 1} complete (${batchProgress}%)`);
+      const pct = Math.floor(10 + (end / scenes.length) * 50);
+      await supabase.from("video_generation_jobs").update({ progress: pct }).eq("id", jobId);
+      console.log(`[ExportVideo] Batch ${start}-${end - 1} done (${pct}%)`);
     }
 
-    const downloadedFiles = sceneResults.filter((p): p is string => p !== null);
-
-    if (downloadedFiles.length === 0) {
-      const detail = sceneErrors.length > 0
-        ? `All ${scenes.length} scene(s) failed. First error: ${sceneErrors[0]}`
-        : `${scenes.length} scene(s) had no downloadable media (no imageUrl/videoUrl/audioUrl).`;
+    const clipPaths = sceneResults.filter((p): p is string => p !== null);
+    if (clipPaths.length === 0) {
+      const detail =
+        sceneErrors.length > 0
+          ? `All ${scenes.length} scene(s) failed. First error: ${sceneErrors[0]}`
+          : `${scenes.length} scene(s) had no downloadable media.`;
       throw new Error(`Video export failed: ${detail}`);
     }
 
-    await writeSystemLog({ jobId, projectId: project_id, userId, category: "system_info", eventType: "export_download_complete", message: `Created ${downloadedFiles.length} scene videos`});
-    await supabase.from('video_generation_jobs').update({ progress: 60 }).eq('id', jobId);
+    await writeSystemLog({
+      jobId,
+      projectId: project_id,
+      userId,
+      category: "system_info",
+      eventType: "export_download_complete",
+      message: `Encoded ${clipPaths.length} scene clips`,
+    });
+    await supabase.from("video_generation_jobs").update({ progress: 60 }).eq("id", jobId);
 
-    // 2. Stitch with xfade transitions
-    await writeSystemLog({ jobId, projectId: project_id, userId, category: "system_info", eventType: "ffmpeg_stitch_started", message: `Starting FFmpeg stitch with transitions`});
-    await concatWithTransitions(downloadedFiles, finalOutputPath, project_type);
+    // ── 2. Concatenate via concat demuxer (NO complex filters) ──────
+    await writeSystemLog({
+      jobId,
+      projectId: project_id,
+      userId,
+      category: "system_info",
+      eventType: "ffmpeg_stitch_started",
+      message: "Starting concat demuxer stitch (no filter_complex)",
+    });
+    await concatFiles(clipPaths, finalOutputPath);
 
-    // Free individual scene MP4s after concat produces the final file
-    for (const f of downloadedFiles) removeFiles(f);
+    // Free individual scene MP4s
+    for (const f of clipPaths) removeFiles(f);
 
-    await supabase.from('video_generation_jobs').update({ progress: 90 }).eq('id', jobId);
+    await supabase.from("video_generation_jobs").update({ progress: 90 }).eq("id", jobId);
 
-    // 3. Upload final video
+    // ── 3. Upload final video ───────────────────────────────────────
     const finalFileName = `export_${project_id}_${Date.now()}.mp4`;
     const finalVideoUrl = await uploadToSupabase(finalOutputPath, finalFileName);
 
-    await writeSystemLog({ jobId, projectId: project_id, userId, category: "system_info", eventType: "export_video_completed", message: `Video stitched and exported successfully`});
+    await writeSystemLog({
+      jobId,
+      projectId: project_id,
+      userId,
+      category: "system_info",
+      eventType: "export_video_completed",
+      message: "Video exported successfully (concat demuxer)",
+    });
 
     return { success: true, url: finalVideoUrl };
   } catch (error) {
     console.error(`[ExportVideo] Job ${jobId} failed:`, error);
-    await writeSystemLog({ jobId, projectId: project_id, userId, category: "system_error", eventType: "export_video_failed", message: `Video stitching failed`, details: { error: error instanceof Error ? error.message : "Unknown" }});
+    await writeSystemLog({
+      jobId,
+      projectId: project_id,
+      userId,
+      category: "system_error",
+      eventType: "export_video_failed",
+      message: "Video export failed",
+      details: { error: error instanceof Error ? error.message : "Unknown" },
+    });
     throw error;
   } finally {
-    // Cleanup temp dir — swallow errors (EBUSY on Windows when FFmpeg still holds handles)
     try {
-      if (fs.existsSync(tempDir)) {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-      }
+      if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
     } catch (cleanupErr) {
-      console.warn(`[ExportVideo] Temp dir cleanup skipped for ${jobId}:`, (cleanupErr as Error).message);
+      console.warn(`[ExportVideo] Temp cleanup skipped:`, (cleanupErr as Error).message);
     }
   }
 }

@@ -409,8 +409,63 @@ async function processScene(
   }
 }
 
+/** Fetch scenes from the generations table as a fallback when payload.scenes is unusable */
+async function fetchScenesFromDb(projectId: string): Promise<any[]> {
+  const { data: gen, error } = await supabase
+    .from('generations')
+    .select('scenes')
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (error || !gen?.scenes) return [];
+  const rows = gen.scenes as any[];
+  // Strip _meta helper keys that the generation pipeline attaches
+  return rows.map((s: any) => { const { _meta, ...rest } = s; return rest; });
+}
+
+/** Check whether any scene in the list has at least one downloadable URL */
+function hasUsableUrls(scenes: any[]): boolean {
+  return scenes.some(
+    (s) =>
+      s.videoUrl ||
+      s.imageUrl ||
+      (Array.isArray(s.imageUrls) && s.imageUrls.some(Boolean))
+  );
+}
+
 export async function handleExportVideo(jobId: string, payload: any, userId?: string) {
-  const { scenes, format, brandMark, project_id, project_type } = payload;
+  const { format, brandMark, project_id, project_type } = payload;
+  let scenes: any[] = Array.isArray(payload.scenes) ? payload.scenes : [];
+
+  // ── Diagnostic: log what URLs each scene has ──────────────────────
+  console.log(`[ExportVideo] Payload scenes: ${scenes.length}`);
+  scenes.forEach((s: any, i: number) => {
+    console.log(
+      `[ExportVideo]   Scene ${i}: videoUrl=${!!s.videoUrl} imageUrl=${!!s.imageUrl}` +
+      ` imageUrls=${Array.isArray(s.imageUrls) ? s.imageUrls.filter(Boolean).length : 0}` +
+      ` audioUrl=${!!s.audioUrl}`
+    );
+  });
+
+  // ── Fallback: fetch scenes from DB when payload lacks usable URLs ──
+  if (scenes.length === 0 || !hasUsableUrls(scenes)) {
+    console.warn(`[ExportVideo] Payload scenes unusable — fetching from generations table for project ${project_id}`);
+    scenes = await fetchScenesFromDb(project_id);
+    console.log(`[ExportVideo] DB scenes fetched: ${scenes.length}`);
+    scenes.forEach((s: any, i: number) => {
+      console.log(
+        `[ExportVideo]   DB Scene ${i}: videoUrl=${!!s.videoUrl} imageUrl=${!!s.imageUrl}` +
+        ` imageUrls=${Array.isArray(s.imageUrls) ? s.imageUrls.filter(Boolean).length : 0}` +
+        ` audioUrl=${!!s.audioUrl}`
+      );
+    });
+  }
+
+  if (scenes.length === 0) {
+    throw new Error(`Export failed: no scenes found in payload or database for project ${project_id}`);
+  }
 
   await writeSystemLog({ jobId, projectId: project_id, userId, category: "system_info", eventType: "export_video_started", message: `Started video stitching for ${scenes.length} scenes` });
 
@@ -426,6 +481,7 @@ export async function handleExportVideo(jobId: string, payload: any, userId?: st
     //    Order is preserved via indexed sceneResults array.
     //    Progress is updated once per batch (fewer DB writes).
     const sceneResults: (string | null)[] = new Array(scenes.length).fill(null);
+    const sceneErrors: string[] = [];
 
     for (let batchStart = 0; batchStart < scenes.length; batchStart += SCENE_BATCH_SIZE) {
       const batchEnd = Math.min(batchStart + SCENE_BATCH_SIZE, scenes.length);
@@ -439,7 +495,9 @@ export async function handleExportVideo(jobId: string, payload: any, userId?: st
         if (result.status === "fulfilled" && result.value.path) {
           sceneResults[result.value.index] = result.value.path;
         } else if (result.status === "rejected") {
-          console.error(`[ExportVideo] Scene in batch ${batchStart}-${batchEnd} failed:`, result.reason);
+          const reason = result.reason instanceof Error ? result.reason.message : String(result.reason);
+          console.error(`[ExportVideo] Scene in batch ${batchStart}-${batchEnd} failed:`, reason);
+          sceneErrors.push(reason);
         }
       }
 
@@ -451,7 +509,12 @@ export async function handleExportVideo(jobId: string, payload: any, userId?: st
 
     const downloadedFiles = sceneResults.filter((p): p is string => p !== null);
 
-    if (downloadedFiles.length === 0) throw new Error("No video scenes provided to stitch.");
+    if (downloadedFiles.length === 0) {
+      const detail = sceneErrors.length > 0
+        ? `All ${scenes.length} scene(s) failed. First error: ${sceneErrors[0]}`
+        : `${scenes.length} scene(s) had no downloadable media (no imageUrl/videoUrl/audioUrl).`;
+      throw new Error(`Video export failed: ${detail}`);
+    }
 
     await writeSystemLog({ jobId, projectId: project_id, userId, category: "system_info", eventType: "export_download_complete", message: `Created ${downloadedFiles.length} scene videos`});
     await supabase.from('video_generation_jobs').update({ progress: 60 }).eq('id', jobId);

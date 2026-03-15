@@ -119,7 +119,7 @@ async function moderateContent(content: string): Promise<ModerationResult> {
       return { passed: true };
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${geminiKey}`;
 
     const payload = {
       contents: [{
@@ -514,8 +514,8 @@ interface LLMCallResult {
   model: string;
 }
 
-const PRIMARY_LLM_MODEL = "gemini-3.1-pro";
-const FALLBACK_MODEL = "gemini-2.0-flash";
+const PRIMARY_LLM_MODEL = "gemini-3.1-pro-preview";
+const FALLBACK_MODEL = "gemini-3.1-flash-lite-preview";
 
 function getLLMModelsToTry(primaryModel: string): string[] {
   return Array.from(new Set([primaryModel, FALLBACK_MODEL]));

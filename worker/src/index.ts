@@ -30,7 +30,13 @@ async function processJob(job: Job) {
       .eq('id', job.id);
 
     if (job.task_type === 'generate_video') {
-      await handleGenerateVideo(job.id, job.payload, job.user_id);
+      const scriptResult = await handleGenerateVideo(job.id, job.payload, job.user_id);
+      // Merge result into finalPayload so both `payload` and `result` columns
+      // carry the output — the frontend polls `payload` (old builds) or
+      // `result` (new builds).
+      if (scriptResult && typeof scriptResult === "object") {
+        finalPayload = { ...finalPayload, ...scriptResult };
+      }
     } else if (job.task_type === 'export_video' as any) {
       const exportResult = await handleExportVideo(job.id, job.payload, job.user_id);
       finalPayload.finalUrl = exportResult.url;

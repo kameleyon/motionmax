@@ -126,7 +126,7 @@ export async function handleGenerateVideo(
   jobId: string,
   payload: any,
   userId?: string,
-): Promise<void> {
+): Promise<Record<string, unknown>> {
   const phaseStart = Date.now();
   const projectType: string = payload.projectType || "doc2video";
   const style: string = payload.style || "realistic";
@@ -271,4 +271,6 @@ export async function handleGenerateVideo(
   console.log(
     `[GenerateVideo] Job ${jobId} done → project=${project.id} gen=${generation.id}`,
   );
+
+  return result;
 }

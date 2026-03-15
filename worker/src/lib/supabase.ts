@@ -13,29 +13,68 @@ dotenv.config();
 const EXPECTED_PROJECT_REF = "ayjbvcikuwknqdrpsdmj";
 const EXPECTED_URL = `https://${EXPECTED_PROJECT_REF}.supabase.co`;
 
+/**
+ * The public anon key for the canonical project.
+ * This key is already embedded in the frontend (client-side code) so it is
+ * not secret.  We use it as a last-resort fallback when the Render env vars
+ * still reference the old project's credentials.
+ */
+const EXPECTED_ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
+  "eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF5amJ2Y2lrdXdrbnFkcnBzZG1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxMDE0MjMsImV4cCI6MjA4ODY3NzQyM30." +
+  "KmOVtLzpzsZXjxyGEi6gxkd5U9Ir7omoCOxqnoN65YI";
+
+// ── URL ────────────────────────────────────────────────────────────
 const envUrl = process.env.SUPABASE_URL ?? "";
+const urlMatchesProject = envUrl.includes(EXPECTED_PROJECT_REF);
+const supabaseUrl = urlMatchesProject ? envUrl : EXPECTED_URL;
 
-// Validate — only honour env var if it targets the correct project
-const supabaseUrl = envUrl.includes(EXPECTED_PROJECT_REF) ? envUrl : EXPECTED_URL;
-
-if (envUrl && !envUrl.includes(EXPECTED_PROJECT_REF)) {
+if (envUrl && !urlMatchesProject) {
   console.warn(
     `[Worker] ⚠️  SUPABASE_URL env var ("${envUrl}") does NOT match the expected project ref "${EXPECTED_PROJECT_REF}".`
   );
   console.warn(`[Worker] ⚠️  Overriding to ${EXPECTED_URL} — update your Render env vars!`);
 }
 
-// Prefer service_role key; fall back to anon key for Lovable-managed projects
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+// ── API Key ────────────────────────────────────────────────────────
+// If the URL was overridden, the old project's keys won't work either.
+// Prefer service_role → then env anon → then hardcoded anon for the
+// correct project.
+function resolveKey(): { key: string; label: string } {
+  const srvKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const envAnon = process.env.SUPABASE_ANON_KEY;
 
-if (!supabaseKey) {
-  console.error("Missing SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY environment variable.");
-  process.exit(1);
+  // service_role key is only valid if it belongs to the correct project.
+  // JWT payload.ref must match.  Quick check: decode the payload part.
+  function keyBelongsToProject(jwt: string): boolean {
+    try {
+      const payload = JSON.parse(Buffer.from(jwt.split(".")[1], "base64").toString());
+      return payload.ref === EXPECTED_PROJECT_REF;
+    } catch {
+      return false;
+    }
+  }
+
+  if (srvKey && keyBelongsToProject(srvKey)) {
+    return { key: srvKey, label: "service_role (env)" };
+  }
+  if (envAnon && keyBelongsToProject(envAnon)) {
+    return { key: envAnon, label: "anon (env)" };
+  }
+
+  // Neither env key matches the correct project — fall back to the
+  // public anon key embedded in the frontend.
+  if (srvKey || envAnon) {
+    console.warn("[Worker] ⚠️  Env API key(s) belong to a different project — falling back to hardcoded anon key.");
+    console.warn("[Worker] ⚠️  Update SUPABASE_SERVICE_ROLE_KEY and/or SUPABASE_ANON_KEY on Render!");
+  }
+  return { key: EXPECTED_ANON_KEY, label: "anon (hardcoded fallback)" };
 }
 
-const isServiceRole = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+const { key: supabaseKey, label: keyLabel } = resolveKey();
+
 console.log(`[Worker] Supabase URL: ${supabaseUrl}`);
-console.log(`[Worker] Supabase client initialized with ${isServiceRole ? "service_role" : "anon"} key`);
+console.log(`[Worker] Supabase key: ${keyLabel}`);
 
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {

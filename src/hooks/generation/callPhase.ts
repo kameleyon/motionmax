@@ -60,20 +60,21 @@ export async function getFreshSession(): Promise<string> {
  * the worker marks it completed or failed.
  */
 async function workerCallPhase(
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  taskType: string = "generate_video",
+  pollTimeoutMs: number = 5 * 60 * 1000
 ): Promise<any> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
-  // project_id is NULL for script phase — the worker creates the real project
   const { data: job, error: insertError } = await supabase
     .from("video_generation_jobs")
     .insert({
       user_id: user.id,
-      project_id: null,
-      task_type: "generate_video",
+      project_id: (body.projectId as string) ?? null,
+      task_type: taskType,
       status: "pending",
-      payload: { ...body, phase: "script" } as any,
+      payload: body as any,
     })
     .select("id")
     .single();
@@ -82,23 +83,23 @@ async function workerCallPhase(
     throw new Error(`Failed to queue job: ${insertError?.message}`);
   }
 
-  console.log(LOG, "Job queued for worker", { jobId: job.id, phase: "script" });
+  console.log(LOG, "Job queued for worker", { jobId: job.id, taskType, phase: body.phase ?? null });
 
-  return pollWorkerJob(job.id);
+  return pollWorkerJob(job.id, pollTimeoutMs);
 }
 
 /**
  * Poll `video_generation_jobs` every 3 s until the worker marks the job
- * completed or failed.  Safety timeout: 5 minutes.
+ * completed or failed.  Timeout is caller-supplied (default 8 minutes).
  */
-async function pollWorkerJob(jobId: string): Promise<any> {
+async function pollWorkerJob(jobId: string, maxWaitMs: number = 8 * 60 * 1000): Promise<any> {
   const POLL_INTERVAL = 3000;
-  const MAX_WAIT = 5 * 60 * 1000;
+  const MAX_WAIT = maxWaitMs;
   const startTime = Date.now();
 
   while (true) {
     if (Date.now() - startTime > MAX_WAIT) {
-      throw new Error("Script generation timed out after 5 minutes");
+      throw new Error(`Worker job timed out after ${Math.round(MAX_WAIT / 60000)} minutes`);
     }
 
     await sleep(POLL_INTERVAL);
@@ -141,12 +142,27 @@ export async function callPhase(
   timeoutMs: number = 300000, // 5 minutes max wait for video to render
   endpoint: string = DEFAULT_ENDPOINT
 ): Promise<any> {
-  // Route script phase through worker queue (Render, no edge-function timeout)
+  // Script phase → worker queue
   if (body.phase === "script") {
-    return workerCallPhase(body);
+    return workerCallPhase(body, "generate_video", 8 * 60 * 1000);
   }
 
-  // Everything else goes through edge functions (legacy path)
+  // Images phase → worker queue (edge function times out at ~150s per chunk)
+  if (body.phase === "images") {
+    return workerCallPhase(body, "process_images", timeoutMs);
+  }
+
+  // Audio phase → worker queue (many providers, HC key rotation can take minutes)
+  if (body.phase === "audio") {
+    return workerCallPhase(body, "process_audio", timeoutMs);
+  }
+
+  // Finalize phase → worker queue (cost recording + status marking)
+  if (body.phase === "finalize") {
+    return workerCallPhase(body, "finalize_generation", 2 * 60 * 1000);
+  }
+
+  // Regeneration still goes through edge functions (scene-level, needs auth context)
   return legacyCallPhase(body, timeoutMs, endpoint);
 }
 

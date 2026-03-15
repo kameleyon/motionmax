@@ -1,6 +1,9 @@
 import { supabase } from "./lib/supabase.js";
 import { Job } from "./types/job.js";
 import { handleGenerateVideo } from "./handlers/generateVideo.js";
+import { handleImagesPhase } from "./handlers/handleImages.js";
+import { handleAudioPhase } from "./handlers/handleAudio.js";
+import { handleFinalizePhase } from "./handlers/handleFinalize.js";
 import { handleExportVideo } from "./handlers/exportVideo.js";
 import { writeSystemLog } from "./lib/logger.js";
 
@@ -13,7 +16,7 @@ async function processJob(job: Job) {
 
   await writeSystemLog({
     jobId: job.id,
-    projectId: job.project_id,
+    projectId: job.project_id ?? undefined,
     userId: job.user_id,
     generationId: job.payload?.generation_id,
     category: "system_info",
@@ -37,6 +40,15 @@ async function processJob(job: Job) {
       if (scriptResult && typeof scriptResult === "object") {
         finalPayload = { ...finalPayload, ...scriptResult };
       }
+    } else if (job.task_type === 'process_images' as any) {
+      const imagesResult = await handleImagesPhase(job.id, job.payload as any, job.user_id);
+      finalPayload = { ...finalPayload, ...imagesResult };
+    } else if (job.task_type === 'process_audio' as any) {
+      const audioResult = await handleAudioPhase(job.id, job.payload as any, job.user_id);
+      finalPayload = { ...finalPayload, ...audioResult };
+    } else if (job.task_type === 'finalize_generation' as any) {
+      const finalizeResult = await handleFinalizePhase(job.id, job.payload as any, job.user_id);
+      finalPayload = { ...finalPayload, ...finalizeResult };
     } else if (job.task_type === 'export_video' as any) {
       const exportResult = await handleExportVideo(job.id, job.payload, job.user_id);
       finalPayload.finalUrl = exportResult.url;
@@ -52,7 +64,7 @@ async function processJob(job: Job) {
     
     await writeSystemLog({
       jobId: job.id,
-      projectId: job.project_id,
+      projectId: job.project_id ?? undefined,
       userId: job.user_id,
       category: "system_info",
       eventType: "job_completed",
@@ -74,7 +86,7 @@ async function processJob(job: Job) {
     
     await writeSystemLog({
       jobId: job.id,
-      projectId: job.project_id,
+      projectId: job.project_id ?? undefined,
       userId: job.user_id,
       category: "system_error",
       eventType: "job_failed",

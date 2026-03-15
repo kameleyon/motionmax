@@ -5843,6 +5843,23 @@ serve(async (req) => {
       }
       // ============= END UPFRONT CREDIT DEDUCTION =============
 
+      // ============= SCRIPT PHASE DEPRECATED — NOW HANDLED BY RENDER WORKER =============
+      // The script phase (doc2video / storytelling / smartflow) is no longer processed here.
+      // It is queued as a `video_generation_jobs` row and picked up by the Render worker
+      // (worker/src/handlers/generateVideo.ts). Routing here is intentionally blocked so
+      // no code path accidentally falls back to the edge function for scripting.
+      return new Response(
+        JSON.stringify({
+          error:
+            "Script generation is handled by the Render worker, not this edge function. " +
+            "If you see this error the frontend callPhase.ts routing is mis-configured — " +
+            "phase:script must go through workerCallPhase(), not legacyCallPhase().",
+          code: "SCRIPT_PHASE_DEPRECATED",
+        }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+      // ============= END DEPRECATED SCRIPT PHASE GUARD =============
+
       // Route based on project type
       if (body.projectType === "smartflow") {
         console.log(
@@ -5940,27 +5957,25 @@ serve(async (req) => {
     }
 
     switch (phase) {
+      // ── DEPRECATED: script / audio / images / finalize all moved to Render worker ──
+      // These phases are now processed by the Node.js worker (worker/src/handlers/).
+      // callPhase.ts routes them through the video_generation_jobs queue.
+      // Returning 503 here prevents any accidental fallback to the edge function.
       case "audio":
-        return await handleAudioPhase(
-          supabase,
-          user,
-          generationId,
-          projectId,
-          REPLICATE_API_KEY,
-          googleApiKeys,
-          audioStartIndex || 0,
+        return new Response(
+          JSON.stringify({ error: "Audio phase is now handled by the Render worker (process_audio task). Check callPhase.ts routing.", code: "AUDIO_PHASE_DEPRECATED" }),
+          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       case "images":
-        return await handleImagesPhase(
-          supabase,
-          user,
-          generationId,
-          projectId,
-          REPLICATE_API_KEY,
-          imageStartIndex || 0,
+        return new Response(
+          JSON.stringify({ error: "Images phase is now handled by the Render worker (process_images task). Check callPhase.ts routing.", code: "IMAGES_PHASE_DEPRECATED" }),
+          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       case "finalize":
-        return await handleFinalizePhase(supabase, user, generationId, projectId);
+        return new Response(
+          JSON.stringify({ error: "Finalize phase is now handled by the Render worker (finalize_generation task). Check callPhase.ts routing.", code: "FINALIZE_PHASE_DEPRECATED" }),
+          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
       case "regenerate-audio":
         if (typeof sceneIndex !== "number" || !newVoiceover) {
           return new Response(JSON.stringify({ error: "Missing sceneIndex or newVoiceover" }), {

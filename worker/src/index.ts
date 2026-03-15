@@ -114,11 +114,11 @@ async function pollQueue() {
   busy = true;
   pollCount++;
   try {
-    // Query for pending jobs AND stale processing jobs (orphaned by worker restart)
+    // Only pick up PENDING jobs — never re-grab processing ones (avoids restart loops)
     const { data: jobs, error, status, statusText } = await supabase
       .from('video_generation_jobs')
       .select('*')
-      .in('status', ['pending', 'processing'])
+      .eq('status', 'pending')
       .order('created_at', { ascending: true })
       .limit(1);
 
@@ -153,10 +153,9 @@ async function pollQueue() {
 
 const POLL_INTERVAL_MS = 5000;
 
-// Jobs stuck in 'processing' for longer than this are orphaned (worker crashed mid-run).
-const STALE_JOB_THRESHOLD_MS = 20 * 60 * 1000; // 20 minutes
-
-/** Run once at startup to verify DB connectivity and rescue stale jobs. */
+/** Run once at startup to verify DB connectivity and rescue orphaned jobs.
+ *  In a single-worker setup, ANY job in 'processing' at boot is an orphan
+ *  from the previous worker instance — reset it to 'pending' so it retries. */
 async function startupDiagnostic(): Promise<void> {
   try {
     const { count, error } = await supabase
@@ -169,43 +168,38 @@ async function startupDiagnostic(): Promise<void> {
     }
     console.log(`[Worker] ✅ Startup diagnostic OK — video_generation_jobs has ${count ?? 0} total row(s)`);
 
-    // Find all 'processing' jobs
+    // Reset ALL processing jobs to pending (orphans from previous worker instance)
     const { data: processingRows } = await supabase
       .from("video_generation_jobs")
-      .select("id, status, created_at, updated_at, task_type")
+      .select("id, task_type, created_at, updated_at")
       .eq("status", "processing")
       .order("created_at", { ascending: true });
 
     if (processingRows && processingRows.length > 0) {
-      const now = Date.now();
-      const staleIds: string[] = [];
-
+      const orphanIds = processingRows.map((r: any) => r.id as string);
       for (const row of processingRows as any[]) {
-        const lastUpdated = new Date(row.updated_at || row.created_at).getTime();
-        const age = now - lastUpdated;
-
-        if (age > STALE_JOB_THRESHOLD_MS) {
-          staleIds.push(row.id);
-          console.warn(
-            `[Worker] ⚠️  Stale job detected: ${row.id} (${row.task_type}, stuck ${Math.round(age / 60000)}min) → marking FAILED`,
-          );
-        }
+        console.warn(
+          `[Worker] ⚠️  Orphaned job: ${row.id} (${row.task_type}) → resetting to pending`,
+        );
       }
 
-      if (staleIds.length > 0) {
-        await supabase
-          .from("video_generation_jobs")
-          .update({ status: "failed", error_message: "Worker restarted — job was stuck in processing for too long. Please retry.", updated_at: new Date().toISOString() })
-          .in("id", staleIds);
-        console.log(`[Worker] 🧹 Cleared ${staleIds.length} stale job(s)`);
-      }
+      await supabase
+        .from("video_generation_jobs")
+        .update({
+          status: "pending",
+          progress: 0,
+          error_message: null,
+          updated_at: new Date().toISOString(),
+        })
+        .in("id", orphanIds);
+      console.log(`[Worker] 🔄 Reset ${orphanIds.length} orphaned job(s) to pending`);
     }
 
-    // Show pending/processing jobs remaining after cleanup
+    // Show pending jobs remaining after cleanup
     const { data: pendingRows } = await supabase
       .from("video_generation_jobs")
       .select("id, status, task_type, created_at")
-      .in("status", ["pending", "processing"])
+      .eq("status", "pending")
       .order("created_at", { ascending: true })
       .limit(5);
 

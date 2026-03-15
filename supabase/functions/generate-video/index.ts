@@ -3096,11 +3096,12 @@ async function handleScriptPhase(
 
   const lengthConfig: Record<string, { count: number; targetDuration: number; avgSceneDuration: number }> = {
     short: { count: 6, targetDuration: 90, avgSceneDuration: 15 },
-    brief: { count: 12, targetDuration: 225, avgSceneDuration: 18 },
-    presentation: { count: 24, targetDuration: 480, avgSceneDuration: 20 },
+    brief: { count: 12, targetDuration: 180, avgSceneDuration: 15 },
+    presentation: { count: 24, targetDuration: 360, avgSceneDuration: 15 },
   };
   const config = lengthConfig[length] || lengthConfig.brief;
   const sceneCount = config.count;
+  // Hard cap: 12-15 seconds of voiceover per scene → 30-37 words at ~2.5 words/sec
   const targetWords = Math.floor(config.avgSceneDuration * 2.5);
 
   const styleDescription = getStylePrompt(style, customStyle);
@@ -3163,11 +3164,14 @@ All image prompts must adhere to this style:
 - QUALITY: Ultra-detailed, 8K resolution, dramatic lighting
 - CAMERA WORK: Use varied angles (Close-up, Wide shot, Low angle, Over-shoulder) to keep the video dynamic
 
-=== TIMING REQUIREMENTS ===
+=== TIMING REQUIREMENTS (CRITICAL - STRICT ENFORCEMENT) ===
 - Target duration: ${config.targetDuration} seconds
 - Create exactly ${sceneCount} scenes
-- MAXIMUM 25 seconds per scene - MINIMUM 3 seconds per scene (to avoid glitchy flashes)
-- Each voiceover: ~${targetWords} words
+- EACH SCENE VOICEOVER MUST BE 12-15 SECONDS LONG. NO MORE THAN 15 SECONDS.
+- That means each voiceover must be approximately ${targetWords} words (at ~2.5 words per second)
+- MINIMUM 3 seconds per scene (to avoid glitchy flashes)
+- If you exceed 15 seconds of spoken text per scene, the generation WILL FAIL. Keep it concise.
+- Set each scene "duration" to exactly 15
 
 === NARRATIVE ARC ===
 1. HOOK (Scenes 1-2): Create intrigue (High energy, fast cuts)
@@ -3438,13 +3442,14 @@ async function handleStorytellingScriptPhase(
 
   // Map storytelling lengths to scene counts
   const lengthConfig: Record<string, { count: number; targetDuration: number; avgSceneDuration: number }> = {
-    short: { count: 4, targetDuration: 90, avgSceneDuration: 22 }, // <3 min
-    brief: { count: 8, targetDuration: 210, avgSceneDuration: 26 }, // <7 min
-    extended: { count: 16, targetDuration: 480, avgSceneDuration: 30 }, // <15 min
-    presentation: { count: 16, targetDuration: 480, avgSceneDuration: 30 }, // alias
+    short: { count: 4, targetDuration: 60, avgSceneDuration: 15 },
+    brief: { count: 8, targetDuration: 120, avgSceneDuration: 15 },
+    extended: { count: 16, targetDuration: 240, avgSceneDuration: 15 },
+    presentation: { count: 16, targetDuration: 240, avgSceneDuration: 15 },
   };
   const config = lengthConfig[length] || lengthConfig.brief;
   const sceneCount = config.count;
+  // Hard cap: 12-15 seconds of voiceover per scene → 30-37 words at ~2.5 words/sec
   const targetWords = Math.floor(config.avgSceneDuration * 2.5);
 
   const styleDescription = getStylePrompt(style, customStyle);
@@ -3547,11 +3552,14 @@ All image prompts must adhere to this style:
 - QUALITY: Cinematic, ultra-detailed, 8K resolution, dramatic lighting
 - CAMERA WORK: Use varied angles (Close-up, Wide shot, Low angle, Over-shoulder) to keep the video dynamic
 
-=== TIMING REQUIREMENTS ===
+=== TIMING REQUIREMENTS (CRITICAL - STRICT ENFORCEMENT) ===
 - Target duration: ${config.targetDuration} seconds
 - Create exactly ${sceneCount} scenes
-- MAXIMUM 40 seconds per scene - MINIMUM 3 seconds per scene
-- Each voiceover: ~${targetWords} words for natural narration pacing
+- EACH SCENE VOICEOVER MUST BE 12-15 SECONDS LONG. NO MORE THAN 15 SECONDS.
+- That means each voiceover must be approximately ${targetWords} words (at ~2.5 words per second)
+- MINIMUM 3 seconds per scene (to avoid glitchy flashes)
+- If you exceed 15 seconds of spoken text per scene, the generation WILL FAIL. Keep it concise and impactful.
+- Set each scene "duration" to exactly 15
 
 === NARRATIVE STRUCTURE ===
 1. OPENING (Scene 1): Hook the audience immediately. Start in media res or with a provocative question.
@@ -3639,7 +3647,7 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
       "visualPrompt": "Full prompt including CHARACTER BIBLE description + action + setting + camera angle...",
       "subVisuals": ["Second visual moment for variety...", "Third visual moment for dynamic pacing..."],
       "coverTitle": "Catchy Cover Title",
-      "duration": 20${
+      "duration": 15${
         includeTextOverlay
           ? `,
       "title": "Evocative Headline",

@@ -514,7 +514,7 @@ interface LLMCallResult {
   model: string;
 }
 
-const PRIMARY_LLM_MODEL = "google/gemini-3.1-pro-preview";
+const PRIMARY_LLM_MODEL = "anthropic/claude-sonnet-4.6";
 const FALLBACK_MODEL = "google/gemini-3.1-flash-lite-preview";
 
 function getLLMModelsToTry(primaryModel: string): string[] {

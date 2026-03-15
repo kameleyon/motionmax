@@ -17,13 +17,18 @@ import { concatFiles } from "./concatScenes.js";
 /** Shared video filter: ensure even dimensions for yuv420p */
 const SCALE_EVEN = "scale=trunc(iw/2)*2:trunc(ih/2)*2";
 
-/** Create a video clip from a still image + audio file. */
+/** Create a video clip from a still image + audio file.
+ *  Duration is driven by the ACTUAL audio length (ffprobe), not metadata. */
 async function imageAudioToClip(
   imagePath: string,
   audioPath: string,
-  outputPath: string,
-  maxDuration: number
-): Promise<void> {
+  outputPath: string
+): Promise<number> {
+  // Probe real audio duration — never trust scene.duration metadata
+  const audioDur = await probeDuration(audioPath);
+  const safeDur = Math.ceil(audioDur) + 1; // +1s buffer so audio isn't clipped
+  console.log(`[SceneEncoder] imageAudioToClip: audio=${audioDur.toFixed(1)}s, cap=${safeDur}s`);
+
   await runFfmpeg([
     "-loop", "1",
     "-framerate", "24",
@@ -37,11 +42,13 @@ async function imageAudioToClip(
     "-b:a", "128k",
     "-pix_fmt", "yuv420p",
     "-shortest",
-    "-t", String(Math.ceil(maxDuration)),
+    "-t", String(safeDur),
     "-movflags", "+faststart",
     ...X264_MEM_FLAGS,
     outputPath,
   ]);
+
+  return audioDur;
 }
 
 /** Create a silent video from a still image for a given duration. */
@@ -208,8 +215,8 @@ export async function processScene(
       console.log(`[SceneEncoder] Scene ${i}: image+audio → clip`);
       await streamToFile(scene.imageUrl, imgPath);
       await streamToFile(scene.audioUrl, audPath);
-      const duration = scene.duration || 10;
-      await imageAudioToClip(imgPath, audPath, localPath, duration);
+      const actualDur = await imageAudioToClip(imgPath, audPath, localPath);
+      console.log(`[SceneEncoder] Scene ${i}: done (${actualDur.toFixed(1)}s from audio probe)`);
       removeFiles(imgPath, audPath);
       return { index: i, path: localPath };
     }

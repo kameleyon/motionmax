@@ -2,8 +2,11 @@
  * Image generation service for the worker.
  * Tries Hypereal (gemini-3-1-flash-t2i) first with 4 retries,
  * then falls back to Replicate nano-banana-2.
- * Returns a public URL (Hypereal returns URL directly;
- * Replicate returns bytes that we upload to Supabase Storage).
+ *
+ * IMPORTANT: Hypereal CDN URLs (r2.dev) have hotlink protection —
+ * browsers sending a Referer from motionmax.io get blocked.
+ * We ALWAYS download image bytes and re-upload to Supabase Storage
+ * so the frontend loads from our own domain (no restriction).
  */
 
 import { supabase } from "../lib/supabase.js";
@@ -21,7 +24,7 @@ const REPLICATE_RETRIES = 2;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-// ── Aspect ratio mapper ────────────────────────────────────────────
+// ── Aspect ratio ──────────────────────────────────────────────────
 
 function toAspectRatio(format: string): string {
   if (format === "portrait") return "9:16";
@@ -29,23 +32,35 @@ function toAspectRatio(format: string): string {
   return "16:9";
 }
 
+// ── Supabase Storage upload ────────────────────────────────────────
+
+async function uploadToStorage(bytes: Uint8Array, projectId: string): Promise<string> {
+  const fileName = `${projectId}/${uuidv4()}.png`;
+  const { error } = await supabase.storage
+    .from("scene-images")
+    .upload(fileName, bytes, { contentType: "image/png", upsert: true });
+
+  if (error) throw new Error(`Storage upload failed: ${error.message}`);
+
+  const { data } = supabase.storage.from("scene-images").getPublicUrl(fileName);
+  return data.publicUrl;
+}
+
 // ── Hypereal ───────────────────────────────────────────────────────
 
+/** Generate from Hypereal, download bytes, return raw bytes (not URL). */
 async function tryHypereal(
   prompt: string,
   apiKey: string,
   format: string,
-): Promise<string | null> {
+): Promise<Uint8Array | null> {
   const aspectRatio = toAspectRatio(format);
 
   for (let attempt = 1; attempt <= HYPEREAL_RETRIES; attempt++) {
     try {
       const res = await fetch(HYPEREAL_API_URL, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, model: HYPEREAL_MODEL, format: aspectRatio }),
       });
 
@@ -57,15 +72,24 @@ async function tryHypereal(
       }
 
       const data = await res.json() as any;
-      const url = data?.data?.[0]?.url;
-      if (!url) {
+      const hyperealUrl = data?.data?.[0]?.url;
+      if (!hyperealUrl) {
         console.warn(`[ImageGen] Hypereal attempt ${attempt}: no URL in response`);
         if (attempt < HYPEREAL_RETRIES) await sleep(1500 * attempt);
         continue;
       }
 
-      console.log(`[ImageGen] Hypereal success on attempt ${attempt}`);
-      return url as string;
+      // Download bytes (no Referer header sent — no hotlink block)
+      const imgRes = await fetch(hyperealUrl);
+      if (!imgRes.ok) {
+        console.warn(`[ImageGen] Hypereal download failed (${imgRes.status}) on attempt ${attempt}`);
+        if (attempt < HYPEREAL_RETRIES) await sleep(1500 * attempt);
+        continue;
+      }
+
+      const bytes = new Uint8Array(await imgRes.arrayBuffer());
+      console.log(`[ImageGen] Hypereal ✅ attempt ${attempt} — ${bytes.length} bytes`);
+      return bytes;
     } catch (err) {
       console.warn(`[ImageGen] Hypereal attempt ${attempt} threw: ${err}`);
       if (attempt < HYPEREAL_RETRIES) await sleep(1500 * attempt);
@@ -77,21 +101,6 @@ async function tryHypereal(
 
 // ── Replicate ──────────────────────────────────────────────────────
 
-async function uploadBytesToStorage(
-  bytes: Uint8Array,
-  projectId: string,
-): Promise<string> {
-  const fileName = `images/${projectId}/${uuidv4()}.webp`;
-  const { error } = await supabase.storage
-    .from("generation-assets")
-    .upload(fileName, bytes, { contentType: "image/webp", upsert: true });
-
-  if (error) throw new Error(`Storage upload failed: ${error.message}`);
-
-  const { data } = supabase.storage.from("generation-assets").getPublicUrl(fileName);
-  return data.publicUrl;
-}
-
 async function tryReplicate(
   prompt: string,
   apiKey: string,
@@ -102,7 +111,6 @@ async function tryReplicate(
 
   for (let attempt = 1; attempt <= REPLICATE_RETRIES; attempt++) {
     try {
-      // Create prediction
       const createRes = await fetch(REPLICATE_API_URL, {
         method: "POST",
         headers: {
@@ -110,34 +118,28 @@ async function tryReplicate(
           "Content-Type": "application/json",
           Prefer: "wait",
         },
-        body: JSON.stringify({
-          input: { prompt, aspect_ratio: aspectRatio, output_format: "webp" },
-        }),
+        body: JSON.stringify({ input: { prompt, aspect_ratio: aspectRatio, output_format: "webp" } }),
       });
 
       if (!createRes.ok) {
-        console.warn(`[ImageGen] Replicate create attempt ${attempt} failed: ${createRes.status}`);
+        console.warn(`[ImageGen] Replicate attempt ${attempt} failed: ${createRes.status}`);
         if (attempt < REPLICATE_RETRIES) await sleep(2000 * attempt);
         continue;
       }
 
       const prediction = await createRes.json() as any;
 
-      // If already completed (Prefer: wait)
       if (prediction.status === "succeeded" && prediction.output?.[0]) {
-        const imageUrl = prediction.output[0];
-        // Download and re-upload to our own storage
-        const imgRes = await fetch(imageUrl);
+        const imgRes = await fetch(prediction.output[0]);
         if (imgRes.ok) {
           const bytes = new Uint8Array(await imgRes.arrayBuffer());
-          return await uploadBytesToStorage(bytes, projectId);
+          return await uploadToStorage(bytes, projectId);
         }
       }
 
-      // Poll if still processing
       if (prediction.id && prediction.status !== "failed") {
-        const finalUrl = await pollReplicate(prediction.id, apiKey, projectId);
-        if (finalUrl) return finalUrl;
+        const url = await pollReplicate(prediction.id, apiKey, projectId);
+        if (url) return url;
       }
 
       if (attempt < REPLICATE_RETRIES) await sleep(2000 * attempt);
@@ -164,11 +166,10 @@ async function pollReplicate(
     if (!res.ok) continue;
     const data = await res.json() as any;
     if (data.status === "succeeded" && data.output?.[0]) {
-      const imageUrl = data.output[0];
-      const imgRes = await fetch(imageUrl);
+      const imgRes = await fetch(data.output[0]);
       if (imgRes.ok) {
         const bytes = new Uint8Array(await imgRes.arrayBuffer());
-        return await uploadBytesToStorage(bytes, projectId);
+        return await uploadToStorage(bytes, projectId);
       }
     }
     if (data.status === "failed") return null;
@@ -179,8 +180,8 @@ async function pollReplicate(
 // ── Public API ─────────────────────────────────────────────────────
 
 /**
- * Generate one image: tries Hypereal first, falls back to Replicate.
- * Returns a public URL or throws if both fail.
+ * Generate one image: Hypereal first, Replicate fallback.
+ * Always re-uploads to Supabase Storage and returns a public Supabase URL.
  */
 export async function generateImage(
   prompt: string,
@@ -189,14 +190,17 @@ export async function generateImage(
   format: string,
   projectId: string,
 ): Promise<string> {
-  // Primary: Hypereal
+  // Primary: Hypereal → download bytes → upload to Supabase
   if (hyperealApiKey) {
-    const url = await tryHypereal(prompt, hyperealApiKey, format);
-    if (url) return url;
-    console.warn("[ImageGen] Hypereal exhausted all retries — falling back to Replicate");
+    const bytes = await tryHypereal(prompt, hyperealApiKey, format);
+    if (bytes) {
+      const url = await uploadToStorage(bytes, projectId);
+      return url;
+    }
+    console.warn("[ImageGen] Hypereal exhausted — falling back to Replicate");
   }
 
-  // Fallback: Replicate
+  // Fallback: Replicate (already uploads to Supabase internally)
   if (replicateApiKey) {
     const url = await tryReplicate(prompt, replicateApiKey, format, projectId);
     if (url) return url;

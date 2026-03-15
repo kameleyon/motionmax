@@ -16,7 +16,9 @@ import { generateImage } from "../services/imageGenerator.js";
 
 // ── Constants ──────────────────────────────────────────────────────
 
-const MAX_IMAGES_PER_CALL = 4; // Process 4 images per job invocation
+// Process 9 images per job invocation (3 full scenes × 3 images each).
+// Images run in parallel so 9 images ≈ ~10-15s total instead of 72s sequential.
+const MAX_IMAGES_PER_CALL = 9;
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -109,66 +111,66 @@ export async function handleImagesPhase(
     return sum + primary + subs;
   }, 0);
 
-  // Process each task in the chunk sequentially (avoids rate limits)
+  // Process all tasks in the chunk IN PARALLEL — dramatically speeds up image generation.
+  // Hypereal handles concurrent requests fine; each takes ~5-10s.
   let newlyGenerated = 0;
 
-  for (const task of chunk) {
-    const { sceneIndex, subIndex, prompt } = task;
-    const scene = scenes[sceneIndex];
+  const pendingTasks = chunk.filter(({ sceneIndex, subIndex }) => {
+    const scene = scenes[sceneIndex] as any;
+    if (subIndex === 0 && scene.imageUrl) return false;
+    if (subIndex > 0 && (scene.imageUrls || [])[subIndex]) return false;
+    return true;
+  });
 
-    // Skip if already generated
-    if (subIndex === 0 && (scene as any).imageUrl) {
-      console.log(`[Images] Scene ${sceneIndex} primary already done — skipping`);
-      continue;
-    }
-    if (subIndex > 0) {
-      const existing = (scene as any).imageUrls || [];
-      if (existing[subIndex]) {
-        console.log(`[Images] Scene ${sceneIndex} subIndex ${subIndex} already done — skipping`);
-        continue;
-      }
-    }
+  console.log(`[Images] Generating ${pendingTasks.length} images in parallel (chunk ${imageStartIndex}-${chunkEnd - 1})`);
 
-    try {
-      console.log(`[Images] Generating scene ${sceneIndex}, sub ${subIndex} (${prompt.length} chars)`);
+  const results = await Promise.allSettled(
+    pendingTasks.map(async ({ sceneIndex, subIndex, prompt }) => {
+      console.log(`[Images] → scene ${sceneIndex}, sub ${subIndex} (${prompt.length} chars)`);
       const url = await generateImage(prompt, hyperealApiKey, replicateApiKey, format, projectId);
+      return { sceneIndex, subIndex, url };
+    })
+  );
 
-      // Write back to scene
+  for (const result of results) {
+    if (result.status === "fulfilled") {
+      const { sceneIndex, subIndex, url } = result.value;
+      const subs: (string | null)[] = Array.isArray((scenes[sceneIndex] as any).imageUrls)
+        ? [...(scenes[sceneIndex] as any).imageUrls]
+        : [null, null, null];
+
       if (subIndex === 0) {
+        // Write primary to both imageUrl (legacy) AND imageUrls[0] (carousel)
         (scenes[sceneIndex] as any).imageUrl = url;
+        subs[0] = url;
       } else {
-        const subs: (string | null)[] = Array.isArray((scenes[sceneIndex] as any).imageUrls)
-          ? [...(scenes[sceneIndex] as any).imageUrls]
-          : [null, null, null];
         subs[subIndex] = url;
-        (scenes[sceneIndex] as any).imageUrls = subs;
       }
-
+      (scenes[sceneIndex] as any).imageUrls = subs;
       newlyGenerated++;
       completedSoFar++;
-      const progress = Math.min(89, 45 + Math.round((completedSoFar / totalImages) * 44));
-
-      // Persist progress to DB after each image
-      await supabase
-        .from("generations")
-        .update({
-          progress,
-          scenes: scenes.map((s: any, idx: number) => ({
-            ...s,
-            _meta: {
-              ...((scenes[idx] as any)._meta || {}),
-              completedImages: completedSoFar,
-              totalImages,
-              statusMessage: `Images ${completedSoFar}/${totalImages}...`,
-            },
-          })),
-        })
-        .eq("id", generationId);
-    } catch (err) {
-      console.error(`[Images] Failed scene ${sceneIndex} sub ${subIndex}:`, err);
-      // Continue — don't abort the whole chunk for one failure
+    } else {
+      console.error(`[Images] Parallel task failed:`, result.reason);
     }
   }
+
+  // Single DB write after the entire parallel batch completes
+  const progressAfter = Math.min(89, 45 + Math.round((completedSoFar / totalImages) * 44));
+  await supabase
+    .from("generations")
+    .update({
+      progress: progressAfter,
+      scenes: scenes.map((s: any, idx: number) => ({
+        ...s,
+        _meta: {
+          ...((scenes[idx] as any)._meta || {}),
+          completedImages: completedSoFar,
+          totalImages,
+          statusMessage: `Images ${completedSoFar}/${totalImages}...`,
+        },
+      })),
+    })
+    .eq("id", generationId);
 
   const hasMore = chunkEnd < totalImages;
   const phaseTime = Date.now() - phaseStart;

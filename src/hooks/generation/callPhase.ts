@@ -54,13 +54,102 @@ export async function getFreshSession(): Promise<string> {
   return session.access_token;
 }
 
+/**
+ * Route the script phase through the worker queue (Render / Node.js).
+ * Inserts a row into `video_generation_jobs`, then polls until
+ * the worker marks it completed or failed.
+ */
+async function workerCallPhase(
+  body: Record<string, unknown>
+): Promise<any> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  // project_id is NOT NULL in the table but the worker creates the real
+  // project during script generation, so we use a placeholder UUID here.
+  const placeholderProjectId = crypto.randomUUID();
+
+  const { data: job, error: insertError } = await supabase
+    .from("video_generation_jobs")
+    .insert({
+      user_id: user.id,
+      project_id: placeholderProjectId,
+      task_type: "generate_video",
+      status: "pending",
+      payload: { ...body, phase: "script" } as any,
+    })
+    .select("id")
+    .single();
+
+  if (insertError || !job) {
+    throw new Error(`Failed to queue job: ${insertError?.message}`);
+  }
+
+  console.log(LOG, "Job queued for worker", { jobId: job.id, phase: "script" });
+
+  return pollWorkerJob(job.id);
+}
+
+/**
+ * Poll `video_generation_jobs` every 3 s until the worker marks the job
+ * completed or failed.  Safety timeout: 5 minutes.
+ */
+async function pollWorkerJob(jobId: string): Promise<any> {
+  const POLL_INTERVAL = 3000;
+  const MAX_WAIT = 5 * 60 * 1000;
+  const startTime = Date.now();
+
+  while (true) {
+    if (Date.now() - startTime > MAX_WAIT) {
+      throw new Error("Script generation timed out after 5 minutes");
+    }
+
+    await sleep(POLL_INTERVAL);
+
+    // The DB has a `result` JSONB column added after the TypeScript types
+    // were generated, so we cast the query through `as any` to access it.
+    const { data: row, error: pollError } = await supabase
+      .from("video_generation_jobs")
+      .select("status, error_message, payload")
+      .eq("id", jobId)
+      .single();
+
+    if (pollError) throw new Error(`Failed to poll job: ${pollError.message}`);
+
+    const jobRow = row as any;
+
+    if (jobRow.status === "completed") {
+      console.log(LOG, "Worker job completed", {
+        jobId,
+        elapsedMs: Date.now() - startTime,
+      });
+      // The worker writes the script result into the `result` column.
+      // If the types don't expose it, fall back to payload which the
+      // worker index.ts also updates on completion.
+      return jobRow.result ?? jobRow.payload;
+    }
+
+    if (jobRow.status === "failed") {
+      throw new Error(
+        String(jobRow.error_message || "Script generation failed")
+      );
+    }
+
+    // status is 'pending' or 'processing' — keep polling
+  }
+}
+
 export async function callPhase(
   body: Record<string, unknown>,
   timeoutMs: number = 300000, // 5 minutes max wait for video to render
   endpoint: string = DEFAULT_ENDPOINT
 ): Promise<any> {
-  // Route all calls through direct Edge Function HTTP path.
-  // Worker queue path (Render) is not yet active.
+  // Route script phase through worker queue (Render, no edge-function timeout)
+  if (body.phase === "script") {
+    return workerCallPhase(body);
+  }
+
+  // Everything else goes through edge functions (legacy path)
   return legacyCallPhase(body, timeoutMs, endpoint);
 }
 

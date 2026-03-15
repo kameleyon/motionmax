@@ -1,57 +1,98 @@
-﻿
+﻿/**
+ * OpenRouter LLM integration for the Node.js worker.
+ *
+ * Re-exports the three prompt builders (each in its own module to stay
+ * under 300 lines) and provides callOpenRouterLLM — the raw API caller
+ * with NO timeout (that's the whole point of the worker).
+ */
 
-import { writeApiLog } from "../lib/logger.js";
+// ── Re-exports ─────────────────────────────────────────────────────
+
+export { buildDoc2VideoPrompt } from "./buildDoc2Video.js";
+export type { Doc2VideoParams, PromptResult } from "./buildDoc2Video.js";
+
+export { buildStorytellingPrompt } from "./buildStorytelling.js";
+export type { StorytellingParams } from "./buildStorytelling.js";
+
+export { buildSmartFlowPrompt } from "./buildSmartFlow.js";
+export type { SmartFlowParams } from "./buildSmartFlow.js";
+
+// ── callOpenRouterLLM ──────────────────────────────────────────────
+
+/**
+ * Call the OpenRouter chat-completions API.
+ *
+ * @param prompt  - `{ system, user }` strings produced by a builder.
+ * @param options - `{ maxTokens, model? }`.  Defaults to claude-sonnet-4.
+ * @returns The raw text content from the LLM response.
+ *
+ * There is intentionally NO AbortController / timeout here — the worker
+ * runs on Render with no execution-time cap, unlike Supabase Edge Functions.
+ */
+export async function callOpenRouterLLM(
+  prompt: { system: string; user: string },
+  options: { maxTokens: number; model?: string },
+): Promise<string> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
+
+  const model = options.model || "anthropic/claude-sonnet-4";
+  console.log(`[OpenRouter] Calling ${model} (maxTokens=${options.maxTokens})`);
+
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: options.maxTokens,
+      temperature: 0.7,
+      messages: [
+        { role: "system", content: prompt.system },
+        { role: "user", content: prompt.user },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`OpenRouter API error ${res.status}: ${body}`);
+  }
+
+  const data = (await res.json()) as any;
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error("OpenRouter returned empty content");
+
+  console.log(`[OpenRouter] Response received (${text.length} chars)`);
+  return text;
+}
+
+// ── Backward-compatible wrapper for legacy generateVideo handler ───
+
+/** @deprecated Use buildDoc2VideoPrompt + callOpenRouterLLM instead. */
 export async function extractScriptWithOpenRouter(
   prompt: string,
   style: string,
   targetDuration: number,
-  openRouterApiKey: string
-) {
-  console.log(`[OpenRouter] Extracting script for style: ${style}`);
-  
+  _openRouterApiKey?: string,
+): Promise<any> {
   const estimatedScenes = Math.max(1, Math.floor(targetDuration / 4));
-  
-  const systemPrompt = `You are an expert short-form video scriptwriter. 
-  Create an engaging, highly visual script tailored for a ${targetDuration} second video. 
-  Break the script down into exactly ${estimatedScenes} scenes. 
+  const systemPrompt = `You are an expert short-form video scriptwriter.
+  Create an engaging, highly visual script tailored for a ${targetDuration} second video.
+  Break the script down into exactly ${estimatedScenes} scenes.
   For each scene, provide a "visual_prompt" (what we see) and "narration" (what the voiceover says).
-  The visual style is: ${style}. Return the result as valid JSON matching this schema: 
-  { 
+  The visual style is: ${style}. Return the result as valid JSON matching this schema:
+  {
     "scenes": [
       { "number": 1, "visual_prompt": "...", "narration": "..." }
     ]
   }`;
 
-  try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${openRouterApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "anthropic/claude-sonnet-4.6",
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: prompt }
-        ]
-      })
-    });
-
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`OpenRouter API error: ${response.status} - ${err}`);
-    }
-
-    const data = await response.json() as any;
-    const content = data.choices?.[0]?.message?.content;
-    
-    if (!content) throw new Error("No content returned from OpenRouter");
-
-    return JSON.parse(content);
-  } catch (error) {
-    console.error("[OpenRouter] Failed to extract script:", error);
-    throw error;
-  }
+  const raw = await callOpenRouterLLM(
+    { system: systemPrompt, user: prompt },
+    { maxTokens: 4000 },
+  );
+  return JSON.parse(raw);
 }

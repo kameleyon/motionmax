@@ -1,150 +1,274 @@
-﻿import { supabase } from "../lib/supabase.js";
-import fs from "fs";
-import path from "path";
-import os from "os";
-import ffmpeg from "fluent-ffmpeg";
-import { v4 as uuidv4 } from "uuid";
-import { extractScriptWithOpenRouter } from "../services/openrouter.js";
-import { generateSpeechUrl } from "../services/elevenlabs.js";
-import { generateImage, generateVideoFromImage } from "../services/hypereal.js";
+﻿/**
+ * Full script generation handler for the Node.js worker.
+ *
+ * Flow:
+ *  1. Extract payload fields & determine project type
+ *  2. Route to the correct prompt builder (doc2video | storytelling | smartflow)
+ *  3. Call OpenRouter LLM (no timeout — worker has no time cap)
+ *  4. Parse & validate JSON response
+ *  5. Post-process scenes (style append, voiceover sanitize, duration, image count)
+ *  6. Create project + generation rows in Supabase
+ *  7. Write result to the job row so the client can poll it
+ *
+ * Signature matches what worker/src/index.ts expects:
+ *   handleGenerateVideo(job.id, job.payload, job.user_id)
+ */
+
+import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
+import {
+  buildDoc2VideoPrompt,
+  buildStorytellingPrompt,
+  buildSmartFlowPrompt,
+  callOpenRouterLLM,
+} from "../services/openrouter.js";
+import type { PromptResult } from "../services/openrouter.js";
+import { getStylePrompt, extractJsonFromLLMResponse } from "../services/prompts.js";
+import {
+  postProcessScenes,
+  type ParsedScene,
+  type ParsedScript,
+} from "./sceneProcessor.js";
 
-async function downloadFile(url: string, destPath: string): Promise<void> {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Failed to download ${url}: ${response.statusText}`);
-  const buffer = Buffer.from(await response.arrayBuffer());
-  await fs.promises.writeFile(destPath, buffer);
-}
+// ── Prompt Router ──────────────────────────────────────────────────
 
-async function uploadToSupabase(localPath: string, fileName: string): Promise<string> {
-  const fileBuffer = await fs.promises.readFile(localPath);
-  const { data, error } = await supabase.storage
-    .from('videos')
-    .upload(`generated/${fileName}`, fileBuffer, {
-      contentType: 'video/mp4',
-      upsert: true
-    });
-  if (error) throw new Error(`Supabase upload failed: ${error.message}`);
-  const { data: publicData } = supabase.storage.from('videos').getPublicUrl(`generated/${fileName}`);
-  return publicData.publicUrl;
-}
+function buildPrompt(projectType: string, p: Record<string, any>): PromptResult {
+  switch (projectType) {
+    case "storytelling":
+      return buildStorytellingPrompt({
+        storyIdea: p.storyIdea || p.content || "",
+        format: p.format || "landscape",
+        length: p.length || "brief",
+        style: p.style || "realistic",
+        customStyle: p.customStyle,
+        brandMark: p.brandMark,
+        inspiration: p.inspiration,
+        tone: p.tone,
+        genre: p.genre,
+        characterDescription: p.characterDescription,
+        voiceType: p.voiceType,
+      });
 
-function mergeAudioVideo(videoPath: string, audioPath: string, outputPath: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    ffmpeg()
-      .addInput(videoPath)
-      .addInput(audioPath)
-      .outputOptions([
-        '-c:v copy',
-        '-c:a aac',
-        '-map 0:v:0',
-        '-map 1:a:0',
-        '-shortest'
-      ])
-      .save(outputPath)
-      .on('end', () => resolve())
-      .on('error', (err) => reject(new Error(`FFmpeg Error: ${err.message}`)));
-  });
-}
+    case "smartflow":
+      return buildSmartFlowPrompt({
+        content: p.content || "",
+        format: p.format || "landscape",
+        style: p.style || "realistic",
+        customStyle: p.customStyle,
+        brandMark: p.brandMark,
+      });
 
-function sanitizePrompt(prompt: string): string {
-    // 1. Remove systemic tags to prevent injection (like </system> or <role>)
-    // 2. Escape special character chains commonly used for jailbreaking
-    // 3. Limit length to prevent buffer bloat
-    const stripped = prompt
-        .replace(/<\/?(system|role|instruction|framework|rules)[^>]*>/gi, "")
-        .replace(/(\n|\r)+/g, ' ')
-        .substring(0, 5000)
-        .trim();
-    return stripped;
-}
-
-export async function handleGenerateVideo(jobId: string, payload: any, userId?: string) {
-  // Client sends "content" (not "prompt"); also accept "prompt" as fallback
-  const content = payload.content || payload.prompt || "";
-  const { style, voice_id, voiceId, project_id, generation_id, format, length } = payload;
-  const resolvedVoiceId = voice_id || voiceId;
-  
-  await writeSystemLog({ jobId, projectId: project_id, userId, generationId: generation_id, category: "system_info", eventType: "generate_video_started", message: `Started video generation for project ${project_id}`});
-  
-  console.log(`[GenerateVideo] Starting processing for job ${jobId}`, {
-    contentLength: content.length,
-    style,
-    format,
-    length,
-  });
-  const tempDir = path.join(os.tmpdir(), `motionmax_${jobId}`);
-  
-  try {
-    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-    await supabase.from('video_generation_jobs').update({ progress: 10, status: 'processing' }).eq('id', jobId);
-
-    const openRouterApiKey = process.env.OPENROUTER_API_KEY || "";
-    const hyperealApiKey = process.env.HYPEREAL_API_KEY || "";
-    const elevenLabsApiKey = process.env.ELEVENLABS_API_KEY || "";
-
-    // Sanitize content before sending to LLM pipeline
-    const cleanPrompt = sanitizePrompt(content);
-    await writeSystemLog({ jobId, projectId: project_id, userId, generationId: generation_id, category: "system_info", eventType: "prompt_sanitized", message: `Sanitized prompt length: ${cleanPrompt.length} chars`});
-
-    const targetDuration = length === "presentation" ? 480 : length === "brief" ? 225 : 90;
-    const script = await extractScriptWithOpenRouter(cleanPrompt, style || "realistic", targetDuration, openRouterApiKey);
-    const scene = script.scenes[0];
-
-    if (!scene) {
-      throw new Error("Script generation returned no scenes");
-    }
-
-    await supabase.from('video_generation_jobs').update({ progress: 30 }).eq('id', jobId);
-    const audioUrl = await generateSpeechUrl(scene.narration, resolvedVoiceId, elevenLabsApiKey, project_id);
-
-    await supabase.from('video_generation_jobs').update({ progress: 50 }).eq('id', jobId);
-    const aspectRatio = format === "portrait" ? "9:16" : format === "square" ? "1:1" : "16:9";
-    const imageUrl = await generateImage(scene.visual_prompt, hyperealApiKey, aspectRatio);
-    const videoUrl = await generateVideoFromImage(imageUrl, scene.visual_prompt, hyperealApiKey);
-
-    console.log(`[GenerateVideo] Downloading assets to ${tempDir}`);
-    await writeSystemLog({ jobId, projectId: project_id, userId, generationId: generation_id, category: "system_info", eventType: "download_assets_started", message: `Downloading raw video and audio assets to Render node`});
-    
-    await supabase.from('video_generation_jobs').update({ progress: 70 }).eq('id', jobId);
-    
-    const localVideoPath = path.join(tempDir, 'scene.mp4');
-    const localAudioPath = path.join(tempDir, 'audio.mp3');
-    const finalOutputPath = path.join(tempDir, 'final_output.mp4');
-
-    await downloadFile(videoUrl, localVideoPath);
-    await downloadFile(audioUrl, localAudioPath);
-
-    await writeSystemLog({ jobId, projectId: project_id, userId, generationId: generation_id, category: "system_info", eventType: "ffmpeg_merge_started", message: `Started FFmpeg compilation`});
-    console.log(`[GenerateVideo] Merging video and audio via FFmpeg...`);
-    await supabase.from('video_generation_jobs').update({ progress: 85 }).eq('id', jobId);
-    await mergeAudioVideo(localVideoPath, localAudioPath, finalOutputPath);
-
-    await writeSystemLog({ jobId, projectId: project_id, userId, generationId: generation_id, category: "system_info", eventType: "upload_started", message: `Uploading compiled video to Supabase Storage`});
-    console.log(`[GenerateVideo] Uploading final video to Supabase Storage...`);
-    const finalFileName = `${project_id}_${Date.now()}.mp4`;
-    const finalVideoUrl = await uploadToSupabase(finalOutputPath, finalFileName);
-
-    console.log(`[GenerateVideo] Job ${jobId} successfully completed. URL: ${finalVideoUrl}`);
-    
-    if (generation_id) {
-        await supabase.from('generations').update({
-            status: 'completed',
-            video_url: finalVideoUrl,
-            updated_at: new Date().toISOString()
-        }).eq('id', generation_id);
-    }
-
-    return { success: true, url: finalVideoUrl };
-
-  } catch (error) {
-    console.error(`[GenerateVideo] Job ${jobId} failed:`, error);
-    await writeSystemLog({ jobId, projectId: project_id, userId, generationId: generation_id, category: "system_error", eventType: "generate_video_failed", message: `Video generation explicitly failed`, details: { error: error instanceof Error ? error.message : "Unknown" }});
-    throw error;
-  } finally {
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-      console.log(`[GenerateVideo] Cleaned up directory ${tempDir}`);
-    }
+    default: // doc2video
+      return buildDoc2VideoPrompt({
+        content: p.content || "",
+        format: p.format || "landscape",
+        length: p.length || "brief",
+        style: p.style || "realistic",
+        customStyle: p.customStyle,
+        brandMark: p.brandMark,
+        presenterFocus: p.presenterFocus,
+        characterDescription: p.characterDescription,
+        voiceType: p.voiceType,
+      });
   }
+}
+
+// ── DB Helpers ─────────────────────────────────────────────────────
+
+/** Update job progress in video_generation_jobs. */
+async function updateJobProgress(jobId: string, progress: number): Promise<void> {
+  await supabase
+    .from("video_generation_jobs")
+    .update({ progress, updated_at: new Date().toISOString() })
+    .eq("id", jobId);
+}
+
+/** Build the project insert object with type-specific columns. */
+function buildProjectInsert(
+  userId: string | undefined,
+  title: string,
+  payload: Record<string, any>,
+  projectType: string,
+): Record<string, unknown> {
+  const row: Record<string, unknown> = {
+    user_id: userId,
+    title,
+    content: payload.content || payload.storyIdea || "",
+    format: payload.format || "landscape",
+    length: payload.length || "brief",
+    style: payload.style || "realistic",
+    brand_mark: payload.brandMark || null,
+    status: "generating",
+    project_type: projectType,
+    voice_type: payload.voiceType || "standard",
+    voice_id: payload.voiceId || null,
+    voice_name: payload.voiceName || null,
+  };
+
+  if (projectType === "doc2video") {
+    row.presenter_focus = payload.presenterFocus || null;
+    row.character_description = payload.characterDescription || null;
+  }
+
+  if (projectType === "storytelling") {
+    row.inspiration_style = payload.inspiration || null;
+    row.story_tone = payload.tone || null;
+    row.story_genre = payload.genre || null;
+    row.character_description = payload.characterDescription || null;
+  }
+
+  return row;
+}
+
+// ── Main Handler ───────────────────────────────────────────────────
+
+export async function handleGenerateVideo(
+  jobId: string,
+  payload: any,
+  userId?: string,
+): Promise<void> {
+  const phaseStart = Date.now();
+  const projectType: string = payload.projectType || "doc2video";
+  const style: string = payload.style || "realistic";
+  const customStyle: string | undefined = payload.customStyle;
+
+  await writeSystemLog({
+    jobId,
+    userId,
+    category: "system_info",
+    eventType: "script_generation_started",
+    message: `Script generation started for ${projectType} project`,
+  });
+
+  // ── Step 1: Build prompt ──────────────────────────────────────────
+  await updateJobProgress(jobId, 5);
+  const promptResult = buildPrompt(projectType, payload);
+  console.log(
+    `[GenerateVideo] Built ${projectType} prompt (maxTokens=${promptResult.maxTokens})`,
+  );
+
+  // ── Step 2: Call OpenRouter LLM ───────────────────────────────────
+  await updateJobProgress(jobId, 10);
+  const rawText = await callOpenRouterLLM(promptResult, {
+    maxTokens: promptResult.maxTokens,
+  });
+
+  // ── Step 3: Parse LLM response ───────────────────────────────────
+  await updateJobProgress(jobId, 20);
+  const parsed = extractJsonFromLLMResponse(
+    rawText,
+    `${projectType} script`,
+  ) as ParsedScript;
+
+  // SmartFlow may return a single scene without a scenes array
+  if (projectType === "smartflow" && !Array.isArray(parsed.scenes)) {
+    parsed.scenes = [
+      {
+        number: 1,
+        visualPrompt: parsed.visualPrompt || parsed.visual_prompt || "",
+        voiceover: "",
+        duration: 15,
+      },
+    ];
+  }
+
+  if (!parsed.scenes || parsed.scenes.length === 0) {
+    throw new Error(`LLM returned no scenes for ${projectType} script`);
+  }
+
+  // ── Step 4: Post-process scenes ──────────────────────────────────
+  const stylePrompt = getStylePrompt(style, customStyle);
+  const { scenes, totalImages, title } = postProcessScenes(
+    parsed,
+    stylePrompt,
+    projectType,
+  );
+  const phaseTime = Date.now() - phaseStart;
+
+  console.log(
+    `[GenerateVideo] Script parsed: ${scenes.length} scenes, ${totalImages} images, ${phaseTime}ms`,
+  );
+
+  // ── Step 5: Create project ────────────────────────────────────────
+  const projectRow = buildProjectInsert(userId, title, payload, projectType);
+  const { data: project, error: projectError } = await supabase
+    .from("projects")
+    .insert(projectRow)
+    .select("id")
+    .single();
+
+  if (projectError || !project) {
+    throw new Error(
+      `Failed to create project: ${projectError?.message || "no data returned"}`,
+    );
+  }
+
+  // ── Step 6: Create generation ─────────────────────────────────────
+  const scenesWithMeta = scenes.map((s: ParsedScene, idx: number) => ({
+    ...s,
+    _meta: {
+      statusMessage: "Script complete. Ready for audio generation.",
+      totalImages,
+      completedImages: 0,
+      sceneIndex: idx,
+      phaseTimings: { script: phaseTime },
+      characterBible: parsed.characters || null,
+      projectType,
+    },
+  }));
+
+  const { data: generation, error: genError } = await supabase
+    .from("generations")
+    .insert({
+      project_id: project.id,
+      user_id: userId,
+      status: "generating",
+      progress: 10,
+      script: rawText,
+      scenes: scenesWithMeta,
+      started_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+
+  if (genError || !generation) {
+    throw new Error(
+      `Failed to create generation: ${genError?.message || "no data returned"}`,
+    );
+  }
+
+  // ── Step 7: Write result to job row ───────────────────────────────
+  const result = {
+    success: true,
+    projectId: project.id,
+    generationId: generation.id,
+    title,
+    scenes: scenesWithMeta,
+    sceneCount: scenes.length,
+    totalImages,
+    phaseTime,
+  };
+
+  await supabase
+    .from("video_generation_jobs")
+    .update({
+      result,
+      progress: 30,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", jobId);
+
+  await writeSystemLog({
+    jobId,
+    projectId: project.id,
+    userId,
+    generationId: generation.id,
+    category: "system_info",
+    eventType: "script_generation_completed",
+    message: `Script complete: ${scenes.length} scenes, ${totalImages} images, ${phaseTime}ms`,
+  });
+
+  console.log(
+    `[GenerateVideo] Job ${jobId} done → project=${project.id} gen=${generation.id}`,
+  );
 }

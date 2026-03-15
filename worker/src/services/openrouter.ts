@@ -36,7 +36,7 @@ export async function callOpenRouterLLM(
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
 
-  const model = options.model || "anthropic/claude-sonnet-4";
+  const model = options.model || "anthropic/claude-sonnet-4.6";
   console.log(`[OpenRouter] Calling ${model} (maxTokens=${options.maxTokens})`);
 
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {

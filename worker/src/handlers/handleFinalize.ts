@@ -126,11 +126,22 @@ export async function handleFinalizePhase(
     })
     .eq("id", generationId);
 
-  // Mark project complete
+  // Extract thumbnail from first scene with an image
+  const thumbnailScene = finalScenes.find((s: any) => s.imageUrl);
+  const thumbnailUrl: string | null = thumbnailScene?.imageUrl || null;
+
+  // Mark project complete and write thumbnail
   await supabase
     .from("projects")
-    .update({ status: "complete" })
+    .update({
+      status: "complete",
+      ...(thumbnailUrl ? { thumbnail_url: thumbnailUrl } : {}),
+    })
     .eq("id", projectId);
+
+  if (thumbnailUrl) {
+    console.log(`[Finalize] Thumbnail set for project ${projectId}: ${thumbnailUrl.substring(0, 80)}...`);
+  }
 
   const phaseTime = Date.now() - phaseStart;
 

@@ -1,40 +1,33 @@
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
-import { readFileSync } from "fs";
 import { join } from "path";
 
-// Load .env from parent (workspace root) or current dir
 try { dotenv.config({ path: join(process.cwd(), ".env") }); } catch {}
 try { dotenv.config({ path: join(process.cwd(), "..", ".env") }); } catch {}
 
-const url = "https://ayjbvcikuwknqdrpsdmj.supabase.co";
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+const sb = createClient(
+  "https://ayjbvcikuwknqdrpsdmj.supabase.co",
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
+);
 
-if (!key) { console.error("No key found"); process.exit(1); }
-
-const supabase = createClient(url, key);
-
-const STUCK_JOB_ID = "eb03bea9-0489-4eec-bb25-d91abf5ee8c6";
-
-const { data, error } = await supabase
+// Clear all stuck/failing export jobs
+const { data: exportJobs } = await sb
   .from("video_generation_jobs")
   .update({
     status: "failed",
-    error_message: "Manually cleared — stuck in processing (export loop on restart)",
+    error_message: "Manually cleared — export job crashing worker on FFmpeg step",
     updated_at: new Date().toISOString(),
   })
-  .eq("id", STUCK_JOB_ID)
-  .select("id, status, task_type, updated_at");
+  .eq("task_type", "export_video")
+  .in("status", ["pending", "processing"])
+  .select("id, task_type, status");
 
-if (error) {
-  console.error("Failed:", error.message);
-} else {
-  console.log("✅ Cleared:", data);
-}
+console.log(`✅ Cleared ${exportJobs?.length ?? 0} export job(s):`);
+exportJobs?.forEach(j => console.log(`  ${j.id} → failed`));
 
-// Also clear ALL export_video jobs stuck in processing > 20 min
+// Also clear any other stale processing jobs (>20 min)
 const twentyMinAgo = new Date(Date.now() - 20 * 60 * 1000).toISOString();
-const { data: stale, error: staleErr } = await supabase
+const { data: stale } = await sb
   .from("video_generation_jobs")
   .update({
     status: "failed",
@@ -43,12 +36,8 @@ const { data: stale, error: staleErr } = await supabase
   })
   .eq("status", "processing")
   .lt("updated_at", twentyMinAgo)
-  .select("id, task_type, updated_at");
+  .select("id, task_type");
 
-if (staleErr) {
-  console.error("Stale clear failed:", staleErr.message);
-} else if (stale && stale.length > 0) {
-  console.log(`✅ Cleared ${stale.length} additional stale job(s):`, stale.map(r => r.id));
-} else {
-  console.log("No other stale jobs found.");
+if (stale && stale.length > 0) {
+  console.log(`✅ Also cleared ${stale.length} stale processing job(s):`, stale.map(r => r.id));
 }

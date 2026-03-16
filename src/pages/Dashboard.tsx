@@ -286,6 +286,11 @@ export default function Dashboard() {
                               src={project.thumbnailUrl || defaultThumbnail}
                               alt={project.title}
                               className="absolute inset-0 w-full h-full object-cover"
+                              onError={(e) => {
+                                const img = e.target as HTMLImageElement;
+                                img.onerror = null;
+                                img.src = defaultThumbnail;
+                              }}
                             />
                             <div className="absolute bottom-2 right-2 p-1.5 rounded-md bg-black/50 backdrop-blur-sm z-10">
                               <ProjectIcon className="h-4 w-4 text-white" />

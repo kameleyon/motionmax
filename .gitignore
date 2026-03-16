@@ -43,3 +43,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+scripts/check-queue.mjs
+scripts/clear-stuck-job.mjs
+scripts/fetch-project-script.mjs
+scripts/repair-hypereal-images.mjs
+scripts/repair-imageUrls.mjs
+scripts/clear-stuck-job.mjs

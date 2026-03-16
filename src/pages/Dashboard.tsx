@@ -138,7 +138,37 @@ export default function Dashboard() {
         .order("updated_at", { ascending: false })
         .limit(10);
       if (error) throw error;
-      return (projects || []).map(p => ({ ...p, thumbnailUrl: p.thumbnail_url || null }));
+      if (!projects?.length) return [];
+
+      // Fetch thumbnails from generations.scenes (same approach as Projects page)
+      const projectIds = projects.map(p => p.id);
+      const { data: generations } = await supabase
+        .from("generations")
+        .select("project_id, scenes")
+        .in("project_id", projectIds)
+        .eq("status", "complete")
+        .order("created_at", { ascending: false });
+
+      const thumbnailMap: Record<string, string | null> = {};
+      if (generations) {
+        for (const gen of generations) {
+          if (thumbnailMap[gen.project_id] !== undefined) continue;
+          const scenes = gen.scenes as any[];
+          if (Array.isArray(scenes) && scenes.length > 0) {
+            const first = scenes[0];
+            thumbnailMap[gen.project_id] =
+              first?.imageUrl ||
+              first?.image_url ||
+              (Array.isArray(first?.imageUrls) ? first.imageUrls[0] : null) ||
+              null;
+          }
+        }
+      }
+
+      return projects.map(p => ({
+        ...p,
+        thumbnailUrl: thumbnailMap[p.id] ?? p.thumbnail_url ?? null,
+      }));
     },
     enabled: !!user?.id,
     staleTime: 30000,

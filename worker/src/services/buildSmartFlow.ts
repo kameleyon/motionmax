@@ -97,7 +97,7 @@ Return ONLY valid JSON:
     "voiceover": "Optional narration script - but the visual is the star here...",
     "visualPrompt": "You are an expert marketing and content creator, you know your targeted population and know how to catch their attention. So, Be extremely creative and using your expert marketing skills to create a catchy, detailed, elegant yet captivating editorial infographic illustration using elements, images and typography that suit best the topic presented. LAYOUT: [Magazine/Panel layout]. MAIN TITLE: Bold text '[YOUR TITLE]' at top center. CENTRAL VISUAL: [Describe the anchor image - a character, object, or symbol]. SECTION 1: Title text '[TITLE 1]' with subtitle '[SUBTITLE]' and description paragraph text '[Full 15-25 word explanation]'. Accompanied by [icon description]. SECTION 2: Title text '[TITLE 2]' with description paragraph text '[explanation]'. [Continue for all sections]. FLOATING ICONS: [List thematic icons around edges]. COLOR PALETTE: [Specify colors matching content theme].",
     "coverTitle": "Catchy Cover Title",
-    "duration": 10
+    "duration": 15
   }]
 }
 

@@ -14,7 +14,7 @@ interface StorytellingLengthSelectorProps {
 }
 
 const LENGTHS: { id: StoryLength; label: string; description: string }[] = [
-  { id: "short", label: "Short", description: "~ 2 min" },
+  { id: "short", label: "Short", description: "~ 2.5 min" },
   { id: "brief", label: "Brief", description: "< 7 min" },
   { id: "extended", label: "Extended", description: "< 15 min" },
 ];

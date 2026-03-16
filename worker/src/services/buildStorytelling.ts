@@ -60,7 +60,7 @@ const GENRE_GUIDE: Record<string, string> = {
 
 export function buildStorytellingPrompt(p: StorytellingParams): PromptResult {
   const lengthCfg: Record<string, { count: number; targetDuration: number; avgSceneDuration: number }> = {
-    short: { count: 10, targetDuration: 100, avgSceneDuration: 10 },
+    short: { count: 10, targetDuration: 150, avgSceneDuration: 15 },
     brief: { count: 28, targetDuration: 420, avgSceneDuration: 15 },
     extended: { count: 36, targetDuration: 540, avgSceneDuration: 15 },
     presentation: { count: 36, targetDuration: 540, avgSceneDuration: 15 },
@@ -107,11 +107,11 @@ All image prompts must adhere to this style:
 === TIMING REQUIREMENTS (CRITICAL - STRICT ENFORCEMENT) ===
 - Target duration: ${cfg.targetDuration} seconds
 - Create exactly ${sc} scenes
-- EACH SCENE VOICEOVER MUST BE 8-10 SECONDS LONG. NO MORE THAN 10 SECONDS.
+- EACH SCENE VOICEOVER MUST BE 12-15 SECONDS LONG. NO MORE THAN 15 SECONDS.
 - That means each voiceover must be approximately ${targetWords} words (at ~2.5 words per second)
 - MINIMUM 3 seconds per scene (to avoid glitchy flashes)
-- If you exceed 10 seconds of spoken text per scene, the generation WILL FAIL. Keep it concise and impactful.
-- Set each scene "duration" to exactly ${cfg.avgSceneDuration}
+- If you exceed 15 seconds of spoken text per scene, the generation WILL FAIL. Keep it concise and impactful.
+- Set each scene "duration" to exactly 15
 
 === NARRATIVE STRUCTURE ===
 1. OPENING (Scene 1): Hook the audience immediately. Start in media res or with a provocative question.

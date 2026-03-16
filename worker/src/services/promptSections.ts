@@ -75,7 +75,7 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
       "visualPrompt": "Full prompt including CHARACTER BIBLE description + action + setting + camera angle...",
       "subVisuals": ["Second visual moment for variety...", "Third visual moment for dynamic pacing..."],
       "coverTitle": "Catchy Cover Title",
-      "duration": 10${textOverlayFields}
+      "duration": 15${textOverlayFields}
     }
   ]
 }`;

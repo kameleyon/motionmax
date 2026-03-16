@@ -15,9 +15,8 @@ import { processScene } from "./export/sceneEncoder.js";
 import { concatFiles } from "./export/concatScenes.js";
 import { uploadToSupabase, removeFiles } from "./export/storageHelpers.js";
 
-/** Process 2 scenes in parallel — each runs 1 ffmpeg at a time (~80MB),
- *  so 2 parallel = ~160MB peak, leaving room for other jobs on 512MB. */
-const SCENE_BATCH_SIZE = 2;
+/** Process ONE scene at a time — Render's 512MB can OOM with 2 parallel. */
+const SCENE_BATCH_SIZE = 1;
 
 /** Fetch scenes from the generations table as a fallback. */
 async function fetchScenesFromDb(projectId: string): Promise<any[]> {

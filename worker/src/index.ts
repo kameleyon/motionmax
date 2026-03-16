@@ -153,9 +153,10 @@ async function pollQueue() {
 
 const POLL_INTERVAL_MS = 5000;
 
+const MAX_RESTART_RETRIES = 3;
+
 /** Run once at startup to verify DB connectivity and rescue orphaned jobs.
- *  In a single-worker setup, ANY job in 'processing' at boot is an orphan
- *  from the previous worker instance — reset it to 'pending' so it retries. */
+ *  Tracks retries via payload._restartCount — after 3 restarts, marks as failed. */
 async function startupDiagnostic(): Promise<void> {
   try {
     const { count, error } = await supabase
@@ -168,31 +169,44 @@ async function startupDiagnostic(): Promise<void> {
     }
     console.log(`[Worker] ✅ Startup diagnostic OK — video_generation_jobs has ${count ?? 0} total row(s)`);
 
-    // Reset ALL processing jobs to pending (orphans from previous worker instance)
+    // Find all processing jobs (orphans from previous worker instance)
     const { data: processingRows } = await supabase
       .from("video_generation_jobs")
-      .select("id, task_type, created_at, updated_at")
+      .select("id, task_type, payload, created_at, updated_at")
       .eq("status", "processing")
       .order("created_at", { ascending: true });
 
     if (processingRows && processingRows.length > 0) {
-      const orphanIds = processingRows.map((r: any) => r.id as string);
       for (const row of processingRows as any[]) {
-        console.warn(
-          `[Worker] ⚠️  Orphaned job: ${row.id} (${row.task_type}) → resetting to pending`,
-        );
-      }
+        const payload = (row.payload && typeof row.payload === "object") ? row.payload : {};
+        const restartCount = (typeof payload._restartCount === "number" ? payload._restartCount : 0) + 1;
 
-      await supabase
-        .from("video_generation_jobs")
-        .update({
-          status: "pending",
-          progress: 0,
-          error_message: null,
-          updated_at: new Date().toISOString(),
-        })
-        .in("id", orphanIds);
-      console.log(`[Worker] 🔄 Reset ${orphanIds.length} orphaned job(s) to pending`);
+        if (restartCount > MAX_RESTART_RETRIES) {
+          // Too many restarts — mark as failed to break the loop
+          console.error(`[Worker] 🛑 Job ${row.id} exceeded ${MAX_RESTART_RETRIES} restart retries → marking FAILED`);
+          await supabase
+            .from("video_generation_jobs")
+            .update({
+              status: "failed",
+              error_message: `Export failed after ${MAX_RESTART_RETRIES} worker restarts. The video may be too large for the current server. Please retry or try a shorter video.`,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", row.id);
+        } else {
+          // Reset to pending with incremented restart counter
+          console.warn(`[Worker] ⚠️  Orphaned job: ${row.id} (${row.task_type}) restart #${restartCount} → resetting to pending`);
+          await supabase
+            .from("video_generation_jobs")
+            .update({
+              status: "pending",
+              progress: 0,
+              error_message: null,
+              payload: { ...payload, _restartCount: restartCount },
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", row.id);
+        }
+      }
     }
 
     // Show pending jobs remaining after cleanup

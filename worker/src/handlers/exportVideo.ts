@@ -15,8 +15,9 @@ import { processScene } from "./export/sceneEncoder.js";
 import { concatFiles } from "./export/concatScenes.js";
 import { uploadToSupabase, removeFiles } from "./export/storageHelpers.js";
 
-/** Process ONE scene at a time to stay within Render's 512 MB RAM. */
-const SCENE_BATCH_SIZE = 1;
+/** Process 2 scenes in parallel — each runs 1 ffmpeg at a time (~80MB),
+ *  so 2 parallel = ~160MB peak, leaving room for other jobs on 512MB. */
+const SCENE_BATCH_SIZE = 2;
 
 /** Fetch scenes from the generations table as a fallback. */
 async function fetchScenesFromDb(projectId: string): Promise<any[]> {
@@ -152,7 +153,7 @@ export async function handleExportVideo(
       eventType: "ffmpeg_stitch_started",
       message: "Starting concat demuxer stitch (no filter_complex)",
     });
-    await concatFiles(clipPaths, finalOutputPath);
+    await concatFiles(clipPaths, finalOutputPath, true); // stream-copy: all scenes use same codec
 
     // Free individual scene MP4s
     for (const f of clipPaths) removeFiles(f);

@@ -31,13 +31,28 @@ export type { SmartFlowParams } from "./buildSmartFlow.js";
  */
 export async function callOpenRouterLLM(
   prompt: { system: string; user: string },
-  options: { maxTokens: number; model?: string },
+  options: { maxTokens: number; model?: string; forceJson?: boolean },
 ): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
 
   const model = options.model || "anthropic/claude-sonnet-4.6";
-  console.log(`[OpenRouter] Calling ${model} (maxTokens=${options.maxTokens})`);
+  console.log(`[OpenRouter] Calling ${model} (maxTokens=${options.maxTokens}, forceJson=${!!options.forceJson})`);
+
+  const requestBody: Record<string, unknown> = {
+    model,
+    max_tokens: options.maxTokens,
+    temperature: 0.7,
+    messages: [
+      { role: "system", content: prompt.system },
+      { role: "user", content: prompt.user },
+    ],
+  };
+
+  // Force JSON output at the API level to prevent malformed responses
+  if (options.forceJson) {
+    requestBody.response_format = { type: "json_object" };
+  }
 
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
@@ -45,15 +60,7 @@ export async function callOpenRouterLLM(
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model,
-      max_tokens: options.maxTokens,
-      temperature: 0.7,
-      messages: [
-        { role: "system", content: prompt.system },
-        { role: "user", content: prompt.user },
-      ],
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!res.ok) {

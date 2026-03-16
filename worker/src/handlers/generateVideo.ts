@@ -151,6 +151,7 @@ export async function handleGenerateVideo(
   await updateJobProgress(jobId, 10);
   const rawText = await callOpenRouterLLM(promptResult, {
     maxTokens: promptResult.maxTokens,
+    forceJson: true,
   });
 
   // ── Step 3: Parse LLM response ───────────────────────────────────

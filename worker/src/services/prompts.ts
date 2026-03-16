@@ -93,6 +93,59 @@ export function getImageDimensions(format: string): ImageDimensions {
 
 // ──────────────────── JSON Extraction ──────────────────────────────
 
+/**
+ * Repair a JSON string by escaping unescaped double-quotes that appear inside
+ * string values.  Uses a lightweight state machine instead of a regex so it
+ * handles arbitrary value content correctly.
+ */
+function repairUnescapedQuotes(json: string): string {
+  let result = "";
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < json.length; i++) {
+    const ch = json[i];
+
+    if (escaped) {
+      result += ch;
+      escaped = false;
+      continue;
+    }
+
+    if (ch === "\\") {
+      result += ch;
+      escaped = true;
+      continue;
+    }
+
+    if (ch === '"') {
+      if (!inString) {
+        inString = true;
+        result += ch;
+        continue;
+      }
+
+      // Determine whether this quote closes the string or is unescaped content.
+      // A closing quote is followed (ignoring whitespace) by : , ] } or EOF.
+      const rest = json.slice(i + 1).trimStart();
+      const isClosing = rest.length === 0 || /^[:,\]}]/.test(rest);
+
+      if (isClosing) {
+        inString = false;
+        result += ch;
+      } else {
+        // Unescaped quote inside a string value — escape it.
+        result += '\\"';
+      }
+      continue;
+    }
+
+    result += ch;
+  }
+
+  return result;
+}
+
 /** Return the top-level keys of an object (up to 12) for debug logging. */
 function getTopLevelKeys(value: unknown): string[] {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -180,14 +233,28 @@ export function extractJsonFromLLMResponse(raw: string, label: string): unknown 
       });
       return result;
     } catch (secondError) {
-      console.error(
-        `[JSON_EXTRACT] ${label}: all parse attempts failed.`,
-        `\nFirst error: ${(firstError as Error).message}`,
-        `\nSecond error: ${(secondError as Error).message}`,
-        `\nRaw content (first 800 chars): ${raw.substring(0, 800)}`,
-        `\nRaw content (last 300 chars): ${raw.substring(Math.max(0, raw.length - 300))}`,
-      );
-      throw new Error(`Failed to parse ${label}: invalid JSON from LLM`);
+      // Step 6: State-machine repair for unescaped double-quotes inside string values.
+      // LLMs writing rich visual prompts sometimes embed literal " inside strings,
+      // producing invalid JSON.  repairUnescapedQuotes() fixes this without a library.
+      try {
+        const sanitized = repairUnescapedQuotes(fixedContent);
+        const result = JSON.parse(sanitized);
+        console.log(`[JSON_EXTRACT] ${label}: recovered via state-machine quote repair`, {
+          sanitizedLength: sanitized.length,
+          topLevelKeys: getTopLevelKeys(result),
+        });
+        return result;
+      } catch (thirdError) {
+        console.error(
+          `[JSON_EXTRACT] ${label}: all parse attempts failed.`,
+          `\nFirst error: ${(firstError as Error).message}`,
+          `\nSecond error: ${(secondError as Error).message}`,
+          `\nThird error: ${(thirdError as Error).message}`,
+          `\nRaw content (first 800 chars): ${raw.substring(0, 800)}`,
+          `\nRaw content (last 300 chars): ${raw.substring(Math.max(0, raw.length - 300))}`,
+        );
+        throw new Error(`Failed to parse ${label}: invalid JSON from LLM`);
+      }
     }
   }
 }

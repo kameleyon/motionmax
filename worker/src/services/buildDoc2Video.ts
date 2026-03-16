@@ -27,7 +27,7 @@ export interface PromptResult { system: string; user: string; maxTokens: number;
 
 export function buildDoc2VideoPrompt(p: Doc2VideoParams): PromptResult {
   const lengthCfg: Record<string, { count: number; targetDuration: number; avgSceneDuration: number }> = {
-    short: { count: 12, targetDuration: 120, avgSceneDuration: 10 },
+    short: { count: 10, targetDuration: 100, avgSceneDuration: 10 },
     brief: { count: 28, targetDuration: 420, avgSceneDuration: 15 },
     presentation: { count: 36, targetDuration: 540, avgSceneDuration: 15 },
   };

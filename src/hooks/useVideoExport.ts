@@ -180,7 +180,7 @@ export function useVideoExport() {
             cleanup();
             setState({ status: "error", progress: 0, error: "Render server timed out" });
             reject(new Error("Timeout waiting for Render server"));
-          }, 600000);
+          }, 1_200_000); // 20 minutes — 12-scene exports with audio transcoding need ~12-15min
 
           // Start at the correct rate for current visibility
           startPollInterval(document.visibilityState === "visible" ? 5000 : 15000);

@@ -27,7 +27,7 @@ export interface PromptResult { system: string; user: string; maxTokens: number;
 
 export function buildDoc2VideoPrompt(p: Doc2VideoParams): PromptResult {
   const lengthCfg: Record<string, { count: number; targetDuration: number; avgSceneDuration: number }> = {
-    short: { count: 12, targetDuration: 180, avgSceneDuration: 15 },
+    short: { count: 12, targetDuration: 120, avgSceneDuration: 10 },
     brief: { count: 28, targetDuration: 420, avgSceneDuration: 15 },
     presentation: { count: 36, targetDuration: 540, avgSceneDuration: 15 },
   };
@@ -72,11 +72,11 @@ All image prompts must adhere to this style:
 === TIMING REQUIREMENTS (CRITICAL - STRICT ENFORCEMENT) ===
 - Target duration: ${cfg.targetDuration} seconds
 - Create exactly ${cfg.count} scenes
-- EACH SCENE VOICEOVER MUST BE 12-15 SECONDS LONG. NO MORE THAN 15 SECONDS.
+- EACH SCENE VOICEOVER MUST BE 8-10 SECONDS LONG. NO MORE THAN 10 SECONDS.
 - That means each voiceover must be approximately ${targetWords} words (at ~2.5 words per second)
 - MINIMUM 3 seconds per scene (to avoid glitchy flashes)
-- If you exceed 15 seconds of spoken text per scene, the generation WILL FAIL. Keep it concise.
-- Set each scene "duration" to exactly 15
+- If you exceed 10 seconds of spoken text per scene, the generation WILL FAIL. Keep it concise.
+- Set each scene "duration" to exactly ${cfg.avgSceneDuration}
 
 === NARRATIVE ARC ===
 1. HOOK (Scenes 1-2): Create intrigue (High energy, fast cuts)

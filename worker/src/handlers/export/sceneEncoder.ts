@@ -74,14 +74,13 @@ async function imageAudioToClip(
 
   // Step 2: Get exact audio duration via full decode
   const exactDur = await getExactAudioDuration(aacPath);
-  const videoDur = exactDur + 3; // generous buffer
-  console.log(`[SceneEncoder] Scene ${sceneIndex} imageAudio: exactAudio=${exactDur.toFixed(2)}s, videoPad=${videoDur.toFixed(1)}s`);
+  console.log(`[SceneEncoder] Scene ${sceneIndex} imageAudio: exactAudio=${exactDur.toFixed(2)}s`);
 
-  // Step 3: Create silent video longer than audio
+  // Step 3: Create silent video at exact audio duration
   const silentVidPath = path.join(tempDir, `scene_${sceneIndex}_imgvid.mp4`);
-  await imageToSilentClip(imagePath, silentVidPath, videoDur);
+  await imageToSilentClip(imagePath, silentVidPath, exactDur);
 
-  // Step 4: Merge video + audio, trim to exact audio duration via re-encode
+  // Step 4: Merge video + audio (no padding — exact decoded duration)
   await runFfmpeg([
     "-i", silentVidPath,
     "-i", aacPath,
@@ -90,9 +89,7 @@ async function imageAudioToClip(
     "-c:v", "libx264",
     "-preset", "ultrafast",
     "-pix_fmt", "yuv420p",
-    "-c:a", "aac",
-    "-b:a", "128k",
-    "-t", String(exactDur + 0.5),  // tiny +0.5s safety for AAC frame alignment
+    "-c:a", "copy",
     "-movflags", "+faststart",
     ...X264_MEM_FLAGS,
     outputPath,
@@ -138,20 +135,15 @@ async function muxVideoAudio(
     stretchedVid,
   ]);
 
-  // Pass 2: merge stretched video + audio, trim to exact audio duration
+  // Pass 2: merge stretched video + audio (no padding — exact duration)
   await runFfmpeg([
     "-i", stretchedVid,
     "-i", aacPath,
     "-map", "0:v:0",
     "-map", "1:a:0",
-    "-c:v", "libx264",
-    "-preset", "ultrafast",
-    "-pix_fmt", "yuv420p",
-    "-c:a", "aac",
-    "-b:a", "128k",
-    "-t", String(audioDur + 0.5),
+    "-c:v", "copy",
+    "-c:a", "copy",
     "-movflags", "+faststart",
-    ...X264_MEM_FLAGS,
     outputPath,
   ]);
 
@@ -172,7 +164,7 @@ async function slideshowFromImages(
   const audioDur = await getExactAudioDuration(aacPath);
 
   const n = imageUrls.length;
-  const perImgDur = (audioDur + 3) / n; // extra padding per image
+  const perImgDur = audioDur / n; // exact split — no padding
 
   // 1. Create a silent clip per sub-image
   const subClips: string[] = [];
@@ -190,20 +182,15 @@ async function slideshowFromImages(
   await concatFiles(subClips, slideshowPath, true); // streamCopy=true: identical codec sub-clips
   removeFiles(...subClips);
 
-  // 3. Add audio track, trim to exact audio duration
+  // 3. Add audio track (no padding — exact audio duration)
   await runFfmpeg([
     "-i", slideshowPath,
     "-i", aacPath,
     "-map", "0:v:0",
     "-map", "1:a:0",
-    "-c:v", "libx264",
-    "-preset", "ultrafast",
-    "-pix_fmt", "yuv420p",
-    "-c:a", "aac",
-    "-b:a", "128k",
-    "-t", String(audioDur + 0.5),
+    "-c:v", "copy",
+    "-c:a", "copy",
     "-movflags", "+faststart",
-    ...X264_MEM_FLAGS,
     outputPath,
   ]);
 

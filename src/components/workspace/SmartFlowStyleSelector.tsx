@@ -1,4 +1,4 @@
-﻿import { Wand2, Pencil, Users, Camera, Palette, Laugh, PenTool, Baby, ChevronLeft, ChevronRight, Upload, X, GraduationCap, Loader2 } from "lucide-react";
+﻿import { Wand2, Pencil, Users, Camera, Palette, Laugh, PenTool, Baby, ChevronLeft, ChevronRight, Upload, X, GraduationCap, Loader2, Cherry, Box, Hand, CloudMoon } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -13,20 +13,22 @@ import { toast } from "sonner";
 import minimalistPreview from "@/assets/styles/minimalist-preview.png";
 import doodlePreview from "@/assets/styles/doodle-preview.png";
 import stickPreview from "@/assets/styles/stick-preview.png";
+import animePreview from "@/assets/styles/anime-preview.png";
 import realisticPreview from "@/assets/styles/realistic-preview.png";
+import pixarPreview from "@/assets/styles/3d-pixar-preview.png";
+import claymationPreview from "@/assets/styles/claymation-preview.png";
 import storybookPreview from "@/assets/styles/painterly-preview.png";
 import caricaturePreview from "@/assets/styles/caricature-preview.png";
+import moodyPreview from "@/assets/styles/moody-preview.png";
 import sketchPreview from "@/assets/styles/sketch-preview.png";
 import crayonPreview from "@/assets/styles/crayon-preview.png";
 import chalkboardPreview from "@/assets/styles/chalkboard-preview.png";
 import customPreview from "@/assets/styles/custom-preview.png";
 
 /**
- * SmartFlow-specific style selector with 10 styles.
- * Includes chalkboard (educational focus), excludes anime/moody/3d-pixar/claymation
- * which are available in the main StyleSelector used by other workspaces.
+ * SmartFlow style selector with all styles from Doc2Video Explainers + chalkboard.
  */
-export type SmartFlowStyle = "minimalist" | "doodle" | "stick" | "realistic" | "storybook" | "caricature" | "sketch" | "crayon" | "chalkboard" | "custom";
+export type SmartFlowStyle = "minimalist" | "doodle" | "stick" | "anime" | "realistic" | "3d-pixar" | "claymation" | "storybook" | "caricature" | "moody" | "sketch" | "crayon" | "chalkboard" | "custom";
 
 interface SmartFlowStyleSelectorProps {
   selected: SmartFlowStyle;
@@ -46,8 +48,12 @@ const styles: { id: SmartFlowStyle; label: string; icon: React.ElementType; prev
   { id: "doodle", label: "Urban Doodle", icon: Pencil, preview: doodlePreview },
   { id: "stick", label: "Stick Figure", icon: Users, preview: stickPreview },
   { id: "realistic", label: "Realistic", icon: Camera, preview: realisticPreview },
+  { id: "3d-pixar", label: "3D Pixar", icon: Box, preview: pixarPreview },
   { id: "storybook", label: "Storybook", icon: Palette, preview: storybookPreview },
+  { id: "anime", label: "Anime", icon: Cherry, preview: animePreview },
   { id: "caricature", label: "Caricature", icon: Laugh, preview: caricaturePreview },
+  { id: "moody", label: "Moody", icon: CloudMoon, preview: moodyPreview },
+  { id: "claymation", label: "Claymation", icon: Hand, preview: claymationPreview },
   { id: "crayon", label: "Crayon", icon: Baby, preview: crayonPreview },
   { id: "sketch", label: "Papercut 3D", icon: PenTool, preview: sketchPreview },
   { id: "chalkboard", label: "Chalkboard", icon: GraduationCap, preview: chalkboardPreview },

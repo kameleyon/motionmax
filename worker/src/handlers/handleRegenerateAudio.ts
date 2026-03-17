@@ -94,12 +94,23 @@ export async function handleRegenerateAudio(
 
   const duration = Math.ceil(audioResult.durationSeconds || scene.duration || 15);
 
+  // Snapshot history for undo
+  const history = Array.isArray(scene._history) ? [...scene._history] : [];
+  history.push({
+    timestamp: new Date().toISOString(),
+    audioUrl: scene.audioUrl,
+    voiceover: scene.voiceover,
+    duration: scene.duration,
+  });
+  if (history.length > 5) history.shift();
+
   // Patch scene in DB
   scenes[sceneIndex] = {
     ...scene,
     voiceover: newVoiceover,
     audioUrl: audioResult.url,
     duration,
+    _history: history,
   };
 
   await supabase.from("generations").update({ scenes }).eq("id", generationId);

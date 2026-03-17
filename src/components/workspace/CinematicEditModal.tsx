@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Loader2, Wand2, Volume2, Film, RefreshCw } from "lucide-react";
+import { X, Loader2, Wand2, Volume2, Film, RefreshCw, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
@@ -14,6 +14,7 @@ interface CinematicScene {
   videoUrl?: string;
   audioUrl?: string;
   duration: number;
+  _history?: any[];
 }
 
 interface CinematicEditModalProps {
@@ -25,6 +26,7 @@ interface CinematicEditModalProps {
   onRegenerateVideo: (sceneIndex: number) => Promise<void>;
   onApplyImageEdit: (sceneIndex: number, imageModification: string) => Promise<void>;
   onRegenerateImage: (sceneIndex: number) => Promise<void>;
+  onUndoRegeneration?: (sceneIndex: number) => Promise<void>;
   isRegenerating: boolean;
   regeneratingType: "audio" | "video" | "image" | null;
 }
@@ -38,6 +40,7 @@ export function CinematicEditModal({
   onRegenerateVideo,
   onApplyImageEdit,
   onRegenerateImage,
+  onUndoRegeneration,
   isRegenerating,
   regeneratingType,
 }: CinematicEditModalProps) {
@@ -72,6 +75,14 @@ export function CinematicEditModal({
     await onRegenerateVideo(sceneIndex);
   };
 
+  const handleUndo = async () => {
+    if (onUndoRegeneration) {
+      await onUndoRegeneration(sceneIndex);
+    }
+  };
+
+  const hasHistory = Array.isArray(scene._history) && scene._history.length > 0;
+
   return (
     <AnimatePresence>
       <motion.div
@@ -92,9 +103,23 @@ export function CinematicEditModal({
           <Card className="bg-card border-border overflow-hidden rounded-xl flex flex-col max-h-[90vh]">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-border shrink-0">
-              <h2 className="text-lg font-semibold text-foreground">
-                Edit Scene {scene.number}
-              </h2>
+              <div className="flex items-center gap-4">
+                <h2 className="text-lg font-semibold text-foreground">
+                  Edit Scene {scene.number}
+                </h2>
+                {hasHistory && onUndoRegeneration && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleUndo}
+                    disabled={isRegenerating}
+                    className="gap-2"
+                  >
+                    <Undo2 className="h-4 w-4" />
+                    Undo
+                  </Button>
+                )}
+              </div>
               <Button
                 variant="ghost"
                 size="icon"

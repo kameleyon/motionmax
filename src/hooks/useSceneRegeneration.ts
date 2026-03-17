@@ -138,9 +138,56 @@ export function useSceneRegeneration(
     [generationId, projectId, scenes, onScenesUpdate, toast]
   );
 
+  // ── Undo regeneration ──────────────────────────────────────────────────
+
+  const undoRegeneration = useCallback(
+    async (sceneIndex: number) => {
+      if (!generationId || !projectId || !scenes) {
+        toast({ variant: "destructive", title: "Error", description: "Missing generation context" });
+        return;
+      }
+
+      setState({ isRegenerating: true, regeneratingType: "image", sceneIndex }); // Using image type for generic loading state
+
+      try {
+        const result = await callPhase(
+          {
+            phase: "undo",
+            generationId,
+            projectId,
+            sceneIndex,
+          },
+          30 * 1000,
+        );
+
+        if (!result?.success) throw new Error(result?.error || "Undo failed");
+
+        const updatedScenes = [...scenes];
+        updatedScenes[sceneIndex] = {
+          ...updatedScenes[sceneIndex],
+          ...result.scene,
+        };
+        onScenesUpdate(updatedScenes);
+
+        toast({ title: "Undo Successful", description: `Scene ${sceneIndex + 1} restored to previous state.` });
+      } catch (error) {
+        console.error("Undo error:", error);
+        toast({
+          variant: "destructive",
+          title: "Undo Failed",
+          description: error instanceof Error ? error.message : "Failed to undo",
+        });
+      } finally {
+        setState({ isRegenerating: false, regeneratingType: null, sceneIndex: null });
+      }
+    },
+    [generationId, projectId, scenes, onScenesUpdate, toast]
+  );
+
   return {
     ...state,
     regenerateAudio,
     regenerateImage,
+    undoRegeneration,
   };
 }

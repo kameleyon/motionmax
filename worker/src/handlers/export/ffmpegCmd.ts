@@ -106,10 +106,10 @@ export function getExactAudioDuration(filePath: string): Promise<number> {
 
 /** Memory-safe x264 flags — keeps libx264 under ~40 MB */
 export const X264_MEM_FLAGS = [
-  "-threads", "1",
+  "-threads", "2",
   "-refs", "1",
   "-rc-lookahead", "0",
   "-g", "24",
   "-bf", "0",
-  "-x264-params", "rc-lookahead=0:threads=1",
+  "-x264-params", "rc-lookahead=0:threads=2",
 ];

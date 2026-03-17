@@ -1,7 +1,6 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { SUPABASE_URL } from "@/lib/supabaseUrl";
 import { callPhase } from "@/hooks/generation/callPhase";
 
 interface CinematicScene {
@@ -20,34 +19,6 @@ interface RegenerationState {
   isRegenerating: boolean;
   sceneIndex: number | null;
   type: RegenType | null;
-}
-
-// ── Cinematic video polling (edge function for Kling/Wan video gen) ─────────
-
-async function cinematicVideoFetch(path: string, body: Record<string, unknown>) {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error("Not authenticated");
-
-  const response = await fetch(
-    `${SUPABASE_URL}/functions/v1/${path}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify(body),
-    }
-  );
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
-    throw new Error(error.error || `Request failed (${response.status})`);
-  }
-
-  const result = await response.json();
-  if (!result.success) throw new Error(result.error || "Operation failed");
-  return result;
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
@@ -76,31 +47,6 @@ export function useCinematicRegeneration(
       if (error) throw error;
     },
     [generationId]
-  );
-
-  // Video polling via edge function (cinematic-specific video rendering)
-  const pollVideoPhase = useCallback(
-    async (idx: number) => {
-      if (!projectId || !generationId) return;
-      const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-      const MAX_POLLS = 120;
-      let polls = 0;
-      while (polls < MAX_POLLS) {
-        polls++;
-        const result = await cinematicVideoFetch("generate-cinematic", {
-          phase: "video",
-          projectId,
-          generationId,
-          sceneIndex: idx,
-        });
-        const nextScene = result.scene as Partial<CinematicScene>;
-        onScenesUpdate(scenes.map((s, i) => (i === idx ? { ...s, ...nextScene } : s)));
-        if (result.status === "complete") break;
-        await sleep(5000);
-      }
-      if (polls >= MAX_POLLS) throw new Error("Video generation timed out. Please try again.");
-    },
-    [generationId, projectId, scenes, onScenesUpdate]
   );
 
   // ── Audio regeneration → worker ──────────────────────────────────────────
@@ -147,7 +93,7 @@ export function useCinematicRegeneration(
     [generationId, projectId, scenes, onScenesUpdate, persistScenes, onStopPlayback, toast]
   );
 
-  // ── Video regeneration → cinematic edge function ─────────────────────────
+  // ── Video regeneration → worker ──────────────────────────────────────────
 
   const regenerateVideo = useCallback(
     async (idx: number) => {
@@ -160,14 +106,22 @@ export function useCinematicRegeneration(
       setState({ isRegenerating: true, sceneIndex: idx, type: "video" });
 
       try {
-        await cinematicVideoFetch("generate-cinematic", {
+        const result = await callPhase({
           phase: "video",
-          projectId,
           generationId,
+          projectId,
           sceneIndex: idx,
           regenerate: true,
-        });
-        await pollVideoPhase(idx);
+        }, 10 * 60 * 1000);
+        
+        if (!result?.success) throw new Error(result?.error || "Video regeneration failed");
+        
+        const nextScenes = scenes.map((s, i) =>
+          i === idx ? { ...s, videoUrl: result.videoUrl } : s
+        );
+        onScenesUpdate(nextScenes);
+        await persistScenes(nextScenes);
+        
         toast({ title: "Video Regenerated", description: `Scene ${idx + 1} video updated.` });
       } catch (error) {
         console.error("Video regeneration error:", error);
@@ -180,7 +134,7 @@ export function useCinematicRegeneration(
         setState({ isRegenerating: false, sceneIndex: null, type: null });
       }
     },
-    [generationId, projectId, pollVideoPhase, onStopPlayback, toast]
+    [generationId, projectId, scenes, onScenesUpdate, persistScenes, onStopPlayback, toast]
   );
 
   // ── Apply image edit → worker ────────────────────────────────────────────
@@ -271,11 +225,54 @@ export function useCinematicRegeneration(
     [generationId, projectId, scenes, onScenesUpdate, onStopPlayback, toast]
   );
 
+  // ── Undo regeneration → worker ──────────────────────────────────────────
+
+  const undoRegeneration = useCallback(
+    async (idx: number) => {
+      if (!generationId || !projectId) {
+        toast({ variant: "destructive", title: "Error", description: "Missing generation context" });
+        return;
+      }
+
+      onStopPlayback?.();
+      setState({ isRegenerating: true, sceneIndex: idx, type: "image" }); // Using image type for generic loading state
+
+      try {
+        const result = await callPhase({
+          phase: "undo",
+          generationId,
+          projectId,
+          sceneIndex: idx,
+        }, 30 * 1000);
+
+        if (!result?.success) throw new Error(result?.error || "Undo failed");
+
+        const nextScenes = scenes.map((s, i) =>
+          i === idx ? { ...s, ...result.scene } : s
+        );
+        onScenesUpdate(nextScenes);
+
+        toast({ title: "Undo Successful", description: `Scene ${idx + 1} restored to previous state.` });
+      } catch (error) {
+        console.error("Undo error:", error);
+        toast({
+          variant: "destructive",
+          title: "Undo Failed",
+          description: error instanceof Error ? error.message : "Failed to undo",
+        });
+      } finally {
+        setState({ isRegenerating: false, sceneIndex: null, type: null });
+      }
+    },
+    [generationId, projectId, scenes, onScenesUpdate, onStopPlayback, toast]
+  );
+
   return {
     isRegenerating: state.isRegenerating ? { sceneIndex: state.sceneIndex!, type: state.type! } : null,
     regenerateAudio,
     regenerateVideo,
     applyImageEdit,
     regenerateImage,
+    undoRegeneration,
   };
 }

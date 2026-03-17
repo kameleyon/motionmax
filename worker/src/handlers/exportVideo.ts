@@ -16,7 +16,7 @@ import { concatFiles } from "./export/concatScenes.js";
 import { uploadToSupabase, removeFiles } from "./export/storageHelpers.js";
 
 /** Process ONE scene at a time — Render's 512MB can OOM with 2 parallel. */
-const SCENE_BATCH_SIZE = 1;
+const SCENE_BATCH_SIZE = parseInt(process.env.EXPORT_BATCH_SIZE || "3", 10);
 
 /** Fetch scenes from the generations table as a fallback. */
 async function fetchScenesFromDb(projectId: string): Promise<any[]> {

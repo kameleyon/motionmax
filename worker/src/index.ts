@@ -7,11 +7,15 @@ import { handleFinalizePhase } from "./handlers/handleFinalize.js";
 import { handleExportVideo } from "./handlers/exportVideo.js";
 import { handleRegenerateImage } from "./handlers/handleRegenerateImage.js";
 import { handleRegenerateAudio } from "./handlers/handleRegenerateAudio.js";
+import { handleCinematicVideo } from "./handlers/handleCinematicVideo.js";
+import { handleCinematicAudio } from "./handlers/handleCinematicAudio.js";
+import { handleCinematicImage } from "./handlers/handleCinematicImage.js";
+import { handleUndoRegeneration } from "./handlers/handleUndoRegeneration.js";
 import { writeSystemLog } from "./lib/logger.js";
 
 /* ---- Concurrency guard: prevent re-processing the same job ---- */
 const activeJobs = new Set<string>();
-let busy = false;
+const MAX_CONCURRENT_JOBS = parseInt(process.env.WORKER_CONCURRENCY || "3", 10);
 
 async function processJob(job: Job) {
   activeJobs.add(job.id);
@@ -60,6 +64,18 @@ async function processJob(job: Job) {
     } else if (job.task_type === 'regenerate_audio' as any) {
       const audioRegenResult = await handleRegenerateAudio(job.id, job.payload as any, job.user_id);
       finalPayload = { ...finalPayload, ...audioRegenResult };
+    } else if (job.task_type === 'cinematic_video' as any) {
+      const result = await handleCinematicVideo(job.id, job.payload as any, job.user_id);
+      finalPayload = { ...finalPayload, ...result };
+    } else if (job.task_type === 'cinematic_audio' as any) {
+      const result = await handleCinematicAudio(job.id, job.payload as any, job.user_id);
+      finalPayload = { ...finalPayload, ...result };
+    } else if (job.task_type === 'cinematic_image' as any) {
+      const result = await handleCinematicImage(job.id, job.payload as any, job.user_id);
+      finalPayload = { ...finalPayload, ...result };
+    } else if (job.task_type === 'undo_regeneration' as any) {
+      const result = await handleUndoRegeneration(job.id, job.payload as any, job.user_id);
+      finalPayload = { ...finalPayload, ...result };
     } else {
       await writeSystemLog({
         jobId: job.id,
@@ -119,48 +135,64 @@ async function processJob(job: Job) {
 let pollCount = 0;
 
 async function pollQueue() {
-  if (busy) return; // Previous poll still running — skip this tick
-  busy = true;
   pollCount++;
   try {
-    // Only pick up PENDING jobs — never re-grab processing ones (avoids restart loops)
-    const { data: jobs, error, status, statusText } = await supabase
+    const availableSlots = MAX_CONCURRENT_JOBS - activeJobs.size;
+    if (availableSlots <= 0) return;
+
+    // Query for export jobs
+    const { data: exportJobs, error: exportError } = await supabase
       .from('video_generation_jobs')
       .select('*')
       .eq('status', 'pending')
+      .eq('task_type', 'export_video')
       .order('created_at', { ascending: true })
-      .limit(1);
+      .limit(availableSlots);
 
-    // Log every 12th poll (~60s) or when there's data/errors
-    const shouldLog = pollCount % 12 === 1 || (jobs && jobs.length > 0) || error;
+    if (exportError) {
+      console.error("[Worker] Poll export error:", exportError.code, exportError.message);
+    }
+
+    // Query for generation jobs
+    const { data: genJobs, error: genError } = await supabase
+      .from('video_generation_jobs')
+      .select('*')
+      .eq('status', 'pending')
+      .neq('task_type', 'export_video')
+      .order('created_at', { ascending: true })
+      .limit(availableSlots);
+
+    if (genError) {
+      console.error("[Worker] Poll generation error:", genError.code, genError.message);
+    }
+
+    const allJobs = [...(exportJobs || []), ...(genJobs || [])];
+    
+    // Sort by created_at to process oldest first, but we already have them separated
+    allJobs.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    // Take up to availableSlots
+    const jobsToProcess = allJobs.slice(0, availableSlots);
+
+    const shouldLog = pollCount % 12 === 1 || jobsToProcess.length > 0 || exportError || genError;
     if (shouldLog) {
-      console.log(`[Worker] Poll #${pollCount}: HTTP ${status} ${statusText || ''}, jobs: ${jobs?.length ?? 'null'}, error: ${error ? JSON.stringify(error) : 'none'}`);
+      console.log(`[Worker] Poll #${pollCount}: jobs found: ${jobsToProcess.length}, active: ${activeJobs.size}/${MAX_CONCURRENT_JOBS}`);
     }
 
-    if (error) {
-      console.error("[Worker] Poll error:", error.code, error.message);
-      return;
-    }
-
-    if (jobs && jobs.length > 0) {
-      const job = jobs[0] as Job;
-
-      if (activeJobs.has(job.id)) {
-        // Already processing this job — skip
-        return;
-      }
-
+    for (const job of jobsToProcess) {
+      if (activeJobs.has(job.id)) continue;
       console.log(`[Worker] Found job ${job.id} (type: ${job.task_type}, status: ${job.status})`);
-      await processJob(job);
+      // Fire and forget
+      processJob(job as Job).catch(err => {
+        console.error(`[Worker] Unhandled error in processJob for ${job.id}:`, err);
+      });
     }
   } catch (err) {
     console.error("[Worker] Polling exception:", err);
-  } finally {
-    busy = false;
   }
 }
 
-const POLL_INTERVAL_MS = 5000;
+const POLL_INTERVAL_MS = 2000;
 
 const MAX_RESTART_RETRIES = 3;
 

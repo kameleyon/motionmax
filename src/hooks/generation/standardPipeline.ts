@@ -68,76 +68,52 @@ export async function runStandardPipeline(
     phaseTimings: { script: scriptResult.phaseTime },
   }));
 
-  // ============= PHASE 2: AUDIO (chunked) =============
+  // ============= PHASE 2: AUDIO (single job) =============
   if (!isSmartFlowNoVoice) {
     console.log(LOG, "Starting audio phase");
     ctx.setState((prev) => ({ ...prev, step: "visuals" as const, progress: 15, statusMessage: "Generating voiceover audio..." }));
 
-    let audioStartIndex = 0;
-    let audioResult: any;
+    const audioResult = await ctx.callPhase({ phase: "audio", generationId, projectId, audioStartIndex: 0 }, 300000); // 5 minutes
+    if (!audioResult.success) throw new Error(audioResult.error || "Audio generation failed");
 
-    do {
-      audioResult = await ctx.callPhase({ phase: "audio", generationId, projectId, audioStartIndex }, 300000);
-      if (!audioResult.success) throw new Error(audioResult.error || "Audio generation failed");
-
-      console.log(LOG, "Audio chunk complete", { generated: audioResult.audioGenerated, hasMore: audioResult.hasMore });
-
-      ctx.setState((prev) => ({
-        ...prev,
-        progress: typeof audioResult.progress === "number" ? audioResult.progress : prev.progress,
-        statusMessage: audioResult.hasMore
-          ? `Generating voiceover... (${audioResult.audioGenerated || 0}/${prev.sceneCount})`
-          : `Audio complete (${audioResult.audioSeconds?.toFixed(1) || 0}s). Starting images...`,
-        costTracking: audioResult.costTracking,
-        phaseTimings: { ...prev.phaseTimings, audio: audioResult.phaseTime },
-      }));
-
-      if (audioResult.hasMore && typeof audioResult.nextStartIndex === "number") {
-        audioStartIndex = audioResult.nextStartIndex;
-      }
-    } while (audioResult.hasMore);
-
-    console.log(LOG, "Audio phase complete");
-  }
-
-  // ============= PHASE 3: IMAGES (chunked, fault-tolerant) =============
-  console.log(LOG, "Starting images phase");
-  ctx.setState((prev) => ({ ...prev, progress: 45, statusMessage: "Generating images..." }));
-
-  let imageStartIndex = 0;
-  let imagesResult: any;
-
-  do {
-    try {
-      imagesResult = await ctx.callPhase({ phase: "images", generationId, projectId, imageStartIndex }, 480000);
-
-      if (!imagesResult.success) {
-        console.warn(LOG, `Image chunk at index ${imageStartIndex} failed: ${imagesResult.error}`);
-        imageStartIndex += 4;
-        imagesResult = { hasMore: imageStartIndex < (imagesResult?.totalImages || expectedSceneCount * 3) };
-        continue;
-      }
-    } catch (err) {
-      console.warn(LOG, `Image chunk at index ${imageStartIndex} error:`, err);
-      imageStartIndex += 4;
-      imagesResult = { hasMore: imageStartIndex < expectedSceneCount * 3 };
-      continue;
-    }
+    console.log(LOG, "Audio phase complete", { generated: audioResult.audioGenerated });
 
     ctx.setState((prev) => ({
       ...prev,
-      progress: imagesResult.progress || prev.progress,
-      completedImages: imagesResult.imagesGenerated || prev.completedImages,
-      totalImages: imagesResult.totalImages || prev.totalImages,
-      statusMessage: `Images ${imagesResult.imagesGenerated || 0}/${imagesResult.totalImages || prev.totalImages}...`,
-      costTracking: imagesResult.costTracking || prev.costTracking,
-      phaseTimings: { ...prev.phaseTimings, images: (prev.phaseTimings?.images || 0) + (imagesResult.phaseTime || 0) },
+      progress: typeof audioResult.progress === "number" ? audioResult.progress : prev.progress,
+      statusMessage: `Audio complete (${audioResult.audioSeconds?.toFixed(1) || 0}s). Starting images...`,
+      costTracking: audioResult.costTracking,
+      phaseTimings: { ...prev.phaseTimings, audio: audioResult.phaseTime },
     }));
+  }
 
-    if (imagesResult.hasMore && imagesResult.nextStartIndex !== undefined) {
-      imageStartIndex = imagesResult.nextStartIndex;
+  // ============= PHASE 3: IMAGES (single job, fault-tolerant) =============
+  console.log(LOG, "Starting images phase");
+  ctx.setState((prev) => ({ ...prev, progress: 45, statusMessage: "Generating images..." }));
+
+  let imagesResult: any;
+
+  try {
+    imagesResult = await ctx.callPhase({ phase: "images", generationId, projectId, imageStartIndex: 0 }, 600000); // 10 minutes
+
+    if (!imagesResult.success) {
+      console.warn(LOG, `Image phase failed: ${imagesResult.error}`);
+      imagesResult = { totalImages: expectedSceneCount * 3, imagesGenerated: 0 };
     }
-  } while (imagesResult.hasMore);
+  } catch (err) {
+    console.warn(LOG, `Image phase error:`, err);
+    imagesResult = { totalImages: expectedSceneCount * 3, imagesGenerated: 0 };
+  }
+
+  ctx.setState((prev) => ({
+    ...prev,
+    progress: imagesResult.progress || prev.progress,
+    completedImages: imagesResult.imagesGenerated || prev.completedImages,
+    totalImages: imagesResult.totalImages || prev.totalImages,
+    statusMessage: `Images ${imagesResult.imagesGenerated || 0}/${imagesResult.totalImages || prev.totalImages}...`,
+    costTracking: imagesResult.costTracking || prev.costTracking,
+    phaseTimings: { ...prev.phaseTimings, images: (prev.phaseTimings?.images || 0) + (imagesResult.phaseTime || 0) },
+  }));
 
   // Retry missing images (up to 2 rounds)
   for (let retryRound = 0; retryRound < 2; retryRound++) {

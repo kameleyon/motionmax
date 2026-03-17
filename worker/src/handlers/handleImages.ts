@@ -96,13 +96,12 @@ export async function handleImagesPhase(
     isSmartFlow,
   };
 
-  // Build the full task list then slice the current chunk
+  // Build the full task list
   const allTasks = buildImageTasks(scenes, buildOpts);
   const totalImages = allTasks.length;
-  const chunkEnd = Math.min(imageStartIndex + MAX_IMAGES_PER_CALL, totalImages);
-  const chunk = allTasks.slice(imageStartIndex, chunkEnd);
+  const tasksToProcess = allTasks.slice(imageStartIndex);
 
-  console.log(`[Images] Processing chunk: tasks ${imageStartIndex}-${chunkEnd - 1} of ${totalImages}`);
+  console.log(`[Images] Processing all remaining tasks: ${tasksToProcess.length} of ${totalImages}`);
 
   // Track how many images are already done (from existing imageUrls / imageUrl)
   let completedSoFar = scenes.reduce((sum, s: any) => {
@@ -111,68 +110,71 @@ export async function handleImagesPhase(
     return sum + primary + subs;
   }, 0);
 
-  // Process all tasks in the chunk IN PARALLEL — dramatically speeds up image generation.
-  // Hypereal handles concurrent requests fine; each takes ~5-10s.
   let newlyGenerated = 0;
 
-  const pendingTasks = chunk.filter(({ sceneIndex, subIndex }) => {
+  const pendingTasks = tasksToProcess.filter(({ sceneIndex, subIndex }) => {
     const scene = scenes[sceneIndex] as any;
     if (subIndex === 0 && scene.imageUrl) return false;
     if (subIndex > 0 && (scene.imageUrls || [])[subIndex]) return false;
     return true;
   });
 
-  console.log(`[Images] Generating ${pendingTasks.length} images in parallel (chunk ${imageStartIndex}-${chunkEnd - 1})`);
+  console.log(`[Images] Generating ${pendingTasks.length} images in parallel batches`);
 
-  const results = await Promise.allSettled(
-    pendingTasks.map(async ({ sceneIndex, subIndex, prompt }) => {
-      console.log(`[Images] → scene ${sceneIndex}, sub ${subIndex} (${prompt.length} chars)`);
-      const url = await generateImage(prompt, hyperealApiKey, replicateApiKey, format, projectId);
-      return { sceneIndex, subIndex, url };
-    })
-  );
+  // Process in batches of 9 to avoid overwhelming the API, but do all batches in this job
+  const BATCH_SIZE = 9;
+  for (let i = 0; i < pendingTasks.length; i += BATCH_SIZE) {
+    const batch = pendingTasks.slice(i, i + BATCH_SIZE);
+    
+    const results = await Promise.allSettled(
+      batch.map(async ({ sceneIndex, subIndex, prompt }) => {
+        console.log(`[Images] → scene ${sceneIndex}, sub ${subIndex} (${prompt.length} chars)`);
+        const url = await generateImage(prompt, hyperealApiKey, replicateApiKey, format, projectId);
+        return { sceneIndex, subIndex, url };
+      })
+    );
 
-  for (const result of results) {
-    if (result.status === "fulfilled") {
-      const { sceneIndex, subIndex, url } = result.value;
-      const subs: (string | null)[] = Array.isArray((scenes[sceneIndex] as any).imageUrls)
-        ? [...(scenes[sceneIndex] as any).imageUrls]
-        : [null, null, null];
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        const { sceneIndex, subIndex, url } = result.value;
+        const subs: (string | null)[] = Array.isArray((scenes[sceneIndex] as any).imageUrls)
+          ? [...(scenes[sceneIndex] as any).imageUrls]
+          : [null, null, null];
 
-      if (subIndex === 0) {
-        // Write primary to both imageUrl (legacy) AND imageUrls[0] (carousel)
-        (scenes[sceneIndex] as any).imageUrl = url;
-        subs[0] = url;
+        if (subIndex === 0) {
+          // Write primary to both imageUrl (legacy) AND imageUrls[0] (carousel)
+          (scenes[sceneIndex] as any).imageUrl = url;
+          subs[0] = url;
+        } else {
+          subs[subIndex] = url;
+        }
+        (scenes[sceneIndex] as any).imageUrls = subs;
+        newlyGenerated++;
+        completedSoFar++;
       } else {
-        subs[subIndex] = url;
+        console.error(`[Images] Parallel task failed:`, result.reason);
       }
-      (scenes[sceneIndex] as any).imageUrls = subs;
-      newlyGenerated++;
-      completedSoFar++;
-    } else {
-      console.error(`[Images] Parallel task failed:`, result.reason);
     }
+
+    // Update progress periodically after each batch
+    const progressAfter = Math.min(89, 45 + Math.round((completedSoFar / totalImages) * 44));
+    await supabase
+      .from("generations")
+      .update({
+        progress: progressAfter,
+        scenes: scenes.map((s: any, idx: number) => ({
+          ...s,
+          _meta: {
+            ...((scenes[idx] as any)._meta || {}),
+            completedImages: completedSoFar,
+            totalImages,
+            statusMessage: `Images ${completedSoFar}/${totalImages}...`,
+          },
+        })),
+      })
+      .eq("id", generationId);
   }
 
-  // Single DB write after the entire parallel batch completes
-  const progressAfter = Math.min(89, 45 + Math.round((completedSoFar / totalImages) * 44));
-  await supabase
-    .from("generations")
-    .update({
-      progress: progressAfter,
-      scenes: scenes.map((s: any, idx: number) => ({
-        ...s,
-        _meta: {
-          ...((scenes[idx] as any)._meta || {}),
-          completedImages: completedSoFar,
-          totalImages,
-          statusMessage: `Images ${completedSoFar}/${totalImages}...`,
-        },
-      })),
-    })
-    .eq("id", generationId);
-
-  const hasMore = chunkEnd < totalImages;
   const phaseTime = Date.now() - phaseStart;
   const progress = Math.min(89, 45 + Math.round((completedSoFar / totalImages) * 44));
 
@@ -182,17 +184,16 @@ export async function handleImagesPhase(
     userId,
     generationId,
     category: "system_info",
-    eventType: "images_chunk_completed",
-    message: `Images chunk done: ${newlyGenerated} new, ${completedSoFar}/${totalImages} total, hasMore=${hasMore}`,
-    details: { imageStartIndex, chunkEnd, newlyGenerated, completedSoFar, totalImages, hasMore, phaseTime },
+    eventType: "images_phase_completed",
+    message: `Images phase done: ${newlyGenerated} new, ${completedSoFar}/${totalImages} total`,
+    details: { imageStartIndex, newlyGenerated, completedSoFar, totalImages, phaseTime },
   });
 
   return {
     success: true,
     imagesGenerated: newlyGenerated,
     totalImages,
-    hasMore,
-    nextStartIndex: hasMore ? chunkEnd : undefined,
+    hasMore: false,
     progress,
     phaseTime,
   };

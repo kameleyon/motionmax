@@ -95,6 +95,17 @@ export async function handleRegenerateImage(
     imageUrl = await generateImage(fullPrompt, hyperealApiKey, replicateApiKey, format, projectId);
   }
 
+  // Snapshot history for undo
+  const history = Array.isArray(scene._history) ? [...scene._history] : [];
+  history.push({
+    timestamp: new Date().toISOString(),
+    imageUrl: scene.imageUrl,
+    imageUrls: scene.imageUrls,
+  });
+  // Limit history to 5 entries
+  if (history.length > 5) history.shift();
+  scenes[sceneIndex]._history = history;
+
   // Patch the scene's imageUrl / imageUrls array
   const existingUrls: (string | null)[] =
     Array.isArray(scene.imageUrls) && scene.imageUrls.length > 0

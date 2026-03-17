@@ -267,6 +267,7 @@ export function CinematicResult({
     regenerateVideo,
     applyImageEdit,
     regenerateImage,
+    undoRegeneration,
   } = useCinematicRegeneration(
     generationId,
     projectId,
@@ -993,6 +994,7 @@ export function CinematicResult({
           onRegenerateVideo={(idx) => regenerateVideo(idx)}
           onApplyImageEdit={applyImageEdit}
           onRegenerateImage={regenerateImage}
+          onUndoRegeneration={undoRegeneration}
           isRegenerating={!!isRegenerating && isRegenerating.sceneIndex === currentSceneIndex}
           regeneratingType={isRegenerating?.sceneIndex === currentSceneIndex ? isRegenerating.type : null}
         />

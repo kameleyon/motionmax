@@ -95,7 +95,7 @@ async function workerCallPhase(
  * completed or failed.  Timeout is caller-supplied (default 8 minutes).
  */
 async function pollWorkerJob(jobId: string, maxWaitMs: number = 8 * 60 * 1000): Promise<any> {
-  const POLL_INTERVAL = 3000;
+  const POLL_INTERVAL = 2000;
   const MAX_WAIT = maxWaitMs;
   const startTime = Date.now();
 
@@ -149,6 +149,21 @@ export async function callPhase(
     return workerCallPhase(body, "generate_video", 8 * 60 * 1000);
   }
 
+  // Cinematic video phase → worker queue
+  if (body.phase === "video") {
+    return workerCallPhase(body, "cinematic_video", 10 * 60 * 1000);
+  }
+
+  // Cinematic per-scene audio (has sceneIndex, endpoint is cinematic) → worker
+  if (body.phase === "audio" && typeof body.sceneIndex === "number") {
+    return workerCallPhase(body, "cinematic_audio", 5 * 60 * 1000);
+  }
+
+  // Cinematic per-scene images (has sceneIndex, endpoint is cinematic) → worker
+  if (body.phase === "images" && typeof body.sceneIndex === "number") {
+    return workerCallPhase(body, "cinematic_image", 5 * 60 * 1000);
+  }
+
   // Images phase → worker queue (edge function times out at ~150s per chunk)
   if (body.phase === "images") {
     return workerCallPhase(body, "process_images", timeoutMs);
@@ -171,6 +186,10 @@ export async function callPhase(
 
   if (body.phase === "regenerate-audio") {
     return workerCallPhase(body, "regenerate_audio", 3 * 60 * 1000);
+  }
+
+  if (body.phase === "undo") {
+    return workerCallPhase(body, "undo_regeneration", 30 * 1000);
   }
 
   // Any remaining phase (unknown/legacy) → edge function

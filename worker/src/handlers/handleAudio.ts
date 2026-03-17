@@ -91,67 +91,58 @@ export async function handleAudioPhase(
 
   const scenes = (generation.scenes || []) as any[];
 
-  // Batch size: 1 for Haitian Creole (slow), 3 for others
-  const currentScene = scenes[startIndex];
-  const isHC = config.forceHaitianCreole || isHaitianCreole(currentScene?.voiceover || "");
-  const BATCH_SIZE = isHC ? 1 : 3;
-
-  const batchEnd = Math.min(startIndex + BATCH_SIZE, scenes.length);
-  console.log(`[Audio] Processing scenes ${startIndex + 1}-${batchEnd} of ${scenes.length}`);
-
-  // Track existing audio URLs (from previous chunks)
+  // Track existing audio URLs
   const audioUrls: (string | null)[] = scenes.map((s: any) => s.audioUrl ?? null);
   let totalAudioSeconds = 0;
   let audioGenerated = 0;
 
-  // Process batch (parallel for non-HC, sequential for HC)
-  const batchScenes: { scene: AudioScene; index: number }[] = [];
-  for (let i = startIndex; i < batchEnd; i++) {
-    if (audioUrls[i]) continue; // already done
-    batchScenes.push({
-      index: i,
-      scene: { number: i + 1, voiceover: scenes[i].voiceover || "", duration: scenes[i].duration || 8 },
-    });
-  }
+  // Process all scenes in batches of 3-5
+  const BATCH_SIZE = 3;
+  
+  for (let batchStart = startIndex; batchStart < scenes.length; batchStart += BATCH_SIZE) {
+    const batchEnd = Math.min(batchStart + BATCH_SIZE, scenes.length);
+    console.log(`[Audio] Processing scenes ${batchStart + 1}-${batchEnd} of ${scenes.length}`);
 
-  const processBatch = async () => {
-    const promises = batchScenes.map(({ scene, index }) =>
-      generateSceneAudio(scene, config).then((result) => ({ result, index }))
-    );
-    return Promise.all(promises);
-  };
-
-  const results = await processBatch();
-
-  for (const { result, index } of results) {
-    if (result.url) {
-      audioUrls[index] = result.url;
-      totalAudioSeconds += result.durationSeconds || 0;
-      audioGenerated++;
-    } else {
-      console.warn(`[Audio] Scene ${index + 1} failed: ${result.error}`);
+    const batchScenes: { scene: AudioScene; index: number }[] = [];
+    for (let i = batchStart; i < batchEnd; i++) {
+      if (audioUrls[i]) continue; // already done
+      batchScenes.push({
+        index: i,
+        scene: { number: i + 1, voiceover: scenes[i].voiceover || "", duration: scenes[i].duration || 8 },
+      });
     }
+
+    if (batchScenes.length > 0) {
+      const promises = batchScenes.map(({ scene, index }) =>
+        generateSceneAudio(scene, config).then((result) => ({ result, index }))
+      );
+      
+      const results = await Promise.all(promises);
+
+      for (const { result, index } of results) {
+        if (result.url) {
+          audioUrls[index] = result.url;
+          totalAudioSeconds += result.durationSeconds || 0;
+          audioGenerated++;
+        } else {
+          console.warn(`[Audio] Scene ${index + 1} failed: ${result.error}`);
+        }
+      }
+    }
+
+    // Update progress periodically
+    const progress = Math.min(39, 10 + Math.floor((batchEnd / scenes.length) * 30));
+    const updatedScenes = scenes.map((s: any, i: number) => ({
+      ...s,
+      audioUrl: audioUrls[i],
+      _meta: { ...(s._meta || {}), statusMessage: `Audio ${i < batchEnd ? "complete" : "pending"}` },
+    }));
+
+    await supabase
+      .from("generations")
+      .update({ progress, scenes: updatedScenes })
+      .eq("id", generationId);
   }
-
-  // Write updated audio URLs back to DB
-  const updatedScenes = scenes.map((s: any, i: number) => ({
-    ...s,
-    audioUrl: audioUrls[i],
-    _meta: { ...(s._meta || {}), statusMessage: `Audio ${i < batchEnd ? "complete" : "pending"}` },
-  }));
-
-  const hasMore = batchEnd < scenes.length;
-  const overallAudioSeconds = scenes.reduce((sum: number, s: any) => {
-    if (!s.audioUrl) return sum;
-    return sum + (s.duration || 8);
-  }, totalAudioSeconds);
-
-  const progress = Math.min(39, 10 + Math.floor((batchEnd / scenes.length) * 30));
-
-  await supabase
-    .from("generations")
-    .update({ progress, scenes: updatedScenes })
-    .eq("id", generationId);
 
   await writeSystemLog({
     jobId,
@@ -159,18 +150,17 @@ export async function handleAudioPhase(
     userId,
     generationId,
     category: "system_info",
-    eventType: "audio_chunk_completed",
-    message: `Audio chunk done: ${audioGenerated} scenes, hasMore=${hasMore}`,
-    details: { startIndex, batchEnd, audioGenerated, hasMore, audioSeconds: totalAudioSeconds },
+    eventType: "audio_phase_completed",
+    message: `Audio phase done: ${audioGenerated} scenes`,
+    details: { audioGenerated, audioSeconds: totalAudioSeconds },
   });
 
   return {
     success: true,
     audioGenerated,
-    hasMore,
-    nextStartIndex: hasMore ? batchEnd : undefined,
+    hasMore: false,
     audioSeconds: totalAudioSeconds,
-    progress,
+    progress: 40,
     phaseTime: Date.now() - phaseStart,
   };
 }

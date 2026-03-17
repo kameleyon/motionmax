@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Save, RefreshCw, Loader2, Wand2, Volume2, Image as ImageIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, Save, RefreshCw, Loader2, Wand2, Volume2, Image as ImageIcon, ChevronLeft, ChevronRight, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
@@ -15,6 +15,7 @@ interface SceneEditModalProps {
   onClose: () => void;
   onRegenerateAudio: (sceneIndex: number, newVoiceover: string) => Promise<void>;
   onRegenerateImage: (sceneIndex: number, imageModification: string, imageIndex?: number) => Promise<void>;
+  onUndoRegeneration?: (sceneIndex: number) => Promise<void>;
   isRegenerating: boolean;
   regeneratingType: "audio" | "image" | null;
 }
@@ -26,6 +27,7 @@ export function SceneEditModal({
   onClose,
   onRegenerateAudio,
   onRegenerateImage,
+  onUndoRegeneration,
   isRegenerating,
   regeneratingType,
 }: SceneEditModalProps) {
@@ -61,6 +63,12 @@ export function SceneEditModal({
     await onRegenerateImage(sceneIndex, "", selectedImageIndex);
   };
 
+  const handleUndo = async () => {
+    if (onUndoRegeneration) {
+      await onUndoRegeneration(sceneIndex);
+    }
+  };
+
   const goToPrevImage = () => {
     setSelectedImageIndex((prev) => (prev > 0 ? prev - 1 : currentImages.length - 1));
   };
@@ -68,6 +76,8 @@ export function SceneEditModal({
   const goToNextImage = () => {
     setSelectedImageIndex((prev) => (prev < currentImages.length - 1 ? prev + 1 : 0));
   };
+
+  const hasHistory = Array.isArray((scene as any)._history) && (scene as any)._history.length > 0;
 
   return (
     <AnimatePresence>
@@ -89,9 +99,23 @@ export function SceneEditModal({
           <Card className="bg-card border-border overflow-hidden rounded-xl flex flex-col max-h-[90vh]">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-border shrink-0">
-              <h2 className="text-lg font-semibold text-foreground">
-                Edit Scene {scene.number}
-              </h2>
+              <div className="flex items-center gap-4">
+                <h2 className="text-lg font-semibold text-foreground">
+                  Edit Scene {scene.number}
+                </h2>
+                {hasHistory && onUndoRegeneration && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleUndo}
+                    disabled={isRegenerating}
+                    className="gap-2"
+                  >
+                    <Undo2 className="h-4 w-4" />
+                    Undo
+                  </Button>
+                )}
+              </div>
               <Button
                 variant="ghost"
                 size="icon"

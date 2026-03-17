@@ -97,23 +97,13 @@ async function runCinematicAudio(projectId: string, generationId: string, sceneC
       progress: 10 + Math.floor(((i + 0.25) / sceneCount) * 25),
     }));
 
-    let audioComplete = false;
-    let pollCount = 0;
-    while (!audioComplete) {
-      pollCount++;
-      const audioRes = await ctx.callPhase(
-        { phase: "audio", projectId, generationId, sceneIndex: i },
-        300000,
-        CINEMATIC_ENDPOINT
-      );
-      if (!audioRes.success) throw new Error(audioRes.error || "Audio generation failed");
-      if (audioRes.status === "complete") {
-        audioComplete = true;
-        console.log(LOG, `Audio scene ${i + 1}/${sceneCount} complete after ${pollCount} poll(s)`);
-      } else {
-        await sleep(1200);
-      }
-    }
+    const audioRes = await ctx.callPhase(
+      { phase: "audio", projectId, generationId, sceneIndex: i },
+      300000,
+      CINEMATIC_ENDPOINT
+    );
+    if (!audioRes.success) throw new Error(audioRes.error || "Audio generation failed");
+    console.log(LOG, `Audio scene ${i + 1}/${sceneCount} complete`);
 
     ctx.setState((prev) => ({
       ...prev,
@@ -200,60 +190,27 @@ async function runCinematicVideo(projectId: string, generationId: string, sceneC
         return;
       }
 
-      let videoComplete = false;
-      let pollAttempts = 0;
-      const MAX_POLL = 120;
-
-      while (!videoComplete) {
-        pollAttempts++;
-        if (pollAttempts > MAX_POLL) {
-          console.warn(LOG, `Video scene ${sceneIdx + 1} timed out after ${MAX_POLL} polls`);
-          return;
-        }
-
-        // Global cooldown: wait if we recently hit a rate limit
-        const now = Date.now();
-        if (now - lastRateLimitTime < GLOBAL_COOLDOWN_MS) {
-          const cooldownWait = GLOBAL_COOLDOWN_MS - (now - lastRateLimitTime);
-          console.log(LOG, `Scene ${sceneIdx + 1}: global cooldown active, waiting ${(cooldownWait / 1000).toFixed(1)}s`);
-          await sleep(cooldownWait);
-        }
-
-        const vidRes = await ctx.callPhase(
-          { phase: "video", projectId, generationId, sceneIndex: sceneIdx },
-          480000,
-          CINEMATIC_ENDPOINT
-        );
-        if (!vidRes.success) {
-          console.warn(LOG, `Video scene ${sceneIdx + 1} failed: ${vidRes.error}`);
-          return;
-        }
-        if (vidRes.status === "complete") {
-          videoComplete = true;
-          console.log(LOG, `Video scene ${sceneIdx + 1} complete after ${pollAttempts} poll(s)`);
-        } else {
-          const waitMs = vidRes.retryAfterMs || 6000;
-          if (waitMs >= 20000) {
-            lastRateLimitTime = Date.now();
-            console.log(LOG, `Scene ${sceneIdx + 1}: rate limited, waiting ${waitMs / 1000}s (global cooldown set)`);
-            ctx.setState((prev) => ({
-              ...prev,
-              statusMessage: `Provider busy. Pausing for ${waitMs / 1000}s (Scene ${sceneIdx + 1})...`,
-            }));
-          }
-          // Safari: slow down background polling to prevent tab suspension
-          const safeSleepMs = typeof document !== "undefined" && document.visibilityState === "hidden"
-            ? Math.max(waitMs, 15000) : waitMs;
-          await sleep(safeSleepMs);
-          // After sleeping, re-read DB to catch completions that arrived while backgrounded
-          const { data: wakeCheck } = await supabase.from("generations").select("scenes").eq("id", generationId).maybeSingle();
-          const wakeScenes = normalizeScenes(wakeCheck?.scenes) ?? [];
-          if (wakeScenes[sceneIdx]?.videoUrl) {
-            console.log(LOG, `Scene ${sceneIdx + 1}: videoUrl found in DB after sleep (completed while backgrounded)`);
-            videoComplete = true;
-          }
-        }
+      // Global cooldown: wait if we recently hit a rate limit
+      const now = Date.now();
+      if (now - lastRateLimitTime < GLOBAL_COOLDOWN_MS) {
+        const cooldownWait = GLOBAL_COOLDOWN_MS - (now - lastRateLimitTime);
+        console.log(LOG, `Scene ${sceneIdx + 1}: global cooldown active, waiting ${(cooldownWait / 1000).toFixed(1)}s`);
+        await sleep(cooldownWait);
       }
+
+      const vidRes = await ctx.callPhase(
+        { phase: "video", projectId, generationId, sceneIndex: sceneIdx },
+        600000, // 10 minutes
+        CINEMATIC_ENDPOINT
+      );
+      
+      if (!vidRes.success) {
+        console.warn(LOG, `Video scene ${sceneIdx + 1} failed: ${vidRes.error}`);
+        return;
+      }
+      
+      console.log(LOG, `Video scene ${sceneIdx + 1} complete`);
+      
       completedVideos++;
       ctx.setState((prev) => ({
         ...prev,

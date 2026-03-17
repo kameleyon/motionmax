@@ -96,6 +96,7 @@ export function GenerationResult({
     regeneratingType,
     regenerateAudio,
     regenerateImage,
+    undoRegeneration,
   } = useSceneRegeneration(generationId, projectId, scenes, handleScenesUpdate);
 
   // Keep scenes in sync with prop changes
@@ -764,6 +765,7 @@ export function GenerationResult({
           onClose={() => setEditingSceneIndex(null)}
           onRegenerateAudio={regenerateAudio}
           onRegenerateImage={regenerateImage}
+          onUndoRegeneration={undoRegeneration}
           isRegenerating={isRegenerating}
           regeneratingType={regeneratingType}
         />

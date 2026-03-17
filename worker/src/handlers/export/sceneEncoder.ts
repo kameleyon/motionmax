@@ -17,7 +17,10 @@ import { concatFiles } from "./concatScenes.js";
 /** Shared video filter: ensure even dimensions for yuv420p */
 const SCALE_EVEN = "scale=trunc(iw/2)*2:trunc(ih/2)*2";
 
-/** Create a silent video from a still image for a given duration. */
+/** Create a silent video from a still image for a given duration.
+ *  Uses low input framerate (4fps) since it's a static image — 6x faster
+ *  than 24fps with no visible difference. Output is forced to 24fps for
+ *  compatibility with the concat demuxer (stream-copy). */
 async function imageToSilentClip(
   imagePath: string,
   outputPath: string,
@@ -25,13 +28,14 @@ async function imageToSilentClip(
 ): Promise<void> {
   await runFfmpeg([
     "-loop", "1",
-    "-framerate", "24",
+    "-framerate", "4",
     "-i", imagePath,
     "-vf", SCALE_EVEN,
     "-c:v", "libx264",
     "-preset", "ultrafast",
     "-tune", "stillimage",
     "-pix_fmt", "yuv420p",
+    "-r", "24",
     "-t", String(duration),
     "-movflags", "+faststart",
     ...X264_MEM_FLAGS,

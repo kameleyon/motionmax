@@ -8,29 +8,34 @@
  *   • probeDuration on audio (fast, single ffprobe call)
  *   • Create silent video at probed duration
  *   • Merge video + audio via stream-copy (no re-encode)
+ *
+ * Long still-image scenes (>20s) are chunked into shorter segments
+ * then concatenated — prevents OOM on constrained Render instances.
  */
 import path from "path";
 import { runFfmpeg, probeDuration, X264_MEM_FLAGS } from "./ffmpegCmd.js";
 import { streamToFile, removeFiles } from "./storageHelpers.js";
 import { concatFiles } from "./concatScenes.js";
 
-/** Shared video filter: ensure even dimensions for yuv420p */
-const SCALE_EVEN = "scale=trunc(iw/2)*2:trunc(ih/2)*2";
+/** Max seconds per ffmpeg encode pass — keeps x264 peak memory low. */
+const MAX_CHUNK_SECONDS = 20;
 
-/** Create a silent video from a still image for a given duration.
- *  Uses low input framerate (4fps) since it's a static image — 6x faster
- *  than 24fps with no visible difference. Output is forced to 24fps for
- *  compatibility with the concat demuxer (stream-copy). */
-async function imageToSilentClip(
+/** Shared video filter: cap to 1920px wide + ensure even dimensions. */
+const SCALE_FIT =
+  "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease," +
+  "scale=trunc(iw/2)*2:trunc(ih/2)*2";
+
+/** Encode a ≤ MAX_CHUNK_SECONDS still-image segment. */
+async function encodeSilentChunk(
   imagePath: string,
   outputPath: string,
   duration: number
 ): Promise<void> {
   await runFfmpeg([
     "-loop", "1",
-    "-framerate", "4",
+    "-framerate", "2",
     "-i", imagePath,
-    "-vf", SCALE_EVEN,
+    "-vf", SCALE_FIT,
     "-c:v", "libx264",
     "-preset", "ultrafast",
     "-tune", "stillimage",
@@ -41,6 +46,40 @@ async function imageToSilentClip(
     ...X264_MEM_FLAGS,
     outputPath,
   ]);
+}
+
+/** Create a silent video from a still image for a given duration.
+ *  For clips longer than MAX_CHUNK_SECONDS the encode is split into
+ *  shorter segments and concatenated — this caps x264's peak memory and
+ *  prevents OOM-kills on constrained servers. */
+async function imageToSilentClip(
+  imagePath: string,
+  outputPath: string,
+  duration: number
+): Promise<void> {
+  if (duration <= MAX_CHUNK_SECONDS) {
+    await encodeSilentChunk(imagePath, outputPath, duration);
+    return;
+  }
+
+  // ── Chunked encode for long durations ──
+  console.log(`[SceneEncoder] Chunking ${duration.toFixed(1)}s into ≤${MAX_CHUNK_SECONDS}s segments`);
+  const chunks: string[] = [];
+  let remaining = duration;
+  let idx = 0;
+
+  while (remaining > 0.1) {
+    const chunkDur = Math.min(remaining, MAX_CHUNK_SECONDS);
+    const chunkPath = outputPath.replace(".mp4", `_chunk${idx}.mp4`);
+    await encodeSilentChunk(imagePath, chunkPath, chunkDur);
+    chunks.push(chunkPath);
+    remaining -= chunkDur;
+    idx++;
+  }
+
+  await concatFiles(chunks, outputPath, true);
+  removeFiles(...chunks);
+  console.log(`[SceneEncoder] Chunked encode complete (${chunks.length} segments)`);
 }
 
 /** Create a video clip from a still image + audio.
@@ -55,7 +94,7 @@ async function imageAudioToClip(
   const audioDur = await probeDuration(audioPath);
   console.log(`[SceneEncoder] Scene ${sceneIndex} imageAudio: ${audioDur.toFixed(2)}s`);
 
-  // Pass 1: silent video at audio duration
+  // Pass 1: silent video at audio duration (chunked if long)
   const silentVidPath = path.join(tempDir, `scene_${sceneIndex}_imgvid.mp4`);
   await imageToSilentClip(imagePath, silentVidPath, audioDur);
 
@@ -97,7 +136,7 @@ async function muxVideoAudio(
   const stretchedVid = path.join(tempDir, `scene_${sceneIndex}_stretched.mp4`);
   await runFfmpeg([
     "-i", videoPath,
-    "-vf", `setpts=${ratio.toFixed(4)}*PTS,${SCALE_EVEN}`,
+    "-vf", `setpts=${ratio.toFixed(4)}*PTS,${SCALE_FIT}`,
     "-an",
     "-c:v", "libx264",
     "-preset", "ultrafast",
@@ -135,7 +174,7 @@ async function slideshowFromImages(
   const n = imageUrls.length;
   const perImgDur = audioDur / n;
 
-  // 1. Create a silent clip per sub-image
+  // 1. Create a silent clip per sub-image (chunked if long)
   const subClips: string[] = [];
   for (let j = 0; j < n; j++) {
     const imgPath = path.join(tempDir, `scene_${sceneIndex}_img${j}.png`);

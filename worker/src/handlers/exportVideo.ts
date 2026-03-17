@@ -15,7 +15,7 @@ import { processScene } from "./export/sceneEncoder.js";
 import { concatFiles } from "./export/concatScenes.js";
 import { uploadToSupabase, removeFiles } from "./export/storageHelpers.js";
 
-/** Process ONE scene at a time — Render's 512MB can OOM with 2 parallel. */
+/** Scenes per batch — keep low to avoid OOM on Render. */
 const SCENE_BATCH_SIZE = parseInt(process.env.EXPORT_BATCH_SIZE || "3", 10);
 
 /** Fetch scenes from the generations table as a fallback. */

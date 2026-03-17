@@ -14,7 +14,9 @@ export interface FfmpegResult {
   stderr: string;
 }
 
-/** Run an ffmpeg command with a timeout. Rejects on non-zero exit. */
+/** Run an ffmpeg command with a timeout. Rejects on non-zero exit.
+ *  `-loglevel warning` is prepended to reduce stderr buffer pressure —
+ *  ffmpeg progress lines are suppressed. */
 export function runFfmpeg(
   args: string[],
   timeoutMs = DEFAULT_TIMEOUT_MS
@@ -22,8 +24,8 @@ export function runFfmpeg(
   return new Promise((resolve, reject) => {
     const proc = execFile(
       FFMPEG_BIN,
-      ["-y", ...args],
-      { timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024 },
+      ["-y", "-loglevel", "warning", ...args],
+      { timeout: timeoutMs, maxBuffer: 5 * 1024 * 1024 },
       (error, stdout, stderr) => {
         if (error) {
           const msg = stderr?.slice(-500) || error.message;

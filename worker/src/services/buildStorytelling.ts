@@ -22,6 +22,7 @@ export interface StorytellingParams {
   storyIdea: string; format: string; length: string; style: string;
   customStyle?: string; brandMark?: string; inspiration?: string;
   tone?: string; genre?: string; characterDescription?: string; voiceType?: string;
+  disableExpressions?: boolean;
 }
 
 // ── Guide Lookups ──────────────────────────────────────────────────
@@ -127,8 +128,11 @@ All image prompts must adhere to this style:
 - Vary sentence rhythm for musicality
 - NO labels, NO stage directions, NO markdown
 - **PRESERVE THE USER'S EXACT TERMINOLOGY**: If the user refers to a character as "Queen of Clubs", use "Queen of Clubs" throughout the story - do NOT replace names/titles with pronouns like "she" or "they". The user chose specific names/titles for a reason. Use pronouns sparingly and only after establishing the character name in the same scene.
-- Include paralinguistic tags sparingly for emotional emphasis: [sigh], [chuckle], [gasp], [laugh]
-- Use them only at key emotional moments, not every scene
+${p.disableExpressions
+  ? `- Write CLEAN, plain speech — NO paralinguistic tags, NO bracketed cues, NO expressions like [chuckle], [sigh], [gasp], [laugh], etc.
+- Narrate in unadorned, flowing sentences only.`
+  : `- Include paralinguistic tags sparingly for emotional emphasis: [sigh], [chuckle], [gasp], [laugh]
+- Use them only at key emotional moments, not every scene`}
 
 ${SUB_VISUALS_SECTION}
 

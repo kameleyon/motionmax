@@ -5,6 +5,8 @@ import { handleImagesPhase } from "./handlers/handleImages.js";
 import { handleAudioPhase } from "./handlers/handleAudio.js";
 import { handleFinalizePhase } from "./handlers/handleFinalize.js";
 import { handleExportVideo } from "./handlers/exportVideo.js";
+import { handleRegenerateImage } from "./handlers/handleRegenerateImage.js";
+import { handleRegenerateAudio } from "./handlers/handleRegenerateAudio.js";
 import { writeSystemLog } from "./lib/logger.js";
 
 /* ---- Concurrency guard: prevent re-processing the same job ---- */
@@ -52,6 +54,12 @@ async function processJob(job: Job) {
     } else if (job.task_type === 'export_video' as any) {
       const exportResult = await handleExportVideo(job.id, job.payload, job.user_id);
       finalPayload.finalUrl = exportResult.url;
+    } else if (job.task_type === 'regenerate_image' as any) {
+      const regenResult = await handleRegenerateImage(job.id, job.payload as any, job.user_id);
+      finalPayload = { ...finalPayload, ...regenResult };
+    } else if (job.task_type === 'regenerate_audio' as any) {
+      const audioRegenResult = await handleRegenerateAudio(job.id, job.payload as any, job.user_id);
+      finalPayload = { ...finalPayload, ...audioRegenResult };
     } else {
       await writeSystemLog({
         jobId: job.id,
@@ -71,13 +79,14 @@ async function processJob(job: Job) {
       message: `Worker successfully completed job ${job.id}`
     });
 
-    await supabase
+    await (supabase as any)
       .from('video_generation_jobs')
       .update({
-          status: 'completed',
-          progress: 100,
-          payload: finalPayload,
-          updated_at: new Date().toISOString()
+        status: 'completed',
+        progress: 100,
+        payload: finalPayload,
+        result: finalPayload,       // also write result so pollWorkerJob always finds it
+        updated_at: new Date().toISOString()
       })
       .eq('id', job.id);
 

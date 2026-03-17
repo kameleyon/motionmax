@@ -162,7 +162,16 @@ export async function callPhase(
     return workerCallPhase(body, "finalize_generation", 2 * 60 * 1000);
   }
 
-  // Regeneration still goes through edge functions (scene-level, needs auth context)
+  // Regeneration phases → worker queue (no edge-function timeout risk)
+  if (body.phase === "regenerate-image") {
+    return workerCallPhase(body, "regenerate_image", 3 * 60 * 1000);
+  }
+
+  if (body.phase === "regenerate-audio") {
+    return workerCallPhase(body, "regenerate_audio", 3 * 60 * 1000);
+  }
+
+  // Any remaining phase (unknown/legacy) → edge function
   return legacyCallPhase(body, timeoutMs, endpoint);
 }
 

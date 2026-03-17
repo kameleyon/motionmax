@@ -305,6 +305,7 @@ function validateGenerationRequest(body: unknown): GenerationRequest {
 
   // Validate numeric fields
   validated.sceneIndex = validateNonNegativeInt(raw.sceneIndex, "sceneIndex") ?? undefined;
+  validated.imageIndex = validateNonNegativeInt(raw.imageIndex, "imageIndex") ?? undefined;
 
   return validated;
 }
@@ -340,6 +341,7 @@ interface GenerationRequest {
   projectId?: string;
   // For regeneration
   sceneIndex?: number;
+  imageIndex?: number;
   newVoiceover?: string;
   imageModification?: string;
 }

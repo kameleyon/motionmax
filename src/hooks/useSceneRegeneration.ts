@@ -1,8 +1,7 @@
 import { useState, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import type { Scene } from "@/hooks/useGenerationPipeline";
-import { SUPABASE_URL } from "@/lib/supabaseUrl";
+import { callPhase } from "@/hooks/generation/callPhase";
 
 interface RegenerationState {
   isRegenerating: boolean;
@@ -23,53 +22,32 @@ export function useSceneRegeneration(
     sceneIndex: null,
   });
 
+  // ── Regenerate audio for a single scene ────────────────────────────
+
   const regenerateAudio = useCallback(
     async (sceneIndex: number, newVoiceover: string) => {
       if (!generationId || !projectId || !scenes) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Missing generation context",
-        });
+        toast({ variant: "destructive", title: "Error", description: "Missing generation context" });
         return;
       }
 
       setState({ isRegenerating: true, regeneratingType: "audio", sceneIndex });
 
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error("Not authenticated");
-
-        const response = await fetch(
-          `${SUPABASE_URL}/functions/v1/generate-video`,
+        // Route through worker queue (3 min poll timeout)
+        const result = await callPhase(
           {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({
-              phase: "regenerate-audio",
-              generationId,
-              projectId,
-              sceneIndex,
-              newVoiceover,
-            }),
-          }
+            phase: "regenerate-audio",
+            generationId,
+            projectId,
+            sceneIndex,
+            newVoiceover,
+          },
+          3 * 60 * 1000,
         );
 
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || "Failed to regenerate audio");
-        }
+        if (!result?.success) throw new Error(result?.error || "Audio regeneration failed");
 
-        const result = await response.json();
-
-        if (!result.success) {
-          throw new Error(result.error || "Audio regeneration failed");
-        }
-
-        // Update local scenes with new audio
         const updatedScenes = [...scenes];
         updatedScenes[sceneIndex] = {
           ...updatedScenes[sceneIndex],
@@ -77,13 +55,9 @@ export function useSceneRegeneration(
           audioUrl: result.audioUrl,
           duration: result.duration || updatedScenes[sceneIndex].duration,
         };
-
         onScenesUpdate(updatedScenes);
 
-        toast({
-          title: "Audio Regenerated",
-          description: `Scene ${sceneIndex + 1} audio has been updated.`,
-        });
+        toast({ title: "Audio Regenerated", description: `Scene ${sceneIndex + 1} audio updated.` });
       } catch (error) {
         console.error("Audio regeneration error:", error);
         toast({
@@ -98,67 +72,45 @@ export function useSceneRegeneration(
     [generationId, projectId, scenes, onScenesUpdate, toast]
   );
 
+  // ── Regenerate (or edit) a specific scene image ────────────────────
+
   const regenerateImage = useCallback(
     async (sceneIndex: number, imageModification: string, imageIndex?: number) => {
       if (!generationId || !projectId || !scenes) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Missing generation context",
-        });
+        toast({ variant: "destructive", title: "Error", description: "Missing generation context" });
         return;
       }
 
       setState({ isRegenerating: true, regeneratingType: "image", sceneIndex });
 
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error("Not authenticated");
-
-        const response = await fetch(
-          `${SUPABASE_URL}/functions/v1/generate-video`,
+        // Route through worker queue (3 min poll timeout)
+        const result = await callPhase(
           {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({
-              phase: "regenerate-image",
-              generationId,
-              projectId,
-              sceneIndex,
-              imageModification,
-              imageIndex: imageIndex ?? 0, // Default to first image if not specified
-            }),
-          }
+            phase: "regenerate-image",
+            generationId,
+            projectId,
+            sceneIndex,
+            imageModification,
+            imageIndex: imageIndex ?? 0,
+          },
+          3 * 60 * 1000,
         );
 
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || "Failed to regenerate image");
-        }
+        if (!result?.success) throw new Error(result?.error || "Image regeneration failed");
 
-        const result = await response.json();
-
-        if (!result.success) {
-          throw new Error(result.error || "Image regeneration failed");
-        }
-
-        // Update local scenes with new image(s)
         const updatedScenes = [...scenes];
-        
-        // If we have imageUrls and a specific imageIndex, update just that image
-        if (result.imageUrl && typeof imageIndex === 'number' && updatedScenes[sceneIndex].imageUrls?.length) {
+        const targetIdx = imageIndex ?? 0;
+
+        if (result.imageUrl && updatedScenes[sceneIndex].imageUrls?.length) {
           const newImageUrls = [...updatedScenes[sceneIndex].imageUrls!];
-          newImageUrls[imageIndex] = result.imageUrl;
+          newImageUrls[targetIdx] = result.imageUrl;
           updatedScenes[sceneIndex] = {
             ...updatedScenes[sceneIndex],
             imageUrls: newImageUrls,
-            imageUrl: imageIndex === 0 ? result.imageUrl : updatedScenes[sceneIndex].imageUrl,
+            imageUrl: targetIdx === 0 ? result.imageUrl : updatedScenes[sceneIndex].imageUrl,
           };
         } else {
-          // Fallback: replace all images (for full regeneration or single-image scenes)
           updatedScenes[sceneIndex] = {
             ...updatedScenes[sceneIndex],
             imageUrl: result.imageUrl,
@@ -170,7 +122,7 @@ export function useSceneRegeneration(
 
         toast({
           title: "Image Regenerated",
-          description: `Scene ${sceneIndex + 1}${typeof imageIndex === 'number' ? ` image ${imageIndex + 1}` : ''} has been updated.`,
+          description: `Scene ${sceneIndex + 1}${typeof imageIndex === "number" ? ` image ${imageIndex + 1}` : ""} updated.`,
         });
       } catch (error) {
         console.error("Image regeneration error:", error);

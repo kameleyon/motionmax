@@ -47,6 +47,7 @@ function buildPrompt(projectType: string, p: Record<string, any>): PromptResult 
         genre: p.genre,
         characterDescription: p.characterDescription,
         voiceType: p.voiceType,
+        disableExpressions: p.disableExpressions === true,
       });
 
     case "smartflow":
@@ -69,6 +70,7 @@ function buildPrompt(projectType: string, p: Record<string, any>): PromptResult 
         presenterFocus: p.presenterFocus,
         characterDescription: p.characterDescription,
         voiceType: p.voiceType,
+        disableExpressions: p.disableExpressions === true,
       });
   }
 }

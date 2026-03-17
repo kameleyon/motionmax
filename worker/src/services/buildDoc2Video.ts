@@ -21,6 +21,7 @@ export interface Doc2VideoParams {
   content: string; format: string; length: string; style: string;
   customStyle?: string; brandMark?: string; presenterFocus?: string;
   characterDescription?: string; voiceType?: string;
+  disableExpressions?: boolean;
 }
 
 export interface PromptResult { system: string; user: string; maxTokens: number; }
@@ -90,8 +91,11 @@ All image prompts must adhere to this style:
 - Start each scene with a hook
 - NO labels, NO stage directions, NO markdown
 - Just raw spoken text
-- Include paralinguistic tags where appropriate for natural expression: [clear throat], [sigh], [sush], [cough], [groan], [sniff], [gasp], [chuckle], [laugh]
-- Example: "Oh, that's interesting! [chuckle] Let me explain why..."
+${p.disableExpressions
+  ? `- Write CLEAN, plain speech — NO paralinguistic tags, NO bracketed cues, NO expressions like [chuckle], [sigh], [laugh], [gasp], etc.
+- Every character speaks in natural, unadorned sentences only.`
+  : `- Include paralinguistic tags where appropriate for natural expression: [clear throat], [sigh], [sush], [cough], [groan], [sniff], [gasp], [chuckle], [laugh]
+- Example: "Oh, that's interesting! [chuckle] Let me explain why..."`}
 
 ${SUB_VISUALS_SECTION}
 

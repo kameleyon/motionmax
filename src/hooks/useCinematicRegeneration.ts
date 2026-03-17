@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { SUPABASE_URL } from "@/lib/supabaseUrl";
+import { callPhase } from "@/hooks/generation/callPhase";
 
 interface CinematicScene {
   number: number;
@@ -9,6 +10,7 @@ interface CinematicScene {
   visualPrompt: string;
   videoUrl?: string;
   audioUrl?: string;
+  imageUrl?: string;
   duration: number;
 }
 
@@ -20,7 +22,9 @@ interface RegenerationState {
   type: RegenType | null;
 }
 
-async function authenticatedFetch(path: string, body: Record<string, unknown>) {
+// ── Cinematic video polling (edge function for Kling/Wan video gen) ─────────
+
+async function cinematicVideoFetch(path: string, body: Record<string, unknown>) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("Not authenticated");
 
@@ -42,12 +46,11 @@ async function authenticatedFetch(path: string, body: Record<string, unknown>) {
   }
 
   const result = await response.json();
-  if (!result.success) {
-    throw new Error(result.error || "Operation failed");
-  }
-
+  if (!result.success) throw new Error(result.error || "Operation failed");
   return result;
 }
+
+// ── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useCinematicRegeneration(
   generationId: string | undefined,
@@ -75,38 +78,32 @@ export function useCinematicRegeneration(
     [generationId]
   );
 
-  const pollUntilComplete = useCallback(
-    async (idx: number, type: RegenType) => {
+  // Video polling via edge function (cinematic-specific video rendering)
+  const pollVideoPhase = useCallback(
+    async (idx: number) => {
       if (!projectId || !generationId) return;
-
       const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
       const MAX_POLLS = 120;
       let polls = 0;
       while (polls < MAX_POLLS) {
         polls++;
-        const result = await authenticatedFetch("generate-cinematic", {
-          phase: type,
+        const result = await cinematicVideoFetch("generate-cinematic", {
+          phase: "video",
           projectId,
           generationId,
           sceneIndex: idx,
         });
-
         const nextScene = result.scene as Partial<CinematicScene>;
-        onScenesUpdate(
-          scenes.map((s, i) => (i === idx ? { ...s, ...nextScene } : s))
-        );
-
+        onScenesUpdate(scenes.map((s, i) => (i === idx ? { ...s, ...nextScene } : s)));
         if (result.status === "complete") break;
-        // 5s for video (120×5=10min coverage), 1.2s for audio
-        await sleep(type === "audio" ? 1200 : 5000);
+        await sleep(5000);
       }
-      if (polls >= MAX_POLLS) {
-        throw new Error("Generation timed out after maximum retries. Please try again.");
-      }
+      if (polls >= MAX_POLLS) throw new Error("Video generation timed out. Please try again.");
     },
     [generationId, projectId, scenes, onScenesUpdate]
   );
+
+  // ── Audio regeneration → worker ──────────────────────────────────────────
 
   const regenerateAudio = useCallback(
     async (idx: number, newVoiceover: string) => {
@@ -119,17 +116,23 @@ export function useCinematicRegeneration(
       setState({ isRegenerating: true, sceneIndex: idx, type: "audio" });
 
       try {
-        // Save new voiceover text first
+        const result = await callPhase({
+          phase: "regenerate-audio",
+          generationId,
+          projectId,
+          sceneIndex: idx,
+          newVoiceover,
+        }, 3 * 60 * 1000);
+
+        if (!result?.success) throw new Error(result?.error || "Audio regeneration failed");
+
         const nextScenes = scenes.map((s, i) =>
-          i === idx ? { ...s, voiceover: newVoiceover } : s
+          i === idx ? { ...s, voiceover: newVoiceover, audioUrl: result.audioUrl, duration: result.duration || s.duration } : s
         );
         onScenesUpdate(nextScenes);
         await persistScenes(nextScenes);
 
-        // Poll until audio is complete
-        await pollUntilComplete(idx, "audio");
-
-        toast({ title: "Audio Regenerated", description: `Scene ${idx + 1} audio has been updated.` });
+        toast({ title: "Audio Regenerated", description: `Scene ${idx + 1} audio updated.` });
       } catch (error) {
         console.error("Audio regeneration error:", error);
         toast({
@@ -141,8 +144,10 @@ export function useCinematicRegeneration(
         setState({ isRegenerating: false, sceneIndex: null, type: null });
       }
     },
-    [generationId, projectId, scenes, onScenesUpdate, persistScenes, pollUntilComplete, onStopPlayback, toast]
+    [generationId, projectId, scenes, onScenesUpdate, persistScenes, onStopPlayback, toast]
   );
+
+  // ── Video regeneration → cinematic edge function ─────────────────────────
 
   const regenerateVideo = useCallback(
     async (idx: number) => {
@@ -155,18 +160,15 @@ export function useCinematicRegeneration(
       setState({ isRegenerating: true, sceneIndex: idx, type: "video" });
 
       try {
-        // Step 1: Send ONE explicit call with regenerate=true to start a new prediction
-        await authenticatedFetch("generate-cinematic", {
+        await cinematicVideoFetch("generate-cinematic", {
           phase: "video",
           projectId,
           generationId,
           sceneIndex: idx,
           regenerate: true,
         });
-
-        // Step 2: Poll for completion (never sends regenerate)
-        await pollUntilComplete(idx, "video");
-        toast({ title: "Video Regenerated", description: `Scene ${idx + 1} video has been updated.` });
+        await pollVideoPhase(idx);
+        toast({ title: "Video Regenerated", description: `Scene ${idx + 1} video updated.` });
       } catch (error) {
         console.error("Video regeneration error:", error);
         toast({
@@ -178,8 +180,10 @@ export function useCinematicRegeneration(
         setState({ isRegenerating: false, sceneIndex: null, type: null });
       }
     },
-    [generationId, projectId, pollUntilComplete, onStopPlayback, toast]
+    [generationId, projectId, pollVideoPhase, onStopPlayback, toast]
   );
+
+  // ── Apply image edit → worker ────────────────────────────────────────────
 
   const applyImageEdit = useCallback(
     async (idx: number, imageModification: string) => {
@@ -192,23 +196,23 @@ export function useCinematicRegeneration(
       setState({ isRegenerating: true, sceneIndex: idx, type: "image" });
 
       try {
-        const result = await authenticatedFetch("generate-cinematic", {
-          phase: "image-edit",
-          projectId,
+        const result = await callPhase({
+          phase: "regenerate-image",
           generationId,
+          projectId,
           sceneIndex: idx,
+          imageIndex: 0,
           imageModification,
-        });
+        }, 3 * 60 * 1000);
 
-        const nextScene = result.scene as Partial<CinematicScene>;
-        onScenesUpdate(
-          scenes.map((s, i) => (i === idx ? { ...s, ...nextScene } : s))
+        if (!result?.success) throw new Error(result?.error || "Image edit failed");
+
+        const nextScenes = scenes.map((s, i) =>
+          i === idx ? { ...s, imageUrl: result.imageUrl } : s
         );
+        onScenesUpdate(nextScenes);
 
-        // Step 2: Poll video phase until Grok completes (handles timeouts/retries)
-        await pollUntilComplete(idx, "video");
-
-        toast({ title: "Image Edited", description: `Scene ${idx + 1} image edited and video regenerated.` });
+        toast({ title: "Image Edited", description: `Scene ${idx + 1} image updated.` });
       } catch (error) {
         console.error("Image edit error:", error);
         toast({
@@ -220,8 +224,10 @@ export function useCinematicRegeneration(
         setState({ isRegenerating: false, sceneIndex: null, type: null });
       }
     },
-    [generationId, projectId, scenes, onScenesUpdate, onStopPlayback, toast, pollUntilComplete]
+    [generationId, projectId, scenes, onScenesUpdate, onStopPlayback, toast]
   );
+
+  // ── Image regeneration → worker ──────────────────────────────────────────
 
   const regenerateImage = useCallback(
     async (idx: number) => {
@@ -234,22 +240,23 @@ export function useCinematicRegeneration(
       setState({ isRegenerating: true, sceneIndex: idx, type: "image" });
 
       try {
-        const result = await authenticatedFetch("generate-cinematic", {
-          phase: "image-regen",
-          projectId,
+        const result = await callPhase({
+          phase: "regenerate-image",
           generationId,
+          projectId,
           sceneIndex: idx,
-        });
+          imageIndex: 0,
+          imageModification: "",
+        }, 3 * 60 * 1000);
 
-        const nextScene = result.scene as Partial<CinematicScene>;
-        onScenesUpdate(
-          scenes.map((s, i) => (i === idx ? { ...s, ...nextScene } : s))
+        if (!result?.success) throw new Error(result?.error || "Image regeneration failed");
+
+        const nextScenes = scenes.map((s, i) =>
+          i === idx ? { ...s, imageUrl: result.imageUrl } : s
         );
+        onScenesUpdate(nextScenes);
 
-        // Step 2: Poll video phase until Grok completes
-        await pollUntilComplete(idx, "video");
-
-        toast({ title: "Image Regenerated", description: `Scene ${idx + 1} image and video regenerated.` });
+        toast({ title: "Image Regenerated", description: `Scene ${idx + 1} image updated.` });
       } catch (error) {
         console.error("Image regeneration error:", error);
         toast({
@@ -261,7 +268,7 @@ export function useCinematicRegeneration(
         setState({ isRegenerating: false, sceneIndex: null, type: null });
       }
     },
-    [generationId, projectId, scenes, onScenesUpdate, onStopPlayback, toast, pollUntilComplete]
+    [generationId, projectId, scenes, onScenesUpdate, onStopPlayback, toast]
   );
 
   return {

@@ -64,13 +64,15 @@ async function workerCallPhase(
   taskType: string = "generate_video",
   pollTimeoutMs: number = 5 * 60 * 1000
 ): Promise<any> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
+  // Use getSession() (local-storage read, no network round-trip) instead of
+  // getUser() (makes an auth API call that can fail with "TypeError: Failed to fetch")
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) throw new Error("Not authenticated");
 
   const { data: job, error: insertError } = await supabase
     .from("video_generation_jobs")
     .insert({
-      user_id: user.id,
+      user_id: session.user.id,
       project_id: (body.projectId as string) ?? null,
       task_type: taskType,
       status: "pending",

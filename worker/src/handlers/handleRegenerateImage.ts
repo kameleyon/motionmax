@@ -10,7 +10,7 @@
 
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
-import { generateImage } from "../services/imageGenerator.js";
+import { generateImage, editImage } from "../services/imageGenerator.js";
 import { getStylePrompt } from "../services/prompts.js";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -74,22 +74,26 @@ export async function handleRegenerateImage(
   const style: string = (generation.projects as any)?.style || "realistic";
   const styleDesc = getStylePrompt(style);
 
-  // Build prompt — select sub-visual for indices > 0
-  let basePrompt: string = scene.visualPrompt || "";
-  if (targetImageIndex > 0) {
-    const subIdx = targetImageIndex - 1;
-    const hasSubVisual = Array.isArray(scene.subVisuals) && scene.subVisuals[subIdx];
-    basePrompt = hasSubVisual
-      ? scene.subVisuals[subIdx]
-      : (subIdx === 0 ? "close-up detail shot, " : "wide establishing shot, ") + scene.visualPrompt;
+  let imageUrl: string;
+
+  if (imageModification) {
+    // Image Edit
+    const sourceImageUrl = (scene.imageUrls || [])[targetImageIndex] || scene.imageUrl;
+    if (!sourceImageUrl) throw new Error("Cannot edit an image that does not exist.");
+    imageUrl = await editImage(imageModification, sourceImageUrl, hyperealApiKey, projectId);
+  } else {
+    // Full Regeneration
+    let basePrompt: string = scene.visualPrompt || "";
+    if (targetImageIndex > 0) {
+      const subIdx = targetImageIndex - 1;
+      const hasSubVisual = Array.isArray(scene.subVisuals) && scene.subVisuals[subIdx];
+      basePrompt = hasSubVisual
+        ? scene.subVisuals[subIdx]
+        : (subIdx === 0 ? "close-up detail shot, " : "wide establishing shot, ") + scene.visualPrompt;
+    }
+    const fullPrompt = `${basePrompt}\n\nSTYLE: ${styleDesc}\n\nProfessional illustration with dynamic composition and clear visual hierarchy.`;
+    imageUrl = await generateImage(fullPrompt, hyperealApiKey, replicateApiKey, format, projectId);
   }
-
-  const fullPrompt = imageModification
-    ? `${basePrompt}\n\nUSER MODIFICATION REQUEST: ${imageModification}\n\nSTYLE: ${styleDesc}\n\nApply the modification while maintaining scene consistency. Professional illustration.`
-    : `${basePrompt}\n\nSTYLE: ${styleDesc}\n\nProfessional illustration with dynamic composition and clear visual hierarchy.`;
-
-  // Generate image (uploads to scene-images bucket, returns public URL)
-  const imageUrl = await generateImage(fullPrompt, hyperealApiKey, replicateApiKey, format, projectId);
 
   // Patch the scene's imageUrl / imageUrls array
   const existingUrls: (string | null)[] =

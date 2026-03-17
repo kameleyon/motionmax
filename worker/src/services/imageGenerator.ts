@@ -15,6 +15,7 @@ import { v4 as uuidv4 } from "uuid";
 // ── Constants ──────────────────────────────────────────────────────
 
 const HYPEREAL_API_URL = "https://hypereal.tech/api/v1/images/generate";
+const HYPEREAL_EDIT_URL = "https://hypereal.tech/api/v1/images/edit";
 const HYPEREAL_MODEL = "gemini-3-1-flash-t2i";
 const HYPEREAL_RETRIES = 4;
 
@@ -61,7 +62,7 @@ async function tryHypereal(
       const res = await fetch(HYPEREAL_API_URL, {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, model: HYPEREAL_MODEL, format: aspectRatio }),
+        body: JSON.stringify({ prompt, model: HYPEREAL_MODEL, aspect_ratio: aspectRatio }),
       });
 
       if (!res.ok) {
@@ -96,6 +97,53 @@ async function tryHypereal(
     }
   }
 
+  return null;
+}
+
+/** Edit with Hypereal, download bytes, return raw bytes (not URL). */
+async function tryHyperealEdit(
+  prompt: string,
+  imageUrl: string,
+  apiKey: string,
+): Promise<Uint8Array | null> {
+  for (let attempt = 1; attempt <= HYPEREAL_RETRIES; attempt++) {
+    try {
+      const res = await fetch(HYPEREAL_EDIT_URL, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, image_url: imageUrl }),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        console.warn(`[ImageGen] Hypereal Edit attempt ${attempt} failed (${res.status}): ${err.substring(0, 200)}`);
+        if (attempt < HYPEREAL_RETRIES) await sleep(1500 * attempt);
+        continue;
+      }
+
+      const data = await res.json() as any;
+      const hyperealUrl = data?.data?.[0]?.url;
+      if (!hyperealUrl) {
+        console.warn(`[ImageGen] Hypereal Edit attempt ${attempt}: no URL in response`);
+        if (attempt < HYPEREAL_RETRIES) await sleep(1500 * attempt);
+        continue;
+      }
+
+      const imgRes = await fetch(hyperealUrl);
+      if (!imgRes.ok) {
+        console.warn(`[ImageGen] Hypereal Edit download failed (${imgRes.status}) on attempt ${attempt}`);
+        if (attempt < HYPEREAL_RETRIES) await sleep(1500 * attempt);
+        continue;
+      }
+
+      const bytes = new Uint8Array(await imgRes.arrayBuffer());
+      console.log(`[ImageGen] Hypereal Edit ✅ attempt ${attempt} — ${bytes.length} bytes`);
+      return bytes;
+    } catch (err) {
+      console.warn(`[ImageGen] Hypereal Edit attempt ${attempt} threw: ${err}`);
+      if (attempt < HYPEREAL_RETRIES) await sleep(1500 * attempt);
+    }
+  }
   return null;
 }
 
@@ -207,4 +255,25 @@ export async function generateImage(
   }
 
   throw new Error("Image generation failed: both Hypereal and Replicate exhausted");
+}
+
+/**
+ * Edit one image: Hypereal only.
+ * Always re-uploads to Supabase Storage and returns a public Supabase URL.
+ */
+export async function editImage(
+  prompt: string,
+  imageUrl: string,
+  hyperealApiKey: string,
+  projectId: string,
+): Promise<string> {
+  if (hyperealApiKey) {
+    const bytes = await tryHyperealEdit(prompt, imageUrl, hyperealApiKey);
+    if (bytes) {
+      const url = await uploadToStorage(bytes, projectId);
+      return url;
+    }
+  }
+
+  throw new Error("Image edit failed: Hypereal unavailable or failed");
 }

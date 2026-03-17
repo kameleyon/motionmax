@@ -95,13 +95,16 @@ async function processJob(job: Job) {
       message: `Worker successfully completed job ${job.id}`
     });
 
+    // Strip restart bookkeeping before persisting
+    const { _restartCount: _rc, ...cleanPayload } = finalPayload;
+
     await (supabase as any)
       .from('video_generation_jobs')
       .update({
         status: 'completed',
         progress: 100,
-        payload: finalPayload,
-        result: finalPayload,       // also write result so pollWorkerJob always finds it
+        payload: cleanPayload,
+        result: cleanPayload,       // also write result so pollWorkerJob always finds it
         updated_at: new Date().toISOString()
       })
       .eq('id', job.id);
@@ -196,9 +199,15 @@ const POLL_INTERVAL_MS = 2000;
 
 const MAX_RESTART_RETRIES = 3;
 
+/** Cooldown (ms) before first poll after recovering orphaned jobs.
+ *  Prevents the crash-restart-pick-up-crash loop. */
+const STARTUP_COOLDOWN_MS = 10_000;
+
 /** Run once at startup to verify DB connectivity and rescue orphaned jobs.
- *  Tracks retries via payload._restartCount — after 3 restarts, marks as failed. */
-async function startupDiagnostic(): Promise<void> {
+ *  Tracks retries via payload._restartCount — after 3 restarts, marks as failed.
+ *  Returns true if orphaned jobs were recovered (triggers cooldown). */
+async function startupDiagnostic(): Promise<boolean> {
+  let recoveredOrphans = false;
   try {
     const { count, error } = await supabase
       .from("video_generation_jobs")
@@ -206,7 +215,7 @@ async function startupDiagnostic(): Promise<void> {
 
     if (error) {
       console.error("[Worker] ❌ Startup diagnostic FAILED — cannot read video_generation_jobs:", error.code, error.message);
-      return;
+      return false;
     }
     console.log(`[Worker] ✅ Startup diagnostic OK — video_generation_jobs has ${count ?? 0} total row(s)`);
 
@@ -218,6 +227,7 @@ async function startupDiagnostic(): Promise<void> {
       .order("created_at", { ascending: true });
 
     if (processingRows && processingRows.length > 0) {
+      recoveredOrphans = true;
       for (const row of processingRows as any[]) {
         const payload = (row.payload && typeof row.payload === "object") ? row.payload : {};
         const restartCount = (typeof payload._restartCount === "number" ? payload._restartCount : 0) + 1;
@@ -268,10 +278,27 @@ async function startupDiagnostic(): Promise<void> {
   } catch (err) {
     console.error("[Worker] ❌ Startup diagnostic exception:", err);
   }
+  return recoveredOrphans;
 }
 
+/* ---- Crash guard: prevent Node.js from dying on uncaught errors ---- */
+process.on("uncaughtException", (err) => {
+  console.error("[Worker] 💥 Uncaught exception (kept alive):", err.message);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[Worker] 💥 Unhandled rejection (kept alive):", reason);
+});
+
 console.log(`[Worker] MotionMax Render Worker started. Polling every ${POLL_INTERVAL_MS}ms.`);
-startupDiagnostic().then(() => {
-  pollQueue();
-  setInterval(pollQueue, POLL_INTERVAL_MS);
+startupDiagnostic().then((hadOrphans) => {
+  if (hadOrphans) {
+    console.log(`[Worker] ⏳ Cooldown ${STARTUP_COOLDOWN_MS / 1000}s before first poll (orphans recovered)`);
+    setTimeout(() => {
+      pollQueue();
+      setInterval(pollQueue, POLL_INTERVAL_MS);
+    }, STARTUP_COOLDOWN_MS);
+  } else {
+    pollQueue();
+    setInterval(pollQueue, POLL_INTERVAL_MS);
+  }
 });

@@ -15,8 +15,9 @@ import { processScene } from "./export/sceneEncoder.js";
 import { concatFiles } from "./export/concatScenes.js";
 import { uploadToSupabase, removeFiles } from "./export/storageHelpers.js";
 
-/** Scenes per batch — keep low to avoid OOM on Render. */
-const SCENE_BATCH_SIZE = parseInt(process.env.EXPORT_BATCH_SIZE || "3", 10);
+/** Scenes per batch — sequential (1) is safest; slideshows spawn many ffmpeg
+ *  sub-processes per scene, so even 2 parallel can OOM. */
+const SCENE_BATCH_SIZE = parseInt(process.env.EXPORT_BATCH_SIZE || "1", 10);
 
 /** Fetch scenes from the generations table as a fallback. */
 async function fetchScenesFromDb(projectId: string): Promise<any[]> {

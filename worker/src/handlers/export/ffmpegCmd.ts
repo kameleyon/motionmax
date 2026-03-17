@@ -7,7 +7,7 @@ import { execFile } from "child_process";
 
 const FFMPEG_BIN = process.env.FFMPEG_PATH || "ffmpeg";
 const FFPROBE_BIN = process.env.FFPROBE_PATH || "ffprobe";
-const DEFAULT_TIMEOUT_MS = 180_000; // 3 min
+const DEFAULT_TIMEOUT_MS = 600_000; // 10 min
 
 export interface FfmpegResult {
   stdout: string;

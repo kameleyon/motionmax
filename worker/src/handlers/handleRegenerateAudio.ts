@@ -26,6 +26,7 @@ interface RegenerateAudioResult {
   audioUrl: string | null;
   duration: number;
   voiceover: string;
+  _history: unknown[];
 }
 
 // ── Handler ────────────────────────────────────────────────────────
@@ -130,5 +131,6 @@ export async function handleRegenerateAudio(
     audioUrl: audioResult.url,
     duration,
     voiceover: newVoiceover,
+    _history: scenes[sceneIndex]._history || [],
   };
 }

@@ -54,7 +54,8 @@ export function useSceneRegeneration(
           voiceover: newVoiceover,
           audioUrl: result.audioUrl,
           duration: result.duration || updatedScenes[sceneIndex].duration,
-        };
+          _history: result._history || updatedScenes[sceneIndex]._history,
+        } as Scene;
         onScenesUpdate(updatedScenes);
 
         toast({ title: "Audio Regenerated", description: `Scene ${sceneIndex + 1} audio updated.` });
@@ -109,13 +110,15 @@ export function useSceneRegeneration(
             ...updatedScenes[sceneIndex],
             imageUrls: newImageUrls,
             imageUrl: targetIdx === 0 ? result.imageUrl : updatedScenes[sceneIndex].imageUrl,
-          };
+            _history: result._history || updatedScenes[sceneIndex]._history,
+          } as Scene;
         } else {
           updatedScenes[sceneIndex] = {
             ...updatedScenes[sceneIndex],
             imageUrl: result.imageUrl,
             imageUrls: result.imageUrls || [result.imageUrl],
-          };
+            _history: result._history || updatedScenes[sceneIndex]._history,
+          } as Scene;
         }
 
         onScenesUpdate(updatedScenes);

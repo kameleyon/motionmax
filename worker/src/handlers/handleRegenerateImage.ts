@@ -30,6 +30,7 @@ interface RegenerateImageResult {
   imageIndex: number;
   imageUrl: string;
   imageUrls: (string | null)[];
+  _history: unknown[];
 }
 
 // ── Handler ────────────────────────────────────────────────────────
@@ -148,5 +149,6 @@ export async function handleRegenerateImage(
     imageIndex: targetImageIndex,
     imageUrl,
     imageUrls: scenes[sceneIndex].imageUrls,
+    _history: scenes[sceneIndex]._history || [],
   };
 }

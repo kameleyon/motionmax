@@ -100,7 +100,8 @@ async function tryHypereal(
   return null;
 }
 
-/** Edit with Hypereal, download bytes, return raw bytes (not URL). */
+/** Edit with Hypereal, download bytes, return raw bytes (not URL).
+ *  Fast-fails on 404/HTML responses (endpoint doesn't exist). */
 async function tryHyperealEdit(
   prompt: string,
   imageUrl: string,
@@ -115,8 +116,13 @@ async function tryHyperealEdit(
       });
 
       if (!res.ok) {
-        const err = await res.text();
-        console.warn(`[ImageGen] Hypereal Edit attempt ${attempt} failed (${res.status}): ${err.substring(0, 200)}`);
+        const body = await res.text();
+        // If endpoint returns HTML (404 page) it doesn't exist — bail immediately
+        if (res.status === 404 || body.trimStart().startsWith("<!DOCTYPE") || body.trimStart().startsWith("<html")) {
+          console.warn(`[ImageGen] Hypereal Edit endpoint not available (${res.status}) — skipping retries`);
+          return null;
+        }
+        console.warn(`[ImageGen] Hypereal Edit attempt ${attempt} failed (${res.status}): ${body.substring(0, 200)}`);
         if (attempt < HYPEREAL_RETRIES) await sleep(1500 * attempt);
         continue;
       }

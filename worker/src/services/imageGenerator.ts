@@ -99,100 +99,6 @@ async function tryHypereal(
   return null;
 }
 
-/** TRUE image edit via Replicate google/nano-banana-2 with image_input.
- *  The source image pixels are sent to the model — not just a text prompt. */
-async function tryReplicateEdit(
-  editInstruction: string,
-  sourceImageUrl: string,
-  apiKey: string,
-  format: string,
-  styleDesc?: string,
-): Promise<Uint8Array | null> {
-  const MODEL = "google/nano-banana-2";
-  const aspectRatio = toAspectRatio(format);
-
-  const fullPrompt = `Edit this image with the following modification: ${editInstruction}
-
-IMPORTANT REQUIREMENTS:
-- Preserve the overall composition, lighting, and style of the original image
-- Apply ONLY the requested modification while keeping everything else intact
-- Maintain the same artistic style and color palette${styleDesc ? `\n\nSTYLE CONTEXT: ${styleDesc}` : ""}`;
-
-  try {
-    console.log(`[ImageGen] Nano Banana 2 edit: ${editInstruction.substring(0, 80)}`);
-    console.log(`[ImageGen] Source: ${sourceImageUrl.substring(0, 80)}...`);
-
-    const createRes = await fetch(`https://api.replicate.com/v1/models/${MODEL}/predictions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        Prefer: "wait",
-      },
-      body: JSON.stringify({
-        input: {
-          prompt: fullPrompt,
-          image_input: [sourceImageUrl],
-          aspect_ratio: aspectRatio,
-          output_format: "png",
-          resolution: "1K",
-          num_outputs: 1,
-        },
-      }),
-    });
-
-    if (!createRes.ok) {
-      const errText = await createRes.text().catch(() => "");
-      console.warn(`[ImageGen] Nano Banana 2 edit failed (${createRes.status}): ${errText.substring(0, 200)}`);
-      return null;
-    }
-
-    let prediction = await createRes.json() as any;
-    console.log(`[ImageGen] Nano Banana 2 prediction: ${prediction.id} status=${prediction.status}`);
-
-    // Poll if not yet finished (Prefer: wait may time out)
-    let polls = 0;
-    while (prediction.status !== "succeeded" && prediction.status !== "failed" && polls < 30) {
-      await sleep(2000);
-      polls++;
-      const pollRes = await fetch(`${REPLICATE_POLL_URL}/${prediction.id}`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      });
-      if (pollRes.ok) prediction = await pollRes.json();
-    }
-
-    if (prediction.status === "failed") {
-      console.warn(`[ImageGen] Nano Banana 2 edit failed: ${prediction.error}`);
-      return null;
-    }
-
-    const first = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
-    const resultUrl = typeof first === "string"
-      ? first
-      : first && typeof first === "object" && typeof (first as any).url === "string"
-        ? (first as any).url
-        : null;
-
-    if (!resultUrl) {
-      console.warn("[ImageGen] Nano Banana 2 edit: no image URL in response");
-      return null;
-    }
-
-    const imgRes = await fetch(resultUrl);
-    if (!imgRes.ok) {
-      console.warn(`[ImageGen] Nano Banana 2 edit download failed: ${imgRes.status}`);
-      return null;
-    }
-
-    const bytes = new Uint8Array(await imgRes.arrayBuffer());
-    console.log(`[ImageGen] Nano Banana 2 edit ✅ — ${bytes.length} bytes`);
-    return bytes;
-  } catch (err) {
-    console.warn(`[ImageGen] Nano Banana 2 edit threw: ${err}`);
-    return null;
-  }
-}
-
 // ── Replicate ──────────────────────────────────────────────────────
 
 async function tryReplicate(
@@ -304,13 +210,11 @@ export async function generateImage(
 }
 
 /**
- * Edit one image IN-PLACE using the existing image as input.
+ * Edit one image — matches the edge function approach.
  *
- * Uses Replicate google/nano-banana-2 with `image_input: [sourceUrl]`.
- * Hypereal's generate endpoint does NOT support image_url for editing.
- *
- * Requires REPLICATE_API_KEY to be set on Render.
- * Always re-uploads to Supabase Storage and returns a public Supabase URL.
+ * Combines the scene's original visualPrompt + user modification request
+ * into one prompt and generates via Hypereal (primary, cheaper) with
+ * Replicate fallback. Same model, same endpoint as normal generation.
  */
 export async function editImage(
   editInstruction: string,
@@ -322,17 +226,19 @@ export async function editImage(
   format?: string,
   styleDesc?: string,
 ): Promise<string> {
-  if (!replicateApiKey) {
-    throw new Error("Image edit requires REPLICATE_API_KEY — add it to Render environment variables");
+  if (!originalPrompt) {
+    throw new Error("Image edit requires the original visual prompt");
   }
 
-  const bytes = await tryReplicateEdit(
-    editInstruction, imageUrl, replicateApiKey, format || "landscape", styleDesc,
-  );
-  if (bytes) {
-    const url = await uploadToStorage(bytes, projectId);
-    return url;
-  }
+  const editPrompt = `${originalPrompt}
 
-  throw new Error("Image edit failed: Replicate nano-banana-2 returned no result");
+USER MODIFICATION REQUEST: ${editInstruction}
+
+STYLE: ${styleDesc || ""}
+
+Professional illustration with dynamic composition and clear visual hierarchy. Apply the user's modification while maintaining consistency with the original scene concept.`;
+
+  console.log(`[ImageGen] Edit via generate: "${editInstruction.substring(0, 80)}"`);
+
+  return generateImage(editPrompt, hyperealApiKey, replicateApiKey || "", format || "landscape", projectId);
 }

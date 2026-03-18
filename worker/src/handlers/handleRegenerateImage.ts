@@ -77,8 +77,7 @@ export async function handleRegenerateImage(
   let imageUrl: string;
 
   if (imageModification) {
-    // TRUE image edit — sends the existing image pixels + user instruction
-    // to Replicate nano-banana-2 via image_input.
+    // Edit via Hypereal generate — original prompt + user modification
     const sourceImageUrl = (scene.imageUrls || [])[targetImageIndex] || scene.imageUrl;
     if (!sourceImageUrl) throw new Error("Cannot edit an image that does not exist.");
 
@@ -87,7 +86,7 @@ export async function handleRegenerateImage(
       sourceImageUrl,
       hyperealApiKey,
       projectId,
-      undefined,        // originalPrompt (unused for true edit)
+      scene.visualPrompt || "",
       replicateApiKey,
       format,
       styleDesc,

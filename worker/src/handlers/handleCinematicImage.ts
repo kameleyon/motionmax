@@ -1,5 +1,6 @@
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
+import { updateSceneField } from "../lib/sceneUpdate.js";
 import { generateImage } from "../services/imageGenerator.js";
 
 interface CinematicImagePayload {
@@ -58,12 +59,8 @@ export async function handleCinematicImage(
     throw new Error("Image generation failed");
   }
 
-  scenes[sceneIndex].imageUrl = imageUrl;
-
-  await supabase
-    .from("generations")
-    .update({ scenes })
-    .eq("id", generationId);
+  // Atomic update: only set this scene's imageUrl without overwriting other scenes
+  await updateSceneField(generationId, sceneIndex, "imageUrl", imageUrl);
 
   await writeSystemLog({
     jobId,

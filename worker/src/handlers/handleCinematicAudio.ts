@@ -1,5 +1,6 @@
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
+import { updateSceneField } from "../lib/sceneUpdate.js";
 import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
 import { isHaitianCreole } from "../services/audioWavUtils.js";
 
@@ -80,12 +81,8 @@ export async function handleCinematicAudio(
     throw new Error(`Audio generation failed: ${result.error}`);
   }
 
-  scenes[sceneIndex].audioUrl = result.url;
-
-  await supabase
-    .from("generations")
-    .update({ scenes })
-    .eq("id", generationId);
+  // Atomic update: only set this scene's audioUrl without overwriting other scenes
+  await updateSceneField(generationId, sceneIndex, "audioUrl", result.url);
 
   await writeSystemLog({
     jobId,

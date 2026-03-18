@@ -1,5 +1,6 @@
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
+import { updateSceneField } from "../lib/sceneUpdate.js";
 
 interface CinematicVideoPayload {
   generationId: string;
@@ -47,7 +48,7 @@ export async function handleCinematicVideo(
     throw new Error(`Scene ${sceneIndex} has no imageUrl`);
   }
 
-  // Snapshot history for undo if regenerating
+  // Snapshot history for undo if regenerating (single-job, no concurrency issue)
   if (regenerate) {
     const history = Array.isArray(scene._history) ? [...scene._history] : [];
     history.push({
@@ -56,6 +57,11 @@ export async function handleCinematicVideo(
     });
     if (history.length > 5) history.shift();
     scenes[sceneIndex]._history = history;
+
+    await supabase
+      .from("generations")
+      .update({ scenes })
+      .eq("id", generationId);
   }
 
   const hyperealApiKey = process.env.HYPEREAL_API_KEY;
@@ -69,12 +75,39 @@ export async function handleCinematicVideo(
     .select("format")
     .eq("id", projectId)
     .single();
-  
-  const format = project?.format || "landscape";
-  const aspectRatio = format === "portrait" ? "9:16" : format === "square" ? "1:1" : "16:9";
 
   const visualPrompt = scene.visualPrompt || scene.visual_prompt || scene.voiceover || "Cinematic scene with dramatic lighting";
-  const videoPrompt = `${visualPrompt}
+  const videoPrompt = buildVideoPrompt(visualPrompt);
+
+  // Start Hypereal Kling V2.6 Pro I2V job
+  const hyperealJobId = await startHyperealJob(hyperealApiKey, videoPrompt, imageUrl);
+
+  // Poll Hypereal API
+  const videoUrl = await pollHyperealJob(hyperealApiKey, hyperealJobId);
+
+  // Download and upload to Supabase
+  const finalVideoUrl = await uploadVideoToStorage(videoUrl, projectId, generationId, sceneIndex);
+
+  // Atomic update: only set this scene's videoUrl without overwriting other scenes
+  await updateSceneField(generationId, sceneIndex, "videoUrl", finalVideoUrl);
+
+  await writeSystemLog({
+    jobId,
+    projectId,
+    userId,
+    generationId,
+    category: "system_info",
+    eventType: "cinematic_video_completed",
+    message: `Cinematic video completed for scene ${sceneIndex}`,
+  });
+
+  return { success: true, status: "complete", videoUrl: finalVideoUrl, sceneIndex };
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────
+
+function buildVideoPrompt(visualPrompt: string): string {
+  return `${visualPrompt}
 
 ANIMATION RULES (CRITICAL):
 - NO lip-sync talking animation - characters should NOT move their mouths as if speaking
@@ -83,24 +116,29 @@ ANIMATION RULES (CRITICAL):
 - Environment animation IS allowed: wind, particles, camera movement, lighting changes
 - Static poses with subtle breathing/idle movement are preferred for dialogue scenes
 - Focus on CAMERA MOTION and SCENE DYNAMICS rather than character lip movement`;
+}
 
-  // Start Hypereal Seedance 1.5 I2V job
+async function startHyperealJob(
+  apiKey: string,
+  prompt: string,
+  imageUrl: string
+): Promise<string> {
   const startRes = await fetch("https://hypereal.tech/api/v1/videos/generate", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${hyperealApiKey}`,
+      "Authorization": `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "seedance-1-5-i2v",
+      model: "kling-2-6-i2v-pro",
       input: {
-        prompt: videoPrompt,
+        prompt,
         image: imageUrl,
+        negative_prompt: "blurry, low quality, watermark",
         duration: 5,
-        resolution: "720p",
-        aspect_ratio: aspectRatio,
+        cfg_scale: 0.5,
+        sound: false,
       },
-      generate_audio: false,
     }),
   });
 
@@ -116,17 +154,19 @@ ANIMATION RULES (CRITICAL):
     throw new Error("Hypereal API did not return a job_id");
   }
 
-  // Poll Hypereal API
-  let videoUrl = null;
+  return hyperealJobId;
+}
+
+async function pollHyperealJob(apiKey: string, hyperealJobId: string): Promise<string> {
   const maxAttempts = 60; // 10 minutes at 10s intervals
+
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     await new Promise((resolve) => setTimeout(resolve, 10000));
 
-    const pollRes = await fetch(`https://hypereal.tech/api/v1/jobs/${hyperealJobId}?model=seedance-1-5-i2v&type=video`, {
-      headers: {
-        "Authorization": `Bearer ${hyperealApiKey}`,
-      },
-    });
+    const pollRes = await fetch(
+      `https://hypereal.tech/api/v1/jobs/${hyperealJobId}?model=kling-2-6-i2v-pro&type=video`,
+      { headers: { "Authorization": `Bearer ${apiKey}` } }
+    );
 
     if (!pollRes.ok) {
       console.warn(`[CinematicVideo] Poll failed: ${pollRes.status}`);
@@ -137,18 +177,23 @@ ANIMATION RULES (CRITICAL):
     const status = pollData.status;
 
     if (status === "completed" || status === "succeeded") {
-      videoUrl = pollData.outputUrl || pollData.output_url || pollData.url;
-      break;
+      const videoUrl = pollData.outputUrl || pollData.output_url || pollData.url;
+      if (!videoUrl) throw new Error("Hypereal returned completed but no URL");
+      return videoUrl;
     } else if (status === "failed") {
       throw new Error(`Hypereal job failed: ${pollData.error || "Unknown error"}`);
     }
   }
 
-  if (!videoUrl) {
-    throw new Error("Hypereal job timed out");
-  }
+  throw new Error("Hypereal job timed out");
+}
 
-  // Download and upload to Supabase
+async function uploadVideoToStorage(
+  videoUrl: string,
+  projectId: string,
+  generationId: string,
+  sceneIndex: number
+): Promise<string> {
   const videoRes = await fetch(videoUrl);
   if (!videoRes.ok) {
     throw new Error(`Failed to download video from Hypereal: ${videoRes.status}`);
@@ -172,25 +217,5 @@ ANIMATION RULES (CRITICAL):
     .from("scene-videos")
     .getPublicUrl(fileName);
 
-  const finalVideoUrl = publicUrlData.publicUrl;
-
-  // Update DB
-  scenes[sceneIndex].videoUrl = finalVideoUrl;
-
-  await supabase
-    .from("generations")
-    .update({ scenes })
-    .eq("id", generationId);
-
-  await writeSystemLog({
-    jobId,
-    projectId,
-    userId,
-    generationId,
-    category: "system_info",
-    eventType: "cinematic_video_completed",
-    message: `Cinematic video completed for scene ${sceneIndex}`,
-  });
-
-  return { success: true, status: "complete", videoUrl: finalVideoUrl, sceneIndex };
+  return publicUrlData.publicUrl;
 }

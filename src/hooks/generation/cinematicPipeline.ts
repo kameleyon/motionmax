@@ -125,7 +125,9 @@ async function runCinematicImages(projectId: string, generationId: string, scene
   console.log(LOG, "Starting images phase", { sceneCount });
   ctx.setState((prev) => ({ ...prev, progress: 35, statusMessage: "Audio complete. Creating scene images..." }));
 
-  for (let i = 0; i < sceneCount; i++) {
+  const IMAGE_CONCURRENCY = 3;
+
+  const processImageScene = async (i: number) => {
     ctx.setState((prev) => ({
       ...prev,
       statusMessage: `Creating images (${i + 1}/${sceneCount})...`,
@@ -161,6 +163,14 @@ async function runCinematicImages(projectId: string, generationId: string, scene
       ...prev,
       progress: 35 + Math.floor(((i + 1) / sceneCount) * 25),
     }));
+  };
+
+  for (let batchStart = 0; batchStart < sceneCount; batchStart += IMAGE_CONCURRENCY) {
+    const batchEnd = Math.min(batchStart + IMAGE_CONCURRENCY, sceneCount);
+    const batch: Promise<void>[] = [];
+    for (let i = batchStart; i < batchEnd; i++) batch.push(processImageScene(i));
+    console.log(LOG, `Processing image batch ${batchStart + 1}–${batchEnd}`);
+    await Promise.allSettled(batch);
   }
 
   await retryMissingImages(generationId, sceneCount, ctx, projectId);
@@ -376,12 +386,14 @@ export async function resumeCinematicPipeline(
       }
     }
 
-    // Phase 3: Images (resume)
+    // Phase 3: Images (resume) — batched like audio
     if (resumeFrom === "audio" || resumeFrom === "images") {
       console.log(LOG, "Resume: starting images phase");
       ctx.setState((prev) => ({ ...prev, progress: 35, statusMessage: "Resuming images..." }));
-      for (let i = 0; i < sceneCount; i++) {
-        if (existingScenes[i]?.imageUrl) { console.log(LOG, `Resume: skipping image scene ${i + 1} (done)`); continue; }
+      const IMAGE_CONCURRENCY = 3;
+
+      const processResumeImage = async (i: number) => {
+        if (existingScenes[i]?.imageUrl) { console.log(LOG, `Resume: skipping image scene ${i + 1} (done)`); return; }
         ctx.setState((prev) => ({ ...prev, statusMessage: `Creating images (${i + 1}/${sceneCount})...`, progress: 35 + Math.floor(((i + 0.25) / sceneCount) * 25) }));
         // Respect global rate-limit cooldown
         const now = Date.now();
@@ -402,6 +414,14 @@ export async function resumeCinematicPipeline(
           console.warn(LOG, `Resume image scene ${i + 1} error:`, err);
         }
         ctx.setState((prev) => ({ ...prev, progress: 35 + Math.floor(((i + 1) / sceneCount) * 25) }));
+      };
+
+      for (let batchStart = 0; batchStart < sceneCount; batchStart += IMAGE_CONCURRENCY) {
+        const batchEnd = Math.min(batchStart + IMAGE_CONCURRENCY, sceneCount);
+        const batch: Promise<void>[] = [];
+        for (let i = batchStart; i < batchEnd; i++) batch.push(processResumeImage(i));
+        console.log(LOG, `Processing resume image batch ${batchStart + 1}–${batchEnd}`);
+        await Promise.allSettled(batch);
       }
       await retryMissingImages(generationId, sceneCount, ctx, projectId);
     }

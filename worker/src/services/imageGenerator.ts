@@ -99,71 +99,8 @@ async function tryHypereal(
   return null;
 }
 
-/** TRUE image edit via Hypereal GENERATE endpoint with image_url.
- *  The gemini-3-1-flash-t2i model accepts image_url for editing. */
-async function tryHyperealEditViaGenerate(
-  editInstruction: string,
-  sourceImageUrl: string,
-  apiKey: string,
-  format: string,
-  styleDesc?: string,
-): Promise<Uint8Array | null> {
-  const aspectRatio = toAspectRatio(format);
-  const fullPrompt = `Edit this image with the following modification: ${editInstruction}
-
-IMPORTANT REQUIREMENTS:
-- Preserve the overall composition, lighting, and style of the original image
-- Apply ONLY the requested modification while keeping everything else intact
-- Maintain the same artistic style and color palette${styleDesc ? `\n\nSTYLE CONTEXT: ${styleDesc}` : ""}`;
-
-  for (let attempt = 1; attempt <= HYPEREAL_RETRIES; attempt++) {
-    try {
-      console.log(`[ImageGen] Hypereal generate-edit attempt ${attempt}: ${editInstruction.substring(0, 60)}`);
-      const res = await fetch(HYPEREAL_API_URL, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: fullPrompt,
-          model: HYPEREAL_MODEL,
-          aspect_ratio: aspectRatio,
-          image_url: sourceImageUrl,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.text();
-        console.warn(`[ImageGen] Hypereal generate-edit attempt ${attempt} failed (${res.status}): ${err.substring(0, 200)}`);
-        if (attempt < HYPEREAL_RETRIES) await sleep(1500 * attempt);
-        continue;
-      }
-
-      const data = await res.json() as any;
-      const hyperealUrl = data?.data?.[0]?.url;
-      if (!hyperealUrl) {
-        console.warn(`[ImageGen] Hypereal generate-edit attempt ${attempt}: no URL in response`);
-        if (attempt < HYPEREAL_RETRIES) await sleep(1500 * attempt);
-        continue;
-      }
-
-      const imgRes = await fetch(hyperealUrl);
-      if (!imgRes.ok) {
-        console.warn(`[ImageGen] Hypereal generate-edit download failed (${imgRes.status})`);
-        if (attempt < HYPEREAL_RETRIES) await sleep(1500 * attempt);
-        continue;
-      }
-
-      const bytes = new Uint8Array(await imgRes.arrayBuffer());
-      console.log(`[ImageGen] Hypereal generate-edit ✅ attempt ${attempt} — ${bytes.length} bytes`);
-      return bytes;
-    } catch (err) {
-      console.warn(`[ImageGen] Hypereal generate-edit attempt ${attempt} threw: ${err}`);
-      if (attempt < HYPEREAL_RETRIES) await sleep(1500 * attempt);
-    }
-  }
-  return null;
-}
-
-/** Fallback: TRUE image edit via Replicate google/nano-banana-2 with image_input. */
+/** TRUE image edit via Replicate google/nano-banana-2 with image_input.
+ *  The source image pixels are sent to the model — not just a text prompt. */
 async function tryReplicateEdit(
   editInstruction: string,
   sourceImageUrl: string,
@@ -199,6 +136,7 @@ IMPORTANT REQUIREMENTS:
           aspect_ratio: aspectRatio,
           output_format: "png",
           resolution: "1K",
+          num_outputs: 1,
         },
       }),
     });
@@ -368,9 +306,10 @@ export async function generateImage(
 /**
  * Edit one image IN-PLACE using the existing image as input.
  *
- * 1. Hypereal GENERATE endpoint with image_url (gemini-3-1-flash-t2i)
- * 2. Fallback: Replicate google/nano-banana-2 with image_input
+ * Uses Replicate google/nano-banana-2 with `image_input: [sourceUrl]`.
+ * Hypereal's generate endpoint does NOT support image_url for editing.
  *
+ * Requires REPLICATE_API_KEY to be set on Render.
  * Always re-uploads to Supabase Storage and returns a public Supabase URL.
  */
 export async function editImage(
@@ -383,29 +322,17 @@ export async function editImage(
   format?: string,
   styleDesc?: string,
 ): Promise<string> {
-  // ── Primary: Hypereal generate endpoint with image_url ──
-  if (hyperealApiKey) {
-    const bytes = await tryHyperealEditViaGenerate(
-      editInstruction, imageUrl, hyperealApiKey, format || "landscape", styleDesc,
-    );
-    if (bytes) {
-      const url = await uploadToStorage(bytes, projectId);
-      return url;
-    }
-    console.warn("[ImageGen] Hypereal generate-edit exhausted");
+  if (!replicateApiKey) {
+    throw new Error("Image edit requires REPLICATE_API_KEY — add it to Render environment variables");
   }
 
-  // ── Fallback: Replicate nano-banana-2 with image_input ──
-  if (replicateApiKey) {
-    const bytes = await tryReplicateEdit(
-      editInstruction, imageUrl, replicateApiKey, format || "landscape", styleDesc,
-    );
-    if (bytes) {
-      const url = await uploadToStorage(bytes, projectId);
-      return url;
-    }
-    console.warn("[ImageGen] Replicate nano-banana-2 edit also failed");
+  const bytes = await tryReplicateEdit(
+    editInstruction, imageUrl, replicateApiKey, format || "landscape", styleDesc,
+  );
+  if (bytes) {
+    const url = await uploadToStorage(bytes, projectId);
+    return url;
   }
 
-  throw new Error("Image edit failed: both Hypereal and Replicate exhausted");
+  throw new Error("Image edit failed: Replicate nano-banana-2 returned no result");
 }

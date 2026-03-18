@@ -77,10 +77,29 @@ export async function handleRegenerateImage(
   let imageUrl: string;
 
   if (imageModification) {
-    // Image Edit
+    // Image Edit — pass original prompt + fallback keys so editImage can
+    // regenerate with the edit instruction when the Hypereal edit endpoint
+    // is unavailable (currently returns 404).
     const sourceImageUrl = (scene.imageUrls || [])[targetImageIndex] || scene.imageUrl;
     if (!sourceImageUrl) throw new Error("Cannot edit an image that does not exist.");
-    imageUrl = await editImage(imageModification, sourceImageUrl, hyperealApiKey, projectId);
+
+    let basePrompt: string = scene.visualPrompt || "";
+    if (targetImageIndex > 0) {
+      const subIdx = targetImageIndex - 1;
+      const hasSubVisual = Array.isArray(scene.subVisuals) && scene.subVisuals[subIdx];
+      basePrompt = hasSubVisual ? scene.subVisuals[subIdx] : basePrompt;
+    }
+    const originalPrompt = `${basePrompt}\n\nSTYLE: ${styleDesc}\n\nProfessional illustration with dynamic composition and clear visual hierarchy.`;
+
+    imageUrl = await editImage(
+      imageModification,
+      sourceImageUrl,
+      hyperealApiKey,
+      projectId,
+      originalPrompt,
+      replicateApiKey,
+      format,
+    );
   } else {
     // Full Regeneration
     let basePrompt: string = scene.visualPrompt || "";

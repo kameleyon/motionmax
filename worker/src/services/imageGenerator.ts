@@ -258,22 +258,40 @@ export async function generateImage(
 }
 
 /**
- * Edit one image: Hypereal only.
+ * Edit one image.
+ *
+ * 1. Try Hypereal's dedicated edit endpoint (image_url + instruction).
+ * 2. Fallback: regenerate with the original visual prompt merged with the
+ *    user's edit instruction so the result honours the modification
+ *    (e.g. "remove extra arms", "change the title colour to red").
+ *
  * Always re-uploads to Supabase Storage and returns a public Supabase URL.
  */
 export async function editImage(
-  prompt: string,
+  editInstruction: string,
   imageUrl: string,
   hyperealApiKey: string,
   projectId: string,
+  originalPrompt?: string,
+  replicateApiKey?: string,
+  format?: string,
 ): Promise<string> {
+  // ── Primary: Hypereal edit endpoint ──
   if (hyperealApiKey) {
-    const bytes = await tryHyperealEdit(prompt, imageUrl, hyperealApiKey);
+    const bytes = await tryHyperealEdit(editInstruction, imageUrl, hyperealApiKey);
     if (bytes) {
       const url = await uploadToStorage(bytes, projectId);
       return url;
     }
+    console.warn("[ImageGen] Hypereal edit endpoint failed — falling back to regeneration with edit instruction");
   }
 
-  throw new Error("Image edit failed: Hypereal unavailable or failed");
+  // ── Fallback: regenerate with edit-aware prompt ──
+  if (originalPrompt) {
+    const mergedPrompt =
+      `${originalPrompt}\n\nCRITICAL EDIT INSTRUCTION — apply this change to the image: ${editInstruction}`;
+    return generateImage(mergedPrompt, hyperealApiKey, replicateApiKey || "", format || "landscape", projectId);
+  }
+
+  throw new Error("Image edit failed: Hypereal edit endpoint unavailable and no fallback prompt provided");
 }

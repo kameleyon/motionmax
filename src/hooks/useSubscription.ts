@@ -10,28 +10,9 @@ import {
   type ValidationResult 
 } from "@/lib/planLimits";
 
-// Stripe product/price mappings - Updated pricing structure
-export const STRIPE_PLANS = {
-  starter: {
-    monthly: { priceId: "price_1SqN1x6hfVkBDzkSzfLDk9eF", productId: "prod_Tnyz2nMLqpHz3R" },
-    yearly: { priceId: "price_1T2b0Q6hfVkBDzkSF4MqHPRi", productId: "prod_Tnyz2nMLqpHz3R" },
-  },
-  creator: {
-    monthly: { priceId: "price_1SqN2D6hfVkBDzkS6ywVTBEt", productId: "prod_Tnz0KUQX2J5VBH" },
-    yearly: { priceId: "price_1T2b0R6hfVkBDzkSFD5gowGz", productId: "prod_Tnz0KUQX2J5VBH" },
-  },
-  professional: {
-    monthly: { priceId: "price_1SqN2U6hfVkBDzkSNCDvRyeP", productId: "prod_Tnz0BeRmJDdh0V" },
-    yearly: { priceId: "price_1T2b0S6hfVkBDzkS4nrYAc2E", productId: "prod_Tnz0BeRmJDdh0V" },
-  },
-} as const;
-
-export const CREDIT_PACKS = {
-  15: { priceId: "price_1SuJk36hfVkBDzkSCbSorQJY", productId: "prod_Ts3r9EBXzzKKfU", price: 11.99 },
-  50: { priceId: "price_1SqN2q6hfVkBDzkSNbEXBWTL", productId: "prod_Tnz0B2aJPD895y", price: 14.99 },
-  150: { priceId: "price_1SqN316hfVkBDzkSVq77cGDd", productId: "prod_Tnz1CygtJnMhUz", price: 39.99 },
-  500: { priceId: "price_1SuJk46hfVkBDzkSSkkal5QG", productId: "prod_Ts3rl1zDT9oLVt", price: 249.99 },
-} as const;
+// Re-export Stripe IDs from the centralised config so existing imports
+// (`import { STRIPE_PLANS } from "@/hooks/useSubscription"`) keep working.
+export { STRIPE_PLANS, CREDIT_PACKS } from "@/config/stripeProducts";
 
 // Re-export for convenience
 export { PLAN_LIMITS, getCreditsRequired, validateGenerationAccess };

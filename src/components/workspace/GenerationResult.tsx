@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ChevronLeft,
@@ -32,6 +32,7 @@ import {
 } from "@/lib/videoExportDebug";
 import { SceneEditModal } from "./SceneEditModal";
 import { ResultActionBar } from "./ResultActionBar";
+import { toast } from "sonner";
 
 interface GenerationResultProps {
   title: string;
@@ -110,11 +111,12 @@ export function GenerationResult({
     if (lastAutoDownloadedUrlRef.current === exportState.videoUrl) return;
 
     // iOS Safari and any backgrounded/screen-off tab block non-gesture downloads.
-    // Skip auto-download — the Export Complete modal shows a Download button for a fresh tap.
+    // Show a toast so the user knows the video is ready and can tap the Download button.
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     if (isIOS || document.visibilityState !== "visible") {
       shouldAutoDownloadRef.current = false;
       lastAutoDownloadedUrlRef.current = exportState.videoUrl;
+      toast.success("Video ready! Tap the Download button below to save it.", { duration: 6000 });
       return;
     }
 
@@ -303,6 +305,43 @@ export function GenerationResult({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Auto-open export logs modal when export fails so the user can report the error
+  useEffect(() => {
+    if (exportState.status === "error") {
+      setShowExportLogs(true);
+    }
+  }, [exportState.status]);
+
+  // Keyboard shortcuts: Space = play/pause, ArrowLeft/Right = scene navigation
+  const handleKeyboard = useCallback(
+    (e: KeyboardEvent) => {
+      // Ignore when user is typing in an input/textarea
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (isPlayingAll) {
+          pausePlayAll();
+        } else {
+          resumePlayAll();
+        }
+      } else if (e.code === "ArrowLeft") {
+        e.preventDefault();
+        goToPrevScene();
+      } else if (e.code === "ArrowRight") {
+        e.preventDefault();
+        goToNextScene();
+      }
+    },
+    [isPlayingAll, currentSceneIndex, scenes.length]
+  );
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyboard);
+    return () => window.removeEventListener("keydown", handleKeyboard);
+  }, [handleKeyboard]);
+
   const aspectClass =
     format === "portrait" ? "aspect-[9/16]" : format === "square" ? "aspect-square" : "aspect-video";
 
@@ -411,6 +450,7 @@ export function GenerationResult({
                 src={displayedImageUrl}
                 alt={`Scene ${currentScene?.number}`}
                 loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}

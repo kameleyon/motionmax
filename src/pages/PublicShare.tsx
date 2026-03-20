@@ -28,6 +28,15 @@ interface Scene {
   voiceover?: string;
 }
 
+interface SharedProject {
+  title: string;
+  description: string | null;
+  format: string;
+  style: string;
+  status: string;
+  project_type?: string;
+}
+
 // Header CTA component - Get Started button (icon on mobile/tablet)
 function HeaderCTA() {
   const isMobile = useIsMobile();
@@ -81,7 +90,7 @@ export default function PublicShare() {
   });
 
   const scenes = shareData?.scenes || [];
-  const project = shareData?.project as any;
+  const project = shareData?.project as SharedProject | undefined;
   const sharedVideoUrl = shareData?.videoUrl;
   const isSingleVideo = !!sharedVideoUrl;
 

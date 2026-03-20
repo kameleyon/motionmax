@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useRefreshThumbnails } from "@/hooks/useRefreshThumbnails";
+import { gridThumbnailUrl } from "@/lib/thumbnailUrl";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import {
@@ -157,9 +158,11 @@ export default function Projects() {
       const from = pageParam * ITEMS_PER_PAGE;
       const to = from + ITEMS_PER_PAGE - 1;
 
+      // Single query: join projects with their latest complete generation
+      // to extract thumbnail in one round-trip instead of two
       let q = supabase
         .from("projects")
-        .select("*")
+        .select("*, generations(project_id, scenes)")
         .eq("user_id", user.id)
         .order("is_favorite", { ascending: false })
         .order(sortField, { ascending: sortOrder === "asc" })
@@ -174,37 +177,33 @@ export default function Projects() {
 
       if (!projectsData?.length) return { projects: [], nextCursor: null };
 
-      // Only query generations.scenes for projects missing a thumbnail_url
-      const missingIds = projectsData.filter(p => !p.thumbnail_url).map(p => p.id);
-      const thumbnailMap: Record<string, string | null> = {};
+      const projects = projectsData.map(p => {
+        // Use existing thumbnail_url if set
+        if (p.thumbnail_url) {
+          return { ...p, generations: undefined, thumbnailUrl: gridThumbnailUrl(p.thumbnail_url) } as unknown as Project;
+        }
 
-      if (missingIds.length > 0) {
-        const { data: generations } = await supabase
-          .from("generations")
-          .select("project_id, scenes")
-          .in("project_id", missingIds)
-          .eq("status", "complete")
-          .order("created_at", { ascending: false });
+        // Extract thumbnail from joined generations data
+        const gens = (p as any).generations as Array<{ project_id: string; scenes: any }> | null;
+        let fallbackUrl: string | null = null;
 
-        if (generations) {
-          for (const gen of generations) {
-            if (thumbnailMap[gen.project_id] !== undefined) continue;
+        if (Array.isArray(gens)) {
+          for (const gen of gens) {
             const scenes = gen.scenes as any[];
-            if (Array.isArray(scenes) && scenes.length > 0) {
-              const firstScene = scenes[0];
-              const imageUrl = firstScene?.imageUrl ||
-                              firstScene?.image_url ||
-                              (Array.isArray(firstScene?.imageUrls) ? firstScene.imageUrls[0] : null);
-              thumbnailMap[gen.project_id] = imageUrl || null;
+            if (!Array.isArray(scenes) || scenes.length === 0) continue;
+            const firstScene = scenes[0];
+            const imageUrl = firstScene?.imageUrl ||
+                            firstScene?.image_url ||
+                            (Array.isArray(firstScene?.imageUrls) ? firstScene.imageUrls[0] : null);
+            if (imageUrl) {
+              fallbackUrl = imageUrl;
+              break;
             }
           }
         }
-      }
 
-      const projects = projectsData.map(p => ({
-        ...p,
-        thumbnailUrl: p.thumbnail_url || thumbnailMap[p.id] || null,
-      })) as Project[];
+        return { ...p, generations: undefined, thumbnailUrl: gridThumbnailUrl(fallbackUrl) } as unknown as Project;
+      });
 
       return {
         projects,
@@ -223,7 +222,7 @@ export default function Projects() {
     return data.pages.flatMap(page => page.projects);
   }, [data]);
 
-  // Background refresh of thumbnails after initial load
+  // Background refresh of thumbnails after initial load (with AbortController for cleanup)
   useEffect(() => {
     if (allProjects.length === 0 || refreshInProgressRef.current) return;
     
@@ -233,18 +232,21 @@ export default function Projects() {
     
     if (thumbnailInputs.length === 0) return;
     
+    let cancelled = false;
     refreshInProgressRef.current = true;
     
     refreshThumbnails(thumbnailInputs)
       .then(refreshedMap => {
-        setRefreshedThumbnails(refreshedMap);
+        if (!cancelled) setRefreshedThumbnails(refreshedMap);
       })
       .catch(err => {
-        console.warn("[Projects] Background thumbnail refresh failed:", err);
+        if (!cancelled) console.warn("[Projects] Background thumbnail refresh failed:", err);
       })
       .finally(() => {
         refreshInProgressRef.current = false;
       });
+
+    return () => { cancelled = true; };
   }, [allProjects, refreshThumbnails]);
 
   // Merge refreshed thumbnails with projects
@@ -256,13 +258,9 @@ export default function Projects() {
     }));
   }, [allProjects, refreshedThumbnails]);
 
-  // Mutations
+  // Mutations – ON DELETE CASCADE handles child records (generations, project_shares, project_characters)
   const deleteProjectMutation = useMutation({
     mutationFn: async (projectId: string) => {
-      // Delete associated records first to satisfy foreign key constraints
-      await supabase.from("generations").delete().eq("project_id", projectId);
-      await supabase.from("project_shares").delete().eq("project_id", projectId);
-      await supabase.from("project_characters").delete().eq("project_id", projectId);
       const { error } = await supabase.from("projects").delete().eq("id", projectId);
       if (error) throw error;
     },
@@ -276,10 +274,6 @@ export default function Projects() {
 
   const bulkDeleteMutation = useMutation({
     mutationFn: async (ids: string[]) => {
-      // Delete associated records first to satisfy foreign key constraints
-      await supabase.from("generations").delete().in("project_id", ids);
-      await supabase.from("project_shares").delete().in("project_id", ids);
-      await supabase.from("project_characters").delete().in("project_id", ids);
       const { error } = await supabase.from("projects").delete().in("id", ids);
       if (error) throw error;
     },
@@ -421,7 +415,7 @@ export default function Projects() {
         setShareUrl(`${window.location.origin}/share/${existingShare.share_token}`);
       } else {
         // Create new share token
-        const shareToken = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+        const shareToken = crypto.randomUUID().replace(/-/g, "");
         const { error } = await supabase.from("project_shares").insert({
           project_id: project.id,
           user_id: user?.id,
@@ -465,18 +459,16 @@ export default function Projects() {
         return;
       }
 
-      // If there's a pre-rendered video URL, download that
+      // If there's a pre-rendered video URL, let the browser handle the download directly
       if (generation.video_url) {
-        const response = await fetch(generation.video_url);
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
-        link.href = url;
+        link.href = generation.video_url;
         link.download = `${project.title.replace(/[^a-z0-9]/gi, "_")}.mp4`;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        URL.revokeObjectURL(url);
         toast.success("Video download started");
         return;
       }

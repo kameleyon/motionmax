@@ -63,7 +63,7 @@ serve(async (req) => {
       starter: 0,
       creator: 1,
       professional: 3,
-      enterprise: 999,
+      enterprise: Number.MAX_SAFE_INTEGER,
     };
     const voiceCloneLimit = VOICE_CLONE_LIMITS[planName] ?? 0;
 
@@ -112,7 +112,37 @@ serve(async (req) => {
     console.log(`Cloning voice for user ${user.id}: ${voiceName}`);
     console.log(`Storage path: ${storagePath}`);
 
-    // Download audio file from private bucket using service role
+    const MAX_BYTES = 20 * 1024 * 1024;
+    const ALLOWED_TYPES = [
+      "audio/mpeg", "audio/mp3", "audio/wav", "audio/ogg",
+      "audio/webm", "audio/x-wav", "audio/flac", "audio/aac",
+    ];
+
+    // Pre-download validation: check file metadata BEFORE downloading up to 20 MB
+    const { data: fileMeta, error: metaError } = await supabaseAdmin.storage
+      .from("voice_samples")
+      .list(storagePath.split("/").slice(0, -1).join("/"), {
+        search: storagePath.split("/").pop(),
+        limit: 1,
+      });
+
+    if (!metaError && fileMeta && fileMeta.length > 0) {
+      const meta = fileMeta[0];
+      if (meta.metadata?.size && meta.metadata.size > MAX_BYTES) {
+        return new Response(
+          JSON.stringify({ error: "Audio file exceeds 20 MB limit" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      if (meta.metadata?.mimetype && !ALLOWED_TYPES.includes(meta.metadata.mimetype)) {
+        return new Response(
+          JSON.stringify({ error: `Unsupported audio format: ${meta.metadata.mimetype}` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // Download the audio file
     const { data: audioData, error: downloadError } = await supabaseAdmin.storage
       .from("voice_samples")
       .download(storagePath);
@@ -128,15 +158,13 @@ serve(async (req) => {
     const audioBlob = audioData;
     console.log(`Audio file size: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
 
-    // Validate file size (max 20 MB) and MIME type
-    const MAX_BYTES = 20 * 1024 * 1024;
+    // Post-download validation (belt-and-suspenders in case metadata was missing)
     if (audioBlob.size > MAX_BYTES) {
       return new Response(
         JSON.stringify({ error: "Audio file exceeds 20 MB limit" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const ALLOWED_TYPES = ["audio/mpeg", "audio/mp3", "audio/wav", "audio/ogg", "audio/webm", "audio/x-wav", "audio/flac", "audio/aac"];
     if (audioBlob.type && !ALLOWED_TYPES.includes(audioBlob.type)) {
       return new Response(
         JSON.stringify({ error: `Unsupported audio format: ${audioBlob.type}` }),
@@ -273,6 +301,18 @@ serve(async (req) => {
 
     if (insertError) {
       console.error("Database insert error:", insertError);
+
+      // Cleanup: delete orphaned voice from ElevenLabs to avoid resource waste
+      try {
+        await fetch(`https://api.elevenlabs.io/v1/voices/${voiceId}`, {
+          method: "DELETE",
+          headers: { "xi-api-key": ELEVENLABS_API_KEY },
+        });
+        console.log(`Cleaned up orphaned ElevenLabs voice: ${voiceId}`);
+      } catch (cleanupErr) {
+        console.error(`Failed to cleanup ElevenLabs voice ${voiceId}:`, cleanupErr);
+      }
+
       return new Response(
         JSON.stringify({ error: "Failed to save voice to database" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Star, MoreVertical, Eye, Pencil, Share2, Download, Trash2, Video, Clapperboard, Wallpaper, Film, Loader2 } from "lucide-react";
+import { gridThumbnailUrl } from "@/lib/thumbnailUrl";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -92,7 +93,7 @@ export function ProjectsGridView({
                 {/* Thumbnail */}
                 <div className={cn("relative w-full overflow-hidden", getAspectRatio(project.format))}>
                   <img
-                    src={project.thumbnailUrl || defaultThumbnail}
+                    src={gridThumbnailUrl(project.thumbnailUrl) || defaultThumbnail}
                     alt={project.title}
                     loading="lazy"
                     decoding="async"

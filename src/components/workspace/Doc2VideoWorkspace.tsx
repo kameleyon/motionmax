@@ -20,10 +20,8 @@ import { useGenerationPipeline } from "@/hooks/useGenerationPipeline";
 import { useAdminLogs } from "@/hooks/useAdminLogs";
 import { AdminLogsPanel } from "./AdminLogsPanel";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useSubscription, validateGenerationAccess, PLAN_LIMITS } from "@/hooks/useSubscription";
-import { useToast } from "@/hooks/use-toast";
-import { UpgradeRequiredModal } from "@/components/modals/UpgradeRequiredModal";
-import { SubscriptionSuspendedModal } from "@/components/modals/SubscriptionSuspendedModal";
+import { useWorkspaceSubscription } from "@/hooks/useWorkspaceSubscription";
+import { WorkspaceModals } from "./WorkspaceModals";
 
 import { TemplateSelector } from "./TemplateSelector";
 import { useWorkspaceDraft } from "@/hooks/useWorkspaceDraft";
@@ -60,13 +58,11 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
     const { state: generationState, startGeneration, reset, loadProject } = useGenerationPipeline();
     const { isAdmin, adminLogs, showAdminLogs, setShowAdminLogs } = useAdminLogs(generationState.generationId ?? null, generationState.step);
 
-    // Subscription and plan validation
-    const { plan, creditsBalance, subscriptionStatus, checkSubscription } = useSubscription();
-    const { toast } = useToast();
-    const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-    const [upgradeReason, setUpgradeReason] = useState("");
-    const [showSuspendedModal, setShowSuspendedModal] = useState(false);
-    const [suspendedStatus, setSuspendedStatus] = useState<"past_due" | "unpaid" | "canceled">("past_due");
+    // Subscription and plan validation (shared hook eliminates boilerplate)
+    const {
+      plan, creditsBalance, checkSubscription, limits,
+      modalState, closeUpgradeModal, closeSuspendedModal, guardGeneration,
+    } = useWorkspaceSubscription();
 
     // Auto-save draft to localStorage
     const { clearDraft, loadDraft, hasDraft } = useWorkspaceDraft(
@@ -89,7 +85,6 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
     const canGenerate = content.trim().length > 0 && !generationState.isGenerating;
 
     // Disable formats/lengths based on plan
-    const limits = PLAN_LIMITS[plan];
     const disabledFormats: VideoFormat[] = (["landscape", "portrait", "square"] as VideoFormat[]).filter(
       f => !limits.allowedFormats.includes(f)
     );
@@ -171,35 +166,14 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
       if (content.trim().length === 0) return;
       if (generationState.isGenerating) return;
 
-      // Check for subscription issues first
-      if (subscriptionStatus === "past_due" || subscriptionStatus === "unpaid") {
-        setSuspendedStatus(subscriptionStatus as "past_due" | "unpaid");
-        setShowSuspendedModal(true);
-        return;
-      }
-
-      // Validate plan access before generation
-      const validation = validateGenerationAccess(
-        plan,
-        creditsBalance,
-        "doc2video",
+      const canProceed = guardGeneration({
+        projectType: "doc2video",
         length,
         format,
-        brandMarkEnabled && brandMarkText.trim().length > 0,
-        style === "custom",
-        subscriptionStatus || undefined
-      );
-
-      if (!validation.canGenerate) {
-        toast({
-          variant: "destructive",
-          title: "Cannot Generate",
-          description: validation.error,
-        });
-        setUpgradeReason(validation.error || "Please upgrade your plan to continue.");
-        setShowUpgradeModal(true);
-        return;
-      }
+        hasBrandMark: brandMarkEnabled && brandMarkText.trim().length > 0,
+        hasCustomStyle: style === "custom",
+      });
+      if (!canProceed) return;
 
       runGeneration();
       setTimeout(() => checkSubscription(), 2000);
@@ -516,17 +490,14 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
             </AnimatePresence>
 
         {/* Modals */}
-        <UpgradeRequiredModal
-          open={showUpgradeModal}
-          onOpenChange={setShowUpgradeModal}
-          reason={upgradeReason}
-          showCreditsOption={plan !== "free"}
-        />
-
-        <SubscriptionSuspendedModal
-          open={showSuspendedModal}
-          onOpenChange={setShowSuspendedModal}
-          status={suspendedStatus}
+        <WorkspaceModals
+          plan={plan}
+          showUpgradeModal={modalState.showUpgradeModal}
+          upgradeReason={modalState.upgradeReason}
+          showSuspendedModal={modalState.showSuspendedModal}
+          suspendedStatus={modalState.suspendedStatus}
+          onUpgradeModalChange={closeUpgradeModal}
+          onSuspendedModalChange={closeSuspendedModal}
         />
       </WorkspaceLayout>
     );

@@ -96,25 +96,26 @@ serve(async (req) => {
 
     logStep("Event verified and parsed", { type: event.type });
 
-    // === IDEMPOTENCY CHECK: Skip already-processed events ===
-    const { data: existingEvent } = await supabaseAdmin
-      .from("webhook_events")
-      .select("id")
-      .eq("event_id", event.id)
-      .maybeSingle();
-
-    if (existingEvent) {
-      logStep("Duplicate event, skipping", { eventId: event.id });
-      return new Response(JSON.stringify({ received: true, duplicate: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      });
-    }
-
-    // Record event as processed BEFORE handling to prevent race conditions
-    await supabaseAdmin
+    // === IDEMPOTENCY: Insert-first to avoid TOCTOU race condition ===
+    // If two identical events arrive simultaneously, the UNIQUE constraint
+    // on event_id guarantees only one insert succeeds; the other gets 23505.
+    const { error: idempotencyError } = await supabaseAdmin
       .from("webhook_events")
       .insert({ event_id: event.id, event_type: event.type });
+
+    if (idempotencyError) {
+      // 23505 = unique_violation → duplicate event, safe to skip
+      if (idempotencyError.code === "23505") {
+        logStep("Duplicate event, skipping", { eventId: event.id });
+        return new Response(JSON.stringify({ received: true, duplicate: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+      // Any other insert error is unexpected — log and re-throw
+      logStep("ERROR", { message: `Idempotency insert failed: ${idempotencyError.message}` });
+      throw new Error(`Idempotency check failed: ${idempotencyError.message}`);
+    }
 
     logStep("Event recorded for idempotency", { eventId: event.id });
 

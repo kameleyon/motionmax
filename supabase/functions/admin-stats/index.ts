@@ -65,8 +65,24 @@ serve(async (req) => {
 
     logStep("Admin access verified");
 
-    const { action, params } = await req.json();
-    logStep("Action requested", { action, params });
+    const body = await req.json();
+    const action = typeof body?.action === "string" ? body.action : "";
+    const params = typeof body?.params === "object" && body.params !== null ? body.params : {};
+
+    // Input validation: whitelist allowed actions
+    const ALLOWED_ACTIONS = [
+      "dashboard_stats", "subscribers_list", "revenue_stats",
+      "generation_stats", "flags_list", "create_flag", "resolve_flag",
+      "admin_logs", "user_details", "api_calls_list", "api_call_detail",
+    ];
+    if (!ALLOWED_ACTIONS.includes(action)) {
+      return new Response(
+        JSON.stringify({ error: `Unknown or invalid action: ${action}` }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+      );
+    }
+
+    logStep("Action requested", { action });
 
     let result: unknown;
 
@@ -140,16 +156,18 @@ serve(async (req) => {
           try {
             const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
             
-            // Get all successful charges
-            const charges = await stripe.charges.list({
-              limit: 100,
-            });
+            // Paginate through ALL charges (not just first 100)
+            const allCharges: Stripe.Charge[] = [];
+            for await (const charge of stripe.charges.list({ limit: 100 })) {
+              if (charge.status === "succeeded") {
+                allCharges.push(charge);
+              }
+            }
             
-            const successfulCharges = charges.data.filter((c: { status: string }) => c.status === "succeeded");
-            totalRevenue = successfulCharges.reduce((sum: number, c: { amount: number }) => sum + c.amount, 0) / 100;
+            totalRevenue = allCharges.reduce((sum, c) => sum + c.amount, 0) / 100;
             
             // Separate subscription vs one-time (credit pack) payments
-            for (const charge of successfulCharges) {
+            for (const charge of allCharges) {
               if (charge.invoice) {
                 subscriptionRevenue += charge.amount / 100;
               } else {
@@ -308,25 +326,31 @@ serve(async (req) => {
 
         const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
-        // Get all charges from Stripe
-        const charges = await stripe.charges.list({
-          limit: 100,
-          created: {
-            gte: startDate ? Math.floor(new Date(startDate).getTime() / 1000) : undefined,
-            lte: endDate ? Math.floor(new Date(endDate).getTime() / 1000) : undefined,
-          },
-        });
+        // Paginate through ALL matching charges
+        const chargeListParams: Stripe.ChargeListParams = { limit: 100 };
+        if (startDate) {
+          chargeListParams.created = { ...chargeListParams.created as object, gte: Math.floor(new Date(startDate).getTime() / 1000) };
+        }
+        if (endDate) {
+          chargeListParams.created = { ...chargeListParams.created as object, lte: Math.floor(new Date(endDate).getTime() / 1000) };
+        }
 
-        const successfulCharges = charges.data.filter((c: { status: string }) => c.status === "succeeded");
-        const totalRevenue = successfulCharges.reduce((sum: number, c: { amount: number }) => sum + c.amount, 0) / 100;
+        const successfulCharges: Stripe.Charge[] = [];
+        for await (const charge of stripe.charges.list(chargeListParams)) {
+          if (charge.status === "succeeded") {
+            successfulCharges.push(charge);
+          }
+        }
 
-        // Get subscriptions revenue
-        const subscriptions = await stripe.subscriptions.list({
-          limit: 100,
-          status: "active",
-        });
+        const totalRevenue = successfulCharges.reduce((sum, c) => sum + c.amount, 0) / 100;
 
-        const mrr = subscriptions.data.reduce((sum: number, s: { items: { data: Array<{ price?: { recurring?: { interval?: string }; unit_amount?: number | null } }> } }) => {
+        // Paginate through ALL active subscriptions
+        const allSubscriptions: Stripe.Subscription[] = [];
+        for await (const sub of stripe.subscriptions.list({ limit: 100, status: "active" })) {
+          allSubscriptions.push(sub);
+        }
+
+        const mrr = allSubscriptions.reduce((sum: number, s) => {
           const price = s.items.data[0]?.price;
           if (price?.recurring?.interval === "month") {
             return sum + (price.unit_amount || 0) / 100;
@@ -338,7 +362,7 @@ serve(async (req) => {
 
         // Group by day for chart
         const revenueByDay: Record<string, number> = {};
-        successfulCharges.forEach((charge: { created: number; amount: number }) => {
+        successfulCharges.forEach((charge) => {
           const day = new Date(charge.created * 1000).toISOString().split("T")[0];
           revenueByDay[day] = (revenueByDay[day] || 0) + charge.amount / 100;
         });
@@ -347,7 +371,7 @@ serve(async (req) => {
           totalRevenue,
           mrr,
           chargeCount: successfulCharges.length,
-          activeSubscriptions: subscriptions.data.length,
+          activeSubscriptions: allSubscriptions.length,
           revenueByDay: Object.entries(revenueByDay).map(([date, amount]) => ({ date, amount })),
         };
         break;

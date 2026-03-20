@@ -86,9 +86,15 @@ export default function Settings() {
     fetchProfile();
   }, [user]);
 
+  const DISPLAY_NAME_REGEX = /^[a-zA-Z0-9\s\-_]{1,50}$/;
+
   const handleSaveDisplayName = async () => {
     if (!user?.id || !displayName.trim()) {
       toast.error("Please enter a display name.");
+      return;
+    }
+    if (!DISPLAY_NAME_REGEX.test(displayName.trim())) {
+      toast.error("Display name can only contain letters, numbers, spaces, hyphens, and underscores.");
       return;
     }
     setIsSavingName(true);
@@ -103,8 +109,8 @@ export default function Settings() {
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ["user-profile", user.id] });
       toast.success("Display name saved.");
-    } catch (error: any) {
-      toast.error(error.message || "Please try again.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Please try again.");
     } finally {
       setIsSavingName(false);
     }
@@ -112,7 +118,7 @@ export default function Settings() {
 
   const handleChangeEmail = async () => {
     if (!newEmail.trim()) { toast.error("Please enter a new email address."); return; }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
     if (!emailRegex.test(newEmail)) { toast.error("Please enter a valid email address."); return; }
     setIsChangingEmail(true);
     try {
@@ -122,8 +128,8 @@ export default function Settings() {
       setEmailChangePending(true);
       setPendingEmail(newEmail.trim());
       setNewEmail("");
-    } catch (error: any) {
-      toast.error(error.message || "Please try again.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Please try again.");
     } finally {
       setIsChangingEmail(false);
     }
@@ -141,8 +147,8 @@ export default function Settings() {
       toast.success("Password updated successfully.");
       setNewPassword("");
       setConfirmPassword("");
-    } catch (error: any) {
-      toast.error(error.message || "Please try again.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Please try again.");
     } finally {
       setIsChangingPassword(false);
     }
@@ -153,18 +159,17 @@ export default function Settings() {
     setIsDeletingAccount(true);
     try {
       // Log deletion request with 7-day grace period (replaces mailto: flow)
-      // Cast required until types.ts is regenerated to include deletion_requests
-      const { error } = await (supabase as any)
-        .from("deletion_requests")
-        .insert({ user_id: user!.id, email: user?.email });
+      const { error } = await supabase
+        .from("deletion_requests" as never)
+        .insert({ user_id: user!.id, email: user?.email } as never);
       if (error) throw error;
       toast.success("Deletion request submitted. Your account will be permanently deleted in 7 days. You have been signed out.");
       setShowDeleteDialog(false);
       setDeleteConfirmText("");
       // Sign out immediately so the session can't be used after the request
       await supabase.auth.signOut();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to submit deletion request. Please contact support@motionmax.io.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to submit deletion request. Please contact support@motionmax.io.");
     } finally {
       setIsDeletingAccount(false);
     }

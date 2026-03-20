@@ -40,35 +40,39 @@ if (envUrl && !urlMatchesProject) {
 // If the URL was overridden, the old project's keys won't work either.
 // Prefer service_role → then env anon → then hardcoded anon for the
 // correct project.
+function keyBelongsToProject(jwt: string): boolean {
+  try {
+    const payload = JSON.parse(Buffer.from(jwt.split(".")[1], "base64").toString());
+    return payload.ref === EXPECTED_PROJECT_REF;
+  } catch {
+    return false;
+  }
+}
+
 function resolveKey(): { key: string; label: string } {
   const srvKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const envAnon = process.env.SUPABASE_ANON_KEY;
 
-  // service_role key is only valid if it belongs to the correct project.
-  // JWT payload.ref must match.  Quick check: decode the payload part.
-  function keyBelongsToProject(jwt: string): boolean {
-    try {
-      const payload = JSON.parse(Buffer.from(jwt.split(".")[1], "base64").toString());
-      return payload.ref === EXPECTED_PROJECT_REF;
-    } catch {
-      return false;
-    }
-  }
-
+  // service_role key is REQUIRED — worker needs to bypass RLS
   if (srvKey && keyBelongsToProject(srvKey)) {
     return { key: srvKey, label: "service_role (env)" };
   }
-  if (envAnon && keyBelongsToProject(envAnon)) {
-    return { key: envAnon, label: "anon (env)" };
-  }
 
-  // Neither env key matches the correct project — fall back to the
-  // public anon key embedded in the frontend.
-  if (srvKey || envAnon) {
-    console.warn("[Worker] ⚠️  Env API key(s) belong to a different project — falling back to hardcoded anon key.");
-    console.warn("[Worker] ⚠️  Update SUPABASE_SERVICE_ROLE_KEY and/or SUPABASE_ANON_KEY on Render!");
+  // service_role missing or wrong project — WARN loudly
+  if (srvKey) {
+    console.error("[Worker] 🔴 SUPABASE_SERVICE_ROLE_KEY belongs to a different project!");
+    console.error(`[Worker] 🔴 Expected project ref: ${EXPECTED_PROJECT_REF}`);
+  } else {
+    console.error("[Worker] 🔴 SUPABASE_SERVICE_ROLE_KEY is not set!");
   }
-  return { key: EXPECTED_ANON_KEY, label: "anon (hardcoded fallback)" };
+  console.error("[Worker] 🔴 The worker REQUIRES service_role to bypass RLS.");
+  console.error("[Worker] 🔴 Falling back to anon key — some operations may fail.");
+
+  // Fallback to anon (degraded mode — will fail on RLS-protected tables)
+  if (envAnon && keyBelongsToProject(envAnon)) {
+    return { key: envAnon, label: "anon (env) ⚠️ DEGRADED" };
+  }
+  return { key: EXPECTED_ANON_KEY, label: "anon (hardcoded fallback) ⚠️ DEGRADED" };
 }
 
 const { key: supabaseKey, label: keyLabel } = resolveKey();

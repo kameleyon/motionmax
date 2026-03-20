@@ -17,7 +17,7 @@ export function ContentInput({ content, onContentChange }: ContentInputProps) {
         placeholder="Please add all your sources and documentations.
 
 Example: Paste your article, blog post, script, or any text content you want to transform into a video..."
-        className="min-h-[180px] resize-none rounded-xl border-border bg-muted/50 dark:bg-white/10 text-sm placeholder:text-muted-foreground/60 focus:border-primary/50 focus:ring-primary/20"
+        className="min-h-[120px] sm:min-h-[180px] resize-none rounded-xl border-border bg-muted/50 dark:bg-white/10 text-sm placeholder:text-muted-foreground/60 focus:border-primary/50 focus:ring-primary/20"
         value={content}
         onChange={(e) => onContentChange(e.target.value.slice(0, MAX_CONTENT_LENGTH))}
       />

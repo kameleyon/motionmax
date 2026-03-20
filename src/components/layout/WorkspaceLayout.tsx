@@ -14,7 +14,7 @@ export function WorkspaceLayout({ headerActions, children }: WorkspaceLayoutProp
   return (
     <div className="flex h-screen flex-col bg-background overflow-hidden">
       {/* Top Bar */}
-      <header className="grid h-14 sm:h-16 grid-cols-3 items-center border-b border-border/30 bg-background/80 px-4 sm:px-6 backdrop-blur-sm">
+      <header className="grid h-14 sm:h-16 grid-cols-3 gap-2 sm:gap-4 items-center border-b border-border/30 bg-background/80 px-2 min-[375px]:px-4 sm:px-6 backdrop-blur-sm">
         <div className="flex items-center gap-3 sm:gap-4 justify-start">
           <SidebarTrigger className="lg:hidden">
             <Menu className="h-5 w-5 text-muted-foreground" />

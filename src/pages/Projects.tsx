@@ -532,7 +532,7 @@ export default function Projects() {
               placeholder="Search projects..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 bg-card border-border/50"
+              className="pl-10 bg-muted/50 border-border/50"
             />
           </div>
           <div className="flex gap-2 flex-wrap">
@@ -709,7 +709,7 @@ export default function Projects() {
                             <span className="font-medium group-hover:text-primary transition-colors truncate block text-xs sm:text-sm">
                               {project.title}
                             </span>
-                            <span className="text-[10px] sm:text-xs text-muted-foreground truncate block">
+                            <span className="text-xs sm:text-sm text-muted-foreground truncate block">
                               {formatTimestamp(project.updated_at)}
                             </span>
                           </div>

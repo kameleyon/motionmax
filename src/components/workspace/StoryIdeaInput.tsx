@@ -19,7 +19,7 @@ export function StoryIdeaInput({ value, onChange }: StoryIdeaInputProps) {
         placeholder="Describe your story idea, concept, or theme. What's the narrative you want to tell? What emotions do you want to evoke?
 
 Example: A young entrepreneur's journey from a garage startup to building a billion-dollar company, facing setbacks, making hard decisions, and ultimately finding that success isn't just about money..."
-        className="min-h-[180px] resize-none rounded-xl border-border bg-muted/50 dark:bg-white/10 text-sm placeholder:text-muted-foreground/60 focus:border-primary/50 focus:ring-primary/20"
+        className="min-h-[120px] sm:min-h-[180px] resize-none rounded-xl border-border bg-muted/50 dark:bg-white/10 text-sm placeholder:text-muted-foreground/60 focus:border-primary/50 focus:ring-primary/20"
       />
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground/60">

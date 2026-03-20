@@ -196,6 +196,8 @@ export function SmartFlowStyleSelector({
                 <img
                   src={style.preview}
                   alt={style.label}
+                  loading="lazy"
+                  decoding="async"
                   className={cn(
                     "h-full w-full object-cover transition-transform duration-300",
                     "group-hover:scale-105"

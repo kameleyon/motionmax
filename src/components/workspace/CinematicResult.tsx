@@ -805,6 +805,7 @@ export function CinematicResult({
                   alt={`Scene ${scene.number}`}
                   className="w-full h-full object-cover"
                   loading="lazy"
+                  decoding="async"
                 />
               ) : (
                 <div className="w-full h-full bg-muted/50 flex items-center justify-center">

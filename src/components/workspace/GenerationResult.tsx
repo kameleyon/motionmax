@@ -551,6 +551,8 @@ export function GenerationResult({
                   <img
                     src={scene.imageUrl}
                     alt={`Scene ${scene.number}`}
+                    loading="lazy"
+                    decoding="async"
                     className="w-full h-full object-cover"
                   />
                 ) : (

@@ -315,6 +315,8 @@ export default function Dashboard() {
                             <img
                               src={project.thumbnailUrl || defaultThumbnail}
                               alt={project.title}
+                              loading="lazy"
+                              decoding="async"
                               className="absolute inset-0 w-full h-full object-cover"
                               onError={(e) => {
                                 const img = e.target as HTMLImageElement;

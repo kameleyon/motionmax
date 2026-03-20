@@ -47,40 +47,46 @@ const FREE_STATE: SubscriptionState = {
  * Direct DB fallback when the edge function is unreachable.
  * Queries the subscriptions + user_credits tables directly so users
  * keep their plan even if the edge function is temporarily down.
+ * Never throws — returns FREE_STATE on any failure.
  */
 async function fetchSubscriptionFromDB(): Promise<SubscriptionState> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return FREE_STATE;
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return FREE_STATE;
 
-  const [subResult, creditResult] = await Promise.all([
-    supabase
-      .from("subscriptions")
-      .select("plan_name, status, current_period_end, cancel_at_period_end")
-      .eq("user_id", user.id)
-      .eq("status", "active")
-      .maybeSingle(),
-    supabase
-      .from("user_credits")
-      .select("credits_balance")
-      .eq("user_id", user.id)
-      .maybeSingle(),
-  ]);
+    const [subResult, creditResult] = await Promise.all([
+      supabase
+        .from("subscriptions")
+        .select("plan_name, status, current_period_end, cancel_at_period_end")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .maybeSingle(),
+      supabase
+        .from("user_credits")
+        .select("credits_balance")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+    ]);
 
-  const sub = subResult.data;
-  const credits = creditResult.data?.credits_balance ?? 0;
+    const sub = subResult.data;
+    const credits = creditResult.data?.credits_balance ?? 0;
 
-  if (!sub) {
-    return { ...FREE_STATE, creditsBalance: credits };
+    if (!sub) {
+      return { ...FREE_STATE, creditsBalance: credits };
+    }
+
+    return {
+      subscribed: true,
+      plan: (sub.plan_name as PlanTier) || "free",
+      subscriptionStatus: sub.cancel_at_period_end ? "canceling" : "active",
+      subscriptionEnd: sub.current_period_end || null,
+      cancelAtPeriodEnd: sub.cancel_at_period_end || false,
+      creditsBalance: credits,
+    };
+  } catch (err) {
+    console.warn("[useSubscription] DB fallback also failed, using free defaults", err);
+    return FREE_STATE;
   }
-
-  return {
-    subscribed: true,
-    plan: (sub.plan_name as PlanTier) || "free",
-    subscriptionStatus: sub.cancel_at_period_end ? "canceling" : "active",
-    subscriptionEnd: sub.current_period_end || null,
-    cancelAtPeriodEnd: sub.cancel_at_period_end || false,
-    creditsBalance: credits,
-  };
 }
 
 function parseResponse(d: Record<string, unknown>): SubscriptionState {
@@ -94,33 +100,50 @@ function parseResponse(d: Record<string, unknown>): SubscriptionState {
   };
 }
 
-// Fetch function for React Query
+/**
+ * Check whether an error is a network-level failure (edge function unreachable).
+ */
+function isEdgeFunctionNetworkError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { name?: string; message?: string };
+  return (
+    e.name === "FunctionsFetchError" ||
+    !!e.message?.includes("Failed to send") ||
+    !!e.message?.includes("Failed to fetch") ||
+    !!e.message?.includes("NetworkError")
+  );
+}
+
+// Fetch function for React Query — never throws on network errors
 async function fetchSubscription(accessToken: string | undefined): Promise<SubscriptionState> {
   if (!accessToken) return FREE_STATE;
 
-  const { data, error } = await supabase.functions.invoke("check-subscription", {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  let data: Record<string, unknown> | null = null;
+  let error: unknown = null;
 
-  // Edge function unreachable (network error, deploy in progress, etc.)
-  // Fall back to direct DB query so users keep their subscription status
-  const isNetworkError =
-    error?.name === "FunctionsFetchError" ||
-    error?.message?.includes("Failed to send") ||
-    error?.message?.includes("Failed to fetch") ||
-    error?.message?.includes("NetworkError");
+  try {
+    const result = await supabase.functions.invoke("check-subscription", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    data = result.data;
+    error = result.error;
+  } catch (thrown) {
+    error = thrown;
+  }
 
-  if (isNetworkError) {
+  // Edge function unreachable → fall back to direct DB query
+  if (isEdgeFunctionNetworkError(error)) {
     console.warn("[useSubscription] Edge function unreachable, falling back to DB query");
     return fetchSubscriptionFromDB();
   }
 
   // Handle token expiration
+  const errObj = error as { message?: string } | null;
   const isTokenExpired =
-    error?.message?.includes("401") ||
-    error?.message?.toLowerCase().includes("non-2xx") ||
+    errObj?.message?.includes("401") ||
+    errObj?.message?.toLowerCase?.().includes("non-2xx") ||
     data?.code === "TOKEN_EXPIRED" ||
-    data?.error?.includes?.("Token expired");
+    (data?.error as string)?.includes?.("Token expired");
 
   if (isTokenExpired) {
     const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
@@ -128,19 +151,21 @@ async function fetchSubscription(accessToken: string | undefined): Promise<Subsc
       await supabase.auth.signOut();
       return FREE_STATE;
     }
-    const { data: retryData, error: retryError } = await supabase.functions.invoke("check-subscription", {
-      headers: { Authorization: `Bearer ${refreshData.session.access_token}` },
-    });
-    // If retry also fails with network error, fall back to DB
-    if (retryError?.name === "FunctionsFetchError" || retryError?.message?.includes("Failed to send")) {
-      return fetchSubscriptionFromDB();
+    try {
+      const { data: retryData, error: retryError } = await supabase.functions.invoke("check-subscription", {
+        headers: { Authorization: `Bearer ${refreshData.session.access_token}` },
+      });
+      if (isEdgeFunctionNetworkError(retryError)) return fetchSubscriptionFromDB();
+      if (retryError) throw retryError;
+      return parseResponse(retryData);
+    } catch (retryThrown) {
+      if (isEdgeFunctionNetworkError(retryThrown)) return fetchSubscriptionFromDB();
+      throw retryThrown;
     }
-    if (retryError) throw retryError;
-    return parseResponse(retryData);
   }
 
-  if (error) throw error;
-  return parseResponse(data);
+  if (error) throw error as Error;
+  return parseResponse(data!);
 }
 
 export function useSubscription() {

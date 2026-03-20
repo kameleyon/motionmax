@@ -171,10 +171,21 @@ export const CREDIT_PACKAGES: CreditPackDef[] = [
  * Credit cost per content type
  * ────────────────────────────────────────────── */
 
-export const CREDIT_INFO = [
+export interface CreditInfoItem {
+  type: string;
+  credits: number;
+  /** Optional explanation shown as a tooltip or footnote */
+  note?: string;
+}
+
+export const CREDIT_INFO: CreditInfoItem[] = [
   { type: "Short Video (<2 min)", credits: 1 },
   { type: "Brief Video (<5 min)", credits: 2 },
   { type: "Presentation (<10 min)", credits: 4 },
   { type: "Infographic", credits: 1 },
-  { type: "Cinematic", credits: 12 },
+  {
+    type: "Cinematic",
+    credits: 12,
+    note: "Uses advanced multi-model AI pipeline: scene-by-scene image generation, cinematic audio, and video composition.",
+  },
 ];

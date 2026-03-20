@@ -21,6 +21,7 @@ import LandingPricing from "@/components/landing/LandingPricing";
 import LandingCta from "@/components/landing/LandingCta";
 import LandingAbout from "@/components/landing/LandingAbout";
 import LandingFooter from "@/components/landing/LandingFooter";
+import BeforeAfterComparison from "@/components/landing/BeforeAfterComparison";
 
 export default function Landing() {
   const navigate = useNavigate();
@@ -231,6 +232,9 @@ export default function Landing() {
 
       {/* Trust Indicators */}
       <TrustIndicators />
+
+      {/* Before/After Comparison — time-saved metric */}
+      <BeforeAfterComparison />
 
       {/* Pricing Section */}
       <LandingPricing onCtaClick={handleCta} />

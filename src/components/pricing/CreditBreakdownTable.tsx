@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Info } from "lucide-react";
 import { CREDIT_INFO } from "@/config/pricingPlans";
 import { PLAN_LIMITS, type PlanTier } from "@/lib/planLimits";
 
@@ -22,6 +24,8 @@ const TIER_LABELS: { id: PlanTier; label: string }[] = [
 ];
 
 export default function CreditBreakdownTable() {
+  const [expandedNote, setExpandedNote] = useState<string | null>(null);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -41,17 +45,37 @@ export default function CreditBreakdownTable() {
       {/* Quick credit pills */}
       <div className="flex flex-wrap justify-center gap-3 max-w-2xl mx-auto mb-6">
         {CREDIT_INFO.map((item) => (
-          <div
+          <button
             key={item.type}
-            className="flex items-center gap-2 px-3 py-2 rounded-full bg-muted/50 border border-border/50"
+            type="button"
+            className="flex items-center gap-2 px-3 py-2 rounded-full bg-muted/50 border border-border/50 transition-colors hover:border-primary/30"
+            onClick={() => item.note ? setExpandedNote(expandedNote === item.type ? null : item.type) : undefined}
           >
             <span className="text-xs text-muted-foreground">{item.type}</span>
             <Badge variant="secondary" className="text-xs">
               {item.credits} {item.credits === 1 ? "credit" : "credits"}
             </Badge>
-          </div>
+            {item.note && (
+              <Info className="h-3 w-3 text-muted-foreground/60" />
+            )}
+          </button>
         ))}
       </div>
+
+      {/* Expanded note for selected credit type */}
+      {expandedNote && (() => {
+        const item = CREDIT_INFO.find((c) => c.type === expandedNote);
+        if (!item?.note) return null;
+        return (
+          <div className="flex items-start gap-2 max-w-2xl mx-auto mb-6 p-3 rounded-lg bg-primary/5 border border-primary/20">
+            <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-medium text-foreground">{item.type} — {item.credits} credits</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{item.note}</p>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Detailed breakdown table */}
       <Card className="max-w-3xl mx-auto border-border/50 bg-card/50 overflow-hidden">
@@ -80,7 +104,21 @@ export default function CreditBreakdownTable() {
                     key={item.type}
                     className={idx % 2 === 0 ? "bg-background" : "bg-muted/10"}
                   >
-                    <td className="px-4 py-2.5 text-xs text-foreground font-medium">{item.type}</td>
+                    <td className="px-4 py-2.5 text-xs text-foreground font-medium">
+                      <span className="inline-flex items-center gap-1">
+                        {item.type}
+                        {item.note && (
+                          <button
+                            type="button"
+                            onClick={() => setExpandedNote(expandedNote === item.type ? null : item.type)}
+                            className="inline-flex"
+                            aria-label={`Info about ${item.type} pricing`}
+                          >
+                            <Info className="h-3 w-3 text-muted-foreground/60 hover:text-primary transition-colors" />
+                          </button>
+                        )}
+                      </span>
+                    </td>
                     <td className="text-center px-3 py-2.5">
                       <Badge variant="outline" className="text-[10px]">
                         {item.credits} {item.credits === 1 ? "cr" : "cr"}

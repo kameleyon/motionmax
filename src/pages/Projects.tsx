@@ -258,9 +258,12 @@ export default function Projects() {
     }));
   }, [allProjects, refreshedThumbnails]);
 
-  // Mutations – ON DELETE CASCADE handles child records (generations, project_shares, project_characters)
+  // Mutations – delete child records first to satisfy foreign key constraints
   const deleteProjectMutation = useMutation({
     mutationFn: async (projectId: string) => {
+      await supabase.from("generations").delete().eq("project_id", projectId);
+      await supabase.from("project_shares").delete().eq("project_id", projectId);
+      await supabase.from("project_characters").delete().eq("project_id", projectId);
       const { error } = await supabase.from("projects").delete().eq("id", projectId);
       if (error) throw error;
     },
@@ -274,6 +277,9 @@ export default function Projects() {
 
   const bulkDeleteMutation = useMutation({
     mutationFn: async (ids: string[]) => {
+      await supabase.from("generations").delete().in("project_id", ids);
+      await supabase.from("project_shares").delete().in("project_id", ids);
+      await supabase.from("project_characters").delete().in("project_id", ids);
       const { error } = await supabase.from("projects").delete().in("id", ids);
       if (error) throw error;
     },

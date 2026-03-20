@@ -5,6 +5,7 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { createScopedLogger } from "@/lib/logger";
 import { callPhase } from "./generation/callPhase";
 import { runCinematicPipeline, resumeCinematicPipeline } from "./generation/cinematicPipeline";
 import { runStandardPipeline } from "./generation/standardPipeline";
@@ -22,7 +23,7 @@ import {
 // Re-export all types for consumers
 export type { GenerationStep, Scene, CostTracking, PhaseTimings, GenerationState, GenerationParams, ProjectRow } from "./generation/types";
 
-const LOG = "[Pipeline]";
+const log = createScopedLogger("Pipeline");
 
 export function useGenerationPipeline() {
   const { toast } = useToast();
@@ -36,7 +37,7 @@ export function useGenerationPipeline() {
 
   const startGeneration = useCallback(async (params: GenerationParams) => {
     const expectedSceneCount = SCENE_COUNTS[params.length] || 12;
-    console.log(LOG, "startGeneration", { projectType: params.projectType, length: params.length, expectedSceneCount });
+    log.debug("startGeneration", { projectType: params.projectType, length: params.length, expectedSceneCount });
 
     setState({
       step: "analysis",
@@ -63,7 +64,7 @@ export function useGenerationPipeline() {
         await runStandardPipeline(params, ctx, expectedSceneCount);
       }
     } catch (error) {
-      console.error(LOG, "Generation error:", error);
+      log.error("Generation error:", error);
       const errorMessage = error instanceof Error ? error.message : "Generation failed";
       setState((prev) => ({ ...prev, step: "error", isGenerating: false, error: errorMessage, statusMessage: errorMessage }));
       toast({ variant: "destructive", title: "Generation Failed", description: errorMessage });
@@ -72,14 +73,14 @@ export function useGenerationPipeline() {
 
   const resumeCinematic = useCallback(
     async (project: ProjectRow, generationId: string, existingScenes: any[], resumeFrom: "audio" | "images" | "video" | "finalize") => {
-      console.log(LOG, "resumeCinematic", { projectId: project.id, resumeFrom });
+      log.debug("resumeCinematic", { projectId: project.id, resumeFrom });
       await resumeCinematicPipeline(project, generationId, existingScenes, resumeFrom, createContext());
     },
     [createContext]
   );
 
   const loadProject = useCallback(async (projectId: string): Promise<ProjectRow | null> => {
-    console.log(LOG, "loadProject", { projectId });
+    log.debug("loadProject", { projectId });
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id;
 
@@ -99,7 +100,7 @@ export function useGenerationPipeline() {
 
     if (projectError || !project) {
       const msg = projectError?.message || "Project not found.";
-      console.error(LOG, "loadProject failed:", msg);
+      log.error("loadProject failed:", msg);
       toast({ variant: "destructive", title: "Could not load project", description: msg });
       setState((prev) => ({ ...prev, step: "error", isGenerating: false, error: msg }));
       return null;
@@ -113,7 +114,7 @@ export function useGenerationPipeline() {
       .limit(1)
       .maybeSingle();
 
-    console.log(LOG, "loadProject: generation", { status: generation?.status, projectType: project.project_type });
+    log.debug("loadProject: generation", { status: generation?.status, projectType: project.project_type });
 
     if (generation?.status === "complete") {
       const scenes = normalizeScenes(generation.scenes) ?? [];
@@ -121,7 +122,7 @@ export function useGenerationPipeline() {
       const isCinematic = project.project_type === "cinematic";
 
       if (isCinematic && scenes.length > 0 && scenes.some((s) => !s.videoUrl && s.imageUrl)) {
-        console.log(LOG, "Auto-resuming cinematic video phase");
+        log.debug("Auto-resuming cinematic video phase");
         void resumeCinematic(project, generation.id, scenes, "video");
       } else {
         setState({
@@ -191,7 +192,7 @@ export function useGenerationPipeline() {
   }, [toast, state.sceneCount, resumeCinematic]);
 
   const reset = useCallback(() => {
-    console.log(LOG, "reset");
+    log.debug("reset");
     setState(INITIAL_GENERATION_STATE);
   }, []);
 

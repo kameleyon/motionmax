@@ -3,13 +3,14 @@
  * Handles doc2video, storytelling, and smartflow project types.
  */
 import { supabase } from "@/integrations/supabase/client";
+import { createScopedLogger } from "@/lib/logger";
 import {
   type GenerationParams,
   type PipelineContext,
   normalizeScenes,
 } from "./types";
 
-const LOG = "[Pipeline:Standard]";
+const log = createScopedLogger("Pipeline:Standard");
 
 /** Execute the standard (non-cinematic) pipeline */
 export async function runStandardPipeline(
@@ -17,7 +18,7 @@ export async function runStandardPipeline(
   ctx: PipelineContext,
   expectedSceneCount: number
 ): Promise<void> {
-  console.log(LOG, "Starting standard pipeline", { projectType: params.projectType, format: params.format, length: params.length });
+  log.debug("Starting standard pipeline", { projectType: params.projectType, format: params.format, length: params.length });
 
   // ============= PHASE 1: SCRIPT =============
   ctx.setState((prev) => ({ ...prev, step: "scripting" as const, progress: 5, statusMessage: "Generating script with AI..." }));
@@ -52,7 +53,7 @@ export async function runStandardPipeline(
   if (!scriptResult.success) throw new Error(scriptResult.error || "Script generation failed");
 
   const { projectId, generationId, title, sceneCount, totalImages, costTracking } = scriptResult;
-  console.log(LOG, "Script complete", { projectId, generationId, sceneCount, totalImages });
+  log.debug("Script complete", { projectId, generationId, sceneCount, totalImages });
 
   ctx.setState((prev) => ({
     ...prev,
@@ -70,13 +71,13 @@ export async function runStandardPipeline(
 
   // ============= PHASE 2: AUDIO (single job) =============
   if (!isSmartFlowNoVoice) {
-    console.log(LOG, "Starting audio phase");
+    log.debug("Starting audio phase");
     ctx.setState((prev) => ({ ...prev, step: "visuals" as const, progress: 15, statusMessage: "Generating voiceover audio..." }));
 
     const audioResult = await ctx.callPhase({ phase: "audio", generationId, projectId, audioStartIndex: 0 }, 300000); // 5 minutes
     if (!audioResult.success) throw new Error(audioResult.error || "Audio generation failed");
 
-    console.log(LOG, "Audio phase complete", { generated: audioResult.audioGenerated });
+    log.debug("Audio phase complete", { generated: audioResult.audioGenerated });
 
     ctx.setState((prev) => ({
       ...prev,
@@ -88,7 +89,7 @@ export async function runStandardPipeline(
   }
 
   // ============= PHASE 3: IMAGES (single job, fault-tolerant) =============
-  console.log(LOG, "Starting images phase");
+  log.debug("Starting images phase");
   ctx.setState((prev) => ({ ...prev, progress: 45, statusMessage: "Generating images..." }));
 
   let imagesResult: any;
@@ -97,11 +98,11 @@ export async function runStandardPipeline(
     imagesResult = await ctx.callPhase({ phase: "images", generationId, projectId, imageStartIndex: 0 }, 600000); // 10 minutes
 
     if (!imagesResult.success) {
-      console.warn(LOG, `Image phase failed: ${imagesResult.error}`);
+      log.warn(`Image phase failed: ${imagesResult.error}`);
       imagesResult = { totalImages: expectedSceneCount * 3, imagesGenerated: 0 };
     }
   } catch (err) {
-    console.warn(LOG, `Image phase error:`, err);
+    log.warn(`Image phase error:`, err);
     imagesResult = { totalImages: expectedSceneCount * 3, imagesGenerated: 0 };
   }
 
@@ -122,7 +123,7 @@ export async function runStandardPipeline(
     const missingImageScenes = imgCheckScenes.filter((s) => !s.imageUrl).length;
     if (missingImageScenes === 0) break;
 
-    console.log(LOG, `Image retry round ${retryRound + 1}: ${missingImageScenes} scenes missing`);
+    log.debug(`Image retry round ${retryRound + 1}: ${missingImageScenes} scenes missing`);
     ctx.setState((prev) => ({ ...prev, statusMessage: `Retrying ${missingImageScenes} missing images (round ${retryRound + 1})...` }));
 
     let retryIndex = 0;
@@ -144,7 +145,7 @@ export async function runStandardPipeline(
   const finalImagesGenerated = postRetryScenes.filter((s) => !!s.imageUrl).length;
   const finalTotalImages = imagesResult?.totalImages || postRetryScenes.length * 3;
 
-  console.log(LOG, "Images phase complete", { generated: finalImagesGenerated, total: finalTotalImages });
+  log.debug("Images phase complete", { generated: finalImagesGenerated, total: finalTotalImages });
 
   ctx.setState((prev) => ({
     ...prev,
@@ -156,12 +157,12 @@ export async function runStandardPipeline(
   }));
 
   // ============= PHASE 4: FINALIZE =============
-  console.log(LOG, "Starting finalize phase");
+  log.debug("Starting finalize phase");
   const finalResult = await ctx.callPhase({ phase: "finalize", generationId, projectId });
   if (!finalResult.success) throw new Error(finalResult.error || "Finalization failed");
 
   const finalScenes = normalizeScenes(finalResult.scenes);
-  console.log(LOG, "Standard pipeline complete", { sceneCount: finalScenes?.length, title: finalResult.title });
+  log.debug("Standard pipeline complete", { sceneCount: finalScenes?.length, title: finalResult.title });
 
   ctx.setState({
     step: "complete",

@@ -4,7 +4,8 @@
  * Both functions convert technical error messages to user-friendly strings.
  */
 
-const LOG = "[ErrorMessages]";
+import { createScopedLogger } from "@/lib/logger";
+const log = createScopedLogger("ErrorMessages");
 
 /**
  * Map raw Supabase Auth error messages to user-friendly strings.
@@ -12,12 +13,12 @@ const LOG = "[ErrorMessages]";
  */
 export function getAuthErrorMessage(raw: string | undefined): string {
   if (!raw) {
-    console.warn(LOG, "getAuthErrorMessage called with empty input");
+    log.warn("getAuthErrorMessage called with empty input");
     return "Something went wrong. Please try again.";
   }
 
   const msg = raw.toLowerCase();
-  console.log(LOG, "Mapping auth error:", raw);
+  log.debug("Mapping auth error:", raw);
 
   // Duplicate / existing user
   if (msg.includes("user already registered") || msg.includes("already been registered")) {
@@ -87,7 +88,7 @@ export function getAuthErrorMessage(raw: string | undefined): string {
     return raw;
   }
 
-  console.warn(LOG, "Auth error fell through to generic fallback:", raw);
+  log.warn("Auth error fell through to generic fallback:", raw);
   return "Something went wrong. Please try again.";
 }
 
@@ -97,12 +98,12 @@ export function getAuthErrorMessage(raw: string | undefined): string {
  */
 export function getUserFriendlyErrorMessage(error: string | undefined): string {
   if (!error) {
-    console.warn(LOG, "getUserFriendlyErrorMessage called with empty input");
+    log.warn("getUserFriendlyErrorMessage called with empty input");
     return "Something went wrong. Please try again.";
   }
 
   const lowerError = error.toLowerCase();
-  console.log(LOG, "Mapping operational error:", error);
+  log.debug("Mapping operational error:", error);
 
   // Network/connection errors
   if (lowerError.includes("failed to fetch") || lowerError.includes("network")) {
@@ -149,6 +150,6 @@ export function getUserFriendlyErrorMessage(error: string | undefined): string {
     return error;
   }
 
-  console.warn(LOG, "Operational error fell through to generic fallback:", error);
+  log.warn("Operational error fell through to generic fallback:", error);
   return "Something went wrong. Please try again.";
 }

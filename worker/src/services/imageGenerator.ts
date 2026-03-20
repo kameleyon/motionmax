@@ -210,11 +210,8 @@ export async function generateImage(
 }
 
 /**
- * Edit one image — matches the edge function approach.
- *
- * Combines the scene's original visualPrompt + user modification request
- * into one prompt and generates via Hypereal (primary, cheaper) with
- * Replicate fallback. Same model, same endpoint as normal generation.
+ * Edit one image — combines original visualPrompt + user modification.
+ * Uses Replicate nano-banana-2 as PRIMARY provider, Hypereal as fallback.
  */
 export async function editImage(
   editInstruction: string,
@@ -238,7 +235,20 @@ STYLE: ${styleDesc || ""}
 
 Professional illustration with dynamic composition and clear visual hierarchy. Apply the user's modification while maintaining consistency with the original scene concept.`;
 
-  console.log(`[ImageGen] Edit via generate: "${editInstruction.substring(0, 80)}"`);
+  console.log(`[ImageGen] Edit via Replicate (primary): "${editInstruction.substring(0, 80)}"`);
 
-  return generateImage(editPrompt, hyperealApiKey, replicateApiKey || "", format || "landscape", projectId);
+  // Primary: Replicate nano-banana-2 for edits
+  if (replicateApiKey) {
+    const url = await tryReplicate(editPrompt, replicateApiKey, format || "landscape", projectId);
+    if (url) return url;
+    console.warn("[ImageGen] Replicate exhausted for edit — falling back to Hypereal");
+  }
+
+  // Fallback: Hypereal
+  if (hyperealApiKey) {
+    const bytes = await tryHypereal(editPrompt, hyperealApiKey, format || "landscape");
+    if (bytes) return await uploadToStorage(bytes, projectId);
+  }
+
+  throw new Error("Image edit failed: both Replicate and Hypereal exhausted");
 }

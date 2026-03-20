@@ -174,35 +174,36 @@ export default function Projects() {
 
       if (!projectsData?.length) return { projects: [], nextCursor: null };
 
-      // Fetch thumbnails for this page
-      const projectIds = projectsData.map(p => p.id);
-      const { data: generations } = await supabase
-        .from("generations")
-        .select("project_id, scenes")
-        .in("project_id", projectIds)
-        .eq("status", "complete")
-        .order("created_at", { ascending: false });
-
+      // Only query generations.scenes for projects missing a thumbnail_url
+      const missingIds = projectsData.filter(p => !p.thumbnail_url).map(p => p.id);
       const thumbnailMap: Record<string, string | null> = {};
-      if (generations) {
-        for (const gen of generations) {
-          if (thumbnailMap[gen.project_id] !== undefined) continue;
-          const scenes = gen.scenes as any[];
-          if (Array.isArray(scenes) && scenes.length > 0) {
-            const firstScene = scenes[0];
-            const imageUrl = firstScene?.imageUrl || 
-                            firstScene?.image_url || 
-                            (Array.isArray(firstScene?.imageUrls) ? firstScene.imageUrls[0] : null);
-            thumbnailMap[gen.project_id] = imageUrl || null;
-          } else {
-            thumbnailMap[gen.project_id] = null;
+
+      if (missingIds.length > 0) {
+        const { data: generations } = await supabase
+          .from("generations")
+          .select("project_id, scenes")
+          .in("project_id", missingIds)
+          .eq("status", "complete")
+          .order("created_at", { ascending: false });
+
+        if (generations) {
+          for (const gen of generations) {
+            if (thumbnailMap[gen.project_id] !== undefined) continue;
+            const scenes = gen.scenes as any[];
+            if (Array.isArray(scenes) && scenes.length > 0) {
+              const firstScene = scenes[0];
+              const imageUrl = firstScene?.imageUrl ||
+                              firstScene?.image_url ||
+                              (Array.isArray(firstScene?.imageUrls) ? firstScene.imageUrls[0] : null);
+              thumbnailMap[gen.project_id] = imageUrl || null;
+            }
           }
         }
       }
 
       const projects = projectsData.map(p => ({
         ...p,
-        thumbnailUrl: thumbnailMap[p.id] || null,
+        thumbnailUrl: p.thumbnail_url || thumbnailMap[p.id] || null,
       })) as Project[];
 
       return {

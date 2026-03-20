@@ -22,6 +22,8 @@ import { UpgradeRequiredModal } from "@/components/modals/UpgradeRequiredModal";
 import { SubscriptionSuspendedModal } from "@/components/modals/SubscriptionSuspendedModal";
 import { useAdminLogs } from "@/hooks/useAdminLogs";
 import { AdminLogsPanel } from "./AdminLogsPanel";
+import { TemplateSelector } from "./TemplateSelector";
+import { useWorkspaceDraft } from "@/hooks/useWorkspaceDraft";
 
 export interface WorkspaceHandle {
   resetWorkspace: () => void;
@@ -57,6 +59,21 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
     const [upgradeReason, setUpgradeReason] = useState("");
     const [showSuspendedModal, setShowSuspendedModal] = useState(false);
     const [suspendedStatus, setSuspendedStatus] = useState<"past_due" | "unpaid" | "canceled">("past_due");
+
+    // Auto-save draft to localStorage
+    const { loadDraft } = useWorkspaceDraft(
+      "smartflow",
+      { dataContent, extractionPrompt, format, style },
+      generationState.step === "idle"
+    );
+
+    // Restore draft on mount if no project loaded
+    useEffect(() => {
+      if (initialProjectId) return;
+      const draft = loadDraft();
+      if (draft?.dataContent) setDataContent(draft.dataContent as string);
+      if (draft?.extractionPrompt) setExtractionPrompt(draft.extractionPrompt as string);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const canGenerate = dataContent.trim().length > 0 && extractionPrompt.trim().length > 0 && !generationState.isGenerating;
 
@@ -252,6 +269,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
                       </span>
                     </div>
                   </div>
+                  <TemplateSelector mode="smartflow" onSelectTemplate={setDataContent} />
 
                   {/* Extraction Prompt */}
                   <div className="space-y-2">

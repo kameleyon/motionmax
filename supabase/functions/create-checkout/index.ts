@@ -7,10 +7,24 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const logStep = (step: string, details?: any) => {
+const logStep = (step: string, details?: Record<string, unknown>) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
   console.log(`[CREATE-CHECKOUT] ${step}${detailsStr}`);
 };
+
+/**
+ * Stable product IDs — these rarely change in Stripe unlike price IDs.
+ * Validation checks that the requested price belongs to one of these products.
+ */
+const VALID_PRODUCT_IDS = new Set([
+  "prod_Tnyz2nMLqpHz3R", // Starter
+  "prod_Tnz0KUQX2J5VBH", // Creator
+  "prod_Tnz0BeRmJDdh0V", // Professional
+  "prod_Ts3r9EBXzzKKfU", // Credit 15
+  "prod_Tnz0B2aJPD895y", // Credit 50
+  "prod_Tnz1CygtJnMhUz", // Credit 150
+  "prod_Ts3rl1zDT9oLVt", // Credit 500
+]);
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -27,11 +41,11 @@ serve(async (req) => {
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("No authorization header provided");
-    
+
     const token = authHeader.replace("Bearer ", "");
     const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
     if (userError) throw new Error(`Authentication error: ${userError.message}`);
-    
+
     const user = userData.user;
     if (!user?.email) throw new Error("User not authenticated or email not available");
     logStep("User authenticated", { userId: user.id, email: user.email });
@@ -39,21 +53,23 @@ serve(async (req) => {
     const { priceId, mode } = await req.json();
     if (!priceId) throw new Error("Price ID is required");
 
-    // Validate against known price IDs to prevent purchase of unintended products
-    const VALID_PRICE_IDS = new Set([
-      "price_1SqN1x6hfVkBDzkSzfLDk9eF", "price_1T2b0Q6hfVkBDzkSF4MqHPRi", // starter monthly/yearly
-      "price_1SqN2D6hfVkBDzkS6ywVTBEt", "price_1T2b0R6hfVkBDzkSFD5gowGz", // creator monthly/yearly
-      "price_1SqN2U6hfVkBDzkSNCDvRyeP", "price_1T2b0S6hfVkBDzkS4nrYAc2E", // professional monthly/yearly
-      "price_1SuJk36hfVkBDzkSCbSorQJY", "price_1SqN2q6hfVkBDzkSNbEXBWTL", // credit 15 / 50
-      "price_1SqN316hfVkBDzkSVq77cGDd", "price_1SuJk46hfVkBDzkSSkkal5QG", // credit 150 / 500
-    ]);
-    if (!VALID_PRICE_IDS.has(priceId)) throw new Error("Invalid price ID");
-
-    logStep("Request params", { priceId, mode });
-
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
       apiVersion: "2025-08-27.basil",
     });
+
+    // Dynamic validation: fetch the price from Stripe and verify it is active
+    // and belongs to one of our known products (product IDs are stable).
+    const price = await stripe.prices.retrieve(priceId);
+    if (!price || !price.active) {
+      throw new Error("Price is no longer active. Please refresh and try again.");
+    }
+
+    const productId = typeof price.product === "string" ? price.product : price.product?.id;
+    if (!productId || !VALID_PRODUCT_IDS.has(productId)) {
+      throw new Error("Invalid product for this price");
+    }
+
+    logStep("Price validated", { priceId, productId, active: price.active });
 
     // Check for existing Stripe customer
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
@@ -64,7 +80,7 @@ serve(async (req) => {
     }
 
     const origin = req.headers.get("origin") || "https://motionmax.io";
-    
+
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       customer_email: customerId ? undefined : user.email,

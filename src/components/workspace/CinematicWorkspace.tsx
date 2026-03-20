@@ -20,7 +20,7 @@ import { CinematicResult } from "./CinematicResult";
 
 import { useGenerationPipeline } from "@/hooks/useGenerationPipeline";
 import { getUserFriendlyErrorMessage } from "@/lib/errorMessages";
-import { useSubscription, validateGenerationAccess } from "@/hooks/useSubscription";
+import { useSubscription, validateGenerationAccess, PLAN_LIMITS } from "@/hooks/useSubscription";
 import { useToast } from "@/hooks/use-toast";
 import { UpgradeRequiredModal } from "@/components/modals/UpgradeRequiredModal";
 import { SubscriptionSuspendedModal } from "@/components/modals/SubscriptionSuspendedModal";
@@ -28,6 +28,8 @@ import { useAdminLogs } from "@/hooks/useAdminLogs";
 import { AdminLogsPanel } from "./AdminLogsPanel";
 import { useGenerationLogs } from "@/hooks/useGenerationLogs";
 import { GenerationLogsPanel } from "./GenerationLogsPanel";
+import { TemplateSelector } from "./TemplateSelector";
+import { useWorkspaceDraft } from "@/hooks/useWorkspaceDraft";
 import type { WorkspaceHandle } from "./Doc2VideoWorkspace";
 
 interface CinematicWorkspaceProps {
@@ -77,10 +79,43 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
       }
     };
 
+    // Auto-save draft to localStorage
+    const { loadDraft } = useWorkspaceDraft(
+      "cinematic",
+      { content, format, length, style, presenterFocus, characterDescription },
+      generationState.step === "idle"
+    );
+
+    // Restore draft on mount if no project loaded
+    useEffect(() => {
+      if (initialProjectId) return;
+      const draft = loadDraft();
+      if (draft?.content) setContent(draft.content as string);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
     const canGenerate = content.trim().length > 0 && !generationState.isGenerating;
 
-    // All formats (landscape, portrait, square) are available for short
-    const disabledFormats: VideoFormat[] = [];
+    // Disable formats/lengths based on plan
+    const limits = PLAN_LIMITS[plan];
+    const disabledFormats: VideoFormat[] = (["landscape", "portrait", "square"] as VideoFormat[]).filter(
+      f => !limits.allowedFormats.includes(f)
+    );
+    const disabledLengths: VideoLength[] = (["short", "brief", "presentation"] as VideoLength[]).filter(
+      l => !limits.allowedLengths.includes(l)
+    );
+
+    // Auto-switch to allowed values if current selection becomes disabled
+    useEffect(() => {
+      if (disabledFormats.includes(format) && limits.allowedFormats.length > 0) {
+        setFormat(limits.allowedFormats[0] as VideoFormat);
+      }
+    }, [plan, format, disabledFormats, limits.allowedFormats]);
+
+    useEffect(() => {
+      if (disabledLengths.includes(length) && limits.allowedLengths.length > 0) {
+        setLength(limits.allowedLengths[0] as VideoLength);
+      }
+    }, [plan, length, disabledLengths, limits.allowedLengths]);
 
     // DB polling: detect if generation completed while app was backgrounded (mobile resilience)
     // IMPORTANT: Only triggers loadProject when the generation is NOT already being actively
@@ -282,7 +317,10 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                   </div>
 
                   {/* Content Input */}
-                  <ContentInput content={content} onContentChange={setContent} />
+                  <div className="space-y-2">
+                    <ContentInput content={content} onContentChange={setContent} />
+                    <TemplateSelector mode="cinematic" onSelectTemplate={setContent} />
+                  </div>
 
                   {/* Collapsible Advanced Options */}
                   <div className="space-y-2 sm:space-y-3">
@@ -350,7 +388,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                     {/* Length and Voice side by side on desktop, stacked on mobile */}
                     <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
                       <div className="flex-1">
-                        <LengthSelector selected={length} onSelect={setLength} />
+                        <LengthSelector selected={length} onSelect={setLength} disabledLengths={disabledLengths} />
                       </div>
                       <div className="sm:flex-shrink-0">
                         <VoiceSelector selected={voice} onSelect={setVoice} />

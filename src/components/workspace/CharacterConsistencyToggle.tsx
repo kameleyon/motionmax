@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Lock, Users, Sparkles, Crown } from "lucide-react";
+import { Lock, Users, Sparkles, Crown, Info } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -56,12 +57,23 @@ export function CharacterConsistencyToggle({ enabled, onToggle }: CharacterConsi
             )}
           </div>
           <div>
-            <Label className="text-sm font-medium cursor-pointer" onClick={handleToggleClick}>
-              Character Consistency
-            </Label>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-sm font-medium cursor-pointer" onClick={handleToggleClick}>
+                Character Consistency
+              </Label>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[260px]">
+                  AI generates reference portraits for each character, ensuring they look
+                  identical across all scenes in your video. Best for stories with recurring characters.
+                </TooltipContent>
+              </Tooltip>
+            </div>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {canUseFeature 
-                ? "Generate reference images for consistent characters" 
+              {canUseFeature
+                ? "Generate reference images for consistent characters"
                 : "Pro feature • Upgrade to unlock"
               }
             </p>

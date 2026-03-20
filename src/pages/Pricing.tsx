@@ -1,28 +1,14 @@
 ﻿import { useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { 
-  Check, 
-  Zap, 
-  Crown,
-  Gem,
-  Building2,
-  Sparkles,
-  Plus,
-  Loader2,
-  Info,
-  X,
-  Menu,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Menu, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ThemedLogo } from "@/components/ThemedLogo";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
-import { useSubscription, STRIPE_PLANS, CREDIT_PACKS } from "@/hooks/useSubscription";
-import { PLAN_LIMITS } from "@/lib/planLimits";
-import { PLAN_PRICES, CREDIT_PACK_PRICES, yearlyDiscountPercent } from "@/config/products";
+import { useSubscription } from "@/hooks/useSubscription";
+import { yearlyDiscountPercent } from "@/config/products";
+import { PLANS, CREDIT_PACKAGES } from "@/config/pricingPlans";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -36,153 +22,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-const plans = [
-  {
-    id: "free",
-    name: "Free",
-    monthlyPrice: PLAN_PRICES.free.monthly,
-    yearlyPrice: PLAN_PRICES.free.yearly,
-    description: "Get started with basic features",
-    icon: Sparkles,
-    features: [
-      `${PLAN_LIMITS.free.creditsPerMonth} credits/month`,
-      "Short videos only (<2 min)",
-      "720p quality",
-      "5 basic visual styles",
-      "Landscape format only",
-      "No narration (silent/captions)",
-      "Watermark on exports",
-    ],
-    excluded: [
-      "Voice cloning",
-      "Infographics",
-      "Brand mark",
-    ],
-    cta: "Current Plan",
-    popular: false,
-    monthlyPriceId: null,
-    yearlyPriceId: null,
-  },
-  {
-    id: "starter",
-    name: "Starter",
-    monthlyPrice: PLAN_PRICES.starter.monthly,
-    yearlyPrice: PLAN_PRICES.starter.yearly,
-    description: "Hobbyists & social creators",
-    icon: Zap,
-    features: [
-      `${PLAN_LIMITS.starter.creditsPerMonth} credits/month`,
-      "Short + Brief videos",
-      "1080p quality",
-      "10 visual styles",
-      "All formats (16:9, 9:16, 1:1)",
-      "Standard narration voices",
-      "10 infographics/month",
-      "No watermark",
-      "Email support (48h)",
-    ],
-    excluded: [
-      "Voice cloning",
-      "Brand mark",
-    ],
-    cta: "Upgrade to Starter",
-    popular: false,
-    monthlyPriceId: STRIPE_PLANS.starter.monthly.priceId,
-    yearlyPriceId: STRIPE_PLANS.starter.yearly.priceId,
-  },
-  {
-    id: "creator",
-    name: "Creator",
-    monthlyPrice: PLAN_PRICES.creator.monthly,
-    yearlyPrice: PLAN_PRICES.creator.yearly,
-    description: "Content creators & small biz",
-    icon: Crown,
-    features: [
-      `${PLAN_LIMITS.creator.creditsPerMonth} credits/month`,
-      "All video lengths",
-      "1080p quality",
-      "All 13 styles + Custom",
-      "All formats",
-      "Full narration + voice effects",
-      "1 voice clone",
-      "50 infographics/month",
-      "Brand mark",
-      "Priority support (24h)",
-    ],
-    excluded: [],
-    cta: "Upgrade to Creator",
-    popular: true,
-    monthlyPriceId: STRIPE_PLANS.creator.monthly.priceId,
-    yearlyPriceId: STRIPE_PLANS.creator.yearly.priceId,
-  },
-  {
-    id: "professional",
-    name: "Professional",
-    monthlyPrice: PLAN_PRICES.professional.monthly,
-    yearlyPrice: PLAN_PRICES.professional.yearly,
-    description: "Agencies & marketing teams",
-    icon: Gem,
-    features: [
-      `${PLAN_LIMITS.professional.creditsPerMonth} credits/month`,
-      "All video lengths",
-      "4K quality",
-      "All styles + premium effects",
-      "Full narration + multilingual",
-      "3 voice clones",
-      "Unlimited infographics",
-      "Full brand kit",
-      "Priority support (12h)",
-    ],
-    excluded: [],
-    cta: "Upgrade to Professional",
-    popular: false,
-    monthlyPriceId: STRIPE_PLANS.professional.monthly.priceId,
-    yearlyPriceId: STRIPE_PLANS.professional.yearly.priceId,
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    monthlyPrice: PLAN_PRICES.enterprise.monthly,
-    yearlyPrice: PLAN_PRICES.enterprise.yearly,
-    description: "Large organizations",
-    icon: Building2,
-    features: [
-      "Unlimited credits (fair use)",
-      "4K+ quality (up to 8K)",
-      "Custom style development",
-      "Custom voice training",
-      "Unlimited voice clones",
-      "White-label solution",
-      "SSO/SAML integration",
-      "On-premise available",
-      "Custom SLA guarantee",
-      "Dedicated manager",
-      "24/7 premium support",
-      "Onboarding training",
-    ],
-    excluded: [],
-    cta: "Contact Sales",
-    popular: false,
-    monthlyPriceId: null,
-    yearlyPriceId: null,
-  },
-];
-
-const creditPackages = [
-  { credits: 15 as const, price: CREDIT_PACK_PRICES[15].price, perCredit: CREDIT_PACK_PRICES[15].perCredit, priceId: CREDIT_PACKS[15].priceId },
-  { credits: 50 as const, price: CREDIT_PACK_PRICES[50].price, perCredit: CREDIT_PACK_PRICES[50].perCredit, priceId: CREDIT_PACKS[50].priceId },
-  { credits: 150 as const, price: CREDIT_PACK_PRICES[150].price, perCredit: CREDIT_PACK_PRICES[150].perCredit, popular: true, bestValue: true, priceId: CREDIT_PACKS[150].priceId },
-  { credits: 500 as const, price: CREDIT_PACK_PRICES[500].price, perCredit: CREDIT_PACK_PRICES[500].perCredit, priceId: CREDIT_PACKS[500].priceId },
-];
-
-const creditInfo = [
-  { type: "Short Video (<2 min)", credits: 1 },
-  { type: "Brief Video (<5 min)", credits: 2 },
-  { type: "Presentation (<10 min)", credits: 4 },
-  { type: "Infographic", credits: 1 },
-  { type: "Cinematic", credits: 12 },
-];
-
+import PlanCardGrid from "@/components/pricing/PlanCardGrid";
+import CreditBreakdownTable from "@/components/pricing/CreditBreakdownTable";
+import RoiCalculator from "@/components/pricing/RoiCalculator";
+import CreditTopUp from "@/components/pricing/CreditTopUp";
+import EnterpriseContactModal from "@/components/pricing/EnterpriseContactModal";
 
 function getCheckoutErrorMessage(error: unknown): string {
   const msg = (error instanceof Error ? error.message : String(error)).toLowerCase();
@@ -194,14 +38,16 @@ function getCheckoutErrorMessage(error: unknown): string {
     return "Connection error. Check your internet connection and try again.";
   return "Unable to start checkout. Please try again or contact support@motionmax.io.";
 }
+
 export default function Pricing() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
-  const { plan: currentPlan, createCheckout, openCustomerPortal, isLoading: isLoadingSub } = useSubscription();
+  const { plan: currentPlan, createCheckout, openCustomerPortal } = useSubscription();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [loadingCredits, setLoadingCredits] = useState<number | null>(null);
   const [showDowngradeDialog, setShowDowngradeDialog] = useState(false);
+  const [showEnterpriseModal, setShowEnterpriseModal] = useState(false);
   const [billingInterval, setBillingInterval] = useState<"monthly" | "yearly">("monthly");
 
   const handleDowngrade = async () => {
@@ -222,13 +68,9 @@ export default function Pricing() {
 
   const handleSubscribe = async (planId: string, priceId: string | null) => {
     if (!priceId) return;
-    
+
     if (!user) {
-      toast({
-        title: "Sign in required",
-        description: "Please sign in to subscribe to a plan",
-        variant: "destructive",
-      });
+      toast({ title: "Sign in required", description: "Please sign in to subscribe to a plan", variant: "destructive" });
       navigate("/auth");
       return;
     }
@@ -237,11 +79,7 @@ export default function Pricing() {
       setLoadingPlan(planId);
       await createCheckout(priceId, "subscription");
     } catch (error) {
-      toast({
-        title: "Error",
-        description: getCheckoutErrorMessage(error),
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: getCheckoutErrorMessage(error), variant: "destructive" });
     } finally {
       setLoadingPlan(null);
     }
@@ -249,11 +87,7 @@ export default function Pricing() {
 
   const handleBuyCredits = async (credits: 15 | 50 | 150 | 500, priceId: string) => {
     if (!user) {
-      toast({
-        title: "Sign in required",
-        description: "Please sign in to purchase credits",
-        variant: "destructive",
-      });
+      toast({ title: "Sign in required", description: "Please sign in to purchase credits", variant: "destructive" });
       navigate("/auth");
       return;
     }
@@ -262,31 +96,10 @@ export default function Pricing() {
       setLoadingCredits(credits);
       await createCheckout(priceId, "payment");
     } catch (error) {
-      toast({
-        title: "Error",
-        description: getCheckoutErrorMessage(error),
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: getCheckoutErrorMessage(error), variant: "destructive" });
     } finally {
       setLoadingCredits(null);
     }
-  };
-
-  const getPlanCta = (plan: typeof plans[0]) => {
-    if (plan.id === currentPlan) {
-      return "Current Plan";
-    }
-    if (plan.id === "free" && currentPlan !== "free") {
-      return "Downgrade to Free";
-    }
-    return plan.cta;
-  };
-
-  const isPlanDisabled = (plan: typeof plans[0]) => {
-    if (plan.id === "free") return currentPlan === "free";
-    if (plan.id === currentPlan) return true;
-    if (plan.id === "enterprise") return false;
-    return false;
   };
 
   return (
@@ -339,246 +152,40 @@ export default function Pricing() {
               </span>
               <Badge variant="secondary" className="bg-primary/10 text-primary text-xs">{`Save ${yearlyDiscountPercent()}%`}</Badge>
             </div>
+
+            {/* Money-Back Guarantee */}
+            <div className="flex items-center justify-center gap-2 mt-4">
+              <ShieldCheck className="h-4 w-4 text-green-600 dark:text-green-400" />
+              <span className="text-xs font-medium text-green-600 dark:text-green-400">
+                7-Day Money-Back Guarantee — No questions asked
+              </span>
+            </div>
           </div>
 
           {/* Pricing Cards */}
-          <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            {plans.map((plan, index) => {
-              const Icon = plan.icon;
-              const isCurrentPlan = plan.id === currentPlan;
-              const isDisabled = isPlanDisabled(plan);
-              const isLoading = loadingPlan === plan.id;
-              
-              return (
-                <motion.div
-                  key={plan.name}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                >
-                  <Card
-                    className={cn(
-                      "relative h-full border-border/50 bg-card/50 shadow-sm transition-all hover:shadow-md flex flex-col",
-                      plan.popular && "border-primary/50 bg-gradient-to-b from-primary/5 to-transparent",
-                      isCurrentPlan && "ring-2 ring-primary"
-                    )}
-                  >
-                    {plan.popular && !isCurrentPlan && (
-                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                        <Badge className="bg-primary text-primary-foreground">Most Popular</Badge>
-                      </div>
-                    )}
-                    {isCurrentPlan && (
-                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                        <Badge className="bg-primary text-primary-foreground">Your Plan</Badge>
-                      </div>
-                    )}
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className={cn(
-                          "flex h-8 w-8 items-center justify-center rounded-lg",
-                          plan.popular || isCurrentPlan ? "bg-primary/20" : "bg-muted"
-                        )}>
-                          <Icon className={cn(
-                            "h-4 w-4",
-                            plan.popular || isCurrentPlan ? "text-primary" : "text-muted-foreground"
-                          )} />
-                        </div>
-                        <CardTitle className="text-base sm:text-lg">{plan.name}</CardTitle>
-                      </div>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-2xl sm:text-3xl font-bold">
-                          {billingInterval === "yearly" ? plan.yearlyPrice : plan.monthlyPrice}
-                        </span>
-                        {plan.id !== "free" && plan.id !== "enterprise" && (
-                          <span className="text-sm text-muted-foreground">
-                            /mo
-                          </span>
-                        )}
-                      </div>
-                      {billingInterval === "yearly" && plan.id !== "free" && plan.id !== "enterprise" && (
-                        <p className="text-xs text-primary">
-                          Billed yearly (${(parseFloat(plan.yearlyPrice.replace("$", "")) * 12).toFixed(0)}/yr)
-                        </p>
-                      )}
-                      <CardDescription className="text-xs sm:text-sm">{plan.description}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3 flex-1 flex flex-col">
-                      <ul className="space-y-1.5 flex-1">
-                        {plan.features.map((feature) => (
-                          <li key={feature} className="flex items-start gap-2 text-xs">
-                            <Check className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
-                            <span className="text-muted-foreground">{feature}</span>
-                          </li>
-                        ))}
-                        {plan.excluded.map((feature) => (
-                          <li key={feature} className="flex items-start gap-2 text-xs">
-                            <X className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0 mt-0.5" />
-                            <span className="text-muted-foreground/50 line-through">{feature}</span>
-                          </li>
-                        ))}
-                      </ul>
-                      <div className="pt-2">
-                        <Button
-                          className={cn(
-                            "w-full rounded-full text-sm",
-                            plan.popular || isCurrentPlan
-                              ? "bg-primary text-primary-foreground" 
-                              : isDisabled 
-                                ? "bg-muted text-muted-foreground cursor-not-allowed"
-                                : "bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
-                          )}
-                          disabled={isDisabled || isLoading}
-                          onClick={() => {
-                            if (plan.id === "enterprise") {
-                              window.open("mailto:support@motionmax.io?subject=Enterprise%20Inquiry", "_blank");
-                            } else if (plan.id === "free" && currentPlan !== "free") {
-                              setShowDowngradeDialog(true);
-                            } else {
-                              const priceId = billingInterval === "yearly" ? plan.yearlyPriceId : plan.monthlyPriceId;
-                              if (priceId) handleSubscribe(plan.id, priceId);
-                            }
-                          }}
-                        >
-                          {isLoading ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                              Processing...
-                            </>
-                          ) : (
-                            getPlanCta(plan)
-                          )}
-                        </Button>
-                      </div>
-                      {plan.id === "free" && currentPlan !== "free" && (
-                        <div className="flex items-start gap-1.5 p-2 rounded-md bg-muted/50">
-                          <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
-                          <p className="text-[10px] text-muted-foreground leading-tight">
-                            When downgrading, you keep remaining credits until billing period ends. No refunds.
-                          </p>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              );
-            })}
-          </div>
+          <PlanCardGrid
+            plans={PLANS}
+            currentPlan={currentPlan}
+            billingInterval={billingInterval}
+            loadingPlan={loadingPlan}
+            onSubscribe={handleSubscribe}
+            onDowngrade={() => setShowDowngradeDialog(true)}
+            onEnterprise={() => setShowEnterpriseModal(true)}
+          />
 
-          {/* Credit System Info */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="mt-10 sm:mt-14"
-          >
-            <div className="text-center mb-6">
-              <h2 className="text-lg sm:text-xl font-semibold text-foreground">
-                How Credits Work
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Each content type uses a different amount of credits
-              </p>
-            </div>
-            <div className="flex flex-wrap justify-center gap-3 max-w-2xl mx-auto">
-              {creditInfo.map((item) => (
-                <div
-                  key={item.type}
-                  className="flex items-center gap-2 px-3 py-2 rounded-full bg-muted/50 border border-border/50"
-                >
-                  <span className="text-xs text-muted-foreground">{item.type}</span>
-                  <Badge variant="secondary" className="text-xs">
-                    {item.credits} {item.credits === 1 ? "credit" : "credits"}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </motion.div>
+          {/* Credit Breakdown Table */}
+          <CreditBreakdownTable />
 
-          {/* Credit Top-Up Section */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className="mt-10 sm:mt-14"
-          >
-            <div className="text-center mb-6 sm:mb-8">
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground flex items-center justify-center gap-2">
-                <Plus className="h-5 w-5 text-primary" />
-                Credit Top-Up Packs
-              </h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Need more credits? Purchase additional packs anytime. Credits never expire.
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Available for Starter tier and above
-              </p>
-            </div>
+          {/* ROI Calculator */}
+          <RoiCalculator />
 
-            <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4 max-w-3xl mx-auto">
-              {creditPackages.map((pkg, index) => {
-                const isLoading = loadingCredits === pkg.credits;
-                const canBuy = currentPlan !== "free";
-                
-                return (
-                  <motion.div
-                    key={pkg.credits}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.6 + index * 0.05 }}
-                  >
-                    <Card
-                      className={cn(
-                        "relative border-border/50 bg-card/50 shadow-sm transition-all hover:shadow-md",
-                        canBuy && "cursor-pointer hover:border-primary/50",
-                        !canBuy && "opacity-60",
-                        pkg.popular && "border-primary/50 ring-1 ring-primary/20",
-                        pkg.bestValue && "border-primary ring-2 ring-primary/30"
-                      )}
-                      onClick={() => canBuy && !isLoading && handleBuyCredits(pkg.credits, pkg.priceId)}
-                    >
-                      {pkg.popular && (
-                        <div className="absolute -top-2 right-2">
-                          <Badge variant="secondary" className="text-[10px]">Popular</Badge>
-                        </div>
-                      )}
-                      {pkg.bestValue && (
-                        <div className="absolute -top-2 right-2">
-                          <Badge className="bg-primary text-primary-foreground text-[10px]">Best Value</Badge>
-                        </div>
-                      )}
-                      <CardContent className="p-4 text-center">
-                        {isLoading ? (
-                          <div className="py-4 flex flex-col items-center gap-2">
-                            <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                            <span className="text-sm text-muted-foreground">Processing...</span>
-                          </div>
-                        ) : (
-                          <>
-                            <div className="text-2xl sm:text-3xl font-bold text-foreground">
-                              {pkg.credits}
-                            </div>
-                            <div className="text-xs text-muted-foreground">credits</div>
-                            <div className="mt-2 text-lg font-semibold text-foreground">
-                              {pkg.price}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {pkg.perCredit}/credit
-                            </div>
-                            {!canBuy && (
-                              <p className="mt-2 text-[10px] text-muted-foreground">
-                                Upgrade to Starter+
-                              </p>
-                            )}
-                          </>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </motion.div>
+          {/* Credit Top-Up Packs */}
+          <CreditTopUp
+            packages={CREDIT_PACKAGES}
+            currentPlan={currentPlan}
+            loadingCredits={loadingCredits}
+            onBuyCredits={handleBuyCredits}
+          />
 
           {/* Support Link */}
           <motion.div
@@ -619,6 +226,12 @@ export default function Pricing() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Enterprise Contact Modal */}
+      <EnterpriseContactModal
+        open={showEnterpriseModal}
+        onOpenChange={setShowEnterpriseModal}
+      />
     </div>
   );
 }

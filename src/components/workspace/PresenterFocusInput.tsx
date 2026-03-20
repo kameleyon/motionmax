@@ -6,7 +6,7 @@ interface PresenterFocusInputProps {
   onChange: (value: string) => void;
 }
 
-const MAX_PRESENTER_LENGTH = 500000;
+const MAX_PRESENTER_LENGTH = 500000; // 500K characters
 
 export function PresenterFocusInput({ value, onChange }: PresenterFocusInputProps) {
   return (
@@ -21,7 +21,7 @@ export function PresenterFocusInput({ value, onChange }: PresenterFocusInputProp
         onChange={(e) => onChange(e.target.value.slice(0, MAX_PRESENTER_LENGTH))}
       />
       <div className="text-right text-[10px] text-muted-foreground/50">
-        {value.length.toLocaleString()} / {MAX_PRESENTER_LENGTH.toLocaleString()}
+        {value.length.toLocaleString()} / {MAX_PRESENTER_LENGTH.toLocaleString()} characters
       </div>
       <div className="flex items-start gap-2 text-xs text-muted-foreground/70">
         <Lightbulb className="h-3.5 w-3.5 mt-0.5 shrink-0" />

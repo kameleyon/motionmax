@@ -29,6 +29,8 @@ import { useSubscription, validateGenerationAccess, getCreditsRequired, PLAN_LIM
 import { useToast } from "@/hooks/use-toast";
 import { UpgradeRequiredModal } from "@/components/modals/UpgradeRequiredModal";
 import { SubscriptionSuspendedModal } from "@/components/modals/SubscriptionSuspendedModal";
+import { TemplateSelector } from "./TemplateSelector";
+import { useWorkspaceDraft } from "@/hooks/useWorkspaceDraft";
 import type { WorkspaceHandle } from "./Doc2VideoWorkspace";
 import { useAdminLogs } from "@/hooks/useAdminLogs";
 import { AdminLogsPanel } from "./AdminLogsPanel";
@@ -73,6 +75,20 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
     const [showSuspendedModal, setShowSuspendedModal] = useState(false);
     const [suspendedStatus, setSuspendedStatus] = useState<"past_due" | "unpaid" | "canceled">("past_due");
 
+    // Auto-save draft to localStorage
+    const { clearDraft, loadDraft } = useWorkspaceDraft(
+      "storytelling",
+      { storyIdea, format, length, style, tone, genre, inspiration, presenterFocus, characterDescription },
+      generationState.step === "idle"
+    );
+
+    // Restore draft on mount if no project loaded
+    useEffect(() => {
+      if (initialProjectId) return;
+      const draft = loadDraft();
+      if (draft?.storyIdea) setStoryIdea(draft.storyIdea as string);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
     const canGenerate = storyIdea.trim().length > 0 && !generationState.isGenerating;
 
     // Get disabled formats based on plan (free users can only use landscape)
@@ -80,13 +96,26 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
     const disabledFormats: VideoFormat[] = (["landscape", "portrait", "square"] as VideoFormat[]).filter(
       f => !limits.allowedFormats.includes(f)
     );
+
+    // Map plan allowed lengths to story lengths: presentation → extended
+    const storyLengthMap: Record<string, StoryLength> = { short: "short", brief: "brief", presentation: "extended" };
+    const allowedStoryLengths = limits.allowedLengths.map(l => storyLengthMap[l]).filter(Boolean) as StoryLength[];
+    const disabledLengths: StoryLength[] = (["short", "brief", "extended"] as StoryLength[]).filter(
+      l => !allowedStoryLengths.includes(l)
+    );
     
-    // Auto-switch to allowed format if current format becomes disabled
+    // Auto-switch to allowed format/length if current selection becomes disabled
     useEffect(() => {
       if (disabledFormats.includes(format) && limits.allowedFormats.length > 0) {
         setFormat(limits.allowedFormats[0] as VideoFormat);
       }
     }, [plan, format, disabledFormats, limits.allowedFormats]);
+
+    useEffect(() => {
+      if (disabledLengths.includes(length) && allowedStoryLengths.length > 0) {
+        setLength(allowedStoryLengths[0]);
+      }
+    }, [plan, length, disabledLengths, allowedStoryLengths]);
 
     // Load project if projectId provided
     useEffect(() => {
@@ -308,7 +337,10 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
                   </div>
 
                   {/* Story Idea Input */}
-                  <StoryIdeaInput value={storyIdea} onChange={setStoryIdea} />
+                  <div className="space-y-2">
+                    <StoryIdeaInput value={storyIdea} onChange={setStoryIdea} />
+                    <TemplateSelector mode="storytelling" onSelectTemplate={setStoryIdea} />
+                  </div>
 
                   {/* Story Settings */}
                   <div className="space-y-4 sm:space-y-6 rounded-xl sm:rounded-2xl border border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm">
@@ -393,7 +425,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
                   <div className="space-y-4 sm:space-y-6 rounded-xl sm:rounded-2xl border border-border/50 bg-card/50 p-3 sm:p-6 backdrop-blur-sm shadow-sm overflow-hidden">
                     <FormatSelector selected={format} onSelect={setFormat} disabledFormats={disabledFormats} />
                     <div className="h-px bg-border/30" />
-                    <StorytellingLengthSelector selected={length} onSelect={setLength} />
+                    <StorytellingLengthSelector selected={length} onSelect={setLength} disabledLengths={disabledLengths} />
                     <div className="h-px bg-border/30" />
                     <StyleSelector
                       selected={style}

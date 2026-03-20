@@ -1,6 +1,6 @@
 import { useState, forwardRef, useImperativeHandle, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Play, AlertCircle, RotateCcw, ChevronDown, Lightbulb, Users, MessageSquareOff, Video } from "lucide-react";
+import { Play, AlertCircle, RotateCcw, ChevronDown, Lightbulb, Users, MessageSquareOff, Video, Info } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { WorkspaceLayout } from "@/components/layout/WorkspaceLayout";
@@ -20,7 +20,13 @@ import { useGenerationPipeline } from "@/hooks/useGenerationPipeline";
 import { useAdminLogs } from "@/hooks/useAdminLogs";
 import { AdminLogsPanel } from "./AdminLogsPanel";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Info } from "lucide-react";
+import { useSubscription, validateGenerationAccess, PLAN_LIMITS } from "@/hooks/useSubscription";
+import { useToast } from "@/hooks/use-toast";
+import { UpgradeRequiredModal } from "@/components/modals/UpgradeRequiredModal";
+import { SubscriptionSuspendedModal } from "@/components/modals/SubscriptionSuspendedModal";
+
+import { TemplateSelector } from "./TemplateSelector";
+import { useWorkspaceDraft } from "@/hooks/useWorkspaceDraft";
 
 import { getUserFriendlyErrorMessage } from "@/lib/errorMessages";
 
@@ -54,10 +60,55 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
     const { state: generationState, startGeneration, reset, loadProject } = useGenerationPipeline();
     const { isAdmin, adminLogs, showAdminLogs, setShowAdminLogs } = useAdminLogs(generationState.generationId ?? null, generationState.step);
 
+    // Subscription and plan validation
+    const { plan, creditsBalance, subscriptionStatus, checkSubscription } = useSubscription();
+    const { toast } = useToast();
+    const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+    const [upgradeReason, setUpgradeReason] = useState("");
+    const [showSuspendedModal, setShowSuspendedModal] = useState(false);
+    const [suspendedStatus, setSuspendedStatus] = useState<"past_due" | "unpaid" | "canceled">("past_due");
+
+    // Auto-save draft to localStorage
+    const { clearDraft, loadDraft, hasDraft } = useWorkspaceDraft(
+      "doc2video",
+      { content, format, length, style, customStyle, presenterFocus, characterDescription, brandMarkText },
+      generationState.step === "idle"
+    );
+
+    // Restore draft on mount if no project loaded
+    useEffect(() => {
+      if (initialProjectId) return;
+      const draft = loadDraft();
+      if (draft) {
+        if (draft.content) setContent(draft.content as string);
+        if (draft.presenterFocus) { setPresenterFocus(draft.presenterFocus as string); setPresenterFocusOpen(true); }
+        if (draft.characterDescription) { setCharacterDescription(draft.characterDescription as string); setCharacterDescOpen(true); }
+      }
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
     const canGenerate = content.trim().length > 0 && !generationState.isGenerating;
 
-    // All formats (landscape, portrait, square) are available for short
-    const disabledFormats: VideoFormat[] = [];
+    // Disable formats/lengths based on plan
+    const limits = PLAN_LIMITS[plan];
+    const disabledFormats: VideoFormat[] = (["landscape", "portrait", "square"] as VideoFormat[]).filter(
+      f => !limits.allowedFormats.includes(f)
+    );
+    const disabledLengths: VideoLength[] = (["short", "brief", "presentation"] as VideoLength[]).filter(
+      l => !limits.allowedLengths.includes(l)
+    );
+
+    // Auto-switch to allowed values if current selection becomes disabled
+    useEffect(() => {
+      if (disabledFormats.includes(format) && limits.allowedFormats.length > 0) {
+        setFormat(limits.allowedFormats[0] as VideoFormat);
+      }
+    }, [plan, format, disabledFormats, limits.allowedFormats]);
+
+    useEffect(() => {
+      if (disabledLengths.includes(length) && limits.allowedLengths.length > 0) {
+        setLength(limits.allowedLengths[0] as VideoLength);
+      }
+    }, [plan, length, disabledLengths, limits.allowedLengths]);
 
     // Load project if projectId provided
     useEffect(() => {
@@ -119,7 +170,39 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
     const handleGenerate = () => {
       if (content.trim().length === 0) return;
       if (generationState.isGenerating) return;
+
+      // Check for subscription issues first
+      if (subscriptionStatus === "past_due" || subscriptionStatus === "unpaid") {
+        setSuspendedStatus(subscriptionStatus as "past_due" | "unpaid");
+        setShowSuspendedModal(true);
+        return;
+      }
+
+      // Validate plan access before generation
+      const validation = validateGenerationAccess(
+        plan,
+        creditsBalance,
+        "doc2video",
+        length,
+        format,
+        brandMarkEnabled && brandMarkText.trim().length > 0,
+        style === "custom",
+        subscriptionStatus || undefined
+      );
+
+      if (!validation.canGenerate) {
+        toast({
+          variant: "destructive",
+          title: "Cannot Generate",
+          description: validation.error,
+        });
+        setUpgradeReason(validation.error || "Please upgrade your plan to continue.");
+        setShowUpgradeModal(true);
+        return;
+      }
+
       runGeneration();
+      setTimeout(() => checkSubscription(), 2000);
     };
 
     const handleRetry = () => {
@@ -258,7 +341,10 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
                   </div>
 
                   {/* Content Input */}
-                  <ContentInput content={content} onContentChange={setContent} />
+                  <div className="space-y-2">
+                    <ContentInput content={content} onContentChange={setContent} />
+                    <TemplateSelector mode="doc2video" onSelectTemplate={setContent} />
+                  </div>
 
                   {/* Collapsible Advanced Options */}
                   <div className="space-y-2 sm:space-y-3">
@@ -342,7 +428,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
                     {/* Length and Voice side by side on desktop, stacked on mobile */}
                     <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
                       <div className="flex-1">
-                        <LengthSelector selected={length} onSelect={setLength} />
+                        <LengthSelector selected={length} onSelect={setLength} disabledLengths={disabledLengths} />
                       </div>
                       <div className="sm:flex-shrink-0">
                         <VoiceSelector selected={voice} onSelect={setVoice} />
@@ -428,6 +514,20 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
                 </motion.div>
               )}
             </AnimatePresence>
+
+        {/* Modals */}
+        <UpgradeRequiredModal
+          open={showUpgradeModal}
+          onOpenChange={setShowUpgradeModal}
+          reason={upgradeReason}
+          showCreditsOption={plan !== "free"}
+        />
+
+        <SubscriptionSuspendedModal
+          open={showSuspendedModal}
+          onOpenChange={setShowSuspendedModal}
+          status={suspendedStatus}
+        />
       </WorkspaceLayout>
     );
   }

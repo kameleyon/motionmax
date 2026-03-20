@@ -23,14 +23,14 @@ BEGIN
   END IF;
 END$$;
 
--- 3. Subscription Check: user_subscriptions WHERE user_id = ? AND status = 'active'
+-- 3. Subscription Check: subscriptions WHERE user_id = ? AND status = 'active'
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_indexes WHERE indexname = 'idx_user_subs_user_status'
+    SELECT 1 FROM pg_indexes WHERE indexname = 'idx_subs_user_status'
   ) THEN
-    CREATE INDEX idx_user_subs_user_status
-      ON user_subscriptions(user_id, status);
+    CREATE INDEX idx_subs_user_status
+      ON subscriptions(user_id, status);
   END IF;
 END$$;
 

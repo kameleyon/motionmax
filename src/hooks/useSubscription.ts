@@ -34,28 +34,88 @@ export interface SubscriptionState {
 
 const SUBSCRIPTION_QUERY_KEY = ["subscription"] as const;
 
-// Fetch function for React Query
-async function fetchSubscription(accessToken: string | undefined): Promise<SubscriptionState> {
-  if (!accessToken) {
-    return {
-      subscribed: false,
-      plan: "free",
-      subscriptionStatus: null,
-      subscriptionEnd: null,
-      cancelAtPeriodEnd: false,
-      creditsBalance: 0,
-    };
+const FREE_STATE: SubscriptionState = {
+  subscribed: false,
+  plan: "free",
+  subscriptionStatus: null,
+  subscriptionEnd: null,
+  cancelAtPeriodEnd: false,
+  creditsBalance: 0,
+};
+
+/**
+ * Direct DB fallback when the edge function is unreachable.
+ * Queries the subscriptions + user_credits tables directly so users
+ * keep their plan even if the edge function is temporarily down.
+ */
+async function fetchSubscriptionFromDB(): Promise<SubscriptionState> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return FREE_STATE;
+
+  const [subResult, creditResult] = await Promise.all([
+    supabase
+      .from("subscriptions")
+      .select("plan_name, status, current_period_end, cancel_at_period_end")
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle(),
+    supabase
+      .from("user_credits")
+      .select("credits_balance")
+      .eq("user_id", user.id)
+      .maybeSingle(),
+  ]);
+
+  const sub = subResult.data;
+  const credits = creditResult.data?.credits_balance ?? 0;
+
+  if (!sub) {
+    return { ...FREE_STATE, creditsBalance: credits };
   }
 
+  return {
+    subscribed: true,
+    plan: (sub.plan_name as PlanTier) || "free",
+    subscriptionStatus: sub.cancel_at_period_end ? "canceling" : "active",
+    subscriptionEnd: sub.current_period_end || null,
+    cancelAtPeriodEnd: sub.cancel_at_period_end || false,
+    creditsBalance: credits,
+  };
+}
+
+function parseResponse(d: Record<string, unknown>): SubscriptionState {
+  return {
+    subscribed: (d.subscribed as boolean) || false,
+    plan: (d.plan as PlanTier) || "free",
+    subscriptionStatus: (d.subscription_status as string) || (d.subscribed ? "active" : null),
+    subscriptionEnd: (d.subscription_end as string) || null,
+    cancelAtPeriodEnd: (d.cancel_at_period_end as boolean) || false,
+    creditsBalance: (d.credits_balance as number) || 0,
+  };
+}
+
+// Fetch function for React Query
+async function fetchSubscription(accessToken: string | undefined): Promise<SubscriptionState> {
+  if (!accessToken) return FREE_STATE;
+
   const { data, error } = await supabase.functions.invoke("check-subscription", {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
 
-  // Handle token expiration - supabase.functions.invoke puts non-2xx responses
-  // in error with message like "Edge Function returned a non-2xx status code"
-  // and the response body may be in data or need parsing from error context
+  // Edge function unreachable (network error, deploy in progress, etc.)
+  // Fall back to direct DB query so users keep their subscription status
+  const isNetworkError =
+    error?.name === "FunctionsFetchError" ||
+    error?.message?.includes("Failed to send") ||
+    error?.message?.includes("Failed to fetch") ||
+    error?.message?.includes("NetworkError");
+
+  if (isNetworkError) {
+    console.warn("[useSubscription] Edge function unreachable, falling back to DB query");
+    return fetchSubscriptionFromDB();
+  }
+
+  // Handle token expiration
   const isTokenExpired =
     error?.message?.includes("401") ||
     error?.message?.toLowerCase().includes("non-2xx") ||
@@ -65,44 +125,22 @@ async function fetchSubscription(accessToken: string | undefined): Promise<Subsc
   if (isTokenExpired) {
     const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
     if (refreshError || !refreshData.session) {
-      // Session is truly dead — sign out to trigger redirect to /auth
       await supabase.auth.signOut();
-      return {
-        subscribed: false,
-        plan: "free" as const,
-        subscriptionStatus: null,
-        subscriptionEnd: null,
-        cancelAtPeriodEnd: false,
-        creditsBalance: 0,
-      };
+      return FREE_STATE;
     }
-    // Retry with refreshed token
     const { data: retryData, error: retryError } = await supabase.functions.invoke("check-subscription", {
-      headers: {
-        Authorization: `Bearer ${refreshData.session.access_token}`,
-      },
+      headers: { Authorization: `Bearer ${refreshData.session.access_token}` },
     });
+    // If retry also fails with network error, fall back to DB
+    if (retryError?.name === "FunctionsFetchError" || retryError?.message?.includes("Failed to send")) {
+      return fetchSubscriptionFromDB();
+    }
     if (retryError) throw retryError;
-    return {
-      subscribed: retryData.subscribed || false,
-      plan: retryData.plan || "free",
-      subscriptionStatus: retryData.subscription_status || (retryData.subscribed ? "active" : null),
-      subscriptionEnd: retryData.subscription_end || null,
-      cancelAtPeriodEnd: retryData.cancel_at_period_end || false,
-      creditsBalance: retryData.credits_balance || 0,
-    };
+    return parseResponse(retryData);
   }
 
   if (error) throw error;
-
-  return {
-    subscribed: data.subscribed || false,
-    plan: data.plan || "free",
-    subscriptionStatus: data.subscription_status || (data.subscribed ? "active" : null),
-    subscriptionEnd: data.subscription_end || null,
-    cancelAtPeriodEnd: data.cancel_at_period_end || false,
-    creditsBalance: data.credits_balance || 0,
-  };
+  return parseResponse(data);
 }
 
 export function useSubscription() {

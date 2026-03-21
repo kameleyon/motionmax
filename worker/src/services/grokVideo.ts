@@ -66,13 +66,17 @@ export async function generateGrokVideo(
   try {
     const output = await replicate.run("xai/grok-imagine-video", { input: replicateInput });
 
-    // Replicate returns a FileOutput with a .url() method
-    let outputUrl: string | null = null;
+    // Replicate FileOutput: coerce to string via .url() or String()
+    let outputUrl = "";
     if (output && typeof (output as any).url === "function") {
-      outputUrl = (output as any).url();
+      const u = (output as any).url();
+      outputUrl = typeof u === "string" ? u : String(u ?? "");
     } else if (typeof output === "string") {
       outputUrl = output;
-    } else {
+    } else if (output && typeof (output as any).href === "string") {
+      // URL object
+      outputUrl = (output as any).href;
+    } else if (output) {
       outputUrl = String(output);
     }
 
@@ -80,7 +84,7 @@ export async function generateGrokVideo(
       return { url: null, provider: "Grok Video", error: "No output URL returned" };
     }
 
-    console.log(`[GrokVideo] ✅ Complete — ${outputUrl.substring(0, 80)}…`);
+    console.log(`[GrokVideo] ✅ Complete — ${String(outputUrl).substring(0, 80)}…`);
     return { url: outputUrl, provider: "Grok Video" };
   } catch (err: any) {
     const msg = err?.message || String(err);

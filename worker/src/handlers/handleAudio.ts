@@ -83,11 +83,10 @@ export async function handleAudioPhase(
   }
   config.voiceGender = voiceGender;
 
-  // Haitian Creole detection from presenter_focus field — always male voice
+  // Haitian Creole detection from presenter_focus field
   const presenterFocus: string = generation.projects?.presenter_focus || "";
   if (presenterFocus && isHaitianCreole(presenterFocus)) {
     config.forceHaitianCreole = true;
-    config.voiceGender = "male";
   }
 
   const scenes = (generation.scenes || []) as any[];

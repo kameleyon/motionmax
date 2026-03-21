@@ -80,11 +80,10 @@ export async function handleRegenerateAudio(
   if (voiceId) config.customVoiceId = voiceId;
   if (voiceGender) config.voiceGender = voiceGender;
 
-  // Haitian Creole detection → always male Gemini voice
+  // Haitian Creole detection → Google TTS (3 API keys)
   const presenterFocus: string = (generation.projects as any)?.presenter_focus || "";
   if (presenterFocus && isHaitianCreole(presenterFocus)) {
     config.forceHaitianCreole = true;
-    config.voiceGender = "male";
   }
 
   const scenes: any[] = generation.scenes || [];

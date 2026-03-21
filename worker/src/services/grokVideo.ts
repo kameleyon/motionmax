@@ -40,9 +40,9 @@ function mapFormatToAspectRatio(format: string): GrokAspectRatio {
 export async function generateGrokVideo(
   input: GrokVideoInput,
 ): Promise<GrokVideoResult> {
-  const apiToken = process.env.REPLICATE_API_TOKEN;
+  const apiToken = process.env.REPLICATE_API_TOKEN || process.env.REPLICATE_API_KEY;
   if (!apiToken) {
-    return { url: null, provider: "Grok Video", error: "REPLICATE_API_TOKEN not configured" };
+    return { url: null, provider: "Grok Video", error: "REPLICATE_API_TOKEN / REPLICATE_API_KEY not configured" };
   }
 
   const replicate = new Replicate({ auth: apiToken });

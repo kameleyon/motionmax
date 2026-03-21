@@ -9,6 +9,7 @@
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
+import { isHaitianCreole } from "../services/audioWavUtils.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -62,10 +63,10 @@ export async function handleRegenerateAudio(
     message: `Regenerating audio for scene ${sceneIndex + 1}`,
   });
 
-  // Fetch generation + project voice settings
+  // Fetch generation + project voice settings (including presenter_focus for Creole detection)
   const { data: generation, error: genError } = await supabase
     .from("generations")
-    .select("scenes, projects!inner(voice_type, voice_id, voice_name)")
+    .select("scenes, projects!inner(voice_type, voice_id, voice_name, presenter_focus)")
     .eq("id", generationId)
     .single();
 
@@ -78,6 +79,13 @@ export async function handleRegenerateAudio(
 
   if (voiceId) config.customVoiceId = voiceId;
   if (voiceGender) config.voiceGender = voiceGender;
+
+  // Haitian Creole detection → always male Gemini voice
+  const presenterFocus: string = (generation.projects as any)?.presenter_focus || "";
+  if (presenterFocus && isHaitianCreole(presenterFocus)) {
+    config.forceHaitianCreole = true;
+    config.voiceGender = "male";
+  }
 
   const scenes: any[] = generation.scenes || [];
   if (sceneIndex < 0 || sceneIndex >= scenes.length) throw new Error("Invalid scene index");

@@ -76,16 +76,16 @@ export async function generateSceneAudio(
   const { projectId, googleApiKeys } = config;
   const gender = (config.voiceGender || "female").toLowerCase();
 
-  // ── 1. Haitian Creole → Gemini TTS (3 key rotation) ─────────────
+  // ── 1. Haitian Creole → Gemini TTS, always male voice ───────────
   if (config.forceHaitianCreole) {
     if (googleApiKeys.length === 0) {
       return { url: null, error: "No Google TTS API keys for Haitian Creole" };
     }
-    console.log(`[TTS] Scene ${scene.number}: Haitian Creole → Gemini TTS`);
+    console.log(`[TTS] Scene ${scene.number}: Haitian Creole → Gemini TTS (male voice)`);
     const result = await generateGeminiTTS(voiceoverText, scene.number, googleApiKeys, projectId);
     if (result.url) {
-      console.log(`✅ Scene ${scene.number}: Gemini TTS (Haitian Creole)`);
-      return { ...result, provider: "Gemini TTS (Haitian Creole)" };
+      console.log(`✅ Scene ${scene.number}: Gemini TTS (Haitian Creole, male)`);
+      return { ...result, provider: "Gemini TTS (Haitian Creole, male)" };
     }
     return { url: null, error: `Haitian Creole Gemini failed: ${result.error}` };
   }

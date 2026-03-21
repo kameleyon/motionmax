@@ -13,7 +13,7 @@
  * Same logic for generation AND regeneration.
  */
 
-import { sanitizeVoiceover } from "./audioWavUtils.js";
+import { sanitizeVoiceover, isHaitianCreole } from "./audioWavUtils.js";
 import {
   generateLemonfoxTTS,
   generateFishAudioTTS,
@@ -64,7 +64,12 @@ export async function generateSceneAudio(
   const { projectId, googleApiKeys } = config;
   const gender = (config.voiceGender || "female").toLowerCase();
   const isClone = !!config.customVoiceId;
-  const isCreole = !!config.forceHaitianCreole;
+
+  // Detect Haitian Creole from config flag OR from the voiceover text itself
+  const isCreole = config.forceHaitianCreole || isHaitianCreole(text);
+  if (isCreole && !config.forceHaitianCreole) {
+    console.log(`[TTS] Scene ${scene.number}: Auto-detected Haitian Creole from voiceover text`);
+  }
 
   // ════════════════════════════════════════════════════════════════
   //  HAITIAN CREOLE

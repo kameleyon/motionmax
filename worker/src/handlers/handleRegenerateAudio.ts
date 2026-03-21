@@ -80,9 +80,16 @@ export async function handleRegenerateAudio(
   if (voiceId) config.customVoiceId = voiceId;
   if (voiceGender) config.voiceGender = voiceGender;
 
-  // Haitian Creole detection → Google TTS (3 API keys)
+  // Haitian Creole detection — matches edge function pattern
   const presenterFocus: string = (generation.projects as any)?.presenter_focus || "";
-  if (presenterFocus && isHaitianCreole(presenterFocus)) {
+  const pfLower = presenterFocus.toLowerCase();
+  const forceCreoleFromPresenter =
+    pfLower.includes("haitian") ||
+    pfLower.includes("kreyòl") ||
+    pfLower.includes("kreyol") ||
+    pfLower.includes("creole") ||
+    isHaitianCreole(presenterFocus);
+  if (forceCreoleFromPresenter) {
     config.forceHaitianCreole = true;
   }
 

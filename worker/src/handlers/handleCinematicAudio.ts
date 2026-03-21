@@ -67,8 +67,16 @@ export async function handleCinematicAudio(
     config.customVoiceId = generation.projects.voice_id;
   }
 
+  // Haitian Creole detection — matches edge function pattern
   const presenterFocus: string = generation.projects?.presenter_focus || "";
-  if (presenterFocus && isHaitianCreole(presenterFocus)) {
+  const pfLower = presenterFocus.toLowerCase();
+  const forceCreoleFromPresenter =
+    pfLower.includes("haitian") ||
+    pfLower.includes("kreyòl") ||
+    pfLower.includes("kreyol") ||
+    pfLower.includes("creole") ||
+    isHaitianCreole(presenterFocus);
+  if (forceCreoleFromPresenter) {
     config.forceHaitianCreole = true;
   }
 

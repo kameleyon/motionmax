@@ -1,16 +1,13 @@
 /**
- * TTS provider router — exact routing rules:
+ * TTS provider router — mirrors edge function audioEngine.ts with modifications:
  *
- * ═══════════ ENGLISH ═══════════
- * Male (standard)   → LemonFox        → Fallback: Chatterbox (Replicate)
- * Female (standard) → Fish Audio      → Fallback: Chatterbox (Replicate)
- * Clone (any)       → ElevenLabs TTS  → NO fallback
+ * CASE 1: HC + Clone        → Gemini TTS → ElevenLabs STS (clone voice)
+ * CASE 2: English + Clone   → ElevenLabs TTS (no fallback)
+ * CASE 3: HC Standard       → Gemini TTS ONLY (no STS, no fallback)
+ * CASE 4: English Male      → LemonFox → Chatterbox (Replicate)
+ * CASE 5: English Female    → Fish Audio → Chatterbox (Replicate)
  *
- * ═══════════ HAITIAN CREOLE ═══════════
- * Standard (m/f)    → Google TTS (3 API keys) → NO fallback
- * Clone             → Google TTS (3 API keys) → ElevenLabs STS → NO fallback
- *
- * Same logic for generation AND regeneration.
+ * Creole detected from: config.forceHaitianCreole OR isHaitianCreole(text)
  */
 
 import { sanitizeVoiceover, isHaitianCreole } from "./audioWavUtils.js";
@@ -40,7 +37,7 @@ export interface AudioConfig {
   replicateApiKey: string;
   voiceGender?: string;           // "male" | "female"
   customVoiceId?: string;         // set when voice_type === "custom"
-  forceHaitianCreole?: boolean;
+  forceHaitianCreole?: boolean;   // from presenter_focus
 }
 
 export interface AudioResult {
@@ -56,62 +53,59 @@ export async function generateSceneAudio(
   scene: AudioScene,
   config: AudioConfig,
 ): Promise<AudioResult> {
-  const text = sanitizeVoiceover(scene.voiceover);
-  if (!text || text.length < 2) {
+  const voiceoverText = sanitizeVoiceover(scene.voiceover);
+  if (!voiceoverText || voiceoverText.length < 2) {
     return { url: null, error: "No voiceover text" };
   }
 
-  const { projectId, googleApiKeys } = config;
-  const gender = (config.voiceGender || "female").toLowerCase();
-  const isClone = !!config.customVoiceId;
+  const {
+    projectId,
+    googleApiKeys,
+    elevenLabsApiKey,
+    lemonfoxApiKey,
+    fishAudioApiKey,
+    replicateApiKey,
+    voiceGender = "female",
+    customVoiceId,
+    forceHaitianCreole = false,
+  } = config;
 
-  // Detect Haitian Creole from config flag OR from the voiceover text itself
-  const isCreole = config.forceHaitianCreole || isHaitianCreole(text);
-  if (isCreole && !config.forceHaitianCreole) {
+  // Detect Haitian Creole from config flag OR from voiceover text
+  const isHC = forceHaitianCreole || isHaitianCreole(voiceoverText);
+
+  if (forceHaitianCreole && !isHaitianCreole(voiceoverText)) {
+    console.log(`[TTS] Scene ${scene.number}: Forcing Haitian Creole from presenter_focus`);
+  }
+  if (!forceHaitianCreole && isHC) {
     console.log(`[TTS] Scene ${scene.number}: Auto-detected Haitian Creole from voiceover text`);
   }
 
-  // ════════════════════════════════════════════════════════════════
-  //  HAITIAN CREOLE
-  // ════════════════════════════════════════════════════════════════
+  // ========== CASE 1: Haitian Creole + Cloned Voice ==========
+  // Gemini TTS → ElevenLabs Speech-to-Speech (clone voice)
+  if (isHC && customVoiceId && elevenLabsApiKey && googleApiKeys.length > 0) {
+    console.log(`[TTS] Scene ${scene.number}: HC + Clone → Gemini TTS → ElevenLabs STS`);
 
-  if (isCreole) {
-    // Creole + Clone → Google TTS → ElevenLabs STS (no fallback)
-    if (isClone && config.elevenLabsApiKey) {
-      console.log(`[TTS] Scene ${scene.number}: Creole+Clone → Gemini → ElevenLabs STS`);
-      const baseResult = await generateGeminiTTS(text, scene.number, googleApiKeys, projectId);
-      if (!baseResult.url) {
-        return { url: null, error: `Creole base audio failed: ${baseResult.error}` };
-      }
-      const stsResult = await transformElevenLabsSTS(
-        baseResult.url, config.customVoiceId!, scene.number, config.elevenLabsApiKey, projectId,
-      );
-      if (stsResult.url) {
-        console.log(`✅ Scene ${scene.number}: Creole+Clone (Gemini → STS)`);
-        return { ...stsResult, provider: "Gemini → ElevenLabs STS (Creole clone)" };
-      }
-      return { url: null, error: `Creole STS failed: ${stsResult.error}` };
+    const geminiResult = await generateGeminiTTS(voiceoverText, scene.number, googleApiKeys, projectId);
+    if (!geminiResult.url) {
+      return { url: null, error: `HC clone base audio failed: ${geminiResult.error}` };
     }
 
-    // Creole standard (male or female) → Google TTS only (no fallback)
-    console.log(`[TTS] Scene ${scene.number}: Creole → Google TTS (${gender})`);
-    const result = await generateGeminiTTS(text, scene.number, googleApiKeys, projectId);
-    if (result.url) {
-      console.log(`✅ Scene ${scene.number}: Google TTS (Creole, ${gender})`);
-      return { ...result, provider: `Google TTS (Creole, ${gender})` };
+    const stsResult = await transformElevenLabsSTS(
+      geminiResult.url, customVoiceId, scene.number, elevenLabsApiKey, projectId,
+    );
+    if (stsResult.url) {
+      console.log(`✅ Scene ${scene.number}: Gemini TTS → ElevenLabs STS (HC clone)`);
+      return { ...stsResult, provider: "Gemini → ElevenLabs STS (HC clone)" };
     }
-    return { url: null, error: `Creole Google TTS failed: ${result.error}` };
+    return { url: null, error: `HC clone STS failed: ${stsResult.error}` };
   }
 
-  // ════════════════════════════════════════════════════════════════
-  //  ENGLISH
-  // ════════════════════════════════════════════════════════════════
-
-  // English + Clone → ElevenLabs TTS (no fallback)
-  if (isClone && config.elevenLabsApiKey) {
-    console.log(`[TTS] Scene ${scene.number}: English+Clone → ElevenLabs TTS`);
+  // ========== CASE 2: English + Cloned Voice ==========
+  // ElevenLabs TTS directly (no fallback)
+  if (customVoiceId && elevenLabsApiKey && !isHC) {
+    console.log(`[TTS] Scene ${scene.number}: English + Clone → ElevenLabs TTS`);
     const result = await generateElevenLabsTTS(
-      text, scene.number, config.customVoiceId!, config.elevenLabsApiKey, projectId,
+      voiceoverText, scene.number, customVoiceId, elevenLabsApiKey, projectId,
     );
     if (result.url) {
       console.log(`✅ Scene ${scene.number}: ElevenLabs TTS (clone)`);
@@ -120,43 +114,55 @@ export async function generateSceneAudio(
     return { url: null, error: `ElevenLabs clone TTS failed: ${result.error}` };
   }
 
-  // English Male → LemonFox → Fallback: Chatterbox (Replicate)
-  if (gender === "male") {
-    if (config.lemonfoxApiKey) {
+  // ========== CASE 3: Haitian Creole Standard ==========
+  // Gemini TTS ONLY — no STS, no fallback
+  if (isHC && googleApiKeys.length > 0) {
+    console.log(`[TTS] Scene ${scene.number}: HC standard → Gemini TTS (male Enceladus)`);
+    const result = await generateGeminiTTS(voiceoverText, scene.number, googleApiKeys, projectId);
+    if (result.url) {
+      console.log(`✅ Scene ${scene.number}: Gemini TTS (HC standard)`);
+      return { ...result, provider: "Gemini TTS (HC standard)" };
+    }
+    return { url: null, error: `HC Gemini TTS failed: ${result.error}` };
+  }
+
+  // ========== CASE 4: English Male ==========
+  // LemonFox → Chatterbox (Replicate)
+  if (voiceGender === "male") {
+    if (lemonfoxApiKey) {
       console.log(`[TTS] Scene ${scene.number}: English Male → LemonFox`);
-      const result = await generateLemonfoxTTS(text, scene.number, "male", config.lemonfoxApiKey, projectId);
+      const result = await generateLemonfoxTTS(voiceoverText, scene.number, "male", lemonfoxApiKey, projectId);
       if (result.url) {
         console.log(`✅ Scene ${scene.number}: LemonFox (male)`);
         return result;
       }
-      console.warn(`[TTS] Scene ${scene.number}: LemonFox failed, Chatterbox fallback`);
+      console.warn(`[TTS] Scene ${scene.number}: LemonFox failed (${result.error}), Chatterbox fallback`);
     }
-    // Fallback: Chatterbox via Replicate
-    if (config.replicateApiKey) {
-      const fb = await generateChatterboxTTS(text, scene.number, "male", config.replicateApiKey, projectId);
+    if (replicateApiKey) {
+      const fb = await generateChatterboxTTS(voiceoverText, scene.number, "male", replicateApiKey, projectId);
       if (fb.url) {
-        console.log(`✅ Scene ${scene.number}: Chatterbox fallback (male)`);
+        console.log(`✅ Scene ${scene.number}: Chatterbox (male fallback)`);
         return fb;
       }
     }
     return { url: null, error: "English male: LemonFox + Chatterbox both failed" };
   }
 
-  // English Female → Fish Audio → Fallback: Chatterbox (Replicate)
-  if (config.fishAudioApiKey) {
+  // ========== CASE 5: English Female ==========
+  // Fish Audio → Chatterbox (Replicate)
+  if (fishAudioApiKey) {
     console.log(`[TTS] Scene ${scene.number}: English Female → Fish Audio`);
-    const result = await generateFishAudioTTS(text, scene.number, config.fishAudioApiKey, projectId);
+    const result = await generateFishAudioTTS(voiceoverText, scene.number, fishAudioApiKey, projectId);
     if (result.url) {
       console.log(`✅ Scene ${scene.number}: Fish Audio (female)`);
       return result;
     }
-    console.warn(`[TTS] Scene ${scene.number}: Fish Audio failed, Chatterbox fallback`);
+    console.warn(`[TTS] Scene ${scene.number}: Fish Audio failed (${result.error}), Chatterbox fallback`);
   }
-  // Fallback: Chatterbox via Replicate
-  if (config.replicateApiKey) {
-    const fb = await generateChatterboxTTS(text, scene.number, "female", config.replicateApiKey, projectId);
+  if (replicateApiKey) {
+    const fb = await generateChatterboxTTS(voiceoverText, scene.number, "female", replicateApiKey, projectId);
     if (fb.url) {
-      console.log(`✅ Scene ${scene.number}: Chatterbox fallback (female)`);
+      console.log(`✅ Scene ${scene.number}: Chatterbox (female fallback)`);
       return fb;
     }
   }

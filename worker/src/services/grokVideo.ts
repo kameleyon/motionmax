@@ -4,6 +4,8 @@
  * - No sound
  * - 5-second duration
  * - Respect project aspect ratio (landscape → 16:9, portrait → 9:16, square → 1:1)
+ *
+ * Requires env var: REPLICATE_API_TOKEN
  */
 
 import Replicate from "replicate";
@@ -40,12 +42,12 @@ function mapFormatToAspectRatio(format: string): GrokAspectRatio {
 export async function generateGrokVideo(
   input: GrokVideoInput,
 ): Promise<GrokVideoResult> {
-  const apiToken = process.env.REPLICATE_API_TOKEN || process.env.REPLICATE_API_KEY;
-  if (!apiToken) {
-    return { url: null, provider: "Grok Video", error: "REPLICATE_API_TOKEN / REPLICATE_API_KEY not configured" };
+  // Replicate client auto-reads REPLICATE_API_TOKEN from env
+  if (!process.env.REPLICATE_API_TOKEN) {
+    return { url: null, provider: "Grok Video", error: "REPLICATE_API_TOKEN not set" };
   }
 
-  const replicate = new Replicate({ auth: apiToken });
+  const replicate = new Replicate();
   const aspectRatio = mapFormatToAspectRatio(input.format);
 
   const replicateInput: Record<string, unknown> = {
@@ -65,11 +67,14 @@ export async function generateGrokVideo(
     const output = await replicate.run("xai/grok-imagine-video", { input: replicateInput });
 
     // Replicate returns a FileOutput with a .url() method
-    const outputUrl = typeof output === "string"
-      ? output
-      : typeof (output as any)?.url === "function"
-        ? (output as any).url()
-        : String(output);
+    let outputUrl: string | null = null;
+    if (output && typeof (output as any).url === "function") {
+      outputUrl = (output as any).url();
+    } else if (typeof output === "string") {
+      outputUrl = output;
+    } else {
+      outputUrl = String(output);
+    }
 
     if (!outputUrl || outputUrl === "null" || outputUrl === "undefined") {
       return { url: null, provider: "Grok Video", error: "No output URL returned" };

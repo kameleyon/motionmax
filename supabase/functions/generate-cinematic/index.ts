@@ -1,4 +1,5 @@
-﻿import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+﻿// @ts-nocheck — Deno edge function; not compatible with VS Code's Node.js TypeScript checker
+import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decode as base64Decode, encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import {
@@ -40,12 +41,14 @@ interface CinematicRequest {
   generationId?: string;
   sceneIndex?: number;
   imageModification?: string;
+  regenerate?: boolean;
 }
 
 interface Scene {
   number: number;
   voiceover: string;
   visualPrompt: string;
+  visual_prompt?: string;  // Legacy alias for backward compatibility
   visualStyle: string;
   duration: number;
   audioUrl?: string;
@@ -1687,7 +1690,7 @@ serve(async (req) => {
         // Both initial gen and regen use Hypereal Seedance 1.5
         // Initial = T2V (text-to-video, no image, 5s), Regen = I2V (image-to-video)
         if (isRegeneration) {
-          const predictionId = await startSeedance(scene, scene.imageUrl, format, replicateToken);
+          const predictionId = await startSeedance(scene, scene.imageUrl || "", format, replicateToken);
           scenes[idx] = {
             ...scene,
             videoPredictionId: predictionId,

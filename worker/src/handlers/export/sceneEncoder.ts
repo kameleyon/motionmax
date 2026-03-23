@@ -130,8 +130,8 @@ async function muxVideoAudio(
     probeDuration(audioPath),
   ]);
 
-  // Stretch video to audio duration + 5s buffer — video MUST outlast audio
-  const AUDIO_SAFETY_BUFFER = 5;
+  // Stretch video to audio duration + 2.5s buffer — video MUST outlast audio
+  const AUDIO_SAFETY_BUFFER = 2.5;
   const targetDur = audioDur + AUDIO_SAFETY_BUFFER;
   const ratio = targetDur / videoDur;
   console.log(

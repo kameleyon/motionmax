@@ -115,9 +115,9 @@ async function imageAudioToClip(
   return audioDur;
 }
 
-/** Mux video + audio: stretch video to match audio duration.
- *  Adds a 3-second safety buffer to the video so the audio is
- *  never truncated at the end (especially on the last scene). */
+/** Mux video + audio: video is stretched to be LONGER than audio.
+ *  Audio is the master clock — the output plays the full audio track.
+ *  Video extends a few seconds past audio end (frozen last frame). */
 async function muxVideoAudio(
   videoPath: string,
   audioPath: string,
@@ -130,15 +130,15 @@ async function muxVideoAudio(
     probeDuration(audioPath),
   ]);
 
-  // Stretch video to audio duration + 3s buffer so audio is never truncated
-  const AUDIO_SAFETY_BUFFER = 3;
+  // Stretch video to audio duration + 5s buffer — video MUST outlast audio
+  const AUDIO_SAFETY_BUFFER = 5;
   const targetDur = audioDur + AUDIO_SAFETY_BUFFER;
   const ratio = targetDur / videoDur;
   console.log(
     `[SceneEncoder] Scene ${sceneIndex} mux: video=${videoDur.toFixed(1)}s audio=${audioDur.toFixed(1)}s target=${targetDur.toFixed(1)}s ratio=${ratio.toFixed(2)}x`
   );
 
-  // Pass 1: stretch + normalize video (overshoots by buffer amount)
+  // Pass 1: stretch + normalize video (overshoots audio by buffer)
   const stretchedVid = path.join(tempDir, `scene_${sceneIndex}_stretched.mp4`);
   await runFfmpeg([
     "-i", videoPath,
@@ -152,7 +152,9 @@ async function muxVideoAudio(
     stretchedVid,
   ]);
 
-  // Pass 2: merge with audio, trim to audio duration so we don't add silence
+  // Pass 2: merge with audio — NO -t trim, let audio play fully.
+  // The video is longer than the audio, so the audio track dictates
+  // the perceived clip length. Extra video frames are harmless.
   await runFfmpeg([
     "-i", stretchedVid,
     "-i", audioPath,
@@ -161,7 +163,6 @@ async function muxVideoAudio(
     "-c:v", "copy",
     "-c:a", "aac",
     "-b:a", "128k",
-    "-t", String(audioDur + 0.5),
     "-movflags", "+faststart",
     outputPath,
   ]);

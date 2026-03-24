@@ -10,10 +10,10 @@
  * CASE 5: English Female    → Fish Audio → Chatterbox (Replicate)
  *
  * Creole detected from: config.forceHaitianCreole OR isHaitianCreole(text)
- * French detected from: config.language === "fr"
+ * French detected from: config.language === "fr" OR isFrench(text) auto-detection
  */
 
-import { sanitizeVoiceover, isHaitianCreole } from "./audioWavUtils.js";
+import { sanitizeVoiceover, isHaitianCreole, isFrench } from "./audioWavUtils.js";
 import {
   generateLemonfoxTTS,
   generateFishAudioTTS,
@@ -75,13 +75,18 @@ export async function generateSceneAudio(
   } = config;
 
   // Detect Haitian Creole from config flag OR from voiceover text
-  const isHC = forceHaitianCreole || isHaitianCreole(voiceoverText);
+  const isHC = forceHaitianCreole || config.language === "ht" || isHaitianCreole(voiceoverText);
+  // Detect French from config OR from voiceover text (auto-detection for legacy projects)
+  const isFR = config.language === "fr" || (!isHC && isFrench(voiceoverText));
 
   if (forceHaitianCreole && !isHaitianCreole(voiceoverText)) {
     console.log(`[TTS] Scene ${scene.number}: Forcing Haitian Creole from presenter_focus`);
   }
   if (!forceHaitianCreole && isHC) {
     console.log(`[TTS] Scene ${scene.number}: Auto-detected Haitian Creole from voiceover text`);
+  }
+  if (isFR && config.language !== "fr") {
+    console.log(`[TTS] Scene ${scene.number}: Auto-detected French from voiceover text`);
   }
 
   // ========== CASE 1: Haitian Creole + Cloned Voice ==========
@@ -131,8 +136,8 @@ export async function generateSceneAudio(
   }
 
   // ========== CASE 3b: French Male ==========
-  // FishAudio with French male model
-  if (config.language === "fr" && voiceGender === "male" && fishAudioApiKey) {
+  // FishAudio with French male model (config OR auto-detected)
+  if (isFR && voiceGender === "male" && fishAudioApiKey) {
     console.log(`[TTS] Scene ${scene.number}: French Male → Fish Audio (FR male model)`);
     const result = await generateFishAudioTTS(
       voiceoverText, scene.number, fishAudioApiKey, projectId, "1c86c56391ab4fefb7d376c86c0cf605",
@@ -145,8 +150,8 @@ export async function generateSceneAudio(
   }
 
   // ========== CASE 3c: French Female ==========
-  // FishAudio with French female voice
-  if (config.language === "fr" && fishAudioApiKey) {
+  // FishAudio with French female voice (config OR auto-detected)
+  if (isFR && fishAudioApiKey) {
     console.log(`[TTS] Scene ${scene.number}: French Female → Fish Audio (FR female voice)`);
     const result = await generateFishAudioTTS(
       voiceoverText, scene.number, fishAudioApiKey, projectId, "42fe8376b029438e81dd2929c0889ce1",

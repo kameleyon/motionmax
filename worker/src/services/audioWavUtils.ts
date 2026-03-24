@@ -67,6 +67,25 @@ export function isHaitianCreole(text: string): boolean {
   return count >= 3;
 }
 
+/** Detect French text from common French words (same approach as isHaitianCreole). */
+export function isFrench(text: string): boolean {
+  const lower = text.toLowerCase();
+  const indicators = [
+    "le","la","les","un","une","des","du","de","et","est","sont","dans","pour","avec",
+    "sur","par","pas","plus","que","qui","ce","cette","ces","son","ses","nous","vous",
+    "ils","elles","mon","ton","leur","mais","ou","donc","comme","aussi","très","bien",
+    "alors","tout","tous","autre","même","être","avoir","faire","dire","aller","voir",
+    "savoir","pouvoir","falloir","vouloir","entre","après","avant","depuis","encore",
+    "toujours","jamais","beaucoup","peut","était","fait","monde","pendant","chaque",
+    "jusqu","parce","histoire","cependant","également","travers","devient","commence",
+  ];
+  let count = 0;
+  for (const w of indicators) {
+    if (new RegExp(`\\b${w}\\b`, "gi").test(lower)) count++;
+  }
+  return count >= 4;
+}
+
 export function splitTextIntoChunks(text: string, maxChars = 400): string[] {
   const sentences = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text];
   const chunks: string[] = [];

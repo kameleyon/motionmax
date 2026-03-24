@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { sleep, DEFAULT_ENDPOINT } from "./types";
+import { sleep, DEFAULT_ENDPOINT, CINEMATIC_ENDPOINT } from "./types";
 import { SUPABASE_URL } from "@/lib/supabaseUrl";
 
 const LOG = "[Pipeline:Network]";
@@ -146,6 +146,10 @@ export async function callPhase(
 ): Promise<any> {
   // Script phase → worker queue
   if (body.phase === "script") {
+    // Auto-detect cinematic from endpoint when projectType not explicitly set
+    if (endpoint === CINEMATIC_ENDPOINT && !body.projectType) {
+      body.projectType = "cinematic";
+    }
     return workerCallPhase(body, "generate_video", 8 * 60 * 1000);
   }
 

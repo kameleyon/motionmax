@@ -64,15 +64,20 @@ export async function handleExportVideo(
   userId?: string
 ) {
   const { project_id } = payload;
-  let scenes: any[] = Array.isArray(payload.scenes) ? payload.scenes : [];
 
-  logScenes("Payload", scenes);
+  // ALWAYS fetch latest scenes from DB to pick up regenerated images/audio.
+  // Payload scenes may be stale if a scene was regenerated after the export was queued.
+  let scenes: any[] = await fetchScenesFromDb(project_id);
+  logScenes("DB (fresh)", scenes);
 
-  // Fallback: fetch from DB when payload lacks usable URLs
+  // Fallback to payload only if DB returned nothing
   if (scenes.length === 0 || !hasUsableUrls(scenes)) {
-    console.warn(`[ExportVideo] Payload unusable — fetching from DB for ${project_id}`);
-    scenes = await fetchScenesFromDb(project_id);
-    logScenes("DB", scenes);
+    const payloadScenes: any[] = Array.isArray(payload.scenes) ? payload.scenes : [];
+    if (payloadScenes.length > 0 && hasUsableUrls(payloadScenes)) {
+      console.warn(`[ExportVideo] DB scenes unusable — using payload scenes for ${project_id}`);
+      scenes = payloadScenes;
+      logScenes("Payload (fallback)", scenes);
+    }
   }
 
   if (scenes.length === 0) {

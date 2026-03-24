@@ -163,6 +163,11 @@ export async function generateSceneAudio(
     return { url: null, error: `French female Fish Audio failed: ${result.error}` };
   }
 
+  // French with no Fish Audio API key — can't generate, don't fall through to English
+  if (isFR) {
+    return { url: null, error: "French TTS requires Fish Audio API key (FISH_AUDIO_API_KEY)" };
+  }
+
   // ========== CASE 4: English Male ==========
   // LemonFox → Chatterbox (Replicate)
   if (voiceGender === "male") {

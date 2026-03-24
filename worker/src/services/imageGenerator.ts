@@ -106,11 +106,17 @@ async function tryReplicate(
   apiKey: string,
   format: string,
   projectId: string,
+  imageInputs?: string[],
 ): Promise<string | null> {
   const aspectRatio = toAspectRatio(format);
 
   for (let attempt = 1; attempt <= REPLICATE_RETRIES; attempt++) {
     try {
+      const input: Record<string, unknown> = { prompt, aspect_ratio: aspectRatio, output_format: "webp" };
+      // Pass source images for edits (Replicate nano-banana-2 image_input)
+      if (imageInputs && imageInputs.length > 0) {
+        input.image_input = imageInputs;
+      }
       const createRes = await fetch(REPLICATE_API_URL, {
         method: "POST",
         headers: {
@@ -118,7 +124,7 @@ async function tryReplicate(
           "Content-Type": "application/json",
           Prefer: "wait",
         },
-        body: JSON.stringify({ input: { prompt, aspect_ratio: aspectRatio, output_format: "webp" } }),
+        body: JSON.stringify({ input }),
       });
 
       if (!createRes.ok) {
@@ -237,9 +243,9 @@ Professional illustration with dynamic composition and clear visual hierarchy. A
 
   console.log(`[ImageGen] Edit via Replicate (primary): "${editInstruction.substring(0, 80)}"`);
 
-  // Primary: Replicate nano-banana-2 for edits
+  // Primary: Replicate nano-banana-2 for edits — pass source image for editing
   if (replicateApiKey) {
-    const url = await tryReplicate(editPrompt, replicateApiKey, format || "landscape", projectId);
+    const url = await tryReplicate(editPrompt, replicateApiKey, format || "landscape", projectId, [imageUrl]);
     if (url) return url;
     console.warn("[ImageGen] Replicate exhausted for edit — falling back to Hypereal");
   }

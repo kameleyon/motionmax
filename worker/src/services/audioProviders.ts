@@ -295,8 +295,10 @@ export async function generateFishAudioTTS(
       body: JSON.stringify({ text, reference_id: referenceId, format: "mp3" }),
     });
     if (!res.ok) {
+      const errBody = await res.text().catch(() => "");
+      console.warn(`[FishAudio] Attempt ${attempt} failed (${res.status}): ${errBody.substring(0, 300)}`);
       if ((res.status === 429 || res.status >= 500) && attempt < 3) { await sleep(2000 * Math.pow(2, attempt-1)); continue; }
-      return { url: null, error: `Fish Audio ${res.status}` };
+      return { url: null, error: `Fish Audio ${res.status}: ${errBody.substring(0, 100)}` };
     }
     const bytes = new Uint8Array(await res.arrayBuffer());
     if (bytes.length < 100) return { url: null, error: "Empty audio" };

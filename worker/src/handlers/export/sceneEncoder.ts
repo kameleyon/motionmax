@@ -133,7 +133,7 @@ async function muxVideoAudio(
     probeDuration(audioPath),
   ]);
 
-  const SILENCE_BUFFER = 2;
+  const SILENCE_BUFFER = 1;
   const clipDuration = audioDur + SILENCE_BUFFER;
   const ratio = clipDuration / videoDur;
   console.log(

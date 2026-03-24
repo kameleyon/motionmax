@@ -132,6 +132,14 @@ export async function handleRegenerateImage(
     scenes[sceneIndex].imageUrls = [imageUrl];
   }
 
+  // Clear the stale videoUrl — it was generated from the old image.
+  // The export will use the new imageUrl + audioUrl to build the clip.
+  if (scenes[sceneIndex].videoUrl) {
+    console.log(`[RegenerateImage] Clearing stale videoUrl for scene ${sceneIndex + 1}`);
+    scenes[sceneIndex].videoUrl = undefined;
+    scenes[sceneIndex].videoPredictionId = undefined;
+  }
+
   await supabase.from("generations").update({ scenes }).eq("id", generationId);
 
   await writeSystemLog({

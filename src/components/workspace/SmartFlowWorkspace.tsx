@@ -212,6 +212,11 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
       // Restore voice setting - if voice_type is set and not undefined, voice was enabled
       const hasVoice = !!project.voice_type && project.voice_type !== "none";
       setEnableVoice(hasVoice);
+
+      // Restore language from voice_inclination
+      const savedLang = project.voice_inclination as Language | null;
+      if (savedLang === "en" || savedLang === "fr" || savedLang === "ht") setLanguage(savedLang);
+      else setLanguage("en");
     };
 
     useImperativeHandle(ref, () => ({

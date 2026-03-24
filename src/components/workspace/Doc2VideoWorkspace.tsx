@@ -273,8 +273,14 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
         setBrandMarkText("");
       }
 
-      // Restore character consistency
+      // Restore character consistency + expressions
       setCharacterConsistencyEnabled(project.character_consistency_enabled ?? false);
+      setDisableExpressions(project.disable_expressions ?? false);
+
+      // Restore language from voice_inclination
+      const savedLang = project.voice_inclination as Language | null;
+      if (savedLang === "en" || savedLang === "fr" || savedLang === "ht") setLanguage(savedLang);
+      else setLanguage("en");
     };
 
     useImperativeHandle(ref, () => ({

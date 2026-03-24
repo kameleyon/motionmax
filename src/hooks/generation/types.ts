@@ -108,6 +108,7 @@ export type ProjectRow = {
   story_tone?: string | null;
   story_genre?: string | null;
   voice_inclination?: string | null;
+  disable_expressions?: boolean | null;
   project_type?: string | null;
 };
 

@@ -119,31 +119,25 @@ function buildProjectInsert(
     format: payload.format || "landscape",
     length: payload.length || "brief",
     style: payload.style || "realistic",
-    brand_mark: payload.brandMark || null,
+    brand_mark: payload.brandMark || payload.brandName || null,
     status: "generating",
     project_type: projectType,
     voice_type: payload.voiceType || "standard",
     voice_id: payload.voiceId || null,
     voice_name: payload.voiceName || null,
-    voice_inclination: payload.language || null, // Store language for regeneration fallback
+    voice_inclination: payload.language || null,
+    // Store ALL shared params for every project type — enables reload/regenerate
+    presenter_focus: payload.presenterFocus || null,
+    character_description: payload.characterDescription || null,
+    character_consistency_enabled: payload.characterConsistencyEnabled || false,
+    disable_expressions: payload.disableExpressions || false,
   };
 
-  if (projectType === "doc2video") {
-    row.presenter_focus = payload.presenterFocus || null;
-    row.character_description = payload.characterDescription || null;
-  }
-
+  // Type-specific columns
   if (projectType === "storytelling") {
     row.inspiration_style = payload.inspiration || null;
     row.story_tone = payload.tone || null;
     row.story_genre = payload.genre || null;
-    row.character_description = payload.characterDescription || null;
-  }
-
-  if (projectType === "cinematic") {
-    row.presenter_focus = payload.presenterFocus || null;
-    row.character_description = payload.characterDescription || null;
-    row.character_consistency_enabled = payload.characterConsistencyEnabled || false;
   }
 
   return row;

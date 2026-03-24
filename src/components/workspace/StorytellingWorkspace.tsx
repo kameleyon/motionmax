@@ -297,6 +297,11 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
         setPresenterFocus(project.presenter_focus);
         setPresenterFocusOpen(true);
       }
+
+      // Restore language from voice_inclination
+      const savedLang = project.voice_inclination as Language | null;
+      if (savedLang === "en" || savedLang === "fr" || savedLang === "ht") setLanguage(savedLang);
+      else setLanguage("en");
     };
 
     useImperativeHandle(ref, () => ({

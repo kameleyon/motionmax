@@ -269,6 +269,11 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
       if (project.character_consistency_enabled) {
         setCharacterConsistencyEnabled(true);
       }
+
+      // Restore language from voice_inclination
+      const savedLang = project.voice_inclination as Language | null;
+      if (savedLang === "en" || savedLang === "fr" || savedLang === "ht") setLanguage(savedLang);
+      else setLanguage("en");
     };
 
     // Load project from URL if provided

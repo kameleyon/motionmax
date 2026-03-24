@@ -17,6 +17,9 @@ export type { StorytellingParams } from "./buildStorytelling.js";
 export { buildSmartFlowPrompt } from "./buildSmartFlow.js";
 export type { SmartFlowParams } from "./buildSmartFlow.js";
 
+export { buildCinematicPrompt } from "./buildCinematic.js";
+export type { CinematicParams } from "./buildCinematic.js";
+
 // ── callOpenRouterLLM ──────────────────────────────────────────────
 
 /**
@@ -31,18 +34,19 @@ export type { SmartFlowParams } from "./buildSmartFlow.js";
  */
 export async function callOpenRouterLLM(
   prompt: { system: string; user: string },
-  options: { maxTokens: number; model?: string; forceJson?: boolean },
+  options: { maxTokens: number; model?: string; forceJson?: boolean; temperature?: number },
 ): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
 
   const model = options.model || "anthropic/claude-sonnet-4.6";
-  console.log(`[OpenRouter] Calling ${model} (maxTokens=${options.maxTokens}, forceJson=${!!options.forceJson})`);
+  const temperature = options.temperature ?? 0.7;
+  console.log(`[OpenRouter] Calling ${model} (maxTokens=${options.maxTokens}, temp=${temperature}, forceJson=${!!options.forceJson})`);
 
   const requestBody: Record<string, unknown> = {
     model,
     max_tokens: options.maxTokens,
-    temperature: 0.7,
+    temperature,
     messages: [
       { role: "system", content: prompt.system },
       { role: "user", content: prompt.user },

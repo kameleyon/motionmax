@@ -34,6 +34,7 @@ export async function runCinematicPipeline(
   const scriptResult = await ctx.callPhase(
     {
       phase: "script",
+      projectType: "cinematic",
       content: params.content,
       format: params.format,
       length: params.length,

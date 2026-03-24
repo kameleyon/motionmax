@@ -161,8 +161,9 @@ export function useCinematicRegeneration(
 
         if (!result?.success) throw new Error(result?.error || "Image edit failed");
 
+        // Clear videoUrl — the cinematic clip was generated from the old image
         const nextScenes = scenes.map((s, i) =>
-          i === idx ? { ...s, imageUrl: result.imageUrl } : s
+          i === idx ? { ...s, imageUrl: result.imageUrl, videoUrl: undefined } : s
         );
         onScenesUpdate(nextScenes);
 
@@ -205,8 +206,9 @@ export function useCinematicRegeneration(
 
         if (!result?.success) throw new Error(result?.error || "Image regeneration failed");
 
+        // Clear videoUrl — the cinematic clip was generated from the old image
         const nextScenes = scenes.map((s, i) =>
-          i === idx ? { ...s, imageUrl: result.imageUrl } : s
+          i === idx ? { ...s, imageUrl: result.imageUrl, videoUrl: undefined } : s
         );
         onScenesUpdate(nextScenes);
 

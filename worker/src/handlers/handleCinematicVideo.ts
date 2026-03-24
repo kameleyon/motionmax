@@ -52,6 +52,10 @@ export async function handleCinematicVideo(
   const imageUrl = scene.imageUrl;
   if (!imageUrl) throw new Error(`Scene ${sceneIndex} has no imageUrl`);
 
+  // Snapshot the imageUrl used to generate the video — used later to detect
+  // if the user regenerated the image while the video was being created.
+  const sourceImageUrl = imageUrl;
+
   // Snapshot history for undo if regenerating
   if (regenerate) {
     const history = Array.isArray(scene._history) ? [...scene._history] : [];
@@ -89,6 +93,31 @@ export async function handleCinematicVideo(
 
     // ── 2. Fallback → Hypereal ──────────────────────────────────────
     finalVideoUrl = await tryHyperealFallback(videoPrompt, imageUrl, projectId, generationId, sceneIndex);
+  }
+
+  // ── Stale-image guard ────────────────────────────────────────────
+  // Re-read the scene from DB. If the imageUrl changed while we were
+  // generating the video, the clip is stale — discard it.
+  const { data: freshGen } = await supabase
+    .from("generations")
+    .select("scenes")
+    .eq("id", generationId)
+    .single();
+
+  const freshScenes = (freshGen?.scenes as any[]) ?? [];
+  const freshImageUrl = freshScenes[sceneIndex]?.imageUrl;
+
+  if (freshImageUrl && freshImageUrl !== sourceImageUrl) {
+    console.warn(
+      `[CinematicVideo] Scene ${sceneIndex}: imageUrl changed while video was generating — discarding stale video`,
+    );
+    await writeSystemLog({
+      jobId, projectId, userId, generationId,
+      category: "system_info",
+      eventType: "cinematic_video_stale_discarded",
+      message: `Scene ${sceneIndex} video discarded — source image was regenerated during generation`,
+    });
+    return { success: true, status: "stale_discarded", videoUrl: null, sceneIndex };
   }
 
   // Atomic update: only set this scene's videoUrl

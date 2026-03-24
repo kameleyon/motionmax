@@ -20,6 +20,7 @@ import {
   buildDoc2VideoPrompt,
   buildStorytellingPrompt,
   buildSmartFlowPrompt,
+  buildCinematicPrompt,
   callOpenRouterLLM,
 } from "../services/openrouter.js";
 import type { PromptResult } from "../services/openrouter.js";
@@ -34,6 +35,21 @@ import {
 
 function buildPrompt(projectType: string, p: Record<string, any>): PromptResult {
   switch (projectType) {
+    case "cinematic":
+      return buildCinematicPrompt({
+        content: p.content || "",
+        format: p.format || "landscape",
+        length: p.length || "brief",
+        style: p.style || "realistic",
+        customStyle: p.customStyle,
+        brandMark: p.brandMark,
+        presenterFocus: p.presenterFocus,
+        characterDescription: p.characterDescription,
+        voiceType: p.voiceType,
+        disableExpressions: p.disableExpressions === true,
+        characterConsistencyEnabled: p.characterConsistencyEnabled === true,
+      });
+
     case "storytelling":
       return buildStorytellingPrompt({
         storyIdea: p.storyIdea || p.content || "",
@@ -119,6 +135,12 @@ function buildProjectInsert(
     row.character_description = payload.characterDescription || null;
   }
 
+  if (projectType === "cinematic") {
+    row.presenter_focus = payload.presenterFocus || null;
+    row.character_description = payload.characterDescription || null;
+    row.character_consistency_enabled = payload.characterConsistencyEnabled || false;
+  }
+
   return row;
 }
 
@@ -151,9 +173,12 @@ export async function handleGenerateVideo(
 
   // ── Step 2: Call OpenRouter LLM ───────────────────────────────────
   await updateJobProgress(jobId, 10);
+  // All project types use 0.8 for creative output
+  const temperature = 0.8;
   const rawText = await callOpenRouterLLM(promptResult, {
     maxTokens: promptResult.maxTokens,
     forceJson: true,
+    temperature,
   });
 
   // ── Step 3: Parse LLM response ───────────────────────────────────

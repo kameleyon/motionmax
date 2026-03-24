@@ -134,10 +134,11 @@ export async function handleRegenerateImage(
 
   // Clear the stale videoUrl — it was generated from the old image.
   // The export will use the new imageUrl + audioUrl to build the clip.
+  // Use null (not undefined) so the key is explicitly set in the JSON column.
   if (scenes[sceneIndex].videoUrl) {
     console.log(`[RegenerateImage] Clearing stale videoUrl for scene ${sceneIndex + 1}`);
-    scenes[sceneIndex].videoUrl = undefined;
-    scenes[sceneIndex].videoPredictionId = undefined;
+    scenes[sceneIndex].videoUrl = null;
+    scenes[sceneIndex].videoPredictionId = null;
   }
 
   await supabase.from("generations").update({ scenes }).eq("id", generationId);

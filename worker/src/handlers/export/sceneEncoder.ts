@@ -115,9 +115,12 @@ async function imageAudioToClip(
   return audioDur;
 }
 
-/** Mux video + audio: video is stretched to be LONGER than audio.
- *  Audio is the master clock — the output plays the full audio track.
- *  Video extends a few seconds past audio end (frozen last frame). */
+/** Mux video + audio.
+ *
+ *  clipDuration = audioDuration + 2s silence buffer
+ *  - Video is re-encoded/stretched to EXACTLY clipDuration
+ *  - Audio plays fully, then 2s of silence before the next scene
+ *  - Hard cut at clipDuration — clean scene transitions */
 async function muxVideoAudio(
   videoPath: string,
   audioPath: string,
@@ -130,31 +133,30 @@ async function muxVideoAudio(
     probeDuration(audioPath),
   ]);
 
-  // Stretch video to audio duration + 2.5s buffer — video MUST outlast audio
-  const AUDIO_SAFETY_BUFFER = 2.5;
-  const targetDur = audioDur + AUDIO_SAFETY_BUFFER;
-  const ratio = targetDur / videoDur;
+  const SILENCE_BUFFER = 2;
+  const clipDuration = audioDur + SILENCE_BUFFER;
+  const ratio = clipDuration / videoDur;
   console.log(
-    `[SceneEncoder] Scene ${sceneIndex} mux: video=${videoDur.toFixed(1)}s audio=${audioDur.toFixed(1)}s target=${targetDur.toFixed(1)}s ratio=${ratio.toFixed(2)}x`
+    `[SceneEncoder] Scene ${sceneIndex} mux: video=${videoDur.toFixed(1)}s audio=${audioDur.toFixed(1)}s clip=${clipDuration.toFixed(1)}s`
   );
 
-  // Pass 1: stretch + normalize video (overshoots audio by buffer)
+  // Pass 1: stretch video to EXACTLY clipDuration (re-encode for precise control)
   const stretchedVid = path.join(tempDir, `scene_${sceneIndex}_stretched.mp4`);
   await runFfmpeg([
     "-i", videoPath,
-    "-vf", `setpts=${ratio.toFixed(4)}*PTS,${SCALE_FIT}`,
+    "-vf", `setpts=${ratio.toFixed(6)}*PTS,${SCALE_FIT}`,
     "-an",
     "-c:v", "libx264",
     "-preset", "ultrafast",
     "-pix_fmt", "yuv420p",
+    "-t", String(clipDuration),
     "-movflags", "+faststart",
     ...X264_MEM_FLAGS,
     stretchedVid,
   ]);
 
-  // Pass 2: merge with audio — NO -t trim, let audio play fully.
-  // The video is longer than the audio, so the audio track dictates
-  // the perceived clip length. Extra video frames are harmless.
+  // Pass 2: merge video + audio, hard cut at clipDuration.
+  // Audio plays in full; remaining time is 2s silence buffer.
   await runFfmpeg([
     "-i", stretchedVid,
     "-i", audioPath,
@@ -163,6 +165,8 @@ async function muxVideoAudio(
     "-c:v", "copy",
     "-c:a", "aac",
     "-b:a", "128k",
+    "-af", `apad=whole_dur=${clipDuration}`,
+    "-t", String(clipDuration),
     "-movflags", "+faststart",
     outputPath,
   ]);

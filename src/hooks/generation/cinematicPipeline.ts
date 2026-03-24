@@ -48,6 +48,7 @@ export async function runCinematicPipeline(
       voiceType: params.voiceType,
       voiceId: params.voiceId,
       voiceName: params.voiceName,
+      language: params.language,
     },
     180000,
     CINEMATIC_ENDPOINT
@@ -74,7 +75,7 @@ export async function runCinematicPipeline(
   }));
 
   // Phase 2: Audio (all scenes)
-  await runCinematicAudio(projectId, generationId, sceneCount, ctx);
+  await runCinematicAudio(projectId, generationId, sceneCount, ctx, params.language);
   // Phase 3+4: Image → Video interleaved (each scene flows image→video immediately)
   await runCinematicVisuals(projectId, generationId, sceneCount, ctx);
 
@@ -86,7 +87,7 @@ export async function runCinematicPipeline(
 
 // ---- Sub-Phases ----
 
-async function runCinematicAudio(projectId: string, generationId: string, sceneCount: number, ctx: PipelineContext) {
+async function runCinematicAudio(projectId: string, generationId: string, sceneCount: number, ctx: PipelineContext, language?: string) {
   console.log(LOG, "Starting audio phase", { sceneCount });
 
   const AUDIO_CONCURRENCY = 3;
@@ -99,7 +100,7 @@ async function runCinematicAudio(projectId: string, generationId: string, sceneC
     }));
 
     const audioRes = await ctx.callPhase(
-      { phase: "audio", projectId, generationId, sceneIndex: i },
+      { phase: "audio", projectId, generationId, sceneIndex: i, language },
       300000,
       CINEMATIC_ENDPOINT
     );

@@ -8,6 +8,7 @@ interface CinematicAudioPayload {
   generationId: string;
   projectId: string;
   sceneIndex: number;
+  language?: string;
 }
 
 export async function handleCinematicAudio(
@@ -65,6 +66,11 @@ export async function handleCinematicAudio(
 
   if (voiceType === "custom" && generation.projects?.voice_id) {
     config.customVoiceId = generation.projects.voice_id;
+  }
+
+  // Language from job payload (set by frontend cinematic pipeline)
+  if (payload.language) {
+    config.language = payload.language;
   }
 
   // Haitian Creole detection — matches edge function pattern

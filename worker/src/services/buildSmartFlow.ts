@@ -8,31 +8,26 @@ import {
   getImageDimensions,
   CONTENT_COMPLIANCE_INSTRUCTION,
 } from "./prompts.js";
+import { buildLanguageSection } from "./promptSections.js";
 import type { PromptResult } from "./buildDoc2Video.js";
 
 export interface SmartFlowParams {
   content: string; format: string; style: string;
   customStyle?: string; brandMark?: string;
+  language?: string;
 }
 
 export function buildSmartFlowPrompt(p: SmartFlowParams): PromptResult {
   const styleDesc = getStylePrompt(p.style, p.customStyle);
   const dims = getImageDimensions(p.format);
 
-  const system = `You are a Top tier Elite Editorial Infographic Designer and Content Creator. You excell in making content that caugth the attention regardless of the topic discussed. You have an in deepth knowledge about visual content and how to reach the target population for the topic discussed. You are highly creative, with a touch of boldness, elegant and wow-factor. Your style is dynamic, detailed with catchy, smart choices of illustration and presentation. You are modern and a lavantgarde when it comes to content presentation. You set the tone, turn head, and keep the eyes on your art generated. 
+  const languageSection = buildLanguageSection(p.language);
+
+  const system = `You are a Top tier Elite Editorial Infographic Designer and Content Creator. You excell in making content that caugth the attention regardless of the topic discussed. You have an in deepth knowledge about visual content and how to reach the target population for the topic discussed. You are highly creative, with a touch of boldness, elegant and wow-factor. Your style is dynamic, detailed with catchy, smart choices of illustration and presentation. You are modern and a lavantgarde when it comes to content presentation. You set the tone, turn head, and keep the eyes on your art generated.
 ${CONTENT_COMPLIANCE_INSTRUCTION}
 Your goal is to create a modern, detailed SINGLE, MAGAZINE-QUALITY INFOGRAPHIC with rich, self-explanatory text that works as a standalone meaning WITHOUT audio narration.
 
-=== LANGUAGE REQUIREMENT ===
-ALWAYS generate ALL content in ENGLISH, regardless of the input language.
-The ONLY exception: If the user EXPLICITLY requests Haitian Creole (Kreyòl Ayisyen), then generate in Haitian Creole.
-
-=== HAITIAN CREOLE ILLUSTRATION TEXT RULES ===
-When generating content in Haitian Creole:
-- Write ALL illustration text, captions, and visual descriptions in Haitian Creole
-- PRESERVE proper nouns, brand names, and specific terminology in their ORIGINAL form (do NOT translate names, slogans, or technical terms)
-- Example: "Lionel Messi" stays "Lionel Messi", "Nike - Just Do It" stays "Nike - Just Do It"
-- Translate descriptive and narrative text to Haitian Creole, but keep recognizable names and branded terms unchanged
+${languageSection}
 
 === VISUAL STYLE ===
 - Art Style: ${styleDesc}

@@ -11,6 +11,7 @@ import { FormatSelector, type VideoFormat } from "./FormatSelector";
 import { LengthSelector, type VideoLength } from "./LengthSelector";
 import { StyleSelector, type VisualStyle } from "./StyleSelector";
 import { VoiceSelector, type VoiceSelection } from "./VoiceSelector";
+import { LanguageSelector, type Language } from "./LanguageSelector";
 import { PresenterFocusInput } from "./PresenterFocusInput";
 import { CharacterDescriptionInput } from "./CharacterDescriptionInput";
 import { CharacterConsistencyToggle } from "./CharacterConsistencyToggle";
@@ -46,6 +47,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
     const [customStyle, setCustomStyle] = useState("");
     const [customStyleImage, setCustomStyleImage] = useState<string | null>(null);
     const [voice, setVoice] = useState<VoiceSelection>({ type: "standard", gender: "female" });
+    const [language, setLanguage] = useState<Language>("en");
     const [presenterFocus, setPresenterFocus] = useState("");
     const [characterDescription, setCharacterDescription] = useState("");
     const [presenterFocusOpen, setPresenterFocusOpen] = useState(false);
@@ -154,6 +156,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
         characterDescription: characterDescription.trim() || undefined,
         disableExpressions,
         characterConsistencyEnabled,
+        language,
         projectType: "doc2video",
         // Voice selection - pass gender for standard voices, voiceName for custom
         voiceType: voice.type,
@@ -194,6 +197,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
       setCustomStyle("");
       setCustomStyleImage(null);
       setVoice({ type: "standard", gender: "female" });
+      setLanguage("en");
       setPresenterFocus("");
       setCharacterDescription("");
       setPresenterFocusOpen(false);
@@ -399,7 +403,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
                     <FormatSelector selected={format} onSelect={setFormat} disabledFormats={disabledFormats} />
                     <div className="h-px bg-border/30" />
                     
-                    {/* Length and Voice side by side on desktop, stacked on mobile */}
+                    {/* Length, Voice, and Language */}
                     <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
                       <div className="flex-1">
                         <LengthSelector selected={length} onSelect={setLength} disabledLengths={disabledLengths} />
@@ -408,6 +412,8 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
                         <VoiceSelector selected={voice} onSelect={setVoice} />
                       </div>
                     </div>
+                    <div className="h-px bg-border/30" />
+                    <LanguageSelector value={language} onChange={setLanguage} />
                     
                     <div className="h-px bg-border/30" />
                     <StyleSelector

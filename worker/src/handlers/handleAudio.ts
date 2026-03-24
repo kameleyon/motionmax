@@ -83,6 +83,12 @@ export async function handleAudioPhase(
   }
   config.voiceGender = voiceGender;
 
+  // Language from job payload (set by frontend pipeline)
+  const payloadLanguage = (payload as any).language as string | undefined;
+  if (payloadLanguage) {
+    config.language = payloadLanguage;
+  }
+
   // Haitian Creole detection from presenter_focus — matches edge function pattern
   const presenterFocus: string = generation.projects?.presenter_focus || "";
   const pfLower = presenterFocus.toLowerCase();

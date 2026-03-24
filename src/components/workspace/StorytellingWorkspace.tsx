@@ -11,6 +11,7 @@ import { StoryIdeaInput } from "./StoryIdeaInput";
 import { FormatSelector, type VideoFormat } from "./FormatSelector";
 import { StyleSelector, type VisualStyle } from "./StyleSelector";
 import { VoiceSelector, type VoiceSelection } from "./VoiceSelector";
+import { LanguageSelector, type Language } from "./LanguageSelector";
 import { CharacterDescriptionInput } from "./CharacterDescriptionInput";
 import { PresenterFocusInput } from "./PresenterFocusInput";
 import { InspirationSelector, type InspirationStyle } from "./InspirationSelector";
@@ -57,6 +58,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
     const [customStyle, setCustomStyle] = useState("");
     const [customStyleImage, setCustomStyleImage] = useState<string | null>(null);
     const [voice, setVoice] = useState<VoiceSelection>({ type: "standard", gender: "female" });
+    const [language, setLanguage] = useState<Language>("en");
     const [presenterFocus, setPresenterFocus] = useState("");
     const [presenterFocusOpen, setPresenterFocusOpen] = useState(false);
     const [characterDescription, setCharacterDescription] = useState("");
@@ -215,6 +217,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
         storyTone: tone,
         storyGenre: genre,
         disableExpressions: disableVoiceExpressions,
+        language,
         brandName: brandName.trim() || undefined,
         characterConsistencyEnabled,
         voiceType: voice.type,
@@ -240,6 +243,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
       setCustomStyle("");
       setCustomStyleImage(null);
       setVoice({ type: "standard", gender: "female" });
+      setLanguage("en");
       setPresenterFocus("");
       setPresenterFocusOpen(false);
       setCharacterDescription("");
@@ -358,12 +362,14 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
                         <VoiceSelector selected={voice} onSelect={setVoice} />
                       </div>
                       <div className="flex-1">
-                        <InclinationSelector 
+                        <InclinationSelector
                           disabled={disableVoiceExpressions}
                           onDisabledChange={setDisableVoiceExpressions}
                         />
                       </div>
                     </div>
+                    <div className="h-px bg-border/30" />
+                    <LanguageSelector value={language} onChange={setLanguage} />
                   </div>
 
                   {/* Character Consistency - Pro Feature */}

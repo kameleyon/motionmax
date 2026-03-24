@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { FormatSelector, type VideoFormat } from "./FormatSelector";
 import { VoiceSelector, type VoiceSelection } from "./VoiceSelector";
+import { LanguageSelector, type Language } from "./LanguageSelector";
 import { GenerationProgress } from "./GenerationProgress";
 
 import { SmartFlowStyleSelector, type SmartFlowStyle } from "./SmartFlowStyleSelector";
@@ -46,6 +47,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
     const [customStyleImage, setCustomStyleImage] = useState<string | null>(null);
     const [enableVoice, setEnableVoice] = useState(false);
     const [voice, setVoice] = useState<VoiceSelection>({ type: "standard", gender: "female" });
+    const [language, setLanguage] = useState<Language>("en");
     const [brandMarkEnabled, setBrandMarkEnabled] = useState(false);
     const [brandMarkText, setBrandMarkText] = useState("");
 
@@ -162,6 +164,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
         customStyleImage: style === "custom" ? customStyleImage : undefined,
         length: "short", // Fixed for Smart Flow - single scene
         brandMark: brandMarkEnabled && brandMarkText.trim() ? brandMarkText.trim() : undefined,
+        language,
         projectType: "smartflow", // Smart Flow uses dedicated single-scene backend
         // Voice selection (only if enabled)
         voiceType: enableVoice ? voice.type : undefined,
@@ -187,6 +190,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
       setCustomStyleImage(null);
       setEnableVoice(false);
       setVoice({ type: "standard", gender: "female" });
+      setLanguage("en");
       setBrandMarkEnabled(false);
       setBrandMarkText("");
     };
@@ -303,8 +307,10 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
                     
                     <div className="h-px bg-border/30" />
                     
-                    {/* Format Selector */}
+                    {/* Format and Language */}
                     <FormatSelector selected={format} onSelect={setFormat} />
+                    <div className="h-px bg-border/30" />
+                    <LanguageSelector value={language} onChange={setLanguage} />
                     
                     <div className="h-px bg-border/30" />
                     

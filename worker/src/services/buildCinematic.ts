@@ -16,7 +16,7 @@ import {
   CONTENT_COMPLIANCE_INSTRUCTION,
 } from "./prompts.js";
 import {
-  LANGUAGE_SECTION,
+  buildLanguageSection,
   PROMPT_ENGINEERING_SECTION,
   buildCoverTitleSection,
 } from "./promptSections.js";
@@ -34,6 +34,7 @@ export interface CinematicParams {
   voiceType?: string;
   disableExpressions?: boolean;
   characterConsistencyEnabled?: boolean;
+  language?: string;
 }
 
 export function buildCinematicPrompt(p: CinematicParams): PromptResult {
@@ -54,7 +55,7 @@ export function buildCinematicPrompt(p: CinematicParams): PromptResult {
     ? `\n=== CHARACTER APPEARANCE ===\nAll human characters in visual prompts MUST match this description:\n${p.characterDescription}\nInclude these character details in EVERY visualPrompt that features people.\n`
     : "";
 
-  const system = buildCinematicSystem(cfg, targetWords, styleDesc, dims, p);
+  const system = buildCinematicSystem(cfg, targetWords, styleDesc, dims, p, p.language);
   const user = `Create a cinematic video script based on this idea:\n\n${p.content}\n${presenterGuidance}${characterGuidance}`;
   return { system, user, maxTokens };
 }
@@ -67,12 +68,15 @@ function buildCinematicSystem(
   styleDesc: string,
   dims: { width: number; height: number },
   p: CinematicParams,
+  language?: string,
 ): string {
+  const languageSection = buildLanguageSection(language);
+
   return `You are a precise, visually obsessive cinematic director and scriptwriter.
 Read the source material and generate a complete 10-beat sequence combining motion prompts.
 
 ${CONTENT_COMPLIANCE_INSTRUCTION}
-${LANGUAGE_SECTION}
+${languageSection}
 
 === CONTENT ANALYSIS (CRITICAL — DO THIS FIRST) ===
 Before writing the script, carefully analyze the content to identify:

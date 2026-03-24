@@ -47,6 +47,7 @@ export async function runStandardPipeline(
     storyGenre: params.storyGenre,
     voiceInclination: params.voiceInclination,
     brandName: params.brandName,
+    language: params.language,
     skipAudio: isSmartFlowNoVoice,
   }, 180000);
 
@@ -74,7 +75,7 @@ export async function runStandardPipeline(
     log.debug("Starting audio phase");
     ctx.setState((prev) => ({ ...prev, step: "visuals" as const, progress: 15, statusMessage: "Generating voiceover audio..." }));
 
-    const audioResult = await ctx.callPhase({ phase: "audio", generationId, projectId, audioStartIndex: 0 }, 300000); // 5 minutes
+    const audioResult = await ctx.callPhase({ phase: "audio", generationId, projectId, audioStartIndex: 0, language: params.language }, 300000); // 5 minutes
     if (!audioResult.success) throw new Error(audioResult.error || "Audio generation failed");
 
     log.debug("Audio phase complete", { generated: audioResult.audioGenerated });

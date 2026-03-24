@@ -2,12 +2,15 @@
  * TTS provider router — mirrors edge function audioEngine.ts with modifications:
  *
  * CASE 1: HC + Clone        → Gemini TTS → ElevenLabs STS (clone voice)
- * CASE 2: English + Clone   → ElevenLabs TTS (no fallback)
+ * CASE 2: Non-HC/FR + Clone → ElevenLabs TTS (no fallback)
  * CASE 3: HC Standard       → Gemini TTS ONLY (no STS, no fallback)
+ * CASE 3b: French Male      → Fish Audio (model 1c86c56391ab4fefb7d376c86c0cf605)
+ * CASE 3c: French Female    → Fish Audio (voice 42fe8376b029438e81dd2929c0889ce1)
  * CASE 4: English Male      → LemonFox → Chatterbox (Replicate)
  * CASE 5: English Female    → Fish Audio → Chatterbox (Replicate)
  *
  * Creole detected from: config.forceHaitianCreole OR isHaitianCreole(text)
+ * French detected from: config.language === "fr"
  */
 
 import { sanitizeVoiceover, isHaitianCreole } from "./audioWavUtils.js";
@@ -38,6 +41,7 @@ export interface AudioConfig {
   voiceGender?: string;           // "male" | "female"
   customVoiceId?: string;         // set when voice_type === "custom"
   forceHaitianCreole?: boolean;   // from presenter_focus
+  language?: string;              // "en" | "fr" | "ht" — explicit language selection
 }
 
 export interface AudioResult {
@@ -124,6 +128,34 @@ export async function generateSceneAudio(
       return { ...result, provider: "Gemini TTS (HC standard)" };
     }
     return { url: null, error: `HC Gemini TTS failed: ${result.error}` };
+  }
+
+  // ========== CASE 3b: French Male ==========
+  // FishAudio with French male model
+  if (config.language === "fr" && voiceGender === "male" && fishAudioApiKey) {
+    console.log(`[TTS] Scene ${scene.number}: French Male → Fish Audio (FR male model)`);
+    const result = await generateFishAudioTTS(
+      voiceoverText, scene.number, fishAudioApiKey, projectId, "1c86c56391ab4fefb7d376c86c0cf605",
+    );
+    if (result.url) {
+      console.log(`✅ Scene ${scene.number}: Fish Audio (French male)`);
+      return { ...result, provider: "Fish Audio (French male)" };
+    }
+    return { url: null, error: `French male Fish Audio failed: ${result.error}` };
+  }
+
+  // ========== CASE 3c: French Female ==========
+  // FishAudio with French female voice
+  if (config.language === "fr" && fishAudioApiKey) {
+    console.log(`[TTS] Scene ${scene.number}: French Female → Fish Audio (FR female voice)`);
+    const result = await generateFishAudioTTS(
+      voiceoverText, scene.number, fishAudioApiKey, projectId, "42fe8376b029438e81dd2929c0889ce1",
+    );
+    if (result.url) {
+      console.log(`✅ Scene ${scene.number}: Fish Audio (French female)`);
+      return { ...result, provider: "Fish Audio (French female)" };
+    }
+    return { url: null, error: `French female Fish Audio failed: ${result.error}` };
   }
 
   // ========== CASE 4: English Male ==========

@@ -10,7 +10,7 @@ import {
   CONTENT_COMPLIANCE_INSTRUCTION,
 } from "./prompts.js";
 import {
-  LANGUAGE_SECTION,
+  buildLanguageSection,
   SUB_VISUALS_SECTION,
   PROMPT_ENGINEERING_SECTION,
   buildCoverTitleSection,
@@ -23,6 +23,7 @@ export interface StorytellingParams {
   customStyle?: string; brandMark?: string; inspiration?: string;
   tone?: string; genre?: string; characterDescription?: string; voiceType?: string;
   disableExpressions?: boolean;
+  language?: string;
 }
 
 // ── Guide Lookups ──────────────────────────────────────────────────
@@ -84,9 +85,11 @@ export function buildStorytellingPrompt(p: StorytellingParams): PromptResult {
   const brandSec = p.brandMark
     ? `\n=== BRAND ATTRIBUTION ===\nSubtly weave "${p.brandMark}" into the narrative as the source or presenter of this story.` : "";
 
+  const languageSection = buildLanguageSection(p.language);
+
   const system = `You are a MASTER STORYTELLER creating an immersive visual narrative.
 ${CONTENT_COMPLIANCE_INSTRUCTION}
-${LANGUAGE_SECTION}
+${languageSection}
 
 === CONTENT ANALYSIS (CRITICAL - DO THIS FIRST) ===
 Before writing the story, carefully analyze the story idea to identify:

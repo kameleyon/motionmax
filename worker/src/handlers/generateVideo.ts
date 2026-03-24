@@ -48,6 +48,7 @@ function buildPrompt(projectType: string, p: Record<string, any>): PromptResult 
         voiceType: p.voiceType,
         disableExpressions: p.disableExpressions === true,
         characterConsistencyEnabled: p.characterConsistencyEnabled === true,
+        language: p.language,
       });
 
     case "storytelling":
@@ -64,6 +65,7 @@ function buildPrompt(projectType: string, p: Record<string, any>): PromptResult 
         characterDescription: p.characterDescription,
         voiceType: p.voiceType,
         disableExpressions: p.disableExpressions === true,
+        language: p.language,
       });
 
     case "smartflow":
@@ -73,6 +75,7 @@ function buildPrompt(projectType: string, p: Record<string, any>): PromptResult 
         style: p.style || "realistic",
         customStyle: p.customStyle,
         brandMark: p.brandMark,
+        language: p.language,
       });
 
     default: // doc2video
@@ -87,6 +90,7 @@ function buildPrompt(projectType: string, p: Record<string, any>): PromptResult 
         characterDescription: p.characterDescription,
         voiceType: p.voiceType,
         disableExpressions: p.disableExpressions === true,
+        language: p.language,
       });
   }
 }

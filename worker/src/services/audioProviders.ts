@@ -285,13 +285,14 @@ export async function generateLemonfoxTTS(
 const FISH_AUDIO_FEMALE_VOICE = "57ea41ba9aa64b9c8fe2d5625c50d1b0";
 
 export async function generateFishAudioTTS(
-  text: string, sceneNumber: number, apiKey: string, projectId: string,
+  text: string, sceneNumber: number, apiKey: string, projectId: string, voiceId?: string,
 ): Promise<{ url: string | null; durationSeconds?: number; provider?: string; error?: string }> {
+  const referenceId = voiceId || FISH_AUDIO_FEMALE_VOICE;
   for (let attempt = 1; attempt <= 3; attempt++) {
     const res = await fetch("https://api.fish.audio/v1/tts", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", model: "s2" },
-      body: JSON.stringify({ text, reference_id: FISH_AUDIO_FEMALE_VOICE, format: "mp3" }),
+      body: JSON.stringify({ text, reference_id: referenceId, format: "mp3" }),
     });
     if (!res.ok) {
       if ((res.status === 429 || res.status >= 500) && attempt < 3) { await sleep(2000 * Math.pow(2, attempt-1)); continue; }

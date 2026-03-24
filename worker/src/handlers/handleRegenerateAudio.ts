@@ -18,6 +18,7 @@ interface RegenerateAudioPayload {
   projectId: string;
   sceneIndex: number;
   newVoiceover: string;
+  language?: string;
   [key: string]: unknown;
 }
 
@@ -79,6 +80,11 @@ export async function handleRegenerateAudio(
 
   if (voiceId) config.customVoiceId = voiceId;
   if (voiceGender) config.voiceGender = voiceGender;
+
+  // Language from job payload (set by frontend regeneration flow)
+  if (payload.language) {
+    config.language = payload.language;
+  }
 
   // Haitian Creole detection — matches edge function pattern
   const presenterFocus: string = (generation.projects as any)?.presenter_focus || "";

@@ -12,6 +12,7 @@ import { FormatSelector, type VideoFormat } from "./FormatSelector";
 import { LengthSelector, type VideoLength } from "./LengthSelector";
 import { StyleSelector, type VisualStyle } from "./StyleSelector";
 import { VoiceSelector, type VoiceSelection } from "./VoiceSelector";
+import { LanguageSelector, type Language } from "./LanguageSelector";
 import { PresenterFocusInput } from "./PresenterFocusInput";
 import { CharacterDescriptionInput } from "./CharacterDescriptionInput";
 import { CharacterConsistencyToggle } from "./CharacterConsistencyToggle";
@@ -46,6 +47,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
     const [customStyle, setCustomStyle] = useState("");
     const [customStyleImage, setCustomStyleImage] = useState<string | null>(null);
     const [voice, setVoice] = useState<VoiceSelection>({ type: "standard", gender: "female" });
+    const [language, setLanguage] = useState<Language>("en");
     const [presenterFocus, setPresenterFocus] = useState("");
     const [characterDescription, setCharacterDescription] = useState("");
     const [presenterFocusOpen, setPresenterFocusOpen] = useState(false);
@@ -208,6 +210,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
         voiceType: voice.type,
         voiceId: voice.voiceId,
         voiceName: voice.type === "custom" ? voice.voiceName : voice.gender,
+        language,
         projectType: "cinematic",
       });
 
@@ -223,6 +226,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
       setCustomStyle("");
       setCustomStyleImage(null);
       setVoice({ type: "standard", gender: "female" });
+      setLanguage("en");
       setPresenterFocus("");
       setCharacterDescription("");
       setPresenterFocusOpen(false);
@@ -385,7 +389,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                     <FormatSelector selected={format} onSelect={setFormat} disabledFormats={disabledFormats} />
                     <div className="h-px bg-border/30" />
                     
-                    {/* Length and Voice side by side on desktop, stacked on mobile */}
+                    {/* Length, Voice, and Language */}
                     <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
                       <div className="flex-1">
                         <LengthSelector selected={length} onSelect={setLength} disabledLengths={disabledLengths} />
@@ -394,6 +398,8 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                         <VoiceSelector selected={voice} onSelect={setVoice} />
                       </div>
                     </div>
+                    <div className="h-px bg-border/30" />
+                    <LanguageSelector value={language} onChange={setLanguage} />
                     
                     <div className="h-px bg-border/30" />
                     <StyleSelector

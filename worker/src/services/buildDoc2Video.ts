@@ -10,7 +10,7 @@ import {
   CONTENT_COMPLIANCE_INSTRUCTION,
 } from "./prompts.js";
 import {
-  LANGUAGE_SECTION,
+  buildLanguageSection,
   SUB_VISUALS_SECTION,
   PROMPT_ENGINEERING_SECTION,
   buildCoverTitleSection,
@@ -22,6 +22,7 @@ export interface Doc2VideoParams {
   customStyle?: string; brandMark?: string; presenterFocus?: string;
   characterDescription?: string; voiceType?: string;
   disableExpressions?: boolean;
+  language?: string;
 }
 
 export interface PromptResult { system: string; user: string; maxTokens: number; }
@@ -45,9 +46,11 @@ export function buildDoc2VideoPrompt(p: Doc2VideoParams): PromptResult {
     ? `\n=== CHARACTER APPEARANCE ===\nAll human characters in visual prompts MUST match this description:\n${p.characterDescription}\nInclude these character details in EVERY visualPrompt that features people.\n`
     : "";
 
+  const languageSection = buildLanguageSection(p.language);
+
   const system = `You are a DYNAMIC video script writer creating engaging, narrative-driven content.
 ${CONTENT_COMPLIANCE_INSTRUCTION}
-${LANGUAGE_SECTION}
+${languageSection}
 
 === CONTENT ANALYSIS (CRITICAL - DO THIS FIRST) ===
 Before writing the script, carefully analyze the content to identify:

@@ -87,6 +87,7 @@ export interface GenerationParams {
   storyGenre?: string;
   voiceInclination?: string;
   brandName?: string;
+  language?: "en" | "fr" | "ht";
 }
 
 export type ProjectRow = {

@@ -5,7 +5,39 @@
 
 // ── Language & Localisation ────────────────────────────────────────
 
-export const LANGUAGE_SECTION = `=== LANGUAGE REQUIREMENT (CRITICAL) ===
+/**
+ * Build a language instruction section for the LLM prompt based on selected language.
+ * - "en" (default): Generate all voiceover text in English
+ * - "fr": Generate voiceover/narration in French; keep JSON keys, visual prompts, and scene descriptions in English
+ * - "ht": Generate voiceover/narration in Haitian Creole with proper noun preservation
+ */
+export function buildLanguageSection(language?: string): string {
+  switch (language) {
+    case "fr":
+      return `=== LANGUAGE REQUIREMENT (CRITICAL) ===
+IMPORTANT: Generate ALL voiceover/narration text in French (Français).
+All scene descriptions, visual prompts, and JSON keys remain in English, but the "voiceover" field text MUST be in French.
+- Translate any input content into natural, fluent French for the voiceover
+- Keep all JSON property names, visualPrompt descriptions, and narrativeBeat labels in English
+- PRESERVE proper nouns, brand names, and specific terminology in their ORIGINAL form (do NOT translate names, slogans, or technical terms)
+- Example: "Lionel Messi" stays "Lionel Messi", "Nike - Just Do It" stays "Nike - Just Do It"
+- The coverTitle field should also be in French`;
+
+    case "ht":
+      return `=== LANGUAGE REQUIREMENT (CRITICAL) ===
+IMPORTANT: Generate ALL voiceover/narration text in Haitian Creole (Kreyòl Ayisyen).
+All scene descriptions, visual prompts, and JSON keys remain in English, but the "voiceover" field text MUST be in Haitian Creole.
+
+=== HAITIAN CREOLE ILLUSTRATION TEXT RULES ===
+When generating content in Haitian Creole:
+- Write ALL illustration text, captions, and visual descriptions in Haitian Creole
+- PRESERVE proper nouns, brand names, and specific terminology in their ORIGINAL form (do NOT translate names, slogans, or technical terms)
+- Example: "Lionel Messi" stays "Lionel Messi", "Nike - Just Do It" stays "Nike - Just Do It"
+- Translate descriptive and narrative text to Haitian Creole, but keep recognizable names and branded terms unchanged
+- The coverTitle field should also be in Haitian Creole`;
+
+    default: // "en" or undefined
+      return `=== LANGUAGE REQUIREMENT (CRITICAL) ===
 ALWAYS generate ALL content (voiceovers, titles, subtitles) in ENGLISH, regardless of the input language.
 The ONLY exception: If the user EXPLICITLY requests Haitian Creole (Kreyòl Ayisyen), then generate in Haitian Creole.
 If the input content is in another language (French, Spanish, Portuguese, etc.), TRANSLATE it to English for the output.
@@ -17,6 +49,11 @@ When generating content in Haitian Creole:
 - PRESERVE proper nouns, brand names, and specific terminology in their ORIGINAL form (do NOT translate names, slogans, or technical terms)
 - Example: "Lionel Messi" stays "Lionel Messi", "Nike - Just Do It" stays "Nike - Just Do It"
 - Translate descriptive and narrative text to Haitian Creole, but keep recognizable names and branded terms unchanged`;
+  }
+}
+
+/** @deprecated Use buildLanguageSection(language) instead. Kept for backward compatibility. */
+export const LANGUAGE_SECTION = buildLanguageSection("en");
 
 // ── Sub-Visuals ────────────────────────────────────────────────────
 

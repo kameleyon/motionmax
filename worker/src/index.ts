@@ -15,7 +15,7 @@ import { writeSystemLog } from "./lib/logger.js";
 
 /* ---- Concurrency guard: prevent re-processing the same job ---- */
 const activeJobs = new Set<string>();
-const MAX_CONCURRENT_JOBS = parseInt(process.env.WORKER_CONCURRENCY || "3", 10);
+const MAX_CONCURRENT_JOBS = parseInt(process.env.WORKER_CONCURRENCY || "6", 10);
 
 async function processJob(job: Job) {
   activeJobs.add(job.id);

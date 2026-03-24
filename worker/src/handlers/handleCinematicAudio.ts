@@ -30,7 +30,7 @@ export async function handleCinematicAudio(
 
   const { data: generation, error: genError } = await supabase
     .from("generations")
-    .select("*, projects!inner(voice_type, voice_id, voice_name, presenter_focus)")
+    .select("*, projects!inner(voice_type, voice_id, voice_name, presenter_focus, voice_inclination)")
     .eq("id", generationId)
     .single();
 
@@ -68,9 +68,15 @@ export async function handleCinematicAudio(
     config.customVoiceId = generation.projects.voice_id;
   }
 
-  // Language from job payload (set by frontend cinematic pipeline)
-  if (payload.language) {
-    config.language = payload.language;
+  // Language resolution: payload → project voice_inclination → scenes[0]._meta.language
+  const resolvedLanguage =
+    payload.language ||
+    generation.projects?.voice_inclination ||
+    (Array.isArray(generation.scenes) && (generation.scenes as any[])[0]?._meta?.language) ||
+    undefined;
+  if (resolvedLanguage) {
+    config.language = resolvedLanguage;
+    console.log(`[CinematicAudio] Scene ${sceneIndex}: language=${resolvedLanguage}`);
   }
 
   // Haitian Creole detection — matches edge function pattern

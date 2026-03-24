@@ -125,6 +125,7 @@ function buildProjectInsert(
     voice_type: payload.voiceType || "standard",
     voice_id: payload.voiceId || null,
     voice_name: payload.voiceName || null,
+    voice_inclination: payload.language || null, // Store language for regeneration fallback
   };
 
   if (projectType === "doc2video") {
@@ -246,6 +247,7 @@ export async function handleGenerateVideo(
       phaseTimings: { script: phaseTime },
       characterBible: parsed.characters || null,
       projectType,
+      language: payload.language || null,
     },
   }));
 

@@ -68,7 +68,7 @@ export async function handleAudioPhase(
   // Fetch generation + project voice settings
   const { data: generation, error: genError } = await supabase
     .from("generations")
-    .select("*, projects!inner(voice_type, voice_id, voice_name, presenter_focus)")
+    .select("*, projects!inner(voice_type, voice_id, voice_name, presenter_focus, voice_inclination)")
     .eq("id", generationId)
     .single();
 
@@ -83,10 +83,15 @@ export async function handleAudioPhase(
   }
   config.voiceGender = voiceGender;
 
-  // Language from job payload (set by frontend pipeline)
-  const payloadLanguage = (payload as any).language as string | undefined;
-  if (payloadLanguage) {
-    config.language = payloadLanguage;
+  // Language resolution: payload → project voice_inclination → scenes[0]._meta.language
+  const resolvedLanguage =
+    (payload as any).language ||
+    generation.projects?.voice_inclination ||
+    (Array.isArray(generation.scenes) && (generation.scenes as any[])[0]?._meta?.language) ||
+    undefined;
+  if (resolvedLanguage) {
+    config.language = resolvedLanguage;
+    console.log(`[Audio] Language resolved: ${resolvedLanguage}`);
   }
 
   // Haitian Creole detection from presenter_focus — matches edge function pattern

@@ -64,10 +64,10 @@ export async function handleRegenerateAudio(
     message: `Regenerating audio for scene ${sceneIndex + 1}`,
   });
 
-  // Fetch generation + project voice settings (including presenter_focus for Creole detection)
+  // Fetch generation + project voice settings (including presenter_focus, voice_inclination for language)
   const { data: generation, error: genError } = await supabase
     .from("generations")
-    .select("scenes, projects!inner(voice_type, voice_id, voice_name, presenter_focus)")
+    .select("scenes, projects!inner(voice_type, voice_id, voice_name, presenter_focus, voice_inclination)")
     .eq("id", generationId)
     .single();
 
@@ -81,9 +81,15 @@ export async function handleRegenerateAudio(
   if (voiceId) config.customVoiceId = voiceId;
   if (voiceGender) config.voiceGender = voiceGender;
 
-  // Language from job payload (set by frontend regeneration flow)
-  if (payload.language) {
-    config.language = payload.language;
+  // Language resolution: payload → project voice_inclination → scenes[0]._meta.language
+  const resolvedLanguage =
+    payload.language ||
+    (generation.projects as any)?.voice_inclination ||
+    (Array.isArray(generation.scenes) && (generation.scenes as any[])[0]?._meta?.language) ||
+    undefined;
+  if (resolvedLanguage) {
+    config.language = resolvedLanguage;
+    console.log(`[RegenerateAudio] Language resolved: ${resolvedLanguage}`);
   }
 
   // Haitian Creole detection — matches edge function pattern

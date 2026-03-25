@@ -112,10 +112,13 @@ async function tryReplicate(
 
   for (let attempt = 1; attempt <= REPLICATE_RETRIES; attempt++) {
     try {
-      const input: Record<string, unknown> = { prompt, aspect_ratio: aspectRatio, output_format: "webp" };
+      const input: Record<string, unknown> = { prompt, aspect_ratio: aspectRatio };
       // Pass source images for edits (Replicate nano-banana-2 image_input)
       if (imageInputs && imageInputs.length > 0) {
         input.image_input = imageInputs;
+        // No output_format when editing — matches edge function behavior
+      } else {
+        input.output_format = "webp";
       }
       const createRes = await fetch(REPLICATE_API_URL, {
         method: "POST",
@@ -128,7 +131,8 @@ async function tryReplicate(
       });
 
       if (!createRes.ok) {
-        console.warn(`[ImageGen] Replicate attempt ${attempt} failed: ${createRes.status}`);
+        const errBody = await createRes.text().catch(() => "");
+        console.warn(`[ImageGen] Replicate attempt ${attempt} failed (${createRes.status}): ${errBody.substring(0, 300)}`);
         if (attempt < REPLICATE_RETRIES) await sleep(2000 * attempt);
         continue;
       }

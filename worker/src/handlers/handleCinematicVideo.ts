@@ -2,13 +2,14 @@
  * Cinematic video handler.
  *
  * Primary:  xai/grok-imagine-video  (via Replicate)
- * Fallback: Hypereal Kling V2.6 Pro (existing provider)
+ * Fallback: Hypereal Seedance 1.5 Pro (image-to-video)
  */
 
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField } from "../lib/sceneUpdate.js";
 import { generateGrokVideo } from "../services/grokVideo.js";
+import { generateVideoFromImage as hyperealI2V } from "../services/hypereal.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -147,7 +148,7 @@ ANIMATION RULES (CRITICAL):
 - Focus on CAMERA MOTION and SCENE DYNAMICS rather than character lip movement`;
 }
 
-// ── Hypereal fallback ──────────────────────────────────────────────
+// ── Hypereal Seedance fallback ─────────────────────────────────────
 
 async function tryHyperealFallback(
   prompt: string,
@@ -161,63 +162,9 @@ async function tryHyperealFallback(
     throw new Error("Both Grok and Hypereal unavailable: HYPEREAL_API_KEY not configured");
   }
 
-  console.log(`[CinematicVideo] Scene ${sceneIndex}: Hypereal fallback`);
-  const hyperealJobId = await startHyperealJob(hyperealApiKey, prompt, imageUrl);
-  const videoUrl = await pollHyperealJob(hyperealApiKey, hyperealJobId);
+  console.log(`[CinematicVideo] Scene ${sceneIndex}: Hypereal Seedance fallback`);
+  const videoUrl = await hyperealI2V(imageUrl, prompt, hyperealApiKey);
   return uploadVideoToStorage(videoUrl, projectId, generationId, sceneIndex);
-}
-
-async function startHyperealJob(
-  apiKey: string,
-  prompt: string,
-  imageUrl: string,
-): Promise<string> {
-  const startRes = await fetch("https://hypereal.tech/api/v1/videos/generate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: "kling-2-6-i2v-pro",
-      input: {
-        prompt,
-        image: imageUrl,
-        negative_prompt: "blurry, low quality, watermark",
-        duration: 5,
-        cfg_scale: 0.5,
-        sound: false,
-      },
-    }),
-  });
-
-  if (!startRes.ok) {
-    const errText = await startRes.text();
-    throw new Error(`Hypereal API error: ${startRes.status} ${errText}`);
-  }
-
-  const startData = await startRes.json();
-  const hyperealJobId = startData.jobId || startData.id || startData.task_id || startData.prediction_id;
-  if (!hyperealJobId) throw new Error("Hypereal API did not return a job_id");
-  return hyperealJobId;
-}
-
-async function pollHyperealJob(apiKey: string, hyperealJobId: string): Promise<string> {
-  const maxAttempts = 60; // 10 min at 10s intervals
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    await new Promise((r) => setTimeout(r, 10000));
-    const pollRes = await fetch(
-      `https://hypereal.tech/api/v1/jobs/${hyperealJobId}?model=kling-2-6-i2v-pro&type=video`,
-      { headers: { Authorization: `Bearer ${apiKey}` } },
-    );
-    if (!pollRes.ok) { console.warn(`[Hypereal] Poll failed: ${pollRes.status}`); continue; }
-    const pollData = await pollRes.json();
-    if (pollData.status === "completed" || pollData.status === "succeeded") {
-      const videoUrl = pollData.outputUrl || pollData.output_url || pollData.url;
-      if (!videoUrl) throw new Error("Hypereal returned completed but no URL");
-      return videoUrl;
-    } else if (pollData.status === "failed") {
-      throw new Error(`Hypereal job failed: ${pollData.error || "Unknown error"}`);
-    }
-  }
-  throw new Error("Hypereal job timed out");
 }
 
 // ── Storage upload ─────────────────────────────────────────────────

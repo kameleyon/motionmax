@@ -38,13 +38,13 @@ export interface CinematicParams {
 }
 
 export function buildCinematicPrompt(p: CinematicParams): PromptResult {
-  const lengthCfg: Record<string, { min: number; max: number; target: number; maxPerScene: number }> = {
-    short:        { min: 10, max: 10, target: 150, maxPerScene: 15 },
-    brief:        { min: 28, max: 28, target: 420, maxPerScene: 15 },
-    presentation: { min: 36, max: 36, target: 540, maxPerScene: 15 },
+  const lengthCfg: Record<string, { min: number; max: number; target: number; maxPerScene: number; maxWords: number }> = {
+    short:        { min: 10, max: 10, target: 160, maxPerScene: 14, maxWords: 33 },
+    brief:        { min: 28, max: 28, target: 420, maxPerScene: 15, maxWords: 37 },
+    presentation: { min: 36, max: 36, target: 540, maxPerScene: 15, maxWords: 37 },
   };
   const cfg = lengthCfg[p.length] || lengthCfg.brief;
-  const targetWords = Math.floor(cfg.maxPerScene * 2.5);
+  const targetWords = cfg.maxWords;
   const styleDesc = getStylePrompt(p.style, p.customStyle);
   const dims = getImageDimensions(p.format);
   const maxTokens = p.length === "presentation" ? 14000 : p.length === "brief" ? 12000 : 8000;
@@ -146,13 +146,19 @@ GOOD: ✓ "Inside a cluttered home kitchen at 2AM, dirty dishes in the sink, dim
 - ASPECT RATIO: ${p.format} (${dims.width}x${dims.height})
 - QUALITY: Ultra-detailed, cinematic lighting, dramatic composition
 
-=== TIMING REQUIREMENTS (CRITICAL — STRICT) ===
+=== TIMING REQUIREMENTS (CRITICAL — STRICT — ZERO TOLERANCE) ===
 ⚠️ MANDATORY SCENE COUNT RULE — NON-NEGOTIABLE:
 - You MUST generate MINIMUM ${cfg.min} scenes and MAXIMUM ${cfg.max} scenes.
 - Target duration: ~${cfg.target} seconds total
-- EACH SCENE VOICEOVER: 12-15 seconds (approx ${targetWords} words at ~2.5 words/sec)
-- MAX per scene: ${cfg.maxPerScene} seconds
-- Set each scene "duration" to exactly 15
+${p.length === "short" ? `
+⚠️ YOUTUBE SHORTS FORMAT — HARD LIMITS:
+- The ENTIRE video MUST be between 2:30 and 2:50 (150–170 seconds). NEVER exceed 3 minutes.
+- EACH scene voiceover: 12–14 seconds MAX (${targetWords} words MAXIMUM at ~2.5 words/sec)
+- COUNT YOUR WORDS. If a voiceover exceeds ${targetWords} words, the generation WILL FAIL.
+- Write TIGHT, punchy narration. Cut filler words ruthlessly.
+` : `- EACH SCENE VOICEOVER: 12-15 seconds (approx ${targetWords} words at ~2.5 words/sec)
+`}- MAX per scene: ${cfg.maxPerScene} seconds
+- Set each scene "duration" to ${cfg.maxPerScene}
 
 === NARRATIVE ARC (10-BEAT STRUCTURE) ===
 1. HOOK (Scene 1-2): Grab attention immediately — high energy, fast cuts

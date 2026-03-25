@@ -61,14 +61,14 @@ const GENRE_GUIDE: Record<string, string> = {
 // ── Builder ────────────────────────────────────────────────────────
 
 export function buildStorytellingPrompt(p: StorytellingParams): PromptResult {
-  const lengthCfg: Record<string, { count: number; targetDuration: number; avgSceneDuration: number }> = {
-    short: { count: 10, targetDuration: 150, avgSceneDuration: 15 },
-    brief: { count: 28, targetDuration: 420, avgSceneDuration: 15 },
-    extended: { count: 36, targetDuration: 540, avgSceneDuration: 15 },
-    presentation: { count: 36, targetDuration: 540, avgSceneDuration: 15 },
+  const lengthCfg: Record<string, { count: number; targetDuration: number; avgSceneDuration: number; maxWords: number }> = {
+    short: { count: 10, targetDuration: 160, avgSceneDuration: 14, maxWords: 33 },
+    brief: { count: 28, targetDuration: 420, avgSceneDuration: 15, maxWords: 37 },
+    extended: { count: 36, targetDuration: 540, avgSceneDuration: 15, maxWords: 37 },
+    presentation: { count: 36, targetDuration: 540, avgSceneDuration: 15, maxWords: 37 },
   };
   const cfg = lengthCfg[p.length] || lengthCfg.brief;
-  const targetWords = Math.floor(cfg.avgSceneDuration * 2.5);
+  const targetWords = cfg.maxWords;
   const sc = cfg.count;
   const styleDesc = getStylePrompt(p.style, p.customStyle);
   const dims = getImageDimensions(p.format);
@@ -111,11 +111,17 @@ All image prompts must adhere to this style:
 === TIMING REQUIREMENTS (CRITICAL - STRICT ENFORCEMENT) ===
 - Target duration: ${cfg.targetDuration} seconds
 - Create exactly ${sc} scenes
-- EACH SCENE VOICEOVER MUST BE 12-15 SECONDS LONG. NO MORE THAN 15 SECONDS.
+${p.length === "short" ? `
+⚠️ YOUTUBE SHORTS FORMAT — HARD LIMITS:
+- The ENTIRE video MUST be between 2:30 and 2:50 (150–170 seconds). NEVER exceed 3 minutes.
+- EACH scene voiceover: 12–14 seconds MAX (${targetWords} words MAXIMUM at ~2.5 words/sec)
+- COUNT YOUR WORDS. If a voiceover exceeds ${targetWords} words, the generation WILL FAIL.
+- Write TIGHT, punchy narration. Cut filler words ruthlessly.
+` : `- EACH SCENE VOICEOVER MUST BE 12-15 SECONDS LONG. NO MORE THAN 15 SECONDS.
 - That means each voiceover must be approximately ${targetWords} words (at ~2.5 words per second)
-- MINIMUM 3 seconds per scene (to avoid glitchy flashes)
-- If you exceed 15 seconds of spoken text per scene, the generation WILL FAIL. Keep it concise and impactful.
-- Set each scene "duration" to exactly 15
+`}- MINIMUM 3 seconds per scene (to avoid glitchy flashes)
+- If you exceed ${cfg.avgSceneDuration} seconds of spoken text per scene, the generation WILL FAIL.
+- Set each scene "duration" to ${cfg.avgSceneDuration}
 
 === NARRATIVE STRUCTURE ===
 1. OPENING (Scene 1): Hook the audience immediately. Start in media res or with a provocative question.

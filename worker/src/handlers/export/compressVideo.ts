@@ -6,8 +6,13 @@
 import fs from "fs";
 import { runFfmpeg, X264_MEM_FLAGS } from "./ffmpegCmd.js";
 
-/** Files above this size trigger a compression re-encode before upload. */
-const COMPRESS_THRESHOLD_BYTES = 500 * 1024 * 1024; // 500 MB
+/** Files above this size trigger a compression re-encode before upload.
+ *  The videos bucket limit is 2 GB — compress anything over 1.5 GB
+ *  to leave headroom for container overhead. */
+const COMPRESS_THRESHOLD_BYTES = 1.5 * 1024 * 1024 * 1024; // 1.5 GB
+
+/** Compression timeout — 20 minutes for very large files. */
+const COMPRESS_TIMEOUT_MS = 20 * 60 * 1000;
 
 /**
  * If the file exceeds COMPRESS_THRESHOLD_BYTES, re-encode it with
@@ -26,14 +31,14 @@ export async function compressIfNeeded(
     return filePath;
   }
 
-  console.log(`[CompressVideo] ${sizeMB} MB exceeds ${COMPRESS_THRESHOLD_BYTES / (1024 * 1024)} MB — compressing`);
+  console.log(`[CompressVideo] ${sizeMB} MB exceeds ${(COMPRESS_THRESHOLD_BYTES / (1024 * 1024)).toFixed(0)} MB — compressing`);
 
   const compressedPath = filePath.replace(".mp4", "_compressed.mp4");
 
   await runFfmpeg([
     "-i", filePath,
     "-c:v", "libx264",
-    "-preset", "fast",
+    "-preset", "ultrafast",
     "-crf", "28",
     "-maxrate", "4M",
     "-bufsize", "8M",
@@ -43,7 +48,7 @@ export async function compressIfNeeded(
     "-movflags", "+faststart",
     ...X264_MEM_FLAGS,
     compressedPath,
-  ]);
+  ], COMPRESS_TIMEOUT_MS);
 
   const compStat = await fs.promises.stat(compressedPath);
   const compMB = (compStat.size / (1024 * 1024)).toFixed(1);

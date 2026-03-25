@@ -219,8 +219,10 @@ export async function generateImage(
 }
 
 /**
- * Edit one image — combines original visualPrompt + user modification.
- * Uses Replicate nano-banana-2 as PRIMARY provider, Hypereal as fallback.
+ * Edit one image using Replicate nano-banana-2 with image_input.
+ * Dedicated edit function — separate from tryReplicate to ensure
+ * image_input is always passed correctly for edits.
+ * Hypereal as fallback (text-only re-generation from modified prompt).
  */
 export async function editImage(
   editInstruction: string,
@@ -232,31 +234,79 @@ export async function editImage(
   format?: string,
   styleDesc?: string,
 ): Promise<string> {
-  if (!originalPrompt) {
-    throw new Error("Image edit requires the original visual prompt");
-  }
+  const editPrompt = `${editInstruction}`;
 
-  const editPrompt = `${originalPrompt}
+  console.log(`[ImageGen] Edit: "${editInstruction.substring(0, 80)}" | source: ${imageUrl.substring(0, 60)}...`);
 
-USER MODIFICATION REQUEST: ${editInstruction}
-
-STYLE: ${styleDesc || ""}
-
-Professional illustration with dynamic composition and clear visual hierarchy. Apply the user's modification while maintaining consistency with the original scene concept.`;
-
-  console.log(`[ImageGen] Edit via Replicate (primary): "${editInstruction.substring(0, 80)}"`);
-
-  // Primary: Replicate nano-banana-2 for edits — pass source image for editing
+  // Primary: Replicate nano-banana-2 with image_input
   if (replicateApiKey) {
-    const url = await tryReplicate(editPrompt, replicateApiKey, format || "landscape", projectId, [imageUrl]);
-    if (url) return url;
-    console.warn("[ImageGen] Replicate exhausted for edit — falling back to Hypereal");
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const body = {
+          input: {
+            prompt: editPrompt,
+            image_input: [imageUrl],
+            aspect_ratio: toAspectRatio(format || "landscape"),
+          },
+        };
+        console.log(`[ImageGen] Replicate edit attempt ${attempt}: prompt="${editPrompt.substring(0, 60)}" image_input=[${imageUrl.substring(0, 50)}...]`);
+
+        const res = await fetch(REPLICATE_API_URL, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${replicateApiKey}`,
+            "Content-Type": "application/json",
+            Prefer: "wait",
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          const errBody = await res.text().catch(() => "");
+          console.warn(`[ImageGen] Replicate edit attempt ${attempt} failed (${res.status}): ${errBody.substring(0, 300)}`);
+          if (attempt < 3) { await sleep(2000 * attempt); continue; }
+          break;
+        }
+
+        const prediction = await res.json() as any;
+        console.log(`[ImageGen] Replicate edit response: status=${prediction.status}, hasOutput=${!!prediction.output}`);
+
+        if (prediction.status === "succeeded" && prediction.output?.[0]) {
+          const imgRes = await fetch(prediction.output[0]);
+          if (imgRes.ok) {
+            const bytes = new Uint8Array(await imgRes.arrayBuffer());
+            const url = await uploadToStorage(bytes, projectId);
+            console.log(`[ImageGen] ✅ Replicate edit success (attempt ${attempt})`);
+            return url;
+          }
+        }
+
+        if (prediction.id && prediction.status !== "failed") {
+          const url = await pollReplicate(prediction.id, replicateApiKey, projectId);
+          if (url) {
+            console.log(`[ImageGen] ✅ Replicate edit success (polled, attempt ${attempt})`);
+            return url;
+          }
+        }
+
+        if (attempt < 3) await sleep(2000 * attempt);
+      } catch (err) {
+        console.warn(`[ImageGen] Replicate edit attempt ${attempt} threw: ${err}`);
+        if (attempt < 3) await sleep(2000 * attempt);
+      }
+    }
+    console.warn("[ImageGen] Replicate edit exhausted — falling back to Hypereal");
   }
 
-  // Fallback: Hypereal
-  if (hyperealApiKey) {
-    const bytes = await tryHypereal(editPrompt, hyperealApiKey, format || "landscape");
-    if (bytes) return await uploadToStorage(bytes, projectId);
+  // Fallback: Hypereal (re-generates from full prompt, no source image)
+  if (hyperealApiKey && originalPrompt) {
+    const fullPrompt = `${originalPrompt}\n\nMODIFICATION: ${editInstruction}\n\nSTYLE: ${styleDesc || ""}`;
+    console.log(`[ImageGen] Hypereal edit fallback: prompt length=${fullPrompt.length}`);
+    const bytes = await tryHypereal(fullPrompt, hyperealApiKey, format || "landscape");
+    if (bytes) {
+      console.log(`[ImageGen] ✅ Hypereal edit fallback success`);
+      return await uploadToStorage(bytes, projectId);
+    }
   }
 
   throw new Error("Image edit failed: both Replicate and Hypereal exhausted");

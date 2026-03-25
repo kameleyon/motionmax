@@ -136,26 +136,17 @@ export async function generateSceneAudio(
   }
 
   // ========== CASE 3b: French Male ==========
-  // FishAudio with French male model (primary + fallback voice)
+  // FishAudio with French male voice
   if (isFR && voiceGender === "male" && fishAudioApiKey) {
-    console.log(`[TTS] Scene ${scene.number}: French Male → Fish Audio (FR male primary)`);
+    console.log(`[TTS] Scene ${scene.number}: French Male → Fish Audio`);
     const result = await generateFishAudioTTS(
-      voiceoverText, scene.number, fishAudioApiKey, projectId, "1c86c56391ab4fefb7d376c86c0cf605",
+      voiceoverText, scene.number, fishAudioApiKey, projectId, "1cda4ad9a4db4e8b8358a6950e22ac03",
     );
     if (result.url) {
       console.log(`✅ Scene ${scene.number}: Fish Audio (French male)`);
       return { ...result, provider: "Fish Audio (French male)" };
     }
-    // Fallback French male voice
-    console.warn(`[TTS] Scene ${scene.number}: FR male primary failed, trying fallback voice`);
-    const fallback = await generateFishAudioTTS(
-      voiceoverText, scene.number, fishAudioApiKey, projectId, "1cda4ad9a4db4e8b8358a6950e22ac03",
-    );
-    if (fallback.url) {
-      console.log(`✅ Scene ${scene.number}: Fish Audio (French male fallback)`);
-      return { ...fallback, provider: "Fish Audio (French male fallback)" };
-    }
-    return { url: null, error: `French male Fish Audio failed: ${fallback.error}` };
+    return { url: null, error: `French male Fish Audio failed: ${result.error}` };
   }
 
   // ========== CASE 3c: French Female ==========

@@ -116,9 +116,8 @@ async function tryReplicate(
       // Pass source images for edits (Replicate nano-banana-2 image_input)
       if (imageInputs && imageInputs.length > 0) {
         input.image_input = imageInputs;
-        // No output_format when editing — matches edge function behavior
       } else {
-        input.output_format = "webp";
+        input.output_format = "png"; // nano-banana-2 only accepts "jpg" or "png"
       }
       const createRes = await fetch(REPLICATE_API_URL, {
         method: "POST",

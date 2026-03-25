@@ -17,9 +17,13 @@ export async function streamToFile(url: string, destPath: string): Promise<void>
   await pipeline(response.body, dest);
 }
 
+/** Size threshold (in bytes) above which we skip straight to TUS resumable. */
+const TUS_THRESHOLD_BYTES = 50 * 1024 * 1024; // 50 MB
+
 /** Upload final MP4 to Supabase Storage.
  *  Standard REST upload first; falls back to TUS resumable upload
- *  when the file exceeds the standard upload limit (413). */
+ *  when the file exceeds the standard upload limit (413).
+ *  Files above 50 MB skip REST and go directly to TUS. */
 export async function uploadToSupabase(
   localPath: string,
   fileName: string
@@ -32,6 +36,12 @@ export async function uploadToSupabase(
     await import("../../lib/supabase.js");
 
   const storagePath = `exports/${fileName}`;
+
+  // Large files → skip REST entirely and go straight to TUS
+  if (stat.size > TUS_THRESHOLD_BYTES) {
+    console.log(`[StorageUpload] File exceeds ${TUS_THRESHOLD_BYTES / (1024 * 1024)} MB — using TUS resumable directly`);
+    return tusResumableUpload(localPath, storagePath, stat.size, supabaseUrl, supabaseKey);
+  }
 
   // Try standard REST upload first
   const uploadUrl = `${supabaseUrl}/storage/v1/object/${BUCKET_NAME}/${storagePath}`;
@@ -58,13 +68,31 @@ export async function uploadToSupabase(
 
   const errText = await response.text();
 
-  // If 413 Payload Too Large — fall back to TUS resumable upload
-  if (response.status === 413) {
-    console.warn(`[StorageUpload] Standard upload 413 (${sizeMB} MB) — trying TUS resumable`);
+  // Detect 413 from either HTTP status OR response body (Supabase may
+  // return HTTP 400 with {"statusCode":"413","error":"Payload too large"})
+  if (isPayloadTooLarge(response.status, errText)) {
+    console.warn(`[StorageUpload] Payload too large (${sizeMB} MB) — trying TUS resumable`);
     return tusResumableUpload(localPath, storagePath, stat.size, supabaseUrl, supabaseKey);
   }
 
   throw new Error(`Supabase upload failed (${response.status}): ${errText}`);
+}
+
+/** Check whether a failed upload response indicates 413 Payload Too Large.
+ *  Supabase may return HTTP 413 directly, or HTTP 400 with the 413 code
+ *  embedded in the JSON body. */
+function isPayloadTooLarge(httpStatus: number, body: string): boolean {
+  if (httpStatus === 413) return true;
+  try {
+    const parsed = JSON.parse(body);
+    const code = String(parsed?.statusCode ?? "");
+    const error = String(parsed?.error ?? "").toLowerCase();
+    if (code === "413" || error.includes("payload too large")) return true;
+  } catch {
+    // body is not JSON — check raw text
+    if (body.includes("413") && body.toLowerCase().includes("payload too large")) return true;
+  }
+  return false;
 }
 
 /** TUS resumable upload — handles large files that exceed the standard upload limit.

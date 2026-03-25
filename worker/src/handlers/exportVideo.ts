@@ -13,6 +13,7 @@ import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { processScene } from "./export/sceneEncoder.js";
 import { concatFiles } from "./export/concatScenes.js";
+import { compressIfNeeded } from "./export/compressVideo.js";
 import { uploadToSupabase, removeFiles } from "./export/storageHelpers.js";
 
 /** Scenes per batch — sequential (1) is safest; slideshows spawn many ffmpeg
@@ -163,11 +164,16 @@ export async function handleExportVideo(
     // Free individual scene MP4s
     for (const f of clipPaths) removeFiles(f);
 
+    await supabase.from("video_generation_jobs").update({ progress: 80 }).eq("id", jobId);
+
+    // ── 3. Compress if too large for Supabase bucket ─────────────────
+    const uploadPath = await compressIfNeeded(finalOutputPath, tempDir);
+
     await supabase.from("video_generation_jobs").update({ progress: 90 }).eq("id", jobId);
 
-    // ── 3. Upload final video ───────────────────────────────────────
+    // ── 4. Upload final video ───────────────────────────────────────
     const finalFileName = `export_${project_id}_${Date.now()}.mp4`;
-    const finalVideoUrl = await uploadToSupabase(finalOutputPath, finalFileName);
+    const finalVideoUrl = await uploadToSupabase(uploadPath, finalFileName);
 
     await writeSystemLog({
       jobId,

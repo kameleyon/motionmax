@@ -599,7 +599,7 @@ INSERT INTO storage.buckets (id, name, public) VALUES ('scene-videos',       'sc
 INSERT INTO storage.buckets (id, name, public) VALUES ('project-thumbnails', 'project-thumbnails', true) ON CONFLICT (id) DO NOTHING;
 INSERT INTO storage.buckets (id, name, public) VALUES ('style-references',   'style-references',   true) ON CONFLICT (id) DO NOTHING;
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-  VALUES ('videos','videos',true,524288000,ARRAY['video/mp4','video/webm','audio/mpeg','image/png','image/jpeg'])
+  VALUES ('videos','videos',true,2147483648,ARRAY['video/mp4','video/webm','audio/mpeg','image/png','image/jpeg'])
   ON CONFLICT (id) DO NOTHING;
 
 -- ── 10. STORAGE POLICIES ──────────────────────────────────

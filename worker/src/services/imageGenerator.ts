@@ -14,7 +14,7 @@ import { v4 as uuidv4 } from "uuid";
 
 // ── Constants ──────────────────────────────────────────────────────
 
-const HYPEREAL_API_URL = "https://hypereal.tech/api/v1/images/generate";
+const HYPEREAL_API_URL = "https://api.hypereal.cloud/api/v1/images/generate";
 const HYPEREAL_MODEL = "gemini-3-1-flash-t2i";
 const HYPEREAL_RETRIES = 4;
 

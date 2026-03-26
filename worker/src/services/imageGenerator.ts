@@ -56,6 +56,13 @@ async function tryHypereal(
 ): Promise<Uint8Array | null> {
   const aspectRatio = toAspectRatio(format);
 
+  // Log masked key on first attempt for debugging
+  const keyLen = apiKey.length;
+  const maskedKey = keyLen === 0 ? "(EMPTY)" : keyLen <= 12
+    ? `${apiKey.substring(0, 3)}…${apiKey.substring(keyLen - 3)} (${keyLen}ch)`
+    : `${apiKey.substring(0, 6)}…${apiKey.substring(keyLen - 4)} (${keyLen}ch)`;
+  console.log(`[ImageGen] Hypereal key in use: ${maskedKey}`);
+
   for (let attempt = 1; attempt <= HYPEREAL_RETRIES; attempt++) {
     try {
       const res = await fetch(HYPEREAL_API_URL, {

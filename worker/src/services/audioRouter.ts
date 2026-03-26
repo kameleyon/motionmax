@@ -147,7 +147,7 @@ export async function generateSceneAudio(
   if (isFR && voiceGender === "male" && fishAudioApiKey) {
     console.log(`[TTS] Scene ${scene.number}: French Male → Fish Audio`);
     const result = await generateFishAudioTTS(
-      voiceoverText, scene.number, fishAudioApiKey, projectId, "1cda4ad9a4db4e8b8358a6950e22ac03",
+      voiceoverText, scene.number, fishAudioApiKey, projectId, "3b6b7ececaa84e60a2adb94c19fd16b2",
     );
     if (result.url) {
       console.log(`✅ Scene ${scene.number}: Fish Audio (French male)`);

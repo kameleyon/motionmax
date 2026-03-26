@@ -4,16 +4,18 @@
  * CASE 1: HC + Clone        → Gemini TTS → ElevenLabs STS (clone voice)
  * CASE 2: Non-HC/FR + Clone → ElevenLabs TTS (no fallback)
  * CASE 3: HC Standard       → Gemini TTS ONLY (no STS, no fallback)
- * CASE 3b: French Male      → Fish Audio (model 1c86c56391ab4fefb7d376c86c0cf605)
- * CASE 3c: French Female    → Fish Audio (voice 42fe8376b029438e81dd2929c0889ce1)
- * CASE 4: English Male      → LemonFox → Chatterbox (Replicate)
- * CASE 5: English Female    → Fish Audio → Chatterbox (Replicate)
+ * CASE 3b: French Male      → Fish Audio (1cda4ad9…)
+ * CASE 3c: French Female    → Fish Audio (42fe8376…)
+ * CASE 3d: Spanish Male     → Fish Audio (53042fce…)
+ * CASE 3e: Spanish Female   → Fish Audio (cd8052cd…)
+ * CASE 4: English Male      → Fish Audio (06a8fa…) → LemonFox → Chatterbox (Replicate)
+ * CASE 5: English Female    → Fish Audio (1dbe49…) → Chatterbox (Replicate)
  *
  * Creole detected from: config.forceHaitianCreole OR isHaitianCreole(text)
  * French detected from: config.language === "fr" OR isFrench(text) auto-detection
  */
 
-import { sanitizeVoiceover, isHaitianCreole, isFrench } from "./audioWavUtils.js";
+import { sanitizeVoiceover, isHaitianCreole, isFrench, isSpanish } from "./audioWavUtils.js";
 import {
   generateLemonfoxTTS,
   generateFishAudioTTS,
@@ -78,6 +80,8 @@ export async function generateSceneAudio(
   const isHC = forceHaitianCreole || config.language === "ht" || isHaitianCreole(voiceoverText);
   // Detect French from config OR from voiceover text (auto-detection for legacy projects)
   const isFR = config.language === "fr" || (!isHC && isFrench(voiceoverText));
+  // Detect Spanish from config OR from voiceover text
+  const isES = config.language === "es" || (!isHC && !isFR && isSpanish(voiceoverText));
 
   if (forceHaitianCreole && !isHaitianCreole(voiceoverText)) {
     console.log(`[TTS] Scene ${scene.number}: Forcing Haitian Creole from presenter_focus`);
@@ -87,6 +91,9 @@ export async function generateSceneAudio(
   }
   if (isFR && config.language !== "fr") {
     console.log(`[TTS] Scene ${scene.number}: Auto-detected French from voiceover text`);
+  }
+  if (isES && config.language !== "es") {
+    console.log(`[TTS] Scene ${scene.number}: Auto-detected Spanish from voiceover text`);
   }
 
   // ========== CASE 1: Haitian Creole + Cloned Voice ==========
@@ -168,14 +175,58 @@ export async function generateSceneAudio(
     return { url: null, error: "French TTS requires Fish Audio API key (FISH_AUDIO_API_KEY)" };
   }
 
+  // ========== CASE 3d: Spanish Male ==========
+  // Fish Audio with Spanish male voice
+  if (isES && voiceGender === "male" && fishAudioApiKey) {
+    console.log(`[TTS] Scene ${scene.number}: Spanish Male → Fish Audio`);
+    const result = await generateFishAudioTTS(
+      voiceoverText, scene.number, fishAudioApiKey, projectId, "53042fcee6b84e138e72db017d9e50a6",
+    );
+    if (result.url) {
+      console.log(`✅ Scene ${scene.number}: Fish Audio (Spanish male)`);
+      return { ...result, provider: "Fish Audio (Spanish male)" };
+    }
+    return { url: null, error: `Spanish male Fish Audio failed: ${result.error}` };
+  }
+
+  // ========== CASE 3e: Spanish Female ==========
+  // Fish Audio with Spanish female voice
+  if (isES && fishAudioApiKey) {
+    console.log(`[TTS] Scene ${scene.number}: Spanish Female → Fish Audio`);
+    const result = await generateFishAudioTTS(
+      voiceoverText, scene.number, fishAudioApiKey, projectId, "cd8052cd1a7d4597855710e6754b3fd6",
+    );
+    if (result.url) {
+      console.log(`✅ Scene ${scene.number}: Fish Audio (Spanish female)`);
+      return { ...result, provider: "Fish Audio (Spanish female)" };
+    }
+    return { url: null, error: `Spanish female Fish Audio failed: ${result.error}` };
+  }
+
+  // Spanish with no Fish Audio API key
+  if (isES) {
+    return { url: null, error: "Spanish TTS requires Fish Audio API key (FISH_AUDIO_API_KEY)" };
+  }
+
   // ========== CASE 4: English Male ==========
-  // LemonFox → Chatterbox (Replicate)
+  // Fish Audio (male) → LemonFox → Chatterbox (Replicate)
   if (voiceGender === "male") {
+    if (fishAudioApiKey) {
+      console.log(`[TTS] Scene ${scene.number}: English Male → Fish Audio (male voice)`);
+      const result = await generateFishAudioTTS(
+        voiceoverText, scene.number, fishAudioApiKey, projectId, "06a8fa125ea54698b0c84feac214abad",
+      );
+      if (result.url) {
+        console.log(`✅ Scene ${scene.number}: Fish Audio (English male)`);
+        return { ...result, provider: "Fish Audio (English male)" };
+      }
+      console.warn(`[TTS] Scene ${scene.number}: Fish Audio male failed (${result.error}), LemonFox fallback`);
+    }
     if (lemonfoxApiKey) {
-      console.log(`[TTS] Scene ${scene.number}: English Male → LemonFox`);
+      console.log(`[TTS] Scene ${scene.number}: English Male → LemonFox (fallback)`);
       const result = await generateLemonfoxTTS(voiceoverText, scene.number, "male", lemonfoxApiKey, projectId);
       if (result.url) {
-        console.log(`✅ Scene ${scene.number}: LemonFox (male)`);
+        console.log(`✅ Scene ${scene.number}: LemonFox (male fallback)`);
         return result;
       }
       console.warn(`[TTS] Scene ${scene.number}: LemonFox failed (${result.error}), Chatterbox fallback`);
@@ -187,7 +238,7 @@ export async function generateSceneAudio(
         return fb;
       }
     }
-    return { url: null, error: "English male: LemonFox + Chatterbox both failed" };
+    return { url: null, error: "English male: Fish Audio + LemonFox + Chatterbox all failed" };
   }
 
   // ========== CASE 5: English Female ==========

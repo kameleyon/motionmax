@@ -2,7 +2,7 @@ import { Globe } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
-export type Language = "en" | "fr" | "ht";
+export type Language = "en" | "fr" | "ht" | "es";
 
 interface LanguageSelectorProps {
   value: Language;
@@ -12,6 +12,7 @@ interface LanguageSelectorProps {
 const languages: { id: Language; label: string; native: string }[] = [
   { id: "en", label: "English", native: "English" },
   { id: "fr", label: "French", native: "Français" },
+  { id: "es", label: "Spanish", native: "Español" },
   { id: "ht", label: "Haitian Creole", native: "Kreyòl Ayisyen" },
 ];
 

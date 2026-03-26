@@ -86,6 +86,25 @@ export function isFrench(text: string): boolean {
   return count >= 4;
 }
 
+/** Detect Spanish text from common Spanish words. */
+export function isSpanish(text: string): boolean {
+  const lower = text.toLowerCase();
+  const indicators = [
+    "el","la","los","las","un","una","unos","unas","de","del","en","con","por","para",
+    "es","son","está","están","ser","estar","hay","que","como","más","pero","muy",
+    "también","entre","hasta","desde","donde","cuando","porque","sin","sobre","todo",
+    "todos","este","esta","estos","estas","ese","esa","otro","otra","mismo","cada",
+    "puede","tiene","hace","dice","había","fue","sido","tiene","hacer","decir","ir",
+    "poder","saber","querer","deber","mundo","tiempo","vida","años","después","siempre",
+    "nunca","mucho","poco","aquí","ahora","entonces","mientras","además","embargo",
+  ];
+  let count = 0;
+  for (const w of indicators) {
+    if (new RegExp(`\\b${w}\\b`, "gi").test(lower)) count++;
+  }
+  return count >= 4;
+}
+
 export function splitTextIntoChunks(text: string, maxChars = 400): string[] {
   const sentences = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text];
   const chunks: string[] = [];

@@ -887,8 +887,8 @@ async function isProOrEnterpriseTier(supabase: any, userId: string): Promise<boo
   }
 }
 
-// ============= IMAGE GENERATION WITH HYPEREAL (gemini-3-1-flash-t2i via https://hypereal.tech/api/v1/images/generate) =============
-const HYPEREAL_API_URL = "https://hypereal.tech/api/v1/images/generate";
+// ============= IMAGE GENERATION WITH HYPEREAL (gemini-3-1-flash-t2i via https://api.hypereal.cloud/api/v1/images/generate) =============
+const HYPEREAL_API_URL = "https://api.hypereal.cloud/api/v1/images/generate";
 const HYPEREAL_IMAGE_RETRIES = 4;
 
 async function generateImageWithHypereal(

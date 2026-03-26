@@ -1,7 +1,7 @@
 ﻿
-const HYPEREAL_IMAGE_URL = "https://hypereal.tech/api/v1/images/generate";
-const HYPEREAL_VIDEO_URL = "https://hypereal.tech/api/v1/videos/generate";
-const HYPEREAL_JOB_POLL_URL = "https://hypereal.tech/api/v1/jobs";
+const HYPEREAL_IMAGE_URL = "https://api.hypereal.cloud/api/v1/images/generate";
+const HYPEREAL_VIDEO_URL = "https://api.hypereal.cloud/api/v1/videos/generate";
+const HYPEREAL_JOB_POLL_URL = "https://api.hypereal.cloud/api/v1/jobs";
 
 export async function generateImage(prompt: string, apiKey: string, aspectRatio = "16:9") {
   console.log(`[Hypereal] Generating image for prompt: ${prompt.substring(0, 50)}...`);

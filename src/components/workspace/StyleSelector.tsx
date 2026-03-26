@@ -1,4 +1,4 @@
-﻿import { Wand2, Pencil, Users, Cherry, Camera, Box, Hand, PenTool, Laugh, ChevronLeft, ChevronRight, Palette, Baby, CloudMoon, Upload, X, Loader2 } from "lucide-react";
+﻿import { Wand2, Pencil, Users, Cherry, Camera, Box, Hand, PenTool, Laugh, ChevronLeft, ChevronRight, Palette, Baby, CloudMoon, GraduationCap, Upload, X, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,7 @@ import storybookPreview from "@/assets/styles/painterly-preview.png";
 import customPreview from "@/assets/styles/custom-preview.png";
 import crayonPreview from "@/assets/styles/crayon-preview.png";
 import moodyPreview from "@/assets/styles/moody-preview.png";
+import chalkboardPreview from "@/assets/styles/chalkboard-preview.png";
 
 /**
  * Main StyleSelector used by Doc2Video, Storytelling, and Cinematic workspaces.
@@ -31,7 +32,7 @@ import moodyPreview from "@/assets/styles/moody-preview.png";
  * Note: SmartFlowStyleSelector has a different set (10 styles, includes chalkboard,
  * excludes anime/moody/3d-pixar/claymation) — see SmartFlowStyleSelector.tsx.
  */
-export type VisualStyle = "minimalist" | "doodle" | "stick" | "anime" | "realistic" | "3d-pixar" | "claymation" | "sketch" | "caricature" | "storybook" | "crayon" | "moody" | "custom";
+export type VisualStyle = "minimalist" | "doodle" | "stick" | "anime" | "realistic" | "3d-pixar" | "claymation" | "sketch" | "caricature" | "storybook" | "crayon" | "moody" | "chalkboard" | "custom";
 
 interface StyleSelectorProps {
   selected: VisualStyle;
@@ -59,6 +60,7 @@ const styles: { id: VisualStyle; label: string; icon: React.ElementType; preview
   { id: "anime", label: "Anime", icon: Cherry, preview: animePreview },
   { id: "claymation", label: "Claymation", icon: Hand, preview: claymationPreview },
   { id: "crayon", label: "Crayon", icon: Baby, preview: crayonPreview },
+  { id: "chalkboard", label: "Chalkboard", icon: GraduationCap, preview: chalkboardPreview },
   { id: "custom", label: "Custom", icon: Wand2, preview: customPreview },
 ];
 

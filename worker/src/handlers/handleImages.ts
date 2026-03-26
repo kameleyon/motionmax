@@ -51,8 +51,8 @@ export async function handleImagesPhase(
   const { generationId, projectId } = payload;
   const imageStartIndex = typeof payload.imageStartIndex === "number" ? payload.imageStartIndex : 0;
 
-  const hyperealApiKey = process.env.HYPEREAL_API_KEY || "";
-  const replicateApiKey = process.env.REPLICATE_API_KEY || "";
+  const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
+  const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
 
   if (!hyperealApiKey && !replicateApiKey) {
     throw new Error("Neither HYPEREAL_API_KEY nor REPLICATE_API_KEY is configured");

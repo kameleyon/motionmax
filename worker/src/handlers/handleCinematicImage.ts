@@ -44,8 +44,8 @@ export async function handleCinematicImage(
   }
 
   const format = generation.projects?.format || "landscape";
-  const hyperealApiKey = process.env.HYPEREAL_API_KEY || "";
-  const replicateApiKey = process.env.REPLICATE_API_KEY || "";
+  const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
+  const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
 
   if (!hyperealApiKey && !replicateApiKey) {
     throw new Error("Neither HYPEREAL_API_KEY nor REPLICATE_API_KEY is configured");

@@ -44,8 +44,8 @@ export async function handleRegenerateImage(
   const targetImageIndex = typeof payload.imageIndex === "number" ? payload.imageIndex : 0;
   const imageModification = payload.imageModification || "";
 
-  const hyperealApiKey = process.env.HYPEREAL_API_KEY || "";
-  const replicateApiKey = process.env.REPLICATE_API_KEY || "";
+  const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
+  const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
 
   if (!hyperealApiKey && !replicateApiKey) {
     throw new Error("No image generation API key configured");

@@ -289,7 +289,20 @@ process.on("unhandledRejection", (reason) => {
   console.error("[Worker] 💥 Unhandled rejection (kept alive):", reason);
 });
 
+/** Mask an API key for safe logging: first 6 + last 4 chars visible. */
+function maskKey(key: string | undefined): string {
+  if (!key) return "(NOT SET)";
+  const trimmed = key.trim();
+  if (trimmed.length === 0) return "(EMPTY)";
+  if (trimmed !== key) return `⚠️ HAS WHITESPACE — trimmed len=${trimmed.length}, raw len=${key.length}`;
+  if (trimmed.length <= 12) return `${trimmed.substring(0, 3)}…${trimmed.substring(trimmed.length - 3)} (${trimmed.length} chars)`;
+  return `${trimmed.substring(0, 6)}…${trimmed.substring(trimmed.length - 4)} (${trimmed.length} chars)`;
+}
+
 console.log(`[Worker] MotionMax Render Worker started. Polling every ${POLL_INTERVAL_MS}ms.`);
+console.log(`[Worker] 🔑 HYPEREAL_API_KEY: ${maskKey(process.env.HYPEREAL_API_KEY)}`);
+console.log(`[Worker] 🔑 REPLICATE_API_KEY: ${maskKey(process.env.REPLICATE_API_KEY)}`);
+console.log(`[Worker] 🔑 OPENROUTER_API_KEY: ${maskKey(process.env.OPENROUTER_API_KEY)}`);
 startupDiagnostic().then((hadOrphans) => {
   if (hadOrphans) {
     console.log(`[Worker] ⏳ Cooldown ${STARTUP_COOLDOWN_MS / 1000}s before first poll (orphans recovered)`);

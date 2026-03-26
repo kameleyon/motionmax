@@ -157,7 +157,7 @@ async function tryHyperealFallback(
   generationId: string,
   sceneIndex: number,
 ): Promise<string> {
-  const hyperealApiKey = process.env.HYPEREAL_API_KEY;
+  const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
   if (!hyperealApiKey) {
     throw new Error("Both Grok and Hypereal unavailable: HYPEREAL_API_KEY not configured");
   }

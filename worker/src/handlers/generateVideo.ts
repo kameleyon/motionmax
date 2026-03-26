@@ -204,7 +204,7 @@ export async function handleGenerateVideo(
   }
 
   // ── Step 4: Post-process scenes ──────────────────────────────────
-  const stylePrompt = getStylePrompt(style, customStyle);
+  const stylePrompt = getStylePrompt(style, customStyle, projectType);
   const length: string = payload.length || "brief";
   const { scenes, totalImages, title } = postProcessScenes(
     parsed,

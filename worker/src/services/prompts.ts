@@ -73,12 +73,24 @@ You are generating visual prompts that will create illustrations. You MUST ensur
 - When unsure, use the MOST COMMONLY DOCUMENTED historical/cultural representation.
 `;
 
+// ──────────────── Cinematic Style Overrides ────────────────────────
+
+/** Styles that differ for the cinematic pipeline. */
+const CINEMATIC_STYLE_OVERRIDES: Record<string, string> = {
+  moody: `Moody monochrome stylized 3D paper cutout illustration in black, white, and grays. The scene is constructed like a shallow diorama, using distinct, physically separated layers of thick paper that cast realistic drop shadows on one another to create tangible depth. Each paper layer features thick clean outlines with hand-inked crosshatching and scratchy pen texture for shading, maintaining a slightly uneven line quality like traditional ink on paper. Cute-but-unsettling character design as the central cutout: oversized head, huge empty simple eyes, tiny mouth, minimal nose; small body with simplified hands. Cinematic centered framing, quiet tension, utilizing varying shades of flat mid-gray paper stock. Visible tactile paper grain, slightly curled edges, and faint ink smudges on the surfaces. The background is minimal but grounded, with simple interior props crafted as separate paper pieces drawn in the same inked style. Overall vibe: moody, melancholic, eerie, 3D pop-up storybook graphic novel, high contrast, no color.`,
+};
+
 // ──────────────────── Helper Functions ─────────────────────────────
 
-/** Resolve a style key to the full visual-prompt string. */
-export function getStylePrompt(style: string, customStyle?: string): string {
+/** Resolve a style key to the full visual-prompt string.
+ *  Pass projectType to get cinematic-specific overrides. */
+export function getStylePrompt(style: string, customStyle?: string, projectType?: string): string {
   if (style === "custom" && customStyle) return customStyle;
-  return STYLE_PROMPTS[style.toLowerCase()] || style;
+  const key = style.toLowerCase();
+  if (projectType === "cinematic" && CINEMATIC_STYLE_OVERRIDES[key]) {
+    return CINEMATIC_STYLE_OVERRIDES[key];
+  }
+  return STYLE_PROMPTS[key] || style;
 }
 
 /** Return pixel dimensions and aspect-ratio string for a given format. */

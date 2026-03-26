@@ -5,51 +5,59 @@
 
 // ── Language & Localisation ────────────────────────────────────────
 
+const LANGUAGE_NAMES: Record<string, string> = {
+  en: "English",
+  fr: "French (Français)",
+  ht: "Haitian Creole (Kreyòl Ayisyen)",
+  es: "Spanish (Español)",
+  pt: "Portuguese (Português)",
+};
+
 /**
  * Build a language instruction section for the LLM prompt based on selected language.
- * - "en" (default): Generate all voiceover text in English
- * - "fr": Generate voiceover/narration in French; keep JSON keys, visual prompts, and scene descriptions in English
- * - "ht": Generate voiceover/narration in Haitian Creole with proper noun preservation
+ * All user-facing text (voiceovers, titles, coverTitle, text overlays, captions)
+ * MUST be in the project's language.  Technical fields (JSON keys, visualPrompt
+ * scene descriptions for the image AI) stay in English.
  */
 export function buildLanguageSection(language?: string): string {
-  switch (language) {
-    case "fr":
-      return `=== LANGUAGE REQUIREMENT (CRITICAL) ===
-IMPORTANT: Generate ALL voiceover/narration text in French (Français).
-All scene descriptions, visual prompts, and JSON keys remain in English, but the "voiceover" field text MUST be in French.
-- Translate any input content into natural, fluent French for the voiceover
-- Keep all JSON property names, visualPrompt descriptions, and narrativeBeat labels in English
-- PRESERVE proper nouns, brand names, and specific terminology in their ORIGINAL form (do NOT translate names, slogans, or technical terms)
+  const lang = language || "en";
+  const langName = LANGUAGE_NAMES[lang] || lang;
+
+  if (lang === "en") {
+    return `=== LANGUAGE REQUIREMENT (CRITICAL) ===
+Generate ALL user-facing content in ENGLISH:
+- "voiceover" field: English
+- "coverTitle" field (Scene 1): English
+- "title" field: English
+- Any text that appears IN the visual illustrations (typography, captions, signs, banners, titles burned into images): English
+If the input content is in another language, TRANSLATE it to English for the output.
+
+=== SMART TEXT RULES ===
+- PRESERVE proper nouns, brand names, slogans, and specific terminology in their ORIGINAL form
 - Example: "Lionel Messi" stays "Lionel Messi", "Nike - Just Do It" stays "Nike - Just Do It"
-- The coverTitle field should also be in French`;
-
-    case "ht":
-      return `=== LANGUAGE REQUIREMENT (CRITICAL) ===
-IMPORTANT: Generate ALL voiceover/narration text in Haitian Creole (Kreyòl Ayisyen).
-All scene descriptions, visual prompts, and JSON keys remain in English, but the "voiceover" field text MUST be in Haitian Creole.
-
-=== HAITIAN CREOLE ILLUSTRATION TEXT RULES ===
-When generating content in Haitian Creole:
-- Write ALL illustration text, captions, and visual descriptions in Haitian Creole
-- PRESERVE proper nouns, brand names, and specific terminology in their ORIGINAL form (do NOT translate names, slogans, or technical terms)
-- Example: "Lionel Messi" stays "Lionel Messi", "Nike - Just Do It" stays "Nike - Just Do It"
-- Translate descriptive and narrative text to Haitian Creole, but keep recognizable names and branded terms unchanged
-- The coverTitle field should also be in Haitian Creole`;
-
-    default: // "en" or undefined
-      return `=== LANGUAGE REQUIREMENT (CRITICAL) ===
-ALWAYS generate ALL content (voiceovers, titles, subtitles) in ENGLISH, regardless of the input language.
-The ONLY exception: If the user EXPLICITLY requests Haitian Creole (Kreyòl Ayisyen), then generate in Haitian Creole.
-If the input content is in another language (French, Spanish, Portuguese, etc.), TRANSLATE it to English for the output.
-We do NOT support other languages at this time.
-
-=== HAITIAN CREOLE ILLUSTRATION TEXT RULES ===
-When generating content in Haitian Creole:
-- Write ALL illustration text, captions, and visual descriptions in Haitian Creole
-- PRESERVE proper nouns, brand names, and specific terminology in their ORIGINAL form (do NOT translate names, slogans, or technical terms)
-- Example: "Lionel Messi" stays "Lionel Messi", "Nike - Just Do It" stays "Nike - Just Do It"
-- Translate descriptive and narrative text to Haitian Creole, but keep recognizable names and branded terms unchanged`;
+- Do NOT mechanically translate names, acronyms, or well-known branded terms
+- Keep JSON property names, visualPrompt technical descriptions, and narrativeBeat labels in English`;
   }
+
+  return `=== LANGUAGE REQUIREMENT (CRITICAL) ===
+The project language is **${langName}**. ALL user-facing text MUST be in ${langName}:
+
+1. **"voiceover" field:** Write natural, fluent narration in ${langName}
+2. **"coverTitle" field (Scene 1):** The cover/thumbnail title MUST be in ${langName}
+3. **"title" field:** The video title MUST be in ${langName}
+4. **Visual illustration text:** Any text that appears IN the images (typography, captions, signs, banners, titles burned into visuals) MUST be written in ${langName}
+
+=== TECHNICAL FIELDS (stay in English) ===
+- JSON property names (keys): English
+- "visualPrompt" scene descriptions (for the image AI): English
+- "narrativeBeat" labels: English
+
+=== SMART TEXT RULES ===
+- PRESERVE proper nouns, brand names, slogans, and specific terminology in their ORIGINAL form — do NOT translate them
+- Example: "Lionel Messi" stays "Lionel Messi", "Nike - Just Do It" stays "Nike - Just Do It"
+- Translate descriptive and narrative text to ${langName}, but keep recognizable names and branded terms unchanged
+- Do NOT mechanically translate everything — use contextual judgment
+- Acronyms, technical terms, and universally recognized phrases may stay in their original language when it sounds more natural`;
 }
 
 /** @deprecated Use buildLanguageSection(language) instead. Kept for backward compatibility. */

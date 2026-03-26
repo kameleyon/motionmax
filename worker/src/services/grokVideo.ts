@@ -2,7 +2,7 @@
  * Grok Imagine Video via Replicate API (xai/grok-imagine-video).
  *
  * - No sound
- * - 5-second duration
+ * - 10-second duration
  * - Respect project aspect ratio (landscape → 16:9, portrait → 9:16, square → 1:1)
  *
  * Requires env var: REPLICATE_API_TOKEN
@@ -52,7 +52,7 @@ export async function generateGrokVideo(
 
   const replicateInput: Record<string, unknown> = {
     prompt: input.prompt,
-    duration: 5,
+    duration: 10,
     aspect_ratio: aspectRatio,
   };
 
@@ -61,7 +61,7 @@ export async function generateGrokVideo(
     replicateInput.image = input.imageUrl;
   }
 
-  console.log(`[GrokVideo] Starting — aspect_ratio=${aspectRatio}, duration=5s, hasImage=${!!input.imageUrl}`);
+  console.log(`[GrokVideo] Starting — aspect_ratio=${aspectRatio}, duration=10s, hasImage=${!!input.imageUrl}`);
 
   try {
     const output = await replicate.run("xai/grok-imagine-video", { input: replicateInput });

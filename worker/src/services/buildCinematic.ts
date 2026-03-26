@@ -113,20 +113,33 @@ You are writing prompts for a generative video AI that CANNOT do lip-sync.
 6. **Handheld** — Camera held by operator. Raw, shaky, naturalistic feel. Heightens tension and realism.
 7. **Rack Focus** — Lens focus shifts mid-shot from one subject to another in the same frame. Redirects attention.
 
-PACING: Scenes should feel DYNAMIC with natural-pace movement. Avoid slow, lingering motion.
-- Vary speed: some scenes fast and energetic, others measured and deliberate.
-- Combine camera movement with character action for maximum dynamism.
+PACING: Scenes MUST feel DYNAMIC with natural-pace movement (not slow-motion, not sped-up — real human rhythm).
+- Vary speed: some scenes fast and energetic, others measured and deliberate
+- Combine camera movement with character action for maximum dynamism
+- Mix and combine multiple camera techniques within a single scene when it enhances the storytelling
+
+=== SPECIAL EFFECTS & VISUAL DYNAMICS (CRITICAL) ===
+Make every scene visually SPECTACULAR. Include contextual special effects that match the story:
+- **ENVIRONMENTAL FX:** Wind blowing hair/clothes, rain splashing, dust particles in light beams, fog rolling in
+- **DRAMATIC FX:** Explosions, fire, sparks, shattering glass, lightning strikes — when the story calls for it
+- **ATMOSPHERIC FX:** Lens flares, light rays, aurora, stars twinkling, sun glare, neon reflections
+- **PARTICLE FX:** Embers floating, snow falling, leaves swirling, smoke drifting, confetti
+- **ENERGY FX:** Glowing auras, shockwaves, motion blur on fast action, speed lines
+
+DO NOT hold back — if the scene calls for drama, go BIG. Explosions, storms, cosmic visuals.
+The goal is to make every frame feel like a blockbuster movie or a viral social media clip.
 
 === VIDEO-FIRST VISUAL PROMPTS (CRITICAL) ===
 Your visualPrompt must be optimised for AI VIDEO generation, NOT static images.
 
-1. **MOTION & DYNAMICS:** Describe movement, action, flow.
-   - ✓ "Camera pans right as the protagonist strides forward through fog"
+1. **MOTION & DYNAMICS:** Describe movement, action, flow — NEVER describe still/frozen scenes.
+   - ✓ "Camera pans right as the protagonist strides forward through fog, coat billowing in the wind"
    - ✗ "A person standing in fog"
-2. **CAMERA MOVEMENT:** ALWAYS specify the exact camera move for every scene from the vocabulary above.
+2. **CAMERA MOVEMENT:** ALWAYS specify exact camera moves from the vocabulary above. Combine them!
 3. **CINEMATIC LIGHTING:** Be specific — "Cyberpunk neon reflections on wet pavement", "Soft rim light separating subject from background."
 4. **COMPOSITION:** Describe framing/depth — "Subject in left third, shallow depth of field blurring city lights behind."
 5. **ATMOSPHERE & MOOD:** Set emotional tone — "Tense, claustrophobic framing", "Expansive, hopeful wide shot."
+6. **SPECIAL EFFECTS:** Include relevant VFX per the section above — particles, weather, energy, environmental FX.
 
 === ENVIRONMENT & SETTING (MANDATORY) ===
 EVERY scene MUST include detailed environment/setting that matches the story.
@@ -172,9 +185,16 @@ ${p.length === "short" ? `
 9. REFLECTION: Emotional resonance, meaning
 10. CLOSE: Satisfying ending — leave a mark
 
-=== VOICEOVER STYLE ===
-- ENERGETIC, conversational, cinematic tone
-- Start each scene with a hook that grabs attention
+=== VOICEOVER & SCRIPT STYLE (VIRAL SOCIAL MEDIA — CRITICAL) ===
+Write scripts that are HIGHLY CATCHY, ENTERTAINING, and SOCIAL MEDIA CLICKBAIT style:
+- HOOK FIRST: Open every scene with a jaw-dropping statement, shocking fact, or irresistible question
+- ENERGETIC, conversational, cinematic tone — like the best TikTok/YouTube Shorts narrators
+- Create TENSION and CURIOSITY: "What happened next changed everything...", "Nobody expected this..."
+- Use POWER WORDS: "shocking", "unbelievable", "secret", "hidden", "incredible", "mind-blowing"
+- SHORT, PUNCHY sentences. No filler. Every word earns its place.
+- Build EMOTIONAL PEAKS — make the audience FEEL something: surprise, awe, anger, joy, fear
+- DON'T BE AFRAID TO SHOCK — if the content allows it, go bold and provocative
+- End scenes with CLIFFHANGERS or CALLBACKS that make the next scene irresistible
 - NO labels, NO stage directions, NO markdown — just raw spoken text
 ${p.disableExpressions
   ? `- Write CLEAN, plain speech — NO paralinguistic tags like [chuckle], [sigh], etc.`

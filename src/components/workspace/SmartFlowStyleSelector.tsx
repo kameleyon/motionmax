@@ -1,4 +1,4 @@
-﻿import { Wand2, Pencil, Users, Camera, Palette, Laugh, PenTool, Baby, ChevronLeft, ChevronRight, Upload, X, GraduationCap, Loader2, Cherry, Box, Hand, CloudMoon } from "lucide-react";
+﻿import { Wand2, Pencil, Users, Camera, Palette, Laugh, PenTool, Baby, ChevronLeft, ChevronRight, Upload, X, GraduationCap, Loader2, Cherry, Box, Hand, CloudMoon, Blocks, Package } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -23,12 +23,14 @@ import moodyPreview from "@/assets/styles/moody-preview.png";
 import sketchPreview from "@/assets/styles/sketch-preview.png";
 import crayonPreview from "@/assets/styles/crayon-preview.png";
 import chalkboardPreview from "@/assets/styles/chalkboard-preview.png";
+import legoPreview from "@/assets/styles/lego-preview.png";
+import cardboardPreview from "@/assets/styles/cardboard-preview.png";
 import customPreview from "@/assets/styles/custom-preview.png";
 
 /**
  * SmartFlow style selector with all styles from Doc2Video Explainers + chalkboard.
  */
-export type SmartFlowStyle = "minimalist" | "doodle" | "stick" | "anime" | "realistic" | "3d-pixar" | "claymation" | "storybook" | "caricature" | "moody" | "sketch" | "crayon" | "chalkboard" | "custom";
+export type SmartFlowStyle = "minimalist" | "doodle" | "stick" | "anime" | "realistic" | "3d-pixar" | "claymation" | "storybook" | "caricature" | "moody" | "sketch" | "crayon" | "chalkboard" | "lego" | "cardboard" | "custom";
 
 interface SmartFlowStyleSelectorProps {
   selected: SmartFlowStyle;
@@ -46,8 +48,10 @@ interface SmartFlowStyleSelectorProps {
 const styles: { id: SmartFlowStyle; label: string; icon: React.ElementType; preview: string }[] = [
   { id: "stick", label: "Stick Figure", icon: Users, preview: stickPreview },
   { id: "caricature", label: "Caricature", icon: Laugh, preview: caricaturePreview },
+  { id: "lego", label: "LEGO", icon: Blocks, preview: legoPreview },
   { id: "doodle", label: "Urban Doodle", icon: Pencil, preview: doodlePreview },
   { id: "moody", label: "Moody", icon: CloudMoon, preview: moodyPreview },
+  { id: "cardboard", label: "Cardboard", icon: Package, preview: cardboardPreview },
   { id: "storybook", label: "Storybook", icon: Palette, preview: storybookPreview },
   { id: "realistic", label: "Realistic", icon: Camera, preview: realisticPreview },
   { id: "sketch", label: "Papercut 3D", icon: PenTool, preview: sketchPreview },

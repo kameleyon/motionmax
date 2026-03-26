@@ -13,6 +13,7 @@ interface CinematicScene {
   visualPrompt: string;
   videoUrl?: string;
   audioUrl?: string;
+  imageUrl?: string;
   duration: number;
   _history?: any[];
 }
@@ -156,6 +157,12 @@ export function CinematicEditModal({
                         playsInline
                         controls
                         preload="metadata"
+                      />
+                    ) : scene.imageUrl ? (
+                      <img
+                        src={scene.imageUrl}
+                        alt={`Scene ${scene.number}`}
+                        className="w-full h-full object-cover"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-muted-foreground">

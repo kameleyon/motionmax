@@ -161,13 +161,32 @@ export function useCinematicRegeneration(
 
         if (!result?.success) throw new Error(result?.error || "Image edit failed");
 
-        // Clear videoUrl — the cinematic clip was generated from the old image
+        // Update image + clear stale videoUrl
         const nextScenes = scenes.map((s, i) =>
           i === idx ? { ...s, imageUrl: result.imageUrl, videoUrl: undefined } : s
         );
         onScenesUpdate(nextScenes);
+        toast({ title: "Image Edited", description: `Scene ${idx + 1} image updated. Generating video...` });
 
-        toast({ title: "Image Edited", description: `Scene ${idx + 1} image updated.` });
+        // Auto-trigger video regeneration from the new image
+        try {
+          const vidResult = await callPhase({
+            phase: "video",
+            generationId,
+            projectId,
+            sceneIndex: idx,
+            regenerate: true,
+          }, 10 * 60 * 1000);
+          if (vidResult?.success && vidResult.videoUrl) {
+            const withVideo = nextScenes.map((s, i) =>
+              i === idx ? { ...s, videoUrl: vidResult.videoUrl } : s
+            );
+            onScenesUpdate(withVideo);
+            toast({ title: "Video Generated", description: `Scene ${idx + 1} video ready.` });
+          }
+        } catch (vidErr) {
+          console.warn("Auto video regen after edit failed:", vidErr);
+        }
       } catch (error) {
         console.error("Image edit error:", error);
         toast({
@@ -206,13 +225,32 @@ export function useCinematicRegeneration(
 
         if (!result?.success) throw new Error(result?.error || "Image regeneration failed");
 
-        // Clear videoUrl — the cinematic clip was generated from the old image
+        // Update image + clear stale videoUrl
         const nextScenes = scenes.map((s, i) =>
           i === idx ? { ...s, imageUrl: result.imageUrl, videoUrl: undefined } : s
         );
         onScenesUpdate(nextScenes);
+        toast({ title: "Image Regenerated", description: `Scene ${idx + 1} image updated. Generating video...` });
 
-        toast({ title: "Image Regenerated", description: `Scene ${idx + 1} image updated.` });
+        // Auto-trigger video regeneration from the new image
+        try {
+          const vidResult = await callPhase({
+            phase: "video",
+            generationId,
+            projectId,
+            sceneIndex: idx,
+            regenerate: true,
+          }, 10 * 60 * 1000);
+          if (vidResult?.success && vidResult.videoUrl) {
+            const withVideo = nextScenes.map((s, i) =>
+              i === idx ? { ...s, videoUrl: vidResult.videoUrl } : s
+            );
+            onScenesUpdate(withVideo);
+            toast({ title: "Video Generated", description: `Scene ${idx + 1} video ready.` });
+          }
+        } catch (vidErr) {
+          console.warn("Auto video regen after image regen failed:", vidErr);
+        }
       } catch (error) {
         console.error("Image regeneration error:", error);
         toast({

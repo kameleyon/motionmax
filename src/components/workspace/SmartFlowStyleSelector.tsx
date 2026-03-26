@@ -44,18 +44,18 @@ interface SmartFlowStyleSelectorProps {
 }
 
 const styles: { id: SmartFlowStyle; label: string; icon: React.ElementType; preview: string }[] = [
-  { id: "minimalist", label: "Minimalist", icon: Wand2, preview: minimalistPreview },
-  { id: "doodle", label: "Urban Doodle", icon: Pencil, preview: doodlePreview },
   { id: "stick", label: "Stick Figure", icon: Users, preview: stickPreview },
-  { id: "realistic", label: "Realistic", icon: Camera, preview: realisticPreview },
-  { id: "3d-pixar", label: "3D Pixar", icon: Box, preview: pixarPreview },
-  { id: "storybook", label: "Storybook", icon: Palette, preview: storybookPreview },
-  { id: "anime", label: "Anime", icon: Cherry, preview: animePreview },
   { id: "caricature", label: "Caricature", icon: Laugh, preview: caricaturePreview },
+  { id: "doodle", label: "Urban Doodle", icon: Pencil, preview: doodlePreview },
   { id: "moody", label: "Moody", icon: CloudMoon, preview: moodyPreview },
+  { id: "storybook", label: "Storybook", icon: Palette, preview: storybookPreview },
+  { id: "realistic", label: "Realistic", icon: Camera, preview: realisticPreview },
+  { id: "sketch", label: "Papercut 3D", icon: PenTool, preview: sketchPreview },
+  { id: "minimalist", label: "Minimalist", icon: Wand2, preview: minimalistPreview },
+  { id: "3d-pixar", label: "3D Pixar", icon: Box, preview: pixarPreview },
+  { id: "anime", label: "Anime", icon: Cherry, preview: animePreview },
   { id: "claymation", label: "Claymation", icon: Hand, preview: claymationPreview },
   { id: "crayon", label: "Crayon", icon: Baby, preview: crayonPreview },
-  { id: "sketch", label: "Papercut 3D", icon: PenTool, preview: sketchPreview },
   { id: "chalkboard", label: "Chalkboard", icon: GraduationCap, preview: chalkboardPreview },
   { id: "custom", label: "Custom", icon: Wand2, preview: customPreview },
 ];

@@ -138,8 +138,13 @@ async function tryReplicate(
 
       const prediction = await createRes.json() as any;
 
-      if (prediction.status === "succeeded" && prediction.output?.[0]) {
-        const imgRes = await fetch(prediction.output[0]);
+      // nano-banana-2 returns output as a single URL string OR an array
+      const outputUrl = typeof prediction.output === "string"
+        ? prediction.output
+        : Array.isArray(prediction.output) ? prediction.output[0] : null;
+
+      if (prediction.status === "succeeded" && outputUrl) {
+        const imgRes = await fetch(outputUrl);
         if (imgRes.ok) {
           const bytes = new Uint8Array(await imgRes.arrayBuffer());
           return await uploadToStorage(bytes, projectId);
@@ -174,8 +179,11 @@ async function pollReplicate(
     });
     if (!res.ok) continue;
     const data = await res.json() as any;
-    if (data.status === "succeeded" && data.output?.[0]) {
-      const imgRes = await fetch(data.output[0]);
+    const pollOutputUrl = typeof data.output === "string"
+      ? data.output
+      : Array.isArray(data.output) ? data.output[0] : null;
+    if (data.status === "succeeded" && pollOutputUrl) {
+      const imgRes = await fetch(pollOutputUrl);
       if (imgRes.ok) {
         const bytes = new Uint8Array(await imgRes.arrayBuffer());
         return await uploadToStorage(bytes, projectId);
@@ -269,10 +277,13 @@ export async function editImage(
         }
 
         const prediction = await res.json() as any;
-        console.log(`[ImageGen] Replicate edit response: status=${prediction.status}, hasOutput=${!!prediction.output}`);
+        const editOutputUrl = typeof prediction.output === "string"
+          ? prediction.output
+          : Array.isArray(prediction.output) ? prediction.output[0] : null;
+        console.log(`[ImageGen] Replicate edit response: status=${prediction.status}, outputUrl=${editOutputUrl?.substring(0, 60)}`);
 
-        if (prediction.status === "succeeded" && prediction.output?.[0]) {
-          const imgRes = await fetch(prediction.output[0]);
+        if (prediction.status === "succeeded" && editOutputUrl) {
+          const imgRes = await fetch(editOutputUrl);
           if (imgRes.ok) {
             const bytes = new Uint8Array(await imgRes.arrayBuffer());
             const url = await uploadToStorage(bytes, projectId);

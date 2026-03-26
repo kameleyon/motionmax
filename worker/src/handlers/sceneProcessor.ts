@@ -75,11 +75,30 @@ export function sanitizeVoiceover(input: unknown): string {
   return out.replace(/\s{2,}/g, " ").trim();
 }
 
+// ── Voiceover word cap ─────────────────────────────────────────────
+
+/** Max words per scene for "short" length (~15-16s at 2.5 words/sec). */
+const SHORT_MAX_WORDS = 40;
+
+/** Truncate voiceover at a sentence boundary to fit the word cap. */
+function capVoiceover(text: string, maxWords: number): string {
+  const words = text.split(/\s+/);
+  if (words.length <= maxWords) return text;
+
+  // Find the last sentence boundary within the limit
+  const truncated = words.slice(0, maxWords).join(" ");
+  const lastPeriod = Math.max(truncated.lastIndexOf("."), truncated.lastIndexOf("!"), truncated.lastIndexOf("?"));
+  if (lastPeriod > truncated.length * 0.5) {
+    return truncated.substring(0, lastPeriod + 1);
+  }
+  return truncated + ".";
+}
+
 // ── Scene Post-Processor ───────────────────────────────────────────
 
 /**
  * Post-process LLM-generated scenes:
- *  1. Sanitize voiceovers
+ *  1. Sanitize voiceovers (+ cap words for "short" length)
  *  2. Append style prompt to visualPrompt & subVisuals
  *  3. Force duration = 15
  *  4. Calculate totalImages (1 primary + up to 2 sub-visuals per scene)
@@ -88,17 +107,22 @@ export function postProcessScenes(
   parsedScript: ParsedScript,
   stylePrompt: string,
   projectType: string,
+  length?: string,
 ): ProcessedResult {
   const rawScenes = parsedScript.scenes || [];
+  const isShort = length === "short";
 
   const scenes = rawScenes.map((s, idx) => {
     const vp = s.visualPrompt || s.visual_prompt || "";
     const subs = s.subVisuals || s.sub_visuals || [];
 
+    let voiceover = sanitizeVoiceover(s.voiceover);
+    if (isShort) voiceover = capVoiceover(voiceover, SHORT_MAX_WORDS);
+
     return {
       ...s,
       number: s.number ?? idx + 1,
-      voiceover: sanitizeVoiceover(s.voiceover),
+      voiceover,
       visualPrompt: `${vp}\n\nSTYLE: ${stylePrompt}`,
       subVisuals: subs.map((sv: string) => `${sv}\n\nSTYLE: ${stylePrompt}`),
       duration: 15,

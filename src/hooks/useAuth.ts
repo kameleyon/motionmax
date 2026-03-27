@@ -30,7 +30,9 @@ export function useAuth() {
   }, []);
 
   const signUp = useCallback(async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signUp({ options: { emailRedirectTo: `${window.location.origin}/app` },
+    const redirectUrl = import.meta.env.VITE_APP_URL || window.location.origin;
+    const { data, error } = await supabase.auth.signUp({
+      options: { emailRedirectTo: `${redirectUrl}/app` },
       email,
       password,
     });
@@ -54,8 +56,9 @@ export function useAuth() {
   }, []);
 
   const resetPassword = useCallback(async (email: string) => {
+    const redirectUrl = import.meta.env.VITE_APP_URL || window.location.origin;
     const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth`,
+      redirectTo: `${redirectUrl}/auth`,
     });
     return { data, error };
   }, []);

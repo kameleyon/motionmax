@@ -13,12 +13,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { ThemedLogo } from "@/components/ThemedLogo";
 import { supabase } from "@/integrations/supabase/client";
+import { getPasswordStrength, PasswordStrengthMeter } from "@/components/ui/password-strength";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { useSidebarState } from "@/hooks/useSidebarState";
@@ -32,22 +32,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-
-/** Calculate a 0–100 password strength score */
-function getPasswordStrength(password: string): { score: number; label: string; color: string } {
-  if (!password) return { score: 0, label: "", color: "bg-muted" };
-  let score = 0;
-  if (password.length >= 8) score += 25;
-  else if (password.length >= 6) score += 10;
-  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score += 25;
-  if (/\d/.test(password)) score += 25;
-  if (/[^a-zA-Z0-9]/.test(password)) score += 25;
-
-  if (score <= 25) return { score, label: "Weak", color: "bg-destructive" };
-  if (score <= 50) return { score, label: "Fair", color: "bg-orange-500" };
-  if (score <= 75) return { score, label: "Good", color: "bg-yellow-500" };
-  return { score, label: "Strong", color: "bg-green-500" };
-}
 
 export default function Settings() {
   const { user } = useAuth();
@@ -310,28 +294,7 @@ export default function Settings() {
                             Enter a new password to update your account security. Password must be at least 8 characters with a mix of character types.
                           </p>
                           <Input type="password" placeholder="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-                          {newPassword && (
-                            <div className="space-y-1.5">
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="text-muted-foreground">Password strength</span>
-                                <span className={`font-medium ${
-                                  passwordStrength.score <= 25 ? "text-destructive" :
-                                  passwordStrength.score <= 50 ? "text-orange-500" :
-                                  passwordStrength.score <= 75 ? "text-yellow-600" :
-                                  "text-green-600"
-                                }`}>
-                                  {passwordStrength.label}
-                                </span>
-                              </div>
-                              <Progress value={passwordStrength.score} className="h-1.5" />
-                              <ul className="text-[11px] text-muted-foreground space-y-0.5 mt-1">
-                                <li className={newPassword.length >= 8 ? "text-green-600" : ""}>• At least 8 characters</li>
-                                <li className={/[a-z]/.test(newPassword) && /[A-Z]/.test(newPassword) ? "text-green-600" : ""}>• Uppercase and lowercase letters</li>
-                                <li className={/\d/.test(newPassword) ? "text-green-600" : ""}>• At least one number</li>
-                                <li className={/[^a-zA-Z0-9]/.test(newPassword) ? "text-green-600" : ""}>• At least one special character</li>
-                              </ul>
-                            </div>
-                          )}
+                          <PasswordStrengthMeter password={newPassword} />
                           <Input type="password" placeholder="Confirm new password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
                           <Button onClick={handleChangePassword} disabled={isChangingPassword} className="gap-2 rounded-full">
                             {isChangingPassword && <Loader2 className="h-4 w-4 animate-spin" />}

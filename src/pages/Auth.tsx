@@ -5,12 +5,14 @@ import { Mail, Lock, ArrowRight, Eye, EyeOff, Loader2, CheckCircle2 } from "luci
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ThemedLogo } from "@/components/ThemedLogo";
 import { supabase } from "@/integrations/supabase/client";
 import { getAuthErrorMessage } from "@/lib/authErrors";
+import { PasswordStrengthMeter } from "@/components/ui/password-strength";
 
 type AuthMode = "login" | "signup" | "reset" | "update";
 
@@ -58,6 +60,7 @@ export default function Auth() {
   const [isLoading, setIsLoading] = useState(false);
   const [showEmailSent, setShowEmailSent] = useState(false);
   const [showRateLimitHint, setShowRateLimitHint] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const failedAttemptsRef = useRef(0);
   const navigate = useNavigate();
   const returnUrl = searchParams.get("returnUrl") || "/app";
@@ -98,6 +101,10 @@ export default function Auth() {
       }
 
       if (mode === "signup") {
+        if (!acceptedTerms) {
+          toast({ variant: "destructive", title: "Terms required", description: "You must accept the Terms of Service and Privacy Policy to create an account." });
+          return;
+        }
         const { error } = await signUp(email, password);
         if (error) {
           toast({ variant: "destructive", title: "Sign up failed", description: getAuthErrorMessage(error.message) });
@@ -268,7 +275,8 @@ export default function Auth() {
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
-                  {(mode === "signup" || mode === "update") && (
+                  {mode === "signup" && <PasswordStrengthMeter password={password} />}
+                  {mode === "update" && (
                     <p className="text-xs text-muted-foreground">Minimum {MIN_PASSWORD_LENGTH} characters required.</p>
                   )}
                 </div>
@@ -304,6 +312,27 @@ export default function Auth() {
                 <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-lg px-3 py-2">
                   Too many failed attempts? You may be temporarily rate-limited. Wait a few minutes before trying again.
                 </p>
+              )}
+
+              {mode === "signup" && (
+                <div className="flex items-start gap-2">
+                  <Checkbox
+                    id="terms"
+                    checked={acceptedTerms}
+                    onCheckedChange={(checked) => setAcceptedTerms(checked === true)}
+                    className="mt-0.5"
+                  />
+                  <label htmlFor="terms" className="text-xs text-muted-foreground leading-relaxed cursor-pointer">
+                    I agree to the{" "}
+                    <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                      Terms of Service
+                    </a>
+                    {" "}and{" "}
+                    <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                      Privacy Policy
+                    </a>
+                  </label>
+                </div>
               )}
 
               <Button

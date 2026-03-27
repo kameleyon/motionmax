@@ -10,6 +10,7 @@ import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField } from "../lib/sceneUpdate.js";
 import { generateGrokVideo } from "../services/grokVideo.js";
 import { generateVideoFromImage as hyperealI2V } from "../services/hypereal.js";
+import { generateImage } from "../services/imageGenerator.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -50,8 +51,22 @@ export async function handleCinematicVideo(
   const scene = scenes[sceneIndex];
   if (!scene) throw new Error(`Scene ${sceneIndex} not found`);
 
-  const imageUrl = scene.imageUrl;
-  if (!imageUrl) throw new Error(`Scene ${sceneIndex} has no imageUrl`);
+  let imageUrl = scene.imageUrl;
+
+  // Auto-generate image if missing (e.g., initial image gen failed with 500)
+  if (!imageUrl) {
+    console.log(`[CinematicVideo] Scene ${sceneIndex} has no imageUrl — generating image first`);
+    const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
+    const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
+    const prompt = scene.visualPrompt || scene.visual_prompt || "Cinematic scene";
+
+    const { data: proj } = await supabase.from("projects").select("format").eq("id", projectId).single();
+    const fmt = proj?.format || "landscape";
+
+    imageUrl = await generateImage(prompt, hyperealApiKey, replicateApiKey, fmt, projectId);
+    await updateSceneField(generationId, sceneIndex, "imageUrl", imageUrl);
+    console.log(`[CinematicVideo] Scene ${sceneIndex} image auto-generated: ${imageUrl.substring(0, 60)}...`);
+  }
 
   // Snapshot the imageUrl used to generate the video — used later to detect
   // if the user regenerated the image while the video was being created.

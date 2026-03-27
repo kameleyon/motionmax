@@ -17,6 +17,30 @@ export default function Admin() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("overview");
 
+  // Production environment check
+  useEffect(() => {
+    const hostname = window.location.hostname;
+    const isProduction = hostname === "motionmax.io" || hostname === "www.motionmax.io";
+
+    if (isProduction) {
+      // In production, require additional confirmation or redirect to avoid accidental access
+      const hasConfirmed = sessionStorage.getItem("admin_production_confirmed");
+
+      if (!hasConfirmed) {
+        const confirmed = window.confirm(
+          "⚠️ PRODUCTION ADMIN PANEL\n\nYou are accessing the admin panel in production. This can affect live user data.\n\nAre you sure you want to proceed?"
+        );
+
+        if (!confirmed) {
+          navigate("/app", { replace: true });
+          return;
+        }
+
+        sessionStorage.setItem("admin_production_confirmed", "true");
+      }
+    }
+  }, [navigate]);
+
   useEffect(() => {
     if (!loading && !isAdmin) {
       navigate("/app", { replace: true });

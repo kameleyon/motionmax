@@ -72,3 +72,13 @@ export function yearlyDiscountPercent(): number {
   const yearly  = parseFloat(PLAN_PRICES.starter.yearly.replace("$", ""));
   return Math.round((1 - yearly / monthly) * 100);
 }
+
+/**
+ * Calculates annual savings (monthly * 12) - (yearly * 12) for a given plan
+ */
+export function getAnnualSavings(plan: keyof typeof PLAN_PRICES): number {
+  if (plan === "free" || plan === "enterprise") return 0;
+  const monthly = parseFloat(PLAN_PRICES[plan].monthly.replace("$", ""));
+  const yearly = parseFloat(PLAN_PRICES[plan].yearly.replace("$", ""));
+  return Math.round((monthly - yearly) * 12);
+}

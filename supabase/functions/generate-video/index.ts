@@ -1,6 +1,7 @@
 ﻿import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { decode as base64Decode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
+import DOMPurify from "https://esm.sh/isomorphic-dompurify@2.16.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") ?? "*",
@@ -87,18 +88,21 @@ function validateNonNegativeInt(value: unknown, fieldName: string): number | nul
   return value;
 }
 
-// Sanitize content to remove potential injection patterns
+// Sanitize content using DOMPurify to prevent injection attacks
 function sanitizeContent(content: string): string {
-  // Remove potential script injection patterns
-  let sanitized = content
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-    .replace(/javascript:/gi, "")
-    .replace(/on\w+\s*=/gi, "");
+  // Configure DOMPurify to strip all HTML tags and attributes
+  // This is safe for content that will be processed by AI models
+  const clean = DOMPurify.sanitize(content, {
+    ALLOWED_TAGS: [], // Strip all HTML tags
+    ALLOWED_ATTR: [], // Strip all attributes
+    KEEP_CONTENT: true, // Keep text content
+    RETURN_TRUSTED_TYPE: false,
+  });
 
   // Remove excessive whitespace while preserving structure
-  sanitized = sanitized.replace(/\s{10,}/g, "    ");
+  const normalized = clean.replace(/\s{10,}/g, "    ");
 
-  return sanitized.trim();
+  return normalized.trim();
 }
 
 // ============= CONTENT MODERATION (Gemini AI-Powered) =============

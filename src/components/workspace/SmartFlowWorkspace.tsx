@@ -25,6 +25,8 @@ import { useAdminLogs } from "@/hooks/useAdminLogs";
 import { AdminLogsPanel } from "./AdminLogsPanel";
 import { TemplateSelector } from "./TemplateSelector";
 import { useWorkspaceDraft } from "@/hooks/useWorkspaceDraft";
+import { useInfographicsUsage } from "@/hooks/useInfographicsUsage";
+import { PLAN_LIMITS } from "@/lib/planLimits";
 
 export interface WorkspaceHandle {
   resetWorkspace: () => void;
@@ -53,9 +55,10 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
 
     const { state: generationState, startGeneration, reset, loadProject } = useGenerationPipeline();
     const { isAdmin, adminLogs, showAdminLogs, setShowAdminLogs } = useAdminLogs(generationState.generationId, generationState.step);
-    
+
     // Subscription and plan validation
     const { plan, creditsBalance, subscriptionStatus, checkSubscription } = useSubscription();
+    const { count: infographicsUsed } = useInfographicsUsage();
     const { toast } = useToast();
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
     const [upgradeReason, setUpgradeReason] = useState("");
@@ -129,6 +132,22 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
       if (subscriptionStatus === "past_due" || subscriptionStatus === "unpaid") {
         setSuspendedStatus(subscriptionStatus as "past_due" | "unpaid");
         setShowSuspendedModal(true);
+        return;
+      }
+
+      // Check monthly infographics limit
+      const monthlyLimit = PLAN_LIMITS[plan].infographicsPerMonth;
+      if (monthlyLimit !== 999999 && infographicsUsed >= monthlyLimit) {
+        const limitMessage = plan === "free"
+          ? "You've reached the Free plan limit. Upgrade to Starter or higher to create infographics."
+          : `You've reached your monthly limit of ${monthlyLimit} infographics. Upgrade to get more or wait until next month.`;
+        toast({
+          variant: "destructive",
+          title: "Monthly Limit Reached",
+          description: limitMessage,
+        });
+        setUpgradeReason(limitMessage);
+        setShowUpgradeModal(true);
         return;
       }
 
@@ -248,10 +267,20 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
                 >
                   {/* Hero */}
                   <div className="text-center space-y-3">
-                    <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                      <Wallpaper className="h-3.5 w-3.5" />
-                      Smart Flow
-                    </span>
+                    <div className="flex flex-col items-center gap-2">
+                      <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                        <Wallpaper className="h-3.5 w-3.5" />
+                        Smart Flow
+                      </span>
+                      {plan !== "free" && (
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <span>
+                            {infographicsUsed} / {PLAN_LIMITS[plan].infographicsPerMonth === 999999 ? "∞" : PLAN_LIMITS[plan].infographicsPerMonth}
+                          </span>
+                          <span className="text-muted-foreground/50">infographics this month</span>
+                        </div>
+                      )}
+                    </div>
                     <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
                       Create Your Infographic
                     </h1>

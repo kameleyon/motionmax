@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Check, X, Sparkles, Zap, Crown, Building2 } from "lucide-react";
 import { PLAN_LIMITS } from "@/lib/planLimits";
-import { PLAN_PRICES, yearlyDiscountPercent } from "@/config/products";
+import { PLAN_PRICES, yearlyDiscountPercent, getAnnualSavings } from "@/config/products";
 import { Button } from "@/components/ui/button";
 
 /* ──────────────────────────────────────────────
@@ -23,7 +23,7 @@ const pricingPlans = [
     description: "Get started with basic features",
     features: [
       { text: `${PLAN_LIMITS.free.creditsPerMonth} credits/month`, included: true },
-      { text: "Short videos only (<2 min)", included: true },
+      { text: "Short videos only (~3 min)", included: true },
       { text: "720p quality", included: true },
       { text: "5 basic visual styles", included: true },
       { text: PLAN_LIMITS.free.allowedFormats.length === 1
@@ -173,7 +173,13 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
                   <span className="text-3xl font-bold text-foreground">{displayPrice}</span>
                   <span className="text-muted-foreground">/month</span>
                 </div>
-                {billingInterval === "yearly" && plan.name !== "Free" && (
+                {billingInterval === "yearly" && plan.name !== "Free" && plan.name !== "Enterprise" && (
+                  <div className="mb-4">
+                    <p className="text-xs text-muted-foreground">Billed annually</p>
+                    <p className="text-xs font-medium text-primary">Save ${getAnnualSavings(plan.name.toLowerCase() as keyof typeof PLAN_PRICES)}/year</p>
+                  </div>
+                )}
+                {billingInterval === "yearly" && (plan.name === "Free" || plan.name === "Enterprise") && (
                   <p className="text-xs text-primary mb-4">Billed annually</p>
                 )}
                 {billingInterval === "monthly" && <div className="mb-4" />}

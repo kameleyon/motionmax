@@ -122,6 +122,7 @@ export default function Projects() {
   const [sortField, setSortField] = useState<SortField>("updated_at");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [projectTypeFilter, setProjectTypeFilter] = useState<string>("all");
   
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -151,7 +152,7 @@ export default function Projects() {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ["all-projects", user?.id, debouncedSearch, sortField, sortOrder],
+    queryKey: ["all-projects", user?.id, debouncedSearch, sortField, sortOrder, projectTypeFilter],
     queryFn: async ({ pageParam = 0 }) => {
       if (!user?.id) return { projects: [], nextCursor: null };
       
@@ -170,6 +171,10 @@ export default function Projects() {
 
       if (debouncedSearch.length > 0) {
         q = q.ilike("title", `%${debouncedSearch}%`);
+      }
+
+      if (projectTypeFilter !== "all") {
+        q = q.eq("project_type", projectTypeFilter);
       }
 
       const { data: projectsData, error } = await q;
@@ -535,6 +540,38 @@ export default function Projects() {
             />
           </div>
           <div className="flex gap-2 flex-wrap">
+            <Select value={projectTypeFilter} onValueChange={setProjectTypeFilter}>
+              <SelectTrigger className="w-[150px] bg-card border-border/50">
+                <SelectValue placeholder="All types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="doc2video">
+                  <div className="flex items-center gap-2">
+                    <Video className="h-4 w-4" />
+                    Doc2Video
+                  </div>
+                </SelectItem>
+                <SelectItem value="storytelling">
+                  <div className="flex items-center gap-2">
+                    <Clapperboard className="h-4 w-4" />
+                    Storytelling
+                  </div>
+                </SelectItem>
+                <SelectItem value="smartflow">
+                  <div className="flex items-center gap-2">
+                    <Wallpaper className="h-4 w-4" />
+                    SmartFlow
+                  </div>
+                </SelectItem>
+                <SelectItem value="cinematic">
+                  <div className="flex items-center gap-2">
+                    <Wand2 className="h-4 w-4" />
+                    Cinematic
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
             <Select value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
               <SelectTrigger className="w-[140px] bg-card border-border/50">
                 <SelectValue placeholder="Sort by" />

@@ -102,8 +102,10 @@
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"></noscript>
-    <!-- Basic Content Security Policy: prevents framing (clickjacking), plugin content, and base-tag injection -->
-    <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'none'; object-src 'none'; base-uri 'self';">
+    <!-- Basic Content Security Policy: prevents plugin content and base-tag injection
+         NOTE: frame-ancestors MUST be set via HTTP header (not meta tag) - see DEPLOYMENT_SECURITY.md
+         Configure in your deployment platform: Content-Security-Policy: frame-ancestors 'none'; -->
+    <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self';">
   </head>
   <body>
     <div id="root"></div>

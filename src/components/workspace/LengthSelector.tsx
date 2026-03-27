@@ -12,9 +12,9 @@ interface LengthSelectorProps {
 }
 
 const lengths: { id: VideoLength; label: string; duration: string }[] = [
-  { id: "short", label: "Short", duration: "~ 2.5 min" },
-  { id: "brief", label: "Brief", duration: "< 5 min" },
-  { id: "presentation", label: "Presentation", duration: "< 10 min" },
+  { id: "short", label: "Short", duration: "~3 min" },
+  { id: "brief", label: "Brief", duration: "~7 min" },
+  { id: "presentation", label: "Presentation", duration: "~9 min" },
 ];
 
 export function LengthSelector({ selected, onSelect, disabledLengths = [] }: LengthSelectorProps) {

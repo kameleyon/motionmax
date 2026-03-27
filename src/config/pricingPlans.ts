@@ -32,7 +32,7 @@ export const PLANS: PlanDef[] = [
     icon: Sparkles,
     features: [
       `${PLAN_LIMITS.free.creditsPerMonth} credits/month`,
-      "Short videos only (<2 min)",
+      "Short videos only (~3 min)",
       "720p quality",
       "5 basic visual styles",
       "Landscape format only",
@@ -179,9 +179,9 @@ export interface CreditInfoItem {
 }
 
 export const CREDIT_INFO: CreditInfoItem[] = [
-  { type: "Short Video (<2 min)", credits: 1 },
-  { type: "Brief Video (<5 min)", credits: 2 },
-  { type: "Presentation (<10 min)", credits: 4 },
+  { type: "Short Video (~3 min)", credits: 1 },
+  { type: "Brief Video (~7 min)", credits: 2 },
+  { type: "Presentation (~9 min)", credits: 4 },
   { type: "Infographic", credits: 1 },
   {
     type: "Cinematic",

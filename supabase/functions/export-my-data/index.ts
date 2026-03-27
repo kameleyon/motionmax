@@ -1,21 +1,28 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
+import { checkRateLimit, getRateLimitHeaders } from "../_shared/rateLimit.ts";
 
 /**
  * GDPR Article 20 — Data Portability
  * Returns all user data as a JSON payload.
  * Authenticated users can only export their own data.
+ *
+ * SECURITY:
+ * - Rate limited to 1 export per hour per user
+ * - Max export size: 10 MB
+ * - CORS properly configured (no wildcard)
  */
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") ?? "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
+const MAX_EXPORT_SIZE_MB = 10;
+const MAX_EXPORT_SIZE_BYTES = MAX_EXPORT_SIZE_MB * 1024 * 1024;
 
 serve(async (req) => {
+  const origin = req.headers.get("origin");
+  const corsHeaders = getCorsHeaders(origin);
+
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return handleCorsPreflightRequest(origin);
   }
 
   try {
@@ -51,6 +58,33 @@ serve(async (req) => {
     }
 
     const userId = user.id;
+
+    // Rate limiting: 1 export per hour per user
+    const rateLimit = await checkRateLimit(supabaseUser, {
+      key: "export-my-data",
+      maxRequests: 1,
+      windowSeconds: 3600, // 1 hour
+      userId,
+    });
+
+    if (!rateLimit.allowed) {
+      const resetDate = new Date(rateLimit.resetAt);
+      return new Response(
+        JSON.stringify({
+          error: "Rate limit exceeded",
+          message: `You can request a data export once per hour. Try again after ${resetDate.toLocaleString()}.`,
+          resetAt: rateLimit.resetAt,
+        }),
+        {
+          headers: {
+            ...corsHeaders,
+            ...getRateLimitHeaders(rateLimit),
+            "Content-Type": "application/json",
+          },
+          status: 429,
+        }
+      );
+    }
 
     // Use service role to gather all data for this user
     const supabaseAdmin = createClient(
@@ -113,9 +147,32 @@ serve(async (req) => {
       project_shares: sharesRes.data ?? [],
     };
 
-    return new Response(JSON.stringify(exportData, null, 2), {
+    // Check export size to prevent memory exhaustion
+    const jsonString = JSON.stringify(exportData);
+    const sizeBytes = new TextEncoder().encode(jsonString).length;
+
+    if (sizeBytes > MAX_EXPORT_SIZE_BYTES) {
+      return new Response(
+        JSON.stringify({
+          error: "Export too large",
+          message: `Your data export exceeds the ${MAX_EXPORT_SIZE_MB}MB limit (${(sizeBytes / 1024 / 1024).toFixed(2)}MB). Please contact support for assistance.`,
+          sizeMB: (sizeBytes / 1024 / 1024).toFixed(2),
+        }),
+        {
+          headers: {
+            ...corsHeaders,
+            ...getRateLimitHeaders(rateLimit),
+            "Content-Type": "application/json",
+          },
+          status: 413, // Payload Too Large
+        }
+      );
+    }
+
+    return new Response(jsonString, {
       headers: {
         ...corsHeaders,
+        ...getRateLimitHeaders(rateLimit),
         "Content-Type": "application/json",
         "Content-Disposition": `attachment; filename="motionmax-data-export-${userId}.json"`,
       },

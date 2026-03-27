@@ -66,7 +66,8 @@ export default function SeoHead() {
         name="twitter:title"
         content="MotionMax — Turn text into engaging visual content"
       />
-      <parameter name="twitter:description"
+      <meta
+        name="twitter:description"
         content="Turn text into engaging visual content. Create narrated videos with AI visuals and voiceovers — start free."
       />
       <meta property="twitter:image" content={OG_IMAGE} />

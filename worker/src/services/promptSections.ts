@@ -84,13 +84,26 @@ When generating the 'visualPrompt' for each scene, you MUST:
 
 // ── Cover Title Section Builder ────────────────────────────────────
 
-export function buildCoverTitleSection(examples: string): string {
+export function buildCoverTitleSection(examples: string, styleDesc?: string): string {
+  const styleMatch = styleDesc
+    ? `\n- **STYLE-MATCHED TYPOGRAPHY:** The title text in the visualPrompt for Scene 1 MUST be rendered in the SAME art style as the rest of the image. If the style is "${styleDesc}", the title lettering must look like it belongs in that world (e.g., Lego style → blocky 3D brick letters, Anime → manga-style text, Watercolor → painted brush-stroke lettering, etc.). NEVER use generic plain text or a mismatched style for the title.`
+    : "";
   return `=== COVER IMAGE TITLE (CRITICAL FOR SCENE 1) ===
 For Scene 1 ONLY, you MUST include a "coverTitle" field with a short, catchy, social media-style title (3-6 words max).
 - This is the THUMBNAIL/COVER title that will be rendered prominently on the first image
-- Make it punchy, intriguing, and scroll-stopping (like a viral TikTok or YouTube thumbnail)
-- It should match the visual style and create curiosity/interest
+- Make it punchy, intriguing, and scroll-stopping (like a viral TikTok or YouTube thumbnail)${styleMatch}
 - Examples: ${examples}`;
+}
+
+// ── Brand Attribution Section Builder ──────────────────────────────
+
+export function buildBrandSection(brandMark?: string): string {
+  if (!brandMark) return "";
+  return `\n=== BRAND ATTRIBUTION (REQUIRED) ===
+Subtly weave "${brandMark}" into the content:
+- Include "${brandMark}" as a small branded footer or logo text in Scene 1's visualPrompt
+- Mention "${brandMark}" naturally in the voiceover of the first or last scene (e.g., "Brought to you by ${brandMark}" or "A ${brandMark} production")
+- Do NOT make it intrusive — it should feel like a natural part of the content\n`;
 }
 
 // ── Output Format Builder ──────────────────────────────────────────

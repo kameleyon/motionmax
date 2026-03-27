@@ -19,6 +19,7 @@ import {
   buildLanguageSection,
   PROMPT_ENGINEERING_SECTION,
   buildCoverTitleSection,
+  buildBrandSection,
 } from "./promptSections.js";
 import type { PromptResult } from "./buildDoc2Video.js";
 
@@ -55,8 +56,9 @@ export function buildCinematicPrompt(p: CinematicParams): PromptResult {
     ? `\n=== CHARACTER APPEARANCE ===\nAll human characters in visual prompts MUST match this description:\n${p.characterDescription}\nInclude these character details in EVERY visualPrompt that features people.\n`
     : "";
 
+  const brandSec = buildBrandSection(p.brandMark);
   const system = buildCinematicSystem(cfg, targetWords, styleDesc, dims, p, p.language);
-  const user = `Create a cinematic video script based on this idea:\n\n${p.content}\n${presenterGuidance}${characterGuidance}`;
+  const user = `Create a cinematic video script based on this idea:\n\n${p.content}\n${presenterGuidance}${characterGuidance}${brandSec}`;
   return { system, user, maxTokens };
 }
 
@@ -225,7 +227,7 @@ When writing visualPrompt, COPY the full character description — don't just re
 
 ${PROMPT_ENGINEERING_SECTION}
 
-${buildCoverTitleSection('"The Untold Story", "When Everything Changed", "Against All Odds", "Rise to Power"')}
+${buildCoverTitleSection('"The Untold Story", "When Everything Changed", "Against All Odds", "Rise to Power"', styleDesc)}
 
 === HISTORICAL, CULTURAL & VISUAL ACCURACY (CRITICAL) ===
 - Historical accuracy: ALL visual elements must match the era

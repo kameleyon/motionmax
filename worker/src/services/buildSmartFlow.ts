@@ -80,7 +80,7 @@ CRITICAL: BASE YOUR OUTPUT ENTIRELY ON THE USER'S "EXTRACTION GOAL" ABOVE.
 You MUST include a "coverTitle" field with a short, catchy, social media-style title (3-6 words max).
 - This is the THUMBNAIL/COVER title that will be rendered prominently on the infographic
 - Make it punchy, intriguing, and scroll-stopping (like a viral TikTok or YouTube thumbnail)
-- It should match the visual style and create curiosity/interest
+- **STYLE-MATCHED TYPOGRAPHY:** The title text in the visualPrompt MUST be rendered in the SAME art style as the rest of the image (style: ${styleDesc}). The title lettering must look like it belongs in that world (e.g., Lego → blocky 3D brick letters, Anime → manga text, Watercolor → painted brush-stroke lettering). NEVER use generic plain text or a mismatched style.
 - Examples: "The $10B Secret", "Top 3 Revealed", "The Hidden Formula", "Game Changing Insights"
 
 === OUTPUT FORMAT (STRICT JSON) ===

@@ -166,7 +166,7 @@ Example:
 
 ${PROMPT_ENGINEERING_SECTION}
 
-${buildCoverTitleSection('"The Untold Story", "When Everything Changed", "The Final Chapter", "A Legend Rises"')}
+${buildCoverTitleSection('"The Untold Story", "When Everything Changed", "The Final Chapter", "A Legend Rises"', styleDesc)}
 
 ${buildOutputFormat({
     charExamples: '"Dragon": "A majestic MALE crimson dragon with golden-flecked scales, amber eyes...",\n    "Hero_child": "A 7-year-old human boy with bright blue eyes, messy brown hair...",\n    "Hero_adult": "A 30-year-old man with the SAME bright blue eyes and brown hair..."',

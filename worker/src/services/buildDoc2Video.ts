@@ -15,6 +15,7 @@ import {
   PROMPT_ENGINEERING_SECTION,
   buildCoverTitleSection,
   buildOutputFormat,
+  buildBrandSection,
 } from "./promptSections.js";
 
 export interface Doc2VideoParams {
@@ -130,7 +131,7 @@ Example:
 
 ${PROMPT_ENGINEERING_SECTION}
 
-${buildCoverTitleSection('"The $10B Secret", "Why They ALL Failed", "Nobody Expected This", "The Hidden Truth"')}
+${buildCoverTitleSection('"The $10B Secret", "Why They ALL Failed", "Nobody Expected This", "The Hidden Truth"', styleDesc)}
 
 ${buildOutputFormat({
     charExamples: '"Protagonist_child": "A 7-year-old boy with dark hair, brown eyes...",\n    "Protagonist_adult": "A 35-year-old man with the SAME dark hair and brown eyes..."',
@@ -140,6 +141,7 @@ ${buildOutputFormat({
     textOverlayExample: includeText ? '"title": "Headline",\n      "subtitle": "Takeaway"' : undefined,
   })}`;
 
-  const user = `Content: ${p.content}\n${presenterGuidance}${characterGuidance}`;
+  const brandSec = buildBrandSection(p.brandMark);
+  const user = `Content: ${p.content}\n${presenterGuidance}${characterGuidance}${brandSec}`;
   return { system, user, maxTokens };
 }

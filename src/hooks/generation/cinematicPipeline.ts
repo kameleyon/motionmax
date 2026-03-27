@@ -172,9 +172,10 @@ async function runCinematicVisuals(projectId: string, generationId: string, scen
       progress: 35 + Math.floor(((completedImages + completedVideos) / (sceneCount * 2)) * 60),
     }));
 
+    // Fire off video even if image failed — the worker will auto-generate
+    // the missing image before creating the video clip.
     if (!imageOk) {
-      console.warn(LOG, `Scene ${i + 1}: skipping video (no image)`);
-      return;
+      console.warn(LOG, `Scene ${i + 1}: image failed, queuing video anyway (worker will auto-generate image)`);
     }
 
     // Fire off video IMMEDIATELY — don't block the image slot

@@ -1,22 +1,23 @@
 /**
- * Grok Imagine Video via Replicate API (xai/grok-imagine-video).
+ * Grok Imagine Video via Hypereal API (grok-video-i2v).
  *
  * - No sound
- * - 10-second duration
- * - Respect project aspect ratio (landscape → 16:9, portrait → 9:16, square → 1:1)
+ * - 10-second duration (configurable up to 15s)
+ * - 1080P resolution
+ * - Respect project aspect ratio (landscape → 16:9, portrait → 9:16)
  *
- * Requires env var: REPLICATE_API_TOKEN
+ * Requires env var: HYPEREAL_API_KEY
  */
 
-import Replicate from "replicate";
+import { generateGrokVideo as hyperealGrokVideo } from "./hypereal.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
-type GrokAspectRatio = "16:9" | "9:16" | "4:3" | "3:4" | "1:1" | "21:9";
+type GrokAspectRatio = "16:9" | "9:16";
 
 export interface GrokVideoInput {
   prompt: string;
-  imageUrl?: string;       // optional first-frame image
+  imageUrl?: string;       // optional first-frame image (REQUIRED for Hypereal)
   format: string;          // "landscape" | "portrait" | "square"
 }
 
@@ -31,7 +32,7 @@ export interface GrokVideoResult {
 function mapFormatToAspectRatio(format: string): GrokAspectRatio {
   switch (format?.toLowerCase()) {
     case "portrait":  return "9:16";
-    case "square":    return "1:1";
+    case "square":    return "16:9"; // Default to 16:9 for square
     case "landscape":
     default:          return "16:9";
   }
@@ -42,53 +43,46 @@ function mapFormatToAspectRatio(format: string): GrokAspectRatio {
 export async function generateGrokVideo(
   input: GrokVideoInput,
 ): Promise<GrokVideoResult> {
-  // Replicate client auto-reads REPLICATE_API_TOKEN from env
-  if (!process.env.REPLICATE_API_TOKEN) {
-    return { url: null, provider: "Grok Video", error: "REPLICATE_API_TOKEN not set" };
+  // Hypereal API key from env
+  const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
+  if (!hyperealApiKey) {
+    return { url: null, provider: "Grok Video (Hypereal)", error: "HYPEREAL_API_KEY not set" };
   }
 
-  const replicate = new Replicate();
+  // Hypereal Grok requires an image URL (image-to-video only)
+  if (!input.imageUrl) {
+    return {
+      url: null,
+      provider: "Grok Video (Hypereal)",
+      error: "Hypereal Grok Video I2V requires an image URL"
+    };
+  }
+
   const aspectRatio = mapFormatToAspectRatio(input.format);
+  const duration = 10; // Can be 10 or 15 seconds
+  const resolution = "1080P"; // 720P or 1080P
 
-  const replicateInput: Record<string, unknown> = {
-    prompt: input.prompt,
-    duration: 10,
-    aspect_ratio: aspectRatio,
-  };
-
-  // If an image URL is provided, use it as the first frame (image-to-video)
-  if (input.imageUrl) {
-    replicateInput.image = input.imageUrl;
-  }
-
-  console.log(`[GrokVideo] Starting — aspect_ratio=${aspectRatio}, duration=10s, hasImage=${!!input.imageUrl}`);
+  console.log(`[GrokVideo] Starting Hypereal Grok — aspect_ratio=${aspectRatio}, duration=${duration}s, resolution=${resolution}`);
 
   try {
-    const output = await replicate.run("xai/grok-imagine-video", { input: replicateInput });
+    const outputUrl = await hyperealGrokVideo(
+      input.imageUrl,
+      input.prompt,
+      hyperealApiKey,
+      aspectRatio,
+      duration,
+      resolution
+    );
 
-    // Replicate FileOutput: coerce to string via .url() or String()
-    let outputUrl = "";
-    if (output && typeof (output as any).url === "function") {
-      const u = (output as any).url();
-      outputUrl = typeof u === "string" ? u : String(u ?? "");
-    } else if (typeof output === "string") {
-      outputUrl = output;
-    } else if (output && typeof (output as any).href === "string") {
-      // URL object
-      outputUrl = (output as any).href;
-    } else if (output) {
-      outputUrl = String(output);
-    }
-
-    if (!outputUrl || outputUrl === "null" || outputUrl === "undefined") {
-      return { url: null, provider: "Grok Video", error: "No output URL returned" };
+    if (!outputUrl) {
+      return { url: null, provider: "Grok Video (Hypereal)", error: "No output URL returned" };
     }
 
     console.log(`[GrokVideo] ✅ Complete — ${String(outputUrl).substring(0, 80)}…`);
-    return { url: outputUrl, provider: "Grok Video" };
+    return { url: outputUrl, provider: "Grok Video (Hypereal)" };
   } catch (err: any) {
     const msg = err?.message || String(err);
     console.error(`[GrokVideo] ❌ Failed — ${msg}`);
-    return { url: null, provider: "Grok Video", error: msg };
+    return { url: null, provider: "Grok Video (Hypereal)", error: msg };
   }
 }

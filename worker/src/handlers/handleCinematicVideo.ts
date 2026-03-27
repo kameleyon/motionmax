@@ -1,7 +1,7 @@
 /**
  * Cinematic video handler.
  *
- * Primary:  xai/grok-imagine-video  (via Replicate)
+ * Primary:  Hypereal Grok Video I2V (xAI Grok Imagine Video)
  * Fallback: Hypereal Seedance 1.5 Pro (image-to-video)
  */
 
@@ -92,7 +92,7 @@ export async function handleCinematicVideo(
   const visualPrompt = scene.visualPrompt || scene.visual_prompt || scene.voiceover || "Cinematic scene with dramatic lighting";
   const videoPrompt = buildVideoPrompt(visualPrompt);
 
-  // ── 1. Try Grok via Replicate (primary) ─────────────────────────
+  // ── 1. Try Grok via Hypereal (primary) ──────────────────────────
   let finalVideoUrl: string | null = null;
 
   const grokResult = await generateGrokVideo({
@@ -102,10 +102,10 @@ export async function handleCinematicVideo(
   });
 
   if (grokResult.url) {
-    console.log(`[CinematicVideo] Scene ${sceneIndex}: Grok succeeded`);
+    console.log(`[CinematicVideo] Scene ${sceneIndex}: Hypereal Grok succeeded`);
     finalVideoUrl = await uploadVideoToStorage(grokResult.url, projectId, generationId, sceneIndex);
   } else {
-    console.warn(`[CinematicVideo] Scene ${sceneIndex}: Grok failed (${grokResult.error}), trying Hypereal fallback`);
+    console.warn(`[CinematicVideo] Scene ${sceneIndex}: Hypereal Grok failed (${grokResult.error}), trying Seedance fallback`);
 
     // ── 2. Fallback → Hypereal ──────────────────────────────────────
     finalVideoUrl = await tryHyperealFallback(videoPrompt, imageUrl, projectId, generationId, sceneIndex);

@@ -8,7 +8,7 @@
  * CASE 3c: French Female    → Fish Audio (42fe8376…)
  * CASE 3d: Spanish Male     → Fish Audio (53042fce…)
  * CASE 3e: Spanish Female   → Fish Audio (cd8052cd…)
- * CASE 4: English Male      → Fish Audio (06a8fa…) → LemonFox → Chatterbox (Replicate)
+ * CASE 4: English Male      → LemonFox (Adam) → Fish Audio (06a8fa…) → Chatterbox (Replicate)
  * CASE 5: English Female    → Fish Audio (1dbe49…) → Chatterbox (Replicate)
  *
  * Creole detected from: config.forceHaitianCreole OR isHaitianCreole(text)
@@ -209,27 +209,27 @@ export async function generateSceneAudio(
   }
 
   // ========== CASE 4: English Male ==========
-  // Fish Audio (male) → LemonFox → Chatterbox (Replicate)
+  // LemonFox (Adam) → Fish Audio (male) → Chatterbox (Replicate)
   if (voiceGender === "male") {
+    if (lemonfoxApiKey) {
+      console.log(`[TTS] Scene ${scene.number}: English Male → LemonFox (Adam)`);
+      const result = await generateLemonfoxTTS(voiceoverText, scene.number, "male", lemonfoxApiKey, projectId);
+      if (result.url) {
+        console.log(`✅ Scene ${scene.number}: LemonFox Adam (English male)`);
+        return result;
+      }
+      console.warn(`[TTS] Scene ${scene.number}: LemonFox failed (${result.error}), Fish Audio fallback`);
+    }
     if (fishAudioApiKey) {
-      console.log(`[TTS] Scene ${scene.number}: English Male → Fish Audio (male voice)`);
+      console.log(`[TTS] Scene ${scene.number}: English Male → Fish Audio (fallback)`);
       const result = await generateFishAudioTTS(
         voiceoverText, scene.number, fishAudioApiKey, projectId, "06a8fa125ea54698b0c84feac214abad",
       );
       if (result.url) {
-        console.log(`✅ Scene ${scene.number}: Fish Audio (English male)`);
+        console.log(`✅ Scene ${scene.number}: Fish Audio (English male fallback)`);
         return { ...result, provider: "Fish Audio (English male)" };
       }
-      console.warn(`[TTS] Scene ${scene.number}: Fish Audio male failed (${result.error}), LemonFox fallback`);
-    }
-    if (lemonfoxApiKey) {
-      console.log(`[TTS] Scene ${scene.number}: English Male → LemonFox (fallback)`);
-      const result = await generateLemonfoxTTS(voiceoverText, scene.number, "male", lemonfoxApiKey, projectId);
-      if (result.url) {
-        console.log(`✅ Scene ${scene.number}: LemonFox (male fallback)`);
-        return result;
-      }
-      console.warn(`[TTS] Scene ${scene.number}: LemonFox failed (${result.error}), Chatterbox fallback`);
+      console.warn(`[TTS] Scene ${scene.number}: Fish Audio male failed (${result.error}), Chatterbox fallback`);
     }
     if (replicateApiKey) {
       const fb = await generateChatterboxTTS(voiceoverText, scene.number, "male", replicateApiKey, projectId);
@@ -238,7 +238,7 @@ export async function generateSceneAudio(
         return fb;
       }
     }
-    return { url: null, error: "English male: Fish Audio + LemonFox + Chatterbox all failed" };
+    return { url: null, error: "English male: LemonFox + Fish Audio + Chatterbox all failed" };
   }
 
   // ========== CASE 5: English Female ==========

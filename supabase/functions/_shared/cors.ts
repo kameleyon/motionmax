@@ -8,6 +8,7 @@
 const PRODUCTION_ORIGIN = "https://motionmax.io";
 const ALLOWED_ORIGINS = [
   PRODUCTION_ORIGIN,
+  "https://www.motionmax.io",
   "http://localhost:5173",
   "http://localhost:8080",
   // Add any Vercel preview domains here
@@ -37,7 +38,7 @@ export function getCorsHeaders(requestOrigin?: string | null): Record<string, st
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+      "authorization, x-client-info, apikey, content-type, x-connection-pooler, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     "Access-Control-Max-Age": "86400",
   };

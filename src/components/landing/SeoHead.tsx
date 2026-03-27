@@ -31,10 +31,10 @@ function buildFaqSchema() {
 export default function SeoHead() {
   return (
     <Helmet>
-      <title>MotionMax — Turn text into engaging visual contents</title>
+      <title>MotionMax — Turn text into engaging visual content</title>
       <meta
         name="description"
-        content="Turn text into engaging visual contents. Create narrated videos with AI visuals, voiceovers, and multiple styles — start free."
+        content="Turn text into engaging visual content. Create narrated videos with AI visuals, voiceovers, and multiple styles — start free."
       />
       <link rel="canonical" href={SITE_URL} />
 
@@ -43,18 +43,18 @@ export default function SeoHead() {
       <meta property="og:url" content={SITE_URL} />
       <meta
         property="og:title"
-        content="MotionMax — Turn text into engaging visual contents"
+        content="MotionMax — Turn text into engaging visual content"
       />
       <meta
         property="og:description"
-        content="Turn text into engaging visual contents. Create narrated videos with AI visuals and voiceovers — start free."
+        content="Turn text into engaging visual content. Create narrated videos with AI visuals and voiceovers — start free."
       />
       <meta property="og:image" content={OG_IMAGE} />
       <meta property="og:image:width" content="1200" />
       <meta property="og:image:height" content="630" />
       <meta
         property="og:image:alt"
-        content="MotionMax — Turn text into engaging visual contents"
+        content="MotionMax — Turn text into engaging visual content"
       />
       <meta property="og:site_name" content="MotionMax" />
       <meta property="og:locale" content="en_US" />
@@ -64,16 +64,15 @@ export default function SeoHead() {
       <meta name="twitter:url" content={SITE_URL} />
       <meta
         name="twitter:title"
-        content="MotionMax — Turn text into engaging visual contents"
+        content="MotionMax — Turn text into engaging visual content"
       />
-      <meta
-        name="twitter:description"
-        content="Turn text into engaging visual contents. Create narrated videos with AI visuals and voiceovers — start free."
+      <parameter name="twitter:description"
+        content="Turn text into engaging visual content. Create narrated videos with AI visuals and voiceovers — start free."
       />
       <meta property="twitter:image" content={OG_IMAGE} />
       <meta
         name="twitter:image:alt"
-        content="MotionMax — Turn text into engaging visual contents"
+        content="MotionMax — Turn text into engaging visual content"
       />
       <meta name="twitter:creator" content="@MotionMax" />
 

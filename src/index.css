@@ -130,6 +130,8 @@
     -moz-osx-font-smoothing: grayscale;
     scrollbar-width: thin;
     scrollbar-color: hsl(var(--primary)) transparent;
+    scroll-behavior: smooth;
+    scroll-padding-top: 5rem; /* 80px - accounts for fixed header */
   }
 
   html::-webkit-scrollbar {

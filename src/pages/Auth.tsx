@@ -44,7 +44,12 @@ function AuthPageFooter() {
 }
 
 export default function Auth() {
-  const [mode, setMode] = useState<AuthMode>("login");
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const modeParam = searchParams.get("mode");
+  const initialMode: AuthMode = modeParam === "signin" ? "login" : modeParam === "signup" ? "signup" : "login";
+
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -55,8 +60,7 @@ export default function Auth() {
   const [showRateLimitHint, setShowRateLimitHint] = useState(false);
   const failedAttemptsRef = useRef(0);
   const navigate = useNavigate();
-  const location = useLocation();
-  const returnUrl = new URLSearchParams(location.search).get("returnUrl") || "/app";
+  const returnUrl = searchParams.get("returnUrl") || "/app";
   const { signIn, signUp, resetPassword, updatePassword } = useAuth();
   const { toast } = useToast();
 
@@ -202,6 +206,11 @@ export default function Auth() {
                   : mode === "reset" ? "We'll email you a reset link"
                   : "Choose a new password to finish resetting"}
               </p>
+              {mode === "signup" && (
+                <p className="mt-2 text-sm font-medium text-primary">
+                  Free — no credit card needed
+                </p>
+              )}
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">

@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import { useTheme } from "next-themes";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Menu } from "lucide-react";
@@ -29,9 +29,62 @@ export default function Landing() {
   const isDark = resolvedTheme === "dark";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const menuToggleRef = useRef<HTMLButtonElement>(null);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
 
   // Analytics: track scroll depth milestones
   useScrollDepthTracker();
+
+  // Focus trap for mobile menu
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+
+    const menuElement = mobileMenuRef.current;
+    if (!menuElement) return;
+
+    // Get all focusable elements within the menu
+    const focusableElements = menuElement.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled])'
+    );
+    const firstFocusable = focusableElements[0];
+    const lastFocusable = focusableElements[focusableElements.length - 1];
+
+    // Focus first element when menu opens
+    firstFocusable?.focus();
+
+    const handleTabKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+
+      if (e.shiftKey) {
+        // Shift + Tab: moving backwards
+        if (document.activeElement === firstFocusable) {
+          e.preventDefault();
+          lastFocusable?.focus();
+        }
+      } else {
+        // Tab: moving forwards
+        if (document.activeElement === lastFocusable) {
+          e.preventDefault();
+          firstFocusable?.focus();
+        }
+      }
+    };
+
+    const handleEscapeKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMobileMenuOpen(false);
+        menuToggleRef.current?.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleTabKey);
+    document.addEventListener('keydown', handleEscapeKey);
+
+    return () => {
+      document.removeEventListener('keydown', handleTabKey);
+      document.removeEventListener('keydown', handleEscapeKey);
+    };
+  }, [mobileMenuOpen]);
 
   // Respect prefers-reduced-motion and data-saver preferences before autoplaying video
   const prefersReducedMotion = typeof window !== "undefined"
@@ -43,7 +96,8 @@ export default function Landing() {
   /** Navigate to auth and fire analytics event */
   function handleCta(label: string) {
     trackEvent("cta_click", { cta_label: label, page: "landing" });
-    navigate("/auth");
+    const mode = label === "Sign In" || label === "Sign In Mobile" ? "signin" : "signup";
+    navigate(`/auth?mode=${mode}`);
   }
 
   return (
@@ -73,11 +127,13 @@ export default function Landing() {
           <div className="flex items-center gap-3">
             <ThemeToggle />
             <Button
+              ref={menuToggleRef}
               variant="ghost"
               size="icon"
               className="md:hidden rounded-full h-9 w-9"
               onClick={() => setMobileMenuOpen((prev) => !prev)}
               aria-label="Toggle menu"
+              aria-expanded={mobileMenuOpen}
             >
               {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </Button>
@@ -100,6 +156,7 @@ export default function Landing() {
         <AnimatePresence>
           {mobileMenuOpen && (
             <motion.nav
+              ref={mobileMenuRef}
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
@@ -150,7 +207,7 @@ export default function Landing() {
               />
               
               <p className="mt-8 text-3xl sm:text-4xl md:text-5xl font-medium leading-tight uppercase tracking-wide text-foreground/85">
-                Turn Text Into Engaging Visual Contents.
+                Turn Text Into Engaging Visual Content.
               </p>
               
               <Button
@@ -200,7 +257,7 @@ export default function Landing() {
       {/* Features Section — theme-aware background */}
       <section
         id="features"
-        className={`py-24 sm:py-32 relative overflow-hidden ${isDark ? "" : "bg-slate-900"}`}
+        className={`py-24 sm:py-32 relative overflow-hidden ${isDark ? "" : "bg-muted/30"}`}
         style={isDark ? {
           backgroundImage: `url(${featuresBackgroundDark})`,
           backgroundSize: "cover",
@@ -214,10 +271,10 @@ export default function Landing() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
+            <h2 className={`text-3xl sm:text-4xl font-bold tracking-tight ${isDark ? 'text-white' : 'text-foreground'}`}>
               Why MotionMax?
             </h2>
-            <p className="mt-4 text-lg text-white/90 max-w-2xl mx-auto">
+            <p className={`mt-4 text-lg max-w-2xl mx-auto ${isDark ? 'text-white/90' : 'text-muted-foreground'}`}>
               From idea to polished content in minutes. Our AI handles the heavy lifting so you can focus on your message.
             </p>
           </motion.div>

@@ -1,15 +1,14 @@
 /**
  * Cinematic video handler.
  *
- * Primary:  Hypereal Grok Video I2V (xAI Grok Imagine Video)
- * Fallback: Hypereal Seedance 1.5 Pro (image-to-video)
+ * Primary:  Hypereal Grok Video I2V
+ * Fallback: Replicate xai/grok-imagine-video
  */
 
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField } from "../lib/sceneUpdate.js";
 import { generateGrokVideo } from "../services/grokVideo.js";
-import { generateVideoFromImage as hyperealI2V } from "../services/hypereal.js";
 import { generateImage } from "../services/imageGenerator.js";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -92,7 +91,7 @@ export async function handleCinematicVideo(
   const visualPrompt = scene.visualPrompt || scene.visual_prompt || scene.voiceover || "Cinematic scene with dramatic lighting";
   const videoPrompt = buildVideoPrompt(visualPrompt);
 
-  // ── 1. Try Grok via Hypereal (primary) ──────────────────────────
+  // ── Generate video (Hypereal Grok → Replicate Grok fallback) ──────
   let finalVideoUrl: string | null = null;
 
   const grokResult = await generateGrokVideo({
@@ -102,13 +101,10 @@ export async function handleCinematicVideo(
   });
 
   if (grokResult.url) {
-    console.log(`[CinematicVideo] Scene ${sceneIndex}: Hypereal Grok succeeded`);
+    console.log(`[CinematicVideo] Scene ${sceneIndex}: ${grokResult.provider} succeeded`);
     finalVideoUrl = await uploadVideoToStorage(grokResult.url, projectId, generationId, sceneIndex);
   } else {
-    console.warn(`[CinematicVideo] Scene ${sceneIndex}: Hypereal Grok failed (${grokResult.error}), trying Seedance fallback`);
-
-    // ── 2. Fallback → Hypereal ──────────────────────────────────────
-    finalVideoUrl = await tryHyperealFallback(videoPrompt, imageUrl, projectId, generationId, sceneIndex);
+    throw new Error(`Video generation failed for scene ${sceneIndex}: ${grokResult.error}`);
   }
 
   // ── Stale-image guard ────────────────────────────────────────────
@@ -161,25 +157,6 @@ ANIMATION RULES (CRITICAL):
 - Environment animation IS allowed: wind, particles, camera movement, lighting changes
 - Static poses with subtle breathing/idle movement are preferred for dialogue scenes
 - Focus on CAMERA MOTION and SCENE DYNAMICS rather than character lip movement`;
-}
-
-// ── Hypereal Seedance fallback ─────────────────────────────────────
-
-async function tryHyperealFallback(
-  prompt: string,
-  imageUrl: string,
-  projectId: string,
-  generationId: string,
-  sceneIndex: number,
-): Promise<string> {
-  const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
-  if (!hyperealApiKey) {
-    throw new Error("Both Grok and Hypereal unavailable: HYPEREAL_API_KEY not configured");
-  }
-
-  console.log(`[CinematicVideo] Scene ${sceneIndex}: Hypereal Seedance fallback`);
-  const videoUrl = await hyperealI2V(imageUrl, prompt, hyperealApiKey);
-  return uploadVideoToStorage(videoUrl, projectId, generationId, sceneIndex);
 }
 
 // ── Storage upload ─────────────────────────────────────────────────

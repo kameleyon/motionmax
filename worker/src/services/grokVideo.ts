@@ -1,12 +1,10 @@
 /**
- * Grok Imagine Video via Hypereal API (grok-video-i2v).
+ * Grok Imagine Video orchestrator.
  *
- * - No sound
- * - 10-second duration (configurable up to 15s)
- * - 1080P resolution
- * - Respect project aspect ratio (landscape → 16:9, portrait → 9:16)
+ * Primary:  Hypereal API (grok-video-i2v) — 1080P, 10s
+ * Fallback: Replicate API (xai/grok-imagine-video) — 720p, 10s
  *
- * Requires env var: HYPEREAL_API_KEY
+ * Requires env vars: HYPEREAL_API_KEY, REPLICATE_API_KEY
  */
 
 import { generateGrokVideo as hyperealGrokVideo } from "./hypereal.js";
@@ -17,7 +15,7 @@ type GrokAspectRatio = "16:9" | "9:16";
 
 export interface GrokVideoInput {
   prompt: string;
-  imageUrl?: string;       // optional first-frame image (REQUIRED for Hypereal)
+  imageUrl?: string;
   format: string;          // "landscape" | "portrait" | "square"
 }
 
@@ -32,57 +30,167 @@ export interface GrokVideoResult {
 function mapFormatToAspectRatio(format: string): GrokAspectRatio {
   switch (format?.toLowerCase()) {
     case "portrait":  return "9:16";
-    case "square":    return "16:9"; // Default to 16:9 for square
+    case "square":    return "16:9";
     case "landscape":
     default:          return "16:9";
   }
 }
 
-// ── Generator ──────────────────────────────────────────────────────
+// ── Orchestrator ───────────────────────────────────────────────────
 
 export async function generateGrokVideo(
   input: GrokVideoInput,
 ): Promise<GrokVideoResult> {
-  // Hypereal API key from env
   const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
-  if (!hyperealApiKey) {
-    return { url: null, provider: "Grok Video (Hypereal)", error: "HYPEREAL_API_KEY not set" };
-  }
-
-  // Hypereal Grok requires an image URL (image-to-video only)
-  if (!input.imageUrl) {
-    return {
-      url: null,
-      provider: "Grok Video (Hypereal)",
-      error: "Hypereal Grok Video I2V requires an image URL"
-    };
-  }
-
+  const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
   const aspectRatio = mapFormatToAspectRatio(input.format);
-  const duration = 10; // Can be 10 or 15 seconds
-  const resolution = "1080P"; // 720P or 1080P
 
-  console.log(`[GrokVideo] Starting Hypereal Grok — aspect_ratio=${aspectRatio}, duration=${duration}s, resolution=${resolution}`);
+  // ── 1. Try Hypereal Grok (primary — 1080P, 10s) ──────────────
+  if (hyperealApiKey && input.imageUrl) {
+    console.log(`[GrokVideo] Trying Hypereal Grok — ${aspectRatio}, 10s, 1080P`);
+    try {
+      const outputUrl = await hyperealGrokVideo(
+        input.imageUrl,
+        input.prompt,
+        hyperealApiKey,
+        aspectRatio,
+        10,
+        "1080P"
+      );
+      if (outputUrl) {
+        console.log(`[GrokVideo] ✅ Hypereal Grok succeeded`);
+        return { url: outputUrl, provider: "Hypereal Grok" };
+      }
+    } catch (err: any) {
+      console.warn(`[GrokVideo] ❌ Hypereal Grok failed: ${err?.message || err}`);
+    }
+  }
 
-  try {
-    const outputUrl = await hyperealGrokVideo(
-      input.imageUrl,
-      input.prompt,
-      hyperealApiKey,
-      aspectRatio,
-      duration,
-      resolution
-    );
+  // ── 2. Fallback: Replicate Grok (720p, 10s) ──────────────────
+  if (replicateApiKey) {
+    console.log(`[GrokVideo] Trying Replicate Grok fallback — ${aspectRatio}, 10s, 720p`);
+    try {
+      const url = await replicateGrokVideo(
+        input.prompt,
+        input.imageUrl || null,
+        replicateApiKey,
+        aspectRatio,
+        10
+      );
+      if (url) {
+        console.log(`[GrokVideo] ✅ Replicate Grok succeeded`);
+        return { url, provider: "Replicate Grok" };
+      }
+    } catch (err: any) {
+      console.warn(`[GrokVideo] ❌ Replicate Grok failed: ${err?.message || err}`);
+    }
+  }
 
-    if (!outputUrl) {
-      return { url: null, provider: "Grok Video (Hypereal)", error: "No output URL returned" };
+  return {
+    url: null,
+    provider: "Grok Video",
+    error: "Both Hypereal and Replicate Grok exhausted"
+  };
+}
+
+// ── Replicate Grok Imagine Video ───────────────────────────────────
+
+const REPLICATE_API = "https://api.replicate.com/v1/models/xai/grok-imagine-video/predictions";
+const REPLICATE_POLL = "https://api.replicate.com/v1/predictions";
+
+async function replicateGrokVideo(
+  prompt: string,
+  imageUrl: string | null,
+  apiKey: string,
+  aspectRatio: string,
+  duration: number,
+): Promise<string | null> {
+  const input: Record<string, unknown> = {
+    prompt,
+    duration,
+    aspect_ratio: aspectRatio,
+    resolution: "720p",
+  };
+
+  if (imageUrl) {
+    input.image = imageUrl;
+  }
+
+  // Create prediction
+  const createRes = await fetch(REPLICATE_API, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ input }),
+  });
+
+  if (!createRes.ok) {
+    const errText = await createRes.text().catch(() => "");
+    throw new Error(`Replicate create failed: ${createRes.status} — ${errText.substring(0, 200)}`);
+  }
+
+  const prediction = await createRes.json() as any;
+  const predId = prediction.id;
+
+  if (!predId) {
+    throw new Error(`No prediction ID from Replicate: ${JSON.stringify(prediction)}`);
+  }
+
+  console.log(`[GrokVideo] Replicate prediction created: ${predId}`);
+
+  // Poll for completion
+  return pollReplicatePrediction(predId, apiKey);
+}
+
+async function pollReplicatePrediction(
+  predId: string,
+  apiKey: string,
+): Promise<string | null> {
+  const maxAttempts = 60;    // 60 × 10s = 10 min
+  const pollMs = 10_000;     // 10s between polls
+
+  for (let i = 1; i <= maxAttempts; i++) {
+    await new Promise(r => setTimeout(r, pollMs));
+
+    if (i <= 2 || i % 5 === 0) {
+      console.log(`[GrokVideo] Replicate poll ${predId} (${i}/${maxAttempts})...`);
     }
 
-    console.log(`[GrokVideo] ✅ Complete — ${String(outputUrl).substring(0, 80)}…`);
-    return { url: outputUrl, provider: "Grok Video (Hypereal)" };
-  } catch (err: any) {
-    const msg = err?.message || String(err);
-    console.error(`[GrokVideo] ❌ Failed — ${msg}`);
-    return { url: null, provider: "Grok Video (Hypereal)", error: msg };
+    const res = await fetch(`${REPLICATE_POLL}/${predId}`, {
+      headers: { "Authorization": `Bearer ${apiKey}` },
+    });
+
+    if (!res.ok) {
+      if (res.status === 429) {
+        console.warn(`[GrokVideo] Replicate 429 — backing off`);
+        await new Promise(r => setTimeout(r, 30_000));
+        continue;
+      }
+      console.warn(`[GrokVideo] Replicate poll HTTP ${res.status}`);
+      continue;
+    }
+
+    const data = await res.json() as any;
+
+    if (data.status === "succeeded") {
+      // output can be a string URL or FileOutput
+      const output = data.output;
+      if (typeof output === "string") return output;
+      if (output?.url) return output.url;
+      if (Array.isArray(output) && output[0]) {
+        return typeof output[0] === "string" ? output[0] : output[0]?.url;
+      }
+      throw new Error(`Replicate succeeded but unexpected output: ${JSON.stringify(data.output)}`);
+    }
+
+    if (data.status === "failed" || data.status === "canceled") {
+      throw new Error(`Replicate Grok ${data.status}: ${data.error || "unknown"}`);
+    }
+
+    // "starting" or "processing" — continue
   }
+
+  throw new Error(`Replicate Grok timed out after ${maxAttempts} polls`);
 }

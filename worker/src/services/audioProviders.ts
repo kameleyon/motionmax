@@ -282,7 +282,7 @@ export async function generateLemonfoxTTS(
 
 // ── Fish Audio TTS ─────────────────────────────────────────────────
 
-const FISH_AUDIO_FEMALE_VOICE = "cd178af6aaef4e7d864a5c8cc5f81a63";
+const FISH_AUDIO_FEMALE_VOICE = "c64a9003acb44737ae2a2d548c772b91";
 const FISH_AUDIO_MALE_VOICE = "06a8fa125ea54698b0c84feac214abad";
 
 export async function generateFishAudioTTS(
@@ -325,7 +325,7 @@ export async function generateChatterboxTTS(
         const createRes = await fetch("https://api.replicate.com/v1/models/resemble-ai/chatterbox-turbo/predictions", {
           method: "POST",
           headers: { Authorization: `Bearer ${replicateApiKey}`, "Content-Type": "application/json", Prefer: "wait" },
-          body: JSON.stringify({ input: { text: chunk, voice, temperature: 0.9, top_p: 1, top_k: 1800, repetition_penalty: 2 } }),
+          body: JSON.stringify({ input: { text: chunk, voice, temperature: 0.85, top_p: 1, top_k: 1800, repetition_penalty: 2 } }),
         });
         if (!createRes.ok) throw new Error(`Chatterbox chunk ${idx} failed: ${createRes.status}`);
         let pred = await createRes.json();

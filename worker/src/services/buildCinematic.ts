@@ -48,7 +48,7 @@ export function buildCinematicPrompt(p: CinematicParams): PromptResult {
   const targetWords = cfg.maxWords;
   const styleDesc = getStylePrompt(p.style, p.customStyle);
   const dims = getImageDimensions(p.format);
-  const maxTokens = p.length === "presentation" ? 14000 : p.length === "brief" ? 12000 : 8000;
+  const maxTokens = p.length === "presentation" ? 18000 : p.length === "brief" ? 16000 : 12000;
 
   const presenterGuidance = p.presenterFocus
     ? `\n=== PRESENTER GUIDANCE ===\n${p.presenterFocus}\n` : "";

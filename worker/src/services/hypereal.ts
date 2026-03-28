@@ -75,7 +75,7 @@ export async function generateGrokVideo(
   };
 
   const bodyJson = JSON.stringify(requestBody);
-  console.log(`[Hypereal] FULL BODY: ${bodyJson.substring(0, 500)}`);
+  console.log(`[Hypereal] FULL BODY (${bodyJson.length} chars): ${bodyJson.substring(0, 2000)}`);
 
   const response = await fetch(HYPEREAL_VIDEO_URL, {
     method: "POST",

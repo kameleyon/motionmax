@@ -61,18 +61,16 @@ export async function generateGrokVideo(
 ) {
   console.log(`[Hypereal] Starting Grok Video I2V — ${duration}s, ${aspectRatio}`);
 
-  // Hypereal wraps model params in 'input' (same as Replicate pattern)
+  // Flat format per Hypereal Grok Video I2V docs
   const requestBody = {
     model: "grok-video-i2v",
-    input: {
-      prompt,
-      image: imageUrl,
-      duration,
-      aspect_ratio: aspectRatio,
-    },
+    prompt,
+    image: imageUrl,
+    duration,
+    aspect_ratio: aspectRatio,
   };
 
-  console.log(`[Hypereal] Grok I2V request — image: ${imageUrl.substring(0, 80)}...`);
+  console.log(`[Hypereal] Grok I2V — prompt: ${prompt.substring(0, 80)}..., image: ${imageUrl.substring(0, 80)}...`);
 
   const response = await fetch(HYPEREAL_VIDEO_URL, {
     method: "POST",

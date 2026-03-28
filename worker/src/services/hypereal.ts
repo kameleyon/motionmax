@@ -3,6 +3,22 @@ const HYPEREAL_IMAGE_URL = "https://api.hypereal.cloud/v1/images/generate";
 const HYPEREAL_VIDEO_URL = "https://api.hypereal.cloud/v1/videos/generate";
 const HYPEREAL_JOB_POLL_URL = "https://api.hypereal.cloud/v1/jobs";
 
+// ── Helpers ────────────────────────────────────────────────────────
+
+/** Sleep with jitter: base ± 25% randomisation */
+function sleepWithJitter(baseMs: number): Promise<void> {
+  const jitter = baseMs * 0.25 * (Math.random() * 2 - 1); // ±25%
+  return new Promise(r => setTimeout(r, Math.max(1000, baseMs + jitter)));
+}
+
+/** Calculate backoff delay for 429 responses */
+function backoffDelay(consecutive429: number): number {
+  // 15s → 30s → 60s, capped at 60s
+  return Math.min(15_000 * Math.pow(2, consecutive429), 60_000);
+}
+
+// ── Image generation ───────────────────────────────────────────────
+
 export async function generateImage(prompt: string, apiKey: string, aspectRatio = "16:9") {
   console.log(`[Hypereal] Generating image for prompt: ${prompt.substring(0, 50)}...`);
   
@@ -32,6 +48,8 @@ export async function generateImage(prompt: string, apiKey: string, aspectRatio 
   return data.data[0].url;
 }
 
+// ── Seedance I2V ───────────────────────────────────────────────────
+
 export async function generateVideoFromImage(imageUrl: string, prompt: string, apiKey: string) {
   console.log(`[Hypereal] Starting Seedance I2V job...`);
 
@@ -58,55 +76,13 @@ export async function generateVideoFromImage(imageUrl: string, prompt: string, a
 
   if (!jobId) throw new Error("No jobId returned from Hypereal Video API");
 
-  return pollVideoJob(jobId, apiKey);
+  return pollVideoJob(jobId, apiKey, "seedance-1-5-pro");
 }
 
-async function pollVideoJob(jobId: string, apiKey: string): Promise<string> {
-  let attempts = 0;
-  const maxAttempts = 60; // 5 minutes max (assuming 5s delay)
-
-  while (attempts < maxAttempts) {
-    await new Promise(r => setTimeout(r, 5000));
-    attempts++;
-
-    console.log(`[Hypereal] Polling Seedance job ${jobId} (Attempt ${attempts})...`);
-
-    const response = await fetch(`${HYPEREAL_JOB_POLL_URL}/${jobId}?model=seedance-1-5-pro&type=video`, {
-      headers: { "Authorization": `Bearer ${apiKey}` }
-    });
-
-    if (!response.ok) {
-       console.warn(`[Hypereal] Seedance poll failed with status ${response.status}`);
-       continue;
-    }
-
-    const data = await response.json() as any;
-
-    if (attempts % 10 === 0) {
-      console.log(`[Hypereal] Seedance job ${jobId} status: ${data.status}`);
-    }
-
-    if (data.status === "succeeded") {
-      const url = data.outputUrl || data.output_url || data.result?.url;
-      if (!url) throw new Error(`Seedance job succeeded but no URL found in response: ${JSON.stringify(data)}`);
-      return url;
-    } else if (data.status === "failed") {
-      throw new Error(`Hypereal Video Job Failed: ${data.error || JSON.stringify(data)}`);
-    }
-    // "processing" or "starting", so we loop again
-  }
-
-  throw new Error("Hypereal Video Job timed out waiting for success.");
-}
+// ── Grok Video I2V ─────────────────────────────────────────────────
 
 /**
  * Generate video using Hypereal Grok Video I2V (xAI Grok Imagine Video)
- * @param imageUrl - Source image URL (required)
- * @param prompt - Text description for video generation
- * @param apiKey - Hypereal API key
- * @param aspectRatio - Video aspect ratio: "16:9" or "9:16"
- * @param duration - Video duration: 10 or 15 seconds (default 10)
- * @param resolution - Video resolution: "720P" or "1080P" (default 1080P)
  */
 export async function generateGrokVideo(
   imageUrl: string,
@@ -116,17 +92,8 @@ export async function generateGrokVideo(
   duration: 10 | 15 = 10,
   resolution: "720P" | "1080P" = "1080P"
 ) {
-  console.log(`[Hypereal] Starting Grok Video I2V job — ${duration}s, ${aspectRatio}, ${resolution}`);
+  console.log(`[Hypereal] Starting Grok Video I2V — ${duration}s, ${aspectRatio}, ${resolution}`);
   console.log(`[Hypereal] Grok image URL: ${imageUrl.substring(0, 80)}...`);
-
-  const requestBody = {
-    model: "grok-video-i2v",
-    prompt,
-    image_url: imageUrl,
-    duration,
-    aspect_ratio: aspectRatio,
-    resolution
-  };
 
   const response = await fetch(HYPEREAL_VIDEO_URL, {
     method: "POST",
@@ -134,7 +101,14 @@ export async function generateGrokVideo(
       "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify(requestBody)
+    body: JSON.stringify({
+      model: "grok-video-i2v",
+      prompt,
+      image_url: imageUrl,
+      duration,
+      aspect_ratio: aspectRatio,
+      resolution
+    })
   });
 
   if (!response.ok) {
@@ -145,50 +119,81 @@ export async function generateGrokVideo(
   const data = await response.json() as any;
   const jobId = data.jobId;
 
-  console.log(`[Hypereal] Grok job created: ${jobId} — full response: ${JSON.stringify(data)}`);
+  console.log(`[Hypereal] Grok job created: ${jobId}`);
 
-  if (!jobId) throw new Error(`No jobId returned from Hypereal Grok Video API — response: ${JSON.stringify(data)}`);
+  if (!jobId) {
+    throw new Error(`No jobId from Hypereal Grok — response: ${JSON.stringify(data)}`);
+  }
 
-  return pollGrokVideoJob(jobId, apiKey);
+  return pollVideoJob(jobId, apiKey, "grok-video-i2v");
 }
 
-async function pollGrokVideoJob(jobId: string, apiKey: string): Promise<string> {
-  let attempts = 0;
-  const maxAttempts = 60; // 5 minutes max
+// ── Unified poll with rate-limit backoff ───────────────────────────
 
-  while (attempts < maxAttempts) {
-    await new Promise(r => setTimeout(r, 5000));
-    attempts++;
+async function pollVideoJob(
+  jobId: string,
+  apiKey: string,
+  model: string,
+): Promise<string> {
+  const label = model.includes("grok") ? "Grok" : "Seedance";
+  const maxAttempts = 40;          // max poll iterations
+  const basePollMs = 15_000;       // 15s between polls (not 5s)
+  let consecutive429 = 0;
 
-    if (attempts % 5 === 0 || attempts <= 3) {
-      console.log(`[Hypereal] Polling Grok job ${jobId} (Attempt ${attempts}/${maxAttempts})...`);
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    // On 429 backoff, wait longer; otherwise normal poll interval with jitter
+    if (consecutive429 > 0) {
+      const delay = backoffDelay(consecutive429);
+      console.log(`[Hypereal] ${label} job ${jobId} — 429 backoff ${Math.round(delay / 1000)}s (streak: ${consecutive429})`);
+      await sleepWithJitter(delay);
+    } else {
+      await sleepWithJitter(basePollMs);
     }
 
-    const response = await fetch(`${HYPEREAL_JOB_POLL_URL}/${jobId}?model=grok-video-i2v&type=video`, {
-      headers: { "Authorization": `Bearer ${apiKey}` }
-    });
+    if (attempt % 5 === 0 || attempt <= 2) {
+      console.log(`[Hypereal] Polling ${label} job ${jobId} (${attempt}/${maxAttempts})...`);
+    }
+
+    const response = await fetch(
+      `${HYPEREAL_JOB_POLL_URL}/${jobId}?model=${model}&type=video`,
+      { headers: { "Authorization": `Bearer ${apiKey}` } }
+    );
+
+    if (response.status === 429) {
+      consecutive429++;
+      continue;
+    }
 
     if (!response.ok) {
-       console.warn(`[Hypereal] Grok poll failed with status ${response.status}`);
-       continue;
+      console.warn(`[Hypereal] ${label} poll ${jobId} — HTTP ${response.status}`);
+      consecutive429 = 0;
+      continue;
     }
+
+    // Successful response — reset 429 counter
+    consecutive429 = 0;
 
     const data = await response.json() as any;
 
-    if (attempts % 10 === 0) {
-      console.log(`[Hypereal] Grok job ${jobId} status: ${data.status} (attempt ${attempts})`);
+    if (attempt % 10 === 0) {
+      console.log(`[Hypereal] ${label} job ${jobId} status: ${data.status} (attempt ${attempt})`);
     }
 
     if (data.status === "succeeded") {
       const url = data.outputUrl || data.output_url || data.result?.url;
-      console.log(`[Hypereal] ✅ Grok Video Complete — ${String(url).substring(0, 80)}...`);
-      if (!url) throw new Error(`Grok job succeeded but no URL in response: ${JSON.stringify(data)}`);
+      console.log(`[Hypereal] ✅ ${label} Video Complete — ${String(url).substring(0, 80)}...`);
+      if (!url) {
+        throw new Error(`${label} job succeeded but no URL: ${JSON.stringify(data)}`);
+      }
       return url;
-    } else if (data.status === "failed") {
-      throw new Error(`Hypereal Grok Video Job Failed: ${data.error || JSON.stringify(data)}`);
     }
-    // "processing" or "starting", so we loop again
+
+    if (data.status === "failed") {
+      throw new Error(`Hypereal ${label} Job Failed: ${data.error || JSON.stringify(data)}`);
+    }
+
+    // "processing" / "starting" — loop again
   }
 
-  throw new Error("Hypereal Grok Video Job timed out waiting for success.");
+  throw new Error(`Hypereal ${label} Job timed out after ${maxAttempts} polls (~${Math.round(maxAttempts * basePollMs / 60_000)} min).`);
 }

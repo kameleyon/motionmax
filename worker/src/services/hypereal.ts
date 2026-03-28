@@ -157,16 +157,18 @@ async function pollGrokJob(
     consecutive429 = 0;
     const data = await response.json() as any;
 
-    if (data.status === "succeeded") {
-      const videoUrl = data.outputUrl || data.output_url || data.result?.url;
-      console.log(`[Hypereal] ✅ Grok complete ${jobId} — ${String(videoUrl).substring(0, 80)}...`);
+    if (data.status === "succeeded" || data.status === "completed") {
+      const videoUrl = data.outputUrl || data.output_url || data.result?.url || data.output?.url || data.url;
+      console.log(`[Hypereal] ✅ Grok ${data.status} ${jobId} — ${String(videoUrl).substring(0, 80)}...`);
       if (!videoUrl) {
-        throw new Error(`Grok job succeeded but no URL: ${JSON.stringify(data)}`);
+        // Log full response to find where the URL is
+        console.log(`[Hypereal] Full response: ${JSON.stringify(data)}`);
+        throw new Error(`Grok job ${data.status} but no URL found in response`);
       }
       return videoUrl;
     }
 
-    if (data.status === "failed") {
+    if (data.status === "failed" || data.status === "error") {
       throw new Error(`Grok Job Failed: ${data.error || JSON.stringify(data)}`);
     }
 

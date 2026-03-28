@@ -103,8 +103,9 @@ async function pollGrokJob(
   apiKey: string,
   pollUrl: string | null,
 ): Promise<string> {
-  const maxAttempts = 40;       // 40 × ~20s base = ~13 min max
-  const basePollMs = 20_000;    // 20s between polls (conservative)
+  const maxAttempts = 40;
+  const basePollMs = 20_000;    // 20s between polls
+  const max429Streak = 4;       // bail after 4 consecutive 429s → fall to Replicate
   let consecutive429 = 0;
 
   // Use the API-returned poll URL, or construct a fallback
@@ -134,6 +135,10 @@ async function pollGrokJob(
 
     if (response.status === 429) {
       consecutive429++;
+      if (consecutive429 >= max429Streak) {
+        console.warn(`[Hypereal] Grok ${jobId} — ${max429Streak} consecutive 429s, bailing to fallback`);
+        throw new Error(`Hypereal rate-limited: ${max429Streak} consecutive 429 responses`);
+      }
       continue;
     }
 

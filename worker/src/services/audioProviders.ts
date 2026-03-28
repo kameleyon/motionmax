@@ -282,7 +282,7 @@ export async function generateLemonfoxTTS(
 
 // ── Fish Audio TTS ─────────────────────────────────────────────────
 
-const FISH_AUDIO_FEMALE_VOICE = "1dbe49aea1d44a98b18d9e76c4952da4";
+const FISH_AUDIO_FEMALE_VOICE = "c64a9003acb44737ae2a2d548c772b91";
 const FISH_AUDIO_MALE_VOICE = "06a8fa125ea54698b0c84feac214abad";
 
 export async function generateFishAudioTTS(

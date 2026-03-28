@@ -9,7 +9,7 @@
  * CASE 3d: Spanish Male     → Fish Audio (53042fce…)
  * CASE 3e: Spanish Female   → Fish Audio (cd8052cd…)
  * CASE 4: English Male      → LemonFox (Adam) → Fish Audio (06a8fa…) → Chatterbox (Replicate)
- * CASE 5: English Female    → Fish Audio (1dbe49…) → Chatterbox (Replicate)
+ * CASE 5: English Female    → Fish Audio (c64a90…) → Chatterbox (Replicate)
  *
  * Creole detected from: config.forceHaitianCreole OR isHaitianCreole(text)
  * French detected from: config.language === "fr" OR isFrench(text) auto-detection

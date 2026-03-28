@@ -56,10 +56,23 @@ export async function generateGrokVideo(
   prompt: string,
   apiKey: string,
   aspectRatio: "16:9" | "9:16" = "16:9",
-  duration: 10 | 15 = 10,
-  resolution: "720P" | "1080P" = "1080P"
+  duration: number = 10,
+  resolution: string = "1080P"
 ) {
-  console.log(`[Hypereal] Starting Grok Video I2V — ${duration}s, ${aspectRatio}, ${resolution}`);
+  console.log(`[Hypereal] Starting Grok Video I2V — ${duration}s, ${aspectRatio}`);
+
+  const requestBody = {
+    model: "grok-video-i2v",
+    mode: "fast",
+    input: {
+      prompt,
+      image: imageUrl,
+      duration,
+      aspect_ratio: aspectRatio,
+    },
+  };
+
+  console.log(`[Hypereal] Request body: ${JSON.stringify({ ...requestBody, input: { ...requestBody.input, image: imageUrl.substring(0, 60) + "..." } })}`);
 
   const response = await fetch(HYPEREAL_VIDEO_URL, {
     method: "POST",
@@ -67,14 +80,7 @@ export async function generateGrokVideo(
       "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({
-      model: "grok-video-i2v",
-      prompt,
-      image_url: imageUrl,
-      duration,
-      aspect_ratio: aspectRatio,
-      resolution
-    })
+    body: JSON.stringify(requestBody)
   });
 
   if (!response.ok) {

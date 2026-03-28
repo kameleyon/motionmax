@@ -42,7 +42,7 @@ export async function generateVideoFromImage(imageUrl: string, prompt: string, a
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: "seedance-1-5-pro-high",
+      model: "seedance-1-5-pro",
       image_url: imageUrl,
       prompt: prompt
     })
@@ -69,23 +69,29 @@ async function pollVideoJob(jobId: string, apiKey: string): Promise<string> {
     await new Promise(r => setTimeout(r, 5000));
     attempts++;
 
-    console.log(`[Hypereal] Polling job ${jobId} (Attempt ${attempts})...`);
+    console.log(`[Hypereal] Polling Seedance job ${jobId} (Attempt ${attempts})...`);
 
-    const response = await fetch(`${HYPEREAL_JOB_POLL_URL}/${jobId}?model=seedance-1-5-pro-high&type=video`, {
+    const response = await fetch(`${HYPEREAL_JOB_POLL_URL}/${jobId}?model=seedance-1-5-pro&type=video`, {
       headers: { "Authorization": `Bearer ${apiKey}` }
     });
 
     if (!response.ok) {
-       console.warn(`[Hypereal] Poll failed with status ${response.status}`);
+       console.warn(`[Hypereal] Seedance poll failed with status ${response.status}`);
        continue;
     }
 
     const data = await response.json() as any;
 
+    if (attempts % 10 === 0) {
+      console.log(`[Hypereal] Seedance job ${jobId} status: ${data.status}`);
+    }
+
     if (data.status === "succeeded") {
-      return data.outputUrl;
+      const url = data.outputUrl || data.output_url || data.result?.url;
+      if (!url) throw new Error(`Seedance job succeeded but no URL found in response: ${JSON.stringify(data)}`);
+      return url;
     } else if (data.status === "failed") {
-      throw new Error(`Hypereal Video Job Failed: ${data.error}`);
+      throw new Error(`Hypereal Video Job Failed: ${data.error || JSON.stringify(data)}`);
     }
     // "processing" or "starting", so we loop again
   }
@@ -111,6 +117,16 @@ export async function generateGrokVideo(
   resolution: "720P" | "1080P" = "1080P"
 ) {
   console.log(`[Hypereal] Starting Grok Video I2V job — ${duration}s, ${aspectRatio}, ${resolution}`);
+  console.log(`[Hypereal] Grok image URL: ${imageUrl.substring(0, 80)}...`);
+
+  const requestBody = {
+    model: "grok-video-i2v",
+    prompt,
+    image_url: imageUrl,
+    duration,
+    aspect_ratio: aspectRatio,
+    resolution
+  };
 
   const response = await fetch(HYPEREAL_VIDEO_URL, {
     method: "POST",
@@ -118,14 +134,7 @@ export async function generateGrokVideo(
       "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({
-      model: "grok-video-i2v",
-      prompt,
-      image: imageUrl,
-      duration,
-      aspect_ratio: aspectRatio,
-      resolution
-    })
+    body: JSON.stringify(requestBody)
   });
 
   if (!response.ok) {
@@ -136,20 +145,24 @@ export async function generateGrokVideo(
   const data = await response.json() as any;
   const jobId = data.jobId;
 
-  if (!jobId) throw new Error("No jobId returned from Hypereal Grok Video API");
+  console.log(`[Hypereal] Grok job created: ${jobId} — full response: ${JSON.stringify(data)}`);
+
+  if (!jobId) throw new Error(`No jobId returned from Hypereal Grok Video API — response: ${JSON.stringify(data)}`);
 
   return pollGrokVideoJob(jobId, apiKey);
 }
 
 async function pollGrokVideoJob(jobId: string, apiKey: string): Promise<string> {
   let attempts = 0;
-  const maxAttempts = 120; // 10 minutes max (Grok can take longer than Seedance)
+  const maxAttempts = 60; // 5 minutes max
 
   while (attempts < maxAttempts) {
     await new Promise(r => setTimeout(r, 5000));
     attempts++;
 
-    console.log(`[Hypereal] Polling Grok job ${jobId} (Attempt ${attempts})...`);
+    if (attempts % 5 === 0 || attempts <= 3) {
+      console.log(`[Hypereal] Polling Grok job ${jobId} (Attempt ${attempts}/${maxAttempts})...`);
+    }
 
     const response = await fetch(`${HYPEREAL_JOB_POLL_URL}/${jobId}?model=grok-video-i2v&type=video`, {
       headers: { "Authorization": `Bearer ${apiKey}` }
@@ -162,11 +175,17 @@ async function pollGrokVideoJob(jobId: string, apiKey: string): Promise<string> 
 
     const data = await response.json() as any;
 
+    if (attempts % 10 === 0) {
+      console.log(`[Hypereal] Grok job ${jobId} status: ${data.status} (attempt ${attempts})`);
+    }
+
     if (data.status === "succeeded") {
-      console.log(`[Hypereal] ✅ Grok Video Complete — ${String(data.outputUrl).substring(0, 80)}...`);
-      return data.outputUrl;
+      const url = data.outputUrl || data.output_url || data.result?.url;
+      console.log(`[Hypereal] ✅ Grok Video Complete — ${String(url).substring(0, 80)}...`);
+      if (!url) throw new Error(`Grok job succeeded but no URL in response: ${JSON.stringify(data)}`);
+      return url;
     } else if (data.status === "failed") {
-      throw new Error(`Hypereal Grok Video Job Failed: ${data.error}`);
+      throw new Error(`Hypereal Grok Video Job Failed: ${data.error || JSON.stringify(data)}`);
     }
     // "processing" or "starting", so we loop again
   }

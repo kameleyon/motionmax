@@ -63,7 +63,7 @@ export function StorytellingLengthSelector({ selected, onSelect, disabledLengths
               whileTap={{ scale: 0.99 }}
             >
               {isDisabled && (
-                <span className="absolute -top-2 right-1 flex items-center gap-0.5 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-[8px] font-medium text-muted-foreground">
+                <span className="absolute -top-2 right-1 flex items-center gap-0.5 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
                   <Lock className="h-2.5 w-2.5" />
                   Pro
                 </span>

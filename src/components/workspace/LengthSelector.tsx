@@ -55,7 +55,7 @@ export function LengthSelector({ selected, onSelect, disabledLengths = [] }: Len
               whileTap={{ scale: 0.99 }}
             >
               {isDisabled && (
-                <span className="absolute -top-2 right-1 flex items-center gap-0.5 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-[8px] font-medium text-muted-foreground">
+                <span className="absolute -top-2 right-1 flex items-center gap-0.5 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
                   <Lock className="h-2.5 w-2.5" />
                   Pro
                 </span>
@@ -66,7 +66,7 @@ export function LengthSelector({ selected, onSelect, disabledLengths = [] }: Len
                   ? "text-muted-foreground/50"
                   : selected === length.id ? "text-foreground" : "text-muted-foreground"
               )}>{length.label}</p>
-              <p className="text-[10px] sm:text-xs text-muted-foreground/70">{length.duration}</p>
+              <p className="text-xs sm:text-xs text-muted-foreground/70">{length.duration}</p>
             </motion.button>
           );
         })}

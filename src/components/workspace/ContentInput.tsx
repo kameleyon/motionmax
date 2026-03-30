@@ -25,7 +25,7 @@ Example: Paste your article, blog post, script, or any text content you want to 
         <p className="text-xs text-muted-foreground/60">
           Paste your content or describe what you want to create.
         </p>
-        <span className={`text-[10px] ${content.length > MAX_CONTENT_LENGTH * 0.9 ? "text-destructive" : "text-muted-foreground/50"}`}>
+        <span className={`text-xs ${content.length > MAX_CONTENT_LENGTH * 0.9 ? "text-destructive" : "text-muted-foreground/50"}`}>
           {content.length.toLocaleString()} / {(MAX_CONTENT_LENGTH).toLocaleString()}
         </span>
       </div>

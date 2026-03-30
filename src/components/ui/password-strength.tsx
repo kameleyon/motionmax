@@ -41,7 +41,7 @@ export function PasswordStrengthMeter({ password, showRequirements = true }: Pas
       </div>
       <Progress value={strength.score} className="h-1.5" />
       {showRequirements && (
-        <ul className="text-[11px] text-muted-foreground space-y-0.5 mt-1">
+        <ul className="text-xs text-muted-foreground space-y-0.5 mt-1">
           <li className={password.length >= 8 ? "text-green-600" : ""}>• At least 8 characters</li>
           <li className={/[a-z]/.test(password) && /[A-Z]/.test(password) ? "text-green-600" : ""}>• Uppercase and lowercase letters</li>
           <li className={/\d/.test(password) ? "text-green-600" : ""}>• At least one number</li>

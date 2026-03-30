@@ -89,7 +89,7 @@ export default function CreditBreakdownTable() {
                   {TIER_LABELS.map((tier) => (
                     <th key={tier.id} className="text-center px-3 py-3 text-xs font-medium text-muted-foreground">
                       {tier.label}
-                      <span className="block text-[10px] font-normal">
+                      <span className="block text-xs font-normal">
                         {PLAN_LIMITS[tier.id].creditsPerMonth >= 999999
                           ? "∞ cr"
                           : `${PLAN_LIMITS[tier.id].creditsPerMonth} cr`}
@@ -120,7 +120,7 @@ export default function CreditBreakdownTable() {
                       </span>
                     </td>
                     <td className="text-center px-3 py-2.5">
-                      <Badge variant="outline" className="text-[10px]">
+                      <Badge variant="outline" className="text-xs">
                         {item.credits} {item.credits === 1 ? "cr" : "cr"}
                       </Badge>
                     </td>
@@ -135,7 +135,7 @@ export default function CreditBreakdownTable() {
             </table>
           </div>
           <div className="px-4 py-2.5 border-t border-border/30">
-            <p className="text-[10px] text-muted-foreground text-center">
+            <p className="text-xs text-muted-foreground text-center">
               Capacity shows maximum if you only create that content type. Mix and match across types within your monthly credit allowance.
             </p>
           </div>

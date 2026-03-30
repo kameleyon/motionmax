@@ -55,13 +55,13 @@ export function FormatSelector({ selected, onSelect, disabledFormats = [] }: For
               whileTap={{ scale: 0.99 }}
             >
               {isDisabled && (
-                <span className="absolute -top-2 right-1 sm:right-2 flex items-center gap-0.5 rounded-full bg-muted-foreground/20 px-1.5 sm:px-2 py-0.5 text-[8px] sm:text-[10px] font-medium text-muted-foreground">
+                <span className="absolute -top-2 right-1 sm:right-2 flex items-center gap-0.5 rounded-full bg-muted-foreground/20 px-1.5 sm:px-2 py-0.5 text-xs sm:text-xs font-medium text-muted-foreground">
                   <Lock className="h-2.5 w-2.5" />
                   Pro
                 </span>
               )}
               {format.badge && !isDisabled && (
-                <span className="absolute -top-2 right-1 sm:right-2 rounded-full bg-primary px-1.5 sm:px-2 py-0.5 text-[8px] sm:text-[10px] font-medium text-primary-foreground">
+                <span className="absolute -top-2 right-1 sm:right-2 rounded-full bg-primary px-1.5 sm:px-2 py-0.5 text-xs sm:text-xs font-medium text-primary-foreground">
                   {format.badge}
                 </span>
               )}
@@ -86,7 +86,7 @@ export function FormatSelector({ selected, onSelect, disabledFormats = [] }: For
                     ? "text-foreground" 
                     : "text-muted-foreground"
                 )}>{format.label}</p>
-                <p className="text-[10px] sm:text-xs text-muted-foreground/70">{format.ratio}</p>
+                <p className="text-xs sm:text-xs text-muted-foreground/70">{format.ratio}</p>
               </div>
             </motion.button>
           );

@@ -192,7 +192,7 @@ function TimeSavedMetrics() {
       {metrics.map((m) => (
         <div key={m.label} className="text-center">
           <p className="text-lg font-bold text-foreground">{m.value}</p>
-          <p className="text-[11px] text-muted-foreground leading-tight">{m.label}</p>
+          <p className="text-xs text-muted-foreground leading-tight">{m.label}</p>
         </div>
       ))}
     </div>

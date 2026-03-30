@@ -83,7 +83,7 @@ export function AdminSubscribers() {
   const getPlanBadge = (plan: string) => {
     const isDefault = plan === "free";
     return (
-      <span className={`text-[10px] px-2 py-0.5 rounded-full capitalize ${
+      <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${
         isDefault 
           ? "bg-muted text-muted-foreground" 
           : "bg-primary/15 text-primary"
@@ -97,14 +97,14 @@ export function AdminSubscribers() {
     const hasActiveFlags = user.flagCount > 0;
     if (hasActiveFlags) {
       return (
-        <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+        <span className="text-xs text-muted-foreground flex items-center gap-0.5">
           <AlertTriangle className="h-2.5 w-2.5" />
           flagged
         </span>
       );
     }
     return (
-      <span className="text-[10px] text-primary">
+      <span className="text-xs text-primary">
         active
       </span>
     );
@@ -178,7 +178,7 @@ export function AdminSubscribers() {
                           <div className="flex items-center gap-2 min-w-0">
                             <Avatar className="h-6 w-6 shrink-0">
                               <AvatarImage src={user.avatarUrl || undefined} />
-                              <AvatarFallback className="text-[10px]">
+                              <AvatarFallback className="text-xs">
                                 {user.displayName?.charAt(0)?.toUpperCase() || "U"}
                               </AvatarFallback>
                             </Avatar>
@@ -196,7 +196,7 @@ export function AdminSubscribers() {
                         <TableCell className="py-2 px-2 text-center font-medium">{user.generationCount}</TableCell>
                         <TableCell className="py-2 px-2 text-center">
                           {user.flagCount > 0 ? (
-                            <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                            <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
                               <AlertTriangle className="h-2.5 w-2.5" />
                               {user.flagCount}
                             </span>
@@ -286,7 +286,7 @@ export function AdminSubscribers() {
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         <Avatar className="h-6 w-6 shrink-0">
                           <AvatarImage src={user.avatarUrl || undefined} />
-                          <AvatarFallback className="text-[10px]">
+                          <AvatarFallback className="text-xs">
                             {user.displayName?.charAt(0)?.toUpperCase() || "U"}
                           </AvatarFallback>
                         </Avatar>
@@ -321,21 +321,21 @@ export function AdminSubscribers() {
                       <div className="flex items-center gap-3 shrink-0 text-muted-foreground">
                         <span>
                           <span className="font-medium text-foreground">{user.creditsBalance}</span>
-                          <span className="text-[10px]">cr</span>
+                          <span className="text-xs">cr</span>
                         </span>
                         <span>
                           <span className="font-medium text-foreground">{user.generationCount}</span>
-                          <span className="text-[10px]">gen</span>
+                          <span className="text-xs">gen</span>
                         </span>
                         {user.flagCount > 0 ? (
-                          <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                          <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
                             <AlertTriangle className="h-2.5 w-2.5" />
                             {user.flagCount}
                           </span>
                         ) : (
                           <span>
                             <span className="font-medium text-foreground">0</span>
-                            <span className="text-[10px]">fl</span>
+                            <span className="text-xs">fl</span>
                           </span>
                         )}
                       </div>

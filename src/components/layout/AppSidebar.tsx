@@ -407,7 +407,7 @@ export function AppSidebar() {
                           {!isCollapsed && (
                             <span className="text-sm flex items-center gap-2">
                               Cinematic
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary">Beta</span>
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-primary/20 text-primary">Beta</span>
                               {!canAccessCinematic && (
                                 <Crown className="h-3 w-3 text-muted-foreground" />
                               )}
@@ -467,7 +467,7 @@ export function AppSidebar() {
         {/* Recent Projects Section - only show when expanded or on mobile */}
         {(!isCollapsed || isMobile) && (
           <SidebarGroup className={`mt-4 ${isMobile ? '' : 'flex-1 min-h-0 flex flex-col'}`}>
-            <SidebarGroupLabel className="text-[10px] sm:text-xs font-medium uppercase tracking-wider text-foreground/50 dark:text-white/50 px-3 py-2 flex items-center gap-2 flex-shrink-0">
+            <SidebarGroupLabel className="text-xs sm:text-xs font-medium uppercase tracking-wider text-foreground/50 dark:text-white/50 px-3 py-2 flex items-center gap-2 flex-shrink-0">
               <History className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
               <span>Recent</span>
             </SidebarGroupLabel>
@@ -564,7 +564,7 @@ export function AppSidebar() {
                     {!isCollapsed && (
                       <div className="flex flex-col items-start overflow-hidden">
                         <span className="truncate text-xs sm:text-sm">{displayName}</span>
-                        <span className="text-[10px] sm:text-[11px] text-muted-foreground/70">{getPlanDisplayName()}</span>
+                        <span className="text-xs sm:text-xs text-muted-foreground/70">{getPlanDisplayName()}</span>
                       </div>
                     )}
                   </Button>

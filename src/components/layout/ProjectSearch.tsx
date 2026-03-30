@@ -93,7 +93,7 @@ export function ProjectSearch({ onSelectProject }: ProjectSearchProps) {
                 <Video className="mr-2 h-4 w-4 text-muted-foreground" />
                 <div className="flex flex-col overflow-hidden">
                   <span className="truncate text-sm font-medium">{p.title}</span>
-                  <span className="text-[11px] text-muted-foreground/70">
+                  <span className="text-xs text-muted-foreground/70">
                     {formatDistanceToNow(new Date(p.created_at), { addSuffix: true })}
                   </span>
                 </div>

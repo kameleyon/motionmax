@@ -281,7 +281,7 @@ export const Workspace = forwardRef<WorkspaceHandle>(function Workspace(_, ref) 
                         )}
                       >
                         <span className={cn(
-                          "flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold",
+                          "flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold",
                           isActive
                             ? "bg-primary text-primary-foreground"
                             : isCompleted
@@ -421,7 +421,7 @@ export const Workspace = forwardRef<WorkspaceHandle>(function Workspace(_, ref) 
                           >
                             <MessageSquareOff className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
                             <span>Disable voice expressions</span>
-                            <span className="text-[10px] sm:text-xs text-muted-foreground/70">(no [chuckle], [sigh], etc.)</span>
+                            <span className="text-xs sm:text-xs text-muted-foreground/70">(no [chuckle], [sigh], etc.)</span>
                           </label>
                         </div>
                       </div>

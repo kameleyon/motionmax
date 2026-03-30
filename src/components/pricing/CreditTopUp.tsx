@@ -62,12 +62,12 @@ export default function CreditTopUp({
               >
                 {pkg.popular && !pkg.bestValue && (
                   <div className="absolute -top-2 right-2">
-                    <Badge variant="secondary" className="text-[10px]">Popular</Badge>
+                    <Badge variant="secondary" className="text-xs">Popular</Badge>
                   </div>
                 )}
                 {pkg.bestValue && (
                   <div className="absolute -top-2 right-2">
-                    <Badge className="bg-primary text-primary-foreground text-[10px]">Best Value</Badge>
+                    <Badge className="bg-primary text-primary-foreground text-xs">Best Value</Badge>
                   </div>
                 )}
                 <CardContent className="p-4 text-center">
@@ -89,7 +89,7 @@ export default function CreditTopUp({
                         {pkg.perCredit}/credit
                       </div>
                       {!canBuy && (
-                        <p className="mt-2 text-[10px] text-muted-foreground">
+                        <p className="mt-2 text-xs text-muted-foreground">
                           Upgrade to Starter+
                         </p>
                       )}

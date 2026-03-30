@@ -109,34 +109,34 @@ export default function RoiCalculator() {
           {/* Results */}
           <div className="grid grid-cols-3 gap-3 text-center">
             <div className="rounded-lg bg-muted/50 border border-border/50 p-3">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Freelance Editor</p>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">Freelance Editor</p>
               <p className="text-lg sm:text-xl font-bold text-foreground">
                 ${result.editorCost.toLocaleString()}
               </p>
-              <p className="text-[10px] text-muted-foreground">/month</p>
+              <p className="text-xs text-muted-foreground">/month</p>
             </div>
             <div className="rounded-lg bg-primary/5 border border-primary/30 p-3">
-              <p className="text-[10px] uppercase tracking-wider text-primary mb-1">MotionMax</p>
+              <p className="text-xs uppercase tracking-wider text-primary mb-1">MotionMax</p>
               <p className="text-lg sm:text-xl font-bold text-primary">
                 ${result.motionMaxCost.toFixed(2)}
               </p>
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 ${result.costPerVideo.toFixed(2)}/video
               </p>
             </div>
             <div className="rounded-lg bg-green-500/5 border border-green-500/30 p-3">
-              <p className="text-[10px] uppercase tracking-wider text-green-600 dark:text-green-400 mb-1">You Save</p>
+              <p className="text-xs uppercase tracking-wider text-green-600 dark:text-green-400 mb-1">You Save</p>
               <p className="text-lg sm:text-xl font-bold text-green-600 dark:text-green-400 flex items-center justify-center gap-1">
                 <TrendingDown className="h-4 w-4" />
                 {result.savingsPercent}%
               </p>
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 ${result.savings.toLocaleString(undefined, { maximumFractionDigits: 0 })}/mo
               </p>
             </div>
           </div>
 
-          <p className="text-[10px] text-muted-foreground text-center">
+          <p className="text-xs text-muted-foreground text-center">
             Based on avg. freelance editor rate of ${EDITOR_COST_PER_VIDEO}/video and ~{AVG_CREDITS_PER_VIDEO} credits/video (blended average).
           </p>
         </CardContent>

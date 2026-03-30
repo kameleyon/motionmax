@@ -687,9 +687,9 @@ export default function Projects() {
                     />
                   </TableHead>
                   <TableHead className="w-8 sm:w-10 py-2 px-1 sm:px-3" />
-                  <TableHead className="py-2 px-1 sm:px-3 text-[11px] uppercase tracking-wider text-muted-foreground/70">Title</TableHead>
-                  <TableHead className="hidden md:table-cell py-2 px-3 text-[11px] uppercase tracking-wider text-muted-foreground/70">Format</TableHead>
-                  <TableHead className="hidden lg:table-cell py-2 px-3 text-[11px] uppercase tracking-wider text-muted-foreground/70">Style</TableHead>
+                  <TableHead className="py-2 px-1 sm:px-3 text-xs uppercase tracking-wider text-muted-foreground/70">Title</TableHead>
+                  <TableHead className="hidden md:table-cell py-2 px-3 text-xs uppercase tracking-wider text-muted-foreground/70">Format</TableHead>
+                  <TableHead className="hidden lg:table-cell py-2 px-3 text-xs uppercase tracking-wider text-muted-foreground/70">Style</TableHead>
                   <TableHead className="w-8 sm:w-10 py-2 px-1 sm:px-3" />
                 </TableRow>
               </TableHeader>

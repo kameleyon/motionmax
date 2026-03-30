@@ -25,7 +25,7 @@ Example: A young entrepreneur's journey from a garage startup to building a bill
         <p className="text-xs text-muted-foreground/60">
           Be descriptive. The more detail you provide, the richer your story will be.
         </p>
-        <span className={`text-[10px] ${value.length > MAX_STORY_LENGTH * 0.9 ? "text-destructive" : "text-muted-foreground/50"}`}>
+        <span className={`text-xs ${value.length > MAX_STORY_LENGTH * 0.9 ? "text-destructive" : "text-muted-foreground/50"}`}>
           {value.length.toLocaleString()} / {MAX_STORY_LENGTH.toLocaleString()}
         </span>
       </div>

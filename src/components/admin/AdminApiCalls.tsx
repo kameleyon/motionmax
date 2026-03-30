@@ -445,11 +445,11 @@ function ApiCallDetail({
           <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Context</h4>
           <div className="space-y-1 text-xs">
             <div><span className="text-muted-foreground">User:</span> <span className="text-foreground">{log.user_display || log.user_id}</span></div>
-            <div><span className="text-muted-foreground">User ID:</span> <span className="font-mono text-foreground text-[10px]">{log.user_id}</span></div>
+            <div><span className="text-muted-foreground">User ID:</span> <span className="font-mono text-foreground text-xs">{log.user_id}</span></div>
             <div>
               <span className="text-muted-foreground">Generation:</span>{" "}
               {log.generation_id ? (
-                <span className="font-mono text-foreground text-[10px]">{log.generation_id}</span>
+                <span className="font-mono text-foreground text-xs">{log.generation_id}</span>
               ) : (
                 <span className="text-muted-foreground italic">none</span>
               )}
@@ -487,7 +487,7 @@ function ApiCallDetail({
           <div className="rounded-md border overflow-hidden">
             <Table>
               <TableHeader>
-                <TableRow className="text-[10px]">
+                <TableRow className="text-xs">
                   <TableHead className="py-1 px-2">Status</TableHead>
                   <TableHead className="py-1 px-2">Provider / Model</TableHead>
                   <TableHead className="py-1 px-2 text-right">Duration</TableHead>
@@ -498,7 +498,7 @@ function ApiCallDetail({
               </TableHeader>
               <TableBody>
                 {detail.related_calls.map((rc) => (
-                  <TableRow key={rc.id} className={`text-[10px] ${rc.id === log.id ? "bg-primary/5" : ""}`}>
+                  <TableRow key={rc.id} className={`text-xs ${rc.id === log.id ? "bg-primary/5" : ""}`}>
                     <TableCell className="py-1 px-2">{getStatusBadge(rc.status)}</TableCell>
                     <TableCell className="py-1 px-2">
                       <span className={`font-medium ${getProviderColor(rc.provider)}`}>{rc.provider}</span>
@@ -525,7 +525,7 @@ function ApiCallDetail({
           </h4>
           <div className="rounded-md bg-black/80 border border-primary/20 p-3 max-h-[400px] overflow-y-auto" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
             {detail.system_logs.map((sl) => (
-              <div key={sl.id} className="py-1 text-[11px] leading-relaxed border-b border-white/5 last:border-0">
+              <div key={sl.id} className="py-1 text-xs leading-relaxed border-b border-white/5 last:border-0">
                 <div className="flex items-start gap-2">
                   <span className="text-white/50 shrink-0">{format(new Date(sl.created_at), "HH:mm:ss.SSS")}</span>
                   <span className={`shrink-0 font-bold ${getCategoryColor(sl.category)}`}>
@@ -534,7 +534,7 @@ function ApiCallDetail({
                   <span className="text-white/90">{sl.message}</span>
                 </div>
                 {sl.details && Object.keys(sl.details).length > 0 && (
-                  <pre className="ml-[120px] mt-1 text-[10px] text-white/50 whitespace-pre-wrap">
+                  <pre className="ml-[120px] mt-1 text-xs text-white/50 whitespace-pre-wrap">
                     {JSON.stringify(sl.details, null, 2)}
                   </pre>
                 )}

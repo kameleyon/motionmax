@@ -20,7 +20,7 @@ export function PresenterFocusInput({ value, onChange }: PresenterFocusInputProp
         value={value}
         onChange={(e) => onChange(e.target.value.slice(0, MAX_PRESENTER_LENGTH))}
       />
-      <div className="text-right text-[10px] text-muted-foreground/50">
+      <div className="text-right text-xs text-muted-foreground/50">
         {value.length.toLocaleString()} / {MAX_PRESENTER_LENGTH.toLocaleString()} characters
       </div>
       <div className="flex items-start gap-2 text-xs text-muted-foreground/70">

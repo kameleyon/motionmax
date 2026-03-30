@@ -217,7 +217,7 @@ export function SmartFlowStyleSelector({
                   : "bg-muted/50"
               )}>
                 <span className={cn(
-                  "text-[10px] sm:text-xs font-medium",
+                  "text-xs sm:text-xs font-medium",
                   selected === style.id ? "text-primary" : "text-muted-foreground"
                 )}>
                   {style.label}
@@ -301,7 +301,7 @@ export function SmartFlowStyleSelector({
                       <X className="h-3 w-3" />
                     </button>
                   </div>
-                  <p className="text-[10px] text-muted-foreground/60 mt-1">
+                  <p className="text-xs text-muted-foreground/60 mt-1">
                     AI will mimic this visual style
                   </p>
                 </div>

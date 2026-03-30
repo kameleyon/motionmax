@@ -544,9 +544,9 @@ export default function Usage() {
                       <TableHeader>
                         <TableRow className="hover:bg-transparent border-border/60 bg-muted/20">
                           <TableHead className="w-8 sm:w-10 py-2 px-1.5 sm:px-3" />
-                          <TableHead className="py-2 px-1 sm:px-3 text-[11px] uppercase tracking-wider text-muted-foreground/70">Project</TableHead>
-                          <TableHead className="py-2 px-1 sm:px-3 text-[11px] uppercase tracking-wider text-muted-foreground/70 text-right w-16 sm:w-20">Time</TableHead>
-                          <TableHead className="py-2 px-1 sm:px-3 text-[11px] uppercase tracking-wider text-muted-foreground/70 text-right w-12 sm:w-16">Credits</TableHead>
+                          <TableHead className="py-2 px-1 sm:px-3 text-xs uppercase tracking-wider text-muted-foreground/70">Project</TableHead>
+                          <TableHead className="py-2 px-1 sm:px-3 text-xs uppercase tracking-wider text-muted-foreground/70 text-right w-16 sm:w-20">Time</TableHead>
+                          <TableHead className="py-2 px-1 sm:px-3 text-xs uppercase tracking-wider text-muted-foreground/70 text-right w-12 sm:w-16">Credits</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -596,7 +596,7 @@ export default function Usage() {
                                     {!isComplete && (
                                       <Badge
                                         variant="secondary"
-                                        className={`shrink-0 text-[10px] px-1.5 py-0 h-4 font-normal ${
+                                        className={`shrink-0 text-xs px-1.5 py-0 h-4 font-normal ${
                                           isFailed
                                             ? "bg-destructive/20 text-destructive"
                                             : "bg-primary/10 text-primary"
@@ -606,29 +606,29 @@ export default function Usage() {
                                       </Badge>
                                     )}
                                   </div>
-                                  <span className="text-[10px] sm:text-xs text-muted-foreground truncate block">
+                                  <span className="text-xs sm:text-xs text-muted-foreground truncate block">
                                     {format(new Date(activity.created_at), "MMM d, h:mm a")}
                                   </span>
                                 </div>
                               </TableCell>
                               <TableCell className="py-2 px-1 sm:px-3 text-right">
                                 {isComplete && activity.generationTimeMs ? (
-                                  <div className="flex items-center justify-end gap-0.5 sm:gap-1 text-[10px] sm:text-[11px] text-muted-foreground" title="Generation time">
+                                  <div className="flex items-center justify-end gap-0.5 sm:gap-1 text-xs sm:text-xs text-muted-foreground" title="Generation time">
                                     <Clock className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                                     <span>{formatTime(activity.generationTimeMs)}</span>
                                   </div>
                                 ) : isGenerating ? (
-                                  <span className="text-[10px] sm:text-[11px] text-muted-foreground">—</span>
+                                  <span className="text-xs sm:text-xs text-muted-foreground">—</span>
                                 ) : null}
                               </TableCell>
                               <TableCell className="py-2 px-1 sm:px-3 text-right">
                                 {isComplete ? (
-                                  <div className="flex items-center justify-end gap-0.5 sm:gap-1 text-[10px] sm:text-[11px] text-muted-foreground" title="Credits used">
+                                  <div className="flex items-center justify-end gap-0.5 sm:gap-1 text-xs sm:text-xs text-muted-foreground" title="Credits used">
                                     <Coins className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                                     <span>{creditCost}</span>
                                   </div>
                                 ) : (
-                                  <span className="text-[10px] sm:text-[11px] text-muted-foreground">—</span>
+                                  <span className="text-xs sm:text-xs text-muted-foreground">—</span>
                                 )}
                               </TableCell>
                             </TableRow>

@@ -393,7 +393,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
                       >
                         <MessageSquareOff className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
                         <span>Disable voice expressions</span>
-                        <span className="text-[10px] sm:text-xs text-muted-foreground/70">(no [chuckle], [sigh], etc.)</span>
+                        <span className="text-xs sm:text-xs text-muted-foreground/70">(no [chuckle], [sigh], etc.)</span>
                       </label>
                     </div>
 

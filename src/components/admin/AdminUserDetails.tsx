@@ -231,7 +231,7 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Verified</span>
-              <Badge variant={data.user.email_confirmed_at ? "default" : "secondary"} className="text-[10px] px-1.5 py-0 h-4">
+              <Badge variant={data.user.email_confirmed_at ? "default" : "secondary"} className="text-xs px-1.5 py-0 h-4">
                 {data.user.email_confirmed_at ? "Yes" : "No"}
               </Badge>
             </div>
@@ -256,13 +256,13 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
           <CardContent className="space-y-1.5 text-xs">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Plan</span>
-              <Badge variant="default" className="text-[10px] px-1.5 py-0 h-4 capitalize">
+              <Badge variant="default" className="text-xs px-1.5 py-0 h-4 capitalize">
                 {data.subscription?.plan_name || "Free"}
               </Badge>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Status</span>
-              <Badge variant={data.subscription?.status === "active" ? "default" : "secondary"} className="text-[10px] px-1.5 py-0 h-4">
+              <Badge variant={data.subscription?.status === "active" ? "default" : "secondary"} className="text-xs px-1.5 py-0 h-4">
                 {data.subscription?.status || "None"}
               </Badge>
             </div>
@@ -287,10 +287,10 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
         <Card className="p-3">
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
             <Coins className="h-3.5 w-3.5" />
-            <span className="text-[10px] uppercase tracking-wide">Credits</span>
+            <span className="text-xs uppercase tracking-wide">Credits</span>
           </div>
           <div className="text-lg">{data.credits?.credits_balance || 0}</div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">
+          <div className="text-xs text-muted-foreground mt-0.5">
             {data.credits?.total_purchased || 0} bought · {data.credits?.total_used || 0} used
           </div>
         </Card>
@@ -298,19 +298,19 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
         <Card className="p-3">
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
             <DollarSign className="h-3.5 w-3.5" />
-            <span className="text-[10px] uppercase tracking-wide">Cost</span>
+            <span className="text-xs uppercase tracking-wide">Cost</span>
           </div>
           <div className="text-lg">${data.totalGenerationCost.toFixed(2)}</div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">Total generation</div>
+          <div className="text-xs text-muted-foreground mt-0.5">Total generation</div>
         </Card>
 
         <Card className="p-3">
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
             <Activity className="h-3.5 w-3.5" />
-            <span className="text-[10px] uppercase tracking-wide">Activity</span>
+            <span className="text-xs uppercase tracking-wide">Activity</span>
           </div>
           <div className="text-lg">{data.totalGenerations || 0}</div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">
+          <div className="text-xs text-muted-foreground mt-0.5">
             {data.activeGenerations || 0} active · {data.archivedGenerations || 0} deleted
           </div>
         </Card>
@@ -318,10 +318,10 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
         <Card className="p-3">
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
             <Flag className="h-3.5 w-3.5" />
-            <span className="text-[10px] uppercase tracking-wide">Flags</span>
+            <span className="text-xs uppercase tracking-wide">Flags</span>
           </div>
           <div className="text-lg">{data.flags?.filter(f => !f.resolved_at).length || 0}</div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">
+          <div className="text-xs text-muted-foreground mt-0.5">
             {data.flags?.length || 0} total
           </div>
         </Card>

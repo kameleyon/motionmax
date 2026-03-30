@@ -149,7 +149,7 @@ export default function PlanCardGrid({
                 {plan.id === "free" && currentPlan !== "free" && (
                   <div className="flex items-start gap-1.5 p-2 rounded-md bg-muted/50">
                     <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
-                    <p className="text-[10px] text-muted-foreground leading-tight">
+                    <p className="text-xs text-muted-foreground leading-tight">
                       When downgrading, you keep remaining credits until billing period ends. No refunds.
                     </p>
                   </div>

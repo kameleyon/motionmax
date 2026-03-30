@@ -1,29 +1,28 @@
 /**
- * Cinematic video handler.
+ * Cinematic video handler — CHAINED SEQUENTIAL GENERATION.
  *
- * Generates video per scene using Kling I2V with seamless morphing:
- *   - image = Scene N's generated image (start frame)
- *   - end_image = Scene N+1's generated image (end frame / morph target)
- *   - prompt = Scene N's visual + voiceover context + character + morph instruction
- *   - duration = matched to audio length (5, 10, or 15s)
+ * Each scene's video starts from where the previous one ended:
+ *   Scene 1: generated image → Grok → video 1
+ *   Scene 2: last frame of video 1 → Grok → video 2
+ *   Scene 3: last frame of video 2 → Grok → video 3
+ *   ...
  *
- * Each clip IS both the scene AND the transition to the next scene.
- * Audio is muxed during export. Clips concat directly — no crossfade needed.
+ * This creates natural visual continuity — no separate transitions needed.
+ * Videos are concatenated directly during export.
  *
- * Provider chain:
- *   Primary:  Kling V3.0 Std I2V (kling-3-0-std-i2v)
- *   Fallback: Kling V2.6 Pro I2V (kling-2-6-i2v-pro)
- *   // Grok — commented out (replaced by Kling for native end_image support)
+ * Provider: Grok Video I2V (Hypereal primary, Replicate fallback)
  */
 
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField } from "../lib/sceneUpdate.js";
 import { generateImage } from "../services/imageGenerator.js";
-import {
-  generateKlingV3Video,
-  generateKlingV26Video,
-} from "../services/hypereal.js";
+import { generateGrokVideo, type GrokVideoInput } from "../services/grokVideo.js";
+import { getStylePrompt } from "../services/prompts.js";
+import { runFfmpeg } from "./export/ffmpegCmd.js";
+import fs from "fs";
+import path from "path";
+import os from "os";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -39,29 +38,19 @@ interface CinematicVideoPayload {
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 /**
- * Pick the Kling duration that covers the audio length.
- * Kling V3.0 accepts: 3, 5, 10, 15. V2.6 accepts: 5, 10.
- * We use V3.0 durations since it's the primary.
+ * Wait for the PREVIOUS scene's videoUrl to be available in the DB.
+ * The cinematic pipeline dispatches videos in parallel, but each scene
+ * needs the previous one's last frame. This polls until it's ready.
  */
-function pickKlingDuration(audioDurationSec: number): number {
-  if (audioDurationSec <= 5) return 5;
-  if (audioDurationSec <= 10) return 10;
-  return 15; // max for Kling V3.0
-}
-
-/**
- * Wait for the next scene's image to be available in the DB.
- * The cinematic pipeline dispatches images and videos in parallel —
- * the next scene's image might not be ready yet when this scene's
- * video starts generating. Poll up to 60s before giving up.
- */
-async function waitForNextSceneImage(
+async function waitForPreviousSceneVideo(
   generationId: string,
-  nextSceneIndex: number,
-  maxWaitMs: number = 60_000
+  prevSceneIndex: number,
+  maxWaitMs: number = 10 * 60 * 1000 // 10 min max wait
 ): Promise<string | null> {
   const startTime = Date.now();
-  const pollInterval = 5_000;
+  const pollInterval = 10_000; // check every 10s
+
+  console.log(`[CinematicVideo] Waiting for scene ${prevSceneIndex} video to finish...`);
 
   while (Date.now() - startTime < maxWaitMs) {
     const { data: gen } = await supabase
@@ -71,18 +60,69 @@ async function waitForNextSceneImage(
       .maybeSingle();
 
     const scenes = (gen?.scenes as any[]) ?? [];
-    const nextImageUrl = scenes[nextSceneIndex]?.imageUrl;
+    const prevVideoUrl = scenes[prevSceneIndex]?.videoUrl;
 
-    if (nextImageUrl) {
-      console.log(`[CinematicVideo] Next scene ${nextSceneIndex} image ready after ${Math.round((Date.now() - startTime) / 1000)}s`);
-      return nextImageUrl;
+    if (prevVideoUrl) {
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+      console.log(`[CinematicVideo] Scene ${prevSceneIndex} video ready after ${elapsed}s`);
+      return prevVideoUrl;
     }
 
     await sleep(pollInterval);
   }
 
-  console.warn(`[CinematicVideo] Next scene ${nextSceneIndex} image not ready after ${maxWaitMs / 1000}s — proceeding without morph target`);
+  console.warn(`[CinematicVideo] Scene ${prevSceneIndex} video not ready after ${maxWaitMs / 1000}s`);
   return null;
+}
+
+/**
+ * Extract the last frame of a video and upload it to Supabase storage.
+ * Returns the public URL of the uploaded frame.
+ */
+async function extractAndUploadLastFrame(
+  videoUrl: string,
+  projectId: string,
+  sceneIndex: number,
+): Promise<string> {
+  const tempDir = path.join(os.tmpdir(), `cinematic_frame_${Date.now()}`);
+  const videoPath = path.join(tempDir, "prev_video.mp4");
+  const framePath = path.join(tempDir, "last_frame.png");
+
+  try {
+    fs.mkdirSync(tempDir, { recursive: true });
+
+    // Download the previous video
+    const res = await fetch(videoUrl);
+    if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+    const buffer = Buffer.from(await res.arrayBuffer());
+    await fs.promises.writeFile(videoPath, buffer);
+
+    // Extract last frame
+    await runFfmpeg([
+      "-sseof", "-0.1",
+      "-i", videoPath,
+      "-frames:v", "1",
+      "-q:v", "2",
+      framePath,
+    ], 30_000);
+
+    // Upload frame to storage
+    const frameBuffer = await fs.promises.readFile(framePath);
+    const fileName = `chained-frames/${projectId}/scene_${sceneIndex}_input_${Date.now()}.png`;
+
+    const { error } = await supabase.storage
+      .from("scene-videos")
+      .upload(fileName, frameBuffer, { contentType: "image/png", upsert: true });
+
+    if (error) throw new Error(`Frame upload failed: ${error.message}`);
+
+    const { data } = supabase.storage.from("scene-videos").getPublicUrl(fileName);
+    console.log(`[CinematicVideo] Last frame extracted and uploaded for scene ${sceneIndex}`);
+    return data.publicUrl;
+  } finally {
+    // Cleanup temp files
+    try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }
+  }
 }
 
 // ── Main handler ───────────────────────────────────────────────────
@@ -115,32 +155,68 @@ export async function handleCinematicVideo(
   const scene = scenes[sceneIndex];
   if (!scene) throw new Error(`Scene ${sceneIndex} not found`);
 
-  // ── Fetch project data (format + character description) ──────────
+  // ── Fetch project data (style, character, content context) ────────
   const { data: project } = await supabase
     .from("projects")
-    .select("format, character_description, presenter_focus, style")
+    .select("format, style, character_description, presenter_focus, content")
     .eq("id", projectId)
     .single();
 
   const format = project?.format || "landscape";
+  const style = project?.style || "realistic";
   const characterDescription = project?.character_description || "";
   const presenterFocus = project?.presenter_focus || "";
+  const contentContext = project?.content || "";
 
-  let imageUrl = scene.imageUrl;
+  // Get the full style prompt (e.g., "Photorealistic cinematic photography...")
+  const stylePrompt = getStylePrompt(style, undefined, "cinematic");
 
-  // Auto-generate image if missing
-  if (!imageUrl) {
-    console.log(`[CinematicVideo] Scene ${sceneIndex} has no imageUrl — generating image first`);
-    const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
-    const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
-    const prompt = scene.visualPrompt || scene.visual_prompt || "Cinematic scene";
+  // Get character bible from scene _meta if available (generated by the LLM)
+  const characterBible: Record<string, string> = (scenes[0] as any)?._meta?.characterBible || {};
 
-    imageUrl = await generateImage(prompt, hyperealApiKey, replicateApiKey, format, projectId);
-    await updateSceneField(generationId, sceneIndex, "imageUrl", imageUrl);
-    console.log(`[CinematicVideo] Scene ${sceneIndex} image auto-generated`);
+  // ── Determine input image ────────────────────────────────────────
+  // Scene 0: use generated image
+  // Scene N > 0: use last frame of previous scene's video
+  let inputImageUrl: string;
+
+  if (sceneIndex === 0) {
+    // First scene — use the generated image
+    inputImageUrl = scene.imageUrl;
+
+    if (!inputImageUrl) {
+      console.log(`[CinematicVideo] Scene 0 has no imageUrl — generating image first`);
+      const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
+      const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
+      const prompt = scene.visualPrompt || scene.visual_prompt || "Cinematic scene";
+
+      inputImageUrl = await generateImage(prompt, hyperealApiKey, replicateApiKey, format, projectId);
+      await updateSceneField(generationId, sceneIndex, "imageUrl", inputImageUrl);
+    }
+
+    console.log(`[CinematicVideo] Scene 0: using generated image`);
+  } else {
+    // Scene N > 0 — wait for previous scene's video, extract last frame
+    const prevVideoUrl = await waitForPreviousSceneVideo(generationId, sceneIndex - 1);
+
+    if (prevVideoUrl) {
+      console.log(`[CinematicVideo] Scene ${sceneIndex}: extracting last frame from scene ${sceneIndex - 1} video`);
+      inputImageUrl = await extractAndUploadLastFrame(prevVideoUrl, projectId, sceneIndex);
+    } else {
+      // Fallback: use this scene's own generated image if previous video isn't available
+      console.warn(`[CinematicVideo] Scene ${sceneIndex}: previous video not available — falling back to generated image`);
+      inputImageUrl = scene.imageUrl;
+
+      if (!inputImageUrl) {
+        const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
+        const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
+        const prompt = scene.visualPrompt || scene.visual_prompt || "Cinematic scene";
+        inputImageUrl = await generateImage(prompt, hyperealApiKey, replicateApiKey, format, projectId);
+        await updateSceneField(generationId, sceneIndex, "imageUrl", inputImageUrl);
+      }
+    }
   }
 
-  const sourceImageUrl = imageUrl;
+  const sourceImageUrl = inputImageUrl;
 
   // Snapshot history for undo if regenerating
   if (regenerate) {
@@ -151,198 +227,153 @@ export async function handleCinematicVideo(
     await supabase.from("generations").update({ scenes }).eq("id", generationId);
   }
 
-  // ── Determine video duration from audio length ───────────────────
-  // Estimate from voiceover word count if audio not yet available
-  const voiceover: string = scene.voiceover || "";
-  const wordCount = voiceover.split(/\s+/).filter(Boolean).length;
-  const estimatedAudioSec = Math.max(5, wordCount / 2.5); // ~150 words per minute
-  const klingDuration = pickKlingDuration(estimatedAudioSec);
-
-  console.log(
-    `[CinematicVideo] Scene ${sceneIndex}: voiceover=${wordCount} words, ` +
-    `estimated=${estimatedAudioSec.toFixed(1)}s, kling duration=${klingDuration}s`
-  );
-
-  // ── Get next scene's image for morph target ──────────────────────
-  const isLastScene = sceneIndex >= scenes.length - 1;
-  let nextImageUrl: string | null = null;
-
-  if (!isLastScene) {
-    // First check if it's already in the scenes array we have
-    nextImageUrl = scenes[sceneIndex + 1]?.imageUrl || null;
-
-    // If not ready, wait for it (the pipeline generates images in parallel)
-    if (!nextImageUrl) {
-      console.log(`[CinematicVideo] Scene ${sceneIndex}: waiting for scene ${sceneIndex + 1} image...`);
-      nextImageUrl = await waitForNextSceneImage(generationId, sceneIndex + 1);
-    }
-
-    if (nextImageUrl) {
-      console.log(`[CinematicVideo] Scene ${sceneIndex}: will morph into scene ${sceneIndex + 1}`);
-    } else {
-      console.log(`[CinematicVideo] Scene ${sceneIndex}: no morph target available`);
-    }
-  } else {
-    console.log(`[CinematicVideo] Scene ${sceneIndex}: last scene — no morph`);
-  }
-
   // ── Build prompt with full context ───────────────────────────────
   const visualPrompt = scene.visualPrompt || scene.visual_prompt || "";
-  const videoPrompt = buildVideoPrompt(
+  const voiceover = scene.voiceover || "";
+  const videoPrompt = buildVideoPrompt({
     visualPrompt,
     voiceover,
     characterDescription,
     presenterFocus,
-    !!nextImageUrl
-  );
+    stylePrompt,
+    styleName: style,
+    characterBible,
+    contentContext,
+    sceneIndex,
+    totalScenes: scenes.length,
+  });
 
-  const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
-  if (!hyperealApiKey) {
-    throw new Error("HYPEREAL_API_KEY is not configured");
+  // ── Generate video with Grok ─────────────────────────────────────
+  console.log(`[CinematicVideo] Scene ${sceneIndex}: generating video with Grok from ${sceneIndex === 0 ? "generated image" : `scene ${sceneIndex - 1} last frame`}`);
+
+  const grokResult = await generateGrokVideo({
+    prompt: videoPrompt,
+    imageUrl: inputImageUrl,
+    format,
+  });
+
+  if (!grokResult.url) {
+    throw new Error(`Video generation failed for scene ${sceneIndex}: ${grokResult.error}`);
   }
 
-  // ── Generate video: Kling V3.0 → Kling V2.6 fallback ────────────
-  let finalVideoUrl: string | null = null;
-  let provider = "";
+  console.log(`[CinematicVideo] Scene ${sceneIndex}: ✅ ${grokResult.provider} succeeded`);
+  const finalVideoUrl = await uploadVideoToStorage(grokResult.url, projectId, generationId, sceneIndex);
 
-  // Kling V2.6 only supports 5 or 10 — clamp duration
-  const v26Duration = Math.min(klingDuration, 10) as 5 | 10;
+  // ── Stale-image guard (only for scene 0) ─────────────────────────
+  if (sceneIndex === 0) {
+    const { data: freshGen } = await supabase
+      .from("generations")
+      .select("scenes")
+      .eq("id", generationId)
+      .maybeSingle();
 
-  // Primary: Kling V2.6 Pro (strong detail preservation, 35 credits)
-  try {
-    console.log(`[CinematicVideo] Scene ${sceneIndex}: trying Kling V2.6 Pro (${v26Duration}s)...`);
-    const url = await generateKlingV26Video(
-      imageUrl,
-      videoPrompt,
-      hyperealApiKey,
-      v26Duration,
-      nextImageUrl || undefined,
-    );
-    if (url) {
-      provider = "Kling V2.6 Pro";
-      finalVideoUrl = await uploadVideoToStorage(url, projectId, generationId, sceneIndex);
-      console.log(`[CinematicVideo] Scene ${sceneIndex}: ✅ ${provider} succeeded`);
-    }
-  } catch (err: any) {
-    console.warn(`[CinematicVideo] Scene ${sceneIndex}: ❌ Kling V2.6 Pro failed — ${err?.message || err}`);
-  }
+    const freshScenes = (freshGen?.scenes as any[]) ?? [];
+    const freshImageUrl = freshScenes[sceneIndex]?.imageUrl;
 
-  // Fallback: Kling V3.0 Std (supports 3-15s durations)
-  if (!finalVideoUrl) {
-    try {
-      console.log(`[CinematicVideo] Scene ${sceneIndex}: trying Kling V3.0 fallback (${klingDuration}s)...`);
-      const url = await generateKlingV3Video(
-        imageUrl,
-        videoPrompt,
-        hyperealApiKey,
-        klingDuration,
-        nextImageUrl || undefined,
-      );
-      if (url) {
-        provider = "Kling V3.0";
-        finalVideoUrl = await uploadVideoToStorage(url, projectId, generationId, sceneIndex);
-        console.log(`[CinematicVideo] Scene ${sceneIndex}: ✅ ${provider} succeeded`);
-      }
-    } catch (err: any) {
-      console.warn(`[CinematicVideo] Scene ${sceneIndex}: ❌ Kling V3.0 failed — ${err?.message || err}`);
+    if (freshImageUrl && freshImageUrl !== sourceImageUrl) {
+      console.warn(`[CinematicVideo] Scene ${sceneIndex}: imageUrl changed — discarding stale video`);
+      await writeSystemLog({
+        jobId, projectId, userId, generationId,
+        category: "system_info",
+        eventType: "cinematic_video_stale_discarded",
+        message: `Scene ${sceneIndex} video discarded — source image was regenerated`,
+      });
+      return { success: true, status: "stale_discarded", videoUrl: null, sceneIndex };
     }
   }
 
-  // ── Grok fallback — commented out (replaced by Kling) ──────────
-  // if (!finalVideoUrl) {
-  //   const grokResult = await generateGrokVideo({ prompt: videoPrompt, imageUrl, format });
-  //   if (grokResult.url) {
-  //     finalVideoUrl = await uploadVideoToStorage(grokResult.url, projectId, generationId, sceneIndex);
-  //     provider = grokResult.provider;
-  //   }
-  // }
-
-  if (!finalVideoUrl) {
-    throw new Error(`Video generation failed for scene ${sceneIndex}: both Kling V3.0 and V2.6 failed`);
-  }
-
-  // ── Stale-image guard ────────────────────────────────────────────
-  const { data: freshGen } = await supabase
-    .from("generations")
-    .select("scenes")
-    .eq("id", generationId)
-    .maybeSingle();
-
-  const freshScenes = (freshGen?.scenes as any[]) ?? [];
-  const freshImageUrl = freshScenes[sceneIndex]?.imageUrl;
-
-  if (freshImageUrl && freshImageUrl !== sourceImageUrl) {
-    console.warn(
-      `[CinematicVideo] Scene ${sceneIndex}: imageUrl changed while video was generating — discarding stale video`,
-    );
-    await writeSystemLog({
-      jobId, projectId, userId, generationId,
-      category: "system_info",
-      eventType: "cinematic_video_stale_discarded",
-      message: `Scene ${sceneIndex} video discarded — source image was regenerated during generation`,
-    });
-    return { success: true, status: "stale_discarded", videoUrl: null, sceneIndex };
-  }
-
+  // Atomic update
   await updateSceneField(generationId, sceneIndex, "videoUrl", finalVideoUrl);
 
   await writeSystemLog({
     jobId, projectId, userId, generationId,
     category: "system_info",
     eventType: "cinematic_video_completed",
-    message: `Cinematic video completed for scene ${sceneIndex} (${provider}, ${klingDuration}s)`,
+    message: `Cinematic video completed for scene ${sceneIndex} (${grokResult.provider}, chained from ${sceneIndex === 0 ? "image" : `scene ${sceneIndex - 1}`})`,
   });
 
-  return { success: true, status: "complete", videoUrl: finalVideoUrl, sceneIndex, provider };
+  return { success: true, status: "complete", videoUrl: finalVideoUrl, sceneIndex, provider: grokResult.provider };
 }
 
 // ── Prompt builder ─────────────────────────────────────────────────
 
-function buildVideoPrompt(
-  visualPrompt: string,
-  voiceover: string,
-  characterDescription: string,
-  presenterFocus: string,
-  hasMorphTarget: boolean
-): string {
+interface PromptInput {
+  visualPrompt: string;
+  voiceover: string;
+  characterDescription: string;
+  presenterFocus: string;
+  stylePrompt: string;
+  styleName: string;
+  characterBible: Record<string, string>;
+  contentContext: string;
+  sceneIndex: number;
+  totalScenes: number;
+}
+
+function buildVideoPrompt(input: PromptInput): string {
   const parts: string[] = [];
 
-  // Character identity — MUST come first for consistency
-  if (characterDescription) {
-    parts.push(`CHARACTER (maintain exact appearance throughout): ${characterDescription}`);
-  }
-  if (presenterFocus) {
-    parts.push(`SUBJECT FOCUS: ${presenterFocus}`);
+  // ── 1. STYLE LOCK — prevents mixing art styles ──
+  parts.push(
+    `VISUAL STYLE (STRICT — do NOT deviate): ${input.styleName.toUpperCase()} style. ` +
+    `${input.stylePrompt.substring(0, 400)}. ` +
+    `Maintain this EXACT visual style throughout. Do NOT mix with other styles. ` +
+    `If the style is realistic, everything must look photorealistic. ` +
+    `If the style is anime, everything must look anime. No exceptions.`
+  );
+
+  // ── 2. CHARACTER IDENTITY — detailed and enforced ──
+  if (input.characterDescription) {
+    parts.push(
+      `MAIN CHARACTER (CRITICAL — maintain EXACT appearance in every frame):\n${input.characterDescription}\n` +
+      `The character's skin tone, hair, clothing, body type, and facial features must remain IDENTICAL ` +
+      `to the provided starting image throughout the entire video. Do NOT change the character's ` +
+      `race, gender, age, hair color/style, or clothing. This is the SAME person from frame 1 to the last frame.`
+    );
   }
 
-  // Scene visual description
-  parts.push(visualPrompt);
-
-  // Voiceover context — tells the AI what's happening in this scene
-  if (voiceover) {
-    parts.push(`SCENE CONTEXT (what is being narrated): ${voiceover.substring(0, 300)}`);
+  // ── 3. CHARACTER BIBLE — if LLM generated specific character refs ──
+  const bibleEntries = Object.entries(input.characterBible);
+  if (bibleEntries.length > 0) {
+    const bibleText = bibleEntries
+      .map(([name, desc]) => `  • ${name}: ${desc}`)
+      .join("\n");
+    parts.push(`CHARACTER REFERENCE SHEET:\n${bibleText}`);
   }
 
-  // Animation rules
-  parts.push(`
-ANIMATION RULES:
-- NO lip-sync talking animation — characters must NOT move their mouths as if speaking
-- Facial expressions ARE allowed: surprised, shocked, screaming, laughing, crying, angry
-- Body movement IS required: walking, running, gesturing, pointing, reacting — at NATURAL pace
-- Environment animation IS required: wind, particles, camera movement, lighting changes
-- All motion must be DYNAMIC and at natural human speed — never slow motion
-- Camera must be in constant motion: dolly, pan, tilt, tracking — never static
-- Match the energy of the narration — if the scene is intense, the motion must be intense`);
-
-  // Morph transition instruction
-  if (hasMorphTarget) {
-    parts.push(`
-TRANSITION (CRITICAL — final 3 seconds):
-- The camera pushes forward with increasing momentum
-- The environment seamlessly morphs, stretches, and melts into the provided ending frame
-- This morphing is fluid and continuous — no hard cuts, no fades to black
-- Objects in the foreground dissolve and reshape into the next scene as the camera passes them`);
+  if (input.presenterFocus) {
+    parts.push(`SUBJECT FOCUS: ${input.presenterFocus}`);
   }
+
+  // ── 4. SCENE VISUAL DESCRIPTION — what this scene shows ──
+  parts.push(`SCENE ${input.sceneIndex + 1}/${input.totalScenes} VISUAL:\n${input.visualPrompt}`);
+
+  // ── 5. NARRATIVE CONTEXT — what's being said, drives the action ──
+  if (input.voiceover) {
+    parts.push(
+      `SCENE NARRATIVE (the voiceover — animate to match this):\n"${input.voiceover.substring(0, 500)}"`
+    );
+  }
+
+  // ── 6. CONTENT/HISTORICAL CONTEXT — keeps accuracy ──
+  if (input.contentContext && input.contentContext.length > 20) {
+    parts.push(
+      `CONTENT CONTEXT (maintain accuracy to this source material):\n${input.contentContext.substring(0, 300)}`
+    );
+  }
+
+  // ── 7. ANIMATION RULES ──
+  parts.push(
+    `ANIMATION RULES (MANDATORY):\n` +
+    `- NO lip-sync talking — characters must NOT move their mouths as if speaking\n` +
+    `- Facial expressions ARE allowed: surprised, shocked, screaming, laughing, crying, angry\n` +
+    `- Body movement IS required: walking, running, gesturing, pointing, reacting\n` +
+    `- ALL motion at NATURAL human speed — never slow motion, never unnaturally fast\n` +
+    `- Environment animation required: wind, particles, camera movement, lighting changes\n` +
+    `- Camera must be in constant motion: dolly, pan, tilt, tracking — never static\n` +
+    `- Match the energy of the narration — intense narration = intense motion\n` +
+    `- Maintain CONSISTENT character appearance — same person, same clothes, same features`
+  );
 
   return parts.join("\n\n");
 }

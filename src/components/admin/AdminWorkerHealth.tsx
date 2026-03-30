@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Loader2, Server, Cpu, HardDrive, Clock, CheckCircle, AlertTriangle, XCircle } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -207,9 +208,11 @@ export function AdminWorkerHealth() {
 
   if (!health) {
     return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground">No worker health data available</p>
-      </div>
+      <EmptyState
+        icon={Server}
+        title="No worker health data"
+        description="Worker health information will appear once the worker is connected."
+      />
     );
   }
 

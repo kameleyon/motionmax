@@ -3,9 +3,37 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn("rounded-lg border bg-card text-card-foreground shadow-sm", className)} {...props} />
+  <div
+    ref={ref}
+    className={cn(
+      "rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-200",
+      className,
+    )}
+    {...props}
+  />
 ));
 Card.displayName = "Card";
+
+/**
+ * Interactive card variant with hover lift + shadow effect.
+ * Use this for clickable cards (project cards, dashboard items, etc.).
+ */
+const InteractiveCard = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+  ({ className, ...props }, ref) => (
+    <div
+      ref={ref}
+      className={cn(
+        "rounded-lg border bg-card text-card-foreground shadow-sm",
+        "transition-all duration-200 cursor-pointer",
+        "hover:shadow-lg hover:-translate-y-1 hover:border-primary/30",
+        "active:translate-y-0 active:shadow-md",
+        className,
+      )}
+      {...props}
+    />
+  ),
+);
+InteractiveCard.displayName = "InteractiveCard";
 
 const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
@@ -40,4 +68,4 @@ const CardFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
 );
 CardFooter.displayName = "CardFooter";
 
-export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent };
+export { Card, InteractiveCard, CardHeader, CardFooter, CardTitle, CardDescription, CardContent };

@@ -203,10 +203,13 @@
   }
 }
 
-/* Custom Scrollbar Styles - Green/Teal Theme */
+/* Unified Scrollbar Styles
+ *   .scrollbar-thin          — standard 4px scrollbar (content areas, modals)
+ *   .scrollbar-thin.narrow   — 3px, lower opacity (sidebars, compact panels)
+ */
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: hsl(var(--primary)) transparent;
+  scrollbar-color: hsl(var(--primary) / 0.6) transparent;
 }
 
 .scrollbar-thin::-webkit-scrollbar {
@@ -227,26 +230,20 @@
   background: hsl(var(--primary));
 }
 
-/* Sidebar Recent Projects Scrollbar */
-.sidebar-scrollbar {
-  scrollbar-width: thin;
+/* Narrow variant for sidebars / compact panels */
+.scrollbar-thin.narrow {
   scrollbar-color: hsl(var(--primary) / 0.4) transparent;
 }
 
-.sidebar-scrollbar::-webkit-scrollbar {
+.scrollbar-thin.narrow::-webkit-scrollbar {
   width: 3px;
 }
 
-.sidebar-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.sidebar-scrollbar::-webkit-scrollbar-thumb {
+.scrollbar-thin.narrow::-webkit-scrollbar-thumb {
   background: hsl(var(--primary) / 0.4);
-  border-radius: 2px;
 }
 
-.sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+.scrollbar-thin.narrow::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--primary) / 0.7);
 }
 

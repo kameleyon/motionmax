@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { Loader2, Flag, CheckCircle, AlertTriangle, Ban, RefreshCw, ChevronLeft, ChevronRight, Eye } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
@@ -348,10 +349,11 @@ export function AdminFlags() {
               </div>
             </>
           ) : (
-            <div className="text-center py-12 text-muted-foreground">
-              <Flag className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No flags found</p>
-            </div>
+            <EmptyState
+              icon={Flag}
+              title="No flags found"
+              description="No user flags or warnings to review."
+            />
           )}
         </CardContent>
       </Card>

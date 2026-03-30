@@ -83,13 +83,9 @@ export function AdminSubscribers() {
   const getPlanBadge = (plan: string) => {
     const isDefault = plan === "free";
     return (
-      <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${
-        isDefault 
-          ? "bg-muted text-muted-foreground" 
-          : "bg-primary/15 text-primary"
-      }`}>
+      <Badge variant={isDefault ? "secondary" : "default"} className="capitalize">
         {plan}
-      </span>
+      </Badge>
     );
   };
 

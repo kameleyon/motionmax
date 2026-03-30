@@ -471,7 +471,7 @@ export function AppSidebar() {
               <History className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
               <span>Recent</span>
             </SidebarGroupLabel>
-            <SidebarGroupContent className={`mt-1 ml-3 ${isMobile ? '' : 'flex-1 min-h-0 overflow-y-auto sidebar-scrollbar'}`}>
+            <SidebarGroupContent className={`mt-1 ml-3 ${isMobile ? '' : 'flex-1 min-h-0 overflow-y-auto scrollbar-thin narrow'}`}>
               <SidebarMenu className="space-y-0.5 sm:space-y-1 border-l border-foreground/10 dark:border-white/10 pl-2">
                 {isLoading ? (
                   <div className="flex items-center justify-center py-4">

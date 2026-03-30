@@ -32,6 +32,8 @@ import {
 } from "lucide-react";
 import { ProjectsGridView } from "@/components/projects/ProjectsGridView";
 import defaultThumbnail from "@/assets/dashboard/default-thumbnail.png";
+import { EmptyState } from "@/components/ui/empty-state";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -620,28 +622,17 @@ export default function Projects() {
         {/* Content */}
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <LoadingSpinner size="lg" label="Loading projects..." />
           </div>
         ) : projectsWithThumbnails.length === 0 ? (
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col items-center justify-center py-20 text-center"
-          >
-            <div className="p-6 rounded-full bg-muted/50 mb-6">
-              <FolderOpen className="h-12 w-12 text-muted-foreground/50" />
-            </div>
-            <h3 className="text-xl font-semibold mb-2">No projects found</h3>
-            <p className="text-muted-foreground mb-6 max-w-md">
-              {searchQuery ? "Try a different search term" : "Create your first project to get started"}
-            </p>
-            {!searchQuery && (
-              <Button onClick={() => navigate("/app/create?mode=doc2video")} className="gap-2">
-                <Wand2 className="h-4 w-4" />
-                Create Project
-              </Button>
-            )}
-          </motion.div>
+          <EmptyState
+            icon={FolderOpen}
+            title="No projects found"
+            description={searchQuery ? "Try a different search term" : "Create your first project to get started"}
+            actionLabel={searchQuery ? undefined : "Create Project"}
+            onAction={searchQuery ? undefined : () => navigate("/app/create?mode=doc2video")}
+            className="py-20"
+          />
         ) : viewMode === "grid" ? (
           /* Grid View */
           <>

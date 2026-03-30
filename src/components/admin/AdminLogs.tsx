@@ -244,7 +244,7 @@ export function AdminLogs() {
             onClick={() => setIsPaused(!isPaused)}
             variant="outline"
             size="sm"
-            className={isPaused ? "border-yellow-500 text-yellow-500" : "border-primary text-primary"}
+            className={isPaused ? "border-warning text-warning" : "border-primary text-primary"}
           >
             {isPaused ? <Play className="h-4 w-4 mr-1" /> : <Pause className="h-4 w-4 mr-1" />}
             {isPaused ? "Resume" : "Pause"}
@@ -258,19 +258,19 @@ export function AdminLogs() {
 
       {/* Category Legend */}
       <div className="flex flex-wrap gap-3 text-xs">
-        <Badge variant="outline" className="gap-1 border-primary text-primary">
+        <Badge variant="outline-primary" className="gap-1">
           <Shield className="h-3 w-3" /> Admin
         </Badge>
-        <Badge variant="outline" className="gap-1 border-[hsl(170,55%,65%)] text-[hsl(170,55%,65%)]">
+        <Badge variant="outline-success" className="gap-1">
           <Activity className="h-3 w-3" /> User
         </Badge>
-        <Badge variant="outline" className="gap-1 border-destructive text-destructive">
+        <Badge variant="outline-destructive" className="gap-1">
           <AlertCircle className="h-3 w-3" /> Error
         </Badge>
-        <Badge variant="outline" className="gap-1 border-yellow-500 text-yellow-500">
+        <Badge variant="outline-warning" className="gap-1">
           <AlertTriangle className="h-3 w-3" /> Warning
         </Badge>
-        <Badge variant="outline" className="gap-1 border-muted-foreground text-muted-foreground">
+        <Badge variant="outline-muted" className="gap-1">
           <Info className="h-3 w-3" /> Info
         </Badge>
       </div>
@@ -285,7 +285,7 @@ export function AdminLogs() {
         <div className="flex items-center gap-2 px-4 py-3 bg-primary/10 border-b border-primary/30">
           <div className="flex gap-2">
             <div className="w-3.5 h-3.5 rounded-full bg-destructive" />
-            <div className="w-3.5 h-3.5 rounded-full bg-yellow-500" />
+            <div className="w-3.5 h-3.5 rounded-full bg-warning" />
             <div className="w-3.5 h-3.5 rounded-full bg-primary" />
           </div>
           <span className="text-sm text-foreground/80 ml-2 font-medium">motionmax-system-logs</span>
@@ -300,10 +300,10 @@ export function AdminLogs() {
         {/* Log Content - LARGER FONTS AND BETTER CONTRAST */}
         <div className="h-[650px] overflow-y-auto p-4 space-y-2">
           {filteredLogs.length === 0 ? (
-            <div className="text-muted-foreground text-center py-12">
-              <Terminal className="h-16 w-16 mx-auto mb-4 opacity-40" />
-              <p className="text-lg">No logs to display</p>
-              <p className="text-sm mt-2">Logs will appear here as events occur</p>
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Terminal className="h-16 w-16 mx-auto mb-4 text-muted-foreground/40" />
+              <h3 className="text-lg font-semibold text-foreground mb-1">No logs to display</h3>
+              <p className="text-sm text-muted-foreground">Logs will appear here as events occur</p>
             </div>
           ) : (
             filteredLogs.map((log) => (

@@ -29,7 +29,7 @@ export function AdminLogsPanel({ logs, show, onToggle }: AdminLogsPanelProps) {
             <div key={log.id} className={cn(
               "flex gap-2",
               log.category === "system_error" ? "text-destructive" :
-              log.category === "system_warning" ? "text-yellow-500" :
+              log.category === "system_warning" ? "text-warning" :
               "text-muted-foreground"
             )}>
               <span className="shrink-0 text-muted-foreground/60">

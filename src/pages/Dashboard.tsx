@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { Lightbulb, Menu, Video, Film, Clapperboard, Wallpaper, AlertCircle } from "lucide-react";
+import { Lightbulb, Menu, Video, Film, Clapperboard, Wallpaper, AlertCircle, FolderOpen } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -310,12 +311,15 @@ export default function Dashboard() {
                 ))}
               </div>
             ) : recentProjects.length === 0 ? (
-              <div className="rounded-xl border border-primary/75 bg-white/90 dark:bg-card/80 backdrop-blur-sm p-8 text-center shadow-sm">
-                <p className="text-muted-foreground mb-4">No projects yet</p>
-                <Button onClick={() => navigate("/app/create")} className="gap-2">
-                  <Video className="h-4 w-4" />
-                  Create Your First Project
-                </Button>
+              <div className="rounded-xl border border-primary/75 bg-white/90 dark:bg-card/80 backdrop-blur-sm shadow-sm">
+                <EmptyState
+                  icon={FolderOpen}
+                  title="No projects yet"
+                  description="Create your first video to get started."
+                  actionLabel="Create Your First Project"
+                  onAction={() => navigate("/app/create")}
+                  className="py-8"
+                />
               </div>
             ) : (
               <Carousel opts={{ align: "start", slidesToScroll: 1 }} className="w-full">

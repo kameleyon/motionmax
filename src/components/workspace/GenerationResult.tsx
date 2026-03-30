@@ -1,24 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  ChevronLeft,
-  ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Copy,
   Download,
   Loader2,
-  Pause,
   Pencil,
-  Play,
-  Share2,
-  Square,
-  Trash2,
   Volume2,
   X,
   Clock,
+  FileText,
+  Eye,
+  EyeOff,
+  Trash2,
+  Share2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import type { Scene, CostTracking, PhaseTimings } from "@/hooks/useGenerationPipeline";
 import { useVideoExport } from "@/hooks/useVideoExport";
@@ -32,7 +31,7 @@ import {
 } from "@/lib/videoExportDebug";
 import { SceneEditModal } from "./SceneEditModal";
 import { SceneVersionHistory } from "./SceneVersionHistory";
-import { ResultActionBar } from "./ResultActionBar";
+import { VideoPlayer } from "./VideoPlayer";
 import { toast } from "sonner";
 
 interface GenerationResultProps {
@@ -55,44 +54,46 @@ export function GenerationResult({
   scenes: initialScenes,
   format,
   onNewProject,
-  onRegenerateAll,
   totalTimeMs,
   costTracking,
   generationId,
   projectId,
   onScenesUpdate,
   brandMark,
-  projectType = 'storytelling',
+  projectType = "storytelling",
 }: GenerationResultProps) {
   const [scenes, setScenes] = useState(initialScenes);
-  const [currentSceneIndex, setCurrentSceneIndex] = useState(0);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [isPlayingAll, setIsPlayingAll] = useState(false);
-  const [sceneProgress, setSceneProgress] = useState(0);
+  const [showScenes, setShowScenes] = useState(false);
   const [editingSceneIndex, setEditingSceneIndex] = useState<number | null>(null);
   const [versionHistorySceneIndex, setVersionHistorySceneIndex] = useState<number | null>(null);
   const [showExportLogs, setShowExportLogs] = useState(false);
   const [exportLogsVersion, setExportLogsVersion] = useState(0);
-  const playAllAudioRef = useRef<HTMLAudioElement | null>(null);
-  const sceneAudioRef = useRef<HTMLAudioElement | null>(null);
-  const imageTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [isReRendering, setIsReRendering] = useState(false);
 
   const { state: exportState, exportVideo, downloadVideo, shareVideo, reset: resetExport } = useVideoExport();
   const { state: zipState, downloadImagesAsZip } = useImagesZipDownload();
-  const shouldAutoDownloadRef = useRef(false);
-  const lastAutoDownloadedUrlRef = useRef<string | null>(null);
+  const reRenderTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const hasAutoExportedRef = useRef(false);
 
-  // Recompute on demand (e.g. after Clear) and during export progress.
   const exportLogText = (() => {
     void exportLogsVersion;
     return formatVideoExportLogs(getVideoExportLogs());
   })();
 
   // Handle scenes update from regeneration
-  const handleScenesUpdate = (updatedScenes: Scene[]) => {
+  const handleScenesUpdate = useCallback((updatedScenes: Scene[]) => {
     setScenes(updatedScenes);
     onScenesUpdate?.(updatedScenes);
-  };
+
+    // Debounced auto re-render: wait 3s after last change
+    setIsReRendering(true);
+    if (reRenderTimerRef.current) clearTimeout(reRenderTimerRef.current);
+    reRenderTimerRef.current = setTimeout(() => {
+      setIsReRendering(false);
+      clearVideoExportLogs();
+      void exportVideo(updatedScenes, format, brandMark, projectId, projectType).catch(() => {});
+    }, 3000);
+  }, [onScenesUpdate, exportVideo, format, brandMark, projectId, projectType]);
 
   const {
     isRegenerating,
@@ -107,680 +108,214 @@ export function GenerationResult({
     setScenes(initialScenes);
   }, [initialScenes]);
 
+  // Auto-export on first render (when generation completes)
   useEffect(() => {
-    if (!shouldAutoDownloadRef.current) return;
-    if (exportState.status !== "complete" || !exportState.videoUrl) return;
-    if (lastAutoDownloadedUrlRef.current === exportState.videoUrl) return;
+    if (hasAutoExportedRef.current) return;
+    if (!initialScenes.length || !projectId) return;
+    if (exportState.status !== "idle") return;
 
-    // iOS Safari and any backgrounded/screen-off tab block non-gesture downloads.
-    // Show a toast so the user knows the video is ready and can tap the Download button.
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    if (isIOS || document.visibilityState !== "visible") {
-      shouldAutoDownloadRef.current = false;
-      lastAutoDownloadedUrlRef.current = exportState.videoUrl;
-      toast.success("Video ready! Tap the Download button below to save it.", { duration: 6000 });
-      return;
-    }
+    hasAutoExportedRef.current = true;
+    clearVideoExportLogs();
+    appendVideoExportLog("log", ["[UI] Auto-export triggered on completion"]);
+    void exportVideo(initialScenes, format, brandMark, projectId, projectType).catch(() => {});
+  }, [initialScenes, projectId, format, brandMark, projectType, exportVideo, exportState.status]);
 
-    lastAutoDownloadedUrlRef.current = exportState.videoUrl;
-    shouldAutoDownloadRef.current = false;
+  // Copy script to clipboard
+  const copyScript = useCallback(() => {
+    const script = scenes
+      .map((s, i) => `Scene ${s.number || i + 1}:\n${s.voiceover}`)
+      .join("\n\n");
+    navigator.clipboard.writeText(script).then(
+      () => toast({ title: "Script copied!" }),
+      () => toast({ variant: "destructive", title: "Failed to copy" })
+    );
+  }, [scenes]);
 
-    const safeName = title.replace(/[^a-z0-9]/gi, "_").slice(0, 50) || "video";
-    downloadVideo(exportState.videoUrl, `${safeName}.mp4`);
-  }, [downloadVideo, exportState.status, exportState.videoUrl, title]);
-
-  const currentScene = scenes[currentSceneIndex];
-  const currentImages = currentScene?.imageUrls && currentScene.imageUrls.length > 0 
-    ? currentScene.imageUrls 
-    : currentScene?.imageUrl 
-      ? [currentScene.imageUrl] 
-      : [];
-  const displayedImageUrl = currentImages[currentImageIndex] || currentScene?.imageUrl;
-
-  const goToNextScene = () => {
-    if (currentSceneIndex < scenes.length - 1) {
-      setCurrentSceneIndex(currentSceneIndex + 1);
-      setCurrentImageIndex(0);
-    }
-  };
-
-  const goToPrevScene = () => {
-    if (currentSceneIndex > 0) {
-      setCurrentSceneIndex(currentSceneIndex - 1);
-      setCurrentImageIndex(0);
-    }
-  };
-
-  // Image cycling timer for multi-image scenes during playback
-  useEffect(() => {
-    if (imageTimerRef.current) {
-      clearInterval(imageTimerRef.current);
-      imageTimerRef.current = null;
-    }
-
-    if (isPlayingAll && currentImages.length > 1) {
-      const duration = currentScene?.duration || 10;
-      const timePerImage = (duration * 1000) / currentImages.length;
-      
-      imageTimerRef.current = setInterval(() => {
-        setCurrentImageIndex(prev => (prev + 1) % currentImages.length);
-      }, timePerImage);
-    }
-
-    return () => {
-      if (imageTimerRef.current) {
-        clearInterval(imageTimerRef.current);
-      }
-    };
-  }, [isPlayingAll, currentSceneIndex, currentImages.length, currentScene?.duration]);
-
-  const stopSceneAudio = () => {
-    const el = sceneAudioRef.current;
-    if (!el) return;
-    el.pause();
-    el.currentTime = 0;
-  };
-
-  const stopPlayAll = () => {
-    const el = playAllAudioRef.current;
-    setIsPlayingAll(false);
-    setSceneProgress(0);
-    setCurrentImageIndex(0);
-    if (imageTimerRef.current) {
-      clearInterval(imageTimerRef.current);
-      imageTimerRef.current = null;
-    }
-    if (el) {
-      el.pause();
-      el.currentTime = 0;
-      el.removeAttribute("src");
-      el.load();
-    }
-  };
-
-  const playSceneAudio = async (index: number) => {
-    stopSceneAudio();
-
-    const el = playAllAudioRef.current;
-    const scene = scenes[index];
-    if (!el) return;
-
-    // CRITICAL: Stop any currently playing audio before starting new scene
-    el.pause();
-    el.currentTime = 0;
-    el.removeAttribute("src");
-    el.load(); // Reset element completely
-
-    setSceneProgress(0);
-    setCurrentSceneIndex(index);
-    setCurrentImageIndex(0);
-
-    if (!scene?.audioUrl) {
-      // Small delay before moving to next scene to prevent rapid firing
-      setTimeout(() => handlePlayAllEnded(index), 100);
-      return;
-    }
-
-    try {
-      // Create a promise that resolves when audio is ready to play
-      const audioReady = new Promise<void>((resolve, reject) => {
-        const onCanPlay = () => {
-          el.removeEventListener("canplaythrough", onCanPlay);
-          el.removeEventListener("error", onError);
-          resolve();
-        };
-        const onError = () => {
-          el.removeEventListener("canplaythrough", onCanPlay);
-          el.removeEventListener("error", onError);
-          reject(new Error("Audio load failed"));
-        };
-        el.addEventListener("canplaythrough", onCanPlay, { once: true });
-        el.addEventListener("error", onError, { once: true });
-      });
-
-      // Set source and wait for it to be ready
-      el.src = scene.audioUrl;
-      el.load();
-      
-      await audioReady;
-      await el.play();
-    } catch {
-      handlePlayAllEnded(index);
-    }
-  };
-
-  const startPlayAll = async (startIndex: number) => {
-    stopSceneAudio();
-    setIsPlayingAll(true);
-    await playSceneAudio(startIndex);
-  };
-
-  const pausePlayAll = () => {
-    const el = playAllAudioRef.current;
-    if (el) el.pause();
-    setIsPlayingAll(false);
-  };
-
-  const resumePlayAll = async () => {
-    stopSceneAudio();
-
-    const el = playAllAudioRef.current;
-    if (!el) return;
-
-    const hasActiveSrc = !!el.getAttribute("src");
-    const hasProgress = Number.isFinite(el.currentTime) && el.currentTime > 0;
-
-    if (hasActiveSrc && hasProgress) {
-      try {
-        await el.play();
-        setIsPlayingAll(true);
-        return;
-      } catch {
-        // fall through to restart
-      }
-    }
-
-    await startPlayAll(currentSceneIndex);
-  };
-
-  const handlePlayAllEnded = async (endedIndex?: number) => {
-    const idx = typeof endedIndex === "number" ? endedIndex : currentSceneIndex;
-    const nextIndex = idx + 1;
-
-    if (nextIndex >= scenes.length) {
-      stopPlayAll();
-      return;
-    }
-
-    await playSceneAudio(nextIndex);
-  };
-
-  useEffect(() => {
-    setSceneProgress(0);
-    setCurrentImageIndex(0);
-  }, [currentSceneIndex]);
-
-  useEffect(() => {
-    return () => {
-      stopPlayAll();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Auto-open export logs modal when export fails so the user can report the error
-  useEffect(() => {
-    if (exportState.status === "error") {
-      setShowExportLogs(true);
-    }
-  }, [exportState.status]);
-
-  // Keyboard shortcuts: Space = play/pause, ArrowLeft/Right = scene navigation
-  const handleKeyboard = useCallback(
-    (e: KeyboardEvent) => {
-      // Ignore when user is typing in an input/textarea
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-
-      if (e.code === "Space") {
-        e.preventDefault();
-        if (isPlayingAll) {
-          pausePlayAll();
-        } else {
-          resumePlayAll();
-        }
-      } else if (e.code === "ArrowLeft") {
-        e.preventDefault();
-        goToPrevScene();
-      } else if (e.code === "ArrowRight") {
-        e.preventDefault();
-        goToNextScene();
-      }
-    },
-    [isPlayingAll, currentSceneIndex, scenes.length]
-  );
-
-  useEffect(() => {
-    window.addEventListener("keydown", handleKeyboard);
-    return () => window.removeEventListener("keydown", handleKeyboard);
-  }, [handleKeyboard]);
-
-  const aspectClass =
-    format === "portrait" ? "aspect-[9/16]" : format === "square" ? "aspect-square" : "aspect-video";
-
-  // Calculate total images for display
-  const totalImages = scenes.reduce((sum, scene) => {
-    const imgCount = scene.imageUrls?.length || (scene.imageUrl ? 1 : 0);
-    return sum + imgCount;
-  }, 0);
+  const handleRetryExport = useCallback(() => {
+    resetExport();
+    clearVideoExportLogs();
+    void exportVideo(scenes, format, brandMark, projectId, projectType).catch(() => {});
+  }, [resetExport, exportVideo, scenes, format, brandMark, projectId, projectType]);
 
   return (
-    <div className="space-y-8">
-      <audio
-        ref={playAllAudioRef}
-        onEnded={() => handlePlayAllEnded()}
-        onLoadedMetadata={() => {
-          const el = playAllAudioRef.current;
-          if (!el) return;
-          const dur = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : currentScene?.duration ?? 0;
-          setSceneProgress(dur > 0 ? Math.min(1, el.currentTime / dur) : 0);
-        }}
-        onTimeUpdate={() => {
-          const el = playAllAudioRef.current;
-          if (!el) return;
-          const dur = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : currentScene?.duration ?? 0;
-          setSceneProgress(dur > 0 ? Math.min(1, el.currentTime / dur) : 0);
-        }}
-        className="hidden"
-      />
-
+    <div className="space-y-6 pb-8">
       {/* Header */}
-      <div className="text-center">
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 mb-4"
-        >
-          <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-          <span className="text-sm font-medium text-primary">Generation Complete</span>
-        </motion.div>
-
-        {/* Stats Panel */}
+      <div className="text-center space-y-2">
         {totalTimeMs && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="flex items-center justify-center gap-4 mb-4"
-          >
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 border border-border/50">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium text-foreground">
-                {Math.floor(totalTimeMs / 60000)}m {Math.floor((totalTimeMs % 60000) / 1000)}s
-              </span>
+          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Clock className="h-4 w-4" />
+            <span>Generated in {Math.floor(totalTimeMs / 60000)}m {Math.floor((totalTimeMs % 60000) / 1000)}s</span>
+          </div>
+        )}
+        <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
+      </div>
+
+      {/* ── Main Split Layout ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* Left: Video Player (3/5 width) */}
+        <div className="lg:col-span-3">
+          <VideoPlayer
+            exportState={exportState}
+            title={title}
+            onDownload={downloadVideo}
+            onReset={resetExport}
+            onRetry={handleRetryExport}
+            isReRendering={isReRendering}
+          />
+        </div>
+
+        {/* Right: Script & Controls (2/5 width) */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* Script Card */}
+          <Card className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <FileText className="h-4 w-4 text-primary" />
+                Script
+              </div>
+              <Button size="sm" variant="outline" onClick={copyScript} className="gap-1.5">
+                <Copy className="h-3.5 w-3.5" />
+                Copy Script
+              </Button>
             </div>
+
+            <div className="max-h-64 overflow-y-auto scrollbar-thin space-y-3">
+              {scenes.map((scene, idx) => (
+                <div key={scene.number || idx} className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Scene {scene.number || idx + 1}
+                  </p>
+                  <p className="text-sm text-foreground leading-relaxed">
+                    {scene.voiceover}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          {/* Quick Actions */}
+          <div className="flex flex-col gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowScenes(!showScenes)}
+              className="w-full justify-between"
+            >
+              <span className="flex items-center gap-2">
+                {showScenes ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {showScenes ? "Hide Scenes" : `Edit / Adjust Scenes (${scenes.length})`}
+              </span>
+              {showScenes ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </Button>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => downloadImagesAsZip(scenes, title)}
+                disabled={zipState.status === "downloading" || zipState.status === "zipping"}
+                className="flex-1 gap-1.5"
+              >
+                <Download className="h-3.5 w-3.5" />
+                {zipState.status === "downloading" || zipState.status === "zipping" ? "Downloading..." : "Images"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (exportState.videoUrl) {
+                    navigator.clipboard.writeText(exportState.videoUrl).then(
+                      () => toast({ title: "Video link copied!" }),
+                      () => {}
+                    );
+                  }
+                }}
+                disabled={!exportState.videoUrl}
+                className="flex-1 gap-1.5"
+              >
+                <Share2 className="h-3.5 w-3.5" />
+                Share
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onNewProject}
+                className="flex-1 gap-1.5"
+              >
+                New Project
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Scenes Grid (Collapsed by default) ── */}
+      <AnimatePresence>
+        {showScenes && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3 }}
+            className="overflow-hidden"
+          >
+            <Card className="p-4 space-y-4">
+              <h3 className="text-lg font-medium text-foreground">
+                All Scenes ({scenes.length})
+                {isRegenerating && (
+                  <span className="ml-2 text-sm text-primary">
+                    <Loader2 className="inline h-4 w-4 animate-spin mr-1" />
+                    Regenerating {regeneratingType}...
+                  </span>
+                )}
+              </h3>
+
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {scenes.map((scene, idx) => {
+                  const sceneImageCount = scene.imageUrls?.length || (scene.imageUrl ? 1 : 0);
+                  return (
+                    <div key={scene.number || idx} className="space-y-2">
+                      {/* Thumbnail */}
+                      <div
+                        className={cn(
+                          "relative rounded-lg overflow-hidden border cursor-pointer transition-all",
+                          format === "portrait" ? "aspect-[9/16]" : format === "square" ? "aspect-square" : "aspect-video",
+                        )}
+                        onClick={() => setEditingSceneIndex(idx)}
+                      >
+                        {scene.imageUrl ? (
+                          <img
+                            src={scene.imageUrl}
+                            alt={`Scene ${scene.number}`}
+                            loading="lazy"
+                            decoding="async"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-muted/50 flex items-center justify-center">
+                            <span className="text-xs text-muted-foreground">Scene {scene.number}</span>
+                          </div>
+                        )}
+                        <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/60 text-xs text-white">
+                          {scene.duration}s
+                          {sceneImageCount > 1 && ` • ${sceneImageCount}`}
+                        </div>
+                        <div className="absolute inset-0 bg-black/0 hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
+                          <Pencil className="h-5 w-5 text-white" />
+                        </div>
+                      </div>
+
+                      {/* Scene info */}
+                      <p className="text-xs text-muted-foreground line-clamp-2 px-0.5">
+                        {scene.voiceover?.substring(0, 80)}...
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
           </motion.div>
         )}
-
-        <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
-
-        <div className="mt-4 flex items-center justify-center gap-2">
-          {!isPlayingAll ? (
-            <Button
-              onClick={resumePlayAll}
-              className="gap-2"
-              disabled={!scenes.some((s) => !!s.audioUrl)}
-            >
-              <Play className="h-4 w-4" />
-              Play Preview
-            </Button>
-          ) : (
-            <Button onClick={pausePlayAll} className="gap-2">
-              <Pause className="h-4 w-4" />
-              Pause
-            </Button>
-          )}
-
-          <Button variant="outline" onClick={stopPlayAll} className="gap-2" disabled={!isPlayingAll}>
-            <Square className="h-4 w-4" />
-            Stop
-          </Button>
-        </div>
-      </div>
-
-      {/* Scene Preview */}
-      <Card className="overflow-hidden border-border/50 bg-card/50 backdrop-blur-sm">
-        {/* Image Preview */}
-        <div className={cn("relative bg-muted/50 flex items-center justify-center", aspectClass)}>
-          <div className="absolute inset-x-0 top-0 z-10 h-1 bg-background/30">
-            <div
-              className="h-full bg-primary transition-[width] duration-150"
-              style={{ width: `${Math.round(sceneProgress * 100)}%` }}
-            />
-          </div>
-
-          {/* Image indicator for multi-image scenes */}
-          {currentImages.length > 1 && (
-            <div className="absolute top-3 right-3 z-10 px-2 py-1 rounded bg-black/60 text-xs text-white">
-              {currentImageIndex + 1} / {currentImages.length}
-            </div>
-          )}
-
-          <AnimatePresence mode="wait" initial={false}>
-            {displayedImageUrl ? (
-              <motion.img
-                key={displayedImageUrl}
-                src={displayedImageUrl}
-                alt={`Scene ${currentScene?.number}`}
-                loading="lazy"
-                decoding="async"
-                className="w-full h-full object-cover"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.35, ease: "easeOut" }}
-              />
-            ) : (
-              <motion.div
-                key={`placeholder-${currentScene?.number ?? "none"}`}
-                className="text-center text-muted-foreground"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-              >
-                <Play className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Scene {currentScene?.number} preview</p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Scene Navigation Overlay */}
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-4">
-            <div className="flex items-center justify-between">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={goToPrevScene}
-                disabled={currentSceneIndex === 0}
-                className="text-white hover:bg-white/20 disabled:opacity-30"
-              >
-                <ChevronLeft className="h-6 w-6" />
-              </Button>
-              
-              <div className="flex items-center gap-2">
-                {scenes.map((_, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => {
-                      setCurrentSceneIndex(idx);
-                      setCurrentImageIndex(0);
-                    }}
-                    className={`h-2 rounded-full transition-all ${
-                      idx === currentSceneIndex
-                        ? "w-6 bg-white"
-                        : "w-2 bg-white/40 hover:bg-white/60"
-                    }`}
-                  />
-                ))}
-              </div>
-              
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={goToNextScene}
-                disabled={currentSceneIndex === scenes.length - 1}
-                className="text-white hover:bg-white/20 disabled:opacity-30"
-              >
-                <ChevronRight className="h-6 w-6" />
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Scene Details */}
-        <div className="p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-medium text-foreground">
-              Scene {currentScene?.number}
-              {currentImages.length > 1 && (
-                <span className="text-muted-foreground ml-2 text-sm font-normal">
-                  ({currentImages.length} visuals)
-                </span>
-              )}
-            </h3>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">{currentScene?.duration}s</span>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => setEditingSceneIndex(currentSceneIndex)}
-                className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-                Edit
-              </Button>
-            </div>
-          </div>
-          
-          <div className="space-y-3">
-            <div className="flex items-start gap-3">
-              <Volume2 className="h-4 w-4 text-muted-foreground mt-1 shrink-0" />
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {currentScene?.voiceover}
-              </p>
-            </div>
-
-            {currentScene?.audioUrl ? (
-              <audio
-                key={currentScene.audioUrl}
-                ref={sceneAudioRef}
-                controls
-                preload="none"
-                src={currentScene.audioUrl}
-                onPlay={() => {
-                  if (isPlayingAll) stopPlayAll();
-                }}
-                className="w-full"
-              />
-            ) : null}
-          </div>
-        </div>
-      </Card>
-
-      {/* All Scenes Grid */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-medium text-foreground">All Scenes</h3>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {scenes.map((scene, idx) => {
-            const sceneImageCount = scene.imageUrls?.length || (scene.imageUrl ? 1 : 0);
-            return (
-              <button
-                type="button"
-                key={scene.number}
-                onClick={() => {
-                  setCurrentSceneIndex(idx);
-                  setCurrentImageIndex(0);
-                }}
-                className={cn(
-                  "relative rounded-lg overflow-hidden border transition-all",
-                  aspectClass,
-                  idx === currentSceneIndex
-                    ? "border-primary ring-2 ring-primary/20"
-                    : "border-border/50 hover:border-border"
-                )}
-              >
-                {scene.imageUrl ? (
-                  <img
-                    src={scene.imageUrl}
-                    alt={`Scene ${scene.number}`}
-                    loading="lazy"
-                    decoding="async"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full bg-muted/50 flex items-center justify-center">
-                    <span className="text-xs text-muted-foreground">Scene {scene.number}</span>
-                  </div>
-                )}
-                <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/60 text-xs text-white">
-                  {scene.duration}s
-                  {sceneImageCount > 1 && ` • ${sceneImageCount} imgs`}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Export Progress Modal */}
-      {exportState.status !== "idle" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <Card className="w-full max-w-md p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-foreground">
-                {exportState.status === "error"
-                  ? "Export Failed"
-                  : exportState.status === "complete"
-                  ? "Export Complete!"
-                  : "Exporting Video..."}
-              </h3>
-              {(exportState.status === "error" ||
-                exportState.status === "complete") && (
-                <Button type="button" variant="ghost" size="icon" onClick={resetExport}>
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-
-            {exportState.status === "error" ? (
-              <>
-                <p className="text-sm text-muted-foreground">{exportState.error}</p>
-                <Button
-                  type="button"
-                  onClick={resetExport}
-                  variant="outline"
-                  className="w-full mt-4"
-                >
-                  Close
-                </Button>
-              </>
-            ) : exportState.status === "complete" ? (
-              <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Your video is ready.
-                </p>
-                <div className="space-y-2">
-                  <Button
-                    type="button"
-                    className="w-full gap-2"
-                    onClick={() => {
-                      const safeName =
-                        title.replace(/[^a-z0-9]/gi, "_").slice(0, 50) || "video";
-                      downloadVideo(exportState.videoUrl!, `${safeName}.mp4`, true);
-                    }}
-                  >
-                    <Download className="h-4 w-4" />
-                    Download to Files
-                  </Button>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={resetExport}
-                  className="w-full"
-                >
-                  Close
-                </Button>
-              </div>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm text-muted-foreground">
-                    <span>
-                      {exportState.status === "loading" && "Loading assets..."}
-                      {exportState.status === "rendering" &&
-                        (exportState.sceneProgress?.overallMessage || "Rendering video...")}
-                      {exportState.status === "encoding" && "Encoding..."}
-                    </span>
-                    <span>{exportState.progress}%</span>
-                  </div>
-                  <Progress value={exportState.progress} className="h-2" />
-                </div>
-
-                {/* Per-scene progress during export */}
-                {exportState.sceneProgress && exportState.sceneProgress.scenes.some((s: any) => s.phase !== "pending") && (
-                  <div className="space-y-1 max-h-36 overflow-y-auto">
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Scene Progress</span>
-                      <span>{exportState.sceneProgress.completedScenes}/{exportState.sceneProgress.totalScenes}</span>
-                    </div>
-                    {exportState.sceneProgress.scenes.map((scene: any) => (
-                      <div key={scene.sceneIndex} className="flex items-center gap-2 text-xs">
-                        <span className={`h-2 w-2 rounded-full ${
-                          scene.phase === "complete" ? "bg-green-500" :
-                          scene.phase === "failed" || scene.phase === "timeout" ? "bg-red-500" :
-                          scene.phase === "encoding" || scene.phase === "generating" ? "bg-primary animate-pulse" :
-                          scene.phase === "skipped" ? "bg-yellow-500" :
-                          "bg-muted-foreground/30"
-                        }`} />
-                        <span className="min-w-[4rem]">Scene {scene.sceneIndex + 1}</span>
-                        <span className="text-muted-foreground truncate flex-1">{scene.message || scene.phase}</span>
-                        {scene.durationMs > 0 && (
-                          <span className="text-muted-foreground/70 tabular-nums">
-                            {scene.durationMs < 1000 ? `${scene.durationMs}ms` : `${Math.round(scene.durationMs / 1000)}s`}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {exportState.sceneProgress?.etaSeconds > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    Estimated time remaining: {exportState.sceneProgress.etaSeconds >= 60
-                      ? `${Math.floor(exportState.sceneProgress.etaSeconds / 60)}m ${exportState.sceneProgress.etaSeconds % 60}s`
-                      : `${exportState.sceneProgress.etaSeconds}s`}
-                  </p>
-                )}
-
-                {exportState.warning && !exportState.sceneProgress?.overallMessage && (
-                  <p className="text-xs text-muted-foreground">
-                    {exportState.warning}
-                  </p>
-                )}
-
-                <p className="text-xs text-muted-foreground">
-                  Please keep this tab open. Your video is being rendered on the server.
-                </p>
-              </>
-            )}
-          </Card>
-        </div>
-      )}
-
-      {/* Actions */}
-      <ResultActionBar
-        projectId={projectId}
-        generationId={generationId}
-        title={title}
-        scenes={scenes}
-        format={format}
-        onExportVideo={() => {
-          clearVideoExportLogs();
-          appendVideoExportLog("log", [
-            "[UI] Export button pressed",
-            {
-              scenes: scenes.length,
-              format,
-              userAgent:
-                typeof navigator !== "undefined"
-                  ? navigator.userAgent.slice(0, 120)
-                  : "unknown",
-              isIOS:
-                typeof navigator !== "undefined"
-                  ? /iPad|iPhone|iPod/.test(navigator.userAgent)
-                  : false,
-            },
-          ]);
-          setExportLogsVersion((v) => v + 1);
-          shouldAutoDownloadRef.current = true;
-          void exportVideo(scenes, format, brandMark, projectId, projectType).catch(() => {
-            setExportLogsVersion((v) => v + 1);
-          });
-        }}
-        onDownloadImages={() => downloadImagesAsZip(scenes, title)}
-        onNewProject={onNewProject}
-        isExporting={
-          exportState.status === "loading" ||
-          exportState.status === "rendering" ||
-          exportState.status === "encoding"
-        }
-        isDownloadingImages={
-          zipState.status === "downloading" || zipState.status === "zipping"
-        }
-        hasImages={scenes.some((s) => !!s.imageUrl || (s.imageUrls && s.imageUrls.length > 0))}
-        hasVideo={scenes.some((s) => !!s.imageUrl)}
-      />
+      </AnimatePresence>
 
       {/* Export Logs Modal */}
       {showExportLogs && (
@@ -792,45 +327,28 @@ export function GenerationResult({
                 <X className="h-4 w-4" />
               </Button>
             </div>
-
-            <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex gap-2">
               <Button
                 variant="outline"
                 className="gap-2"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(exportLogText || "");
-                  } catch {
-                    // ignore clipboard failures (e.g. permissions)
-                  }
-                }}
+                onClick={() => navigator.clipboard.writeText(exportLogText || "").catch(() => {})}
                 disabled={!exportLogText}
               >
-                <Copy className="h-4 w-4" />
-                Copy
+                <Copy className="h-4 w-4" /> Copy
               </Button>
               <Button
                 variant="outline"
                 className="gap-2"
-                onClick={() => {
-                  clearVideoExportLogs();
-                  setExportLogsVersion((v) => v + 1);
-                }}
+                onClick={() => { clearVideoExportLogs(); setExportLogsVersion((v) => v + 1); }}
               >
-                <Trash2 className="h-4 w-4" />
-                Clear
+                <Trash2 className="h-4 w-4" /> Clear
               </Button>
             </div>
-
             <div className="rounded-md border border-border bg-muted/30 p-3 max-h-[60vh] overflow-auto">
               <pre className="text-xs leading-relaxed text-foreground whitespace-pre-wrap">
                 {exportLogText || "No export logs captured yet."}
               </pre>
             </div>
-
-            <p className="text-xs text-muted-foreground">
-              Tip: copy these logs and paste them into chat after the export fails.
-            </p>
           </Card>
         </div>
       )}
@@ -865,7 +383,6 @@ export function GenerationResult({
           onClose={() => setVersionHistorySceneIndex(null)}
           onVersionRestored={() => {
             setVersionHistorySceneIndex(null);
-            // Reload scenes - in a real app you'd refetch from backend
             toast({ title: "Version Restored", description: "Please refresh to see the changes" });
           }}
         />

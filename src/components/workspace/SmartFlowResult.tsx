@@ -1,23 +1,22 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Copy,
   Download,
   Loader2,
-  Pause,
   Pencil,
-  Play,
   Share2,
-  Square,
   Trash2,
-  Volume2,
   X,
   Clock,
-  DollarSign,
+  Eye,
+  EyeOff,
+  ChevronDown,
+  ChevronUp,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import type { VideoFormat } from "./FormatSelector";
 import type { Scene, CostTracking } from "@/hooks/useGenerationPipeline";
@@ -25,13 +24,13 @@ import { useVideoExport } from "@/hooks/useVideoExport";
 import { useSceneRegeneration } from "@/hooks/useSceneRegeneration";
 import { useImagesZipDownload } from "@/hooks/useImagesZipDownload";
 import {
-  appendVideoExportLog,
   clearVideoExportLogs,
   formatVideoExportLogs,
   getVideoExportLogs,
 } from "@/lib/videoExportDebug";
 import { SceneEditModal } from "./SceneEditModal";
-import { ResultActionBar } from "./ResultActionBar";
+import { VideoPlayer } from "./VideoPlayer";
+import { toast } from "sonner";
 
 interface SmartFlowResultProps {
   title: string;
@@ -61,29 +60,37 @@ export function SmartFlowResult({
   brandMark,
 }: SmartFlowResultProps) {
   const [scenes, setScenes] = useState(initialScenes);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [audioProgress, setAudioProgress] = useState(0);
+  const [showScenes, setShowScenes] = useState(false);
   const [editingSceneIndex, setEditingSceneIndex] = useState<number | null>(null);
   const [showExportLogs, setShowExportLogs] = useState(false);
   const [exportLogsVersion, setExportLogsVersion] = useState(0);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const { state: zipState, downloadImagesAsZip } = useImagesZipDownload();
+  const [isReRendering, setIsReRendering] = useState(false);
 
   const { state: exportState, exportVideo, downloadVideo, shareVideo, reset: resetExport } = useVideoExport();
-  const shouldAutoDownloadRef = useRef(false);
-  const lastAutoDownloadedUrlRef = useRef<string | null>(null);
+  const { state: zipState, downloadImagesAsZip } = useImagesZipDownload();
+  const reRenderTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const hasAutoExportedRef = useRef(false);
 
-  // Recompute on demand
   const exportLogText = (() => {
     void exportLogsVersion;
     return formatVideoExportLogs(getVideoExportLogs());
   })();
 
-  // Handle scenes update from regeneration
-  const handleScenesUpdate = (updatedScenes: Scene[]) => {
+  // Handle scenes update from regeneration — debounced auto re-render
+  const handleScenesUpdate = useCallback((updatedScenes: Scene[]) => {
     setScenes(updatedScenes);
     onScenesUpdate?.(updatedScenes);
-  };
+
+    if (!enableVoice) return; // SmartFlow without voice doesn't export
+
+    setIsReRendering(true);
+    if (reRenderTimerRef.current) clearTimeout(reRenderTimerRef.current);
+    reRenderTimerRef.current = setTimeout(() => {
+      setIsReRendering(false);
+      clearVideoExportLogs();
+      void exportVideo(updatedScenes, format as any, brandMark, projectId, "smartflow").catch(() => {});
+    }, 3000);
+  }, [onScenesUpdate, exportVideo, format, brandMark, projectId, enableVoice]);
 
   const {
     isRegenerating,
@@ -92,446 +99,187 @@ export function SmartFlowResult({
     regenerateImage,
   } = useSceneRegeneration(generationId, projectId, scenes, handleScenesUpdate);
 
-  // Keep scenes in sync with prop changes
   useEffect(() => {
     setScenes(initialScenes);
   }, [initialScenes]);
 
-  // Auto-download after export completes (skip on iOS or backgrounded/screen-off tabs)
+  // Auto-export on first render (if voice is enabled)
   useEffect(() => {
-    if (!shouldAutoDownloadRef.current) return;
-    if (exportState.status !== "complete" || !exportState.videoUrl) return;
-    if (lastAutoDownloadedUrlRef.current === exportState.videoUrl) return;
+    if (hasAutoExportedRef.current) return;
+    if (!enableVoice) return;
+    if (!initialScenes.length || !projectId) return;
+    if (exportState.status !== "idle") return;
 
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    if (isIOS || document.visibilityState !== "visible") {
-      shouldAutoDownloadRef.current = false;
-      lastAutoDownloadedUrlRef.current = exportState.videoUrl;
-      return;
-    }
+    hasAutoExportedRef.current = true;
+    clearVideoExportLogs();
+    void exportVideo(initialScenes, format as any, brandMark, projectId, "smartflow").catch(() => {});
+  }, [initialScenes, projectId, format, brandMark, enableVoice, exportVideo, exportState.status]);
 
-    lastAutoDownloadedUrlRef.current = exportState.videoUrl;
-    shouldAutoDownloadRef.current = false;
-
-    const safeName = title.replace(/[^a-z0-9]/gi, "_").slice(0, 50) || "infographic";
-    downloadVideo(exportState.videoUrl, `${safeName}.mp4`);
-  }, [downloadVideo, exportState.status, exportState.videoUrl, title]);
-
-  // Get the single scene
   const scene = scenes[0];
   if (!scene) return null;
 
-  const hasAudio = enableVoice && scene.audioUrl;
-  const aspectClass =
-    format === "portrait" ? "aspect-[9/16]" : format === "square" ? "aspect-square" : "aspect-video";
-
-  const stopAudio = () => {
-    const el = audioRef.current;
-    setIsPlaying(false);
-    setAudioProgress(0);
-    if (el) {
-      el.pause();
-      el.currentTime = 0;
-    }
+  const handleRetryExport = () => {
+    resetExport();
+    clearVideoExportLogs();
+    void exportVideo(scenes, format as any, brandMark, projectId, "smartflow").catch(() => {});
   };
 
-  const playAudio = async () => {
-    const el = audioRef.current;
-    if (!el || !scene.audioUrl) return;
-
-    if (isPlaying) {
-      el.pause();
-      setIsPlaying(false);
-      return;
-    }
-
-    try {
-      el.src = scene.audioUrl;
-      await el.play();
-      setIsPlaying(true);
-    } catch {
-      stopAudio();
-    }
-  };
-
-  const handleDownloadImage = async () => {
-    if (scene.imageUrl) {
-      try {
-        const response = await fetch(scene.imageUrl);
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = blobUrl;
-        link.download = `${title.replace(/\s+/g, "-").toLowerCase()}-infographic.png`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(blobUrl);
-      } catch (error) {
-        console.error("Failed to download image:", error);
-      }
-    }
+  const copyScript = () => {
+    const text = scene.voiceover || scene.title || "";
+    navigator.clipboard.writeText(text).then(
+      () => toast({ title: "Script copied!" }),
+      () => toast({ variant: "destructive", title: "Failed to copy" })
+    );
   };
 
   return (
-    <div className="space-y-8">
-      <audio
-        ref={audioRef}
-        onEnded={stopAudio}
-        onTimeUpdate={() => {
-          const el = audioRef.current;
-          if (!el) return;
-          const dur = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : scene.duration ?? 0;
-          setAudioProgress(dur > 0 ? Math.min(1, el.currentTime / dur) : 0);
-        }}
-        className="hidden"
-      />
-
+    <div className="space-y-6 pb-8">
       {/* Header */}
-      <div className="text-center">
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 mb-4"
-        >
-          <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-          <span className="text-sm font-medium text-primary">Generation Complete</span>
-        </motion.div>
-
-        {/* Stats Panel */}
+      <div className="text-center space-y-2">
         {totalTimeMs && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="flex items-center justify-center gap-4 mb-4"
-          >
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 border border-border/50">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium text-foreground">
-                {Math.floor(totalTimeMs / 60000)}m {Math.floor((totalTimeMs % 60000) / 1000)}s
-              </span>
-            </div>
-          </motion.div>
-        )}
-
-        <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
-        <p className="text-muted-foreground mt-1">
-          1 scene • 1 image generated{!enableVoice && " • No audio"}
-        </p>
-
-        {/* Play Preview (only if voice enabled and audio exists) */}
-        {hasAudio && (
-          <div className="mt-4 flex items-center justify-center gap-2">
-            <Button onClick={playAudio} className="gap-2">
-              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-              {isPlaying ? "Pause" : "Play Preview"}
-            </Button>
-            {isPlaying && (
-              <Button variant="outline" onClick={stopAudio} className="gap-2">
-                <Square className="h-4 w-4" />
-                Stop
-              </Button>
-            )}
+          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Clock className="h-4 w-4" />
+            <span>Generated in {Math.floor(totalTimeMs / 60000)}m {Math.floor((totalTimeMs % 60000) / 1000)}s</span>
           </div>
         )}
+        <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
       </div>
 
-      {/* Scene Preview */}
-      <Card className="overflow-hidden border-border/50 bg-card/50 backdrop-blur-sm">
-        {/* Image Preview */}
-        <div className={cn("relative bg-muted/50 flex items-center justify-center", aspectClass)}>
-          {/* Progress bar when playing */}
-          {hasAudio && (
-            <div className="absolute inset-x-0 top-0 z-10 h-1 bg-background/30">
-              <div
-                className="h-full bg-primary transition-[width] duration-150"
-                style={{ width: `${Math.round(audioProgress * 100)}%` }}
-              />
+      {/* ── Main Split Layout ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* Left: Video Player or Image Preview */}
+        <div className="lg:col-span-3">
+          {enableVoice ? (
+            <VideoPlayer
+              exportState={exportState}
+              title={title}
+              onDownload={downloadVideo}
+              onReset={resetExport}
+              onRetry={handleRetryExport}
+              isReRendering={isReRendering}
+            />
+          ) : (
+            /* No-voice SmartFlow: show the infographic image directly */
+            <div className={cn(
+              "relative rounded-xl overflow-hidden bg-muted/50 border",
+              format === "portrait" ? "aspect-[9/16]" : format === "square" ? "aspect-square" : "aspect-video",
+            )}>
+              {scene.imageUrl ? (
+                <img
+                  src={scene.imageUrl}
+                  alt={title}
+                  className="w-full h-full object-contain"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                  No image
+                </div>
+              )}
             </div>
           )}
-
-          <AnimatePresence mode="wait" initial={false}>
-            {scene.imageUrl ? (
-              <motion.img
-                key={scene.imageUrl}
-                src={scene.imageUrl}
-                alt={title}
-                loading="lazy"
-                className="w-full h-full object-cover"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.35, ease: "easeOut" }}
-              />
-            ) : (
-              <motion.div
-                key="placeholder"
-                className="text-center text-muted-foreground"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-              >
-                <Play className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Infographic preview</p>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
 
-        {/* Scene Details */}
-        <div className="p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-medium text-foreground">Scene 1</h3>
-            <div className="flex items-center gap-2">
-              {scene.duration && (
-                <span className="text-sm text-muted-foreground">{Math.ceil(scene.duration)}s</span>
-              )}
+        {/* Right: Script & Controls */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* Script Card */}
+          {scene.voiceover && (
+            <Card className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <FileText className="h-4 w-4 text-primary" />
+                  Script
+                </div>
+                <Button size="sm" variant="outline" onClick={copyScript} className="gap-1.5">
+                  <Copy className="h-3.5 w-3.5" />
+                  Copy
+                </Button>
+              </div>
+              <p className="text-sm text-foreground leading-relaxed max-h-48 overflow-y-auto scrollbar-thin">
+                {scene.voiceover}
+              </p>
+            </Card>
+          )}
+
+          {/* Quick Actions */}
+          <div className="flex flex-col gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowScenes(!showScenes)}
+              className="w-full justify-between"
+            >
+              <span className="flex items-center gap-2">
+                {showScenes ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {showScenes ? "Hide Scene" : "Edit / Adjust Scene"}
+              </span>
+              {showScenes ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </Button>
+
+            <div className="flex gap-2">
               <Button
+                variant="outline"
                 size="sm"
-                onClick={() => setEditingSceneIndex(0)}
-                className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground"
+                onClick={() => downloadImagesAsZip(scenes, title)}
+                disabled={zipState.status === "downloading" || zipState.status === "zipping"}
+                className="flex-1 gap-1.5"
               >
-                <Pencil className="h-3.5 w-3.5" />
-                Edit
+                <Download className="h-3.5 w-3.5" />
+                Image
+              </Button>
+              <Button variant="outline" size="sm" onClick={onNewProject} className="flex-1 gap-1.5">
+                New Project
               </Button>
             </div>
           </div>
+        </div>
+      </div>
 
-          {/* Script & Audio (only if voice enabled) */}
-          {enableVoice && (
-            <div className="space-y-3">
-              <div className="flex items-start gap-3">
-                <Volume2 className="h-4 w-4 text-muted-foreground mt-1 shrink-0" />
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {scene.voiceover}
-                </p>
+      {/* ── Scene Edit (Collapsed by default) ── */}
+      <AnimatePresence>
+        {showScenes && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3 }}
+            className="overflow-hidden"
+          >
+            <Card className="p-4 space-y-4">
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-medium text-foreground">Scene Editor</h3>
+                {isRegenerating && (
+                  <span className="text-sm text-primary">
+                    <Loader2 className="inline h-4 w-4 animate-spin mr-1" />
+                    Regenerating...
+                  </span>
+                )}
               </div>
 
-              {scene.audioUrl && (
-                <audio
-                  key={scene.audioUrl}
-                  controls
-                  preload="none"
-                  src={scene.audioUrl}
-                  onPlay={() => {
-                    if (isPlaying) stopAudio();
-                  }}
-                  className="w-full"
-                />
-              )}
-            </div>
-          )}
-        </div>
-      </Card>
-
-      {/* Export Progress Modal */}
-      {exportState.status !== "idle" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <Card className="w-full max-w-md p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-foreground">
-                {exportState.status === "error"
-                  ? "Export Failed"
-                  : exportState.status === "complete"
-                  ? "Export Complete!"
-                  : "Exporting Video..."}
-              </h3>
-              {(exportState.status === "error" || exportState.status === "complete") && (
-                <Button type="button" variant="ghost" size="icon" onClick={resetExport}>
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-
-            {exportState.status === "error" ? (
-              <>
-                <p className="text-sm text-muted-foreground">{exportState.error}</p>
-                <Button type="button" onClick={resetExport} variant="outline" className="w-full mt-4">
-                  Close
-                </Button>
-              </>
-            ) : exportState.status === "complete" ? (
-              <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">Your video is ready.</p>
-                <div className="space-y-2">
-                  <Button
-                    type="button"
-                    className="w-full gap-2"
-                    onClick={() => {
-                      const safeName = title.replace(/[^a-z0-9]/gi, "_").slice(0, 50) || "infographic";
-                      downloadVideo(exportState.videoUrl!, `${safeName}.mp4`, true);
-                    }}
-                  >
-                    <Download className="h-4 w-4" />
-                    Download to Files
-                  </Button>
+              <div className={cn(
+                "relative rounded-lg overflow-hidden border cursor-pointer",
+                format === "portrait" ? "aspect-[9/16] max-w-xs" : format === "square" ? "aspect-square max-w-sm" : "aspect-video max-w-lg",
+              )} onClick={() => setEditingSceneIndex(0)}>
+                {scene.imageUrl ? (
+                  <img src={scene.imageUrl} alt={title} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-muted/50 flex items-center justify-center">
+                    <span className="text-muted-foreground">No image</span>
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-black/0 hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
+                  <Pencil className="h-6 w-6 text-white" />
                 </div>
-                <Button type="button" variant="ghost" onClick={resetExport} className="w-full">
-                  Close
-                </Button>
               </div>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm text-muted-foreground">
-                    <span>
-                      {exportState.status === "loading" && "Loading assets..."}
-                      {exportState.status === "rendering" && (exportState.sceneProgress?.overallMessage || "Rendering video...")}
-                      {exportState.status === "encoding" && "Encoding..."}
-                    </span>
-                    <span>{exportState.progress}%</span>
-                  </div>
-                  <Progress value={exportState.progress} className="h-2" />
-                </div>
-
-                {/* Per-scene progress during export */}
-                {exportState.sceneProgress && exportState.sceneProgress.scenes.some((s: any) => s.phase !== "pending") && (
-                  <div className="space-y-1 max-h-36 overflow-y-auto">
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Scene Progress</span>
-                      <span>{exportState.sceneProgress.completedScenes}/{exportState.sceneProgress.totalScenes}</span>
-                    </div>
-                    {exportState.sceneProgress.scenes.map((scene: any) => (
-                      <div key={scene.sceneIndex} className="flex items-center gap-2 text-xs">
-                        <span className={`h-2 w-2 rounded-full ${
-                          scene.phase === "complete" ? "bg-green-500" :
-                          scene.phase === "failed" || scene.phase === "timeout" ? "bg-red-500" :
-                          scene.phase === "encoding" || scene.phase === "generating" ? "bg-primary animate-pulse" :
-                          scene.phase === "skipped" ? "bg-yellow-500" :
-                          "bg-muted-foreground/30"
-                        }`} />
-                        <span className="min-w-[4rem]">Scene {scene.sceneIndex + 1}</span>
-                        <span className="text-muted-foreground truncate flex-1">{scene.message || scene.phase}</span>
-                        {scene.durationMs > 0 && (
-                          <span className="text-muted-foreground/70 tabular-nums">
-                            {scene.durationMs < 1000 ? `${scene.durationMs}ms` : `${Math.round(scene.durationMs / 1000)}s`}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {exportState.sceneProgress?.etaSeconds > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    ETA: {exportState.sceneProgress.etaSeconds >= 60
-                      ? `${Math.floor(exportState.sceneProgress.etaSeconds / 60)}m ${exportState.sceneProgress.etaSeconds % 60}s`
-                      : `${exportState.sceneProgress.etaSeconds}s`}
-                  </p>
-                )}
-
-                {exportState.warning && !exportState.sceneProgress?.overallMessage && (
-                  <p className="text-xs text-muted-foreground">{exportState.warning}</p>
-                )}
-
-                <p className="text-xs text-muted-foreground">
-                  Please keep this tab open. Your video is being rendered on the server.
-                </p>
-              </>
-            )}
-          </Card>
-        </div>
-      )}
-
-      {/* Actions */}
-      <ResultActionBar
-        projectId={projectId}
-        generationId={generationId}
-        title={title}
-        scenes={scenes}
-        format={format}
-        onExportVideo={() => {
-          if (!enableVoice) return;
-          clearVideoExportLogs();
-          appendVideoExportLog("log", [
-            "[UI] Export button pressed",
-            {
-              scenes: scenes.length,
-              format,
-              userAgent: typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 120) : "unknown",
-              isIOS: typeof navigator !== "undefined" ? /iPad|iPhone|iPod/.test(navigator.userAgent) : false,
-            },
-          ]);
-          setExportLogsVersion((v) => v + 1);
-          shouldAutoDownloadRef.current = true;
-          void exportVideo(scenes, format, brandMark, projectId, 'smartflow').catch(() => {
-            setExportLogsVersion((v) => v + 1);
-          });
-        }}
-        onDownloadImages={() => downloadImagesAsZip(scenes, title)}
-        onNewProject={onNewProject}
-        isExporting={
-          exportState.status === "loading" ||
-          exportState.status === "rendering" ||
-          exportState.status === "encoding"
-        }
-        isDownloadingImages={
-          zipState.status === "downloading" || zipState.status === "zipping"
-        }
-        hasImages={!!scene.imageUrl}
-        hasVideo={enableVoice && !!scene.imageUrl}
-      />
-
-      {/* Export Logs Modal */}
-      {showExportLogs && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <Card className="w-full max-w-3xl p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-foreground">Export Logs</h3>
-              <Button type="button" variant="ghost" size="icon" onClick={() => setShowExportLogs(false)}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-2">
-              <Button
-                variant="outline"
-                className="gap-2"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(exportLogText || "");
-                  } catch {
-                    // ignore clipboard failures
-                  }
-                }}
-                disabled={!exportLogText}
-              >
-                <Copy className="h-4 w-4" />
-                Copy
-              </Button>
-              <Button
-                variant="outline"
-                className="gap-2"
-                onClick={() => {
-                  clearVideoExportLogs();
-                  setExportLogsVersion((v) => v + 1);
-                }}
-              >
-                <Trash2 className="h-4 w-4" />
-                Clear
-              </Button>
-            </div>
-
-            <div className="rounded-md border border-border bg-muted/30 p-3 max-h-[60vh] overflow-auto">
-              <pre className="text-xs leading-relaxed text-foreground whitespace-pre-wrap">
-                {exportLogText || "No export logs captured yet."}
-              </pre>
-            </div>
-
-            <p className="text-xs text-muted-foreground">
-              Tip: copy these logs and paste them into chat after the export fails.
-            </p>
-          </Card>
-        </div>
-      )}
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Scene Edit Modal */}
       {editingSceneIndex !== null && scenes[editingSceneIndex] && (
         <SceneEditModal
           scene={scenes[editingSceneIndex]}
           sceneIndex={editingSceneIndex}
+          generationId={generationId}
           format={format}
           onClose={() => setEditingSceneIndex(null)}
           onRegenerateAudio={regenerateAudio}
@@ -539,6 +287,25 @@ export function SmartFlowResult({
           isRegenerating={isRegenerating}
           regeneratingType={regeneratingType}
         />
+      )}
+
+      {/* Export Logs */}
+      {showExportLogs && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <Card className="w-full max-w-3xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">Export Logs</h3>
+              <Button variant="ghost" size="icon" onClick={() => setShowExportLogs(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="rounded-md border bg-muted/30 p-3 max-h-[60vh] overflow-auto">
+              <pre className="text-xs leading-relaxed whitespace-pre-wrap">
+                {exportLogText || "No logs."}
+              </pre>
+            </div>
+          </Card>
+        </div>
       )}
     </div>
   );

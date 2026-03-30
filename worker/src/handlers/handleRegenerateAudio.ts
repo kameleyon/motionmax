@@ -66,9 +66,9 @@ export async function handleRegenerateAudio(
   // Fetch generation + project voice settings (including presenter_focus, voice_inclination for language)
   const { data: generation, error: genError } = await supabase
     .from("generations")
-    .select("scenes, projects!inner(voice_type, voice_id, voice_name, presenter_focus, voice_inclination)")
+    .select("scenes, projects(voice_type, voice_id, voice_name, presenter_focus, voice_inclination)")
     .eq("id", generationId)
-    .single();
+    .maybeSingle();
 
   if (genError || !generation) throw new Error(`Generation not found: ${genError?.message}`);
 

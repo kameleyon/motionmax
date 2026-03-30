@@ -180,6 +180,15 @@ export async function handleExportVideo(
     throw new Error(`Export failed: no scenes for project ${project_id}`);
   }
 
+  // Detect cinematic projects (scenes have AI-generated videoUrls)
+  const isCinematic = scenes.some((s: any) => !!s.videoUrl);
+  if (isCinematic && exportConfig.crossfadeDuration > 0 && restartCount === 0) {
+    // Cinematic videos need longer, more visible crossfade transitions
+    // 0.5s dissolve is invisible on fast-moving AI video clips
+    exportConfig.crossfadeDuration = Math.max(exportConfig.crossfadeDuration, 1.0);
+    console.log(`[ExportVideo] Cinematic detected — crossfade increased to ${exportConfig.crossfadeDuration}s`);
+  }
+
   // ── Initialize per-scene progress tracking ──────────────────────
   const sceneProgress = initSceneProgress(jobId, scenes.length, "encoding");
   await flushSceneProgress(jobId);
@@ -385,10 +394,20 @@ export async function handleExportVideo(
         message: `Applying ${exportConfig.crossfadeDuration}s crossfade to ${clipPaths.length} clips`,
       });
 
+      // Cinematic projects use fadeblack (more visible), standard uses fade (dissolve)
+      const transitionType = isCinematic ? "fadeblack" : "fade";
+
       usedCrossfade = await concatWithCrossfade(clipPaths, finalOutputPath, {
         duration: exportConfig.crossfadeDuration,
-        transition: "fade",
+        transition: transitionType as any,
         pairTimeoutMs: CROSSFADE_TIMEOUT_MS,
+        onPairComplete: async (completed, total) => {
+          // Progress range for crossfade: 55% → 80%
+          const pct = Math.floor(55 + (completed / total) * 25);
+          sceneProgress.overallMessage = `Crossfade transition ${completed}/${total}...`;
+          await flushSceneProgress(jobId);
+          await supabase.from("video_generation_jobs").update({ progress: pct }).eq("id", jobId);
+        },
       });
 
       if (!usedCrossfade) {

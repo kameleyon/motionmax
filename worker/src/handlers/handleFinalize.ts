@@ -58,9 +58,9 @@ export async function handleFinalizePhase(
   // Fetch generation + project
   const { data: generation, error: genError } = await supabase
     .from("generations")
-    .select("*, projects!inner(title, length, project_type)")
+    .select("*, projects(title, length, project_type)")
     .eq("id", generationId)
-    .single();
+    .maybeSingle();
 
   if (genError || !generation) throw new Error(`Generation not found: ${genError?.message}`);
 

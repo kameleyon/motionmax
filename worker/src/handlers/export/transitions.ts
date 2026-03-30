@@ -44,6 +44,8 @@ interface CrossfadeOptions {
   transition: TransitionType;
   /** Per-pair FFmpeg timeout in ms (default 5 min) */
   pairTimeoutMs: number;
+  /** Called after each pair is merged with (completedPairs, totalPairs) */
+  onPairComplete?: (completed: number, total: number) => void | Promise<void>;
 }
 
 const DEFAULT_OPTIONS: CrossfadeOptions = {
@@ -126,6 +128,7 @@ async function pairwiseCrossfade(
   let currentPath = clipPaths[0];
   let currentDuration = durations[0];
   const tempFiles: string[] = [];
+  const totalPairs = clipPaths.length - 1;
 
   for (let i = 1; i < clipPaths.length; i++) {
     const nextPath = clipPaths[i];
@@ -139,7 +142,7 @@ async function pairwiseCrossfade(
     const offset = Math.max(0, currentDuration - opts.duration);
 
     console.log(
-      `[Transitions] Pair ${i}/${clipPaths.length - 1}: ` +
+      `[Transitions] Pair ${i}/${totalPairs}: ` +
       `${currentDuration.toFixed(1)}s + ${nextDuration.toFixed(1)}s → offset=${offset.toFixed(3)}s`
     );
 
@@ -155,6 +158,7 @@ async function pairwiseCrossfade(
       "-map", "[aout]",
       "-c:v", "libx264",
       "-preset", "ultrafast",
+      "-crf", "23",
       "-pix_fmt", "yuv420p",
       "-c:a", "aac",
       "-b:a", "128k",
@@ -174,6 +178,13 @@ async function pairwiseCrossfade(
     // New merged clip duration = current + next - crossfade
     currentDuration = currentDuration + nextDuration - opts.duration;
     currentPath = outPath;
+
+    // Report progress after each pair
+    if (opts.onPairComplete) {
+      try {
+        await opts.onPairComplete(i, totalPairs);
+      } catch { /* non-critical */ }
+    }
   }
 
   // Clean any remaining temp files

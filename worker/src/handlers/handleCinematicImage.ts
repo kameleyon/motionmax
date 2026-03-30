@@ -34,9 +34,9 @@ export async function handleCinematicImage(
 
   const { data: generation, error: genError } = await supabase
     .from("generations")
-    .select("*, projects!inner(format, style)")
+    .select("*, projects(format, style)")
     .eq("id", generationId)
-    .single();
+    .maybeSingle();
 
   if (genError || !generation) {
     throw new Error(`Generation not found: ${genError?.message}`);

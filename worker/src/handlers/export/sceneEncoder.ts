@@ -106,6 +106,7 @@ async function encodeWithKenBurns(
     "-vf", vf,
     "-c:v", "libx264",
     "-preset", "ultrafast",
+    "-crf", "23",
     "-pix_fmt", "yuv420p",
     "-t", String(duration),
     "-movflags", "+faststart",
@@ -128,6 +129,7 @@ async function encodeSilentChunkStatic(
     "-vf", scaleAndPad(config.width, config.height),
     "-c:v", "libx264",
     "-preset", "ultrafast",
+    "-crf", "23",
     "-tune", "stillimage",
     "-pix_fmt", "yuv420p",
     "-r", String(config.fps),
@@ -301,10 +303,8 @@ async function imageAudioToClip(
 
 /** Mux video + audio with duration matching.
  *
- *  clipDuration = audioDuration + 1s silence buffer
- *  - Video is re-encoded/stretched to EXACTLY clipDuration
- *  - Audio plays fully, then 1s of silence before the next scene
- *  - Hard cut at clipDuration — clean scene transitions */
+ *  Stretches or trims video to match audio duration, then merges.
+ *  Uses CRF 23 for reasonable file size. */
 async function muxVideoAudio(
   videoPath: string,
   audioPath: string,
@@ -318,44 +318,30 @@ async function muxVideoAudio(
     probeDuration(audioPath),
   ]);
 
-  const SILENCE_BUFFER = 1;
-  const clipDuration = audioDur + SILENCE_BUFFER;
+  const clipDuration = audioDur;
   const ratio = clipDuration / videoDur;
   console.log(
     `[SceneEncoder] Scene ${sceneIndex} mux: video=${videoDur.toFixed(1)}s audio=${audioDur.toFixed(1)}s clip=${clipDuration.toFixed(1)}s`
   );
 
-  // Pass 1: stretch video to EXACTLY clipDuration + normalize resolution
-  const stretchedVid = path.join(tempDir, `scene_${sceneIndex}_stretched.mp4`);
+  // Single pass: stretch video + scale + merge audio
   await runFfmpeg([
     "-i", videoPath,
+    "-i", audioPath,
     "-vf", `setpts=${ratio.toFixed(6)}*PTS,${scaleAndPad(config.width, config.height)}`,
-    "-an",
+    "-map", "0:v:0",
+    "-map", "1:a:0",
     "-c:v", "libx264",
     "-preset", "ultrafast",
+    "-crf", "23",
     "-pix_fmt", "yuv420p",
+    "-c:a", "aac",
+    "-b:a", "128k",
     "-t", String(clipDuration),
     "-movflags", "+faststart",
     ...X264_MEM_FLAGS,
-    stretchedVid,
-  ]);
-
-  // Pass 2: merge video + audio, hard cut at clipDuration
-  await runFfmpeg([
-    "-i", stretchedVid,
-    "-i", audioPath,
-    "-map", "0:v:0",
-    "-map", "1:a:0",
-    "-c:v", "copy",
-    "-c:a", "aac",
-    "-b:a", "128k",
-    "-af", `apad=whole_dur=${clipDuration}`,
-    "-t", String(clipDuration),
-    "-movflags", "+faststart",
     outputPath,
   ]);
-
-  removeFiles(stretchedVid);
 }
 
 /** Build a slideshow from multiple images + one audio track. */
@@ -444,6 +430,7 @@ export async function processScene(
         "-vf", scaleAndPad(config.width, config.height),
         "-c:v", "libx264",
         "-preset", "ultrafast",
+        "-crf", "23",
         "-pix_fmt", "yuv420p",
         "-movflags", "+faststart",
         ...X264_MEM_FLAGS,

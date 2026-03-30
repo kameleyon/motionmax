@@ -53,6 +53,7 @@ export async function concatFiles(
         "-i", listPath,
         "-c:v", "libx264",
         "-preset", "ultrafast",
+        "-crf", "23",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac",
         "-b:a", "128k",

@@ -16,24 +16,56 @@ import { startHealthServer, stopHealthServer } from "./healthServer.js";
 
 /* ---- Auto-tune concurrency based on system resources ---- */
 import os from "os";
+import fs from "fs";
+
+/**
+ * Get the actual memory available to this process.
+ * In containers (Docker/Render), os.totalmem() returns the HOST memory,
+ * not the container's cgroup limit. We read the cgroup limit directly.
+ */
+function getContainerMemoryBytes(): number {
+  const hostMem = os.totalmem();
+
+  // Try cgroup v2 first (newer Linux kernels / Render)
+  try {
+    const raw = fs.readFileSync("/sys/fs/cgroup/memory.max", "utf-8").trim();
+    if (raw !== "max") {
+      const limit = parseInt(raw, 10);
+      if (limit > 0 && limit < hostMem) return limit;
+    }
+  } catch { /* not cgroup v2 */ }
+
+  // Try cgroup v1
+  try {
+    const raw = fs.readFileSync("/sys/fs/cgroup/memory/memory.limit_in_bytes", "utf-8").trim();
+    const limit = parseInt(raw, 10);
+    // cgroup v1 returns a huge number (9223372036854771712) when unlimited
+    if (limit > 0 && limit < hostMem) return limit;
+  } catch { /* not cgroup v1 */ }
+
+  // Fallback: host memory (non-containerized or Windows)
+  return hostMem;
+}
 
 function detectOptimalConcurrency(): number {
   const envOverride = process.env.WORKER_CONCURRENCY;
   if (envOverride) return parseInt(envOverride, 10);
 
   const cpuCount = os.cpus().length;
-  const totalMemMb = Math.round(os.totalmem() / 1048576);
+  const hostMemMb = Math.round(os.totalmem() / 1048576);
+  const containerMemMb = Math.round(getContainerMemoryBytes() / 1048576);
 
-  // Heuristic: allow more concurrency with more CPUs/RAM
-  // Generation jobs (LLM calls) are I/O-bound → can run many in parallel
-  // Export jobs (FFmpeg) are CPU-bound → limited by CPU count
-  // Mix: use min(cpuCount * 4, memMb / 256) to avoid OOM while maximizing throughput
-  const byMemory = Math.floor(totalMemMb / 256);  // ~256MB per concurrent job
-  const byCpu = cpuCount * 4;                       // I/O-bound jobs can exceed CPU count
-  const optimal = Math.max(4, Math.min(byCpu, byMemory, 24)); // floor 4, cap 24
+  // Use container memory (not host) for memory-based limit
+  // Reserve 512MB for OS/Node.js overhead, use the rest for jobs
+  const availableMemMb = Math.max(512, containerMemMb - 512);
+  const byMemory = Math.floor(availableMemMb / 200);  // ~200MB per concurrent job
+  const byCpu = cpuCount * 3;                           // conservative CPU multiplier
+  const optimal = Math.max(4, Math.min(byCpu, byMemory, 20)); // floor 4, cap 20
 
   console.log(
-    `[Worker] Auto-tuned concurrency: ${optimal} (CPUs=${cpuCount}, RAM=${totalMemMb}MB, byCPU=${byCpu}, byMem=${byMemory})`
+    `[Worker] Auto-tuned concurrency: ${optimal} ` +
+    `(CPUs=${cpuCount}, hostRAM=${hostMemMb}MB, containerRAM=${containerMemMb}MB, ` +
+    `availableForJobs=${availableMemMb}MB, byCPU=${byCpu}, byMem=${byMemory})`
   );
   return optimal;
 }

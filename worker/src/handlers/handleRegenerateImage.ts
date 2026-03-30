@@ -60,9 +60,9 @@ export async function handleRegenerateImage(
   // Fetch generation + project style/format
   const { data: generation, error: genError } = await supabase
     .from("generations")
-    .select("scenes, projects!inner(format, style)")
+    .select("scenes, projects(format, style)")
     .eq("id", generationId)
-    .single();
+    .maybeSingle();
 
   if (genError || !generation) throw new Error(`Generation not found: ${genError?.message}`);
 

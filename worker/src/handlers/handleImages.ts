@@ -77,9 +77,9 @@ export async function handleImagesPhase(
   // Fetch generation + project data
   const { data: generation, error: genError } = await supabase
     .from("generations")
-    .select("*, projects!inner(format, style, brand_mark, character_consistency_enabled, project_type, character_description)")
+    .select("*, projects(format, style, brand_mark, character_consistency_enabled, project_type, character_description)")
     .eq("id", generationId)
-    .single();
+    .maybeSingle();
 
   if (genError || !generation) {
     throw new Error(`Generation not found: ${genError?.message}`);

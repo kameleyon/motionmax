@@ -1,15 +1,30 @@
 /**
  * Cinematic video handler.
  *
- * Primary:  Hypereal Grok Video I2V
- * Fallback: Replicate xai/grok-imagine-video
+ * Generates a 10s video per scene using Kling I2V with seamless morphing:
+ *   - image = Scene N's generated image (start frame)
+ *   - end_image = Scene N+1's generated image (end frame / morph target)
+ *   - prompt = Scene N's video motion + camera motion + morph instruction
+ *
+ * Each clip IS both the scene AND the transition to the next scene.
+ * During export, clips are concatenated directly — no separate transition step.
+ * Audio is muxed on top during export.
+ *
+ * Provider chain:
+ *   Primary:  Kling V3.0 Std I2V (kling-3-0-std-i2v)
+ *   Fallback: Kling V2.6 Pro I2V (kling-2-6-i2v-pro)
+ *   // Grok — commented out (replaced by Kling for native end_image support)
  */
 
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField } from "../lib/sceneUpdate.js";
-import { generateGrokVideo } from "../services/grokVideo.js";
 import { generateImage } from "../services/imageGenerator.js";
+import {
+  generateKlingV3Video,
+  generateKlingV26Video,
+  // generateGrokVideo — commented out: replaced by Kling for seamless morphing
+} from "../services/hypereal.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -40,7 +55,7 @@ export async function handleCinematicVideo(
     .from("generations")
     .select("scenes")
     .eq("id", generationId)
-    .single();
+    .maybeSingle();
 
   if (genError || !generation) {
     throw new Error(`Generation not found: ${genError?.message}`);
@@ -52,7 +67,7 @@ export async function handleCinematicVideo(
 
   let imageUrl = scene.imageUrl;
 
-  // Auto-generate image if missing (e.g., initial image gen failed with 500)
+  // Auto-generate image if missing
   if (!imageUrl) {
     console.log(`[CinematicVideo] Scene ${sceneIndex} has no imageUrl — generating image first`);
     const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
@@ -64,11 +79,10 @@ export async function handleCinematicVideo(
 
     imageUrl = await generateImage(prompt, hyperealApiKey, replicateApiKey, fmt, projectId);
     await updateSceneField(generationId, sceneIndex, "imageUrl", imageUrl);
-    console.log(`[CinematicVideo] Scene ${sceneIndex} image auto-generated: ${imageUrl.substring(0, 60)}...`);
+    console.log(`[CinematicVideo] Scene ${sceneIndex} image auto-generated`);
   }
 
-  // Snapshot the imageUrl used to generate the video — used later to detect
-  // if the user regenerated the image while the video was being created.
+  // Snapshot the imageUrl used — for stale-image guard later
   const sourceImageUrl = imageUrl;
 
   // Snapshot history for undo if regenerating
@@ -88,33 +102,92 @@ export async function handleCinematicVideo(
     .single();
 
   const format = project?.format || "landscape";
-  const visualPrompt = scene.visualPrompt || scene.visual_prompt || scene.voiceover || "Cinematic scene with dramatic lighting";
-  const videoPrompt = buildVideoPrompt(visualPrompt);
 
-  // ── Generate video (Hypereal Grok → Replicate Grok fallback) ──────
-  let finalVideoUrl: string | null = null;
+  // ── Get next scene's image for end_image (morph target) ──────────
+  const nextScene = scenes[sceneIndex + 1];
+  const nextImageUrl = nextScene?.imageUrl || null;
+  const isLastScene = sceneIndex >= scenes.length - 1;
 
-  const grokResult = await generateGrokVideo({
-    prompt: videoPrompt,
-    imageUrl,
-    format,
-  });
-
-  if (grokResult.url) {
-    console.log(`[CinematicVideo] Scene ${sceneIndex}: ${grokResult.provider} succeeded`);
-    finalVideoUrl = await uploadVideoToStorage(grokResult.url, projectId, generationId, sceneIndex);
+  if (nextImageUrl) {
+    console.log(`[CinematicVideo] Scene ${sceneIndex}: will morph into scene ${sceneIndex + 1}`);
+  } else if (!isLastScene) {
+    console.log(`[CinematicVideo] Scene ${sceneIndex}: next scene has no image — no morph target`);
   } else {
-    throw new Error(`Video generation failed for scene ${sceneIndex}: ${grokResult.error}`);
+    console.log(`[CinematicVideo] Scene ${sceneIndex}: last scene — no morph target`);
+  }
+
+  // ── Build prompt ─────────────────────────────────────────────────
+  const visualPrompt = scene.visualPrompt || scene.visual_prompt || scene.voiceover || "Cinematic scene with dramatic lighting";
+  const videoPrompt = buildVideoPrompt(visualPrompt, nextImageUrl ? true : false);
+
+  const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
+  if (!hyperealApiKey) {
+    throw new Error("HYPEREAL_API_KEY is not configured");
+  }
+
+  // ── Generate video: Kling V3.0 → Kling V2.6 fallback ────────────
+  let finalVideoUrl: string | null = null;
+  let provider = "";
+
+  // Primary: Kling V3.0
+  try {
+    console.log(`[CinematicVideo] Scene ${sceneIndex}: trying Kling V3.0...`);
+    const url = await generateKlingV3Video(
+      imageUrl,
+      videoPrompt,
+      hyperealApiKey,
+      10, // 10 seconds
+      nextImageUrl || undefined,
+    );
+    if (url) {
+      provider = "Kling V3.0";
+      finalVideoUrl = await uploadVideoToStorage(url, projectId, generationId, sceneIndex);
+      console.log(`[CinematicVideo] Scene ${sceneIndex}: ✅ ${provider} succeeded`);
+    }
+  } catch (err: any) {
+    console.warn(`[CinematicVideo] Scene ${sceneIndex}: ❌ Kling V3.0 failed — ${err?.message || err}`);
+  }
+
+  // Fallback: Kling V2.6
+  if (!finalVideoUrl) {
+    try {
+      console.log(`[CinematicVideo] Scene ${sceneIndex}: trying Kling V2.6 fallback...`);
+      const url = await generateKlingV26Video(
+        imageUrl,
+        videoPrompt,
+        hyperealApiKey,
+        10,
+        nextImageUrl || undefined,
+      );
+      if (url) {
+        provider = "Kling V2.6";
+        finalVideoUrl = await uploadVideoToStorage(url, projectId, generationId, sceneIndex);
+        console.log(`[CinematicVideo] Scene ${sceneIndex}: ✅ ${provider} succeeded`);
+      }
+    } catch (err: any) {
+      console.warn(`[CinematicVideo] Scene ${sceneIndex}: ❌ Kling V2.6 failed — ${err?.message || err}`);
+    }
+  }
+
+  // ── Grok fallback — commented out (replaced by Kling) ──────────
+  // if (!finalVideoUrl) {
+  //   const grokResult = await generateGrokVideo({ prompt: videoPrompt, imageUrl, format });
+  //   if (grokResult.url) {
+  //     finalVideoUrl = await uploadVideoToStorage(grokResult.url, projectId, generationId, sceneIndex);
+  //     provider = grokResult.provider;
+  //   }
+  // }
+
+  if (!finalVideoUrl) {
+    throw new Error(`Video generation failed for scene ${sceneIndex}: both Kling V3.0 and V2.6 failed`);
   }
 
   // ── Stale-image guard ────────────────────────────────────────────
-  // Re-read the scene from DB. If the imageUrl changed while we were
-  // generating the video, the clip is stale — discard it.
   const { data: freshGen } = await supabase
     .from("generations")
     .select("scenes")
     .eq("id", generationId)
-    .single();
+    .maybeSingle();
 
   const freshScenes = (freshGen?.scenes as any[]) ?? [];
   const freshImageUrl = freshScenes[sceneIndex]?.imageUrl;
@@ -139,16 +212,16 @@ export async function handleCinematicVideo(
     jobId, projectId, userId, generationId,
     category: "system_info",
     eventType: "cinematic_video_completed",
-    message: `Cinematic video completed for scene ${sceneIndex}`,
+    message: `Cinematic video completed for scene ${sceneIndex} (${provider})`,
   });
 
-  return { success: true, status: "complete", videoUrl: finalVideoUrl, sceneIndex };
+  return { success: true, status: "complete", videoUrl: finalVideoUrl, sceneIndex, provider };
 }
 
 // ── Prompt builder ─────────────────────────────────────────────────
 
-function buildVideoPrompt(visualPrompt: string): string {
-  return `${visualPrompt}
+function buildVideoPrompt(visualPrompt: string, hasMorphTarget: boolean): string {
+  const basePrompt = `${visualPrompt}
 
 ANIMATION RULES (CRITICAL):
 - NO lip-sync talking animation - characters should NOT move their mouths as if speaking
@@ -157,6 +230,18 @@ ANIMATION RULES (CRITICAL):
 - Environment animation IS allowed: wind, particles, camera movement, lighting changes
 - Static poses with subtle breathing/idle movement are preferred for dialogue scenes
 - Focus on CAMERA MOTION and SCENE DYNAMICS rather than character lip movement`;
+
+  if (hasMorphTarget) {
+    return `${basePrompt}
+
+TRANSITION (CRITICAL):
+- The camera must be in constant forward motion throughout
+- In the final 3-4 seconds, the environment must seamlessly morph, stretch, and melt into the provided ending frame
+- This morphing must be fluid and continuous — no hard cuts, no fades to black
+- The camera pushes past the foreground as objects dissolve and reshape into the next scene`;
+  }
+
+  return basePrompt;
 }
 
 // ── Storage upload ─────────────────────────────────────────────────

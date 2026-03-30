@@ -182,12 +182,14 @@ export async function handleExportVideo(
   }
 
   // Detect cinematic projects (scenes have AI-generated videoUrls)
+  // Detect cinematic projects (scenes have AI-generated videoUrls with morphing baked in)
   const isCinematic = scenes.some((s: any) => !!s.videoUrl);
-  if (isCinematic && exportConfig.crossfadeDuration > 0 && restartCount === 0) {
-    // Cinematic videos need longer, dramatic crossfade transitions
-    // 0.5s is invisible on fast-moving AI video clips — use 1.5s fadeblack
-    exportConfig.crossfadeDuration = Math.max(exportConfig.crossfadeDuration, 1.5);
-    console.log(`[ExportVideo] Cinematic detected — crossfade increased to ${exportConfig.crossfadeDuration}s`);
+  if (isCinematic) {
+    // Cinematic videos already have seamless morphing from Kling (each clip morphs into the next)
+    // No crossfade or AI transitions needed — just concat directly
+    exportConfig.crossfadeDuration = 0;
+    exportConfig.aiTransitions = false;
+    console.log(`[ExportVideo] Cinematic detected — morphing baked into clips, using direct concat`);
   }
 
   // ── Initialize per-scene progress tracking ──────────────────────

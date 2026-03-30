@@ -98,19 +98,21 @@ export function AdminWorkerHealth() {
           status = "warning";
         }
 
-        // Simulated metrics (in real implementation, these would come from worker API)
-        const memoryUsage = 45 + Math.random() * 20; // 45-65%
-        const cpuUsage = 30 + Math.random() * 30; // 30-60%
-        const uptimeHours = 72 + Math.random() * 24; // 72-96 hours
+        // Calculate uptime from the oldest recent job
+        const oldestJob = recentActivity?.[0];
+        let uptimeSeconds = 0;
+        if (oldestJob?.created_at) {
+          uptimeSeconds = (now.getTime() - new Date(oldestJob.created_at).getTime()) / 1000;
+        }
 
         setHealth({
           status,
-          uptime: uptimeHours * 3600, // convert to seconds
+          uptime: uptimeSeconds,
           lastHeartbeat: lastActivity.toISOString(),
           activeJobs: activeCount || 0,
           maxConcurrency: 6, // from worker MAX_CONCURRENT_JOBS
-          memoryUsage,
-          cpuUsage,
+          memoryUsage: 0, // Not available without worker instrumentation
+          cpuUsage: 0, // Not available without worker instrumentation
           jobsProcessed24h: completedCount || 0,
           avgJobDuration: avgDuration,
           errorRate: errorRate * 100, // convert to percentage
@@ -260,50 +262,56 @@ export function AdminWorkerHealth() {
         </CardContent>
       </Card>
 
-      {/* Resource Usage */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <HardDrive className="h-5 w-5 text-primary" />
-              <CardTitle>Memory Usage</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Current</span>
-                <span className="font-medium">{health.memoryUsage.toFixed(1)}%</span>
-              </div>
-              <Progress value={health.memoryUsage} className="h-3" />
-              {health.memoryUsage > 80 && (
-                <p className="text-xs text-destructive mt-2">High memory usage detected</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+      {/* Resource Usage - Hidden until worker instrumentation is added */}
+      {(health.memoryUsage > 0 || health.cpuUsage > 0) && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {health.memoryUsage > 0 && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <HardDrive className="h-5 w-5 text-primary" />
+                  <CardTitle>Memory Usage</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Current</span>
+                    <span className="font-medium">{health.memoryUsage.toFixed(1)}%</span>
+                  </div>
+                  <Progress value={health.memoryUsage} className="h-3" />
+                  {health.memoryUsage > 80 && (
+                    <p className="text-xs text-destructive mt-2">High memory usage detected</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Cpu className="h-5 w-5 text-primary" />
-              <CardTitle>CPU Usage</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Current</span>
-                <span className="font-medium">{health.cpuUsage.toFixed(1)}%</span>
-              </div>
-              <Progress value={health.cpuUsage} className="h-3" />
-              {health.cpuUsage > 80 && (
-                <p className="text-xs text-destructive mt-2">High CPU usage detected</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          {health.cpuUsage > 0 && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Cpu className="h-5 w-5 text-primary" />
+                  <CardTitle>CPU Usage</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Current</span>
+                    <span className="font-medium">{health.cpuUsage.toFixed(1)}%</span>
+                  </div>
+                  <Progress value={health.cpuUsage} className="h-3" />
+                  {health.cpuUsage > 80 && (
+                    <p className="text-xs text-destructive mt-2">High CPU usage detected</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* Concurrency */}
       <Card>

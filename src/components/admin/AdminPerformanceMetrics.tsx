@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { Loader2, TrendingUp, TrendingDown, DollarSign, Zap, RefreshCw } from "lucide-react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { subDays, format } from "date-fns";
+import { supabase } from "@/integrations/supabase/client";
 
 interface PerformanceMetrics {
   avgTimeByType: {
@@ -42,7 +42,6 @@ interface PerformanceMetrics {
 type TimePeriod = "7d" | "30d" | "90d";
 
 export function AdminPerformanceMetrics() {
-  const { callAdminApi } = useAdminAuth();
   const [metrics, setMetrics] = useState<PerformanceMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,54 +51,144 @@ export function AdminPerformanceMetrics() {
     try {
       setLoading(true);
 
-      // Fetch performance metrics from admin API
-      const data = await callAdminApi("performance_metrics", { period });
+      const now = new Date();
+      const daysAgo = period === "7d" ? 7 : period === "30d" ? 30 : 90;
+      const startDate = subDays(now, daysAgo);
 
-      // If API doesn't have this endpoint yet, use mock data
-      if (!data || Object.keys(data).length === 0) {
-        // Generate mock data based on existing stats
-        const mockMetrics: PerformanceMetrics = {
-          avgTimeByType: {
-            doc2video: 180 + Math.random() * 60, // 3-4 min
-            cinematic: 420 + Math.random() * 120, // 7-9 min
-            smartflow: 90 + Math.random() * 30, // 1.5-2 min
-            storytelling: 240 + Math.random() * 60, // 4-5 min
-          },
-          successRateByType: {
-            doc2video: 92 + Math.random() * 6,
-            cinematic: 88 + Math.random() * 8,
-            smartflow: 95 + Math.random() * 4,
-            storytelling: 90 + Math.random() * 7,
-          },
-          costPerOperation: {
-            script: 0.05,
-            audio: 0.12,
-            image: 0.18,
-            video: 0.25,
-            total: 0.60,
-          },
-          errorTrends: Array.from({ length: parseInt(period) || 7 }, (_, i) => {
-            const date = subDays(new Date(), parseInt(period) - i - 1);
-            const errors = Math.floor(Math.random() * 10);
-            const total = 50 + Math.floor(Math.random() * 50);
-            return {
-              date: date.toISOString(),
-              errors,
-              total,
-              rate: (errors / total) * 100,
-            };
-          }),
-          providerCosts: [
-            { provider: "OpenRouter", cost: 45.23, percentage: 35 },
-            { provider: "Hypereal", cost: 38.67, percentage: 30 },
-            { provider: "Replicate", cost: 32.10, percentage: 25 },
-            { provider: "Google TTS", cost: 12.84, percentage: 10 },
-          ],
-        };
-        setMetrics(mockMetrics);
-      } else {
-        setMetrics(data);
-      }
+      // Fetch generations for the period
+      const { data: generations } = await supabase
+        .from("generations")
+        .select("*")
+        .gte("created_at", startDate.toISOString());
+
+      // Calculate metrics from generations
+      const byType: Record<string, { total: number; completed: number; totalTime: number }> = {
+        doc2video: { total: 0, completed: 0, totalTime: 0 },
+        cinematic: { total: 0, completed: 0, totalTime: 0 },
+        smartflow: { total: 0, completed: 0, totalTime: 0 },
+        storytelling: { total: 0, completed: 0, totalTime: 0 },
+      };
+
+      generations?.forEach((gen: any) => {
+        const projectType = gen.project_type || "doc2video";
+        if (!byType[projectType]) return;
+
+        byType[projectType].total++;
+        if (gen.status === "complete") {
+          byType[projectType].completed++;
+
+          // Calculate processing time if available
+          if (gen.created_at && gen.completed_at) {
+            const start = new Date(gen.created_at).getTime();
+            const end = new Date(gen.completed_at).getTime();
+            byType[projectType].totalTime += (end - start) / 1000; // seconds
+          }
+        }
+      });
+
+      // Fetch costs from generation_costs table
+      const { data: costsData } = await supabase
+        .from("generation_costs")
+        .select("*")
+        .gte("created_at", startDate.toISOString());
+
+      // Aggregate costs
+      let totalOpenRouter = 0;
+      let totalHypereal = 0;
+      let totalReplicate = 0;
+      let totalGoogleTts = 0;
+      let totalCost = 0;
+
+      costsData?.forEach((cost: any) => {
+        totalOpenRouter += Number(cost.openrouter_cost) || 0;
+        totalHypereal += Number(cost.hypereal_cost) || 0;
+        totalReplicate += Number(cost.replicate_cost) || 0;
+        totalGoogleTts += Number(cost.google_tts_cost) || 0;
+        totalCost += Number(cost.total_cost) || 0;
+      });
+
+      // Calculate error trends by day
+      const errorTrendsByDay: Record<string, { errors: number; total: number }> = {};
+      generations?.forEach((gen: any) => {
+        const day = format(new Date(gen.created_at), "yyyy-MM-dd");
+        if (!errorTrendsByDay[day]) {
+          errorTrendsByDay[day] = { errors: 0, total: 0 };
+        }
+        errorTrendsByDay[day].total++;
+        if (gen.status === "error") {
+          errorTrendsByDay[day].errors++;
+        }
+      });
+
+      // Calculate provider costs distribution
+      const providerCosts = [
+        { provider: "OpenRouter", cost: totalOpenRouter, percentage: 0 },
+        { provider: "Hypereal", cost: totalHypereal, percentage: 0 },
+        { provider: "Replicate", cost: totalReplicate, percentage: 0 },
+        { provider: "Google TTS", cost: totalGoogleTts, percentage: 0 },
+      ];
+
+      // Calculate percentages
+      providerCosts.forEach((p) => {
+        p.percentage = totalCost > 0 ? (p.cost / totalCost) * 100 : 0;
+      });
+
+      const calculatedMetrics: PerformanceMetrics = {
+        avgTimeByType: {
+          doc2video:
+            byType.doc2video.completed > 0
+              ? byType.doc2video.totalTime / byType.doc2video.completed
+              : 0,
+          cinematic:
+            byType.cinematic.completed > 0
+              ? byType.cinematic.totalTime / byType.cinematic.completed
+              : 0,
+          smartflow:
+            byType.smartflow.completed > 0
+              ? byType.smartflow.totalTime / byType.smartflow.completed
+              : 0,
+          storytelling:
+            byType.storytelling.completed > 0
+              ? byType.storytelling.totalTime / byType.storytelling.completed
+              : 0,
+        },
+        successRateByType: {
+          doc2video:
+            byType.doc2video.total > 0
+              ? (byType.doc2video.completed / byType.doc2video.total) * 100
+              : 0,
+          cinematic:
+            byType.cinematic.total > 0
+              ? (byType.cinematic.completed / byType.cinematic.total) * 100
+              : 0,
+          smartflow:
+            byType.smartflow.total > 0
+              ? (byType.smartflow.completed / byType.smartflow.total) * 100
+              : 0,
+          storytelling:
+            byType.storytelling.total > 0
+              ? (byType.storytelling.completed / byType.storytelling.total) * 100
+              : 0,
+        },
+        costPerOperation: {
+          script: totalOpenRouter / Math.max((generations?.length || 1), 1),
+          audio: totalGoogleTts / Math.max((generations?.length || 1), 1),
+          image: (totalHypereal + totalReplicate * 0.3) / Math.max((generations?.length || 1), 1),
+          video: (totalReplicate * 0.7) / Math.max((generations?.length || 1), 1),
+          total: totalCost / Math.max((generations?.length || 1), 1),
+        },
+        errorTrends: Object.entries(errorTrendsByDay)
+          .map(([date, stats]) => ({
+            date,
+            errors: stats.errors,
+            total: stats.total,
+            rate: (stats.errors / stats.total) * 100,
+          }))
+          .sort((a, b) => a.date.localeCompare(b.date)),
+        providerCosts,
+      };
+
+      setMetrics(calculatedMetrics);
 
       setError(null);
     } catch (err) {
@@ -108,7 +197,7 @@ export function AdminPerformanceMetrics() {
     } finally {
       setLoading(false);
     }
-  }, [callAdminApi, period]);
+  }, [period]);
 
   useEffect(() => {
     fetchMetrics();

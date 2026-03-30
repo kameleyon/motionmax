@@ -1,25 +1,33 @@
 /**
- * AI-powered transition video generator — SEAMLESS SCENE MORPHING.
+ * AI-powered seamless scene transition generator.
  *
- * Creates automorphic transitions between scenes by:
- *   1. Extracting the last frame of scene N (start state)
- *   2. Extracting the first frame of scene N+1 (end state)
- *   3. Uploading BOTH frames to storage for AI API access
- *   4. Feeding BOTH frames to the I2V model (start_image → end_image)
- *   5. The AI generates a short video that seamlessly morphs between them
+ * Uses Kling V3.0 (primary) or Kling V2.6 (fallback) on Hypereal to generate
+ * continuous fly-through morph transitions between scenes.
  *
- * The prompt explicitly describes the morphing: "The environment fluidly
- * and seamlessly morphs from [Scene A] directly into [Scene B], dissolving
- * smoothly without any hard cuts."
+ * Both Kling models natively support `image` (start frame) + `end_image` (end frame),
+ * generating video that interpolates seamlessly between the two visual states.
  *
- * Provider: Hypereal Grok Video I2V (image + end_image for interpolation)
- * Fallback: Replicate xai/grok-imagine-video (same params)
+ * Flow per transition:
+ *   1. Extract last frame of Scene N → upload as `image`
+ *   2. Extract first frame of Scene N+1 → upload as `end_image`
+ *   3. Build prompt from Scene N+1's video motion prompt + camera motion
+ *   4. Kling generates a 10s video morphing from start to end frame
+ *   5. Normalize and insert between scene clips
+ *
+ * Provider chain:
+ *   Primary:  Kling V3.0 Std I2V (kling-3-0-std-i2v) — 42 credits
+ *   Fallback: Kling V2.6 Pro I2V (kling-2-6-i2v-pro) — 35 credits
+ *   // Grok Video I2V — commented out (does not support end_image properly)
  */
 import path from "path";
 import fs from "fs";
 import { runFfmpeg } from "./ffmpegCmd.js";
 import { removeFiles } from "./storageHelpers.js";
-import { generateSceneVideo, isAiVideoAvailable } from "../../services/sceneVideoGenerator.js";
+import {
+  generateKlingV3Video,
+  generateKlingV26Video,
+  // generateGrokVideo — commented out: Grok does not support end_image natively
+} from "../../services/hypereal.js";
 import { supabase } from "../../lib/supabase.js";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -31,10 +39,12 @@ export interface TransitionRequest {
   fromClipPath: string;
   /** Path to the "to" scene MP4 */
   toClipPath: string;
-  /** Visual description of the outgoing scene (for prompt) */
+  /** Visual prompt of the outgoing scene (Scene N) */
   fromScenePrompt?: string;
-  /** Visual description of the incoming scene (for prompt) */
+  /** Visual prompt of the incoming scene (Scene N+1) — used for morphing target */
   toScenePrompt?: string;
+  /** Video motion prompt for Scene N+1 (how the destination scene moves) */
+  toVideoMotionPrompt?: string;
   /** Output path for the transition clip */
   outputPath: string;
   /** Temp directory for intermediate files */
@@ -45,13 +55,13 @@ export interface TransitionRequest {
   width: number;
   /** Target height */
   height: number;
-  /** Transition duration in seconds (default 2) */
+  /** Transition duration in seconds (default 10) */
   duration?: number;
   /** Project ID for logging */
   projectId?: string;
   /** User ID for logging */
   userId?: string;
-  /** Timeout in ms (default 3 min) */
+  /** Timeout in ms (default 5 min) */
   timeoutMs?: number;
 }
 
@@ -62,6 +72,8 @@ export interface TransitionResult {
   aiGenerated: boolean;
   /** Duration of the transition in seconds */
   durationSeconds: number;
+  /** Provider that generated the transition */
+  provider?: string;
   /** Error message if generation failed */
   error?: string;
 }
@@ -120,37 +132,46 @@ async function uploadFrameForAi(
   return data.publicUrl;
 }
 
-// ── Morphing Prompt Builder ──────────────────────────────────────────
+// ── Transition Prompt Builder ────────────────────────────────────────
 
 /**
- * Strip camera direction prefixes from visual prompts.
- * Scene prompts often start with "Camera trucks left through..." or
- * "Whip pan from darkness to..." — these are instructions for the
- * scene's own video, not descriptions of the scene's visual content.
+ * Build the transition prompt from the destination scene's context.
+ *
+ * The prompt describes:
+ *   - The camera motion (continuous fly-through)
+ *   - The morphing from Scene N into Scene N+1
+ *   - Scene N+1's own video motion (what happens when we arrive)
+ *
+ * The AI receives:
+ *   - `image`: Scene N's last frame (start state)
+ *   - `end_image`: Scene N+1's first frame (end state)
+ *   - `prompt`: HOW to get from start to end
  */
-function stripCameraDirections(prompt: string): string {
-  return prompt
-    .replace(/^(Camera\s+\w+\s+(slowly\s+)?(left|right|up|down|forward|backward)\s+(through|from|to|into|over)\s+)/i, "")
-    .replace(/^(Whip\s+pan\s+(from\s+\w+\s+to\s+)?)/i, "")
-    .replace(/^(Extreme\s+slow\s+rack\s+focus:\s*)/i, "")
-    .replace(/^(Close-up|Wide\s+shot|Medium\s+shot|Tracking\s+shot|Dolly\s+shot|Aerial\s+shot)[:\s]+/i, "")
-    .trim();
-}
-
-function buildMorphingPrompt(
+function buildTransitionPrompt(
   fromPrompt: string | undefined,
   toPrompt: string | undefined,
+  toVideoMotion: string | undefined,
   duration: number
 ): string {
-  const fromDesc = fromPrompt ? stripCameraDirections(fromPrompt).substring(0, 150) : "the current scene";
-  const toDesc = toPrompt ? stripCameraDirections(toPrompt).substring(0, 150) : "the next scene";
+  const fromDesc = fromPrompt ? fromPrompt.substring(0, 150) : "the current scene";
+  const toDesc = toPrompt ? toPrompt.substring(0, 150) : "the next scene";
 
-  return (
-    `A continuous, single-take fly-through shot over ${duration} seconds. The camera is in constant dynamic motion, panning and moving forward. ` +
-    `The shot begins on the provided starting frame showing ${fromDesc}, then the camera fluidly pushes past the foreground as the environment ` +
+  // Start with the fly-through morph instruction
+  let prompt =
+    `A continuous, single-take fly-through shot over ${duration} seconds. ` +
+    `The camera is in constant dynamic motion, panning and moving forward. ` +
+    `The shot begins on the provided starting frame showing ${fromDesc}, ` +
+    `then the camera fluidly pushes past the foreground as the environment ` +
     `seamlessly morphs, stretches, and melts directly into the provided ending frame showing ${toDesc}. ` +
-    `There are no hard cuts, only continuous forward camera movement with seamless, fluid object morphing bridging the two visual states.`
-  );
+    `There are no hard cuts, only continuous forward camera movement with seamless, fluid object morphing bridging the two visual states.`;
+
+  // Append Scene N+1's video motion if available — tells the AI how the
+  // destination scene should be moving when we arrive
+  if (toVideoMotion) {
+    prompt += ` As the transition completes, ${toVideoMotion.substring(0, 200)}.`;
+  }
+
+  return prompt;
 }
 
 // ── Main API ─────────────────────────────────────────────────────────
@@ -164,24 +185,26 @@ export async function generateTransitionVideo(
     toClipPath,
     fromScenePrompt,
     toScenePrompt,
+    toVideoMotionPrompt,
     outputPath,
     tempDir,
     format,
     width,
     height,
-    duration = 2,
+    duration = 10,
     projectId = "unknown",
     userId,
-    timeoutMs = 3 * 60 * 1000,
+    timeoutMs = 5 * 60 * 1000,
   } = request;
 
   const label = `${fromSceneIndex}→${fromSceneIndex + 1}`;
+  const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
 
-  if (!isAiVideoAvailable()) {
-    return { path: null, aiGenerated: false, durationSeconds: 0, error: "No AI video API keys" };
+  if (!hyperealApiKey) {
+    return { path: null, aiGenerated: false, durationSeconds: 0, error: "HYPEREAL_API_KEY not configured" };
   }
 
-  console.log(`[TransitionGen] ${label}: generating ${duration}s morphing transition...`);
+  console.log(`[TransitionGen] ${label}: generating ${duration}s Kling transition...`);
 
   const lastFramePath = path.join(tempDir, `trans_${fromSceneIndex}_lastframe.png`);
   const firstFramePath = path.join(tempDir, `trans_${fromSceneIndex}_firstframe.png`);
@@ -193,42 +216,89 @@ export async function generateTransitionVideo(
       extractFirstFrame(toClipPath, firstFramePath, width, height),
     ]);
 
-    // 2. Upload BOTH frames for AI API access
+    // 2. Upload BOTH frames for API access
     const [startFrameUrl, endFrameUrl] = await Promise.all([
       uploadFrameForAi(lastFramePath, projectId, `trans_${fromSceneIndex}_start`),
       uploadFrameForAi(firstFramePath, projectId, `trans_${fromSceneIndex}_end`),
     ]);
 
-    console.log(`[TransitionGen] ${label}: both frames uploaded — start + end`);
+    console.log(`[TransitionGen] ${label}: both frames uploaded`);
 
-    // 3. Build morphing prompt describing the transformation
-    const morphPrompt = buildMorphingPrompt(fromScenePrompt, toScenePrompt, duration);
-
-    // 4. Generate transition video with BOTH start and end images
-    const result = await generateSceneVideo(
-      {
-        sceneIndex: fromSceneIndex,
-        imageUrl: startFrameUrl,      // Start frame (Scene A's last frame)
-        endImageUrl: endFrameUrl,     // End frame (Scene B's first frame)
-        prompt: morphPrompt,
-        format,
-        duration,
-        projectId,
-        userId,
-      },
-      timeoutMs
+    // 3. Build contextual prompt
+    const transitionPrompt = buildTransitionPrompt(
+      fromScenePrompt,
+      toScenePrompt,
+      toVideoMotionPrompt,
+      duration
     );
 
-    if (!result.url) {
-      console.warn(`[TransitionGen] ${label}: AI failed — ${result.error}`);
-      return { path: null, aiGenerated: false, durationSeconds: 0, error: result.error };
+    // 4. Generate transition — Kling V3.0 primary, Kling V2.6 fallback
+    let videoUrl: string | null = null;
+    let provider = "";
+
+    // ── Primary: Kling V3.0 Std I2V ──
+    try {
+      console.log(`[TransitionGen] ${label}: trying Kling V3.0...`);
+      videoUrl = await Promise.race<string>([
+        generateKlingV3Video(
+          startFrameUrl,
+          transitionPrompt,
+          hyperealApiKey,
+          duration,
+          endFrameUrl
+        ),
+        new Promise<string>((_, reject) =>
+          setTimeout(() => reject(new Error("Kling V3.0 timed out")), timeoutMs)
+        ),
+      ]);
+      provider = "Kling V3.0";
+      console.log(`[TransitionGen] ${label}: ✅ Kling V3.0 succeeded`);
+    } catch (err) {
+      console.warn(`[TransitionGen] ${label}: ❌ Kling V3.0 failed — ${(err as Error).message}`);
     }
+
+    // ── Fallback: Kling V2.6 Pro I2V ──
+    if (!videoUrl) {
+      try {
+        console.log(`[TransitionGen] ${label}: trying Kling V2.6 fallback...`);
+        videoUrl = await Promise.race<string>([
+          generateKlingV26Video(
+            startFrameUrl,
+            transitionPrompt,
+            hyperealApiKey,
+            duration,
+            endFrameUrl
+          ),
+          new Promise<string>((_, reject) =>
+            setTimeout(() => reject(new Error("Kling V2.6 timed out")), timeoutMs)
+          ),
+        ]);
+        provider = "Kling V2.6";
+        console.log(`[TransitionGen] ${label}: ✅ Kling V2.6 succeeded`);
+      } catch (err) {
+        console.warn(`[TransitionGen] ${label}: ❌ Kling V2.6 failed — ${(err as Error).message}`);
+        return {
+          path: null,
+          aiGenerated: false,
+          durationSeconds: 0,
+          error: `Both Kling V3.0 and V2.6 failed for transition ${label}`,
+        };
+      }
+    }
+
+    // ── Grok Video I2V — commented out: does not support end_image properly
+    // if (!videoUrl) {
+    //   try {
+    //     videoUrl = await generateGrokVideo(startFrameUrl, transitionPrompt, hyperealApiKey, ...);
+    //     provider = "Grok";
+    //   } catch (err) { ... }
+    // }
 
     // 5. Download and normalize the transition video
     const rawTransPath = path.join(tempDir, `trans_${fromSceneIndex}_raw.mp4`);
-    const response = await fetch(result.url);
-    if (!response.ok) throw new Error(`Download failed: ${response.status}`);
-    const buffer = Buffer.from(await response.arrayBuffer());
+    const dlResponse = await fetch(videoUrl);
+    if (!dlResponse.ok) throw new Error(`Download failed: ${dlResponse.status}`);
+    const buffer = Buffer.from(await dlResponse.arrayBuffer());
     await fs.promises.writeFile(rawTransPath, buffer);
 
     // Normalize to target resolution + add silent audio
@@ -242,7 +312,6 @@ export async function generateTransitionVideo(
       "-pix_fmt", "yuv420p",
       "-c:a", "aac",
       "-b:a", "128k",
-      "-t", String(duration),
       "-shortest",
       "-movflags", "+faststart",
       "-threads", "2",
@@ -250,9 +319,9 @@ export async function generateTransitionVideo(
     ]);
 
     removeFiles(rawTransPath);
-    console.log(`[TransitionGen] ${label}: ✅ morphing transition generated (${result.provider})`);
+    console.log(`[TransitionGen] ${label}: ✅ transition complete (${provider})`);
 
-    return { path: outputPath, aiGenerated: true, durationSeconds: duration };
+    return { path: outputPath, aiGenerated: true, durationSeconds: duration, provider };
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error(`[TransitionGen] ${label}: ❌ Failed — ${errorMsg}`);
@@ -263,7 +332,7 @@ export async function generateTransitionVideo(
 }
 
 /**
- * Generate morphing transition videos for all adjacent scene pairs.
+ * Generate transitions for all adjacent scene pairs.
  * Returns one TransitionResult per junction (length = clipCount - 1).
  */
 export async function generateAllTransitions(
@@ -287,11 +356,15 @@ export async function generateAllTransitions(
   for (let i = 0; i < clipPaths.length - 1; i++) {
     const outputPath = path.join(tempDir, `transition_${i}_${i + 1}.mp4`);
 
-    // Extract scene visual prompts for the morphing description
     const fromScene = scenes[i];
     const toScene = scenes[i + 1];
-    const fromPrompt = fromScene?.visualPrompt || fromScene?.visual_prompt || fromScene?.voiceover;
-    const toPrompt = toScene?.visualPrompt || toScene?.visual_prompt || toScene?.voiceover;
+
+    // Scene visual prompts (what the image looks like)
+    const fromPrompt = fromScene?.visualPrompt || fromScene?.visual_prompt;
+    const toPrompt = toScene?.visualPrompt || toScene?.visual_prompt;
+
+    // Scene video motion prompt (how the scene animates — from the script)
+    const toVideoMotion = toScene?.videoPrompt || toScene?.video_prompt || toScene?.voiceover;
 
     const result = await generateTransitionVideo({
       fromSceneIndex: i,
@@ -299,12 +372,13 @@ export async function generateAllTransitions(
       toClipPath: clipPaths[i + 1],
       fromScenePrompt: fromPrompt,
       toScenePrompt: toPrompt,
+      toVideoMotionPrompt: toVideoMotion,
       outputPath,
       tempDir,
       format: config.format,
       width: config.width,
       height: config.height,
-      duration: config.duration || 2,
+      duration: config.duration || 10,
       projectId: config.projectId,
       userId: config.userId,
       timeoutMs: config.timeoutMs,
@@ -314,8 +388,9 @@ export async function generateAllTransitions(
   }
 
   const aiCount = results.filter((r) => r.aiGenerated).length;
+  const providers = results.filter((r) => r.provider).map((r) => r.provider);
   console.log(
-    `[TransitionGen] ${aiCount}/${results.length} AI morphing transitions generated`
+    `[TransitionGen] ${aiCount}/${results.length} transitions generated — providers: ${[...new Set(providers)].join(", ") || "none"}`
   );
 
   return results;

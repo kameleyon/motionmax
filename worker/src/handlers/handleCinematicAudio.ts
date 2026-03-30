@@ -3,6 +3,12 @@ import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField } from "../lib/sceneUpdate.js";
 import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
 import { isHaitianCreole } from "../services/audioWavUtils.js";
+import {
+  initSceneProgress,
+  updateSceneProgress,
+  flushSceneProgress,
+  clearSceneProgress,
+} from "../lib/sceneProgress.js";
 
 interface CinematicAudioPayload {
   generationId: string;
@@ -92,17 +98,33 @@ export async function handleCinematicAudio(
     config.forceHaitianCreole = true;
   }
 
+  // Initialize per-scene progress
+  initSceneProgress(jobId, scenes.length, "cinematic_audio");
+  await updateSceneProgress(jobId, sceneIndex, "generating", {
+    message: `Generating cinematic audio for scene ${sceneIndex + 1}`,
+  });
+
   const result = await generateSceneAudio(
     { number: sceneIndex + 1, voiceover: scene.voiceover || "", duration: scene.duration || 8 },
     config
   );
 
   if (!result.url) {
+    await updateSceneProgress(jobId, sceneIndex, "failed", {
+      message: `Scene ${sceneIndex + 1} audio generation failed`,
+      error: result.error,
+    });
+    clearSceneProgress(jobId);
     throw new Error(`Audio generation failed: ${result.error}`);
   }
 
   // Atomic update: only set this scene's audioUrl without overwriting other scenes
   await updateSceneField(generationId, sceneIndex, "audioUrl", result.url);
+
+  await updateSceneProgress(jobId, sceneIndex, "complete", {
+    message: `Scene ${sceneIndex + 1} cinematic audio complete`,
+  });
+  clearSceneProgress(jobId);
 
   await writeSystemLog({
     jobId,

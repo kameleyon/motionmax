@@ -13,6 +13,12 @@ import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { buildImageTasks, type Scene, type BuildPromptOptions } from "../services/imagePromptBuilder.js";
 import { generateImage } from "../services/imageGenerator.js";
+import {
+  initSceneProgress,
+  updateSceneProgress,
+  flushSceneProgress,
+  clearSceneProgress,
+} from "../lib/sceneProgress.js";
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -103,6 +109,20 @@ export async function handleImagesPhase(
 
   console.log(`[Images] Processing all remaining tasks: ${tasksToProcess.length} of ${totalImages}`);
 
+  // Initialize per-scene progress tracking
+  initSceneProgress(jobId, scenes.length, "image_generation");
+  // Mark scenes that already have images as complete
+  for (let i = 0; i < scenes.length; i++) {
+    const s = scenes[i] as any;
+    if (s.imageUrl) {
+      await updateSceneProgress(jobId, i, "complete", {
+        message: `Scene ${i + 1} images already generated`,
+        flush: false,
+      });
+    }
+  }
+  await flushSceneProgress(jobId);
+
   // Track how many images are already done (from existing imageUrls / imageUrl)
   let completedSoFar = scenes.reduce((sum, s: any) => {
     const primary = s.imageUrl ? 1 : 0;
@@ -188,11 +208,28 @@ export async function handleImagesPhase(
           })
           .eq("id", generationId);
 
+        // Update per-scene progress: check if all images for this scene are done
+        const sceneImgUrls = (scenes[sceneIndex] as any).imageUrls || [];
+        const sceneImgCount = sceneImgUrls.filter(Boolean).length;
+        const sceneSubVisuals = (scenes[sceneIndex] as any).subVisuals || [];
+        const expectedCount = 1 + Math.min(2, sceneSubVisuals.length); // primary + up to 2 subs
+        const sceneComplete = sceneImgCount >= expectedCount;
+
+        await updateSceneProgress(jobId, sceneIndex, sceneComplete ? "complete" : "generating", {
+          message: sceneComplete
+            ? `Scene ${currentSceneNum} — all images generated`
+            : `Scene ${currentSceneNum} — ${sceneImgCount}/${expectedCount} images`,
+          flush: false,
+        });
+
         console.log(`[Images] ✅ Image ${completedSoFar}/${totalImages} — Scene ${currentSceneNum} — Progress: ${progressAfter}% — ETA: ${etaSeconds}s`);
       } else {
         console.error(`[Images] Parallel task failed:`, result.reason);
       }
     }
+
+    // Flush scene progress after each batch
+    await flushSceneProgress(jobId);
   }
 
   const phaseTime = Date.now() - phaseStart;
@@ -208,6 +245,8 @@ export async function handleImagesPhase(
     message: `Images phase done: ${newlyGenerated} new, ${completedSoFar}/${totalImages} total`,
     details: { imageStartIndex, newlyGenerated, completedSoFar, totalImages, phaseTime },
   });
+
+  clearSceneProgress(jobId);
 
   return {
     success: true,

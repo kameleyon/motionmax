@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { type ExportState } from "./export/types";
+import { type ExportState, type SceneProgressData } from "./export/types";
 import { downloadVideo, shareVideo } from "./export/downloadHelpers";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
@@ -59,7 +59,16 @@ export function useVideoExport() {
 
     if (updatedJob.status === "processing") {
       const progress = typeof updatedJob.progress === "number" ? updatedJob.progress : 10;
-      setState({ status: "rendering", progress, warning: progress > 80 ? "Stitching video blocks natively..." : undefined });
+      // Extract per-scene progress from payload if available
+      const payload = updatedJob.payload as Record<string, unknown> | null;
+      const sceneProgress = (payload?.sceneProgress as SceneProgressData) || null;
+      const overallMessage = sceneProgress?.overallMessage;
+      const warning = overallMessage
+        ? overallMessage
+        : progress > 80
+          ? "Stitching video blocks natively..."
+          : undefined;
+      setState({ status: "rendering", progress, warning, sceneProgress });
     } else if (updatedJob.status === "completed") {
       cleanup();
       const payload = updatedJob.payload as Record<string, unknown> | null;

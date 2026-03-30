@@ -8,6 +8,12 @@ import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { generateSceneAudio, type AudioConfig, type AudioScene } from "../services/audioRouter.js";
 import { isHaitianCreole } from "../services/audioWavUtils.js";
+import {
+  initSceneProgress,
+  updateSceneProgress,
+  flushSceneProgress,
+  clearSceneProgress,
+} from "../lib/sceneProgress.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -114,9 +120,22 @@ export async function handleAudioPhase(
   let totalAudioSeconds = 0;
   let audioGenerated = 0;
 
+  // Initialize per-scene progress tracking
+  initSceneProgress(jobId, scenes.length, "audio_generation");
+  // Mark scenes that already have audio as complete
+  for (let i = 0; i < scenes.length; i++) {
+    if (audioUrls[i]) {
+      await updateSceneProgress(jobId, i, "complete", {
+        message: `Scene ${i + 1} audio already generated`,
+        flush: false,
+      });
+    }
+  }
+  await flushSceneProgress(jobId);
+
   // Process all scenes in batches of 3-5
   const BATCH_SIZE = 3;
-  
+
   for (let batchStart = startIndex; batchStart < scenes.length; batchStart += BATCH_SIZE) {
     const batchEnd = Math.min(batchStart + BATCH_SIZE, scenes.length);
     console.log(`[Audio] Processing scenes ${batchStart + 1}-${batchEnd} of ${scenes.length}`);
@@ -131,10 +150,19 @@ export async function handleAudioPhase(
     }
 
     if (batchScenes.length > 0) {
+      // Mark scenes in this batch as generating
+      for (const { index } of batchScenes) {
+        await updateSceneProgress(jobId, index, "generating", {
+          message: `Generating audio for scene ${index + 1}`,
+          flush: false,
+        });
+      }
+      await flushSceneProgress(jobId);
+
       const promises = batchScenes.map(({ scene, index }) =>
         generateSceneAudio(scene, config).then((result) => ({ result, index }))
       );
-      
+
       const results = await Promise.all(promises);
 
       for (const { result, index } of results) {
@@ -142,10 +170,21 @@ export async function handleAudioPhase(
           audioUrls[index] = result.url;
           totalAudioSeconds += result.durationSeconds || 0;
           audioGenerated++;
+          await updateSceneProgress(jobId, index, "complete", {
+            message: `Scene ${index + 1} audio complete (${(result.durationSeconds || 0).toFixed(1)}s)`,
+            flush: false,
+          });
         } else {
           console.warn(`[Audio] Scene ${index + 1} failed: ${result.error}`);
+          await updateSceneProgress(jobId, index, "failed", {
+            message: `Scene ${index + 1} audio failed`,
+            error: result.error,
+            flush: false,
+          });
         }
       }
+
+      await flushSceneProgress(jobId);
     }
 
     // Update progress periodically
@@ -172,6 +211,8 @@ export async function handleAudioPhase(
     message: `Audio phase done: ${audioGenerated} scenes`,
     details: { audioGenerated, audioSeconds: totalAudioSeconds },
   });
+
+  clearSceneProgress(jobId);
 
   return {
     success: true,

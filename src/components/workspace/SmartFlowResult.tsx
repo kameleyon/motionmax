@@ -378,7 +378,7 @@ export function SmartFlowResult({
                   <div className="flex justify-between text-sm text-muted-foreground">
                     <span>
                       {exportState.status === "loading" && "Loading assets..."}
-                      {exportState.status === "rendering" && "Rendering video..."}
+                      {exportState.status === "rendering" && (exportState.sceneProgress?.overallMessage || "Rendering video...")}
                       {exportState.status === "encoding" && "Encoding..."}
                     </span>
                     <span>{exportState.progress}%</span>
@@ -386,12 +386,48 @@ export function SmartFlowResult({
                   <Progress value={exportState.progress} className="h-2" />
                 </div>
 
-                {exportState.warning && (
+                {/* Per-scene progress during export */}
+                {exportState.sceneProgress && exportState.sceneProgress.scenes.some((s: any) => s.phase !== "pending") && (
+                  <div className="space-y-1 max-h-36 overflow-y-auto">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Scene Progress</span>
+                      <span>{exportState.sceneProgress.completedScenes}/{exportState.sceneProgress.totalScenes}</span>
+                    </div>
+                    {exportState.sceneProgress.scenes.map((scene: any) => (
+                      <div key={scene.sceneIndex} className="flex items-center gap-2 text-xs">
+                        <span className={`h-2 w-2 rounded-full ${
+                          scene.phase === "complete" ? "bg-green-500" :
+                          scene.phase === "failed" || scene.phase === "timeout" ? "bg-red-500" :
+                          scene.phase === "encoding" || scene.phase === "generating" ? "bg-primary animate-pulse" :
+                          scene.phase === "skipped" ? "bg-yellow-500" :
+                          "bg-muted-foreground/30"
+                        }`} />
+                        <span className="min-w-[4rem]">Scene {scene.sceneIndex + 1}</span>
+                        <span className="text-muted-foreground truncate flex-1">{scene.message || scene.phase}</span>
+                        {scene.durationMs > 0 && (
+                          <span className="text-muted-foreground/70 tabular-nums">
+                            {scene.durationMs < 1000 ? `${scene.durationMs}ms` : `${Math.round(scene.durationMs / 1000)}s`}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {exportState.sceneProgress?.etaSeconds > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    ETA: {exportState.sceneProgress.etaSeconds >= 60
+                      ? `${Math.floor(exportState.sceneProgress.etaSeconds / 60)}m ${exportState.sceneProgress.etaSeconds % 60}s`
+                      : `${exportState.sceneProgress.etaSeconds}s`}
+                  </p>
+                )}
+
+                {exportState.warning && !exportState.sceneProgress?.overallMessage && (
                   <p className="text-xs text-muted-foreground">{exportState.warning}</p>
                 )}
 
                 <p className="text-xs text-muted-foreground">
-                  Please keep this tab open. The video is being rendered in your browser.
+                  Please keep this tab open. Your video is being rendered on the server.
                 </p>
               </>
             )}

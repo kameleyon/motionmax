@@ -12,10 +12,21 @@ import { handleCinematicAudio } from "./handlers/handleCinematicAudio.js";
 import { handleCinematicImage } from "./handlers/handleCinematicImage.js";
 import { handleUndoRegeneration } from "./handlers/handleUndoRegeneration.js";
 import { writeSystemLog } from "./lib/logger.js";
+import { startHealthServer, stopHealthServer } from "./healthServer.js";
 
 /* ---- Concurrency guard: prevent re-processing the same job ---- */
 const activeJobs = new Set<string>();
 const MAX_CONCURRENT_JOBS = parseInt(process.env.WORKER_CONCURRENCY || "6", 10);
+
+/* ---- Graceful shutdown state ---- */
+let isShuttingDown = false;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+let lastPollAt: string | null = null;
+let totalJobsProcessed = 0;
+let totalJobsFailed = 0;
+
+/** Maximum time (ms) to wait for active jobs to drain during shutdown. */
+const SHUTDOWN_DRAIN_TIMEOUT_MS = parseInt(process.env.SHUTDOWN_DRAIN_TIMEOUT || "300000", 10); // 5 minutes
 
 /* ---- Credit refund helper ---- */
 const CREDIT_COSTS = {
@@ -102,7 +113,7 @@ async function processJob(job: Job) {
     eventType: "job_started",
     message: `Worker picked up job ${job.id}`
   });
-  
+
   let finalPayload = { ...job.payload };
 
   try {
@@ -158,7 +169,7 @@ async function processJob(job: Job) {
         message: `No handler for task type: ${job.task_type}`
       });
     }
-    
+
     await writeSystemLog({
       jobId: job.id,
       projectId: job.project_id ?? undefined,
@@ -181,6 +192,8 @@ async function processJob(job: Job) {
         updated_at: new Date().toISOString()
       })
       .eq('id', job.id);
+
+    totalJobsProcessed++;
 
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -206,6 +219,8 @@ async function processJob(job: Job) {
         updated_at: new Date().toISOString()
       })
       .eq('id', job.id);
+
+    totalJobsFailed++;
   } finally {
     activeJobs.delete(job.id);
   }
@@ -214,6 +229,9 @@ async function processJob(job: Job) {
 let pollCount = 0;
 
 async function pollQueue() {
+  // Do not pick up new jobs if shutting down
+  if (isShuttingDown) return;
+
   pollCount++;
   try {
     const availableSlots = MAX_CONCURRENT_JOBS - activeJobs.size;
@@ -246,12 +264,14 @@ async function pollQueue() {
     }
 
     const allJobs = [...(exportJobs || []), ...(genJobs || [])];
-    
+
     // Sort by created_at to process oldest first, but we already have them separated
     allJobs.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
     // Take up to availableSlots
     const jobsToProcess = allJobs.slice(0, availableSlots);
+
+    lastPollAt = new Date().toISOString();
 
     const shouldLog = pollCount % 12 === 1 || jobsToProcess.length > 0 || exportError || genError;
     if (shouldLog) {
@@ -357,6 +377,110 @@ async function startupDiagnostic(): Promise<boolean> {
   return recoveredOrphans;
 }
 
+/* ---- Graceful shutdown ---- */
+
+/**
+ * Initiate graceful shutdown.
+ * 1. Stop accepting new jobs (isShuttingDown = true)
+ * 2. Stop the polling interval
+ * 3. Wait for all active jobs to finish (with timeout)
+ * 4. Close health server
+ * 5. Exit
+ */
+async function gracefulShutdown(signal: string) {
+  if (isShuttingDown) {
+    console.log(`[Worker] Already shutting down — ignoring duplicate ${signal}`);
+    return;
+  }
+
+  isShuttingDown = true;
+  console.log(`[Worker] 🛑 Received ${signal} — initiating graceful shutdown`);
+  console.log(`[Worker] Active jobs: ${activeJobs.size} — will wait up to ${SHUTDOWN_DRAIN_TIMEOUT_MS / 1000}s for them to finish`);
+
+  // Stop polling for new jobs
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+
+  await writeSystemLog({
+    category: "system_info",
+    eventType: "worker_shutdown_started",
+    message: `Graceful shutdown initiated by ${signal} — ${activeJobs.size} active job(s)`,
+    details: { signal, activeJobCount: activeJobs.size, activeJobIds: [...activeJobs] },
+  });
+
+  // Wait for active jobs to drain
+  if (activeJobs.size > 0) {
+    const drainStart = Date.now();
+    const DRAIN_CHECK_INTERVAL = 2000;
+
+    await new Promise<void>((resolve) => {
+      const checkDrained = () => {
+        const elapsed = Date.now() - drainStart;
+
+        if (activeJobs.size === 0) {
+          console.log(`[Worker] ✅ All active jobs drained in ${Math.round(elapsed / 1000)}s`);
+          resolve();
+          return;
+        }
+
+        if (elapsed >= SHUTDOWN_DRAIN_TIMEOUT_MS) {
+          console.error(
+            `[Worker] ⚠️  Shutdown drain timeout after ${SHUTDOWN_DRAIN_TIMEOUT_MS / 1000}s — ` +
+            `${activeJobs.size} job(s) still active: ${[...activeJobs].join(", ")}`
+          );
+          // Mark remaining active jobs as pending so they get picked up after restart
+          const orphanPromises = [...activeJobs].map(async (jobId) => {
+            try {
+              await supabase
+                .from("video_generation_jobs")
+                .update({
+                  status: "pending",
+                  progress: 0,
+                  error_message: null,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq("id", jobId)
+                .eq("status", "processing");
+              console.log(`[Worker] Reset orphaned job ${jobId} to pending`);
+            } catch (err) {
+              console.error(`[Worker] Failed to reset job ${jobId}:`, err);
+            }
+          });
+          Promise.allSettled(orphanPromises).then(() => resolve());
+          return;
+        }
+
+        console.log(
+          `[Worker] Waiting for ${activeJobs.size} active job(s) to finish... ` +
+          `(${Math.round(elapsed / 1000)}s / ${SHUTDOWN_DRAIN_TIMEOUT_MS / 1000}s)`
+        );
+        setTimeout(checkDrained, DRAIN_CHECK_INTERVAL);
+      };
+
+      checkDrained();
+    });
+  }
+
+  // Close health server
+  await stopHealthServer();
+
+  await writeSystemLog({
+    category: "system_info",
+    eventType: "worker_shutdown_complete",
+    message: `Worker shutdown complete — processed ${totalJobsProcessed} jobs, ${totalJobsFailed} failed`,
+    details: { totalJobsProcessed, totalJobsFailed },
+  });
+
+  console.log(`[Worker] 👋 Shutdown complete. Total: ${totalJobsProcessed} processed, ${totalJobsFailed} failed.`);
+  process.exit(0);
+}
+
+/* ---- Signal handlers for graceful shutdown ---- */
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
 /* ---- Crash guard: prevent Node.js from dying on uncaught errors ---- */
 process.on("uncaughtException", (err) => {
   console.error("[Worker] 💥 Uncaught exception (kept alive):", err.message);
@@ -375,6 +499,19 @@ function maskKey(key: string | undefined): string {
   return `${trimmed.substring(0, 6)}…${trimmed.substring(trimmed.length - 4)} (${trimmed.length} chars)`;
 }
 
+/* ---- Start health server ---- */
+const workerStartedAt = Date.now();
+
+startHealthServer(() => ({
+  activeJobs: activeJobs.size,
+  maxConcurrentJobs: MAX_CONCURRENT_JOBS,
+  accepting: !isShuttingDown,
+  uptimeSeconds: Math.round((Date.now() - workerStartedAt) / 1000),
+  lastPollAt,
+  totalJobsProcessed,
+  totalJobsFailed,
+}));
+
 console.log(`[Worker] MotionMax Render Worker started. Polling every ${POLL_INTERVAL_MS}ms.`);
 console.log(`[Worker] 🔑 HYPEREAL_API_KEY: ${maskKey(process.env.HYPEREAL_API_KEY)}`);
 console.log(`[Worker] 🔑 REPLICATE_API_KEY: ${maskKey(process.env.REPLICATE_API_KEY)}`);
@@ -384,10 +521,10 @@ startupDiagnostic().then((hadOrphans) => {
     console.log(`[Worker] ⏳ Cooldown ${STARTUP_COOLDOWN_MS / 1000}s before first poll (orphans recovered)`);
     setTimeout(() => {
       pollQueue();
-      setInterval(pollQueue, POLL_INTERVAL_MS);
+      pollTimer = setInterval(pollQueue, POLL_INTERVAL_MS);
     }, STARTUP_COOLDOWN_MS);
   } else {
     pollQueue();
-    setInterval(pollQueue, POLL_INTERVAL_MS);
+    pollTimer = setInterval(pollQueue, POLL_INTERVAL_MS);
   }
 });

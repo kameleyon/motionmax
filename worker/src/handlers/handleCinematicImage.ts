@@ -2,6 +2,12 @@ import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField } from "../lib/sceneUpdate.js";
 import { generateImage } from "../services/imageGenerator.js";
+import {
+  initSceneProgress,
+  updateSceneProgress,
+  flushSceneProgress,
+  clearSceneProgress,
+} from "../lib/sceneProgress.js";
 
 interface CinematicImagePayload {
   generationId: string;
@@ -53,14 +59,30 @@ export async function handleCinematicImage(
 
   const prompt = scene.visualPrompt || scene.visual_prompt || "Cinematic scene";
 
+  // Initialize per-scene progress (single scene for cinematic per-scene jobs)
+  initSceneProgress(jobId, scenes.length, "cinematic_image");
+  await updateSceneProgress(jobId, sceneIndex, "generating", {
+    message: `Generating cinematic image for scene ${sceneIndex + 1}`,
+  });
+
   const imageUrl = await generateImage(prompt, hyperealApiKey, replicateApiKey, format, projectId);
 
   if (!imageUrl) {
+    await updateSceneProgress(jobId, sceneIndex, "failed", {
+      message: `Scene ${sceneIndex + 1} image generation failed`,
+      error: "Image generation returned no URL",
+    });
+    clearSceneProgress(jobId);
     throw new Error("Image generation failed");
   }
 
   // Atomic update: only set this scene's imageUrl without overwriting other scenes
   await updateSceneField(generationId, sceneIndex, "imageUrl", imageUrl);
+
+  await updateSceneProgress(jobId, sceneIndex, "complete", {
+    message: `Scene ${sceneIndex + 1} cinematic image complete`,
+  });
+  clearSceneProgress(jobId);
 
   await writeSystemLog({
     jobId,

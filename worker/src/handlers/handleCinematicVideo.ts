@@ -205,45 +205,46 @@ export async function handleCinematicVideo(
   let finalVideoUrl: string | null = null;
   let provider = "";
 
-  // Primary: Kling V3.0
+  // Kling V2.6 only supports 5 or 10 — clamp duration
+  const v26Duration = Math.min(klingDuration, 10) as 5 | 10;
+
+  // Primary: Kling V2.6 Pro (strong detail preservation, 35 credits)
   try {
-    console.log(`[CinematicVideo] Scene ${sceneIndex}: trying Kling V3.0 (${klingDuration}s)...`);
-    const url = await generateKlingV3Video(
+    console.log(`[CinematicVideo] Scene ${sceneIndex}: trying Kling V2.6 Pro (${v26Duration}s)...`);
+    const url = await generateKlingV26Video(
       imageUrl,
       videoPrompt,
       hyperealApiKey,
-      klingDuration,
+      v26Duration,
       nextImageUrl || undefined,
     );
     if (url) {
-      provider = "Kling V3.0";
+      provider = "Kling V2.6 Pro";
       finalVideoUrl = await uploadVideoToStorage(url, projectId, generationId, sceneIndex);
       console.log(`[CinematicVideo] Scene ${sceneIndex}: ✅ ${provider} succeeded`);
     }
   } catch (err: any) {
-    console.warn(`[CinematicVideo] Scene ${sceneIndex}: ❌ Kling V3.0 failed — ${err?.message || err}`);
+    console.warn(`[CinematicVideo] Scene ${sceneIndex}: ❌ Kling V2.6 Pro failed — ${err?.message || err}`);
   }
 
-  // Fallback: Kling V2.6
+  // Fallback: Kling V3.0 Std (supports 3-15s durations)
   if (!finalVideoUrl) {
     try {
-      // Kling V2.6 only supports 5 or 10 — clamp
-      const v26Duration = Math.min(klingDuration, 10);
-      console.log(`[CinematicVideo] Scene ${sceneIndex}: trying Kling V2.6 fallback (${v26Duration}s)...`);
-      const url = await generateKlingV26Video(
+      console.log(`[CinematicVideo] Scene ${sceneIndex}: trying Kling V3.0 fallback (${klingDuration}s)...`);
+      const url = await generateKlingV3Video(
         imageUrl,
         videoPrompt,
         hyperealApiKey,
-        v26Duration,
+        klingDuration,
         nextImageUrl || undefined,
       );
       if (url) {
-        provider = "Kling V2.6";
+        provider = "Kling V3.0";
         finalVideoUrl = await uploadVideoToStorage(url, projectId, generationId, sceneIndex);
         console.log(`[CinematicVideo] Scene ${sceneIndex}: ✅ ${provider} succeeded`);
       }
     } catch (err: any) {
-      console.warn(`[CinematicVideo] Scene ${sceneIndex}: ❌ Kling V2.6 failed — ${err?.message || err}`);
+      console.warn(`[CinematicVideo] Scene ${sceneIndex}: ❌ Kling V3.0 failed — ${err?.message || err}`);
     }
   }
 

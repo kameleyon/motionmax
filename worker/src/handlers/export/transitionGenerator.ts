@@ -232,37 +232,40 @@ export async function generateTransitionVideo(
       duration
     );
 
-    // 4. Generate transition — Kling V3.0 primary, Kling V2.6 fallback
+    // 4. Generate transition — Kling V2.6 Pro primary, Kling V3.0 fallback
     let videoUrl: string | null = null;
     let provider = "";
 
-    // ── Primary: Kling V3.0 Std I2V ──
+    // Kling V2.6 only supports 5 or 10
+    const v26Duration = duration <= 7 ? 5 : 10;
+
+    // ── Primary: Kling V2.6 Pro I2V (strong detail preservation, 35 credits) ──
     try {
-      console.log(`[TransitionGen] ${label}: trying Kling V3.0...`);
+      console.log(`[TransitionGen] ${label}: trying Kling V2.6 Pro (${v26Duration}s)...`);
       videoUrl = await Promise.race<string>([
-        generateKlingV3Video(
+        generateKlingV26Video(
           startFrameUrl,
           transitionPrompt,
           hyperealApiKey,
-          duration,
+          v26Duration,
           endFrameUrl
         ),
         new Promise<string>((_, reject) =>
-          setTimeout(() => reject(new Error("Kling V3.0 timed out")), timeoutMs)
+          setTimeout(() => reject(new Error("Kling V2.6 Pro timed out")), timeoutMs)
         ),
       ]);
-      provider = "Kling V3.0";
-      console.log(`[TransitionGen] ${label}: ✅ Kling V3.0 succeeded`);
+      provider = "Kling V2.6 Pro";
+      console.log(`[TransitionGen] ${label}: ✅ Kling V2.6 Pro succeeded`);
     } catch (err) {
-      console.warn(`[TransitionGen] ${label}: ❌ Kling V3.0 failed — ${(err as Error).message}`);
+      console.warn(`[TransitionGen] ${label}: ❌ Kling V2.6 Pro failed — ${(err as Error).message}`);
     }
 
-    // ── Fallback: Kling V2.6 Pro I2V ──
+    // ── Fallback: Kling V3.0 Std I2V (supports 3-15s) ──
     if (!videoUrl) {
       try {
-        console.log(`[TransitionGen] ${label}: trying Kling V2.6 fallback...`);
+        console.log(`[TransitionGen] ${label}: trying Kling V3.0 fallback (${duration}s)...`);
         videoUrl = await Promise.race<string>([
-          generateKlingV26Video(
+          generateKlingV3Video(
             startFrameUrl,
             transitionPrompt,
             hyperealApiKey,
@@ -270,18 +273,18 @@ export async function generateTransitionVideo(
             endFrameUrl
           ),
           new Promise<string>((_, reject) =>
-            setTimeout(() => reject(new Error("Kling V2.6 timed out")), timeoutMs)
+            setTimeout(() => reject(new Error("Kling V3.0 timed out")), timeoutMs)
           ),
         ]);
-        provider = "Kling V2.6";
-        console.log(`[TransitionGen] ${label}: ✅ Kling V2.6 succeeded`);
+        provider = "Kling V3.0";
+        console.log(`[TransitionGen] ${label}: ✅ Kling V3.0 succeeded`);
       } catch (err) {
-        console.warn(`[TransitionGen] ${label}: ❌ Kling V2.6 failed — ${(err as Error).message}`);
+        console.warn(`[TransitionGen] ${label}: ❌ Kling V3.0 failed — ${(err as Error).message}`);
         return {
           path: null,
           aiGenerated: false,
           durationSeconds: 0,
-          error: `Both Kling V3.0 and V2.6 failed for transition ${label}`,
+          error: `Both Kling V2.6 Pro and V3.0 failed for transition ${label}`,
         };
       }
     }

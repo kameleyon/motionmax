@@ -123,20 +123,28 @@ export async function generateKlingV3Video(
   imageUrl: string,
   prompt: string,
   apiKey: string,
-  duration: number = 10,
+  duration: number = 5,
   endImageUrl?: string,
   negativePrompt: string = "blurry, low quality, watermark, text, UI elements",
   cfgScale: number = 0.5
 ): Promise<string> {
   const model = "kling-3-0-std-i2v";
-  console.log(`[Hypereal] Starting Kling V3.0 Std I2V — ${duration}s${endImageUrl ? " (start→end)" : ""}`);
+  // Kling V3.0 valid durations: 3, 5, 10, 15
+  const validDurations = [3, 5, 10, 15];
+  const clampedDuration = validDurations.reduce((prev, curr) =>
+    Math.abs(curr - duration) < Math.abs(prev - duration) ? curr : prev
+  );
+  if (clampedDuration !== duration) {
+    console.warn(`[Hypereal] Kling V3 duration ${duration}s invalid — clamped to ${clampedDuration}s`);
+  }
+  console.log(`[Hypereal] Starting Kling V3.0 Std I2V — ${clampedDuration}s${endImageUrl ? " (start→end)" : ""}`);
   console.log(`[Hypereal] IMAGE: ${imageUrl.substring(0, 80)}...`);
   if (endImageUrl) console.log(`[Hypereal] END IMAGE: ${endImageUrl.substring(0, 80)}...`);
 
   const inputPayload: Record<string, unknown> = {
     prompt,
     image: imageUrl,
-    duration,
+    duration: clampedDuration,
     cfg_scale: cfgScale,
     negative_prompt: negativePrompt,
     sound: false,
@@ -191,20 +199,28 @@ export async function generateKlingV26Video(
   imageUrl: string,
   prompt: string,
   apiKey: string,
-  duration: number = 10,
+  duration: number = 5,
   endImageUrl?: string,
   negativePrompt: string = "blurry, low quality, watermark, text, UI elements",
   cfgScale: number = 0.5
 ): Promise<string> {
   const model = "kling-2-6-i2v-pro";
-  console.log(`[Hypereal] Starting Kling V2.6 Pro I2V — ${duration}s${endImageUrl ? " (start→end)" : ""}`);
+  // Kling V2.6 valid durations: 5, 10
+  const validDurations = [5, 10];
+  const clampedDuration = validDurations.reduce((prev, curr) =>
+    Math.abs(curr - duration) < Math.abs(prev - duration) ? curr : prev
+  );
+  if (clampedDuration !== duration) {
+    console.warn(`[Hypereal] Kling V2.6 duration ${duration}s invalid — clamped to ${clampedDuration}s`);
+  }
+  console.log(`[Hypereal] Starting Kling V2.6 Pro I2V — ${clampedDuration}s${endImageUrl ? " (start→end)" : ""}`);
   console.log(`[Hypereal] IMAGE: ${imageUrl.substring(0, 80)}...`);
   if (endImageUrl) console.log(`[Hypereal] END IMAGE: ${endImageUrl.substring(0, 80)}...`);
 
   const inputPayload: Record<string, unknown> = {
     prompt,
     image: imageUrl,
-    duration,
+    duration: clampedDuration,
     cfg_scale: cfgScale,
     negative_prompt: negativePrompt,
     sound: false, // must be false when using end_image

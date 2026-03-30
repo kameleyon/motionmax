@@ -59,8 +59,9 @@ const AI_TRANSITIONS_ENABLED = (process.env.EXPORT_AI_TRANSITIONS || "false").to
 /** Per-transition AI video timeout (ms). Default: 3 minutes. */
 const AI_TRANSITION_TIMEOUT_MS = parseInt(process.env.EXPORT_AI_TRANSITION_TIMEOUT || "180000", 10);
 
-/** AI transition clip duration in seconds. Default: 2. */
-const AI_TRANSITION_DURATION = parseFloat(process.env.EXPORT_AI_TRANSITION_DURATION || "2");
+/** AI transition clip duration in seconds. Default: 5.
+ *  Kling V3.0 accepts: 3, 5, 10, 15. Kling V2.6 accepts: 5, 10. */
+const AI_TRANSITION_DURATION = parseFloat(process.env.EXPORT_AI_TRANSITION_DURATION || "5");
 
 // ── Helpers ──────────────────────────────────────────────────────────
 

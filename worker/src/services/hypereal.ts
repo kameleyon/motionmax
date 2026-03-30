@@ -57,21 +57,28 @@ export async function generateGrokVideo(
   apiKey: string,
   aspectRatio: "16:9" | "9:16" = "16:9",
   duration: number = 10,
-  resolution: string = "720P"
+  resolution: string = "720P",
+  endImageUrl?: string
 ) {
-  console.log(`[Hypereal] Starting Grok Video I2V — ${duration}s, ${aspectRatio}`);
+  console.log(`[Hypereal] Starting Grok Video I2V — ${duration}s, ${aspectRatio}${endImageUrl ? " (with end_image)" : ""}`);
   console.log(`[Hypereal] IMAGE URL: ${imageUrl}`);
+  if (endImageUrl) console.log(`[Hypereal] END IMAGE URL: ${endImageUrl}`);
 
-  // Nested input format — same as veo-3-1-i2v (the "Example Input" in docs
-  // shows what goes INSIDE input, not the full request body)
+  const inputPayload: Record<string, unknown> = {
+    prompt,
+    image: imageUrl,
+    duration,
+    aspect_ratio: aspectRatio,
+  };
+
+  // Pass end_image for morphing transitions (start→end frame interpolation)
+  if (endImageUrl) {
+    inputPayload.end_image = endImageUrl;
+  }
+
   const requestBody = {
     model: "grok-video-i2v",
-    input: {
-      prompt,
-      image: imageUrl,
-      duration,
-      aspect_ratio: aspectRatio,
-    },
+    input: inputPayload,
   };
 
   const bodyJson = JSON.stringify(requestBody);

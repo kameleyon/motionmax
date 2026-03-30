@@ -1,23 +1,16 @@
 /**
  * Crossfade transition engine for video export.
  *
- * Replaces hard-cut concat with smooth dissolve transitions between scenes
- * using FFmpeg's xfade (video) and acrossfade (audio) filters.
+ * PAIRWISE CROSSFADE — merges clips 2 at a time:
+ *   scene0 + scene1 → merged01 → + scene2 → merged012 → ...
  *
- * Architecture — PAIRWISE CROSSFADE:
- *   Instead of one massive filter_complex (which crashes FFmpeg on 6+ clips),
- *   we merge clips 2 at a time iteratively:
+ * CRITICAL: Audio is NOT crossfaded (no acrossfade).
+ * Voiceovers must never overlap. Instead:
+ *   - Clip 1 audio: trimmed to the transition point, faded out over 0.3s
+ *   - Clip 2 audio: faded in over 0.3s, plays in full
+ *   - Audio tracks concatenated with zero overlap
  *
- *     scene0 + scene1 → merged01 (with xfade)
- *     merged01 + scene2 → merged012 (with xfade)
- *     merged012 + scene3 → merged0123 (with xfade)
- *     ...
- *
- *   Each FFmpeg call has only 2 inputs and 1 xfade + 1 acrossfade filter.
- *   Safe on any instance size. Quality loss from iterative re-encoding
- *   is negligible with ultrafast preset.
- *
- * Falls back to concat demuxer if any crossfade step fails.
+ * Video gets the visual xfade transition (fadeblack, dissolve, etc.)
  */
 import fs from "fs";
 import { runFfmpeg, probeDuration, X264_MEM_FLAGS } from "./ffmpegCmd.js";
@@ -54,12 +47,13 @@ const DEFAULT_OPTIONS: CrossfadeOptions = {
   pairTimeoutMs: 5 * 60 * 1000,
 };
 
+/** Duration of audio fade-out / fade-in at transition points. */
+const AUDIO_FADE_SECONDS = 0.3;
+
 // ── Public API ───────────────────────────────────────────────────────
 
 /**
- * Concatenate clips with crossfade transitions using pairwise merging.
- *
- * Merges clips iteratively (2 at a time) to keep FFmpeg memory low.
+ * Concatenate clips with visual crossfade + clean audio cuts.
  * Falls back to concat demuxer if any pair fails.
  *
  * @returns  True if crossfade was applied, false if fell back to concat
@@ -76,15 +70,13 @@ export async function concatWithCrossfade(
     return false;
   }
 
-  // Probe all clip durations upfront
   console.log(`[Transitions] Probing ${clipPaths.length} clips for crossfade...`);
   const durations = await Promise.all(clipPaths.map(probeDuration));
 
-  // Validate: all clips must be longer than crossfade duration
-  const tooShort = durations.filter((d) => d < opts.duration + 0.1);
+  const tooShort = durations.filter((d) => d < opts.duration + 0.5);
   if (tooShort.length > 0) {
     console.warn(
-      `[Transitions] ${tooShort.length} clip(s) shorter than crossfade (${opts.duration}s) — falling back to concat`
+      `[Transitions] ${tooShort.length} clip(s) too short for ${opts.duration}s crossfade — falling back to concat`
     );
     await concatFiles(clipPaths, outputPath, false);
     return false;
@@ -92,8 +84,8 @@ export async function concatWithCrossfade(
 
   const totalInput = durations.reduce((a, b) => a + b, 0);
   console.log(
-    `[Transitions] Pairwise ${opts.transition} crossfade (${opts.duration}s) — ` +
-    `${clipPaths.length} clips, ${totalInput.toFixed(1)}s total input`
+    `[Transitions] Pairwise ${opts.transition} (${opts.duration}s video, no audio overlap) — ` +
+    `${clipPaths.length} clips, ${totalInput.toFixed(1)}s total`
   );
 
   try {
@@ -101,13 +93,13 @@ export async function concatWithCrossfade(
 
     const totalReduction = opts.duration * (clipPaths.length - 1);
     console.log(
-      `[Transitions] Crossfade complete — ${clipPaths.length - 1} transitions, ` +
-      `reduced by ${totalReduction.toFixed(1)}s`
+      `[Transitions] Complete — ${clipPaths.length - 1} transitions, ` +
+      `output ~${(totalInput - totalReduction).toFixed(1)}s`
     );
     return true;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[Transitions] Pairwise crossfade failed — falling back to concat: ${msg}`);
+    console.error(`[Transitions] Crossfade failed — falling back to concat: ${msg}`);
     await concatFiles(clipPaths, outputPath, false);
     return false;
   }
@@ -115,10 +107,6 @@ export async function concatWithCrossfade(
 
 // ── Pairwise Crossfade ───────────────────────────────────────────────
 
-/**
- * Merge clips 2 at a time with xfade + acrossfade.
- * Each step produces an intermediate file that feeds into the next.
- */
 async function pairwiseCrossfade(
   clipPaths: string[],
   durations: number[],
@@ -138,17 +126,30 @@ async function pairwiseCrossfade(
 
     if (!isLast) tempFiles.push(outPath);
 
-    // xfade offset = duration of current merged clip minus crossfade
     const offset = Math.max(0, currentDuration - opts.duration);
+    const audioFade = Math.min(AUDIO_FADE_SECONDS, opts.duration / 2);
 
     console.log(
       `[Transitions] Pair ${i}/${totalPairs}: ` +
-      `${currentDuration.toFixed(1)}s + ${nextDuration.toFixed(1)}s → offset=${offset.toFixed(3)}s`
+      `${currentDuration.toFixed(1)}s + ${nextDuration.toFixed(1)}s → ` +
+      `${opts.transition} at ${offset.toFixed(1)}s`
     );
 
-    const filterComplex =
-      `[0:v][1:v]xfade=transition=${opts.transition}:duration=${opts.duration}:offset=${offset.toFixed(3)}[vout];` +
-      `[0:a][1:a]acrossfade=d=${opts.duration}:c1=tri:c2=tri[aout]`;
+    // VIDEO: xfade visual transition
+    // AUDIO: clip1 trimmed to offset + faded out, clip2 faded in, CONCATENATED (no overlap)
+    const audioTrimEnd = offset;
+    const audioFadeOutStart = Math.max(0, audioTrimEnd - audioFade);
+
+    const filterComplex = [
+      // Video: smooth visual transition
+      `[0:v][1:v]xfade=transition=${opts.transition}:duration=${opts.duration}:offset=${offset.toFixed(3)}[vout]`,
+      // Audio clip 1: trim to transition point, fade out
+      `[0:a]atrim=0:${audioTrimEnd.toFixed(3)},afade=t=out:st=${audioFadeOutStart.toFixed(3)}:d=${audioFade.toFixed(3)},asetpts=PTS-STARTPTS[a0]`,
+      // Audio clip 2: fade in, play in full
+      `[1:a]afade=t=in:d=${audioFade.toFixed(3)},asetpts=PTS-STARTPTS[a1]`,
+      // Concatenate audio tracks — ZERO overlap
+      `[a0][a1]concat=n=2:v=0:a=1[aout]`,
+    ].join(";");
 
     await runFfmpeg([
       "-i", currentPath,
@@ -169,25 +170,20 @@ async function pairwiseCrossfade(
       outPath,
     ], opts.pairTimeoutMs);
 
-    // Clean up previous temp file (not the original clips)
+    // Clean up previous temp
     if (i >= 2 && tempFiles.length >= 2) {
       const prevTemp = tempFiles[tempFiles.length - 2];
       try { fs.unlinkSync(prevTemp); } catch { /* ignore */ }
     }
 
-    // New merged clip duration = current + next - crossfade
-    currentDuration = currentDuration + nextDuration - opts.duration;
+    currentDuration = offset + nextDuration;
     currentPath = outPath;
 
-    // Report progress after each pair
     if (opts.onPairComplete) {
-      try {
-        await opts.onPairComplete(i, totalPairs);
-      } catch { /* non-critical */ }
+      try { await opts.onPairComplete(i, totalPairs); } catch { /* non-critical */ }
     }
   }
 
-  // Clean any remaining temp files
   for (const tmp of tempFiles) {
     try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch { /* ignore */ }
   }

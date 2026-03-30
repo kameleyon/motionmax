@@ -25,8 +25,10 @@ import { writeApiLog } from "../lib/logger.js";
 export interface SceneVideoRequest {
   /** Scene index (for logging) */
   sceneIndex: number;
-  /** Image URL to animate (I2V input) */
+  /** Image URL to animate (I2V start frame) */
   imageUrl: string;
+  /** Image URL for the target end state (for morphing transitions) */
+  endImageUrl?: string;
   /** Visual prompt describing the scene */
   prompt: string;
   /** Output format: landscape, portrait, square */
@@ -82,6 +84,7 @@ export async function generateSceneVideo(
   const {
     sceneIndex,
     imageUrl,
+    endImageUrl,
     prompt,
     format,
     duration = 5,
@@ -91,9 +94,10 @@ export async function generateSceneVideo(
 
   const startTime = Date.now();
   const videoPrompt = buildVideoPrompt(prompt);
+  const mode = endImageUrl ? "transition (start→end)" : "scene";
 
   console.log(
-    `[SceneVideoGen] Scene ${sceneIndex}: generating ${duration}s AI video (${format})`
+    `[SceneVideoGen] Scene ${sceneIndex}: generating ${duration}s AI video — ${mode} (${format})`
   );
 
   try {
@@ -102,6 +106,7 @@ export async function generateSceneVideo(
       generateGrokVideo({
         prompt: videoPrompt,
         imageUrl,
+        endImageUrl,
         format,
       }),
       new Promise<GrokVideoResult>((_, reject) =>

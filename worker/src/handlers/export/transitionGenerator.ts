@@ -1,17 +1,19 @@
 /**
- * AI-powered transition video generator.
+ * AI-powered transition video generator — SEAMLESS SCENE MORPHING.
  *
- * Generates seamless morphing transitions between scenes by:
- *   1. Extracting the last frame of scene N
- *   2. Extracting the first frame of scene N+1
- *   3. Feeding both frames to an image-to-video AI model
- *   4. The AI generates a short (2-3s) video that morphs between the two frames
+ * Creates automorphic transitions between scenes by:
+ *   1. Extracting the last frame of scene N (start state)
+ *   2. Extracting the first frame of scene N+1 (end state)
+ *   3. Uploading BOTH frames to storage for AI API access
+ *   4. Feeding BOTH frames to the I2V model (start_image → end_image)
+ *   5. The AI generates a short video that seamlessly morphs between them
  *
- * The resulting transition clips are inserted between scene clips during export,
- * creating cinema-grade seamless scene changes.
+ * The prompt explicitly describes the morphing: "The environment fluidly
+ * and seamlessly morphs from [Scene A] directly into [Scene B], dissolving
+ * smoothly without any hard cuts."
  *
- * Provider: Hypereal Grok Video I2V (image-to-video with start frame)
- * Fallback: If AI fails, returns null (caller uses crossfade instead)
+ * Provider: Hypereal Grok Video I2V (image + end_image for interpolation)
+ * Fallback: Replicate xai/grok-imagine-video (same params)
  */
 import path from "path";
 import fs from "fs";
@@ -23,12 +25,16 @@ import { supabase } from "../../lib/supabase.js";
 // ── Types ────────────────────────────────────────────────────────────
 
 export interface TransitionRequest {
-  /** Index of the "from" scene (for logging) */
+  /** Index of the "from" scene */
   fromSceneIndex: number;
   /** Path to the "from" scene MP4 */
   fromClipPath: string;
   /** Path to the "to" scene MP4 */
   toClipPath: string;
+  /** Visual description of the outgoing scene (for prompt) */
+  fromScenePrompt?: string;
+  /** Visual description of the incoming scene (for prompt) */
+  toScenePrompt?: string;
   /** Output path for the transition clip */
   outputPath: string;
   /** Temp directory for intermediate files */
@@ -52,7 +58,7 @@ export interface TransitionRequest {
 export interface TransitionResult {
   /** Path to the generated transition clip, or null on failure */
   path: string | null;
-  /** Whether AI generation was used (vs. skipped) */
+  /** Whether AI generation was used */
   aiGenerated: boolean;
   /** Duration of the transition in seconds */
   durationSeconds: number;
@@ -62,30 +68,22 @@ export interface TransitionResult {
 
 // ── Frame Extraction ─────────────────────────────────────────────────
 
-/**
- * Extract the last frame of a video as a PNG image.
- * Uses ffmpeg to seek near the end and grab the final frame.
- */
 async function extractLastFrame(
   videoPath: string,
   outputPath: string,
   width: number,
   height: number
 ): Promise<void> {
-  // Use sseof to seek from the end — more reliable than computing duration
   await runFfmpeg([
-    "-sseof", "-0.1",      // seek to 0.1s before end
+    "-sseof", "-0.1",
     "-i", videoPath,
     "-vf", `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black`,
     "-frames:v", "1",
-    "-q:v", "2",            // high quality JPEG/PNG
+    "-q:v", "2",
     outputPath,
   ], 30_000);
 }
 
-/**
- * Extract the first frame of a video as a PNG image.
- */
 async function extractFirstFrame(
   videoPath: string,
   outputPath: string,
@@ -101,10 +99,6 @@ async function extractFirstFrame(
   ], 30_000);
 }
 
-/**
- * Upload a local frame image to Supabase storage for AI API access.
- * Returns the public URL. Cleans up after the transition is generated.
- */
 async function uploadFrameForAi(
   localPath: string,
   projectId: string,
@@ -126,19 +120,26 @@ async function uploadFrameForAi(
   return data.publicUrl;
 }
 
+// ── Morphing Prompt Builder ──────────────────────────────────────────
+
+function buildMorphingPrompt(
+  fromPrompt: string | undefined,
+  toPrompt: string | undefined,
+  duration: number
+): string {
+  const fromDesc = fromPrompt ? fromPrompt.substring(0, 200) : "the current scene";
+  const toDesc = toPrompt ? toPrompt.substring(0, 200) : "the next scene";
+
+  return (
+    `A continuous, single-take fly-through shot over ${duration} seconds. The camera is in constant dynamic motion, panning and moving forward. ` +
+    `The shot begins on the provided starting frame showing ${fromDesc}, then the camera fluidly pushes past the foreground as the environment ` +
+    `seamlessly morphs, stretches, and melts directly into the provided ending frame showing ${toDesc}. ` +
+    `There are no hard cuts, only continuous forward camera movement with seamless, fluid object morphing bridging the two visual states.`
+  );
+}
+
 // ── Main API ─────────────────────────────────────────────────────────
 
-/**
- * Generate an AI-powered transition video between two scenes.
- *
- * Flow:
- *   1. Extract last frame of scene N → upload to storage
- *   2. Feed to Grok Video I2V with a "morph/transition" prompt
- *   3. Download the result → normalize to target resolution
- *   4. Return the local path to the transition clip
- *
- * Returns null path on failure (caller should use crossfade instead).
- */
 export async function generateTransitionVideo(
   request: TransitionRequest
 ): Promise<TransitionResult> {
@@ -146,6 +147,8 @@ export async function generateTransitionVideo(
     fromSceneIndex,
     fromClipPath,
     toClipPath,
+    fromScenePrompt,
+    toScenePrompt,
     outputPath,
     tempDir,
     format,
@@ -157,40 +160,42 @@ export async function generateTransitionVideo(
     timeoutMs = 3 * 60 * 1000,
   } = request;
 
-  const transLabel = `${fromSceneIndex}→${fromSceneIndex + 1}`;
+  const label = `${fromSceneIndex}→${fromSceneIndex + 1}`;
 
   if (!isAiVideoAvailable()) {
-    return { path: null, aiGenerated: false, durationSeconds: 0, error: "No AI video API keys configured" };
+    return { path: null, aiGenerated: false, durationSeconds: 0, error: "No AI video API keys" };
   }
 
-  console.log(`[TransitionGen] ${transLabel}: generating ${duration}s AI transition...`);
+  console.log(`[TransitionGen] ${label}: generating ${duration}s morphing transition...`);
 
   const lastFramePath = path.join(tempDir, `trans_${fromSceneIndex}_lastframe.png`);
   const firstFramePath = path.join(tempDir, `trans_${fromSceneIndex}_firstframe.png`);
 
   try {
-    // 1. Extract frames
+    // 1. Extract BOTH frames
     await Promise.all([
       extractLastFrame(fromClipPath, lastFramePath, width, height),
       extractFirstFrame(toClipPath, firstFramePath, width, height),
     ]);
 
-    // 2. Upload the "from" frame for AI API access
-    // We use the last frame of the outgoing scene as the I2V source
-    const frameUrl = await uploadFrameForAi(lastFramePath, projectId, `trans_${fromSceneIndex}`);
+    // 2. Upload BOTH frames for AI API access
+    const [startFrameUrl, endFrameUrl] = await Promise.all([
+      uploadFrameForAi(lastFramePath, projectId, `trans_${fromSceneIndex}_start`),
+      uploadFrameForAi(firstFramePath, projectId, `trans_${fromSceneIndex}_end`),
+    ]);
 
-    // 3. Generate transition video via AI
-    // The prompt describes morphing FROM the current scene TO the next
-    const transitionPrompt =
-      `Smooth cinematic transition. Camera slowly moves forward through the scene. ` +
-      `The composition gradually shifts and transforms. ` +
-      `Fluid, dreamlike motion. Seamless visual flow. Duration: ${duration} seconds.`;
+    console.log(`[TransitionGen] ${label}: both frames uploaded — start + end`);
 
+    // 3. Build morphing prompt describing the transformation
+    const morphPrompt = buildMorphingPrompt(fromScenePrompt, toScenePrompt, duration);
+
+    // 4. Generate transition video with BOTH start and end images
     const result = await generateSceneVideo(
       {
         sceneIndex: fromSceneIndex,
-        imageUrl: frameUrl,
-        prompt: transitionPrompt,
+        imageUrl: startFrameUrl,      // Start frame (Scene A's last frame)
+        endImageUrl: endFrameUrl,     // End frame (Scene B's first frame)
+        prompt: morphPrompt,
         format,
         duration,
         projectId,
@@ -200,14 +205,14 @@ export async function generateTransitionVideo(
     );
 
     if (!result.url) {
-      console.warn(`[TransitionGen] ${transLabel}: AI failed — ${result.error}`);
+      console.warn(`[TransitionGen] ${label}: AI failed — ${result.error}`);
       return { path: null, aiGenerated: false, durationSeconds: 0, error: result.error };
     }
 
-    // 4. Download and normalize the transition video
+    // 5. Download and normalize the transition video
     const rawTransPath = path.join(tempDir, `trans_${fromSceneIndex}_raw.mp4`);
     const response = await fetch(result.url);
-    if (!response.ok) throw new Error(`Failed to download transition video: ${response.status}`);
+    if (!response.ok) throw new Error(`Download failed: ${response.status}`);
     const buffer = Buffer.from(await response.arrayBuffer());
     await fs.promises.writeFile(rawTransPath, buffer);
 
@@ -218,6 +223,7 @@ export async function generateTransitionVideo(
       "-vf", `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black`,
       "-c:v", "libx264",
       "-preset", "ultrafast",
+      "-crf", "23",
       "-pix_fmt", "yuv420p",
       "-c:a", "aac",
       "-b:a", "128k",
@@ -229,27 +235,25 @@ export async function generateTransitionVideo(
     ]);
 
     removeFiles(rawTransPath);
-    console.log(`[TransitionGen] ${transLabel}: ✅ AI transition generated (${result.provider})`);
+    console.log(`[TransitionGen] ${label}: ✅ morphing transition generated (${result.provider})`);
 
     return { path: outputPath, aiGenerated: true, durationSeconds: duration };
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    console.error(`[TransitionGen] ${transLabel}: ❌ Failed — ${errorMsg}`);
+    console.error(`[TransitionGen] ${label}: ❌ Failed — ${errorMsg}`);
     return { path: null, aiGenerated: false, durationSeconds: 0, error: errorMsg };
   } finally {
-    // Clean up temp frame files
     removeFiles(lastFramePath, firstFramePath);
   }
 }
 
 /**
- * Generate transition videos for all adjacent scene pairs.
- *
- * Returns an array of TransitionResult, one per scene junction (length = clipCount - 1).
- * Null paths mean that junction should use crossfade instead.
+ * Generate morphing transition videos for all adjacent scene pairs.
+ * Returns one TransitionResult per junction (length = clipCount - 1).
  */
 export async function generateAllTransitions(
   clipPaths: string[],
+  scenes: any[],
   tempDir: string,
   config: {
     format: string;
@@ -265,14 +269,21 @@ export async function generateAllTransitions(
 
   const results: TransitionResult[] = [];
 
-  // Generate transitions sequentially to avoid overwhelming the API
   for (let i = 0; i < clipPaths.length - 1; i++) {
     const outputPath = path.join(tempDir, `transition_${i}_${i + 1}.mp4`);
+
+    // Extract scene visual prompts for the morphing description
+    const fromScene = scenes[i];
+    const toScene = scenes[i + 1];
+    const fromPrompt = fromScene?.visualPrompt || fromScene?.visual_prompt || fromScene?.voiceover;
+    const toPrompt = toScene?.visualPrompt || toScene?.visual_prompt || toScene?.voiceover;
 
     const result = await generateTransitionVideo({
       fromSceneIndex: i,
       fromClipPath: clipPaths[i],
       toClipPath: clipPaths[i + 1],
+      fromScenePrompt: fromPrompt,
+      toScenePrompt: toPrompt,
       outputPath,
       tempDir,
       format: config.format,
@@ -289,8 +300,7 @@ export async function generateAllTransitions(
 
   const aiCount = results.filter((r) => r.aiGenerated).length;
   console.log(
-    `[TransitionGen] Generated ${aiCount}/${results.length} AI transitions ` +
-    `(${results.length - aiCount} will use crossfade fallback)`
+    `[TransitionGen] ${aiCount}/${results.length} AI morphing transitions generated`
   );
 
   return results;

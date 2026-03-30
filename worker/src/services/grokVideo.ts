@@ -16,6 +16,8 @@ type GrokAspectRatio = "16:9" | "9:16";
 export interface GrokVideoInput {
   prompt: string;
   imageUrl?: string;
+  /** End-state image for morphing transitions (passed as end_image to API) */
+  endImageUrl?: string;
   format: string;          // "landscape" | "portrait" | "square"
 }
 
@@ -45,6 +47,11 @@ export async function generateGrokVideo(
   const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
   const aspectRatio = mapFormatToAspectRatio(input.format);
 
+  const hasEndImage = !!input.endImageUrl;
+  if (hasEndImage) {
+    console.log(`[GrokVideo] Transition mode: start + end image provided`);
+  }
+
   // ── 1. Try Hypereal Grok (primary — 1080P, 10s) ──────────────
   if (hyperealApiKey && input.imageUrl) {
     console.log(`[GrokVideo] Trying Hypereal Grok — ${aspectRatio}, 10s, 1080P`);
@@ -55,7 +62,8 @@ export async function generateGrokVideo(
         hyperealApiKey,
         aspectRatio,
         10,
-        "1080P"
+        "1080P",
+        input.endImageUrl
       );
       if (outputUrl) {
         console.log(`[GrokVideo] ✅ Hypereal Grok succeeded`);
@@ -75,7 +83,8 @@ export async function generateGrokVideo(
         input.imageUrl || null,
         replicateApiKey,
         aspectRatio,
-        10
+        10,
+        input.endImageUrl || null
       );
       if (url) {
         console.log(`[GrokVideo] ✅ Replicate Grok succeeded`);
@@ -104,6 +113,7 @@ async function replicateGrokVideo(
   apiKey: string,
   aspectRatio: string,
   duration: number,
+  endImageUrl: string | null = null,
 ): Promise<string | null> {
   const input: Record<string, unknown> = {
     prompt,
@@ -114,6 +124,11 @@ async function replicateGrokVideo(
 
   if (imageUrl) {
     input.image = imageUrl;
+  }
+
+  // End image for morphing transitions (frame interpolation)
+  if (endImageUrl) {
+    input.end_image = endImageUrl;
   }
 
   // Create prediction

@@ -183,9 +183,9 @@ export async function handleExportVideo(
   // Detect cinematic projects (scenes have AI-generated videoUrls)
   const isCinematic = scenes.some((s: any) => !!s.videoUrl);
   if (isCinematic && exportConfig.crossfadeDuration > 0 && restartCount === 0) {
-    // Cinematic videos need longer, more visible crossfade transitions
-    // 0.5s dissolve is invisible on fast-moving AI video clips
-    exportConfig.crossfadeDuration = Math.max(exportConfig.crossfadeDuration, 1.0);
+    // Cinematic videos need longer, dramatic crossfade transitions
+    // 0.5s is invisible on fast-moving AI video clips — use 1.5s fadeblack
+    exportConfig.crossfadeDuration = Math.max(exportConfig.crossfadeDuration, 1.5);
     console.log(`[ExportVideo] Cinematic detected — crossfade increased to ${exportConfig.crossfadeDuration}s`);
   }
 
@@ -324,7 +324,7 @@ export async function handleExportVideo(
         message: `Generating AI transition videos for ${clipPaths.length - 1} junctions`,
       });
 
-      const transResults = await generateAllTransitions(clipPaths, tempDir, {
+      const transResults = await generateAllTransitions(clipPaths, scenes, tempDir, {
         format: exportConfig.format,
         width: exportConfig.width,
         height: exportConfig.height,

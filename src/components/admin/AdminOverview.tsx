@@ -63,12 +63,12 @@ export function AdminOverview() {
     );
   }
 
-  // Teal palette shades
-  const tealShades = {
-    primary: "text-primary", // #49cdbf
-    light: "text-[hsl(170,55%,65%)]", // Lighter teal
-    dark: "text-[hsl(170,55%,40%)]", // Darker teal
-    muted: "text-[hsl(170,30%,50%)]", // Muted teal
+  // Aqua palette shades
+  const aquaShades = {
+    primary: "text-primary", // Aqua #11C4D0
+    light: "text-secondary", // Lighter aqua
+    gold: "text-[hsl(var(--gold))]", // Gold accent
+    muted: "text-muted-foreground", // Muted text
   };
 
   const statCards = [
@@ -77,7 +77,7 @@ export function AdminOverview() {
       value: stats?.totalUsers || 0,
       description: "Registered accounts",
       icon: Users,
-      color: tealShades.primary,
+      color: aquaShades.primary,
       bgColor: "bg-primary/10",
     },
     {
@@ -85,7 +85,7 @@ export function AdminOverview() {
       value: stats?.subscriberCount || 0,
       description: "Paid subscriptions",
       icon: CreditCard,
-      color: tealShades.light,
+      color: aquaShades.light,
       bgColor: "bg-primary/10",
     },
     {
@@ -93,7 +93,7 @@ export function AdminOverview() {
       value: stats?.totalGenerations || 0,
       description: `${stats?.activeGenerations || 0} active, ${stats?.archivedGenerations || 0} deleted`,
       icon: Activity,
-      color: tealShades.dark,
+      color: aquaShades.primary,
       bgColor: "bg-primary/10",
     },
     {
@@ -109,8 +109,8 @@ export function AdminOverview() {
       value: stats?.creditPurchases || 0,
       description: "Total transactions",
       icon: Coins,
-      color: tealShades.muted,
-      bgColor: "bg-primary/10",
+      color: aquaShades.gold,
+      bgColor: "bg-[hsl(var(--gold))]/10",
     },
     {
       title: "Archived Generations",

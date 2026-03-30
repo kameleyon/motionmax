@@ -121,15 +121,26 @@ export async function handleImagesPhase(
 
   console.log(`[Images] Generating ${pendingTasks.length} images in parallel batches`);
 
+  // Track timing for ETA calculation
+  const imageStartTimes: number[] = [];
+  const getEstimatedTimeRemaining = (completed: number, total: number): number => {
+    if (imageStartTimes.length < 2 || completed === 0) return 0;
+    const avgTimePerImage = (Date.now() - phaseStart) / completed;
+    const remaining = total - completed;
+    return Math.round((avgTimePerImage * remaining) / 1000); // Convert to seconds
+  };
+
   // Process in batches of 9 to avoid overwhelming the API, but do all batches in this job
   const BATCH_SIZE = 9;
   for (let i = 0; i < pendingTasks.length; i += BATCH_SIZE) {
     const batch = pendingTasks.slice(i, i + BATCH_SIZE);
-    
+
     const results = await Promise.allSettled(
       batch.map(async ({ sceneIndex, subIndex, prompt }) => {
         console.log(`[Images] → scene ${sceneIndex}, sub ${subIndex} (${prompt.length} chars)`);
+        const imageStart = Date.now();
         const url = await generateImage(prompt, hyperealApiKey, replicateApiKey, format, projectId);
+        imageStartTimes.push(imageStart);
         return { sceneIndex, subIndex, url };
       })
     );
@@ -151,28 +162,37 @@ export async function handleImagesPhase(
         (scenes[sceneIndex] as any).imageUrls = subs;
         newlyGenerated++;
         completedSoFar++;
+
+        // Update progress IMMEDIATELY after each image completes
+        const progressAfter = Math.min(89, 45 + Math.round((completedSoFar / totalImages) * 44));
+        const etaSeconds = getEstimatedTimeRemaining(completedSoFar, totalImages);
+        const currentSceneNum = sceneIndex + 1;
+
+        await supabase
+          .from("generations")
+          .update({
+            progress: progressAfter,
+            scenes: scenes.map((s: any, idx: number) => ({
+              ...s,
+              _meta: {
+                ...((scenes[idx] as any)._meta || {}),
+                completedImages: completedSoFar,
+                totalImages,
+                currentScene: currentSceneNum,
+                etaSeconds,
+                statusMessage: etaSeconds > 0
+                  ? `Creating visuals... (${completedSoFar}/${totalImages} images, ~${etaSeconds}s remaining)`
+                  : `Creating visuals... (${completedSoFar}/${totalImages} images)`,
+              },
+            })),
+          })
+          .eq("id", generationId);
+
+        console.log(`[Images] ✅ Image ${completedSoFar}/${totalImages} — Scene ${currentSceneNum} — Progress: ${progressAfter}% — ETA: ${etaSeconds}s`);
       } else {
         console.error(`[Images] Parallel task failed:`, result.reason);
       }
     }
-
-    // Update progress periodically after each batch
-    const progressAfter = Math.min(89, 45 + Math.round((completedSoFar / totalImages) * 44));
-    await supabase
-      .from("generations")
-      .update({
-        progress: progressAfter,
-        scenes: scenes.map((s: any, idx: number) => ({
-          ...s,
-          _meta: {
-            ...((scenes[idx] as any)._meta || {}),
-            completedImages: completedSoFar,
-            totalImages,
-            statusMessage: `Images ${completedSoFar}/${totalImages}...`,
-          },
-        })),
-      })
-      .eq("id", generationId);
   }
 
   const phaseTime = Date.now() - phaseStart;

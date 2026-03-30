@@ -135,7 +135,7 @@ export function AdminRevenue() {
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Monthly Recurring</CardTitle>
             <div className="p-2 rounded-lg bg-primary/10 shadow-sm">
-              <TrendingUp className="h-4 w-4 text-[hsl(170,55%,45%)]" />
+              <TrendingUp className="h-4 w-4 text-primary" />
             </div>
           </CardHeader>
           <CardContent>
@@ -148,7 +148,7 @@ export function AdminRevenue() {
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Active Subs</CardTitle>
             <div className="p-2 rounded-lg bg-primary/10 shadow-sm">
-              <CreditCard className="h-4 w-4 text-[hsl(170,55%,40%)]" />
+              <CreditCard className="h-4 w-4 text-secondary" />
             </div>
           </CardHeader>
           <CardContent>
@@ -160,14 +160,14 @@ export function AdminRevenue() {
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Avg Per Charge</CardTitle>
-            <div className="p-2 rounded-lg bg-primary/10 shadow-sm">
-              <DollarSign className="h-4 w-4 text-[hsl(170,55%,50%)]" />
+            <div className="p-2 rounded-lg bg-[hsl(var(--gold))]/10 shadow-sm">
+              <DollarSign className="h-4 w-4 text-[hsl(var(--gold))]" />
             </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${data?.chargeCount 
-                ? (data.totalRevenue / data.chargeCount).toFixed(2) 
+              ${data?.chargeCount
+                ? (data.totalRevenue / data.chargeCount).toFixed(2)
                 : "0.00"
               }
             </div>
@@ -188,25 +188,25 @@ export function AdminRevenue() {
                 <AreaChart data={data.revenueByDay}>
                   <defs>
                     <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(170, 55%, 54%)" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="hsl(170, 55%, 54%)" stopOpacity={0} />
+                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
-                  <XAxis 
-                    dataKey="date" 
+                  <XAxis
+                    dataKey="date"
                     tickFormatter={(value) => format(new Date(value), "MMM d")}
                     stroke="hsl(var(--muted-foreground))"
                     fontSize={11}
                     tick={{ fontSize: 10 }}
                   />
-                  <YAxis 
+                  <YAxis
                     tickFormatter={(value) => `$${value}`}
                     stroke="hsl(var(--muted-foreground))"
                     fontSize={11}
                     width={45}
                   />
-                  <Tooltip 
+                  <Tooltip
                     formatter={(value: number) => [`$${value.toFixed(2)}`, "Revenue"]}
                     labelFormatter={(label) => format(new Date(label), "PPP")}
                     contentStyle={{
@@ -218,7 +218,7 @@ export function AdminRevenue() {
                   <Area
                     type="monotone"
                     dataKey="amount"
-                    stroke="hsl(170, 55%, 54%)"
+                    stroke="hsl(var(--primary))"
                     strokeWidth={2}
                     fillOpacity={1}
                     fill="url(#colorRevenue)"

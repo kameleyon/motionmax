@@ -49,9 +49,17 @@ export function GenerationProgress({ state }: GenerationProgressProps) {
           return `Generating voiceover audio... (${audioProgress}/${sceneCount} scenes)`;
         }
         if (totalImages > 0 && completedImages >= 0) {
+          // Get ETA from state if available
+          const eta = (state as any).etaSeconds;
+          if (eta && eta > 0) {
+            const minutes = Math.floor(eta / 60);
+            const seconds = eta % 60;
+            const etaStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+            return `Creating visuals... (${completedImages}/${totalImages} images, ~${etaStr} remaining)`;
+          }
           return `Creating visuals... (${completedImages}/${totalImages} images)`;
         }
-        return `Generating scene images... (${currentScene}/${sceneCount})`;
+        return `Generating scene images... (${currentScene || 1}/${sceneCount})`;
       
       case "rendering":
         return isSmartFlow ? "Finalizing infographic..." : "Compiling your video...";
@@ -148,13 +156,22 @@ export function GenerationProgress({ state }: GenerationProgressProps) {
           </span>
         </div>
         
-        <div className="h-3 overflow-hidden rounded-full bg-muted/30">
+        <div className="h-3 overflow-hidden rounded-full bg-muted/30 relative">
           <motion.div
-            className="h-full bg-gradient-to-r from-primary to-primary/70 rounded-full"
+            className="h-full bg-gradient-to-r from-primary to-primary/70 rounded-full relative overflow-hidden"
             initial={{ width: 0 }}
             animate={{ width: `${state.progress}%` }}
             transition={{ duration: 0.3, ease: "easeOut" }}
-          />
+          >
+            {/* Subtle shimmer animation to show it's active */}
+            {state.isGenerating && state.progress < 100 && (
+              <motion.div
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                animate={{ x: ["-100%", "200%"] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+              />
+            )}
+          </motion.div>
         </div>
       </div>
 

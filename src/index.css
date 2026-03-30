@@ -14,14 +14,14 @@
     --font-heading: 'Inter', system-ui, sans-serif;
     --font-body: 'Inter', system-ui, sans-serif;
 
-    /* Teal & Mist Color Palette */
+    /* Aqua & Gold Color Palette */
     --brand-dark: 200 9% 6%; /* #0F1112 - Carbon Black */
-    --brand-primary: 186 76% 21%; /* #0D565F - Dark Teal */
-    --brand-secondary: 178 40% 29%; /* #2D6967 - Stormy Teal */
-    --brand-accent: 170 36% 48%; /* #4EA69A - Ocean Mist */
-    --brand-light: 168 47% 67%; /* #86D2CA - Pearl Aqua */
-    --brand-pop: 179 40% 60%; /* #71C0C2 - Tropical Teal */
-    --brand-surface: 165 43% 89%; /* #DAEEE9 - Frozen Water */
+    --brand-aqua-dark: 186 85% 35%; /* #0D99A8 - Deep Aqua */
+    --brand-aqua: 184 85% 44%; /* #11C4D0 - Primary Aqua */
+    --brand-aqua-light: 184 75% 55%; /* #3DD4E0 - Light Aqua */
+    --brand-gold-dark: 45 90% 45%; /* #D4A929 - Deep Gold */
+    --brand-gold: 45 90% 55%; /* #F2C144 - Primary Gold */
+    --brand-gold-light: 45 85% 65%; /* #F5D06C - Light Gold */
 
     /* Semantic Tokens - Light Mode */
     --background: 0 0% 99%;
@@ -33,47 +33,66 @@
     --popover: 0 0% 100%;
     --popover-foreground: 200 9% 12%;
 
-    /* Unified teal green - #49cdbf */
-    --primary: 170 55% 54%;
+    /* Primary - Aqua #11C4D0 */
+    --primary: 184 85% 44%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 170 50% 48%;
+    /* Secondary - Lighter Aqua */
+    --secondary: 184 75% 55%;
     --secondary-foreground: 0 0% 100%;
 
-    --muted: 180 10% 95%;
+    --muted: 184 10% 95%;
     --muted-foreground: 200 9% 35%;
 
-    /* Lighter teal for hover states - use dark text for readability */
-    --accent: 170 55% 58%;
+    /* Accent - Gold */
+    --accent: 45 90% 55%;
     --accent-foreground: 200 9% 10%;
 
-    /* Using muted amber for warnings instead of red */
-    --destructive: 0 63% 31%;
+    /* Gold tokens for charts and highlights */
+    --gold: 45 90% 55%;
+    --gold-foreground: 200 9% 10%;
+
+    /* Warning - Unified amber */
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    /* Destructive - Red for errors */
+    --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 180 10% 90%;
-    --input: 180 10% 92%;
-    --ring: 170 55% 54%;
+    /* Success - Green */
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --border: 184 10% 90%;
+    --input: 184 10% 92%;
+    --ring: 184 85% 44%;
 
     --radius: 0.75rem;
 
     /* UI surfaces */
-    /* Light: subtle dark overlay. Dark: requested white/15 thumbnail surface */
     --thumbnail-surface: 0 0% 0% / 0.04;
 
-    /* Sidebar Tokens - Light - Slightly different from main bg */
-    --sidebar-background: 180 10% 97%;
-    --sidebar-foreground: 180 7% 15%;
-    --sidebar-primary: 170 55% 54%;
+    /* Sidebar Tokens - Light */
+    --sidebar-background: 184 10% 97%;
+    --sidebar-foreground: 200 7% 15%;
+    --sidebar-primary: 184 85% 44%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 180 10% 93%;
-    --sidebar-accent-foreground: 180 7% 15%;
-    --sidebar-border: 180 10% 90%;
-    --sidebar-ring: 170 55% 54%;
+    --sidebar-accent: 184 10% 93%;
+    --sidebar-accent-foreground: 200 7% 15%;
+    --sidebar-border: 184 10% 90%;
+    --sidebar-ring: 184 85% 44%;
+
+    /* Chart colors - Aqua and Gold palette */
+    --chart-1: 184 85% 44%; /* Aqua */
+    --chart-2: 45 90% 55%; /* Gold */
+    --chart-3: 184 75% 60%; /* Light Aqua */
+    --chart-4: 45 85% 65%; /* Light Gold */
+    --chart-5: 186 85% 35%; /* Deep Aqua */
   }
 
   .dark {
-    /* Dark Mode - Teal & Mist - Using #0F1112 base */
+    /* Dark Mode - Aqua & Gold - Using #0F1112 base */
     --background: 200 9% 6%;
     --foreground: 0 0% 96%;
 
@@ -84,39 +103,60 @@
     --popover: 200 8% 20%;
     --popover-foreground: 0 0% 96%;
 
-    /* Unified teal green - #49cdbf */
-    --primary: 170 55% 54%;
+    /* Primary - Aqua #11C4D0 (same in dark mode) */
+    --primary: 184 85% 44%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 170 50% 48%;
+    /* Secondary - Lighter Aqua */
+    --secondary: 184 75% 55%;
     --secondary-foreground: 0 0% 96%;
 
     --muted: 200 8% 14%;
     --muted-foreground: 200 8% 60%;
 
-    /* Lighter teal for hover states - use dark text for readability */
-    --accent: 170 55% 60%;
+    /* Accent - Gold (brighter in dark mode) */
+    --accent: 45 90% 60%;
     --accent-foreground: 200 9% 10%;
 
-    --destructive: 0 63% 31%;
+    /* Gold tokens */
+    --gold: 45 90% 60%;
+    --gold-foreground: 200 9% 10%;
+
+    /* Warning - Unified amber */
+    --warning: 38 92% 55%;
+    --warning-foreground: 200 9% 10%;
+
+    /* Destructive - Red */
+    --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 100%;
+
+    /* Success - Green */
+    --success: 142 71% 50%;
+    --success-foreground: 0 0% 100%;
 
     --border: 200 8% 18%;
     --input: 200 8% 14%;
-    --ring: 170 55% 54%;
+    --ring: 184 85% 44%;
 
-    /* Sidebar Tokens - Dark - Slightly lighter than main bg for contrast */
+    /* Sidebar Tokens - Dark */
     --sidebar-background: 200 8% 10%;
     --sidebar-foreground: 0 0% 96%;
-    --sidebar-primary: 170 55% 54%;
+    --sidebar-primary: 184 85% 44%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 200 8% 14%;
     --sidebar-accent-foreground: 0 0% 96%;
     --sidebar-border: 200 8% 16%;
-    --sidebar-ring: 170 55% 54%;
+    --sidebar-ring: 184 85% 44%;
 
     /* UI surfaces */
     --thumbnail-surface: 0 0% 100% / 0.15;
+
+    /* Chart colors - Aqua and Gold palette (brighter in dark mode) */
+    --chart-1: 184 85% 50%; /* Brighter Aqua */
+    --chart-2: 45 90% 60%; /* Brighter Gold */
+    --chart-3: 184 75% 65%; /* Light Aqua */
+    --chart-4: 45 85% 70%; /* Light Gold */
+    --chart-5: 186 85% 40%; /* Deep Aqua */
   }
 }
 
@@ -208,4 +248,18 @@
 
 .sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--primary) / 0.7);
+}
+
+/* Progress bar shimmer animation */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s linear infinite;
 }

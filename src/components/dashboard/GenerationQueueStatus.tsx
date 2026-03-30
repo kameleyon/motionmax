@@ -127,11 +127,21 @@ export function GenerationQueueStatus() {
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <div className="w-16 bg-muted rounded-full h-1.5">
+                <div className="w-16 bg-muted/30 rounded-full h-1.5 relative overflow-hidden">
                   <div
-                    className="bg-primary h-1.5 rounded-full transition-all duration-500"
+                    className="bg-gradient-to-r from-primary to-primary/70 h-1.5 rounded-full transition-all duration-500 relative overflow-hidden"
                     style={{ width: `${Math.min(job.progress, 100)}%` }}
-                  />
+                  >
+                    {/* Subtle shimmer animation */}
+                    {job.progress < 100 && (
+                      <div
+                        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer"
+                        style={{
+                          animation: "shimmer 2s linear infinite",
+                        }}
+                      />
+                    )}
+                  </div>
                 </div>
                 <span className="text-xs text-muted-foreground w-8 text-right">
                   {job.progress}%

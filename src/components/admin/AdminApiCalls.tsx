@@ -118,7 +118,7 @@ export function AdminApiCalls() {
       case "success":
       case "succeeded":
         return (
-          <Badge variant="outline" className="text-[#49cdbf] border-[#49cdbf] text-xs">
+          <Badge variant="outline" className="text-[hsl(var(--success))] border-[hsl(var(--success))] text-xs">
             <CheckCircle className="h-3 w-3 mr-1" />
             Success
           </Badge>
@@ -152,12 +152,12 @@ export function AdminApiCalls() {
   const getProviderColor = (provider: string) => {
     switch (provider.toLowerCase()) {
       case "openrouter": return "text-primary";
-      case "lovable_ai": return "text-[hsl(170,45%,55%)]";
-      case "replicate": return "text-[hsl(170,55%,65%)]";
-      case "replicate_fallback": return "text-[hsl(30,70%,50%)]";
-      case "hypereal": return "text-[hsl(170,55%,40%)]";
-      case "google_tts": return "text-[hsl(170,30%,50%)]";
-      case "elevenlabs": return "text-[hsl(170,45%,55%)]";
+      case "lovable_ai": return "text-secondary";
+      case "replicate": return "text-primary";
+      case "replicate_fallback": return "text-[hsl(var(--gold))]";
+      case "hypereal": return "text-primary";
+      case "google_tts": return "text-secondary";
+      case "elevenlabs": return "text-secondary";
       default: return "text-muted-foreground";
     }
   };
@@ -165,8 +165,8 @@ export function AdminApiCalls() {
   const getCategoryColor = (category: string) => {
     switch (category) {
       case "system_error": return "text-destructive";
-      case "system_warning": return "text-yellow-500";
-      case "user_activity": return "text-[hsl(170,55%,65%)]";
+      case "system_warning": return "text-[hsl(var(--warning))]";
+      case "user_activity": return "text-primary";
       default: return "text-muted-foreground";
     }
   };

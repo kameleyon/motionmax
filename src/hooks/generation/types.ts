@@ -51,6 +51,7 @@ export interface GenerationState {
   currentScene: number;
   totalImages: number;
   completedImages: number;
+  etaSeconds?: number; // Estimated time remaining in seconds
   isGenerating: boolean;
   projectId?: string;
   generationId?: string;

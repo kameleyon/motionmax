@@ -26,13 +26,13 @@ interface GenerationStats {
 
 type TimePeriod = "7d" | "30d" | "90d" | "all";
 
-// Teal-based color palette
+// Aqua-based color palette using design tokens
 const STATUS_COLORS = {
-  pending: "hsl(170, 40%, 55%)", // Muted teal
-  processing: "hsl(170, 55%, 45%)", // Medium teal
-  complete: "hsl(170, 55%, 54%)", // Primary teal #49cdbf
-  error: "hsl(0, 70%, 55%)", // Keep red for errors for visibility
-  deleted: "hsl(200, 8%, 50%)", // Neutral gray
+  pending: "hsl(var(--muted-foreground))", // Muted
+  processing: "hsl(var(--secondary))", // Light aqua
+  complete: "hsl(var(--primary))", // Primary aqua #11C4D0
+  error: "hsl(var(--destructive))", // Red for errors
+  deleted: "hsl(var(--muted-foreground))", // Neutral gray
 };
 
 export function AdminGenerations() {
@@ -172,11 +172,11 @@ export function AdminGenerations() {
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Processing</CardTitle>
             <div className="p-2 rounded-lg bg-primary/10 shadow-sm">
-              <Clock className="h-4 w-4 text-[hsl(170,55%,45%)]" />
+              <Clock className="h-4 w-4 text-secondary" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-[hsl(170,55%,45%)]">
+            <div className="text-2xl font-bold text-secondary">
               {(data?.byStatus?.processing || 0) + (data?.byStatus?.pending || 0)}
             </div>
           </CardContent>

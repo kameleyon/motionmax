@@ -18,6 +18,7 @@ import { CharacterDescriptionInput } from "./CharacterDescriptionInput";
 import { CharacterConsistencyToggle } from "./CharacterConsistencyToggle";
 import { GenerationProgress } from "./GenerationProgress";
 import { CinematicResult } from "./CinematicResult";
+import { CreditCostDisplay } from "./CreditCostDisplay";
 
 import { useGenerationPipeline } from "@/hooks/useGenerationPipeline";
 import { getUserFriendlyErrorMessage } from "@/lib/errorMessages";
@@ -420,6 +421,13 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                       onBrandMarkTextChange={setBrandMarkText}
                     />
                   </div>
+
+                  {/* Credit Cost Display */}
+                  <CreditCostDisplay
+                    projectType="cinematic"
+                    length={length}
+                    creditsBalance={creditsBalance}
+                  />
 
                   {/* Generate Button */}
                   <motion.div whileHover={{ scale: canGenerate ? 1.01 : 1 }} whileTap={{ scale: canGenerate ? 0.99 : 1 }}>

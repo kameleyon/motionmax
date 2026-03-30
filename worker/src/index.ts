@@ -17,6 +17,79 @@ import { writeSystemLog } from "./lib/logger.js";
 const activeJobs = new Set<string>();
 const MAX_CONCURRENT_JOBS = parseInt(process.env.WORKER_CONCURRENCY || "6", 10);
 
+/* ---- Credit refund helper ---- */
+const CREDIT_COSTS = {
+  short: 1,
+  brief: 2,
+  presentation: 4,
+  smartflow: 1,
+  cinematic: 12,
+} as const;
+
+async function refundCreditsOnFailure(job: Job) {
+  if (!job.user_id) {
+    console.log(`[Refund] Skipping refund for job ${job.id} - no user_id`);
+    return;
+  }
+
+  try {
+    const payload = job.payload || {};
+    const projectType = payload.projectType || "doc2video";
+    const length = payload.length || "brief";
+
+    // Calculate credits to refund
+    let creditsToRefund = 0;
+    if (projectType === "smartflow") {
+      creditsToRefund = CREDIT_COSTS.smartflow;
+    } else if (projectType === "cinematic") {
+      creditsToRefund = CREDIT_COSTS.cinematic;
+    } else if (length === "short") {
+      creditsToRefund = CREDIT_COSTS.short;
+    } else if (length === "presentation") {
+      creditsToRefund = CREDIT_COSTS.presentation;
+    } else {
+      creditsToRefund = CREDIT_COSTS.brief;
+    }
+
+    console.log(`[Refund] Attempting to refund ${creditsToRefund} credits for user ${job.user_id} (job ${job.id}, type ${projectType}/${length})`);
+
+    const { data: refundSuccess, error: rpcError } = await supabase.rpc(
+      "refund_credits_securely",
+      {
+        p_user_id: job.user_id,
+        p_amount: creditsToRefund,
+        p_description: `Refund for failed generation (job ${job.id})`,
+      }
+    );
+
+    if (rpcError || !refundSuccess) {
+      console.error(`[Refund] Failed to refund credits for user ${job.user_id}:`, rpcError?.message);
+      await writeSystemLog({
+        jobId: job.id,
+        projectId: job.project_id ?? undefined,
+        userId: job.user_id,
+        category: "system_warning",
+        eventType: "refund_failed",
+        message: `Failed to refund ${creditsToRefund} credits for job ${job.id}`,
+        details: { error: rpcError?.message }
+      });
+    } else {
+      console.log(`[Refund] Successfully refunded ${creditsToRefund} credits for user ${job.user_id}`);
+      await writeSystemLog({
+        jobId: job.id,
+        projectId: job.project_id ?? undefined,
+        userId: job.user_id,
+        category: "system_info",
+        eventType: "credits_refunded",
+        message: `Refunded ${creditsToRefund} credits for failed job ${job.id}`,
+        details: { credits: creditsToRefund, projectType, length }
+      });
+    }
+  } catch (err) {
+    console.error(`[Refund] Exception while refunding credits for job ${job.id}:`, err);
+  }
+}
+
 async function processJob(job: Job) {
   activeJobs.add(job.id);
 
@@ -111,7 +184,7 @@ async function processJob(job: Job) {
 
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-    
+
     await writeSystemLog({
       jobId: job.id,
       projectId: job.project_id ?? undefined,
@@ -121,7 +194,10 @@ async function processJob(job: Job) {
       message: `Worker failed processing job ${job.id}: ${errorMsg}`,
       details: { stack: error instanceof Error ? error.stack : null }
     });
-    
+
+    // Refund credits for failed generation
+    await refundCreditsOnFailure(job);
+
     await supabase
       .from('video_generation_jobs')
       .update({

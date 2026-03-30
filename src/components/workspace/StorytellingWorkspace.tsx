@@ -23,6 +23,7 @@ import { GenerationProgress } from "./GenerationProgress";
 import { GenerationResult } from "./GenerationResult";
 import { CharacterConsistencyToggle } from "./CharacterConsistencyToggle";
 import { CharacterPreview, type CharacterData } from "./CharacterPreview";
+import { CreditCostDisplay } from "./CreditCostDisplay";
 import { useGenerationPipeline } from "@/hooks/useGenerationPipeline";
 
 import { getUserFriendlyErrorMessage } from "@/lib/errorMessages";
@@ -451,6 +452,13 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
                       onBrandMarkTextChange={setBrandMarkText}
                     />
                   </div>
+
+                  {/* Credit Cost Display */}
+                  <CreditCostDisplay
+                    projectType="storytelling"
+                    length={length}
+                    creditsBalance={creditsBalance}
+                  />
 
                   {/* Generate Button */}
                   <motion.div whileHover={{ scale: canGenerate ? 1.01 : 1 }} whileTap={{ scale: canGenerate ? 0.99 : 1 }}>

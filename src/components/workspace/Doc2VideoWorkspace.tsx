@@ -17,6 +17,7 @@ import { CharacterDescriptionInput } from "./CharacterDescriptionInput";
 import { CharacterConsistencyToggle } from "./CharacterConsistencyToggle";
 import { GenerationProgress } from "./GenerationProgress";
 import { GenerationResult } from "./GenerationResult";
+import { CreditCostDisplay } from "./CreditCostDisplay";
 import { useGenerationPipeline } from "@/hooks/useGenerationPipeline";
 import { useAdminLogs } from "@/hooks/useAdminLogs";
 import { AdminLogsPanel } from "./AdminLogsPanel";
@@ -435,6 +436,13 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
                       onBrandMarkTextChange={setBrandMarkText}
                     />
                   </div>
+
+                  {/* Credit Cost Display */}
+                  <CreditCostDisplay
+                    projectType="doc2video"
+                    length={length}
+                    creditsBalance={creditsBalance}
+                  />
 
                   {/* Generate Button */}
                   <motion.div whileHover={{ scale: canGenerate ? 1.01 : 1 }} whileTap={{ scale: canGenerate ? 0.99 : 1 }}>

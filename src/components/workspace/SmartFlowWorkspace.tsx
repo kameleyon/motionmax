@@ -12,6 +12,7 @@ import { FormatSelector, type VideoFormat } from "./FormatSelector";
 import { VoiceSelector, type VoiceSelection } from "./VoiceSelector";
 import { LanguageSelector, type Language } from "./LanguageSelector";
 import { GenerationProgress } from "./GenerationProgress";
+import { CreditCostDisplay } from "./CreditCostDisplay";
 
 import { SmartFlowStyleSelector, type SmartFlowStyle } from "./SmartFlowStyleSelector";
 import { SmartFlowResult } from "./SmartFlowResult";
@@ -377,6 +378,13 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
                       )}
                     </div>
                   </div>
+
+                  {/* Credit Cost Display */}
+                  <CreditCostDisplay
+                    projectType="smartflow"
+                    length="smartflow"
+                    creditsBalance={creditsBalance}
+                  />
 
                   {/* Generate Button */}
                   <motion.div whileHover={{ scale: canGenerate ? 1.01 : 1 }} whileTap={{ scale: canGenerate ? 0.99 : 1 }}>

@@ -31,6 +31,7 @@ import {
   getVideoExportLogs,
 } from "@/lib/videoExportDebug";
 import { SceneEditModal } from "./SceneEditModal";
+import { SceneVersionHistory } from "./SceneVersionHistory";
 import { ResultActionBar } from "./ResultActionBar";
 import { toast } from "sonner";
 
@@ -69,6 +70,7 @@ export function GenerationResult({
   const [isPlayingAll, setIsPlayingAll] = useState(false);
   const [sceneProgress, setSceneProgress] = useState(0);
   const [editingSceneIndex, setEditingSceneIndex] = useState<number | null>(null);
+  const [versionHistorySceneIndex, setVersionHistorySceneIndex] = useState<number | null>(null);
   const [showExportLogs, setShowExportLogs] = useState(false);
   const [exportLogsVersion, setExportLogsVersion] = useState(0);
   const playAllAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -803,13 +805,34 @@ export function GenerationResult({
         <SceneEditModal
           scene={scenes[editingSceneIndex]}
           sceneIndex={editingSceneIndex}
+          generationId={generationId}
           format={format}
           onClose={() => setEditingSceneIndex(null)}
           onRegenerateAudio={regenerateAudio}
           onRegenerateImage={regenerateImage}
           onUndoRegeneration={undoRegeneration}
+          onShowVersionHistory={(sceneIdx) => {
+            setEditingSceneIndex(null);
+            setVersionHistorySceneIndex(sceneIdx);
+          }}
           isRegenerating={isRegenerating}
           regeneratingType={regeneratingType}
+        />
+      )}
+
+      {/* Version History Modal */}
+      {versionHistorySceneIndex !== null && generationId && projectId && scenes[versionHistorySceneIndex] && (
+        <SceneVersionHistory
+          generationId={generationId}
+          projectId={projectId}
+          sceneIndex={versionHistorySceneIndex}
+          sceneName={`Scene ${scenes[versionHistorySceneIndex].number || versionHistorySceneIndex + 1}`}
+          onClose={() => setVersionHistorySceneIndex(null)}
+          onVersionRestored={() => {
+            setVersionHistorySceneIndex(null);
+            // Reload scenes - in a real app you'd refetch from backend
+            toast({ title: "Version Restored", description: "Please refresh to see the changes" });
+          }}
         />
       )}
     </div>

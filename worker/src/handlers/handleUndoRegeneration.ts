@@ -24,6 +24,7 @@ export async function handleUndoRegeneration(
     message: `Undo regeneration started for scene ${sceneIndex}`,
   });
 
+  // Fetch current generation scenes
   const { data: generation, error: genError } = await supabase
     .from("generations")
     .select("scenes")
@@ -41,26 +42,55 @@ export async function handleUndoRegeneration(
     throw new Error(`Scene ${sceneIndex} not found`);
   }
 
-  const history = scene._history || [];
+  // Get the most recent version from scene_versions table
+  const { data: versions, error: versionsError } = await supabase
+    .from("scene_versions")
+    .select("*")
+    .eq("generation_id", generationId)
+    .eq("scene_index", sceneIndex)
+    .order("version_number", { ascending: false })
+    .limit(1);
 
-  if (history.length === 0) {
-    throw new Error("Nothing to undo");
+  if (versionsError) {
+    throw new Error(`Failed to fetch version history: ${versionsError.message}`);
   }
 
-  const previous = history.pop();
+  if (!versions || versions.length === 0) {
+    throw new Error("Nothing to undo - no version history found");
+  }
+
+  const previousVersion = versions[0];
 
   // Restore previous state
   scenes[sceneIndex] = {
     ...scene,
-    ...previous,
-    _history: history,
-    timestamp: undefined, // remove timestamp from restored fields
+    voiceover: previousVersion.voiceover || scene.voiceover,
+    visualPrompt: previousVersion.visual_prompt || scene.visualPrompt,
+    imageUrl: previousVersion.image_url || scene.imageUrl,
+    imageUrls: previousVersion.image_urls ? JSON.parse(previousVersion.image_urls as any) : scene.imageUrls,
+    audioUrl: previousVersion.audio_url || scene.audioUrl,
+    duration: previousVersion.duration || scene.duration,
+    videoUrl: previousVersion.video_url || null, // Clear video if restoring old image/audio
   };
 
+  // Update the generation
   await supabase
     .from("generations")
     .update({ scenes })
     .eq("id", generationId);
+
+  // Delete the version we just restored (it becomes the current state)
+  await supabase
+    .from("scene_versions")
+    .delete()
+    .eq("id", previousVersion.id);
+
+  // Count remaining versions
+  const { count: remainingCount } = await supabase
+    .from("scene_versions")
+    .select("id", { count: "exact", head: true })
+    .eq("generation_id", generationId)
+    .eq("scene_index", sceneIndex);
 
   await writeSystemLog({
     jobId,
@@ -69,8 +99,8 @@ export async function handleUndoRegeneration(
     generationId,
     category: "system_info",
     eventType: "undo_regeneration_completed",
-    message: `Undo regeneration completed for scene ${sceneIndex}`,
+    message: `Undo regeneration completed for scene ${sceneIndex} (${remainingCount || 0} versions remaining)`,
   });
 
-  return { success: true, scene: scenes[sceneIndex], historyRemaining: history.length };
+  return { success: true, scene: scenes[sceneIndex], historyRemaining: remainingCount || 0 };
 }

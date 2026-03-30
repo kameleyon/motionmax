@@ -30,7 +30,6 @@ interface RegenerateImageResult {
   imageIndex: number;
   imageUrl: string;
   imageUrls: (string | null)[];
-  _history: unknown[];
 }
 
 // ── Handler ────────────────────────────────────────────────────────
@@ -106,16 +105,19 @@ export async function handleRegenerateImage(
     imageUrl = await generateImage(fullPrompt, hyperealApiKey, replicateApiKey, format, projectId);
   }
 
-  // Snapshot history for undo
-  const history = Array.isArray(scene._history) ? [...scene._history] : [];
-  history.push({
-    timestamp: new Date().toISOString(),
-    imageUrl: scene.imageUrl,
-    imageUrls: scene.imageUrls,
+  // Save current state as a version in scene_versions table
+  await supabase.rpc("save_scene_version", {
+    p_generation_id: generationId,
+    p_scene_index: sceneIndex,
+    p_voiceover: scene.voiceover || null,
+    p_visual_prompt: scene.visualPrompt || null,
+    p_image_url: scene.imageUrl || null,
+    p_image_urls: scene.imageUrls ? JSON.stringify(scene.imageUrls) : null,
+    p_audio_url: scene.audioUrl || null,
+    p_duration: scene.duration || null,
+    p_video_url: scene.videoUrl || null,
+    p_change_type: "image",
   });
-  // Limit history to 5 entries
-  if (history.length > 5) history.shift();
-  scenes[sceneIndex]._history = history;
 
   // Patch the scene's imageUrl / imageUrls array
   const existingUrls: (string | null)[] =
@@ -158,6 +160,5 @@ export async function handleRegenerateImage(
     imageIndex: targetImageIndex,
     imageUrl,
     imageUrls: scenes[sceneIndex].imageUrls,
-    _history: scenes[sceneIndex]._history || [],
   };
 }

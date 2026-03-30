@@ -1,21 +1,24 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Save, RefreshCw, Loader2, Wand2, Volume2, Image as ImageIcon, ChevronLeft, ChevronRight, Undo2 } from "lucide-react";
+import { X, Save, RefreshCw, Loader2, Wand2, Volume2, Image as ImageIcon, ChevronLeft, ChevronRight, Undo2, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import type { Scene } from "@/hooks/useGenerationPipeline";
+import { useSceneVersionCount } from "@/hooks/useSceneVersions";
 
 interface SceneEditModalProps {
   scene: Scene;
   sceneIndex: number;
+  generationId?: string;
   format: "landscape" | "portrait" | "square";
   onClose: () => void;
   onRegenerateAudio: (sceneIndex: number, newVoiceover: string) => Promise<void>;
   onRegenerateImage: (sceneIndex: number, imageModification: string, imageIndex?: number) => Promise<void>;
   onUndoRegeneration?: (sceneIndex: number) => Promise<void>;
+  onShowVersionHistory?: (sceneIndex: number) => void;
   isRegenerating: boolean;
   regeneratingType: "audio" | "image" | null;
 }
@@ -23,11 +26,13 @@ interface SceneEditModalProps {
 export function SceneEditModal({
   scene,
   sceneIndex,
+  generationId,
   format,
   onClose,
   onRegenerateAudio,
   onRegenerateImage,
   onUndoRegeneration,
+  onShowVersionHistory,
   isRegenerating,
   regeneratingType,
 }: SceneEditModalProps) {
@@ -35,6 +40,8 @@ export function SceneEditModal({
   const [imageModification, setImageModification] = useState("");
   const [hasScriptChanges, setHasScriptChanges] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+
+  const { data: versionCount = 0 } = useSceneVersionCount(generationId, sceneIndex);
 
   const aspectClass =
     format === "portrait" ? "aspect-[9/16]" : format === "square" ? "aspect-square" : "aspect-video";
@@ -77,7 +84,7 @@ export function SceneEditModal({
     setSelectedImageIndex((prev) => (prev < currentImages.length - 1 ? prev + 1 : 0));
   };
 
-  const hasHistory = Array.isArray((scene as any)._history) && (scene as any)._history.length > 0;
+  const hasHistory = versionCount > 0;
 
   return (
     <AnimatePresence>
@@ -99,21 +106,37 @@ export function SceneEditModal({
           <Card className="bg-card border-border overflow-hidden rounded-xl flex flex-col max-h-[90vh]">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-border shrink-0">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
                 <h2 className="text-lg font-semibold text-foreground">
                   Edit Scene {scene.number}
                 </h2>
-                {hasHistory && onUndoRegeneration && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleUndo}
-                    disabled={isRegenerating}
-                    className="gap-2"
-                  >
-                    <Undo2 className="h-4 w-4" />
-                    Undo
-                  </Button>
+                {hasHistory && (
+                  <>
+                    {onUndoRegeneration && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleUndo}
+                        disabled={isRegenerating}
+                        className="gap-2"
+                      >
+                        <Undo2 className="h-4 w-4" />
+                        Undo
+                      </Button>
+                    )}
+                    {onShowVersionHistory && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onShowVersionHistory(sceneIndex)}
+                        disabled={isRegenerating}
+                        className="gap-2"
+                      >
+                        <History className="h-4 w-4" />
+                        History ({versionCount})
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
               <Button

@@ -55,6 +55,7 @@ import { useCinematicRegeneration } from "@/hooks/useCinematicRegeneration";
 import { useVideoExport } from "@/hooks/useVideoExport";
 import { cn } from "@/lib/utils";
 import { CinematicEditModal } from "./CinematicEditModal";
+import { SceneVersionHistory } from "./SceneVersionHistory";
 import {
   appendVideoExportLog,
   clearVideoExportLogs,
@@ -160,6 +161,7 @@ export function CinematicResult({
 
   // Edit dialog
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [versionHistorySceneIndex, setVersionHistorySceneIndex] = useState<number | null>(null);
   const [editVoiceover, setEditVoiceover] = useState("");
   const [editVisualPrompt, setEditVisualPrompt] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
@@ -989,6 +991,7 @@ export function CinematicResult({
         <CinematicEditModal
           scene={currentScene}
           sceneIndex={currentSceneIndex}
+          generationId={generationId}
           format={format}
           onClose={() => setIsEditOpen(false)}
           onRegenerateAudio={regenerateAudio}
@@ -996,8 +999,27 @@ export function CinematicResult({
           onApplyImageEdit={applyImageEdit}
           onRegenerateImage={regenerateImage}
           onUndoRegeneration={undoRegeneration}
+          onShowVersionHistory={(sceneIdx) => {
+            setIsEditOpen(false);
+            setVersionHistorySceneIndex(sceneIdx);
+          }}
           isRegenerating={!!isRegenerating && isRegenerating.sceneIndex === currentSceneIndex}
           regeneratingType={isRegenerating?.sceneIndex === currentSceneIndex ? isRegenerating.type : null}
+        />
+      )}
+
+      {/* Version History Modal */}
+      {versionHistorySceneIndex !== null && generationId && projectId && localScenes[versionHistorySceneIndex] && (
+        <SceneVersionHistory
+          generationId={generationId}
+          projectId={projectId}
+          sceneIndex={versionHistorySceneIndex}
+          sceneName={`Scene ${localScenes[versionHistorySceneIndex].number || versionHistorySceneIndex + 1}`}
+          onClose={() => setVersionHistorySceneIndex(null)}
+          onVersionRestored={() => {
+            setVersionHistorySceneIndex(null);
+            toast({ title: "Version Restored", description: "Please refresh to see the changes" });
+          }}
         />
       )}
 

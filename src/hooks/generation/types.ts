@@ -27,7 +27,6 @@ export interface Scene {
   videoUrl?: string;
   title?: string;
   subtitle?: string;
-  _history?: unknown[];
 }
 
 export interface CostTracking {

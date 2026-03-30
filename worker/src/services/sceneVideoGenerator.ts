@@ -61,7 +61,7 @@ export interface SceneVideoResult {
 function buildVideoPrompt(visualPrompt: string): string {
   return `${visualPrompt}
 
-Cinematic motion: slow camera movement, subtle parallax, atmospheric dynamics.
+Cinematic motion: steady camera movement at natural pace, subtle parallax, atmospheric dynamics.
 Focus on camera motion (dolly, pan, tilt) and environmental motion (wind, particles, light shifts).
 Maintain stable composition. No rapid cuts or jarring transitions.`;
 }
@@ -93,8 +93,10 @@ export async function generateSceneVideo(
   } = request;
 
   const startTime = Date.now();
-  const videoPrompt = buildVideoPrompt(prompt);
-  const mode = endImageUrl ? "transition (start→end)" : "scene";
+  const isTransition = !!endImageUrl;
+  // Transitions use the raw morphing prompt — do NOT append scene video boilerplate
+  const videoPrompt = isTransition ? prompt : buildVideoPrompt(prompt);
+  const mode = isTransition ? "transition (start→end)" : "scene";
 
   console.log(
     `[SceneVideoGen] Scene ${sceneIndex}: generating ${duration}s AI video — ${mode} (${format})`
@@ -108,6 +110,7 @@ export async function generateSceneVideo(
         imageUrl,
         endImageUrl,
         format,
+        duration,
       }),
       new Promise<GrokVideoResult>((_, reject) =>
         setTimeout(

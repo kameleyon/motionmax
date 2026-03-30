@@ -122,13 +122,28 @@ async function uploadFrameForAi(
 
 // ── Morphing Prompt Builder ──────────────────────────────────────────
 
+/**
+ * Strip camera direction prefixes from visual prompts.
+ * Scene prompts often start with "Camera trucks left through..." or
+ * "Whip pan from darkness to..." — these are instructions for the
+ * scene's own video, not descriptions of the scene's visual content.
+ */
+function stripCameraDirections(prompt: string): string {
+  return prompt
+    .replace(/^(Camera\s+\w+\s+(slowly\s+)?(left|right|up|down|forward|backward)\s+(through|from|to|into|over)\s+)/i, "")
+    .replace(/^(Whip\s+pan\s+(from\s+\w+\s+to\s+)?)/i, "")
+    .replace(/^(Extreme\s+slow\s+rack\s+focus:\s*)/i, "")
+    .replace(/^(Close-up|Wide\s+shot|Medium\s+shot|Tracking\s+shot|Dolly\s+shot|Aerial\s+shot)[:\s]+/i, "")
+    .trim();
+}
+
 function buildMorphingPrompt(
   fromPrompt: string | undefined,
   toPrompt: string | undefined,
   duration: number
 ): string {
-  const fromDesc = fromPrompt ? fromPrompt.substring(0, 200) : "the current scene";
-  const toDesc = toPrompt ? toPrompt.substring(0, 200) : "the next scene";
+  const fromDesc = fromPrompt ? stripCameraDirections(fromPrompt).substring(0, 150) : "the current scene";
+  const toDesc = toPrompt ? stripCameraDirections(toPrompt).substring(0, 150) : "the next scene";
 
   return (
     `A continuous, single-take fly-through shot over ${duration} seconds. The camera is in constant dynamic motion, panning and moving forward. ` +

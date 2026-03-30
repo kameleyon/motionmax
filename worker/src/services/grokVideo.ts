@@ -19,6 +19,8 @@ export interface GrokVideoInput {
   /** End-state image for morphing transitions (passed as end_image to API) */
   endImageUrl?: string;
   format: string;          // "landscape" | "portrait" | "square"
+  /** Video duration in seconds (default 10) */
+  duration?: number;
 }
 
 export interface GrokVideoResult {
@@ -48,20 +50,21 @@ export async function generateGrokVideo(
   const aspectRatio = mapFormatToAspectRatio(input.format);
 
   const hasEndImage = !!input.endImageUrl;
+  const videoDuration = input.duration || 10;
   if (hasEndImage) {
-    console.log(`[GrokVideo] Transition mode: start + end image provided`);
+    console.log(`[GrokVideo] Transition mode: start + end image, ${videoDuration}s`);
   }
 
-  // ── 1. Try Hypereal Grok (primary — 1080P, 10s) ──────────────
+  // ── 1. Try Hypereal Grok (primary — 1080P) ──────────────
   if (hyperealApiKey && input.imageUrl) {
-    console.log(`[GrokVideo] Trying Hypereal Grok — ${aspectRatio}, 10s, 1080P`);
+    console.log(`[GrokVideo] Trying Hypereal Grok — ${aspectRatio}, ${videoDuration}s, 1080P`);
     try {
       const outputUrl = await hyperealGrokVideo(
         input.imageUrl,
         input.prompt,
         hyperealApiKey,
         aspectRatio,
-        10,
+        videoDuration,
         "1080P",
         input.endImageUrl
       );
@@ -74,16 +77,16 @@ export async function generateGrokVideo(
     }
   }
 
-  // ── 2. Fallback: Replicate Grok (720p, 10s) ──────────────────
+  // ── 2. Fallback: Replicate Grok (720p) ──────────────────
   if (replicateApiKey) {
-    console.log(`[GrokVideo] Trying Replicate Grok fallback — ${aspectRatio}, 10s, 720p`);
+    console.log(`[GrokVideo] Trying Replicate Grok fallback — ${aspectRatio}, ${videoDuration}s, 720p`);
     try {
       const url = await replicateGrokVideo(
         input.prompt,
         input.imageUrl || null,
         replicateApiKey,
         aspectRatio,
-        10,
+        videoDuration,
         input.endImageUrl || null
       );
       if (url) {

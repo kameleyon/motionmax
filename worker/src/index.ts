@@ -14,9 +14,37 @@ import { handleUndoRegeneration } from "./handlers/handleUndoRegeneration.js";
 import { writeSystemLog } from "./lib/logger.js";
 import { startHealthServer, stopHealthServer } from "./healthServer.js";
 
-/* ---- Concurrency guard: prevent re-processing the same job ---- */
+/* ---- Auto-tune concurrency based on system resources ---- */
+import os from "os";
+
+function detectOptimalConcurrency(): number {
+  const envOverride = process.env.WORKER_CONCURRENCY;
+  if (envOverride) return parseInt(envOverride, 10);
+
+  const cpuCount = os.cpus().length;
+  const totalMemMb = Math.round(os.totalmem() / 1048576);
+
+  // Heuristic: allow more concurrency with more CPUs/RAM
+  // Generation jobs (LLM calls) are I/O-bound → can run many in parallel
+  // Export jobs (FFmpeg) are CPU-bound → limited by CPU count
+  // Mix: use min(cpuCount * 4, memMb / 256) to avoid OOM while maximizing throughput
+  const byMemory = Math.floor(totalMemMb / 256);  // ~256MB per concurrent job
+  const byCpu = cpuCount * 4;                       // I/O-bound jobs can exceed CPU count
+  const optimal = Math.max(4, Math.min(byCpu, byMemory, 24)); // floor 4, cap 24
+
+  console.log(
+    `[Worker] Auto-tuned concurrency: ${optimal} (CPUs=${cpuCount}, RAM=${totalMemMb}MB, byCPU=${byCpu}, byMem=${byMemory})`
+  );
+  return optimal;
+}
+
 const activeJobs = new Set<string>();
-const MAX_CONCURRENT_JOBS = parseInt(process.env.WORKER_CONCURRENCY || "6", 10);
+const MAX_CONCURRENT_JOBS = detectOptimalConcurrency();
+
+/* ---- Queue depth monitoring ---- */
+let queueDepthAlertThreshold = MAX_CONCURRENT_JOBS * 2; // alert when queue > 2x capacity
+let lastQueueAlert = 0;
+const QUEUE_ALERT_COOLDOWN_MS = 5 * 60 * 1000; // don't spam alerts more than every 5 min
 
 /* ---- Graceful shutdown state ---- */
 let isShuttingDown = false;
@@ -182,7 +210,7 @@ async function processJob(job: Job) {
     // Strip restart bookkeeping before persisting
     const { _restartCount: _rc, ...cleanPayload } = finalPayload;
 
-    await (supabase as any)
+    const { error: completeError } = await (supabase as any)
       .from('video_generation_jobs')
       .update({
         status: 'completed',
@@ -193,25 +221,44 @@ async function processJob(job: Job) {
       })
       .eq('id', job.id);
 
+    if (completeError) {
+      console.error(`[Worker] Failed to mark job ${job.id} as completed:`, completeError.message);
+      // Retry once — this is critical, otherwise the frontend polls forever
+      await supabase
+        .from('video_generation_jobs')
+        .update({ status: 'completed', progress: 100, result: cleanPayload, updated_at: new Date().toISOString() })
+        .eq('id', job.id);
+    }
+
     totalJobsProcessed++;
 
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
 
-    await writeSystemLog({
-      jobId: job.id,
-      projectId: job.project_id ?? undefined,
-      userId: job.user_id,
-      category: "system_error",
-      eventType: "job_failed",
-      message: `Worker failed processing job ${job.id}: ${errorMsg}`,
-      details: { stack: error instanceof Error ? error.stack : null }
-    });
+    // Log the failure — wrapped in try/catch to guarantee we reach the status update
+    try {
+      await writeSystemLog({
+        jobId: job.id,
+        projectId: job.project_id ?? undefined,
+        userId: job.user_id,
+        category: "system_error",
+        eventType: "job_failed",
+        message: `Worker failed processing job ${job.id}: ${errorMsg}`,
+        details: { stack: error instanceof Error ? error.stack : null }
+      });
+    } catch (logErr) {
+      console.error(`[Worker] Failed to write failure log for ${job.id}:`, logErr);
+    }
 
     // Refund credits for failed generation
-    await refundCreditsOnFailure(job);
+    try {
+      await refundCreditsOnFailure(job);
+    } catch (refundErr) {
+      console.error(`[Worker] Refund failed for ${job.id}:`, refundErr);
+    }
 
-    await supabase
+    // CRITICAL: Mark the job as failed — if this doesn't happen, the frontend polls forever
+    const { error: failError } = await supabase
       .from('video_generation_jobs')
       .update({
         status: 'failed',
@@ -219,6 +266,16 @@ async function processJob(job: Job) {
         updated_at: new Date().toISOString()
       })
       .eq('id', job.id);
+
+    if (failError) {
+      console.error(`[Worker] CRITICAL: Failed to mark job ${job.id} as failed:`, failError.message);
+      // Last resort retry
+      await supabase
+        .from('video_generation_jobs')
+        .update({ status: 'failed', error_message: errorMsg, updated_at: new Date().toISOString() })
+        .eq('id', job.id)
+        .then(() => {}, () => {});
+    }
 
     totalJobsFailed++;
   } finally {
@@ -272,6 +329,30 @@ async function pollQueue() {
     const jobsToProcess = allJobs.slice(0, availableSlots);
 
     lastPollAt = new Date().toISOString();
+
+    // Queue depth monitoring — detect when queue is backing up
+    const totalPending = allJobs.length;
+    if (totalPending > queueDepthAlertThreshold && Date.now() - lastQueueAlert > QUEUE_ALERT_COOLDOWN_MS) {
+      lastQueueAlert = Date.now();
+      const mem = process.memoryUsage();
+      console.warn(
+        `[Worker] ⚠️ QUEUE DEPTH ALERT: ${totalPending} pending jobs (threshold: ${queueDepthAlertThreshold}), ` +
+        `active: ${activeJobs.size}/${MAX_CONCURRENT_JOBS}, RSS: ${Math.round(mem.rss / 1048576)}MB`
+      );
+      writeSystemLog({
+        category: "system_warning",
+        eventType: "queue_depth_alert",
+        message: `Queue depth ${totalPending} exceeds threshold ${queueDepthAlertThreshold} — consider scaling workers`,
+        details: {
+          pendingJobs: totalPending,
+          activeJobs: activeJobs.size,
+          maxConcurrent: MAX_CONCURRENT_JOBS,
+          rssMb: Math.round(mem.rss / 1048576),
+          cpuCount: os.cpus().length,
+          totalMemMb: Math.round(os.totalmem() / 1048576),
+        },
+      }).catch(() => {});
+    }
 
     const shouldLog = pollCount % 12 === 1 || jobsToProcess.length > 0 || exportError || genError;
     if (shouldLog) {
@@ -512,7 +593,7 @@ startHealthServer(() => ({
   totalJobsFailed,
 }));
 
-console.log(`[Worker] MotionMax Render Worker started. Polling every ${POLL_INTERVAL_MS}ms.`);
+console.log(`[Worker] MotionMax Render Worker started. Concurrency=${MAX_CONCURRENT_JOBS}, polling every ${POLL_INTERVAL_MS}ms.`);
 console.log(`[Worker] 🔑 HYPEREAL_API_KEY: ${maskKey(process.env.HYPEREAL_API_KEY)}`);
 console.log(`[Worker] 🔑 REPLICATE_API_KEY: ${maskKey(process.env.REPLICATE_API_KEY)}`);
 console.log(`[Worker] 🔑 OPENROUTER_API_KEY: ${maskKey(process.env.OPENROUTER_API_KEY)}`);

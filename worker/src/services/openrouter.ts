@@ -58,8 +58,18 @@ export async function callOpenRouterLLM(
     requestBody.response_format = { type: "json_object" };
   }
 
+  // Scale timeout with token count: 5 min base + 1 min per 2000 tokens above 4000
+  const baseTimeoutMs = 5 * 60 * 1000;
+  const extraTokens = Math.max(0, options.maxTokens - 4000);
+  const extraTimeoutMs = Math.ceil(extraTokens / 2000) * 60 * 1000;
+  const totalTimeoutMs = baseTimeoutMs + extraTimeoutMs;
+
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000); // 5 min safety timeout
+  const timeoutId = setTimeout(() => controller.abort(), totalTimeoutMs);
+
+  if (totalTimeoutMs > baseTimeoutMs) {
+    console.log(`[OpenRouter] Extended timeout: ${Math.round(totalTimeoutMs / 1000)}s (maxTokens=${options.maxTokens})`);
+  }
 
   let res: Response;
   try {
@@ -75,7 +85,7 @@ export async function callOpenRouterLLM(
   } catch (err: any) {
     clearTimeout(timeoutId);
     if (err.name === "AbortError") {
-      throw new Error(`OpenRouter request timed out after 5 minutes (model: ${model})`);
+      throw new Error(`OpenRouter request timed out after ${Math.round(totalTimeoutMs / 1000)}s (model: ${model}, maxTokens: ${options.maxTokens})`);
     }
     throw err;
   }

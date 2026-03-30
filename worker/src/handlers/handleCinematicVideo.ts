@@ -155,10 +155,10 @@ export async function handleCinematicVideo(
   const scene = scenes[sceneIndex];
   if (!scene) throw new Error(`Scene ${sceneIndex} not found`);
 
-  // ── Fetch project data (style, character, content context) ────────
+  // ── Fetch project data (style, character, content context, language) ──
   const { data: project } = await supabase
     .from("projects")
-    .select("format, style, character_description, presenter_focus, content")
+    .select("format, style, character_description, presenter_focus, content, voice_inclination")
     .eq("id", projectId)
     .single();
 
@@ -167,6 +167,7 @@ export async function handleCinematicVideo(
   const characterDescription = project?.character_description || "";
   const presenterFocus = project?.presenter_focus || "";
   const contentContext = project?.content || "";
+  const language = project?.voice_inclination || "en";
 
   // Get the full style prompt (e.g., "Photorealistic cinematic photography...")
   const stylePrompt = getStylePrompt(style, undefined, "cinematic");
@@ -239,6 +240,7 @@ export async function handleCinematicVideo(
     styleName: style,
     characterBible,
     contentContext,
+    language,
     sceneIndex,
     totalScenes: scenes.length,
   });
@@ -306,6 +308,7 @@ interface PromptInput {
   styleName: string;
   characterBible: Record<string, string>;
   contentContext: string;
+  language: string;
   sceneIndex: number;
   totalScenes: number;
 }
@@ -348,10 +351,10 @@ function buildVideoPrompt(input: PromptInput): string {
   // ── 4. SCENE VISUAL DESCRIPTION — what this scene shows ──
   parts.push(`SCENE ${input.sceneIndex + 1}/${input.totalScenes} VISUAL:\n${input.visualPrompt}`);
 
-  // ── 5. NARRATIVE CONTEXT — what's being said, drives the action ──
+  // ── 5. NARRATIVE CONTEXT — what's happening, NOT what's being said ──
   if (input.voiceover) {
     parts.push(
-      `SCENE NARRATIVE (the voiceover — animate to match this):\n"${input.voiceover.substring(0, 500)}"`
+      `SCENE CONTEXT (what is happening in this moment — use for action/emotion cues only):\n"${input.voiceover.substring(0, 500)}"`
     );
   }
 
@@ -362,17 +365,28 @@ function buildVideoPrompt(input: PromptInput): string {
     );
   }
 
-  // ── 7. ANIMATION RULES ──
+  // ── 7. LANGUAGE — text consistency ──
+  const langName = input.language === "fr" ? "French" : input.language === "ht" ? "Haitian Creole" : "English";
+  parts.push(
+    `LANGUAGE & TEXT: Any text, titles, signs, letters, or written content visible in the video must be in ${langName}. ` +
+    `Maintain language consistency throughout.`
+  );
+
+  // ── 8. ANIMATION RULES ──
   parts.push(
     `ANIMATION RULES (MANDATORY):\n` +
-    `- NO lip-sync talking — characters must NOT move their mouths as if speaking\n` +
-    `- Facial expressions ARE allowed: surprised, shocked, screaming, laughing, crying, angry\n` +
-    `- Body movement IS required: walking, running, gesturing, pointing, reacting\n` +
+    `- Characters must NEVER talk, narrate, commentate, or address the audience\n` +
+    `- Characters must NEVER move their mouths as if speaking, presenting, or explaining\n` +
+    `- Characters must NEVER look directly at the camera as if talking to the viewer\n` +
+    `- Even if the script is in first person, characters do NOT speak — the voiceover is separate\n` +
+    `- Characters CAN interact with each other through gestures, body language, and expressions\n` +
+    `- Facial expressions must be RICH and DETAILED: shock, fury, grief, joy, fear, determination, disgust\n` +
+    `- Body movement IS required: walking, running, gesturing, pointing, reacting — NEVER static\n` +
     `- ALL motion at NATURAL human speed — never slow motion, never unnaturally fast\n` +
     `- Environment animation required: wind, particles, camera movement, lighting changes\n` +
     `- Camera must be in constant motion: dolly, pan, tilt, tracking — never static\n` +
     `- Match the energy of the narration — intense narration = intense motion\n` +
-    `- Maintain CONSISTENT character appearance — same person, same clothes, same features`
+    `- Maintain CONSISTENT character appearance — same person, same clothes, same features across all scenes`
   );
 
   return parts.join("\n\n");

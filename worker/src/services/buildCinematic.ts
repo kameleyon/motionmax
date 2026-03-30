@@ -92,14 +92,25 @@ Before writing the script, carefully analyze the content to identify:
 === ANIMATION RULES (CRITICAL & STRICT) ===
 You are writing prompts for a generative video AI that CANNOT do lip-sync.
 
-1. **NO TALKING FACES:** Characters must NEVER be described as "talking", "speaking", or "moving mouth".
+1. **NO TALKING / NO NARRATING / NO ADDRESSING THE AUDIENCE:**
+   - Characters must NEVER be described as "talking", "speaking", "explaining", "narrating", "presenting", "commentating", or "moving mouth".
+   - Characters must NEVER look directly at the camera as if addressing the viewer.
+   - Characters must NEVER act as if they are telling the story — the voiceover is a SEPARATE narrator.
+   - Even if the script is in first person ("I walked into the room..."), the character does NOT speak — they ACT.
+   - Characters CAN interact with each other through gestures, body language, and physical contact.
 2. **VISUAL-AUDIO DISSOCIATION:** If the voiceover is dialogue, the visual must be a Reaction Shot, Action Shot, or Cutaway.
    - Bad: "Close up of John explaining the plan."
-   - Good: "Close up of John looking determined, nodding slightly while holding the map."
-3. **ALLOWED MOTIONS:**
-   - Body: Walking, running, gesturing, pointing, fighting, dancing.
-   - Face: Shock, laughter (mouth open but not speaking), crying, anger, subtle breathing.
-4. **STATIC POSES:** For dialogue-heavy moments, use "Static pose with subtle breathing and idle movement."
+   - Good: "Close up of John's eyes narrowing with determination, jaw clenching, fingers gripping the map as rain pelts the window behind him."
+3. **FACIAL EXPRESSIONS (BE CREATIVE & DETAILED):**
+   - Characters MUST have rich, expressive faces in every scene — never blank or neutral.
+   - Use: shock (eyes wide, mouth agape), fury (brows furrowed, veins visible), grief (tears streaming, chin trembling), joy (beaming smile, eyes crinkling), fear (pupils dilated, face drained of color), disgust (nose scrunched, lip curled), determination (jaw set, eyes focused).
+   - Combine expressions with body language: "She clutches the letter to her chest, eyes glistening with unshed tears, chin trembling."
+   - Expressions MUST match the emotional tone of the voiceover — if the narration is intense, the face is intense.
+4. **MOTION & ACTION (NEVER STATIC):**
+   - Every scene must have DYNAMIC movement — characters walking, running, gesturing, reacting, reaching, turning.
+   - No static poses. No standing still. No "character stands in front of..." without action.
+   - Combine character action with environment action: "She runs through the rain-soaked alley as neon signs flicker and steam rises from grates."
+   - All motion at NATURAL human speed — never slow motion unless explicitly needed for dramatic impact.
 
 === CAMERA MOVEMENT VOCABULARY (MANDATORY — use varied moves across scenes) ===
 ⛔ BANNED: Zoom in, zoom out, dolly zoom, Vertigo effect — do NOT use any zoom.
@@ -133,15 +144,19 @@ The goal is to make every frame feel like a blockbuster movie or a viral social 
 
 === VIDEO-FIRST VISUAL PROMPTS (CRITICAL) ===
 Your visualPrompt must be optimised for AI VIDEO generation, NOT static images.
+Every visualPrompt MUST be rich, detailed, and cinematic. Be CREATIVE. Think like a blockbuster movie director.
 
 1. **MOTION & DYNAMICS:** Describe movement, action, flow — NEVER describe still/frozen scenes.
-   - ✓ "Camera pans right as the protagonist strides forward through fog, coat billowing in the wind"
+   - ✓ "Camera trucks right as the protagonist strides forward through fog, coat billowing violently in the wind, her hand reaching out to grab the rusted gate while sparks fly from the streetlamp above"
    - ✗ "A person standing in fog"
-2. **CAMERA MOVEMENT:** ALWAYS specify exact camera moves from the vocabulary above. Combine them!
+2. **CAMERA MOVEMENT:** ALWAYS specify exact camera moves from the vocabulary above. Combine multiple techniques! Be specific about direction, speed, and purpose.
 3. **CINEMATIC LIGHTING:** Be specific — "Cyberpunk neon reflections on wet pavement", "Soft rim light separating subject from background."
 4. **COMPOSITION:** Describe framing/depth — "Subject in left third, shallow depth of field blurring city lights behind."
 5. **ATMOSPHERE & MOOD:** Set emotional tone — "Tense, claustrophobic framing", "Expansive, hopeful wide shot."
 6. **SPECIAL EFFECTS:** Include relevant VFX per the section above — particles, weather, energy, environmental FX.
+7. **CHARACTER IN EVERY SCENE:** Include the FULL character description (appearance, clothing, features) in EVERY visualPrompt. Do NOT just say "the protagonist" — describe them EVERY time.
+8. **STYLE CONSISTENCY:** Every visualPrompt must match the art style: ${styleDesc}. Include style-specific terms in every prompt.
+9. **TEXT & LANGUAGE:** Any text, titles, signs, or written content visible in the scene MUST be in the SAME language as the voiceover.${p.language ? ` All visible text must be in ${p.language === "fr" ? "French" : p.language === "ht" ? "Haitian Creole" : "English"}.` : ""}
 
 === ENVIRONMENT & SETTING (MANDATORY) ===
 EVERY scene MUST include detailed environment/setting that matches the story.

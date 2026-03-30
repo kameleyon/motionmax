@@ -146,8 +146,21 @@ export async function handleExportVideo(
   userId?: string
 ) {
   const { project_id } = payload;
+  const restartCount = typeof payload._restartCount === "number" ? payload._restartCount : 0;
   const exportConfig = buildExportConfig(payload);
   exportConfig.userId = userId;
+
+  // If this job has been restarted after a crash, disable crossfade and Ken Burns
+  // to prevent the same crash loop. Use the safest possible export path.
+  if (restartCount > 0) {
+    console.warn(
+      `[ExportVideo] Job restarted ${restartCount} time(s) — disabling crossfade and Ken Burns for stability`
+    );
+    exportConfig.crossfadeDuration = 0;
+    exportConfig.kenBurns = false;
+    exportConfig.aiVideo = false;
+    exportConfig.aiTransitions = false;
+  }
 
   // ALWAYS fetch latest scenes from DB to pick up regenerated images/audio.
   let scenes: any[] = await fetchScenesFromDb(project_id);
@@ -375,7 +388,7 @@ export async function handleExportVideo(
       usedCrossfade = await concatWithCrossfade(clipPaths, finalOutputPath, {
         duration: exportConfig.crossfadeDuration,
         transition: "fade",
-        timeoutMs: CROSSFADE_TIMEOUT_MS,
+        pairTimeoutMs: CROSSFADE_TIMEOUT_MS,
       });
 
       if (!usedCrossfade) {

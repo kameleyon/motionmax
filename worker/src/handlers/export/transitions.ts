@@ -4,22 +4,23 @@
  * Replaces hard-cut concat with smooth dissolve transitions between scenes
  * using FFmpeg's xfade (video) and acrossfade (audio) filters.
  *
- * Architecture:
- *   1. Probe all clip durations
- *   2. Build xfade + acrossfade filter_complex chain
- *   3. Execute single FFmpeg call with the complete chain
- *   4. Falls back to concat demuxer if filter_complex fails
+ * Architecture — PAIRWISE CROSSFADE:
+ *   Instead of one massive filter_complex (which crashes FFmpeg on 6+ clips),
+ *   we merge clips 2 at a time iteratively:
  *
- * Requirements for crossfade:
- *   - All clips must have identical resolution, FPS, pixel format
- *   - All clips must have an audio track (even if silent)
- *   - Clips must be ≥ crossfade duration
+ *     scene0 + scene1 → merged01 (with xfade)
+ *     merged01 + scene2 → merged012 (with xfade)
+ *     merged012 + scene3 → merged0123 (with xfade)
+ *     ...
  *
- * Memory considerations:
- *   xfade processes clips sequentially — only ~0.5s of overlap frames
- *   are held in memory at any time. Safe on 2GB Render instances.
+ *   Each FFmpeg call has only 2 inputs and 1 xfade + 1 acrossfade filter.
+ *   Safe on any instance size. Quality loss from iterative re-encoding
+ *   is negligible with ultrafast preset.
+ *
+ * Falls back to concat demuxer if any crossfade step fails.
  */
-import { runFfmpeg, probeDuration } from "./ffmpegCmd.js";
+import fs from "fs";
+import { runFfmpeg, probeDuration, X264_MEM_FLAGS } from "./ffmpegCmd.js";
 import { concatFiles } from "./concatScenes.js";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -41,28 +42,25 @@ interface CrossfadeOptions {
   duration: number;
   /** Transition effect type (default "fade") */
   transition: TransitionType;
-  /** FFmpeg timeout in ms (default 30 min) */
-  timeoutMs: number;
+  /** Per-pair FFmpeg timeout in ms (default 5 min) */
+  pairTimeoutMs: number;
 }
 
 const DEFAULT_OPTIONS: CrossfadeOptions = {
   duration: 0.5,
   transition: "fade",
-  timeoutMs: 30 * 60 * 1000,
+  pairTimeoutMs: 5 * 60 * 1000,
 };
 
 // ── Public API ───────────────────────────────────────────────────────
 
 /**
- * Concatenate clips with crossfade transitions between each pair.
+ * Concatenate clips with crossfade transitions using pairwise merging.
  *
- * Uses FFmpeg filter_complex with chained xfade (video) + acrossfade (audio).
- * Falls back to simple concat demuxer if filter_complex fails.
+ * Merges clips iteratively (2 at a time) to keep FFmpeg memory low.
+ * Falls back to concat demuxer if any pair fails.
  *
- * @param clipPaths    Ordered array of MP4 clip paths
- * @param outputPath   Path for the concatenated output
- * @param options      Crossfade configuration
- * @returns            True if crossfade was applied, false if fell back to concat
+ * @returns  True if crossfade was applied, false if fell back to concat
  */
 export async function concatWithCrossfade(
   clipPaths: string[],
@@ -71,17 +69,16 @@ export async function concatWithCrossfade(
 ): Promise<boolean> {
   const opts = { ...DEFAULT_OPTIONS, ...options };
 
-  // Fewer than 2 clips: no transitions possible
   if (clipPaths.length < 2) {
     await concatFiles(clipPaths, outputPath, false);
     return false;
   }
 
-  // Probe all clip durations
+  // Probe all clip durations upfront
   console.log(`[Transitions] Probing ${clipPaths.length} clips for crossfade...`);
   const durations = await Promise.all(clipPaths.map(probeDuration));
 
-  // Validate: all clips must be longer than the crossfade duration
+  // Validate: all clips must be longer than crossfade duration
   const tooShort = durations.filter((d) => d < opts.duration + 0.1);
   if (tooShort.length > 0) {
     console.warn(
@@ -91,130 +88,98 @@ export async function concatWithCrossfade(
     return false;
   }
 
-  // Build the filter chain
-  const { filterComplex, lastVideoLabel, lastAudioLabel } = buildFilterChain(
-    clipPaths.length,
-    durations,
-    opts.duration,
-    opts.transition
-  );
-
-  // Build FFmpeg args
-  const args: string[] = [];
-
-  // Input files
-  for (const clip of clipPaths) {
-    args.push("-i", clip);
-  }
-
-  // Filter complex
-  args.push("-filter_complex", filterComplex);
-
-  // Map outputs
-  args.push("-map", `[${lastVideoLabel}]`);
-  args.push("-map", `[${lastAudioLabel}]`);
-
-  // Output encoding
-  args.push(
-    "-c:v", "libx264",
-    "-preset", "ultrafast",
-    "-pix_fmt", "yuv420p",
-    "-c:a", "aac",
-    "-b:a", "128k",
-    "-ar", "44100",
-    "-ac", "2",
-    "-movflags", "+faststart",
-    "-threads", "2",
-    "-refs", "1",
-    "-rc-lookahead", "0",
-    "-g", "24",
-    "-bf", "0",
-    outputPath
-  );
-
+  const totalInput = durations.reduce((a, b) => a + b, 0);
   console.log(
-    `[Transitions] Applying ${opts.transition} crossfade (${opts.duration}s) to ${clipPaths.length} clips ` +
-    `— total input duration: ${durations.reduce((a, b) => a + b, 0).toFixed(1)}s`
+    `[Transitions] Pairwise ${opts.transition} crossfade (${opts.duration}s) — ` +
+    `${clipPaths.length} clips, ${totalInput.toFixed(1)}s total input`
   );
 
   try {
-    await runFfmpeg(args, opts.timeoutMs);
-    const totalCrossfadeReduction = opts.duration * (clipPaths.length - 1);
+    await pairwiseCrossfade(clipPaths, durations, outputPath, opts);
+
+    const totalReduction = opts.duration * (clipPaths.length - 1);
     console.log(
-      `[Transitions] Crossfade complete — reduced total by ${totalCrossfadeReduction.toFixed(1)}s from transitions`
+      `[Transitions] Crossfade complete — ${clipPaths.length - 1} transitions, ` +
+      `reduced by ${totalReduction.toFixed(1)}s`
     );
     return true;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[Transitions] filter_complex failed — falling back to concat demuxer: ${msg}`);
-
-    // Fallback: concat demuxer (re-encode for compatibility)
+    console.error(`[Transitions] Pairwise crossfade failed — falling back to concat: ${msg}`);
     await concatFiles(clipPaths, outputPath, false);
     return false;
   }
 }
 
-// ── Filter Chain Builder ─────────────────────────────────────────────
+// ── Pairwise Crossfade ───────────────────────────────────────────────
 
 /**
- * Build the filter_complex string for chained xfade + acrossfade.
- *
- * For N clips, generates N-1 xfade filters (video) and N-1 acrossfade filters (audio).
- *
- * Video chain example (3 clips):
- *   [0:v][1:v]xfade=transition=fade:duration=0.5:offset=D0-0.5[v01];
- *   [v01][2:v]xfade=transition=fade:duration=0.5:offset=D0+D1-1.0[v012]
- *
- * Audio chain example (3 clips):
- *   [0:a][1:a]acrossfade=d=0.5:c1=tri:c2=tri[a01];
- *   [a01][2:a]acrossfade=d=0.5:c1=tri:c2=tri[a012]
+ * Merge clips 2 at a time with xfade + acrossfade.
+ * Each step produces an intermediate file that feeds into the next.
  */
-function buildFilterChain(
-  clipCount: number,
+async function pairwiseCrossfade(
+  clipPaths: string[],
   durations: number[],
-  crossfadeDuration: number,
-  transition: TransitionType
-): {
-  filterComplex: string;
-  lastVideoLabel: string;
-  lastAudioLabel: string;
-} {
-  const filters: string[] = [];
-  let prevVideoLabel = "0:v";
-  let prevAudioLabel = "0:a";
+  finalOutput: string,
+  opts: CrossfadeOptions
+): Promise<void> {
+  let currentPath = clipPaths[0];
+  let currentDuration = durations[0];
+  const tempFiles: string[] = [];
 
-  // Running offset for xfade: cumulative duration minus accumulated crossfade shrinkage
-  let cumulativeDuration = durations[0];
+  for (let i = 1; i < clipPaths.length; i++) {
+    const nextPath = clipPaths[i];
+    const nextDuration = durations[i];
+    const isLast = i === clipPaths.length - 1;
+    const outPath = isLast ? finalOutput : `${finalOutput}.pair_${i}.mp4`;
 
-  for (let i = 1; i < clipCount; i++) {
-    const videoOutLabel = `v${i}`;
-    const audioOutLabel = `a${i}`;
+    if (!isLast) tempFiles.push(outPath);
 
-    // Video: xfade
-    // Offset = cumulative duration of all clips so far (minus accumulated crossfades) minus this crossfade
-    const offset = Math.max(0, cumulativeDuration - crossfadeDuration);
+    // xfade offset = duration of current merged clip minus crossfade
+    const offset = Math.max(0, currentDuration - opts.duration);
 
-    filters.push(
-      `[${prevVideoLabel}][${i}:v]xfade=transition=${transition}:duration=${crossfadeDuration}:offset=${offset.toFixed(3)}[${videoOutLabel}]`
+    console.log(
+      `[Transitions] Pair ${i}/${clipPaths.length - 1}: ` +
+      `${currentDuration.toFixed(1)}s + ${nextDuration.toFixed(1)}s → offset=${offset.toFixed(3)}s`
     );
 
-    // Audio: acrossfade
-    // acrossfade has no offset — it always fades at the junction point
-    filters.push(
-      `[${prevAudioLabel}][${i}:a]acrossfade=d=${crossfadeDuration}:c1=tri:c2=tri[${audioOutLabel}]`
-    );
+    const filterComplex =
+      `[0:v][1:v]xfade=transition=${opts.transition}:duration=${opts.duration}:offset=${offset.toFixed(3)}[vout];` +
+      `[0:a][1:a]acrossfade=d=${opts.duration}:c1=tri:c2=tri[aout]`;
 
-    // Update running state
-    cumulativeDuration = offset + durations[i];
-    prevVideoLabel = videoOutLabel;
-    prevAudioLabel = audioOutLabel;
+    await runFfmpeg([
+      "-i", currentPath,
+      "-i", nextPath,
+      "-filter_complex", filterComplex,
+      "-map", "[vout]",
+      "-map", "[aout]",
+      "-c:v", "libx264",
+      "-preset", "ultrafast",
+      "-pix_fmt", "yuv420p",
+      "-c:a", "aac",
+      "-b:a", "128k",
+      "-ar", "44100",
+      "-ac", "2",
+      "-movflags", "+faststart",
+      ...X264_MEM_FLAGS,
+      outPath,
+    ], opts.pairTimeoutMs);
+
+    // Clean up previous temp file (not the original clips)
+    if (i >= 2 && tempFiles.length >= 2) {
+      const prevTemp = tempFiles[tempFiles.length - 2];
+      try { fs.unlinkSync(prevTemp); } catch { /* ignore */ }
+    }
+
+    // New merged clip duration = current + next - crossfade
+    currentDuration = currentDuration + nextDuration - opts.duration;
+    currentPath = outPath;
   }
 
-  return {
-    filterComplex: filters.join(";"),
-    lastVideoLabel: prevVideoLabel,
-    lastAudioLabel: prevAudioLabel,
-  };
+  // Clean any remaining temp files
+  for (const tmp of tempFiles) {
+    try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch { /* ignore */ }
+  }
 }
 
 /**

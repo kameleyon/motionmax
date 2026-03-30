@@ -1,14 +1,14 @@
 /**
  * Cinematic video handler.
  *
- * Generates a 10s video per scene using Kling I2V with seamless morphing:
+ * Generates video per scene using Kling I2V with seamless morphing:
  *   - image = Scene N's generated image (start frame)
  *   - end_image = Scene N+1's generated image (end frame / morph target)
- *   - prompt = Scene N's video motion + camera motion + morph instruction
+ *   - prompt = Scene N's visual + voiceover context + character + morph instruction
+ *   - duration = matched to audio length (5, 10, or 15s)
  *
  * Each clip IS both the scene AND the transition to the next scene.
- * During export, clips are concatenated directly — no separate transition step.
- * Audio is muxed on top during export.
+ * Audio is muxed during export. Clips concat directly — no crossfade needed.
  *
  * Provider chain:
  *   Primary:  Kling V3.0 Std I2V (kling-3-0-std-i2v)
@@ -23,7 +23,6 @@ import { generateImage } from "../services/imageGenerator.js";
 import {
   generateKlingV3Video,
   generateKlingV26Video,
-  // generateGrokVideo — commented out: replaced by Kling for seamless morphing
 } from "../services/hypereal.js";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -33,6 +32,57 @@ interface CinematicVideoPayload {
   projectId: string;
   sceneIndex: number;
   regenerate?: boolean;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+/**
+ * Pick the Kling duration that covers the audio length.
+ * Kling V3.0 accepts: 3, 5, 10, 15. V2.6 accepts: 5, 10.
+ * We use V3.0 durations since it's the primary.
+ */
+function pickKlingDuration(audioDurationSec: number): number {
+  if (audioDurationSec <= 5) return 5;
+  if (audioDurationSec <= 10) return 10;
+  return 15; // max for Kling V3.0
+}
+
+/**
+ * Wait for the next scene's image to be available in the DB.
+ * The cinematic pipeline dispatches images and videos in parallel —
+ * the next scene's image might not be ready yet when this scene's
+ * video starts generating. Poll up to 60s before giving up.
+ */
+async function waitForNextSceneImage(
+  generationId: string,
+  nextSceneIndex: number,
+  maxWaitMs: number = 60_000
+): Promise<string | null> {
+  const startTime = Date.now();
+  const pollInterval = 5_000;
+
+  while (Date.now() - startTime < maxWaitMs) {
+    const { data: gen } = await supabase
+      .from("generations")
+      .select("scenes")
+      .eq("id", generationId)
+      .maybeSingle();
+
+    const scenes = (gen?.scenes as any[]) ?? [];
+    const nextImageUrl = scenes[nextSceneIndex]?.imageUrl;
+
+    if (nextImageUrl) {
+      console.log(`[CinematicVideo] Next scene ${nextSceneIndex} image ready after ${Math.round((Date.now() - startTime) / 1000)}s`);
+      return nextImageUrl;
+    }
+
+    await sleep(pollInterval);
+  }
+
+  console.warn(`[CinematicVideo] Next scene ${nextSceneIndex} image not ready after ${maxWaitMs / 1000}s — proceeding without morph target`);
+  return null;
 }
 
 // ── Main handler ───────────────────────────────────────────────────
@@ -65,6 +115,17 @@ export async function handleCinematicVideo(
   const scene = scenes[sceneIndex];
   if (!scene) throw new Error(`Scene ${sceneIndex} not found`);
 
+  // ── Fetch project data (format + character description) ──────────
+  const { data: project } = await supabase
+    .from("projects")
+    .select("format, character_description, presenter_focus, style")
+    .eq("id", projectId)
+    .single();
+
+  const format = project?.format || "landscape";
+  const characterDescription = project?.character_description || "";
+  const presenterFocus = project?.presenter_focus || "";
+
   let imageUrl = scene.imageUrl;
 
   // Auto-generate image if missing
@@ -74,15 +135,11 @@ export async function handleCinematicVideo(
     const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
     const prompt = scene.visualPrompt || scene.visual_prompt || "Cinematic scene";
 
-    const { data: proj } = await supabase.from("projects").select("format").eq("id", projectId).single();
-    const fmt = proj?.format || "landscape";
-
-    imageUrl = await generateImage(prompt, hyperealApiKey, replicateApiKey, fmt, projectId);
+    imageUrl = await generateImage(prompt, hyperealApiKey, replicateApiKey, format, projectId);
     await updateSceneField(generationId, sceneIndex, "imageUrl", imageUrl);
     console.log(`[CinematicVideo] Scene ${sceneIndex} image auto-generated`);
   }
 
-  // Snapshot the imageUrl used — for stale-image guard later
   const sourceImageUrl = imageUrl;
 
   // Snapshot history for undo if regenerating
@@ -94,31 +151,50 @@ export async function handleCinematicVideo(
     await supabase.from("generations").update({ scenes }).eq("id", generationId);
   }
 
-  // Get format from project
-  const { data: project } = await supabase
-    .from("projects")
-    .select("format")
-    .eq("id", projectId)
-    .single();
+  // ── Determine video duration from audio length ───────────────────
+  // Estimate from voiceover word count if audio not yet available
+  const voiceover: string = scene.voiceover || "";
+  const wordCount = voiceover.split(/\s+/).filter(Boolean).length;
+  const estimatedAudioSec = Math.max(5, wordCount / 2.5); // ~150 words per minute
+  const klingDuration = pickKlingDuration(estimatedAudioSec);
 
-  const format = project?.format || "landscape";
+  console.log(
+    `[CinematicVideo] Scene ${sceneIndex}: voiceover=${wordCount} words, ` +
+    `estimated=${estimatedAudioSec.toFixed(1)}s, kling duration=${klingDuration}s`
+  );
 
-  // ── Get next scene's image for end_image (morph target) ──────────
-  const nextScene = scenes[sceneIndex + 1];
-  const nextImageUrl = nextScene?.imageUrl || null;
+  // ── Get next scene's image for morph target ──────────────────────
   const isLastScene = sceneIndex >= scenes.length - 1;
+  let nextImageUrl: string | null = null;
 
-  if (nextImageUrl) {
-    console.log(`[CinematicVideo] Scene ${sceneIndex}: will morph into scene ${sceneIndex + 1}`);
-  } else if (!isLastScene) {
-    console.log(`[CinematicVideo] Scene ${sceneIndex}: next scene has no image — no morph target`);
+  if (!isLastScene) {
+    // First check if it's already in the scenes array we have
+    nextImageUrl = scenes[sceneIndex + 1]?.imageUrl || null;
+
+    // If not ready, wait for it (the pipeline generates images in parallel)
+    if (!nextImageUrl) {
+      console.log(`[CinematicVideo] Scene ${sceneIndex}: waiting for scene ${sceneIndex + 1} image...`);
+      nextImageUrl = await waitForNextSceneImage(generationId, sceneIndex + 1);
+    }
+
+    if (nextImageUrl) {
+      console.log(`[CinematicVideo] Scene ${sceneIndex}: will morph into scene ${sceneIndex + 1}`);
+    } else {
+      console.log(`[CinematicVideo] Scene ${sceneIndex}: no morph target available`);
+    }
   } else {
-    console.log(`[CinematicVideo] Scene ${sceneIndex}: last scene — no morph target`);
+    console.log(`[CinematicVideo] Scene ${sceneIndex}: last scene — no morph`);
   }
 
-  // ── Build prompt ─────────────────────────────────────────────────
-  const visualPrompt = scene.visualPrompt || scene.visual_prompt || scene.voiceover || "Cinematic scene with dramatic lighting";
-  const videoPrompt = buildVideoPrompt(visualPrompt, nextImageUrl ? true : false);
+  // ── Build prompt with full context ───────────────────────────────
+  const visualPrompt = scene.visualPrompt || scene.visual_prompt || "";
+  const videoPrompt = buildVideoPrompt(
+    visualPrompt,
+    voiceover,
+    characterDescription,
+    presenterFocus,
+    !!nextImageUrl
+  );
 
   const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
   if (!hyperealApiKey) {
@@ -131,12 +207,12 @@ export async function handleCinematicVideo(
 
   // Primary: Kling V3.0
   try {
-    console.log(`[CinematicVideo] Scene ${sceneIndex}: trying Kling V3.0...`);
+    console.log(`[CinematicVideo] Scene ${sceneIndex}: trying Kling V3.0 (${klingDuration}s)...`);
     const url = await generateKlingV3Video(
       imageUrl,
       videoPrompt,
       hyperealApiKey,
-      10, // 10 seconds
+      klingDuration,
       nextImageUrl || undefined,
     );
     if (url) {
@@ -151,12 +227,14 @@ export async function handleCinematicVideo(
   // Fallback: Kling V2.6
   if (!finalVideoUrl) {
     try {
-      console.log(`[CinematicVideo] Scene ${sceneIndex}: trying Kling V2.6 fallback...`);
+      // Kling V2.6 only supports 5 or 10 — clamp
+      const v26Duration = Math.min(klingDuration, 10);
+      console.log(`[CinematicVideo] Scene ${sceneIndex}: trying Kling V2.6 fallback (${v26Duration}s)...`);
       const url = await generateKlingV26Video(
         imageUrl,
         videoPrompt,
         hyperealApiKey,
-        10,
+        v26Duration,
         nextImageUrl || undefined,
       );
       if (url) {
@@ -205,14 +283,13 @@ export async function handleCinematicVideo(
     return { success: true, status: "stale_discarded", videoUrl: null, sceneIndex };
   }
 
-  // Atomic update: only set this scene's videoUrl
   await updateSceneField(generationId, sceneIndex, "videoUrl", finalVideoUrl);
 
   await writeSystemLog({
     jobId, projectId, userId, generationId,
     category: "system_info",
     eventType: "cinematic_video_completed",
-    message: `Cinematic video completed for scene ${sceneIndex} (${provider})`,
+    message: `Cinematic video completed for scene ${sceneIndex} (${provider}, ${klingDuration}s)`,
   });
 
   return { success: true, status: "complete", videoUrl: finalVideoUrl, sceneIndex, provider };
@@ -220,28 +297,53 @@ export async function handleCinematicVideo(
 
 // ── Prompt builder ─────────────────────────────────────────────────
 
-function buildVideoPrompt(visualPrompt: string, hasMorphTarget: boolean): string {
-  const basePrompt = `${visualPrompt}
+function buildVideoPrompt(
+  visualPrompt: string,
+  voiceover: string,
+  characterDescription: string,
+  presenterFocus: string,
+  hasMorphTarget: boolean
+): string {
+  const parts: string[] = [];
 
-ANIMATION RULES (CRITICAL):
-- NO lip-sync talking animation - characters should NOT move their mouths as if speaking
-- Facial expressions ARE allowed: surprised, shocked, screaming, laughing, crying, angry
-- Body movement IS allowed: walking, running, gesturing, pointing, reacting
-- Environment animation IS allowed: wind, particles, camera movement, lighting changes
-- Static poses with subtle breathing/idle movement are preferred for dialogue scenes
-- Focus on CAMERA MOTION and SCENE DYNAMICS rather than character lip movement`;
-
-  if (hasMorphTarget) {
-    return `${basePrompt}
-
-TRANSITION (CRITICAL):
-- The camera must be in constant forward motion throughout
-- In the final 3-4 seconds, the environment must seamlessly morph, stretch, and melt into the provided ending frame
-- This morphing must be fluid and continuous — no hard cuts, no fades to black
-- The camera pushes past the foreground as objects dissolve and reshape into the next scene`;
+  // Character identity — MUST come first for consistency
+  if (characterDescription) {
+    parts.push(`CHARACTER (maintain exact appearance throughout): ${characterDescription}`);
+  }
+  if (presenterFocus) {
+    parts.push(`SUBJECT FOCUS: ${presenterFocus}`);
   }
 
-  return basePrompt;
+  // Scene visual description
+  parts.push(visualPrompt);
+
+  // Voiceover context — tells the AI what's happening in this scene
+  if (voiceover) {
+    parts.push(`SCENE CONTEXT (what is being narrated): ${voiceover.substring(0, 300)}`);
+  }
+
+  // Animation rules
+  parts.push(`
+ANIMATION RULES:
+- NO lip-sync talking animation — characters must NOT move their mouths as if speaking
+- Facial expressions ARE allowed: surprised, shocked, screaming, laughing, crying, angry
+- Body movement IS required: walking, running, gesturing, pointing, reacting — at NATURAL pace
+- Environment animation IS required: wind, particles, camera movement, lighting changes
+- All motion must be DYNAMIC and at natural human speed — never slow motion
+- Camera must be in constant motion: dolly, pan, tilt, tracking — never static
+- Match the energy of the narration — if the scene is intense, the motion must be intense`);
+
+  // Morph transition instruction
+  if (hasMorphTarget) {
+    parts.push(`
+TRANSITION (CRITICAL — final 3 seconds):
+- The camera pushes forward with increasing momentum
+- The environment seamlessly morphs, stretches, and melts into the provided ending frame
+- This morphing is fluid and continuous — no hard cuts, no fades to black
+- Objects in the foreground dissolve and reshape into the next scene as the camera passes them`);
+  }
+
+  return parts.join("\n\n");
 }
 
 // ── Storage upload ─────────────────────────────────────────────────

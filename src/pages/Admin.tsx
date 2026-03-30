@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Shield, Users, DollarSign, LayoutDashboard, Flag, FileText, AlertTriangle, Cable, Film, LogOut } from "lucide-react";
+import { Loader2, Shield, Users, DollarSign, LayoutDashboard, Flag, FileText, AlertTriangle, Cable, Film, LogOut, Activity, Server, TrendingUp } from "lucide-react";
 import { AdminOverview } from "@/components/admin/AdminOverview";
 import { AdminSubscribers } from "@/components/admin/AdminSubscribers";
 import { AdminRevenue } from "@/components/admin/AdminRevenue";
@@ -10,6 +10,9 @@ import { AdminGenerations } from "@/components/admin/AdminGenerations";
 import { AdminFlags } from "@/components/admin/AdminFlags";
 import { AdminLogs } from "@/components/admin/AdminLogs";
 import { AdminApiCalls } from "@/components/admin/AdminApiCalls";
+import { AdminQueueMonitor } from "@/components/admin/AdminQueueMonitor";
+import { AdminWorkerHealth } from "@/components/admin/AdminWorkerHealth";
+import { AdminPerformanceMetrics } from "@/components/admin/AdminPerformanceMetrics";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function Admin() {
@@ -130,6 +133,18 @@ export default function Admin() {
               <Film className="h-4 w-4" />
               <span className="hidden md:inline">Generations</span>
             </TabsTrigger>
+            <TabsTrigger value="queue" className="gap-2 flex-shrink-0">
+              <Activity className="h-4 w-4" />
+              <span className="hidden md:inline">Queue</span>
+            </TabsTrigger>
+            <TabsTrigger value="worker" className="gap-2 flex-shrink-0">
+              <Server className="h-4 w-4" />
+              <span className="hidden md:inline">Worker</span>
+            </TabsTrigger>
+            <TabsTrigger value="performance" className="gap-2 flex-shrink-0">
+              <TrendingUp className="h-4 w-4" />
+              <span className="hidden md:inline">Performance</span>
+            </TabsTrigger>
             <TabsTrigger value="api-calls" className="gap-2 flex-shrink-0">
               <Cable className="h-4 w-4" />
               <span className="hidden md:inline">API Calls</span>
@@ -158,6 +173,18 @@ export default function Admin() {
 
           <TabsContent value="generations" className="space-y-6">
             <AdminGenerations />
+          </TabsContent>
+
+          <TabsContent value="queue" className="space-y-6">
+            <AdminQueueMonitor />
+          </TabsContent>
+
+          <TabsContent value="worker" className="space-y-6">
+            <AdminWorkerHealth />
+          </TabsContent>
+
+          <TabsContent value="performance" className="space-y-6">
+            <AdminPerformanceMetrics />
           </TabsContent>
 
           <TabsContent value="api-calls" className="space-y-6">

@@ -22,6 +22,20 @@ export async function handleCinematicImage(
 ) {
   const { generationId, projectId, sceneIndex } = payload;
 
+  // ── Chained video flow: only Scene 0 needs a generated image ──
+  // Scenes 1+ get their input from the last frame of the previous video.
+  // Skip image generation for scene > 0 to save API credits.
+  if (sceneIndex > 0) {
+    console.log(`[CinematicImage] Scene ${sceneIndex}: SKIPPED — chained video flow only needs scene 0 image`);
+    await writeSystemLog({
+      jobId, projectId, userId, generationId,
+      category: "system_info",
+      eventType: "cinematic_image_skipped",
+      message: `Scene ${sceneIndex} image skipped — chained video uses previous video's last frame`,
+    });
+    return { success: true, status: "skipped", sceneIndex, imageUrl: null };
+  }
+
   await writeSystemLog({
     jobId,
     projectId,

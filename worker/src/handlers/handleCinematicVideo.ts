@@ -1,24 +1,22 @@
 /**
- * Cinematic video handler — LTX 2.3 Pro with first + last frame interpolation.
+ * Cinematic video handler — Grok Video I2V via Hypereal.
  *
  * Flow:
  *   - All images are generated FIRST (in parallel batches by the frontend)
- *   - Videos are generated using Replicate LTX 2.3 Pro:
+ *   - Videos are generated using Grok Video I2V:
  *     image = Scene N's image (first frame)
- *     last_frame_image = Scene N+1's image (morph target)
- *   - Last scene: no last_frame_image (just scene motion)
- *   - Camera motion is varied per scene from the LTX enum
+ *   - No last_image / morph — each scene is self-contained
+ *   - Camera motion varies per scene (rotated from 7 movement types)
+ *   - Duration: 10s, Resolution: 1080P, No audio
  *
- * The frontend dispatches video jobs for scenes whose images (and next scene's image)
- * are already available. This handler does NOT wait for images — they should already exist.
+ * Model: grok-video-i2v (12 credits)
  */
 
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField } from "../lib/sceneUpdate.js";
 import { generateImage } from "../services/imageGenerator.js";
-import { generateVeoVideo } from "../services/ltxVideo.js";
-import { getStylePrompt } from "../services/prompts.js";
+import { generateGrokVideo } from "../services/hypereal.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -29,38 +27,20 @@ interface CinematicVideoPayload {
   regenerate?: boolean;
 }
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+// ── Camera Motions (rotated per scene) ─────────────────────────────
 
-/**
- * Wait for a specific scene's imageUrl to appear in the DB.
- * Used when the video job is dispatched before the image batch finishes.
- */
-async function waitForSceneImage(
-  generationId: string,
-  sceneIndex: number,
-  maxWaitMs: number = 10 * 60 * 1000 // 10 min — images can take 3 min each, batch of 4 = up to 6-8 min
-): Promise<string | null> {
-  const start = Date.now();
-  let attempts = 0;
-  while (Date.now() - start < maxWaitMs) {
-    const { data: gen } = await supabase
-      .from("generations")
-      .select("scenes")
-      .eq("id", generationId)
-      .maybeSingle();
-    const url = ((gen?.scenes as any[]) ?? [])[sceneIndex]?.imageUrl;
-    if (url) {
-      console.log(`[CinematicVideo] Scene ${sceneIndex} image found after ${Math.round((Date.now() - start) / 1000)}s`);
-      return url;
-    }
-    attempts++;
-    if (attempts % 6 === 0) {
-      console.log(`[CinematicVideo] Still waiting for scene ${sceneIndex} image... (${Math.round((Date.now() - start) / 1000)}s)`);
-    }
-    await sleep(5_000);
-  }
-  console.warn(`[CinematicVideo] Scene ${sceneIndex} image not found after ${maxWaitMs / 1000}s`);
-  return null;
+const CAMERA_MOTIONS = [
+  "Pan — camera pivots horizontally left to right, following the subject smoothly. End with a whip pan for energy.",
+  "Tilt — camera pivots vertically upward, making the subject appear powerful and grandiose.",
+  "Roll — camera rotates on the Z-axis, creating kinetic tension and a sense of unease.",
+  "Truck — camera tracks physically to the right, gliding alongside the moving subject.",
+  "Pedestal — camera rises vertically while keeping its angle level, revealing the scene from above.",
+  "Handheld — camera held naturally with subtle shake for raw, immersive, documentary-like realism.",
+  "Rack Focus — lens focus shifts mid-shot from the foreground subject to a background element.",
+];
+
+function getCameraMotion(sceneIndex: number): string {
+  return CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length];
 }
 
 // ── Main handler ───────────────────────────────────────────────────
@@ -97,7 +77,7 @@ export async function handleCinematicVideo(
   // Fetch project data
   const { data: project } = await supabase
     .from("projects")
-    .select("format, style, character_description, presenter_focus, voice_inclination")
+    .select("format, style, character_description, voice_inclination")
     .eq("id", projectId)
     .single();
 
@@ -110,12 +90,7 @@ export async function handleCinematicVideo(
   // ── Get this scene's image ───────────────────────────────────────
   let imageUrl = scene.imageUrl;
   if (!imageUrl) {
-    console.log(`[CinematicVideo] Scene ${sceneIndex}: waiting for image...`);
-    imageUrl = await waitForSceneImage(generationId, sceneIndex);
-  }
-  if (!imageUrl) {
-    // Last resort: generate it
-    console.log(`[CinematicVideo] Scene ${sceneIndex}: generating image as fallback`);
+    console.log(`[CinematicVideo] Scene ${sceneIndex}: no image, generating fallback`);
     const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
     const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
     const prompt = scene.visualPrompt || scene.visual_prompt || "Cinematic scene";
@@ -124,23 +99,6 @@ export async function handleCinematicVideo(
   }
 
   const sourceImageUrl = imageUrl;
-
-  // ── Get next scene's image for last_frame_image ──────────────────
-  const isLastScene = sceneIndex >= scenes.length - 1;
-  let nextImageUrl: string | null = null;
-
-  if (!isLastScene) {
-    nextImageUrl = scenes[sceneIndex + 1]?.imageUrl || null;
-    if (!nextImageUrl) {
-      console.log(`[CinematicVideo] Scene ${sceneIndex}: waiting for scene ${sceneIndex + 1} image...`);
-      nextImageUrl = await waitForSceneImage(generationId, sceneIndex + 1);
-    }
-    if (nextImageUrl) {
-      console.log(`[CinematicVideo] Scene ${sceneIndex}: will morph → scene ${sceneIndex + 1}`);
-    } else {
-      console.log(`[CinematicVideo] Scene ${sceneIndex}: next image not available, no morph`);
-    }
-  }
 
   // Snapshot history for undo
   if (regenerate) {
@@ -151,30 +109,33 @@ export async function handleCinematicVideo(
     await supabase.from("generations").update({ scenes }).eq("id", generationId);
   }
 
-  // ── Build prompt ─────────────────────────────────────────────────
+  // ── Build prompt with camera motion ──────────────────────────────
   const visualPrompt = scene.visualPrompt || scene.visual_prompt || "";
   const voiceover = scene.voiceover || "";
-  const videoPrompt = buildVideoPrompt(visualPrompt, voiceover, characterDescription, style, language);
+  const cameraMotion = getCameraMotion(sceneIndex);
+  const videoPrompt = buildVideoPrompt(visualPrompt, voiceover, characterDescription, style, language, cameraMotion);
+
+  const apiKey = (process.env.HYPEREAL_API_KEY || "").trim();
+  if (!apiKey) throw new Error("HYPEREAL_API_KEY not configured");
 
   console.log(
-    `[CinematicVideo] Scene ${sceneIndex}: Veo 3.1 8s, ` +
-    `morph=${!!nextImageUrl}, prompt=${videoPrompt.length} chars`
+    `[CinematicVideo] Scene ${sceneIndex}: Grok I2V 10s, ` +
+    `camera=${CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("—")[0].trim()}, ` +
+    `prompt=${videoPrompt.length} chars`
   );
 
-  // ── Generate video with Veo 3.1 Fast I2V ──────────────────────────
-  const result = await generateVeoVideo({
-    prompt: videoPrompt,
+  // ── Generate video with Grok Video I2V ───────────────────────────
+  const grokVideoUrl = await generateGrokVideo(
     imageUrl,
-    lastImageUrl: nextImageUrl || undefined,
+    videoPrompt,
+    apiKey,
     aspectRatio,
-  });
-
-  if (!result.url) {
-    throw new Error(`Video generation failed for scene ${sceneIndex}: ${result.error}`);
-  }
+    10,       // duration: 10s
+    "1080P",  // resolution
+  );
 
   // Upload to Supabase storage
-  const finalVideoUrl = await uploadVideoToStorage(result.url, projectId, generationId, sceneIndex);
+  const finalVideoUrl = await uploadVideoToStorage(grokVideoUrl, projectId, generationId, sceneIndex);
 
   // Stale-image guard (for scene 0)
   if (sceneIndex === 0) {
@@ -193,13 +154,13 @@ export async function handleCinematicVideo(
     jobId, projectId, userId, generationId,
     category: "system_info",
     eventType: "cinematic_video_completed",
-    message: `Cinematic video completed for scene ${sceneIndex} (Veo 3.1, 8s)`,
+    message: `Cinematic video completed for scene ${sceneIndex} (Grok I2V, 10s)`,
   });
 
-  return { success: true, status: "complete", videoUrl: finalVideoUrl, sceneIndex, provider: "Veo 3.1" };
+  return { success: true, status: "complete", videoUrl: finalVideoUrl, sceneIndex, provider: "Grok I2V" };
 }
 
-// ── Prompt builder (stays under 2500 chars) ────────────────────────
+// ── Prompt builder with camera motion ──────────────────────────────
 
 function buildVideoPrompt(
   visualPrompt: string,
@@ -207,20 +168,21 @@ function buildVideoPrompt(
   characterDescription: string,
   styleName: string,
   language: string,
+  cameraMotion: string,
 ): string {
   const MAX_CHARS = 2400;
   const parts: string[] = [];
 
-  parts.push(`STYLE: ${styleName.toUpperCase()}. Maintain this exact visual style. Do not mix styles.`);
+  parts.push(`STYLE: ${styleName.toUpperCase()}. Maintain this exact visual style throughout.`);
 
   if (characterDescription) {
-    parts.push(`CHARACTER: ${characterDescription.substring(0, 200)}. Keep EXACT same appearance throughout.`);
+    parts.push(`CHARACTER: ${characterDescription.substring(0, 200)}. Same appearance in every frame.`);
   }
 
-  parts.push(visualPrompt.substring(0, 600));
+  parts.push(visualPrompt.substring(0, 500));
 
   if (voiceover) {
-    parts.push(`CONTEXT: ${voiceover.substring(0, 250)}`);
+    parts.push(`CONTEXT: ${voiceover.substring(0, 200)}`);
   }
 
   if (language && language !== "en") {
@@ -229,9 +191,15 @@ function buildVideoPrompt(
   }
 
   parts.push(
+    `CAMERA MOVEMENT: ${cameraMotion} ` +
+    `Mix camera motion with character action for maximum dynamism. ` +
+    `Continue the movement through the entire shot.`
+  );
+
+  parts.push(
     `RULES: No talking, no lip movement, no addressing camera. ` +
     `Rich facial expressions (shock, joy, fear, anger). ` +
-    `Dynamic body movement at natural speed. Never static. ` +
+    `Dynamic body movement at natural speed — never slow motion, never static. ` +
     `Match narration energy. Same character appearance throughout.`
   );
 

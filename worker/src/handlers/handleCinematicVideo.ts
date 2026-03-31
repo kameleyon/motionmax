@@ -17,12 +17,7 @@ import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField } from "../lib/sceneUpdate.js";
 import { generateImage } from "../services/imageGenerator.js";
-import {
-  generateLtxVideo,
-  pickCameraMotion,
-  pickLtxDuration,
-  type CameraMotion,
-} from "../services/ltxVideo.js";
+import { generateVeoVideo } from "../services/ltxVideo.js";
 import { getStylePrompt } from "../services/prompts.js";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -161,25 +156,17 @@ export async function handleCinematicVideo(
   const voiceover = scene.voiceover || "";
   const videoPrompt = buildVideoPrompt(visualPrompt, voiceover, characterDescription, style, language);
 
-  // ── Pick duration and camera motion ──────────────────────────────
-  const wordCount = voiceover.split(/\s+/).filter(Boolean).length;
-  const estimatedAudioSec = Math.max(5, wordCount / 2.5);
-  const duration = pickLtxDuration(estimatedAudioSec);
-  const cameraMotion = pickCameraMotion(sceneIndex);
-
   console.log(
-    `[CinematicVideo] Scene ${sceneIndex}: LTX ${duration}s, camera=${cameraMotion}, ` +
+    `[CinematicVideo] Scene ${sceneIndex}: Veo 3.1 8s, ` +
     `morph=${!!nextImageUrl}, prompt=${videoPrompt.length} chars`
   );
 
-  // ── Generate video with LTX 2.3 Pro ──────────────────────────────
-  const result = await generateLtxVideo({
+  // ── Generate video with Veo 3.1 Fast I2V ──────────────────────────
+  const result = await generateVeoVideo({
     prompt: videoPrompt,
     imageUrl,
-    lastFrameImageUrl: nextImageUrl || undefined,
+    lastImageUrl: nextImageUrl || undefined,
     aspectRatio,
-    duration,
-    cameraMotion,
   });
 
   if (!result.url) {
@@ -206,10 +193,10 @@ export async function handleCinematicVideo(
     jobId, projectId, userId, generationId,
     category: "system_info",
     eventType: "cinematic_video_completed",
-    message: `Cinematic video completed for scene ${sceneIndex} (LTX ${duration}s, camera=${cameraMotion})`,
+    message: `Cinematic video completed for scene ${sceneIndex} (Veo 3.1, 8s)`,
   });
 
-  return { success: true, status: "complete", videoUrl: finalVideoUrl, sceneIndex, provider: "LTX 2.3 Pro" };
+  return { success: true, status: "complete", videoUrl: finalVideoUrl, sceneIndex, provider: "Veo 3.1" };
 }
 
 // ── Prompt builder (stays under 2500 chars) ────────────────────────

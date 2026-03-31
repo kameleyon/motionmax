@@ -1,211 +1,166 @@
 /**
- * LTX 2.3 Pro video generation via Replicate.
+ * Veo 3.1 Fast I2V video generation via Hypereal.
  *
- * Model: lightricks/ltx-2.3-pro
- * Supports native first frame + last frame interpolation for seamless transitions.
+ * Model: veo-3-1-i2v (72 credits)
+ * Google Veo 3.1 Fast image-to-video with native first + last frame interpolation.
  *
- * Usage:
- *   image (first frame) + last_frame_image (next scene's image) → seamless morph video
- *   Last scene: image only, no last_frame_image
+ * Defaults: duration=8, resolution=1080p, generate_audio=false
+ * Variable: aspect_ratio (16:9 or 9:16)
+ * Negative prompt: slow, slow motion (enforced)
  */
 
-const REPLICATE_API = "https://api.replicate.com/v1/models/lightricks/ltx-2.3-pro/predictions";
-const REPLICATE_POLL = "https://api.replicate.com/v1/predictions";
+const HYPEREAL_VIDEO_URL = "https://api.hypereal.cloud/v1/videos/generate";
 
 // ── Types ────────────────────────────────────────────────────────────
 
-export type CameraMotion =
-  | "none"
-  | "dolly_in"
-  | "dolly_out"
-  | "dolly_left"
-  | "dolly_right"
-  | "jib_up"
-  | "jib_down"
-  | "static"
-  | "focus_shift";
-
-export interface LtxVideoInput {
-  /** Visual/motion prompt describing the scene (max ~2500 chars) */
+export interface VeoVideoInput {
+  /** Visual/motion prompt */
   prompt: string;
   /** First frame image URL (Scene N's image) */
   imageUrl: string;
   /** Last frame image URL (Scene N+1's image) — creates seamless morph */
-  lastFrameImageUrl?: string;
-  /** Output format */
+  lastImageUrl?: string;
+  /** Output aspect ratio */
   aspectRatio: "16:9" | "9:16";
-  /** Video duration: 6, 8, or 10 seconds */
-  duration: 6 | 8 | 10;
-  /** Camera motion effect */
-  cameraMotion: CameraMotion;
 }
 
-export interface LtxVideoResult {
+export interface VeoVideoResult {
   url: string | null;
   provider: string;
   error?: string;
 }
 
-// ── Camera Motion Selection ──────────────────────────────────────────
-
-/** Available camera motions (excluding 'none' and 'static') */
-const DYNAMIC_MOTIONS: CameraMotion[] = [
-  "dolly_in", "dolly_out", "dolly_left", "dolly_right",
-  "jib_up", "jib_down", "focus_shift",
-];
-
-/**
- * Pick a camera motion for a scene based on its index.
- * Rotates through dynamic motions so adjacent scenes have different movement.
- */
-export function pickCameraMotion(sceneIndex: number): CameraMotion {
-  return DYNAMIC_MOTIONS[sceneIndex % DYNAMIC_MOTIONS.length];
-}
-
-/**
- * Pick the LTX duration that best covers the audio length.
- * LTX accepts: 6, 8, 10.
- */
-export function pickLtxDuration(audioSeconds: number): 6 | 8 | 10 {
-  if (audioSeconds <= 7) return 6;
-  if (audioSeconds <= 9) return 8;
-  return 10;
-}
-
 // ── Main API ─────────────────────────────────────────────────────────
 
-/**
- * Generate video using Replicate LTX 2.3 Pro.
- */
-export async function generateLtxVideo(
-  input: LtxVideoInput
-): Promise<LtxVideoResult> {
-  const apiKey = (process.env.REPLICATE_API_KEY || "").trim();
+export async function generateVeoVideo(
+  input: VeoVideoInput
+): Promise<VeoVideoResult> {
+  const apiKey = (process.env.HYPEREAL_API_KEY || "").trim();
   if (!apiKey) {
-    return { url: null, provider: "LTX 2.3 Pro", error: "REPLICATE_API_KEY not configured" };
+    return { url: null, provider: "Veo 3.1", error: "HYPEREAL_API_KEY not configured" };
   }
 
-  const hasLastFrame = !!input.lastFrameImageUrl;
+  const hasLastImage = !!input.lastImageUrl;
   console.log(
-    `[LTX] Starting LTX 2.3 Pro — ${input.duration}s, ${input.aspectRatio}, ` +
-    `camera=${input.cameraMotion}${hasLastFrame ? ", with last_frame_image" : ""}`
+    `[Veo] Starting Veo 3.1 Fast I2V — 8s, ${input.aspectRatio}${hasLastImage ? ", with last_image" : ""}`
   );
 
-  const replicateInput: Record<string, unknown> = {
-    task: "image_to_video",
+  const veoInput: Record<string, unknown> = {
     prompt: input.prompt,
     image: input.imageUrl,
-    duration: input.duration,
-    aspect_ratio: input.aspectRatio,
+    duration: 8,
     resolution: "1080p",
-    fps: 24,
-    camera_motion: input.cameraMotion,
+    aspect_ratio: input.aspectRatio,
     generate_audio: false,
+    negative_prompt: "slow, slow motion, slow mo, sluggish, lethargic, frozen, static, still, motionless",
   };
 
-  if (input.lastFrameImageUrl) {
-    replicateInput.last_frame_image = input.lastFrameImageUrl;
+  if (input.lastImageUrl) {
+    veoInput.last_image = input.lastImageUrl;
   }
 
+  const requestBody = { model: "veo-3-1-i2v", input: veoInput };
+  const bodyJson = JSON.stringify(requestBody);
+  console.log(`[Veo] Body (${bodyJson.length} chars): ${bodyJson.substring(0, 1500)}`);
+
   try {
-    // Create prediction
-    const createRes = await fetch(REPLICATE_API, {
+    const response = await fetch(HYPEREAL_VIDEO_URL, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "Prefer": "wait",
       },
-      body: JSON.stringify({ input: replicateInput }),
+      body: bodyJson,
     });
 
-    if (!createRes.ok) {
-      const errText = await createRes.text().catch(() => "");
-      throw new Error(`Replicate create failed: ${createRes.status} — ${errText.substring(0, 300)}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Veo API Error: ${response.status} - ${errorText.substring(0, 300)}`);
     }
 
-    const prediction = await createRes.json() as any;
+    const data = await response.json() as any;
+    const jobId = data.jobId;
+    const pollUrl = data.pollUrl || null;
 
-    // Check if the "Prefer: wait" header gave us the result directly
-    if (prediction.status === "succeeded" && prediction.output) {
-      const url = extractOutputUrl(prediction.output);
-      if (url) {
-        console.log(`[LTX] ✅ Completed immediately`);
-        return { url, provider: "LTX 2.3 Pro" };
-      }
+    console.log(`[Veo] Job created: ${jobId} (credits: ${data.creditsUsed})`);
+
+    if (!jobId) {
+      throw new Error(`No jobId from Veo: ${JSON.stringify(data).substring(0, 200)}`);
     }
 
-    const predId = prediction.id;
-    if (!predId) {
-      throw new Error(`No prediction ID: ${JSON.stringify(prediction).substring(0, 200)}`);
-    }
-
-    console.log(`[LTX] Prediction created: ${predId}`);
-
-    // Poll for completion
-    const url = await pollPrediction(predId, apiKey);
-    if (url) {
-      console.log(`[LTX] ✅ Completed: ${url.substring(0, 80)}...`);
-      return { url, provider: "LTX 2.3 Pro" };
-    }
-
-    return { url: null, provider: "LTX 2.3 Pro", error: "No output URL returned" };
+    const videoUrl = await pollVeoJob(jobId, apiKey, pollUrl);
+    console.log(`[Veo] ✅ Completed: ${videoUrl.substring(0, 80)}...`);
+    return { url: videoUrl, provider: "Veo 3.1" };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[LTX] ❌ Failed: ${msg}`);
-    return { url: null, provider: "LTX 2.3 Pro", error: msg };
+    console.error(`[Veo] ❌ Failed: ${msg}`);
+    return { url: null, provider: "Veo 3.1", error: msg };
   }
 }
 
 // ── Polling ──────────────────────────────────────────────────────────
 
-async function pollPrediction(predId: string, apiKey: string): Promise<string | null> {
-  const maxAttempts = 90;  // 90 × 10s = 15 min
-  const pollMs = 10_000;
+function sleepWithJitter(baseMs: number): Promise<void> {
+  const jitter = baseMs * 0.25 * (Math.random() * 2 - 1);
+  return new Promise(r => setTimeout(r, Math.max(2000, baseMs + jitter)));
+}
 
-  for (let i = 1; i <= maxAttempts; i++) {
-    await new Promise(r => setTimeout(r, pollMs));
+async function pollVeoJob(
+  jobId: string,
+  apiKey: string,
+  pollUrl: string | null,
+): Promise<string> {
+  const maxAttempts = 60;
+  const basePollMs = 15_000;
+  let consecutive429 = 0;
 
-    if (i <= 2 || i % 5 === 0) {
-      console.log(`[LTX] Polling ${predId} (${i}/${maxAttempts})...`);
+  const url = pollUrl
+    || `https://api.hypereal.cloud/v1/jobs/${jobId}?model=veo-3-1-i2v&type=video`;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (consecutive429 > 0) {
+      const delay = Math.min(30_000 * Math.pow(2, consecutive429), 120_000);
+      await sleepWithJitter(delay);
+    } else {
+      await sleepWithJitter(basePollMs);
     }
 
-    const res = await fetch(`${REPLICATE_POLL}/${predId}`, {
+    if (attempt <= 2 || attempt % 5 === 0) {
+      console.log(`[Veo] Polling ${jobId} (${attempt}/${maxAttempts})...`);
+    }
+
+    const response = await fetch(url, {
       headers: { "Authorization": `Bearer ${apiKey}` },
     });
 
-    if (!res.ok) {
-      if (res.status === 429) {
-        console.warn(`[LTX] 429 — backing off 30s`);
-        await new Promise(r => setTimeout(r, 30_000));
-        continue;
-      }
-      console.warn(`[LTX] Poll HTTP ${res.status}`);
+    if (response.status === 429) {
+      consecutive429++;
+      if (consecutive429 >= 4) throw new Error(`Veo rate-limited: 4 consecutive 429s`);
       continue;
     }
 
-    const data = await res.json() as any;
-
-    if (data.status === "succeeded") {
-      return extractOutputUrl(data.output);
+    if (!response.ok) {
+      console.warn(`[Veo] Poll HTTP ${response.status}`);
+      consecutive429 = 0;
+      continue;
     }
 
-    if (data.status === "failed" || data.status === "canceled") {
-      throw new Error(`LTX ${data.status}: ${data.error || "unknown"}`);
+    consecutive429 = 0;
+    const data = await response.json() as any;
+
+    if (data.status === "succeeded" || data.status === "completed") {
+      const videoUrl = data.outputUrl || data.output_url || data.result?.url || data.output?.url || data.url;
+      if (!videoUrl) {
+        console.log(`[Veo] Full response: ${JSON.stringify(data)}`);
+        throw new Error(`Veo completed but no URL found`);
+      }
+      return videoUrl;
+    }
+
+    if (data.status === "failed" || data.status === "error") {
+      throw new Error(`Veo failed: ${data.error || JSON.stringify(data)}`);
     }
   }
 
-  throw new Error(`LTX timed out after ${maxAttempts} polls`);
-}
-
-function extractOutputUrl(output: unknown): string | null {
-  if (typeof output === "string") return output;
-  if (output && typeof output === "object") {
-    const o = output as any;
-    if (o.url) return o.url;
-    if (Array.isArray(o) && o[0]) {
-      return typeof o[0] === "string" ? o[0] : o[0]?.url || null;
-    }
-  }
-  return null;
+  throw new Error(`Veo timed out after ${maxAttempts} polls`);
 }

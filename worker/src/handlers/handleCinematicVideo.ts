@@ -313,83 +313,54 @@ interface PromptInput {
   totalScenes: number;
 }
 
+/**
+ * Build a video prompt that stays UNDER 2500 chars.
+ * Grok/Hypereal APIs time out on long prompts. Keep it tight.
+ * The starting image already carries style, character, and context —
+ * the prompt only needs to describe MOTION and ACTION.
+ */
 function buildVideoPrompt(input: PromptInput): string {
+  const MAX_CHARS = 2400;
   const parts: string[] = [];
 
-  // ── 1. STYLE LOCK — prevents mixing art styles ──
-  parts.push(
-    `VISUAL STYLE (STRICT — do NOT deviate): ${input.styleName.toUpperCase()} style. ` +
-    `${input.stylePrompt.substring(0, 400)}. ` +
-    `Maintain this EXACT visual style throughout. Do NOT mix with other styles. ` +
-    `If the style is realistic, everything must look photorealistic. ` +
-    `If the style is anime, everything must look anime. No exceptions.`
-  );
+  // 1. Style (short)
+  parts.push(`STYLE: ${input.styleName.toUpperCase()}. Maintain this exact visual style. Do not mix styles.`);
 
-  // ── 2. CHARACTER IDENTITY — detailed and enforced ──
+  // 2. Character (condensed — the image already shows them)
   if (input.characterDescription) {
-    parts.push(
-      `MAIN CHARACTER (CRITICAL — maintain EXACT appearance in every frame):\n${input.characterDescription}\n` +
-      `The character's skin tone, hair, clothing, body type, and facial features must remain IDENTICAL ` +
-      `to the provided starting image throughout the entire video. Do NOT change the character's ` +
-      `race, gender, age, hair color/style, or clothing. This is the SAME person from frame 1 to the last frame.`
-    );
+    parts.push(`CHARACTER: ${input.characterDescription.substring(0, 200)}. Keep EXACT same appearance throughout.`);
   }
 
-  // ── 3. CHARACTER BIBLE — if LLM generated specific character refs ──
-  const bibleEntries = Object.entries(input.characterBible);
-  if (bibleEntries.length > 0) {
-    const bibleText = bibleEntries
-      .map(([name, desc]) => `  • ${name}: ${desc}`)
-      .join("\n");
-    parts.push(`CHARACTER REFERENCE SHEET:\n${bibleText}`);
-  }
+  // 3. Scene visual — the most important part
+  parts.push(input.visualPrompt.substring(0, 600));
 
-  if (input.presenterFocus) {
-    parts.push(`SUBJECT FOCUS: ${input.presenterFocus}`);
-  }
-
-  // ── 4. SCENE VISUAL DESCRIPTION — what this scene shows ──
-  parts.push(`SCENE ${input.sceneIndex + 1}/${input.totalScenes} VISUAL:\n${input.visualPrompt}`);
-
-  // ── 5. NARRATIVE CONTEXT — what's happening, NOT what's being said ──
+  // 4. Voiceover context (condensed — just the emotional/action cues)
   if (input.voiceover) {
-    parts.push(
-      `SCENE CONTEXT (what is happening in this moment — use for action/emotion cues only):\n"${input.voiceover.substring(0, 500)}"`
-    );
+    parts.push(`CONTEXT: ${input.voiceover.substring(0, 250)}`);
   }
 
-  // ── 6. CONTENT/HISTORICAL CONTEXT — keeps accuracy ──
-  if (input.contentContext && input.contentContext.length > 20) {
-    parts.push(
-      `CONTENT CONTEXT (maintain accuracy to this source material):\n${input.contentContext.substring(0, 300)}`
-    );
+  // 5. Language for text
+  if (input.language && input.language !== "en") {
+    const langName = input.language === "fr" ? "French" : input.language === "ht" ? "Haitian Creole" : input.language;
+    parts.push(`Any visible text must be in ${langName}.`);
   }
 
-  // ── 7. LANGUAGE — text consistency ──
-  const langName = input.language === "fr" ? "French" : input.language === "ht" ? "Haitian Creole" : "English";
+  // 6. Rules (compact)
   parts.push(
-    `LANGUAGE & TEXT: Any text, titles, signs, letters, or written content visible in the video must be in ${langName}. ` +
-    `Maintain language consistency throughout.`
+    `RULES: No talking, no lip movement, no addressing camera. ` +
+    `Rich facial expressions (shock, joy, fear, anger). ` +
+    `Dynamic body movement at natural speed. Never static. ` +
+    `Camera in constant motion: dolly, pan, tilt, tracking. ` +
+    `Match narration energy. Same character appearance throughout.`
   );
 
-  // ── 8. ANIMATION RULES ──
-  parts.push(
-    `ANIMATION RULES (MANDATORY):\n` +
-    `- Characters must NEVER talk, narrate, commentate, or address the audience\n` +
-    `- Characters must NEVER move their mouths as if speaking, presenting, or explaining\n` +
-    `- Characters must NEVER look directly at the camera as if talking to the viewer\n` +
-    `- Even if the script is in first person, characters do NOT speak — the voiceover is separate\n` +
-    `- Characters CAN interact with each other through gestures, body language, and expressions\n` +
-    `- Facial expressions must be RICH and DETAILED: shock, fury, grief, joy, fear, determination, disgust\n` +
-    `- Body movement IS required: walking, running, gesturing, pointing, reacting — NEVER static\n` +
-    `- ALL motion at NATURAL human speed — never slow motion, never unnaturally fast\n` +
-    `- Environment animation required: wind, particles, camera movement, lighting changes\n` +
-    `- Camera must be in constant motion: dolly, pan, tilt, tracking — never static\n` +
-    `- Match the energy of the narration — intense narration = intense motion\n` +
-    `- Maintain CONSISTENT character appearance — same person, same clothes, same features across all scenes`
-  );
+  // Join and enforce hard limit
+  let prompt = parts.join("\n\n");
+  if (prompt.length > MAX_CHARS) {
+    prompt = prompt.substring(0, MAX_CHARS - 3) + "...";
+  }
 
-  return parts.join("\n\n");
+  return prompt;
 }
 
 // ── Storage upload ─────────────────────────────────────────────────

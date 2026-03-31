@@ -123,49 +123,43 @@ async function runCinematicAudio(projectId: string, generationId: string, sceneC
   console.log(LOG, "Audio phase complete");
 }
 
-/**
- * Pipelined image + video generation.
+/** Parallel image generation with immediate video dispatch.
  *
- * Images are generated in parallel batches of 4.
- * As soon as a pair of images (N, N+1) is ready, video N is dispatched.
- * Videos run concurrently with image generation — maximum throughput.
- *
- * Flow:
- *   Image batch 1 (scenes 0-3) → as pairs complete → Video 0, 1, 2, 3
- *   Image batch 2 (scenes 4-7) → as pairs complete → Video 4, 5, 6, 7
- *   ...
- *   Last scene video: no last_frame_image (just scene motion)
+ *  - 4 images sent to Hypereal in parallel at all times
+ *  - As EACH image completes → immediately dispatch video (fire-and-forget)
+ *  - The freed image slot immediately starts the next pending scene
+ *  - Videos run fully in parallel with ongoing images
+ *  - Worker handles waiting for next scene's image (for last_frame_image)
  */
 async function runCinematicVisuals(projectId: string, generationId: string, sceneCount: number, ctx: PipelineContext) {
-  console.log(LOG, "Starting pipelined image→video phase", { sceneCount });
+  console.log(LOG, "Starting parallel image→video phase", { sceneCount });
   ctx.setState((prev) => ({ ...prev, progress: 35, statusMessage: "Audio complete. Generating visuals..." }));
 
-  const IMAGE_BATCH_SIZE = 4;
+  const IMAGE_CONCURRENCY = 4;
   let completedImages = 0;
   let completedVideos = 0;
   const videoPromises: Promise<void>[] = [];
 
-  // Track which images are ready
-  const imageReady = new Set<number>();
-
-  /** Generate image for one scene */
-  const generateImage = async (i: number) => {
+  /** Generate image for one scene. On success → fire off video immediately. */
+  const processImage = async (i: number) => {
     const now = Date.now();
     if (now - lastRateLimitTime < GLOBAL_COOLDOWN_MS) {
-      await sleep(GLOBAL_COOLDOWN_MS - (now - lastRateLimitTime));
+      const wait = GLOBAL_COOLDOWN_MS - (now - lastRateLimitTime);
+      console.log(LOG, `Scene ${i + 1} image: cooldown ${(wait / 1000).toFixed(1)}s`);
+      await sleep(wait);
     }
 
+    let imageOk = false;
     try {
       const imgRes = await ctx.callPhase(
         { phase: "images", projectId, generationId, sceneIndex: i },
         480000, CINEMATIC_ENDPOINT
       );
-      if (imgRes.success) {
-        imageReady.add(i);
-        console.log(LOG, `Scene ${i + 1} image ready`);
-      } else {
+      if (!imgRes.success) {
         if (imgRes.retryAfterMs && imgRes.retryAfterMs >= 20000) lastRateLimitTime = Date.now();
         console.warn(LOG, `Scene ${i + 1} image failed: ${imgRes.error}`);
+      } else {
+        imageOk = true;
       }
     } catch (err) {
       console.warn(LOG, `Scene ${i + 1} image error:`, err);
@@ -174,94 +168,73 @@ async function runCinematicVisuals(projectId: string, generationId: string, scen
     completedImages++;
     ctx.setState((prev) => ({
       ...prev,
-      statusMessage: `Images ${completedImages}/${sceneCount} | Videos ${completedVideos}/${sceneCount}`,
+      statusMessage: `Images ${completedImages}/${sceneCount} | Clips ${completedVideos}/${sceneCount}`,
       progress: 35 + Math.floor(((completedImages + completedVideos) / (sceneCount * 2)) * 60),
     }));
-  };
 
-  /** Dispatch video for scene i once its image pair is ready */
-  const dispatchVideo = async (i: number) => {
-    // Check if video already exists
-    const { data: checkGen } = await supabase
-      .from("generations").select("scenes").eq("id", generationId).maybeSingle();
-    const checkScenes = normalizeScenes(checkGen?.scenes) ?? [];
-    if (checkScenes[i]?.videoUrl) {
-      console.log(LOG, `Scene ${i + 1}: already has videoUrl, skipping`);
+    if (!imageOk) {
+      console.warn(LOG, `Scene ${i + 1}: image failed, queuing video anyway (worker will auto-generate image)`);
+    }
+
+    // Fire off video IMMEDIATELY — don't block the image slot
+    // The worker will wait for the next scene's image if needed (for last_frame_image)
+    const videoTask = (async () => {
+      try {
+        const { data: checkGen } = await supabase.from("generations").select("scenes").eq("id", generationId).maybeSingle();
+        const checkScenes = normalizeScenes(checkGen?.scenes) ?? [];
+        if (checkScenes[i]?.videoUrl) {
+          console.log(LOG, `Scene ${i + 1}: already has videoUrl, skipping`);
+        } else {
+          const vidRes = await ctx.callPhase(
+            { phase: "video", projectId, generationId, sceneIndex: i },
+            20 * 60 * 1000, // 20 min (LTX ~2-5 min + worker waits for next image)
+            CINEMATIC_ENDPOINT
+          );
+          if (!vidRes.success) console.warn(LOG, `Scene ${i + 1} video failed: ${vidRes.error}`);
+          else console.log(LOG, `Scene ${i + 1} video complete`);
+        }
+      } catch (err) {
+        console.warn(LOG, `Scene ${i + 1} video error:`, err);
+      }
       completedVideos++;
-      return;
-    }
-
-    console.log(LOG, `Scene ${i + 1}: dispatching LTX video job`);
-    try {
-      const vidRes = await ctx.callPhase(
-        { phase: "video", projectId, generationId, sceneIndex: i },
-        20 * 60 * 1000, // 20 min timeout (LTX ~2-5 min + wait for images)
-        CINEMATIC_ENDPOINT
-      );
-      if (!vidRes.success) {
-        console.warn(LOG, `Scene ${i + 1} video failed: ${vidRes.error}`);
-      } else {
-        console.log(LOG, `Scene ${i + 1} video complete`);
-      }
-    } catch (err) {
-      console.warn(LOG, `Scene ${i + 1} video error:`, err);
-    }
-
-    completedVideos++;
-    ctx.setState((prev) => ({
-      ...prev,
-      statusMessage: `Images ${completedImages}/${sceneCount} | Videos ${completedVideos}/${sceneCount}`,
-      progress: 35 + Math.floor(((completedImages + completedVideos) / (sceneCount * 2)) * 60),
-    }));
+      ctx.setState((prev) => ({
+        ...prev,
+        statusMessage: `Images ${completedImages}/${sceneCount} | Clips ${completedVideos}/${sceneCount}`,
+        progress: 35 + Math.floor(((completedImages + completedVideos) / (sceneCount * 2)) * 60),
+      }));
+    })();
+    videoPromises.push(videoTask);
   };
 
-  // ── Process image batches, dispatch videos as pairs become available ──
-  for (let batchStart = 0; batchStart < sceneCount; batchStart += IMAGE_BATCH_SIZE) {
-    const batchEnd = Math.min(batchStart + IMAGE_BATCH_SIZE, sceneCount);
-
-    // Generate this batch of images in parallel
-    console.log(LOG, `Image batch ${batchStart + 1}–${batchEnd}`);
-    const imageBatch: Promise<void>[] = [];
-    for (let i = batchStart; i < batchEnd; i++) {
-      imageBatch.push(generateImage(i));
-    }
-    await Promise.allSettled(imageBatch);
-
-    // After each image batch, dispatch videos for scenes whose pairs are now ready
-    // Video i needs image i and image i+1 (except last scene which just needs image i)
-    for (let i = batchStart; i < batchEnd; i++) {
-      const isLast = i >= sceneCount - 1;
-      const thisReady = imageReady.has(i);
-      const nextReady = isLast || imageReady.has(i + 1);
-
-      if (thisReady && nextReady) {
-        // Dispatch video — fire and forget, don't block image generation
-        videoPromises.push(dispatchVideo(i));
-      }
-    }
+  // Process images in parallel batches of IMAGE_CONCURRENCY.
+  // Each batch fires up to 4 images; as each completes its video is dispatched independently.
+  for (let batchStart = 0; batchStart < sceneCount; batchStart += IMAGE_CONCURRENCY) {
+    const batchEnd = Math.min(batchStart + IMAGE_CONCURRENCY, sceneCount);
+    const batch: Promise<void>[] = [];
+    for (let i = batchStart; i < batchEnd; i++) batch.push(processImage(i));
+    console.log(LOG, `Image batch ${batchStart + 1}–${batchEnd} (${IMAGE_CONCURRENCY} parallel)`);
+    await Promise.allSettled(batch);
   }
 
   // Wait for ALL in-flight video jobs to finish
-  console.log(LOG, `All images done. Waiting for ${videoPromises.length} in-flight videos...`);
+  console.log(LOG, `All images done. Waiting for ${videoPromises.length} in-flight video jobs...`);
   await Promise.allSettled(videoPromises);
 
-  // Dispatch any videos that weren't dispatched yet (image pair wasn't ready during batch)
-  for (let i = 0; i < sceneCount; i++) {
-    const { data: checkGen } = await supabase
-      .from("generations").select("scenes").eq("id", generationId).maybeSingle();
-    const checkScenes = normalizeScenes(checkGen?.scenes) ?? [];
-    if (!checkScenes[i]?.videoUrl) {
-      console.log(LOG, `Scene ${i + 1}: video missing, dispatching now`);
+  // Retry missing videos (1 round)
+  const { data: latestGen } = await supabase.from("generations").select("scenes").eq("id", generationId).maybeSingle();
+  const latestScenes = normalizeScenes(latestGen?.scenes) ?? [];
+  const missingVids = latestScenes.map((s, i) => (!s.videoUrl ? i : -1)).filter((i) => i >= 0);
+  if (missingVids.length > 0) {
+    console.log(LOG, `Retrying ${missingVids.length} missing videos`);
+    ctx.setState((prev) => ({ ...prev, statusMessage: `Retrying ${missingVids.length} missing clips...` }));
+    for (const idx of missingVids) {
       try {
-        await ctx.callPhase(
-          { phase: "video", projectId, generationId, sceneIndex: i },
-          20 * 60 * 1000, CINEMATIC_ENDPOINT
-        );
+        await ctx.callPhase({ phase: "video", projectId, generationId, sceneIndex: idx }, 20 * 60 * 1000, CINEMATIC_ENDPOINT);
       } catch { /* continue */ }
     }
   }
 
-  console.log(LOG, "Pipelined image→video phase complete");
+  console.log(LOG, "Parallel image→video phase complete");
 }
 
 async function finalizeCinematic(projectId: string, generationId: string, sceneCount: number, format: string, ctx: PipelineContext) {

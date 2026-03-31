@@ -74,9 +74,9 @@ export async function runCinematicPipeline(
     statusMessage: "Script complete. Generating audio...",
   }));
 
-  // Phase 2: Audio (all scenes)
+  // Phase 2: Audio (all scenes in parallel)
   await runCinematicAudio(projectId, generationId, sceneCount, ctx, params.language);
-  // Phase 3+4: Image → Video interleaved (each scene flows image→video immediately)
+  // Phase 3+4: Generate scene 1 image → chain videos sequentially (each uses previous video's last frame)
   await runCinematicVisuals(projectId, generationId, sceneCount, ctx);
 
   // Phase 5: Finalize
@@ -189,7 +189,7 @@ async function runCinematicVisuals(projectId: string, generationId: string, scen
         console.log(LOG, `Scene ${i + 1}: dispatching video job (chained)`);
         const vidRes = await ctx.callPhase(
           { phase: "video", projectId, generationId, sceneIndex: i },
-          600000, // 10 min per scene (includes waiting for previous)
+          25 * 60 * 1000, // 25 min per scene (Grok ~5-10 min + waiting for previous scene's video)
           CINEMATIC_ENDPOINT
         );
         if (!vidRes.success) {

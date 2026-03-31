@@ -43,9 +43,10 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 async function waitForSceneImage(
   generationId: string,
   sceneIndex: number,
-  maxWaitMs: number = 5 * 60 * 1000
+  maxWaitMs: number = 10 * 60 * 1000 // 10 min — images can take 3 min each, batch of 4 = up to 6-8 min
 ): Promise<string | null> {
   const start = Date.now();
+  let attempts = 0;
   while (Date.now() - start < maxWaitMs) {
     const { data: gen } = await supabase
       .from("generations")
@@ -53,9 +54,17 @@ async function waitForSceneImage(
       .eq("id", generationId)
       .maybeSingle();
     const url = ((gen?.scenes as any[]) ?? [])[sceneIndex]?.imageUrl;
-    if (url) return url;
+    if (url) {
+      console.log(`[CinematicVideo] Scene ${sceneIndex} image found after ${Math.round((Date.now() - start) / 1000)}s`);
+      return url;
+    }
+    attempts++;
+    if (attempts % 6 === 0) {
+      console.log(`[CinematicVideo] Still waiting for scene ${sceneIndex} image... (${Math.round((Date.now() - start) / 1000)}s)`);
+    }
     await sleep(5_000);
   }
+  console.warn(`[CinematicVideo] Scene ${sceneIndex} image not found after ${maxWaitMs / 1000}s`);
   return null;
 }
 

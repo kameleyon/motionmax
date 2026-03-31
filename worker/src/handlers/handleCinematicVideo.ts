@@ -45,7 +45,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 async function waitForPreviousSceneVideo(
   generationId: string,
   prevSceneIndex: number,
-  maxWaitMs: number = 10 * 60 * 1000 // 10 min max wait
+  maxWaitMs: number = 20 * 60 * 1000 // 20 min max wait (Grok can take 10-15 min)
 ): Promise<string | null> {
   const startTime = Date.now();
   const pollInterval = 10_000; // check every 10s

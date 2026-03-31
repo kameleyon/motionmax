@@ -26,8 +26,6 @@ import {
 } from "@/components/ui/carousel";
 import { format } from "date-fns";
 
-import dashboardBgDark from "@/assets/dashboard/dashboard-bg-dark.png";
-import dashboardBgLight from "@/assets/dashboard/dashboard-bg-light.png";
 import defaultThumbnail from "@/assets/dashboard/default-thumbnail.png";
 
 const TIPS_INTERVAL_MS = 8000;
@@ -186,10 +184,6 @@ export default function Dashboard() {
 
   return (
     <div className="flex h-screen flex-col bg-background overflow-hidden relative">
-      {/* Background Images */}
-      <div className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-15 dark:opacity-0 pointer-events-none" style={{ backgroundImage: `url(${dashboardBgLight})` }} />
-      <div className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-0 dark:opacity-40 pointer-events-none" style={{ backgroundImage: `url(${dashboardBgDark})` }} />
-
       {/* Header */}
       <header className="relative z-10 flex h-14 sm:h-16 items-center justify-between border-b border-primary/20 bg-background/80 px-4 sm:px-6 backdrop-blur-sm">
         <div className="flex items-center gap-3 sm:gap-4">

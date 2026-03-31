@@ -110,7 +110,7 @@ export function CinematicResult({
   const [hasCopied, setHasCopied] = useState(false);
   const [isDownloadingClipsZip, setIsDownloadingClipsZip] = useState(false);
 
-  const { state: exportState, exportVideo, downloadVideo, reset: resetExport } = useVideoExport();
+  const { state: exportState, exportVideo, downloadVideo, reset: resetExport, loadExistingVideo } = useVideoExport();
   const reRenderTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasAutoExportedRef = useRef(false);
 
@@ -135,9 +135,9 @@ export function CinematicResult({
         number: s.number, voiceover: s.voiceover, visualPrompt: s.visualPrompt,
         duration: s.duration, videoUrl: s.videoUrl, audioUrl: s.audioUrl, imageUrl: s.imageUrl,
       }));
-      void exportVideo(exportScenes, format, undefined, projectId, "cinematic").catch(() => {});
+      void exportVideo(exportScenes, format, undefined, projectId, "cinematic", generationId).catch(() => {});
     }, 3000);
-  }, [exportVideo, format, projectId]);
+  }, [exportVideo, format, projectId, generationId]);
 
   const {
     isRegenerating,
@@ -151,20 +151,42 @@ export function CinematicResult({
   // Keep scenes synced
   useEffect(() => { setLocalScenes(scenes); }, [scenes]);
 
-  // Auto-export on first mount
+  // On mount: check if a rendered video already exists in the DB.
+  // If yes, show it immediately. If no, auto-export.
   useEffect(() => {
     if (hasAutoExportedRef.current) return;
-    if (!scenesWithVideo.length || !projectId) return;
+    if (!projectId || !generationId) return;
     if (exportState.status !== "idle") return;
 
     hasAutoExportedRef.current = true;
-    clearVideoExportLogs();
-    const exportScenes = localScenes.map((s) => ({
-      number: s.number, voiceover: s.voiceover, visualPrompt: s.visualPrompt,
-      duration: s.duration, videoUrl: s.videoUrl, audioUrl: s.audioUrl, imageUrl: s.imageUrl,
-    }));
-    void exportVideo(exportScenes, format, undefined, projectId, "cinematic").catch(() => {});
-  }, [scenesWithVideo.length, projectId, format, exportVideo, exportState.status, localScenes]);
+
+    // Check for existing exported video in the generations table
+    (async () => {
+      const { data: gen } = await supabase
+        .from("generations")
+        .select("video_url")
+        .eq("id", generationId)
+        .maybeSingle();
+
+      const existingUrl = (gen as any)?.video_url;
+
+      if (existingUrl) {
+        // Already rendered — show it directly, no re-export
+        console.log("[CinematicResult] Existing video found — skipping export");
+        loadExistingVideo(existingUrl);
+        return;
+      }
+
+      // No existing video — trigger export
+      if (!scenesWithVideo.length) return;
+      clearVideoExportLogs();
+      const exportScenes = localScenes.map((s) => ({
+        number: s.number, voiceover: s.voiceover, visualPrompt: s.visualPrompt,
+        duration: s.duration, videoUrl: s.videoUrl, audioUrl: s.audioUrl, imageUrl: s.imageUrl,
+      }));
+      void exportVideo(exportScenes, format, undefined, projectId, "cinematic", generationId).catch(() => {});
+    })();
+  }, [projectId, generationId, format, exportVideo, exportState.status, localScenes, scenesWithVideo.length]);
 
   // Copy script
   const copyScript = useCallback(() => {

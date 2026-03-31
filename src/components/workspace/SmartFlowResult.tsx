@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import type { VideoFormat } from "./FormatSelector";
 import type { Scene, CostTracking } from "@/hooks/useGenerationPipeline";
 import { useVideoExport } from "@/hooks/useVideoExport";
+import { supabase } from "@/integrations/supabase/client";
 import { useSceneRegeneration } from "@/hooks/useSceneRegeneration";
 import { useImagesZipDownload } from "@/hooks/useImagesZipDownload";
 import {
@@ -66,7 +67,7 @@ export function SmartFlowResult({
   const [exportLogsVersion, setExportLogsVersion] = useState(0);
   const [isReRendering, setIsReRendering] = useState(false);
 
-  const { state: exportState, exportVideo, downloadVideo, shareVideo, reset: resetExport } = useVideoExport();
+  const { state: exportState, exportVideo, downloadVideo, shareVideo, reset: resetExport, loadExistingVideo } = useVideoExport();
   const { state: zipState, downloadImagesAsZip } = useImagesZipDownload();
   const reRenderTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasAutoExportedRef = useRef(false);
@@ -88,9 +89,9 @@ export function SmartFlowResult({
     reRenderTimerRef.current = setTimeout(() => {
       setIsReRendering(false);
       clearVideoExportLogs();
-      void exportVideo(updatedScenes, format as any, brandMark, projectId, "smartflow").catch(() => {});
+      void exportVideo(updatedScenes, format as any, brandMark, projectId, "smartflow", generationId).catch(() => {});
     }, 3000);
-  }, [onScenesUpdate, exportVideo, format, brandMark, projectId, enableVoice]);
+  }, [onScenesUpdate, exportVideo, format, brandMark, projectId, enableVoice, generationId]);
 
   const {
     isRegenerating,
@@ -103,7 +104,7 @@ export function SmartFlowResult({
     setScenes(initialScenes);
   }, [initialScenes]);
 
-  // Auto-export on first render (if voice is enabled)
+  // On mount: check for existing rendered video, or auto-export
   useEffect(() => {
     if (hasAutoExportedRef.current) return;
     if (!enableVoice) return;
@@ -111,9 +112,27 @@ export function SmartFlowResult({
     if (exportState.status !== "idle") return;
 
     hasAutoExportedRef.current = true;
-    clearVideoExportLogs();
-    void exportVideo(initialScenes, format as any, brandMark, projectId, "smartflow").catch(() => {});
-  }, [initialScenes, projectId, format, brandMark, enableVoice, exportVideo, exportState.status]);
+
+    (async () => {
+      if (generationId) {
+        const { data: gen } = await supabase
+          .from("generations")
+          .select("video_url")
+          .eq("id", generationId)
+          .maybeSingle();
+
+        const existingUrl = (gen as any)?.video_url;
+        if (existingUrl) {
+          console.log("[SmartFlowResult] Existing video found — skipping export");
+          loadExistingVideo(existingUrl);
+          return;
+        }
+      }
+
+      clearVideoExportLogs();
+      void exportVideo(initialScenes, format as any, brandMark, projectId, "smartflow", generationId).catch(() => {});
+    })();
+  }, [initialScenes, projectId, generationId, format, brandMark, enableVoice, exportVideo, exportState.status, loadExistingVideo]);
 
   const scene = scenes[0];
   if (!scene) return null;
@@ -121,7 +140,7 @@ export function SmartFlowResult({
   const handleRetryExport = () => {
     resetExport();
     clearVideoExportLogs();
-    void exportVideo(scenes, format as any, brandMark, projectId, "smartflow").catch(() => {});
+    void exportVideo(scenes, format as any, brandMark, projectId, "smartflow", generationId).catch(() => {});
   };
 
   const copyScript = () => {

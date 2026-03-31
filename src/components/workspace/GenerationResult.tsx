@@ -21,6 +21,7 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { Scene, CostTracking, PhaseTimings } from "@/hooks/useGenerationPipeline";
 import { useVideoExport } from "@/hooks/useVideoExport";
+import { supabase } from "@/integrations/supabase/client";
 import { useSceneRegeneration } from "@/hooks/useSceneRegeneration";
 import { useImagesZipDownload } from "@/hooks/useImagesZipDownload";
 import {
@@ -70,7 +71,7 @@ export function GenerationResult({
   const [exportLogsVersion, setExportLogsVersion] = useState(0);
   const [isReRendering, setIsReRendering] = useState(false);
 
-  const { state: exportState, exportVideo, downloadVideo, shareVideo, reset: resetExport } = useVideoExport();
+  const { state: exportState, exportVideo, downloadVideo, shareVideo, reset: resetExport, loadExistingVideo } = useVideoExport();
   const { state: zipState, downloadImagesAsZip } = useImagesZipDownload();
   const reRenderTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasAutoExportedRef = useRef(false);
@@ -91,9 +92,9 @@ export function GenerationResult({
     reRenderTimerRef.current = setTimeout(() => {
       setIsReRendering(false);
       clearVideoExportLogs();
-      void exportVideo(updatedScenes, format, brandMark, projectId, projectType).catch(() => {});
+      void exportVideo(updatedScenes, format, brandMark, projectId, projectType, generationId).catch(() => {});
     }, 3000);
-  }, [onScenesUpdate, exportVideo, format, brandMark, projectId, projectType]);
+  }, [onScenesUpdate, exportVideo, format, brandMark, projectId, projectType, generationId]);
 
   const {
     isRegenerating,
@@ -108,17 +109,37 @@ export function GenerationResult({
     setScenes(initialScenes);
   }, [initialScenes]);
 
-  // Auto-export on first render (when generation completes)
+  // On mount: check for existing rendered video, or auto-export
   useEffect(() => {
     if (hasAutoExportedRef.current) return;
     if (!initialScenes.length || !projectId) return;
     if (exportState.status !== "idle") return;
 
     hasAutoExportedRef.current = true;
-    clearVideoExportLogs();
-    appendVideoExportLog("log", ["[UI] Auto-export triggered on completion"]);
-    void exportVideo(initialScenes, format, brandMark, projectId, projectType).catch(() => {});
-  }, [initialScenes, projectId, format, brandMark, projectType, exportVideo, exportState.status]);
+
+    (async () => {
+      // Check for existing exported video
+      if (generationId) {
+        const { data: gen } = await supabase
+          .from("generations")
+          .select("video_url")
+          .eq("id", generationId)
+          .maybeSingle();
+
+        const existingUrl = (gen as any)?.video_url;
+        if (existingUrl) {
+          console.log("[GenerationResult] Existing video found — skipping export");
+          loadExistingVideo(existingUrl);
+          return;
+        }
+      }
+
+      // No existing video — trigger export
+      clearVideoExportLogs();
+      appendVideoExportLog("log", ["[UI] Auto-export triggered on completion"]);
+      void exportVideo(initialScenes, format, brandMark, projectId, projectType, generationId).catch(() => {});
+    })();
+  }, [initialScenes, projectId, generationId, format, brandMark, projectType, exportVideo, exportState.status, loadExistingVideo]);
 
   // Copy script to clipboard
   const copyScript = useCallback(() => {
@@ -134,8 +155,8 @@ export function GenerationResult({
   const handleRetryExport = useCallback(() => {
     resetExport();
     clearVideoExportLogs();
-    void exportVideo(scenes, format, brandMark, projectId, projectType).catch(() => {});
-  }, [resetExport, exportVideo, scenes, format, brandMark, projectId, projectType]);
+    void exportVideo(scenes, format, brandMark, projectId, projectType, generationId).catch(() => {});
+  }, [resetExport, exportVideo, scenes, format, brandMark, projectId, projectType, generationId]);
 
   return (
     <div className="space-y-6 pb-8">

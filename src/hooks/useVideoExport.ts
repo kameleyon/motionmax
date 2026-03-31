@@ -18,6 +18,7 @@ export function useVideoExport() {
 
   // ── Per-export refs (reset each export) ──
   const activeJobIdRef = useRef<string | null>(null);
+  const generationIdRef = useRef<string | null>(null);
   const settledRef = useRef(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -74,6 +75,14 @@ export function useVideoExport() {
       const payload = updatedJob.payload as Record<string, unknown> | null;
       const finalUrl = payload?.finalUrl as string;
       setState({ status: "complete", progress: 100, videoUrl: finalUrl });
+      // Save the exported video URL to the generation for future visits
+      if (finalUrl && generationIdRef.current) {
+        supabase
+          .from("generations")
+          .update({ video_url: finalUrl })
+          .eq("id", generationIdRef.current)
+          .then(() => {}, () => {});
+      }
       resolveRef.current?.(finalUrl);
     } else if (updatedJob.status === "failed") {
       cleanup();
@@ -145,7 +154,8 @@ export function useVideoExport() {
       format: "landscape" | "portrait" | "square",
       brandMark?: string,
       projectId?: string,
-      projectType?: string
+      projectType?: string,
+      generationId?: string
     ) => {
       if (isExportingRef.current) {
         log("Export already in progress, ignoring duplicate request");
@@ -154,6 +164,7 @@ export function useVideoExport() {
       isExportingRef.current = true;
       abortRef.current = false;
       settledRef.current = false;
+      generationIdRef.current = generationId || null;
       log("Starting Render Server export", { scenes: scenes.length, format });
 
       setState({ status: "loading", progress: 0 });
@@ -232,5 +243,13 @@ export function useVideoExport() {
     return shareVideo(url, filename);
   }, [log]);
 
-  return { state, exportVideo, downloadVideo: handleDownload, shareVideo: handleShare, reset };
+  /**
+   * Load an already-exported video URL without triggering a new export.
+   * Used when revisiting a project that was previously rendered.
+   */
+  const loadExistingVideo = useCallback((videoUrl: string) => {
+    setState({ status: "complete", progress: 100, videoUrl });
+  }, []);
+
+  return { state, exportVideo, downloadVideo: handleDownload, shareVideo: handleShare, reset, loadExistingVideo };
 }

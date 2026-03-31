@@ -147,8 +147,7 @@ export function CinematicResult({
   // Keep scenes synced
   useEffect(() => { setLocalScenes(scenes); }, [scenes]);
 
-  // On mount: check if a rendered video already exists in the DB.
-  // If yes, show it immediately. If no, auto-export.
+  // On mount: use cached video if available (prop or DB), otherwise export once.
   useEffect(() => {
     if (hasAutoExportedRef.current) return;
     if (!projectId || !generationId) return;
@@ -156,7 +155,14 @@ export function CinematicResult({
 
     hasAutoExportedRef.current = true;
 
-    // Check for existing exported video in the generations table
+    // 1. Check if the prop already carries a cached video URL (fastest path)
+    if (finalVideoUrl) {
+      console.log("[CinematicResult] Using finalVideoUrl prop — skipping export");
+      loadExistingVideo(finalVideoUrl);
+      return;
+    }
+
+    // 2. Check the DB for a previously exported video URL
     (async () => {
       const { data: gen } = await supabase
         .from("generations")
@@ -167,13 +173,12 @@ export function CinematicResult({
       const existingUrl = (gen as any)?.video_url;
 
       if (existingUrl) {
-        // Already rendered — show it directly, no re-export
-        console.log("[CinematicResult] Existing video found — skipping export");
+        console.log("[CinematicResult] Existing video found in DB — skipping export");
         loadExistingVideo(existingUrl);
         return;
       }
 
-      // No existing video — trigger export
+      // 3. No cached video — trigger first-time export
       if (!scenesWithVideo.length) return;
       clearVideoExportLogs();
       const exportScenes = localScenes.map((s) => ({
@@ -182,7 +187,7 @@ export function CinematicResult({
       }));
       void exportVideo(exportScenes, format, undefined, projectId, "cinematic", generationId).catch(() => {});
     })();
-  }, [projectId, generationId, format, exportVideo, exportState.status, localScenes, scenesWithVideo.length]);
+  }, [projectId, generationId, finalVideoUrl, format, exportVideo, exportState.status, localScenes, scenesWithVideo.length]);
 
   // Copy script
   const copyScript = useCallback(() => {
@@ -316,8 +321,11 @@ export function CinematicResult({
           <Button
             variant="default"
             size="sm"
-            onClick={downloadVideo}
-            disabled={exportState.status !== "ready"}
+            onClick={() => {
+              if (!exportState.videoUrl) return;
+              downloadVideo(exportState.videoUrl, `${safeFileBase(title)}.mp4`, true);
+            }}
+            disabled={exportState.status !== "complete" || !exportState.videoUrl}
             className="gap-1.5"
           >
             <Download className="h-4 w-4" />

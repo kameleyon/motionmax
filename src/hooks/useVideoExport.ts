@@ -73,15 +73,23 @@ export function useVideoExport() {
     } else if (updatedJob.status === "completed") {
       cleanup();
       const payload = updatedJob.payload as Record<string, unknown> | null;
-      const finalUrl = payload?.finalUrl as string;
+      const result = updatedJob.result as Record<string, unknown> | null;
+      const finalUrl = (result?.finalUrl ?? payload?.finalUrl) as string;
       setState({ status: "complete", progress: 100, videoUrl: finalUrl });
-      // Save the exported video URL to the generation for future visits
+      // Persist the exported video URL to the generation so page refreshes skip re-export
       if (finalUrl && generationIdRef.current) {
+        const genId = generationIdRef.current;
         supabase
           .from("generations")
           .update({ video_url: finalUrl })
-          .eq("id", generationIdRef.current)
-          .then(() => {}, () => {});
+          .eq("id", genId)
+          .then(({ error: saveErr }) => {
+            if (saveErr) {
+              console.error("[VideoExport] Failed to save video_url to generation:", saveErr.message);
+            } else {
+              log("video_url persisted to generation", genId);
+            }
+          });
       }
       resolveRef.current?.(finalUrl);
     } else if (updatedJob.status === "failed") {

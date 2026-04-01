@@ -8,9 +8,56 @@ import { supabase } from "../../lib/supabase.js";
 
 const BUCKET_NAME = "videos";
 
-/** Stream a URL directly to disk without buffering in Node.js heap. */
+/**
+ * Extract the storage path (bucket/path) from a Supabase signed URL.
+ * Returns null if the URL is not a signed storage URL.
+ */
+function extractStoragePath(signedUrl: string): string | null {
+  try {
+    const url = new URL(signedUrl);
+    const pathMatch = url.pathname.match(/\/storage\/v1\/object\/sign\/(.+)/);
+    return pathMatch ? pathMatch[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Re-sign a Supabase signed storage URL to get a fresh token.
+ * Returns the original URL unchanged if it's not a signed URL.
+ */
+async function refreshSignedUrl(url: string): Promise<string> {
+  if (!url || !url.includes("/storage/v1/object/sign/")) return url;
+
+  const fullPath = extractStoragePath(url);
+  if (!fullPath) return url;
+
+  const slashIndex = fullPath.indexOf("/");
+  if (slashIndex === -1) return url;
+
+  const bucket = fullPath.substring(0, slashIndex);
+  const storagePath = fullPath.substring(slashIndex + 1);
+
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .createSignedUrl(storagePath, 3600); // 1 hour — plenty for download
+
+  if (error || !data?.signedUrl) {
+    console.warn(`[StorageHelpers] Failed to refresh signed URL for ${bucket}/${storagePath}:`, error?.message);
+    return url; // Fallback to original
+  }
+
+  console.log(`[StorageHelpers] Refreshed signed URL for ${bucket}/${storagePath}`);
+  return data.signedUrl;
+}
+
+/** Stream a URL directly to disk without buffering in Node.js heap.
+ *  Automatically refreshes expired Supabase signed URLs before downloading. */
 export async function streamToFile(url: string, destPath: string): Promise<void> {
-  const response = await fetch(url);
+  // Refresh signed URLs to avoid expired token errors
+  const freshUrl = await refreshSignedUrl(url);
+
+  const response = await fetch(freshUrl);
   if (!response.ok) throw new Error(`Download failed ${url}: ${response.statusText}`);
   if (!response.body) throw new Error(`No response body for ${url}`);
   const dest = fs.createWriteStream(destPath);

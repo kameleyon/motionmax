@@ -5,6 +5,7 @@ import {
   Download,
   Loader2,
   Pencil,
+  Trash2,
   Volume2,
   X,
   Clock,
@@ -29,7 +30,7 @@ import {
 import { SceneEditModal } from "./SceneEditModal";
 import { SceneVersionHistory } from "./SceneVersionHistory";
 import { VideoPlayer } from "./VideoPlayer";
-import { toast } from "sonner";
+import { toast } from "@/hooks/use-toast";
 
 interface GenerationResultProps {
   title: string;

@@ -6,14 +6,10 @@ import {
   Loader2,
   Pencil,
   Share2,
-  Trash2,
   X,
   Clock,
   Eye,
   EyeOff,
-  ChevronDown,
-  ChevronUp,
-  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -31,7 +27,7 @@ import {
 } from "@/lib/videoExportDebug";
 import { SceneEditModal } from "./SceneEditModal";
 import { VideoPlayer } from "./VideoPlayer";
-import { toast } from "sonner";
+import { toast } from "@/hooks/use-toast";
 
 interface SmartFlowResultProps {
   title: string;
@@ -164,91 +160,85 @@ export function SmartFlowResult({
         <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
       </div>
 
-      {/* ── Main Split Layout ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Left: Video Player or Image Preview */}
-        <div className="lg:col-span-3">
-          {enableVoice ? (
-            <VideoPlayer
-              exportState={exportState}
-              title={title}
-              onDownload={downloadVideo}
-              onReset={resetExport}
-              onRetry={handleRetryExport}
-              isReRendering={isReRendering}
-            />
-          ) : (
-            /* No-voice SmartFlow: show the infographic image directly */
-            <div className={cn(
-              "relative rounded-xl overflow-hidden bg-muted/50 border",
-              format === "portrait" ? "aspect-[9/16]" : format === "square" ? "aspect-square" : "aspect-video",
-            )}>
-              {scene.imageUrl ? (
-                <img
-                  src={scene.imageUrl}
-                  alt={title}
-                  className="w-full h-full object-contain"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                  No image
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Right: Script & Controls */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Script Card */}
-          {scene.voiceover && (
-            <Card className="p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <FileText className="h-4 w-4 text-primary" />
-                  Script
-                </div>
-                <Button size="sm" variant="outline" onClick={copyScript} className="gap-1.5">
-                  <Copy className="h-3.5 w-3.5" />
-                  Copy
-                </Button>
+      {/* ── Full-Width Video / Image ── */}
+      <div className="w-full max-w-4xl mx-auto">
+        {enableVoice ? (
+          <VideoPlayer
+            exportState={exportState}
+            title={title}
+            onDownload={downloadVideo}
+            onReset={resetExport}
+            onRetry={handleRetryExport}
+            isReRendering={isReRendering}
+          />
+        ) : (
+          /* No-voice SmartFlow: show the infographic image directly */
+          <div className={cn(
+            "relative rounded-xl overflow-hidden bg-black",
+            "aspect-video",
+          )}>
+            {scene.imageUrl ? (
+              <img
+                src={scene.imageUrl}
+                alt={title}
+                className="w-full h-full object-contain"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                No image
               </div>
-              <p className="text-sm text-foreground leading-relaxed max-h-48 overflow-y-auto scrollbar-thin">
-                {scene.voiceover}
-              </p>
-            </Card>
-          )}
-
-          {/* Quick Actions */}
-          <div className="flex flex-col gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowScenes(!showScenes)}
-              className="w-full justify-between"
-            >
-              <span className="flex items-center gap-2">
-                {showScenes ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                {showScenes ? "Hide Scene" : "Edit / Adjust Scene"}
-              </span>
-              {showScenes ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </Button>
-
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => downloadImagesAsZip(scenes, title)}
-                disabled={zipState.status === "downloading" || zipState.status === "zipping"}
-                className="flex-1 gap-1.5"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Image
-              </Button>
-              <Button variant="outline" size="sm" onClick={onNewProject} className="flex-1 gap-1.5">
-                New Project
-              </Button>
-            </div>
+            )}
           </div>
+        )}
+      </div>
+
+      {/* ── Actions Bar ── */}
+      <div className="w-full max-w-4xl mx-auto space-y-3">
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {enableVoice && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => {
+                if (!exportState.videoUrl) return;
+                const safeName = title.replace(/[^a-z0-9]/gi, "_").slice(0, 50) || "video";
+                downloadVideo(exportState.videoUrl, `${safeName}.mp4`, true);
+              }}
+              disabled={exportState.status !== "complete" || !exportState.videoUrl}
+              className="gap-1.5"
+            >
+              <Download className="h-4 w-4" />
+              Download
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowScenes(!showScenes)}
+            className="gap-1.5"
+          >
+            {showScenes ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {showScenes ? "Hide Scene" : "Edit / Adjust Scene"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => downloadImagesAsZip(scenes, title)}
+            disabled={zipState.status === "downloading" || zipState.status === "zipping"}
+            className="gap-1.5"
+          >
+            <Download className="h-3.5 w-3.5" />
+            {zipState.status === "downloading" || zipState.status === "zipping" ? "..." : "Image"}
+          </Button>
+          {scene.voiceover && (
+            <Button variant="outline" size="sm" onClick={copyScript} className="gap-1.5">
+              <Copy className="h-3.5 w-3.5" />
+              Copy Script
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={onNewProject} className="gap-1.5">
+            New Project
+          </Button>
         </div>
       </div>
 

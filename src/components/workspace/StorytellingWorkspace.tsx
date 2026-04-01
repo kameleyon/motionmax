@@ -19,8 +19,8 @@ import { ToneSelector, type StoryTone } from "./ToneSelector";
 import { GenreSelector, type StoryGenre } from "./GenreSelector";
 import { InclinationSelector } from "./InclinationSelector";
 import { StorytellingLengthSelector, type StoryLength } from "./StorytellingLengthSelector";
-import { GenerationProgress } from "./GenerationProgress";
 import { GenerationResult } from "./GenerationResult";
+import { VideoPlayer } from "./VideoPlayer";
 import { CharacterConsistencyToggle } from "./CharacterConsistencyToggle";
 import { CharacterPreview, type CharacterData } from "./CharacterPreview";
 import { CreditCostDisplay } from "./CreditCostDisplay";
@@ -522,9 +522,15 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
-                  className="max-w-2xl mx-auto space-y-6"
+                  className="w-full max-w-4xl mx-auto space-y-6"
                 >
-                  <GenerationProgress state={generationState} />
+                  <VideoPlayer
+                    exportState={{ status: "idle", progress: 0 }}
+                    title={generationState.title || "Untitled Story"}
+                    onDownload={() => {}}
+                    format={generationState.format || format}
+                    generationState={generationState}
+                  />
                 </motion.div>
               )}
             </AnimatePresence>

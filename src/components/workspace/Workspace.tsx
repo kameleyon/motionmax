@@ -13,8 +13,8 @@ import { StyleSelector, type VisualStyle } from "./StyleSelector";
 import { VoiceSelector, type VoiceSelection } from "./VoiceSelector";
 import { PresenterFocusInput } from "./PresenterFocusInput";
 import { CharacterDescriptionInput } from "./CharacterDescriptionInput";
-import { GenerationProgress } from "./GenerationProgress";
 import { GenerationResult } from "./GenerationResult";
+import { VideoPlayer } from "./VideoPlayer";
 import { CreditEstimate } from "./CreditEstimate";
 import { useGenerationPipeline } from "@/hooks/useGenerationPipeline";
 import { ThemedLogo } from "@/components/ThemedLogo";
@@ -503,9 +503,15 @@ export const Workspace = forwardRef<WorkspaceHandle>(function Workspace(_, ref) 
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="max-w-2xl mx-auto space-y-6"
+                className="w-full max-w-4xl mx-auto space-y-6"
               >
-                <GenerationProgress state={generationState} />
+                <VideoPlayer
+                  exportState={{ status: "idle", progress: 0 }}
+                  title={generationState.title || "Untitled Video"}
+                  onDownload={() => {}}
+                  format={generationState.format || format}
+                  generationState={generationState}
+                />
               </motion.div>
             )}
           </AnimatePresence>

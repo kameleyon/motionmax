@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Play,
@@ -15,6 +15,74 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import type { ExportState } from "@/hooks/export/types";
+import type { GenerationState } from "@/hooks/useGenerationPipeline";
+
+// ── Fun verbose messages shown during rendering/generation ──────────
+const RENDERING_MESSAGES = [
+  "Mixing pixels with a dash of movie magic...",
+  "Teaching frames how to dance together...",
+  "Polishing every pixel to perfection...",
+  "Adding the secret sauce to your scenes...",
+  "Wrangling pixels into cinematic formation...",
+  "Sprinkling storytelling dust on your video...",
+  "Convincing scenes to play nicely together...",
+  "Assembling your masterpiece frame by frame...",
+  "Giving your video its final coat of awesome...",
+  "Making sure every frame earns its screen time...",
+  "Applying cinematic sorcery to your footage...",
+  "Fine-tuning the vibe... almost there...",
+  "Your video is getting its Hollywood makeover...",
+  "Running the final enchantment spell...",
+  "Putting the finishing touches on greatness...",
+];
+
+const GENERATION_MESSAGES: Record<string, string[]> = {
+  analysis: [
+    "Reading between the lines of your idea...",
+    "Decoding your creative vision...",
+    "Mapping out the blueprint for something epic...",
+    "Analyzing the DNA of your concept...",
+    "Understanding your story at a deeper level...",
+  ],
+  scripting: [
+    "The AI screenwriter is in the zone...",
+    "Crafting dialogue that hits different...",
+    "Writing scenes that would make Spielberg proud...",
+    "Building your narrative arc scene by scene...",
+    "Cooking up a script with all the right ingredients...",
+    "Weaving your story into a visual tapestry...",
+  ],
+  visuals: [
+    "Painting your scenes with digital brushstrokes...",
+    "Bringing your imagination to life, one frame at a time...",
+    "The AI artist is having a creative breakthrough...",
+    "Rendering visuals that pop off the screen...",
+    "Creating eye candy for every scene...",
+    "Turning words into stunning imagery...",
+    "Each image is a small work of art...",
+  ],
+  rendering: [
+    "Stitching it all together into pure gold...",
+    "Your video is in the final stretch...",
+    "Almost ready for its world premiere...",
+    "Adding the final sparkle to your creation...",
+    "The finish line is in sight...",
+  ],
+};
+
+/** Pick a rotating message from a list based on a timer interval. */
+function useRotatingMessage(messages: string[], intervalMs = 4000): string {
+  const [index, setIndex] = useState(() => Math.floor(Math.random() * messages.length));
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setIndex((prev) => (prev + 1) % messages.length);
+    }, intervalMs);
+    return () => clearInterval(timer);
+  }, [messages, intervalMs]);
+
+  return messages[index];
+}
 
 interface VideoPlayerProps {
   /** Export state from useVideoExport */
@@ -33,6 +101,8 @@ interface VideoPlayerProps {
   format?: "landscape" | "portrait" | "square";
   /** Additional className */
   className?: string;
+  /** Generation state — when provided, shows generation progress inside the player */
+  generationState?: GenerationState;
 }
 
 export function VideoPlayer({
@@ -44,6 +114,7 @@ export function VideoPlayer({
   isReRendering,
   format = "landscape",
   className,
+  generationState,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -56,6 +127,33 @@ export function VideoPlayer({
   const isComplete = exportState.status === "complete" && !!videoUrl;
   const isError = exportState.status === "error";
   const isIdle = exportState.status === "idle";
+
+  // Determine if we're in generation mode (pipeline still running)
+  const isGenerating = generationState?.isGenerating && generationState.step !== "complete" && generationState.step !== "error";
+
+  // Pick the right message pool based on current state
+  const generationStep = generationState?.step || "rendering";
+  const activeMessages = useMemo(() => {
+    if (isRendering) return RENDERING_MESSAGES;
+    if (isGenerating) return GENERATION_MESSAGES[generationStep] || GENERATION_MESSAGES.visuals;
+    return RENDERING_MESSAGES;
+  }, [isRendering, isGenerating, generationStep]);
+
+  const funMessage = useRotatingMessage(activeMessages, 4500);
+
+  // Progress value: prefer export progress, fall back to generation progress
+  const progressValue = isRendering
+    ? exportState.progress
+    : isGenerating
+      ? generationState!.progress
+      : 0;
+
+  // Status label shown above progress bar
+  const statusLabel = isRendering
+    ? (exportState.status === "loading" ? "Preparing export..." : "Rendering final video...")
+    : isGenerating
+      ? getGenerationLabel(generationState!)
+      : "Video will appear here";
 
   // Auto-play when video becomes available
   useEffect(() => {
@@ -107,7 +205,8 @@ export function VideoPlayer({
     onDownload(videoUrl, `${safeName}.mp4`, true);
   }, [videoUrl, title, onDownload]);
 
-  const safeName = title.replace(/[^a-z0-9]/gi, "_").slice(0, 50) || "video";
+  // Should we show the progress overlay?
+  const showProgress = isRendering || (isGenerating && !isComplete);
 
   return (
     <div className={cn("flex justify-center", className)}>
@@ -122,28 +221,37 @@ export function VideoPlayer({
         onMouseEnter={() => setShowControls(true)}
       >
       {/* ── Idle: waiting for render ── */}
-      {isIdle && (
+      {isIdle && !isGenerating && (
         <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground/60">
           <Play className="h-16 w-16 mb-3" />
           <p className="text-sm">Video will appear here</p>
         </div>
       )}
 
-      {/* ── Rendering progress ── */}
-      {isRendering && (
+      {/* ── Rendering / Generation progress ── */}
+      {showProgress && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 z-10">
           <div className="relative">
             <Loader2 className="h-12 w-12 text-primary animate-spin" />
           </div>
           <div className="text-center space-y-2 px-6 max-w-sm">
             <p className="text-sm font-medium text-white">
-              {exportState.status === "loading" ? "Preparing export..." : "Rendering final video..."}
+              {statusLabel}
             </p>
-            <Progress value={exportState.progress} className="h-2" />
-            <p className="text-xs text-white/60">{exportState.progress}%</p>
-            {exportState.sceneProgress?.overallMessage && (
-              <p className="text-xs text-white/50">{exportState.sceneProgress.overallMessage}</p>
-            )}
+            <Progress value={progressValue} className="h-2" />
+            <p className="text-xs text-white/60">{Math.round(progressValue)}%</p>
+            {/* Fun rotating message — fixed height to prevent layout shifts */}
+            <div className="h-5 flex items-center justify-center">
+              <motion.p
+                key={funMessage}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.6 }}
+                className="text-xs text-white/40 italic"
+              >
+                {funMessage}
+              </motion.p>
+            </div>
           </div>
         </div>
       )}
@@ -249,4 +357,21 @@ export function VideoPlayer({
       </div>
     </div>
   );
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+function getGenerationLabel(state: GenerationState): string {
+  switch (state.step) {
+    case "analysis": return "Analyzing your content...";
+    case "scripting": return "Writing your script...";
+    case "visuals":
+      if (state.progress < 45) return "Generating audio...";
+      if (state.totalImages > 0 && state.completedImages >= 0) {
+        return `Creating visuals (${state.completedImages}/${state.totalImages})...`;
+      }
+      return "Generating visuals...";
+    case "rendering": return "Compiling your video...";
+    default: return "Processing...";
+  }
 }

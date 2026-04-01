@@ -11,8 +11,8 @@ import { Switch } from "@/components/ui/switch";
 import { FormatSelector, type VideoFormat } from "./FormatSelector";
 import { VoiceSelector, type VoiceSelection } from "./VoiceSelector";
 import { LanguageSelector, type Language } from "./LanguageSelector";
-import { GenerationProgress } from "./GenerationProgress";
 import { CreditCostDisplay } from "./CreditCostDisplay";
+import { VideoPlayer } from "./VideoPlayer";
 
 import { SmartFlowStyleSelector, type SmartFlowStyle } from "./SmartFlowStyleSelector";
 import { SmartFlowResult } from "./SmartFlowResult";
@@ -448,9 +448,15 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
-                  className="max-w-2xl mx-auto space-y-6"
+                  className="w-full max-w-4xl mx-auto space-y-6"
                 >
-                  <GenerationProgress state={generationState} />
+                  <VideoPlayer
+                    exportState={{ status: "idle", progress: 0 }}
+                    title={generationState.title || "Untitled Infographic"}
+                    onDownload={() => {}}
+                    format={generationState.format || format}
+                    generationState={generationState}
+                  />
                 </motion.div>
               )}
             </AnimatePresence>

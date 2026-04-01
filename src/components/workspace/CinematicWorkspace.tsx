@@ -16,8 +16,8 @@ import { LanguageSelector, type Language } from "./LanguageSelector";
 import { PresenterFocusInput } from "./PresenterFocusInput";
 import { CharacterDescriptionInput } from "./CharacterDescriptionInput";
 import { CharacterConsistencyToggle } from "./CharacterConsistencyToggle";
-import { GenerationProgress } from "./GenerationProgress";
 import { CinematicResult } from "./CinematicResult";
+import { VideoPlayer } from "./VideoPlayer";
 import { CreditCostDisplay } from "./CreditCostDisplay";
 
 import { useGenerationPipeline } from "@/hooks/useGenerationPipeline";
@@ -495,44 +495,33 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
-                  className="max-w-2xl mx-auto space-y-6"
+                  className="w-full max-w-4xl mx-auto space-y-6"
                 >
-                  {/* Progress UI */}
-                  <div className="rounded-2xl border border-border/50 bg-card/50 p-8 text-center">
-                    <Loader2 className="h-12 w-12 mx-auto text-primary mb-4 animate-spin" />
-                    <h2 className="text-xl font-semibold text-foreground mb-2">
-                      {generationState.step === "scripting" && "Writing Script..."}
-                      {generationState.step === "visuals" && "Creating Scenes..."}
-                      {generationState.step === "rendering" && "Finalizing Video..."}
-                      {generationState.step === "analysis" && "Preparing..."}
-                    </h2>
-                    <p className="text-muted-foreground mb-4">
-                      {generationState.statusMessage || "Please wait while we create your cinematic video..."}
-                    </p>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div 
-                        className="bg-primary h-2 rounded-full transition-all duration-500" 
-                        style={{ width: `${generationState.progress}%` }}
-                      />
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-2">{generationState.progress}% complete</p>
-
-                    {/* Continue Generation button - always visible during generation */}
-                    {generationState.projectId && (
-                      <div className="mt-6">
-                        <Button
-                          onClick={handleResume}
-                          disabled={isResuming}
-                          variant="outline"
-                          size="sm"
-                          className="gap-2"
-                        >
-                          {isResuming ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                          Continue Generation
-                        </Button>
-                      </div>
-                    )}
+                  <div className="w-full max-w-4xl mx-auto">
+                    <VideoPlayer
+                      exportState={{ status: "idle", progress: 0 }}
+                      title={generationState.title || "Untitled Cinematic"}
+                      onDownload={() => {}}
+                      format={format}
+                      generationState={generationState}
+                    />
                   </div>
+
+                  {/* Continue Generation button */}
+                  {generationState.projectId && (
+                    <div className="flex justify-center mt-4">
+                      <Button
+                        onClick={handleResume}
+                        disabled={isResuming}
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                      >
+                        {isResuming ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                        Continue Generation
+                      </Button>
+                    </div>
+                  )}
 
                   {/* Generation Logs - visible to everyone */}
                   <GenerationLogsPanel

@@ -15,8 +15,8 @@ import { LanguageSelector, type Language } from "./LanguageSelector";
 import { PresenterFocusInput } from "./PresenterFocusInput";
 import { CharacterDescriptionInput } from "./CharacterDescriptionInput";
 import { CharacterConsistencyToggle } from "./CharacterConsistencyToggle";
-import { GenerationProgress } from "./GenerationProgress";
 import { GenerationResult } from "./GenerationResult";
+import { VideoPlayer } from "./VideoPlayer";
 import { CreditCostDisplay } from "./CreditCostDisplay";
 import { useGenerationPipeline } from "@/hooks/useGenerationPipeline";
 import { useAdminLogs } from "@/hooks/useAdminLogs";
@@ -501,9 +501,15 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
-                  className="max-w-2xl mx-auto space-y-6"
+                  className="w-full max-w-4xl mx-auto space-y-6"
                 >
-                  <GenerationProgress state={generationState} />
+                  <VideoPlayer
+                    exportState={{ status: "idle", progress: 0 }}
+                    title={generationState.title || "Untitled Video"}
+                    onDownload={() => {}}
+                    format={generationState.format || format}
+                    generationState={generationState}
+                  />
                   {isAdmin && <AdminLogsPanel logs={adminLogs} show={showAdminLogs} onToggle={() => setShowAdminLogs(!showAdminLogs)} />}
                 </motion.div>
               )}

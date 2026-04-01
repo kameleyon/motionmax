@@ -333,7 +333,7 @@ export function AppSidebar() {
                     <SidebarMenuButton
                       onClick={() => navigate("/app/create?mode=doc2video")}
                       className={`cursor-pointer rounded-lg py-2.5 transition-colors ${
-                        isCreateRoute && currentMode === "doc2video" 
+                        isCreateRoute && currentMode === "doc2video" && !new URLSearchParams(location.search).has("project")
                           ? "bg-primary/10 text-primary" 
                           : "hover:bg-sidebar-accent/50"
                       } ${isCollapsed ? "w-10 h-10 p-0 flex items-center justify-center" : "w-full px-3"}`}
@@ -353,7 +353,7 @@ export function AppSidebar() {
                     <SidebarMenuButton
                       onClick={() => navigate("/app/create?mode=storytelling")}
                       className={`cursor-pointer rounded-lg py-2.5 transition-colors ${
-                        isCreateRoute && currentMode === "storytelling" 
+                        isCreateRoute && currentMode === "storytelling" && !new URLSearchParams(location.search).has("project")
                           ? "bg-primary/10 text-primary" 
                           : "hover:bg-sidebar-accent/50"
                       } ${isCollapsed ? "w-10 h-10 p-0 flex items-center justify-center" : "w-full px-3"}`}
@@ -373,7 +373,7 @@ export function AppSidebar() {
                     <SidebarMenuButton
                       onClick={() => navigate("/app/create?mode=smartflow")}
                       className={`cursor-pointer rounded-lg py-2.5 transition-colors ${
-                        isCreateRoute && currentMode === "smartflow" 
+                        isCreateRoute && currentMode === "smartflow" && !new URLSearchParams(location.search).has("project")
                           ? "bg-primary/10 text-primary" 
                           : "hover:bg-sidebar-accent/50"
                       } ${isCollapsed ? "w-10 h-10 p-0 flex items-center justify-center" : "w-full px-3"}`}
@@ -398,7 +398,7 @@ export function AppSidebar() {
                           className={`rounded-lg py-2.5 transition-colors ${
                             !canAccessCinematic
                               ? "opacity-40 cursor-not-allowed"
-                              : isCreateRoute && currentMode === "cinematic"
+                              : isCreateRoute && currentMode === "cinematic" && !new URLSearchParams(location.search).has("project")
                                 ? "bg-primary/10 text-primary cursor-pointer"
                                 : "hover:bg-sidebar-accent/50 cursor-pointer"
                           } ${isCollapsed ? "w-10 h-10 p-0 flex items-center justify-center" : "w-full px-3"}`}

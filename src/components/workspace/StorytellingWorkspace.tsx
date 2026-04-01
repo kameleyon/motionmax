@@ -120,10 +120,12 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
       }
     }, [plan, length, disabledLengths, allowedStoryLengths]);
 
-    // Load project if projectId provided
+    // Load project if projectId provided, or reset if project param removed (tab click)
     useEffect(() => {
       if (initialProjectId) {
         handleOpenProject(initialProjectId);
+      } else {
+        handleNewProject();
       }
     }, [initialProjectId]);
 

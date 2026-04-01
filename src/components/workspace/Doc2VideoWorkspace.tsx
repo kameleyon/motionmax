@@ -108,10 +108,12 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
       }
     }, [plan, length, disabledLengths, limits.allowedLengths]);
 
-    // Load project if projectId provided
+    // Load project if projectId provided, or reset if project param removed (tab click)
     useEffect(() => {
       if (initialProjectId) {
         handleOpenProject(initialProjectId);
+      } else {
+        handleNewProject();
       }
     }, [initialProjectId]);
 

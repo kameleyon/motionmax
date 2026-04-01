@@ -83,12 +83,12 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
 
     const canGenerate = dataContent.trim().length > 0 && extractionPrompt.trim().length > 0 && !generationState.isGenerating;
 
-    // Load project if projectId provided (and check for completed generations)
+    // Load project if projectId provided, or reset if project param removed (tab click)
     useEffect(() => {
       if (initialProjectId) {
-        // Always load the project - loadProject checks the database for completed generations
-        // and will restore the complete state if the generation finished while user was away
         handleOpenProject(initialProjectId);
+      } else {
+        handleNewProject();
       }
     }, [initialProjectId]);
 

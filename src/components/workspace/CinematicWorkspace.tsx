@@ -43,7 +43,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
     // Content input (like Doc2Video)
     const [content, setContent] = useState("");
     const [format, setFormat] = useState<VideoFormat>("portrait");
-    const [length, setLength] = useState<VideoLength>("brief");
+    const [length, setLength] = useState<VideoLength>("short");
     const [style, setStyle] = useState<VisualStyle>("realistic");
     const [customStyle, setCustomStyle] = useState("");
     const [customStyleImage, setCustomStyleImage] = useState<string | null>(null);
@@ -207,8 +207,8 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
         brandMark: brandMarkEnabled && brandMarkText.trim() ? brandMarkText.trim() : undefined,
         presenterFocus: presenterFocus.trim() ? presenterFocus.trim().slice(0, 500000) : undefined,
         characterDescription: characterDescription.trim() || undefined,
-        disableExpressions,
-        characterConsistencyEnabled,
+        disableExpressions: false,
+        characterConsistencyEnabled: true,
         voiceType: voice.type,
         voiceId: voice.voiceId,
         voiceName: voice.type === "custom" ? voice.voiceName : voice.gender,
@@ -223,7 +223,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
       reset();
       setContent("");
       setFormat("portrait");
-      setLength("brief");
+      setLength("short");
       setStyle("realistic");
       setCustomStyle("");
       setCustomStyleImage(null);
@@ -285,10 +285,12 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
       else setLanguage("en");
     };
 
-    // Load project from URL if provided
+    // Load project from URL if provided, or reset if project param removed (tab click)
     useEffect(() => {
       if (initialProjectId) {
         void handleOpenProject(initialProjectId);
+      } else {
+        handleNewProject();
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [initialProjectId]);
@@ -374,28 +376,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                       </CollapsibleContent>
                     </Collapsible>
 
-                    {/* Disable Expressions Toggle */}
-                    <div className="flex items-center gap-2 sm:gap-3 rounded-xl sm:rounded-2xl border border-border/50 bg-card/50 p-3 sm:p-4 backdrop-blur-sm shadow-sm">
-                      <Checkbox
-                        id="disable-expressions"
-                        checked={disableExpressions}
-                        onCheckedChange={(checked) => setDisableExpressions(checked === true)}
-                      />
-                      <label
-                        htmlFor="disable-expressions"
-                        className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-medium cursor-pointer flex-wrap"
-                      >
-                        <MessageSquareOff className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
-                        <span>Disable voice expressions</span>
-                        <span className="text-xs sm:text-xs text-muted-foreground/70">(no [chuckle], [sigh], etc.)</span>
-                      </label>
-                    </div>
-
-                    {/* Character Consistency Toggle - Pro Feature */}
-                    <CharacterConsistencyToggle
-                      enabled={characterConsistencyEnabled}
-                      onToggle={setCharacterConsistencyEnabled}
-                    />
+                    {/* Character consistency always ON, expressions always enabled (hardcoded) */}
                   </div>
 
                   {/* Configuration */}
@@ -403,11 +384,8 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                     <FormatSelector selected={format} onSelect={setFormat} disabledFormats={disabledFormats} />
                     <div className="h-px bg-border/30" />
                     
-                    {/* Length, Voice, and Language */}
+                    {/* Voice and Language (length locked to short for cinematic) */}
                     <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
-                      <div className="flex-1">
-                        <LengthSelector selected={length} onSelect={setLength} disabledLengths={disabledLengths} />
-                      </div>
                       <div className="sm:flex-shrink-0">
                         <VoiceSelector selected={voice} onSelect={setVoice} />
                       </div>

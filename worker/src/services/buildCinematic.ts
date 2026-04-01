@@ -40,9 +40,9 @@ export interface CinematicParams {
 
 export function buildCinematicPrompt(p: CinematicParams): PromptResult {
   const lengthCfg: Record<string, { min: number; max: number; target: number; maxPerScene: number; maxWords: number }> = {
-    short:        { min: 10, max: 10, target: 160, maxPerScene: 14, maxWords: 33 },
-    brief:        { min: 28, max: 28, target: 420, maxPerScene: 15, maxWords: 37 },
-    presentation: { min: 36, max: 36, target: 540, maxPerScene: 15, maxWords: 37 },
+    short:        { min: 10, max: 10, target: 100, maxPerScene: 10, maxWords: 25 },
+    brief:        { min: 28, max: 28, target: 280, maxPerScene: 10, maxWords: 25 },
+    presentation: { min: 36, max: 36, target: 360, maxPerScene: 10, maxWords: 25 },
   };
   const cfg = lengthCfg[p.length] || lengthCfg.brief;
   const targetWords = cfg.maxWords;
@@ -197,11 +197,11 @@ GOOD: ✓ "Inside a cluttered home kitchen at 2AM, dirty dishes in the sink, dim
 - Target duration: ~${cfg.target} seconds total
 ${p.length === "short" ? `
 ⚠️ YOUTUBE SHORTS FORMAT — HARD LIMITS:
-- The ENTIRE video MUST be between 2:30 and 2:50 (150–170 seconds). NEVER exceed 3 minutes.
-- EACH scene voiceover: 12–14 seconds MAX (${targetWords} words MAXIMUM at ~2.5 words/sec)
+- The ENTIRE video MUST be under 2 minutes. NEVER exceed 2 minutes.
+- EACH scene voiceover: 8–10 seconds MAX (${targetWords} words MAXIMUM at ~2.5 words/sec)
 - COUNT YOUR WORDS. If a voiceover exceeds ${targetWords} words, the generation WILL FAIL.
 - Write TIGHT, punchy narration. Cut filler words ruthlessly.
-` : `- EACH SCENE VOICEOVER: 12-15 seconds (approx ${targetWords} words at ~2.5 words/sec)
+` : `- EACH SCENE VOICEOVER: 8-10 seconds (approx ${targetWords} words at ~2.5 words/sec)
 `}- MAX per scene: ${cfg.maxPerScene} seconds
 - Set each scene "duration" to ${cfg.maxPerScene}
 

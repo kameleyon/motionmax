@@ -1,8 +1,13 @@
 /**
  * Generation pipeline orchestrator hook.
  * Delegates to focused sub-modules for cinematic and standard pipelines.
+ *
+ * Abort mechanism: a `generationEpoch` ref increments on every reset or
+ * project switch. The pipeline context's `setState` wrapper silently
+ * discards updates from stale epochs, preventing old pipelines from
+ * overwriting the current project's state.
  */
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { createScopedLogger } from "@/lib/logger";
@@ -29,15 +34,33 @@ export function useGenerationPipeline() {
   const { toast } = useToast();
   const [state, setState] = useState<GenerationState>(INITIAL_GENERATION_STATE);
 
-  const createContext = useCallback((): PipelineContext => ({
-    setState,
-    callPhase,
-    toast,
-  }), [toast]);
+  // Epoch counter: increments on every reset / project switch.
+  // Pipeline contexts capture the current epoch; if it changes, their
+  // setState calls become no-ops so stale pipelines can't clobber state.
+  const epochRef = useRef(0);
+
+  /** Create a pipeline context whose setState is scoped to the current epoch. */
+  const createContext = useCallback((): PipelineContext => {
+    const epoch = epochRef.current;
+    return {
+      setState: (updater) => {
+        if (epochRef.current !== epoch) {
+          log.debug("Stale pipeline setState ignored (epoch mismatch)");
+          return;
+        }
+        setState(updater);
+      },
+      callPhase,
+      toast,
+    };
+  }, [toast]);
 
   const startGeneration = useCallback(async (params: GenerationParams) => {
     const expectedSceneCount = SCENE_COUNTS[params.length] || 12;
     log.debug("startGeneration", { projectType: params.projectType, length: params.length, expectedSceneCount });
+
+    // Bump epoch to abort any stale pipeline
+    epochRef.current++;
 
     setState({
       step: "analysis",
@@ -81,6 +104,10 @@ export function useGenerationPipeline() {
 
   const loadProject = useCallback(async (projectId: string): Promise<ProjectRow | null> => {
     log.debug("loadProject", { projectId });
+
+    // Bump epoch to abort any running pipeline from previous project
+    epochRef.current++;
+
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id;
 
@@ -193,6 +220,8 @@ export function useGenerationPipeline() {
 
   const reset = useCallback(() => {
     log.debug("reset");
+    // Bump epoch so any running pipeline's setState calls become no-ops
+    epochRef.current++;
     setState(INITIAL_GENERATION_STATE);
   }, []);
 

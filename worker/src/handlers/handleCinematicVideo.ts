@@ -176,42 +176,50 @@ export async function handleCinematicVideo(
   const apiKey = (process.env.HYPEREAL_API_KEY || "").trim();
   if (!apiKey) throw new Error("HYPEREAL_API_KEY not configured");
 
+  // Add morph timing instruction to prompt when using end_image transitions
+  const morphInstruction = endImageUrl
+    ? `\n\nTRANSITION: The scene MUST transition/morph to the next scene's image ONLY in the LAST 2-3 seconds. ` +
+      `For the first 7-8 seconds, focus entirely on the current scene's action matching the voiceover. ` +
+      `Do NOT start the morph/transition early or in the middle of the clip.`
+    : "";
+  const finalPrompt = videoPrompt + morphInstruction;
+
   const transitionInfo = endImageUrl ? `→ scene ${sceneIndex + 1}` : "(no end_image)";
   console.log(
-    `[CinematicVideo] Scene ${sceneIndex}: Kling V2.6 Pro I2V 10s ${transitionInfo}, ` +
+    `[CinematicVideo] Scene ${sceneIndex}: Kling V2.5 Turbo I2V 10s ${transitionInfo}, ` +
     `camera=${CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("—")[0].trim()}, ` +
-    `prompt=${videoPrompt.length} chars`
+    `prompt=${finalPrompt.length} chars`
   );
 
-  // ── Generate video with Kling V2.6 Pro I2V (primary) ─────────────
+  // ── Generate video with Kling V2.5 Turbo Pro I2V (primary) ───────
   let videoUrl: string;
-  let provider = "Kling V2.6 Pro I2V";
+  let provider = "Kling V2.5 Turbo I2V";
 
   try {
-    videoUrl = await generateKlingV26Video(
-      imageUrl,
-      videoPrompt,
-      apiKey,
-      10,           // duration: 10s
-      endImageUrl,  // end_image: next scene's image for seamless transition
-      "blurry, low quality, watermark, text, UI elements",
-      0.8,          // cfg_scale: 0.8 for strong prompt adherence
-    );
-  } catch (v26Error) {
-    // Fallback to Kling V2.5 Turbo Pro I2V
-    console.warn(
-      `[CinematicVideo] Scene ${sceneIndex}: Kling V2.6 failed (${(v26Error as Error).message}), falling back to Kling V2.5 Turbo`
-    );
-    provider = "Kling V2.5 Turbo I2V";
-
     videoUrl = await generateKlingV25Video(
       imageUrl,
-      videoPrompt,
+      finalPrompt,
       apiKey,
       10,           // duration: 10s
-      endImageUrl,  // last_image: next scene's image (V2.5 uses `last_image`)
-      "blurry, low quality, watermark, text, UI elements",
+      endImageUrl,  // last_image: next scene's image for seamless transition
+      "blurry, low quality, watermark, text, UI elements, slow motion, sluggish",
       0.8,          // guidance_scale: 0.8
+    );
+  } catch (v25Error) {
+    // Fallback to Kling V2.6 Pro I2V
+    console.warn(
+      `[CinematicVideo] Scene ${sceneIndex}: Kling V2.5 failed (${(v25Error as Error).message}), falling back to Kling V2.6 Pro`
+    );
+    provider = "Kling V2.6 Pro I2V";
+
+    videoUrl = await generateKlingV26Video(
+      imageUrl,
+      finalPrompt,
+      apiKey,
+      10,           // duration: 10s
+      endImageUrl,  // end_image: next scene's image (V2.6 uses `end_image`)
+      "blurry, low quality, watermark, text, UI elements, slow motion, sluggish",
+      0.8,          // cfg_scale: 0.8
     );
   }
 
@@ -292,15 +300,21 @@ function buildVideoPrompt(
 
   parts.push(
     `CAMERA MOVEMENT: ${cameraMotion} ` +
-    `Camera motion must be CONFIDENT and FAST — not lazy or drifting. ` +
-    `Continue the movement through the entire shot with ENERGY.`
+    `Camera motion must be CONFIDENT, FAST, and ENERGETIC — not lazy or drifting. ` +
+    `Continue the movement through the entire shot with URGENCY and PURPOSE.`
+  );
+
+  parts.push(
+    `PACING: FAST-PACED action throughout the entire 10 seconds. ` +
+    `Characters move QUICKLY and DECISIVELY — walking briskly, gesturing sharply, reacting instantly. ` +
+    `Camera moves with SPEED and CONFIDENCE. Every second is packed with motion and energy. ` +
+    `Think action movie or viral TikTok energy — NEVER slow, NEVER sluggish, NEVER drifting.`
   );
 
   parts.push(
     `RULES: No talking, no lip movement, no addressing camera. ` +
     `Expressive faces that match the scene mood — curious, amused, hopeful, surprised, determined. ` +
-    `FAST, ENERGETIC body movement at real-time speed — NEVER slow motion, NEVER sluggish, NEVER lethargic. ` +
-    `Everything moves with URGENCY and LIFE. Match narration energy. Same character appearance throughout.`
+    `Same character appearance throughout.`
   );
 
   let prompt = parts.join("\n\n");

@@ -187,7 +187,10 @@ export function AdminSubscribers() {
                         <TableCell className="py-2 px-2">{getPlanBadge(user.plan)}</TableCell>
                         <TableCell className="py-2 px-2 text-center whitespace-nowrap">
                           <span className="font-medium">{user.creditsBalance}</span>
-                          <span className="text-muted-foreground">/{user.totalPurchased}</span>
+                          <span className="text-muted-foreground"> bal</span>
+                          {user.totalUsed > 0 && (
+                            <span className="text-xs text-muted-foreground ml-1">· {user.totalUsed} used</span>
+                          )}
                         </TableCell>
                         <TableCell className="py-2 px-2 text-center font-medium">{user.generationCount}</TableCell>
                         <TableCell className="py-2 px-2 text-center">

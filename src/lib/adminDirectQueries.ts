@@ -263,8 +263,9 @@ export async function fetchRevenueStats() {
 
 // ── User Details ───────────────────────────────────────────────────
 
-export async function fetchUserDetails(params: { userId: string }) {
-  const uid = params.userId;
+export async function fetchUserDetails(params: { userId?: string; targetUserId?: string }) {
+  const uid = params.targetUserId || params.userId;
+  if (!uid) throw new Error("userId or targetUserId is required");
 
   const [
     { data: profile },

@@ -4,6 +4,43 @@ import { SUPABASE_URL } from "@/lib/supabaseUrl";
 
 const LOG = "[Pipeline:Network]";
 
+// ── Credit costs per generation type (must match worker/src/index.ts) ──
+const CREDIT_COSTS: Record<string, number> = {
+  short: 1,
+  brief: 2,
+  presentation: 4,
+  smartflow: 1,
+  cinematic: 12,
+};
+
+/** Deduct credits upfront before dispatching a generation job.
+ *  Returns the number of credits deducted (for refund on failure). */
+async function deductCreditsUpfront(projectType: string, length: string): Promise<number> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) throw new Error("Not authenticated");
+
+  let amount: number;
+  if (projectType === "smartflow") amount = CREDIT_COSTS.smartflow;
+  else if (projectType === "cinematic") amount = CREDIT_COSTS.cinematic;
+  else amount = CREDIT_COSTS[length] || CREDIT_COSTS.brief;
+
+  console.log(LOG, `Deducting ${amount} credits upfront (${projectType}/${length})`);
+
+  const { data: success, error } = await supabase.rpc("deduct_credits_securely", {
+    p_user_id: session.user.id,
+    p_amount: amount,
+    p_transaction_type: "generation",
+    p_description: `${projectType} video generation (${length})`,
+  });
+
+  if (error || !success) {
+    throw new Error("Insufficient credits. Please purchase more credits to continue.");
+  }
+
+  console.log(LOG, `Credits deducted: ${amount}`);
+  return amount;
+}
+
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function isValidUUID(value: unknown): value is string {
@@ -150,6 +187,10 @@ export async function callPhase(
     if (endpoint === CINEMATIC_ENDPOINT && !body.projectType) {
       body.projectType = "cinematic";
     }
+    // Deduct credits upfront before creating the worker job
+    const projectType = (body.projectType as string) || "doc2video";
+    const length = (body.length as string) || "brief";
+    await deductCreditsUpfront(projectType, length);
     return workerCallPhase(body, "generate_video", 8 * 60 * 1000);
   }
 

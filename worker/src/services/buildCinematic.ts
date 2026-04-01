@@ -101,11 +101,11 @@ You are writing prompts for a generative video AI that CANNOT do lip-sync.
 2. **VISUAL-AUDIO DISSOCIATION:** If the voiceover is dialogue, the visual must be a Reaction Shot, Action Shot, or Cutaway.
    - Bad: "Close up of John explaining the plan."
    - Good: "Close up of John's eyes narrowing with determination, jaw clenching, fingers gripping the map as rain pelts the window behind him."
-3. **FACIAL EXPRESSIONS (BE CREATIVE & DETAILED):**
+3. **FACIAL EXPRESSIONS (MATCH THE MOOD — BE CREATIVE & DETAILED):**
    - Characters MUST have rich, expressive faces in every scene — never blank or neutral.
-   - Use: shock (eyes wide, mouth agape), fury (brows furrowed, veins visible), grief (tears streaming, chin trembling), joy (beaming smile, eyes crinkling), fear (pupils dilated, face drained of color), disgust (nose scrunched, lip curled), determination (jaw set, eyes focused).
+   - Match the scene emotion: curiosity (head tilted, brow raised), determination (jaw set, eyes focused), joy (beaming smile, eyes crinkling), surprise (eyes wide, mouth agape), concern (furrowed brow, pursed lips), awe (wide eyes, slight open mouth), hope (soft smile, upward gaze).
    - Combine expressions with body language: "She clutches the letter to her chest, eyes glistening with unshed tears, chin trembling."
-   - Expressions MUST match the emotional tone of the voiceover — if the narration is intense, the face is intense.
+   - Expressions MUST match the emotional tone of the voiceover — don't default to angry or fearful faces.
 4. **MOTION & ACTION (NEVER STATIC):**
    - Every scene must have DYNAMIC movement — characters walking, running, gesturing, reacting, reaching, turning.
    - No static poses. No standing still. No "character stands in front of..." without action.
@@ -209,7 +209,7 @@ Write scripts that are HIGHLY CATCHY, ENTERTAINING, and SOCIAL MEDIA CLICKBAIT s
 - Create TENSION and CURIOSITY: "What happened next changed everything...", "Nobody expected this..."
 - Use POWER WORDS: "shocking", "unbelievable", "secret", "hidden", "incredible", "mind-blowing"
 - SHORT, PUNCHY sentences. No filler. Every word earns its place.
-- Build EMOTIONAL PEAKS — make the audience FEEL something: surprise, awe, anger, joy, fear
+- Build EMOTIONAL PEAKS — make the audience FEEL something: surprise, awe, wonder, joy, excitement
 - DON'T BE AFRAID TO SHOCK — if the content allows it, go bold and provocative
 - End scenes with CLIFFHANGERS or CALLBACKS that make the next scene irresistible
 - NO labels, NO stage directions, NO markdown — just raw spoken text

@@ -198,7 +198,7 @@ function buildVideoPrompt(
 
   parts.push(
     `RULES: No talking, no lip movement, no addressing camera. ` +
-    `Rich facial expressions (shock, joy, fear, anger). ` +
+    `Expressive faces that match the scene mood — curious, amused, hopeful, surprised, determined. ` +
     `Dynamic body movement at natural speed — never slow motion, never static. ` +
     `Match narration energy. Same character appearance throughout.`
   );

@@ -168,10 +168,7 @@ export function GenerationResult({
       </div>
 
       {/* ── Full-Width Video Player ── */}
-      <div className={cn(
-        "mx-auto",
-        format === "portrait" ? "max-w-xs sm:max-w-sm" : "w-full max-w-4xl"
-      )}>
+      <div className="w-full max-w-4xl mx-auto">
         <VideoPlayer
           exportState={exportState}
           title={title}
@@ -240,7 +237,7 @@ export function GenerationResult({
             Share
           </Button>
           <Button variant="outline" size="sm" onClick={onNewProject} className="gap-1.5">
-            New
+            New Project
           </Button>
         </div>
       </div>

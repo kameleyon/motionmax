@@ -1,7 +1,16 @@
 /**
  * Platform-aware video download and share helpers.
  * Handles iOS Safari/Chrome, Android, macOS Safari, and desktop strategies.
- * Always fetches as blob to ensure cross-origin downloads work correctly.
+ *
+ * Key browser considerations:
+ *   - Safari (macOS): Blob downloads fail silently on large files. Use direct
+ *     link with Content-Disposition or window.open fallback.
+ *   - Safari (iOS): No filesystem download. Must use Web Share API.
+ *   - Chrome/Edge/Firefox: Blob anchor works reliably for all sizes.
+ *   - Firefox: Respects `a.download` attribute on same-origin and blob URLs.
+ *   - All browsers: `a.click()` must happen in the same task as the user
+ *     gesture or within a short microtask. Long async gaps (e.g. fetching a
+ *     200MB file) break the gesture chain and browsers silently block the click.
  */
 
 const LOG = "[Export:Download]";
@@ -14,10 +23,12 @@ function detectPlatform() {
   const ua = navigator.userAgent;
   const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const isAndroid = /Android/i.test(ua);
-  const isMacSafari = /Macintosh.*Safari/i.test(ua) && !/Chrome|CriOS|FxiOS/i.test(ua);
+  const isSafari = /Safari/i.test(ua) && !/Chrome|CriOS|FxiOS|Edg/i.test(ua);
+  const isMacSafari = /Macintosh/i.test(ua) && isSafari;
   const isIOSChrome = isIOS && /CriOS/i.test(ua);
+  const isFirefox = /Firefox/i.test(ua);
   const isMobile = isIOS || isAndroid;
-  return { isIOS, isAndroid, isMacSafari, isIOSChrome, isMobile };
+  return { isIOS, isAndroid, isSafari, isMacSafari, isIOSChrome, isFirefox, isMobile };
 }
 
 /** Fetch video URL as a Blob (works for cross-origin Supabase Storage URLs) */
@@ -39,7 +50,25 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
   setTimeout(() => {
     document.body.removeChild(a);
     URL.revokeObjectURL(blobUrl);
-  }, 3000);
+  }, 5000);
+}
+
+/**
+ * Open the URL directly in a new tab / trigger native download.
+ * Safari handles this reliably for large files — the browser's native
+ * download manager takes over instead of loading into JS memory.
+ */
+function triggerDirectDownload(url: string, filename: string): void {
+  // Try anchor with download attribute first (same-origin or CORS-allowed)
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.target = "_blank";        // fallback: opens in new tab if download blocked
+  a.rel = "noopener";
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => document.body.removeChild(a), 1000);
 }
 
 /** Share video using the Web Share API (primarily for mobile) */
@@ -69,21 +98,21 @@ export async function shareVideo(url: string, filename = "video.mp4"): Promise<b
 }
 
 /**
- * Download video with platform-specific strategies — always blob-based for cross-origin.
+ * Download video with platform-specific strategies.
+ *
  * @param userGesture Pass true when called from a click handler (enables Share API on mobile).
  *                    Auto-downloads from useEffect should pass false to avoid gesture errors.
  */
 export async function downloadVideo(url: string, filename = "video.mp4", userGesture = false): Promise<void> {
   if (!url) return;
 
-  const { isIOS, isAndroid, isMacSafari, isIOSChrome, isMobile } = detectPlatform();
-  console.log(LOG, "Starting download", { filename, isIOS, isAndroid, isMacSafari, isMobile, userGesture });
+  const { isIOS, isAndroid, isSafari, isMacSafari, isFirefox, isMobile } = detectPlatform();
+  console.log(LOG, "Starting download", { filename, isIOS, isAndroid, isSafari, isMacSafari, isFirefox, isMobile, userGesture });
 
   try {
-    const blob = await fetchAsBlob(url);
-
-    // ---- Mobile (iOS + Android): always use Share API for saving files ----
+    // ── Mobile (iOS + Android): Web Share API for saving files ──
     if (isMobile) {
+      const blob = await fetchAsBlob(url);
       const file = new File([blob], filename, { type: "video/mp4" });
       if (!shareInProgress && navigator.share) {
         try {
@@ -93,7 +122,6 @@ export async function downloadVideo(url: string, filename = "video.mp4", userGes
           console.log(LOG, "Mobile: Share API save successful");
           return;
         } catch (shareErr: any) {
-          // User cancelled share dialog — not an error
           if (shareErr?.name === 'AbortError') {
             console.log(LOG, "Mobile: user cancelled share dialog");
             return;
@@ -103,24 +131,30 @@ export async function downloadVideo(url: string, filename = "video.mp4", userGes
           shareInProgress = false;
         }
       }
-      // Fallback: blob anchor (may open in browser on iOS — only option left)
+      // Fallback: blob anchor (may open in browser on iOS)
       console.log(LOG, "Mobile: fallback blob anchor download");
       triggerBlobDownload(blob, filename);
       return;
     }
 
-    // ---- macOS Safari: blob anchor ----
+    // ── macOS Safari: direct link download (avoid blob for large files) ──
+    // Safari silently fails on large blob downloads because the fetch-to-blob
+    // breaks the user gesture chain. Instead, trigger the browser's native
+    // download manager via a direct link.
     if (isMacSafari) {
-      console.log(LOG, "macOS Safari: blob anchor download");
-      triggerBlobDownload(blob, filename);
+      console.log(LOG, "macOS Safari: direct link download (avoids blob memory issue)");
+      triggerDirectDownload(url, filename);
       return;
     }
 
-    // ---- Desktop (Chrome, Firefox, Edge): blob anchor download ----
+    // ── Desktop Chrome, Edge, Firefox, Opera: blob anchor download ──
+    // These browsers handle blob downloads reliably for any file size.
     console.log(LOG, "Desktop: blob anchor download");
+    const blob = await fetchAsBlob(url);
     triggerBlobDownload(blob, filename);
 
   } catch (e) {
+    // Last resort: open in new tab so the user can right-click → Save As
     console.warn(LOG, "Download failed, opening in new tab:", e);
     window.open(url, "_blank");
   }

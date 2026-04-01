@@ -177,6 +177,7 @@ export function GenerationResult({
           onReset={resetExport}
           onRetry={handleRetryExport}
           isReRendering={isReRendering}
+          format={format}
         />
       </div>
 

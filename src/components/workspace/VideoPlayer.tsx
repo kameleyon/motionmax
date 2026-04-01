@@ -29,6 +29,8 @@ interface VideoPlayerProps {
   onRetry?: () => void;
   /** Whether auto re-render is in progress (debounced) */
   isReRendering?: boolean;
+  /** Video format — controls aspect ratio of player container */
+  format?: "landscape" | "portrait" | "square";
   /** Additional className */
   className?: string;
 }
@@ -40,6 +42,7 @@ export function VideoPlayer({
   onReset,
   onRetry,
   isReRendering,
+  format = "landscape",
   className,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -106,15 +109,19 @@ export function VideoPlayer({
 
   const safeName = title.replace(/[^a-z0-9]/gi, "_").slice(0, 50) || "video";
 
+  const aspectClass = format === "portrait" ? "aspect-[9/16]" : format === "square" ? "aspect-square" : "aspect-video";
+
   return (
-    <div
-      className={cn(
-        "relative rounded-xl overflow-hidden bg-black aspect-video",
-        className,
-      )}
-      onMouseMove={resetControlsTimer}
-      onMouseEnter={() => setShowControls(true)}
-    >
+    <div className={cn("flex justify-center", className)}>
+      <div
+        className={cn(
+          "relative rounded-xl overflow-hidden bg-black w-full",
+          format === "landscape" ? "aspect-video" : "h-[28rem]",
+          format !== "landscape" && aspectClass,
+        )}
+        onMouseMove={resetControlsTimer}
+        onMouseEnter={() => setShowControls(true)}
+      >
       {/* ── Idle: waiting for render ── */}
       {isIdle && (
         <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground/60">
@@ -240,6 +247,7 @@ export function VideoPlayer({
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
     </div>
   );
 }

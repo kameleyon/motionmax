@@ -170,6 +170,7 @@ export function SmartFlowResult({
             onReset={resetExport}
             onRetry={handleRetryExport}
             isReRendering={isReRendering}
+            format={format as "landscape" | "portrait" | "square"}
           />
         ) : (
           /* No-voice SmartFlow: show the infographic image directly */

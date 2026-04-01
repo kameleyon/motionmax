@@ -160,6 +160,8 @@ async function runCinematicVisuals(projectId: string, generationId: string, scen
     completedImages++;
     ctx.setState((prev) => ({
       ...prev,
+      completedImages,
+      totalImages: sceneCount,
       statusMessage: `Images ${completedImages}/${sceneCount}`,
       progress: 35 + Math.floor((completedImages / sceneCount) * 30),
     }));

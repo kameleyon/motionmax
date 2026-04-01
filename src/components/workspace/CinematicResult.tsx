@@ -3,15 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Clock,
-  Copy,
   Download,
   Eye,
   EyeOff,
   Film,
-  FolderArchive,
   Loader2,
   Pencil,
-  Plus,
+  RefreshCw,
   Trash2,
   X,
   Share2,
@@ -50,7 +48,6 @@ import {
   formatVideoExportLogs,
   getVideoExportLogs,
 } from "@/lib/videoExportDebug";
-import JSZip from "jszip";
 
 interface CinematicScene {
   number: number;
@@ -69,6 +66,7 @@ interface CinematicResultProps {
   generationId?: string;
   finalVideoUrl?: string;
   onNewProject: () => void;
+  onRegenerate?: () => void;
   format?: "landscape" | "portrait" | "square";
   totalTimeMs?: number;
 }
@@ -84,6 +82,7 @@ export function CinematicResult({
   generationId,
   finalVideoUrl,
   onNewProject,
+  onRegenerate,
   format = "landscape",
   totalTimeMs,
 }: CinematicResultProps) {
@@ -105,7 +104,6 @@ export function CinematicResult({
   const [isCreatingShare, setIsCreatingShare] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [hasCopied, setHasCopied] = useState(false);
-  const [isDownloadingClipsZip, setIsDownloadingClipsZip] = useState(false);
 
   const { state: exportState, exportVideo, downloadVideo, reset: resetExport, loadExistingVideo } = useVideoExport();
   const { isAdmin } = useAdminAuth();
@@ -215,15 +213,6 @@ export function CinematicResult({
     })();
   }, [projectId, generationId, finalVideoUrl, format, exportVideo, exportState.status, localScenes, scenesWithVideo.length]);
 
-  // Copy script
-  const copyScript = useCallback(() => {
-    const script = localScenes.map((s, i) => `Scene ${s.number || i + 1}:\n${s.voiceover}`).join("\n\n");
-    navigator.clipboard.writeText(script).then(
-      () => toast({ title: "Script copied!" }),
-      () => toast({ variant: "destructive", title: "Failed to copy" })
-    );
-  }, [localScenes]);
-
   const handleRetryExport = useCallback(() => {
     resetExport();
     clearVideoExportLogs();
@@ -250,8 +239,9 @@ export function CinematicResult({
         await supabase.from("project_shares").insert({ project_id: projectId, user_id: user.id, share_token: token });
       }
       const backendUrl = import.meta.env.VITE_SUPABASE_URL;
-      setShareUrl(`${backendUrl}/functions/v1/share-meta?token=${token}&v=${Date.now()}`);
-      setDisplayUrl(`https://motionmax.io/share/${token}`);
+      const shareMetaUrl = `${backendUrl}/functions/v1/share-meta?token=${token}`;
+      setShareUrl(shareMetaUrl);
+      setDisplayUrl(shareMetaUrl);
     } catch {
       toast({ title: "Failed to create share link", variant: "destructive" });
       setIsShareDialogOpen(false);
@@ -278,37 +268,6 @@ export function CinematicResult({
       setIsDeleteDialogOpen(false);
     }
   }, [navigate, projectId]);
-
-  // Download clips zip
-  const handleDownloadClipsZip = useCallback(async () => {
-    if (!scenesWithVideo.length) return;
-    setIsDownloadingClipsZip(true);
-    try {
-      const zip = new JSZip();
-      for (const scene of scenesWithVideo) {
-        if (!scene.videoUrl) continue;
-        const res = await fetch(scene.videoUrl);
-        if (res.ok) zip.file(`scene-${scene.number}.mp4`, await res.blob());
-        if (scene.audioUrl) {
-          const audioRes = await fetch(scene.audioUrl);
-          if (audioRes.ok) zip.file(`scene-${scene.number}-audio.wav`, await audioRes.blob());
-        }
-      }
-      const content = await zip.generateAsync({ type: "blob" });
-      const url = URL.createObjectURL(content);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${safeFileBase(title)}-clips.zip`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch {
-      toast({ variant: "destructive", title: "Download failed" });
-    } finally {
-      setIsDownloadingClipsZip(false);
-    }
-  }, [scenesWithVideo, title]);
 
   const currentEditScene = editSceneIndex !== null ? localScenes[editSceneIndex] : null;
 
@@ -386,22 +345,15 @@ export function CinematicResult({
             {showScenes ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             {showScenes ? "Hide Scenes" : `Edit / Adjust Scenes (${localScenes.length})`}
           </Button>
-          <Button variant="outline" size="sm" onClick={handleDownloadClipsZip}
-            disabled={isDownloadingClipsZip || !scenesWithVideo.length} className="gap-1.5">
-            <FolderArchive className="h-3.5 w-3.5" />
-            {isDownloadingClipsZip ? "..." : "Clips"}
-          </Button>
-          <Button variant="outline" size="sm" onClick={copyScript} className="gap-1.5">
-            <Copy className="h-3.5 w-3.5" />
-            Copy Script
-          </Button>
+          {onRegenerate && (
+            <Button variant="outline" size="sm" onClick={onRegenerate} className="gap-1.5">
+              <RefreshCw className="h-4 w-4" />
+              Regenerate
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={handleShare} disabled={!projectId} className="gap-1.5">
             <Share2 className="h-3.5 w-3.5" />
             Share
-          </Button>
-          <Button variant="outline" size="sm" onClick={onNewProject} className="gap-1.5">
-            <Plus className="h-3.5 w-3.5" />
-            New
           </Button>
           <Button variant="outline" size="sm"
             onClick={() => setIsDeleteDialogOpen(true)} disabled={!projectId}

@@ -304,6 +304,9 @@ async function imageAudioToClip(
 /** Mux video + audio with duration matching.
  *
  *  Stretches or trims video to match audio duration, then merges.
+ *  When video is shorter than audio (e.g. 10s video, 15s audio),
+ *  the video is looped and then stretched via setpts so the output
+ *  covers the full audio duration without cutting audio short.
  *  Uses CRF 23 for reasonable file size. */
 async function muxVideoAudio(
   videoPath: string,
@@ -321,12 +324,19 @@ async function muxVideoAudio(
   const clipDuration = audioDur;
   const ratio = clipDuration / videoDur;
   console.log(
-    `[SceneEncoder] Scene ${sceneIndex} mux: video=${videoDur.toFixed(1)}s audio=${audioDur.toFixed(1)}s clip=${clipDuration.toFixed(1)}s`
+    `[SceneEncoder] Scene ${sceneIndex} mux: video=${videoDur.toFixed(1)}s audio=${audioDur.toFixed(1)}s clip=${clipDuration.toFixed(1)}s ratio=${ratio.toFixed(3)}`
   );
 
-  // Single pass: stretch video + scale + merge audio
+  // When video is shorter than audio, loop the video input so ffmpeg has
+  // enough frames to fill the full audio duration after setpts stretching.
+  // -stream_loop -1 loops the video infinitely; -t cuts at the target duration.
+  const videoInputArgs = videoDur < audioDur
+    ? ["-stream_loop", "-1", "-i", videoPath]
+    : ["-i", videoPath];
+
+  // Single pass: loop (if needed) + stretch video + scale + merge audio
   await runFfmpeg([
-    "-i", videoPath,
+    ...videoInputArgs,
     "-i", audioPath,
     "-vf", `setpts=${ratio.toFixed(6)}*PTS,${scaleAndPad(config.width, config.height)}`,
     "-map", "0:v:0",

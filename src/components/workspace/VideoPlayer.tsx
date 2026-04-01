@@ -234,11 +234,13 @@ export function VideoPlayer({
           <div className="relative">
             <Loader2 className="h-12 w-12 text-primary animate-spin" />
           </div>
-          <div className="text-center space-y-2 px-6 max-w-sm">
+          <div className="text-center space-y-2 px-6">
             <p className="text-sm font-medium text-white">
               {statusLabel}
             </p>
-            <Progress value={progressValue} className="h-2" />
+            <div className="w-64 mx-auto">
+              <Progress value={progressValue} className="h-2" />
+            </div>
             <p className="text-xs text-white/60">{Math.round(progressValue)}%</p>
             {/* Fun rotating message — fixed height to prevent layout shifts */}
             <div className="h-5 flex items-center justify-center">
@@ -362,6 +364,10 @@ export function VideoPlayer({
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function getGenerationLabel(state: GenerationState): string {
+  // Prefer the pipeline's own statusMessage when available — it has the most accurate counts
+  if (state.statusMessage && state.step !== "complete" && state.step !== "error") {
+    return state.statusMessage;
+  }
   switch (state.step) {
     case "analysis": return "Analyzing your content...";
     case "scripting": return "Writing your script...";

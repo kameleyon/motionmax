@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
 
     // 3. Fetch share data
     let title = "MotionMax Video";
-    let description = "Watch this AI-generated story.";
+    let description = "Watch this AI-generated video on MotionMax — create stunning videos with AI.";
     let imageUrl = "https://motionmax.io/og-image.png";
     let appUrl = "https://motionmax.io";
 
@@ -125,28 +125,28 @@ Deno.serve(async (req) => {
       }
     }
 
-    // --- GRID LOGIC EXTRACTION ---
+    // --- EXTRACT THUMBNAIL & DESCRIPTION FROM SCENES ---
     if (Array.isArray(scenes) && scenes.length > 0) {
-      const first = scenes[0] as any;
+      console.log(`[Share-Meta] ${scenes.length} scenes, first keys: ${Object.keys((scenes[0] as any) ?? {}).join(", ")}`);
 
-      console.log(`[Share-Meta] First scene keys: ${Object.keys(first ?? {}).join(", ")}`);
-
-      // GRID LOGIC: Check 'imageUrl' first, then 'imageUrls[0]'
+      // Find the best thumbnail: check all scenes for imageUrl or imageUrls[0]
       let rawUrl: string | null = null;
-      
-      if (first?.imageUrl && typeof first.imageUrl === "string" && first.imageUrl.startsWith("http")) {
-        rawUrl = first.imageUrl;
-        console.log(`[Share-Meta] Using imageUrl: ${rawUrl}`);
-      } else if (first?.imageUrls && Array.isArray(first.imageUrls) && first.imageUrls.length > 0) {
-        const firstImageUrl = first.imageUrls[0];
-        if (typeof firstImageUrl === "string" && firstImageUrl.startsWith("http")) {
-          rawUrl = firstImageUrl;
-          console.log(`[Share-Meta] Using imageUrls[0]: ${rawUrl}`);
+      for (const scene of scenes as any[]) {
+        if (scene?.imageUrl && typeof scene.imageUrl === "string" && scene.imageUrl.startsWith("http")) {
+          rawUrl = scene.imageUrl;
+          break;
+        }
+        if (scene?.imageUrls && Array.isArray(scene.imageUrls) && scene.imageUrls.length > 0) {
+          const img = scene.imageUrls[0];
+          if (typeof img === "string" && img.startsWith("http")) {
+            rawUrl = img;
+            break;
+          }
         }
       }
 
       if (rawUrl) {
-        // CLEAN UP: Remove query params from public bucket URLs to avoid expiration issues
+        // Strip query params from public bucket URLs to avoid expiration issues
         if (rawUrl.includes("supabase.co/storage/v1/object/public")) {
           try {
             const u = new URL(rawUrl);
@@ -158,14 +158,16 @@ Deno.serve(async (req) => {
         } else {
           imageUrl = rawUrl;
         }
+        console.log(`[Share-Meta] Thumbnail: ${imageUrl.substring(0, 80)}...`);
       }
 
-      // Extract Description from Voiceover/Script
+      // Extract description from first scene voiceover
+      const first = scenes[0] as any;
       if (typeof first?.voiceover === "string" && first.voiceover.length > 0) {
         description = first.voiceover
-          .substring(0, 160)
+          .substring(0, 150)
           .replace(/\s+/g, " ")
-          .trim() + "...";
+          .trim() + " — Made with MotionMax.io";
       }
     }
     // -----------------------------
@@ -189,17 +191,19 @@ Deno.serve(async (req) => {
     
     <meta property="og:type" content="video.other">
     <meta property="og:url" content="${appUrl}">
-    <meta property="og:title" content="${escapeHtml(title)} | MotionMax">
+    <meta property="og:title" content="${escapeHtml(title)}">
     <meta property="og:description" content="${escapeHtml(description)}">
     <meta property="og:image" content="${cacheBustedImageUrl}">
-    <meta property="og:image:width" content="1200">
-    <meta property="og:image:height" content="630">
-    <meta property="og:site_name" content="MotionMax">
-    
+    <meta property="og:image:width" content="1920">
+    <meta property="og:image:height" content="1080">
+    <meta property="og:image:alt" content="${escapeHtml(title)} — Created with MotionMax.io">
+    <meta property="og:site_name" content="MotionMax — AI Video Generator">
+
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="${escapeHtml(title)} | MotionMax">
+    <meta name="twitter:title" content="${escapeHtml(title)}">
     <meta name="twitter:description" content="${escapeHtml(description)}">
     <meta name="twitter:image" content="${cacheBustedImageUrl}">
+    <meta name="twitter:site" content="@motionmaxio">
 
     ${shouldRedirect ? `<meta http-equiv="refresh" content="0;url=${appUrl}">` : ''}
     <link rel="canonical" href="${appUrl}">

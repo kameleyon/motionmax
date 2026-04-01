@@ -239,6 +239,13 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
       setCharacterConsistencyEnabled(false);
     };
 
+    // Regenerate: reset generation state but keep all user inputs, then re-trigger
+    const handleRegenerate = () => {
+      reset();
+      // Small delay to let state clear, then trigger generation with existing inputs
+      setTimeout(() => handleGenerate(), 100);
+    };
+
     const handleOpenProject = async (projectId: string) => {
       const project = await loadProject(projectId);
       if (!project) return;
@@ -485,6 +492,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                     generationId={generationState.generationId}
                     finalVideoUrl={generationState.finalVideoUrl}
                     onNewProject={handleNewProject}
+                    onRegenerate={handleRegenerate}
                     format={format}
                     totalTimeMs={generationState.totalTimeMs}
                   />

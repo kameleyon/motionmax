@@ -204,13 +204,20 @@ export function useVideoExport() {
           resolveRef.current = resolve;
           rejectRef.current = reject;
 
+          // Scale timeout by scene count: base 20min + 1.5min per scene beyond 12
+          const baseTimeoutMs = 1_200_000; // 20 minutes
+          const extraPerScene = Math.max(0, scenes.length - 12) * 90_000; // 1.5min per extra scene
+          const totalTimeoutMs = baseTimeoutMs + extraPerScene;
+          log(`Export timeout: ${Math.round(totalTimeoutMs / 60000)}min for ${scenes.length} scenes`);
+
           timeoutIdRef.current = setTimeout(() => {
             cleanup();
             setState({ status: "error", progress: 0, error: "Render server timed out" });
             reject(new Error("Timeout waiting for Render server"));
-          }, 1_200_000); // 20 minutes — 12-scene exports with audio transcoding need ~12-15min
+          }, totalTimeoutMs);
 
-          // Start at the correct rate for current visibility
+          // Immediate first poll + adaptive interval for current visibility
+          void pollJob("initial");
           startPollInterval(document.visibilityState === "visible" ? 5000 : 15000);
 
           channelRef.current = supabase

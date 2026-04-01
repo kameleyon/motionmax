@@ -31,6 +31,7 @@ import { SceneEditModal } from "./SceneEditModal";
 import { SceneVersionHistory } from "./SceneVersionHistory";
 import { VideoPlayer } from "./VideoPlayer";
 import { toast } from "@/hooks/use-toast";
+import { useAdminAuth } from "@/hooks/useAdminAuth";
 
 interface GenerationResultProps {
   title: string;
@@ -69,6 +70,7 @@ export function GenerationResult({
   const [isReRendering, setIsReRendering] = useState(false);
 
   const { state: exportState, exportVideo, downloadVideo, shareVideo, reset: resetExport, loadExistingVideo } = useVideoExport();
+  const { isAdmin } = useAdminAuth();
   const { state: zipState, downloadImagesAsZip } = useImagesZipDownload();
   const reRenderTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasAutoExportedRef = useRef(false);
@@ -166,6 +168,23 @@ export function GenerationResult({
           </div>
         )}
         <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
+
+        {/* Admin-only: generation stats */}
+        {isAdmin && (
+          <div className="inline-flex flex-wrap items-center justify-center gap-3 text-xs text-muted-foreground/70 bg-muted/30 rounded-lg px-3 py-1.5 border border-border/30">
+            {totalTimeMs && (
+              <span>Time: {Math.floor(totalTimeMs / 60000)}m {Math.floor((totalTimeMs % 60000) / 1000)}s</span>
+            )}
+            <span>Scenes: {scenes.length}</span>
+            {costTracking && (
+              <>
+                <span>Images: {costTracking.imagesGenerated}</span>
+                <span>Audio: {costTracking.audioSeconds.toFixed(0)}s</span>
+                <span>Est. cost: ~${costTracking.estimatedCostUsd.toFixed(2)}</span>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Full-Width Video Player ── */}

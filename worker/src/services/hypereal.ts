@@ -340,6 +340,82 @@ async function pollHyperealJob(
   throw new Error(`${model} timed out after ${maxAttempts} polls (~${Math.round(maxAttempts * basePollMs / 60_000)} min).`);
 }
 
+// ── Kling V2.5 Turbo Pro I2V (fallback for V2.6) ────────────────────
+
+/**
+ * Generate video using Kling V2.5 Turbo Pro I2V.
+ * Fallback when V2.6 fails — smooth visual transformation with last_image support.
+ *
+ * Model: kling-2-5-i2v (35 credits)
+ * Duration: 5 or 10s
+ * Note: No sound parameter — V2.5 Turbo doesn't support audio generation.
+ *       Uses `last_image` (not `end_image`) for end-frame transitions.
+ */
+export async function generateKlingV25Video(
+  imageUrl: string,
+  prompt: string,
+  apiKey: string,
+  duration: number = 10,
+  lastImageUrl?: string,
+  negativePrompt: string = "blurry, low quality, watermark, text, UI elements",
+  guidanceScale: number = 0.5
+): Promise<string> {
+  const model = "kling-2-5-i2v";
+  // Kling V2.5 valid durations: 5, 10
+  const validDurations = [5, 10];
+  const clampedDuration = validDurations.reduce((prev, curr) =>
+    Math.abs(curr - duration) < Math.abs(prev - duration) ? curr : prev
+  );
+  if (clampedDuration !== duration) {
+    console.warn(`[Hypereal] Kling V2.5 duration ${duration}s invalid — clamped to ${clampedDuration}s`);
+  }
+  console.log(`[Hypereal] Starting Kling V2.5 Turbo Pro I2V — ${clampedDuration}s${lastImageUrl ? " (start→end)" : ""}`);
+  console.log(`[Hypereal] IMAGE: ${imageUrl.substring(0, 80)}...`);
+  if (lastImageUrl) console.log(`[Hypereal] LAST IMAGE: ${lastImageUrl.substring(0, 80)}...`);
+
+  const inputPayload: Record<string, unknown> = {
+    prompt,
+    image: imageUrl,
+    duration: clampedDuration,
+    guidance_scale: guidanceScale,
+    negative_prompt: negativePrompt,
+  };
+
+  if (lastImageUrl) {
+    inputPayload.last_image = lastImageUrl;
+  }
+
+  const requestBody = { model, input: inputPayload };
+  const bodyJson = JSON.stringify(requestBody);
+  console.log(`[Hypereal] Kling V2.5 body (${bodyJson.length} chars): ${bodyJson.substring(0, 2000)}`);
+
+  const response = await fetch(HYPEREAL_VIDEO_URL, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: bodyJson,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Hypereal Kling V2.5 API Error: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json() as any;
+  const jobId = data.jobId;
+  const pollUrl = data.pollUrl || null;
+
+  console.log(`[Hypereal] Kling V2.5 job created: ${jobId} (credits: ${data.creditsUsed})`);
+
+  if (!jobId) {
+    throw new Error(`No jobId from Kling V2.5 — response: ${JSON.stringify(data)}`);
+  }
+
+  return pollHyperealJob(jobId, apiKey, model, pollUrl);
+}
+
 // ── Legacy Seedance export (kept for import compatibility) ─────────
 
 export async function generateVideoFromImage(

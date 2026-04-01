@@ -51,7 +51,7 @@ interface WorkspaceSubscriptionReturn {
 }
 
 export function useWorkspaceSubscription(): WorkspaceSubscriptionReturn {
-  const { plan, creditsBalance, subscriptionStatus, checkSubscription } = useSubscription();
+  const { plan, creditsBalance, subscriptionStatus, subscriptionEnd, checkSubscription } = useSubscription();
   const { toast } = useToast();
 
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -82,6 +82,7 @@ export function useWorkspaceSubscription(): WorkspaceSubscriptionReturn {
         opts.hasBrandMark,
         opts.hasCustomStyle,
         subscriptionStatus || undefined,
+        subscriptionEnd,
       );
 
       if (!validation.canGenerate) {

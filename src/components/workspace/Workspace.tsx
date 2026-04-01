@@ -53,7 +53,7 @@ export const Workspace = forwardRef<WorkspaceHandle>(function Workspace(_, ref) 
   const [wizardStep, setWizardStep] = useState<WizardStep>(1);
 
   // Subscription and plan validation
-  const { plan, creditsBalance, subscriptionStatus, checkSubscription } = useSubscription();
+  const { plan, creditsBalance, subscriptionStatus, subscriptionEnd, checkSubscription } = useSubscription();
   const { toast } = useToast();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgradeReason, setUpgradeReason] = useState("");
@@ -119,7 +119,8 @@ export const Workspace = forwardRef<WorkspaceHandle>(function Workspace(_, ref) 
       format,
       brandMarkEnabled && brandMarkText.trim().length > 0,
       style === "custom",
-      subscriptionStatus || undefined
+      subscriptionStatus || undefined,
+      subscriptionEnd,
     );
 
     if (!validation.canGenerate) {

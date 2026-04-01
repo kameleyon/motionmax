@@ -1,22 +1,30 @@
 /**
- * Cinematic video handler — Grok Video I2V via Hypereal.
+ * Cinematic video handler — Kling V2.6 Pro I2V via Hypereal.
  *
  * Flow:
  *   - All images are generated FIRST (in parallel batches by the frontend)
- *   - Videos are generated using Grok Video I2V:
+ *   - Videos use Kling V2.6 Pro I2V with seamless transitions:
  *     image = Scene N's image (first frame)
- *   - No last_image / morph — each scene is self-contained
+ *     end_image = Scene N+1's image (last frame) — creates smooth morph transition
+ *     Last scene has NO end_image (self-contained)
  *   - Camera motion varies per scene (rotated from 7 movement types)
- *   - Duration: 10s, Resolution: 1080P, No audio
+ *   - Duration: 10s, No sound, cfg_scale: 0.8
  *
- * Model: grok-video-i2v (12 credits)
+ * Primary: kling-2-6-i2v-pro (35 credits / $0.70 per 10s)
+ * Fallback: kling-2-5-i2v (35 credits / $0.70 per 10s)
+ *
+ * Previous model (commented out): grok-video-i2v (12 credits)
  */
 
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField } from "../lib/sceneUpdate.js";
 import { generateImage } from "../services/imageGenerator.js";
-import { generateGrokVideo } from "../services/hypereal.js";
+import {
+  generateKlingV26Video,
+  generateKlingV25Video,
+  // generateGrokVideo,  // Previous model — kept for rollback
+} from "../services/hypereal.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -74,6 +82,9 @@ export async function handleCinematicVideo(
   const scene = scenes[sceneIndex];
   if (!scene) throw new Error(`Scene ${sceneIndex} not found`);
 
+  const totalScenes = scenes.length;
+  const isLastScene = sceneIndex === totalScenes - 1;
+
   // Fetch project data
   const { data: project } = await supabase
     .from("projects")
@@ -85,7 +96,6 @@ export async function handleCinematicVideo(
   const style = project?.style || "realistic";
   const characterDescription = project?.character_description || "";
   const language = project?.voice_inclination || "en";
-  const aspectRatio: "16:9" | "9:16" = format === "portrait" ? "9:16" : "16:9";
 
   // ── Get this scene's image ───────────────────────────────────────
   let imageUrl = scene.imageUrl;
@@ -99,6 +109,54 @@ export async function handleCinematicVideo(
   }
 
   const sourceImageUrl = imageUrl;
+
+  // ── Get next scene's image (for end_image transition) ────────────
+  let endImageUrl: string | undefined;
+  if (!isLastScene) {
+    endImageUrl = scenes[sceneIndex + 1]?.imageUrl;
+
+    if (!endImageUrl) {
+      // Next scene's image is missing — wait for it with gentle polling
+      console.log(`[CinematicVideo] Scene ${sceneIndex}: waiting for scene ${sceneIndex + 1} image...`);
+      const MAX_WAIT_MS = 5 * 60 * 1000; // 5 min max wait
+      const POLL_INTERVAL_MS = 15_000;     // 15s between polls to avoid rate limits
+      const waitStart = Date.now();
+
+      while (!endImageUrl && Date.now() - waitStart < MAX_WAIT_MS) {
+        await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+
+        const { data: freshGen } = await supabase
+          .from("generations")
+          .select("scenes")
+          .eq("id", generationId)
+          .maybeSingle();
+
+        const freshScenes = (freshGen?.scenes as any[]) ?? [];
+        endImageUrl = freshScenes[sceneIndex + 1]?.imageUrl;
+
+        if (endImageUrl) {
+          console.log(`[CinematicVideo] Scene ${sceneIndex}: next scene image now available`);
+        }
+      }
+
+      if (!endImageUrl) {
+        // Still missing after max wait — try generating it ourselves
+        console.warn(`[CinematicVideo] Scene ${sceneIndex}: next scene image still missing after ${MAX_WAIT_MS / 1000}s, generating it`);
+        const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
+        const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
+        const nextScene = scenes[sceneIndex + 1];
+        const nextPrompt = nextScene?.visualPrompt || nextScene?.visual_prompt || "Cinematic scene";
+        try {
+          endImageUrl = await generateImage(nextPrompt, hyperealApiKey, replicateApiKey, format, projectId);
+          await updateSceneField(generationId, sceneIndex + 1, "imageUrl", endImageUrl);
+          console.log(`[CinematicVideo] Scene ${sceneIndex}: generated next scene image as fallback`);
+        } catch (imgErr) {
+          console.error(`[CinematicVideo] Scene ${sceneIndex}: failed to generate next scene image, proceeding without end_image`);
+          endImageUrl = undefined;
+        }
+      }
+    }
+  }
 
   // Snapshot history for undo
   if (regenerate) {
@@ -118,24 +176,57 @@ export async function handleCinematicVideo(
   const apiKey = (process.env.HYPEREAL_API_KEY || "").trim();
   if (!apiKey) throw new Error("HYPEREAL_API_KEY not configured");
 
+  const transitionInfo = endImageUrl ? `→ scene ${sceneIndex + 1}` : "(no end_image)";
   console.log(
-    `[CinematicVideo] Scene ${sceneIndex}: Grok I2V 10s, ` +
+    `[CinematicVideo] Scene ${sceneIndex}: Kling V2.6 Pro I2V 10s ${transitionInfo}, ` +
     `camera=${CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("—")[0].trim()}, ` +
     `prompt=${videoPrompt.length} chars`
   );
 
-  // ── Generate video with Grok Video I2V ───────────────────────────
-  const grokVideoUrl = await generateGrokVideo(
-    imageUrl,
-    videoPrompt,
-    apiKey,
-    aspectRatio,
-    10,       // duration: 10s
-    "1080P",  // resolution
-  );
+  // ── Generate video with Kling V2.6 Pro I2V (primary) ─────────────
+  let videoUrl: string;
+  let provider = "Kling V2.6 Pro I2V";
+
+  try {
+    videoUrl = await generateKlingV26Video(
+      imageUrl,
+      videoPrompt,
+      apiKey,
+      10,           // duration: 10s
+      endImageUrl,  // end_image: next scene's image for seamless transition
+      "blurry, low quality, watermark, text, UI elements",
+      0.8,          // cfg_scale: 0.8 for strong prompt adherence
+    );
+  } catch (v26Error) {
+    // Fallback to Kling V2.5 Turbo Pro I2V
+    console.warn(
+      `[CinematicVideo] Scene ${sceneIndex}: Kling V2.6 failed (${(v26Error as Error).message}), falling back to Kling V2.5 Turbo`
+    );
+    provider = "Kling V2.5 Turbo I2V";
+
+    videoUrl = await generateKlingV25Video(
+      imageUrl,
+      videoPrompt,
+      apiKey,
+      10,           // duration: 10s
+      endImageUrl,  // last_image: next scene's image (V2.5 uses `last_image`)
+      "blurry, low quality, watermark, text, UI elements",
+      0.8,          // guidance_scale: 0.8
+    );
+  }
+
+  // ── Previous model (Grok Video I2V) — commented out for rollback ──
+  // const grokVideoUrl = await generateGrokVideo(
+  //   imageUrl,
+  //   videoPrompt,
+  //   apiKey,
+  //   aspectRatio,
+  //   10,       // duration: 10s
+  //   "1080P",  // resolution
+  // );
 
   // Upload to Supabase storage
-  const finalVideoUrl = await uploadVideoToStorage(grokVideoUrl, projectId, generationId, sceneIndex);
+  const finalVideoUrl = await uploadVideoToStorage(videoUrl, projectId, generationId, sceneIndex);
 
   // Stale-image guard (for scene 0)
   if (sceneIndex === 0) {
@@ -154,10 +245,19 @@ export async function handleCinematicVideo(
     jobId, projectId, userId, generationId,
     category: "system_info",
     eventType: "cinematic_video_completed",
-    message: `Cinematic video completed for scene ${sceneIndex} (Grok I2V, 10s)`,
+    message: `Cinematic video completed for scene ${sceneIndex} (${provider}, 10s${endImageUrl ? ", with transition" : ""})`,
+    details: { provider, hasTransition: !!endImageUrl, cost: 0.70 },
   });
 
-  return { success: true, status: "complete", videoUrl: finalVideoUrl, sceneIndex, provider: "Grok I2V" };
+  return {
+    success: true,
+    status: "complete",
+    videoUrl: finalVideoUrl,
+    sceneIndex,
+    provider,
+    hasTransition: !!endImageUrl,
+    cost: 0.70,
+  };
 }
 
 // ── Prompt builder with camera motion ──────────────────────────────

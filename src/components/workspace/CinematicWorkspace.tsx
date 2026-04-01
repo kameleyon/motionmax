@@ -62,7 +62,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
     const { state: generationState, startGeneration, reset, loadProject } = useGenerationPipeline();
 
     // Subscription and plan validation  
-    const { plan, creditsBalance, subscriptionStatus, checkSubscription } = useSubscription();
+    const { plan, creditsBalance, subscriptionStatus, subscriptionEnd, checkSubscription } = useSubscription();
     const { toast } = useToast();
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
     const [upgradeReason, setUpgradeReason] = useState("");
@@ -183,6 +183,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
         brandMarkEnabled && brandMarkText.trim().length > 0,
         style === "custom",
         subscriptionStatus || undefined,
+        subscriptionEnd,
       );
 
       if (!validation.canGenerate) {

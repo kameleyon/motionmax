@@ -122,6 +122,7 @@ export function validateGenerationAccess(
   hasBrandMark?: boolean,
   hasCustomStyle?: boolean,
   subscriptionStatus?: string,
+  subscriptionEnd?: string | null,
 ): ValidationResult {
   // Check subscription status first
   if (subscriptionStatus === "past_due" || subscriptionStatus === "unpaid") {
@@ -140,10 +141,22 @@ export function validateGenerationAccess(
     };
   }
 
+  // Check if subscription has expired (end date has passed)
+  if (subscriptionEnd && plan !== "free") {
+    const endDate = new Date(subscriptionEnd);
+    if (endDate < new Date()) {
+      return {
+        canGenerate: false,
+        error: "Your subscription has expired. Please renew to continue creating.",
+        upgradeRequired: true,
+      };
+    }
+  }
+
   const limits = PLAN_LIMITS[plan];
   const creditsRequired = getCreditsRequired(projectType, length);
 
-  // Check credits
+  // Check credits — must have enough balance
   if (creditsBalance < creditsRequired) {
     return {
       canGenerate: false,

@@ -58,7 +58,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
     const { isAdmin, adminLogs, showAdminLogs, setShowAdminLogs } = useAdminLogs(generationState.generationId, generationState.step);
 
     // Subscription and plan validation
-    const { plan, creditsBalance, subscriptionStatus, checkSubscription } = useSubscription();
+    const { plan, creditsBalance, subscriptionStatus, subscriptionEnd, checkSubscription } = useSubscription();
     const { count: infographicsUsed } = useInfographicsUsage();
     const { toast } = useToast();
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -161,7 +161,8 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
         format,
         brandMarkEnabled && brandMarkText.trim().length > 0,
         style === "custom",
-        subscriptionStatus || undefined
+        subscriptionStatus || undefined,
+        subscriptionEnd,
       );
 
       if (!validation.canGenerate) {

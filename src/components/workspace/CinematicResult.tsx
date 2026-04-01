@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useCinematicRegeneration } from "@/hooks/useCinematicRegeneration";
 import { useVideoExport } from "@/hooks/useVideoExport";
 import { cn } from "@/lib/utils";
@@ -107,6 +108,7 @@ export function CinematicResult({
   const [isDownloadingClipsZip, setIsDownloadingClipsZip] = useState(false);
 
   const { state: exportState, exportVideo, downloadVideo, reset: resetExport, loadExistingVideo } = useVideoExport();
+  const { isAdmin } = useAdminAuth();
   const reRenderTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasAutoExportedRef = useRef(false);
 
@@ -301,6 +303,23 @@ export function CinematicResult({
           {scenesWithVideo.length} clips
         </div>
         <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
+
+        {/* Admin-only: generation stats */}
+        {isAdmin && (
+          <div className="inline-flex flex-wrap items-center justify-center gap-3 text-xs text-muted-foreground/70 bg-muted/30 rounded-lg px-3 py-1.5 border border-border/30">
+            {totalTimeMs && (
+              <span>Time: {Math.floor(totalTimeMs / 60000)}m {Math.floor((totalTimeMs % 60000) / 1000)}s</span>
+            )}
+            <span>Scenes: {localScenes.length}</span>
+            <span>Videos: {scenesWithVideo.length}</span>
+            <span>Est. cost: ~${(
+              0.02 + // OpenRouter script (~$0.02)
+              localScenes.length * 0.01 + // Audio (~$0.01/scene)
+              localScenes.length * 0.04 + // Images (~$0.04/scene)
+              scenesWithVideo.length * 0.70 // Video ($0.70/scene Kling V2.6)
+            ).toFixed(2)}</span>
+          </div>
+        )}
       </div>
 
       {/* ── Full-Width Video Player ── */}

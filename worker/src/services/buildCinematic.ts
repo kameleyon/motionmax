@@ -147,9 +147,21 @@ Your visualPrompt must be optimised for AI VIDEO generation, NOT static images.
 Every visualPrompt MUST be rich, detailed, and cinematic. Be CREATIVE. Think like a blockbuster movie director.
 
 1. **MOTION & DYNAMICS:** Describe movement, action, flow — NEVER describe still/frozen scenes.
-   - ✓ "Camera trucks right as the protagonist strides forward through fog, coat billowing violently in the wind, her hand reaching out to grab the rusted gate while sparks fly from the streetlamp above"
+   - ✓ "Camera trucks right as the protagonist strides forward through fog, coat billowing violently in the wind, her hand reaching out to grab the rusted gate while sparks fly from the streetlamp above. Camera: Truck right to left, following subject."
    - ✗ "A person standing in fog"
-2. **CAMERA MOVEMENT:** ALWAYS specify exact camera moves from the vocabulary above. Combine multiple techniques! Be specific about direction, speed, and purpose.
+2. **CAMERA MOVEMENT (MANDATORY — LAST LINE OF EVERY visualPrompt):**
+   EVERY visualPrompt MUST end with an explicit camera motion directive on its own line:
+   "Camera: [Motion Type] [direction/detail]"
+   Examples:
+   - "Camera: Pan left to right, following the subject across the room."
+   - "Camera: Tilt upward, revealing the towering cathedral."
+   - "Camera: Handheld, subtle shake, tracking subject through crowd."
+   - "Camera: Rack Focus from foreground candle to background figure."
+   - "Camera: Truck left, gliding alongside as character walks."
+   - "Camera: Pedestal up, rising to reveal city skyline."
+   - "Camera: Roll slight clockwise, creating tension."
+   Pick from the 7 approved techniques. Vary them — never use the same motion two scenes in a row.
+   Be specific about DIRECTION (left/right/up/down) and SPEED (slow/steady/fast/whip).
 3. **CINEMATIC LIGHTING:** Be specific — "Cyberpunk neon reflections on wet pavement", "Soft rim light separating subject from background."
 4. **COMPOSITION:** Describe framing/depth — "Subject in left third, shallow depth of field blurring city lights behind."
 5. **ATMOSPHERE & MOOD:** Set emotional tone — "Tense, claustrophobic framing", "Expansive, hopeful wide shot."
@@ -157,6 +169,7 @@ Every visualPrompt MUST be rich, detailed, and cinematic. Be CREATIVE. Think lik
 7. **CHARACTER IN EVERY SCENE:** Include the FULL character description (appearance, clothing, features) in EVERY visualPrompt. Do NOT just say "the protagonist" — describe them EVERY time.
 8. **STYLE CONSISTENCY:** Every visualPrompt must match the art style: ${styleDesc}. Include style-specific terms in every prompt.
 9. **TEXT & LANGUAGE:** Any text, titles, signs, or written content visible in the scene MUST be in the SAME language as the voiceover.${p.language ? ` All visible text must be in ${p.language === "fr" ? "French" : p.language === "ht" ? "Haitian Creole" : "English"}.` : ""}
+10. **SCENE TRANSITIONS (CRITICAL):** Each scene's video will morph into the NEXT scene's image. Design your visualPrompts so the END state of each scene transitions naturally into the START state of the next scene. Think about visual continuity — matching colors, compositions, or motions that bridge scenes.
 
 === ENVIRONMENT & SETTING (MANDATORY) ===
 EVERY scene MUST include detailed environment/setting that matches the story.
@@ -263,7 +276,7 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
     {
       "number": 1,
       "voiceover": "Engaging narration that hooks the viewer...",
-      "visualPrompt": "'THE JOURNEY BEGINS' in bold typography fading in over: Camera pans right through morning mist. A 32-year-old woman ... steps into frame. Handheld slight sway for intimacy. Shallow depth of field, lens flare kissing edge of frame.",
+      "visualPrompt": "'THE JOURNEY BEGINS' in bold typography fading in over morning mist. A 32-year-old woman with shoulder-length black hair steps into frame, coat billowing. Shallow depth of field, lens flare kissing edge of frame. Warm golden hour light.\nCamera: Pan right to left, steady pace, revealing the landscape as the subject walks into frame.",
       "visualStyle": "Cinematic establishing shot with atmospheric depth",
       "coverTitle": "Catchy Cover Title",
       "duration": 15

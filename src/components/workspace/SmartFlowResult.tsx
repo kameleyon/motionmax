@@ -175,8 +175,10 @@ export function SmartFlowResult({
         ) : (
           /* No-voice SmartFlow: show the infographic image directly */
           <div className={cn(
-            "relative rounded-xl overflow-hidden bg-black",
-            "aspect-video",
+            "relative rounded-xl overflow-hidden bg-black mx-auto",
+            format === "portrait"  && "h-[28rem] aspect-[9/16]",
+            format === "square"    && "h-[28rem] aspect-square",
+            (format === "landscape" || !format) && "w-full aspect-video",
           )}>
             {scene.imageUrl ? (
               <img

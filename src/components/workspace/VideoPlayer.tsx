@@ -109,15 +109,14 @@ export function VideoPlayer({
 
   const safeName = title.replace(/[^a-z0-9]/gi, "_").slice(0, 50) || "video";
 
-  const aspectClass = format === "portrait" ? "aspect-[9/16]" : format === "square" ? "aspect-square" : "aspect-video";
-
   return (
     <div className={cn("flex justify-center", className)}>
       <div
         className={cn(
-          "relative rounded-xl overflow-hidden bg-black w-full",
-          format === "landscape" ? "aspect-video" : "h-[28rem]",
-          format !== "landscape" && aspectClass,
+          "relative rounded-xl overflow-hidden bg-black",
+          format === "portrait"  && "h-[28rem] aspect-[9/16]",
+          format === "square"    && "h-[28rem] aspect-square",
+          format === "landscape" && "w-full aspect-video",
         )}
         onMouseMove={resetControlsTimer}
         onMouseEnter={() => setShowControls(true)}

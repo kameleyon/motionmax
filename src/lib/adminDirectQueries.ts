@@ -272,31 +272,90 @@ export async function fetchUserDetails(params: { userId?: string; targetUserId?:
     { data: sub },
     { data: creds },
     { data: gens },
+    { count: archiveCount },
     { data: flags },
     { data: costs },
+    { data: logs },
+    { data: transactions },
   ] = await Promise.all([
     supabase.from("profiles").select("*").eq("user_id", uid).single(),
     supabase.from("subscriptions").select("*").eq("user_id", uid).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("user_credits").select("*").eq("user_id", uid).single(),
     supabase.from("generations").select("id, project_id, status, created_at").eq("user_id", uid).order("created_at", { ascending: false }).limit(20),
+    supabase.from("generation_archives").select("*", { count: "exact", head: true }).eq("user_id", uid),
     supabase.from("user_flags").select("*").eq("user_id", uid).order("created_at", { ascending: false }),
     supabase.from("generation_costs").select("*").eq("user_id", uid),
+    supabase.from("system_logs").select("*").eq("user_id", uid).order("created_at", { ascending: false }).limit(15),
+    supabase.from("credit_transactions").select("*").eq("user_id", uid).order("created_at", { ascending: false }).limit(10),
   ]);
 
   let totalCost = 0;
   costs?.forEach(c => { totalCost += Number(c.total_cost) || 0; });
 
+  // Determine user status from active flags
+  const activeFlags = flags?.filter(f => !f.resolved_at) || [];
+  const isBanned = activeFlags.some(f => f.flag_type === "banned");
+  const isSuspended = activeFlags.some(f => f.flag_type === "suspended");
+  const userStatus = isBanned ? "banned" : isSuspended ? "suspended" : "active";
+
   return {
-    id: uid,
-    email: profile?.display_name || uid.slice(0, 8),
-    displayName: profile?.display_name,
-    avatarUrl: profile?.avatar_url,
-    createdAt: profile?.created_at,
-    subscription: sub,
-    credits: creds,
-    recentGenerations: gens || [],
-    flags: flags || [],
-    totalCost,
+    user: {
+      id: uid,
+      email: profile?.display_name || uid.slice(0, 8),
+      created_at: profile?.created_at || "",
+      last_sign_in_at: null,
+      email_confirmed_at: profile?.created_at || null,
+    },
+    profile: profile ? {
+      display_name: profile.display_name,
+      avatar_url: profile.avatar_url,
+    } : null,
+    subscription: sub ? {
+      plan_name: sub.plan_name,
+      status: sub.status,
+      current_period_end: sub.current_period_end || null,
+      cancel_at_period_end: sub.cancel_at_period_end || false,
+    } : null,
+    credits: creds ? {
+      credits_balance: creds.credits_balance || 0,
+      total_purchased: creds.total_purchased || 0,
+      total_used: creds.total_used || 0,
+    } : null,
+    projectsCount: 0,
+    deletedProjectsCount: 0,
+    totalGenerationCost: totalCost,
+    totalGenerations: (gens?.length || 0) + (archiveCount || 0),
+    activeGenerations: gens?.length || 0,
+    archivedGenerations: archiveCount || 0,
+    userStatus,
+    recentGenerations: (gens || []).map(g => ({
+      id: g.id,
+      status: g.status,
+      created_at: g.created_at,
+      completed_at: null,
+    })),
+    flags: (flags || []).map(f => ({
+      id: f.id,
+      flag_type: f.flag_type,
+      reason: f.reason,
+      created_at: f.created_at,
+      resolved_at: f.resolved_at,
+    })),
+    recentUserLogs: (logs || []).map(l => ({
+      id: l.id,
+      category: l.category || "",
+      event_type: l.event_type || "",
+      message: l.message || "",
+      details: l.details || null,
+      created_at: l.created_at,
+    })),
+    recentTransactions: (transactions || []).map(t => ({
+      id: t.id,
+      amount: t.amount || 0,
+      transaction_type: t.transaction_type || "",
+      description: t.description || null,
+      created_at: t.created_at,
+    })),
   };
 }
 

@@ -304,7 +304,10 @@ export function CinematicResult({
       </div>
 
       {/* ── Full-Width Video Player ── */}
-      <div className="w-full max-w-4xl mx-auto">
+      <div className={cn(
+        "mx-auto",
+        format === "portrait" ? "max-w-xs sm:max-w-sm" : "w-full max-w-4xl"
+      )}>
         <VideoPlayer
           exportState={exportState}
           title={title}

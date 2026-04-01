@@ -22,7 +22,6 @@ import { concatWithCrossfade } from "./export/transitions.js";
 import { compressIfNeeded } from "./export/compressVideo.js";
 import { uploadToSupabase, removeFiles } from "./export/storageHelpers.js";
 import { getTargetResolution } from "./export/kenBurns.js";
-import { generateAllTransitions } from "./export/transitionGenerator.js";
 import {
   initSceneProgress,
   updateSceneProgress,
@@ -52,16 +51,6 @@ const AI_VIDEO_ENABLED = (process.env.EXPORT_AI_VIDEO || "false").toLowerCase() 
 
 /** Per-scene AI video timeout (ms). Default: 5 minutes. */
 const AI_VIDEO_TIMEOUT_MS = parseInt(process.env.EXPORT_AI_VIDEO_TIMEOUT || "300000", 10);
-
-/** Enable AI transition video generation between scenes. Default: false. */
-const AI_TRANSITIONS_ENABLED = (process.env.EXPORT_AI_TRANSITIONS || "false").toLowerCase() === "true";
-
-/** Per-transition AI video timeout (ms). Default: 3 minutes. */
-const AI_TRANSITION_TIMEOUT_MS = parseInt(process.env.EXPORT_AI_TRANSITION_TIMEOUT || "180000", 10);
-
-/** AI transition clip duration in seconds. Default: 5.
- *  Kling V3.0 accepts: 3, 5, 10, 15. Kling V2.6 accepts: 5, 10. */
-const AI_TRANSITION_DURATION = parseFloat(process.env.EXPORT_AI_TRANSITION_DURATION || "5");
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -131,8 +120,8 @@ function buildExportConfig(payload: any): ExportConfig {
     crossfadeDuration: CROSSFADE_DURATION,
     aiVideo: AI_VIDEO_ENABLED,
     aiVideoTimeoutMs: AI_VIDEO_TIMEOUT_MS,
-    aiTransitions: AI_TRANSITIONS_ENABLED,
-    aiTransitionTimeoutMs: AI_TRANSITION_TIMEOUT_MS,
+    aiTransitions: false,
+    aiTransitionTimeoutMs: 0,
     format,
     projectId: payload.project_id,
     userId: undefined, // set in handler
@@ -182,14 +171,11 @@ export async function handleExportVideo(
   }
 
   // Detect cinematic projects (scenes have AI-generated videoUrls)
-  // Detect cinematic projects (scenes have AI-generated videoUrls with morphing baked in)
   const isCinematic = scenes.some((s: any) => !!s.videoUrl);
   if (isCinematic) {
-    // Cinematic videos already have seamless morphing from Kling (each clip morphs into the next)
-    // No crossfade or AI transitions needed — just concat directly
+    // Cinematic clips are self-contained — just concat directly, no crossfade
     exportConfig.crossfadeDuration = 0;
-    exportConfig.aiTransitions = false;
-    console.log(`[ExportVideo] Cinematic detected — morphing baked into clips, using direct concat`);
+    console.log(`[ExportVideo] Cinematic detected — using direct concat`);
   }
 
   // ── Initialize per-scene progress tracking ──────────────────────
@@ -198,7 +184,7 @@ export async function handleExportVideo(
 
   const features = [
     exportConfig.aiVideo ? "AI video" : exportConfig.kenBurns ? "Ken Burns" : "static",
-    exportConfig.aiTransitions ? "AI transitions" : exportConfig.crossfadeDuration > 0 ? `${exportConfig.crossfadeDuration}s crossfade` : "hard cuts",
+    exportConfig.crossfadeDuration > 0 ? `${exportConfig.crossfadeDuration}s crossfade` : "hard cuts",
   ].join(", ");
 
   await writeSystemLog({
@@ -213,7 +199,7 @@ export async function handleExportVideo(
   console.log(
     `[ExportVideo] Export config: ${exportConfig.width}x${exportConfig.height} | ` +
     `KenBurns=${exportConfig.kenBurns} | AI Video=${exportConfig.aiVideo} | ` +
-    `Crossfade=${exportConfig.crossfadeDuration}s | AI Transitions=${exportConfig.aiTransitions} | ` +
+    `Crossfade=${exportConfig.crossfadeDuration}s | ` +
     `Batch=${SCENE_BATCH_SIZE} | SceneTimeout=${SCENE_TIMEOUT_MS / 1000}s`
   );
 
@@ -307,87 +293,17 @@ export async function handleExportVideo(
     });
     await supabase.from("video_generation_jobs").update({ progress: 55 }).eq("id", jobId);
 
-    // ── 2. (Optional) Generate AI transition videos ────────────────
-
-    let finalClipSequence = clipPaths; // default: just scene clips
-    let aiTransitionCount = 0;
-    const transitionCleanup: string[] = [];
-
-    if (exportConfig.aiTransitions && clipPaths.length >= 2) {
-      sceneProgress.overallPhase = "transitions";
-      sceneProgress.overallMessage = `Generating AI transitions between ${clipPaths.length} scenes...`;
-      await flushSceneProgress(jobId);
-
-      await writeSystemLog({
-        jobId,
-        projectId: project_id,
-        userId,
-        category: "system_info",
-        eventType: "ai_transitions_started",
-        message: `Generating AI transition videos for ${clipPaths.length - 1} junctions`,
-      });
-
-      const transResults = await generateAllTransitions(clipPaths, scenes, tempDir, {
-        format: exportConfig.format,
-        width: exportConfig.width,
-        height: exportConfig.height,
-        duration: AI_TRANSITION_DURATION,
-        projectId: project_id,
-        userId,
-        timeoutMs: exportConfig.aiTransitionTimeoutMs,
-      });
-
-      // Interleave: scene0, trans0→1, scene1, trans1→2, scene2, ...
-      const interleaved: string[] = [];
-      for (let ci = 0; ci < clipPaths.length; ci++) {
-        interleaved.push(clipPaths[ci]);
-
-        if (ci < transResults.length && transResults[ci].path) {
-          interleaved.push(transResults[ci].path!);
-          transitionCleanup.push(transResults[ci].path!);
-          aiTransitionCount++;
-        }
-      }
-
-      finalClipSequence = interleaved;
-
-      await writeSystemLog({
-        jobId,
-        projectId: project_id,
-        userId,
-        category: "system_info",
-        eventType: "ai_transitions_complete",
-        message: `Generated ${aiTransitionCount}/${clipPaths.length - 1} AI transitions`,
-      });
-
-      await supabase.from("video_generation_jobs").update({ progress: 65 }).eq("id", jobId);
-    }
-
-    // ── 3. Stitch scenes: crossfade or concat ───────────────────────
+    // ── 2. Stitch scenes: crossfade or concat ───────────────────────
 
     sceneProgress.overallPhase = "concatenating";
-    sceneProgress.overallMessage =
-      aiTransitionCount > 0
-        ? `Concatenating ${finalClipSequence.length} clips (${aiTransitionCount} AI transitions)...`
-        : exportConfig.crossfadeDuration > 0
-          ? `Applying crossfade transitions to ${clipPaths.length} clips...`
-          : `Concatenating ${clipPaths.length} scene clips...`;
+    sceneProgress.overallMessage = exportConfig.crossfadeDuration > 0
+      ? `Applying crossfade transitions to ${clipPaths.length} clips...`
+      : `Concatenating ${clipPaths.length} scene clips...`;
     await flushSceneProgress(jobId);
 
     let usedCrossfade = false;
 
-    if (aiTransitionCount > 0) {
-      // AI transitions are already inserted as separate clips — use concat (re-encode)
-      await writeSystemLog({
-        jobId,
-        projectId: project_id,
-        userId,
-        category: "system_info",
-        eventType: "concat_started",
-        message: `Concatenating ${finalClipSequence.length} clips with ${aiTransitionCount} AI transitions`,
-      });
-      await concatFiles(finalClipSequence, finalOutputPath, false);
-    } else if (exportConfig.crossfadeDuration > 0 && clipPaths.length >= 2) {
+    if (exportConfig.crossfadeDuration > 0 && clipPaths.length >= 2) {
       await writeSystemLog({
         jobId,
         projectId: project_id,
@@ -436,9 +352,8 @@ export async function handleExportVideo(
       await concatFiles(clipPaths, finalOutputPath, false);
     }
 
-    // Free individual scene MP4s and transition clips
+    // Free individual scene MP4s
     for (const f of clipPaths) removeFiles(f);
-    for (const f of transitionCleanup) removeFiles(f);
 
     await supabase.from("video_generation_jobs").update({ progress: 80 }).eq("id", jobId);
 
@@ -463,9 +378,7 @@ export async function handleExportVideo(
 
     // Mark complete
     sceneProgress.overallPhase = "complete";
-    const transitionInfo = aiTransitionCount > 0
-      ? ` with ${aiTransitionCount} AI transitions`
-      : usedCrossfade ? " with crossfade transitions" : "";
+    const transitionInfo = usedCrossfade ? " with crossfade transitions" : "";
     sceneProgress.overallMessage = `Export complete — ${clipPaths.length}/${scenes.length} scenes${transitionInfo}`;
     await flushSceneProgress(jobId);
 
@@ -475,7 +388,7 @@ export async function handleExportVideo(
       userId,
       category: "system_info",
       eventType: "export_video_completed",
-      message: `Video exported: ${clipPaths.length} scenes, ${features}, crossfade=${usedCrossfade}, aiTransitions=${aiTransitionCount}`,
+      message: `Video exported: ${clipPaths.length} scenes, ${features}, crossfade=${usedCrossfade}`,
     });
 
     return { success: true, url: finalVideoUrl };

@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  ChevronDown,
-  ChevronUp,
   Copy,
   Download,
   Loader2,
@@ -10,10 +8,8 @@ import {
   Volume2,
   X,
   Clock,
-  FileText,
   Eye,
   EyeOff,
-  Trash2,
   Share2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -171,101 +167,81 @@ export function GenerationResult({
         <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
       </div>
 
-      {/* ── Main Split Layout ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Left: Video Player (3/5 width) */}
-        <div className="lg:col-span-3">
-          <VideoPlayer
-            exportState={exportState}
-            title={title}
-            onDownload={downloadVideo}
-            onReset={resetExport}
-            onRetry={handleRetryExport}
-            isReRendering={isReRendering}
-          />
-        </div>
+      {/* ── Full-Width Video Player ── */}
+      <div className={cn(
+        "mx-auto",
+        format === "portrait" ? "max-w-xs sm:max-w-sm" : "w-full max-w-4xl"
+      )}>
+        <VideoPlayer
+          exportState={exportState}
+          title={title}
+          onDownload={downloadVideo}
+          onReset={resetExport}
+          onRetry={handleRetryExport}
+          isReRendering={isReRendering}
+        />
+      </div>
 
-        {/* Right: Script & Controls (2/5 width) */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Script Card */}
-          <Card className="p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                <FileText className="h-4 w-4 text-primary" />
-                Script
-              </div>
-              <Button size="sm" variant="outline" onClick={copyScript} className="gap-1.5">
-                <Copy className="h-3.5 w-3.5" />
-                Copy Script
-              </Button>
-            </div>
-
-            <div className="max-h-64 overflow-y-auto scrollbar-thin space-y-3">
-              {scenes.map((scene, idx) => (
-                <div key={scene.number || idx} className="space-y-1">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    Scene {scene.number || idx + 1}
-                  </p>
-                  <p className="text-sm text-foreground leading-relaxed">
-                    {scene.voiceover}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          {/* Quick Actions */}
-          <div className="flex flex-col gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowScenes(!showScenes)}
-              className="w-full justify-between"
-            >
-              <span className="flex items-center gap-2">
-                {showScenes ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                {showScenes ? "Hide Scenes" : `Edit / Adjust Scenes (${scenes.length})`}
-              </span>
-              {showScenes ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </Button>
-
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => downloadImagesAsZip(scenes, title)}
-                disabled={zipState.status === "downloading" || zipState.status === "zipping"}
-                className="flex-1 gap-1.5"
-              >
-                <Download className="h-3.5 w-3.5" />
-                {zipState.status === "downloading" || zipState.status === "zipping" ? "Downloading..." : "Images"}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  if (exportState.videoUrl) {
-                    navigator.clipboard.writeText(exportState.videoUrl).then(
-                      () => toast({ title: "Video link copied!" }),
-                      () => {}
-                    );
-                  }
-                }}
-                disabled={!exportState.videoUrl}
-                className="flex-1 gap-1.5"
-              >
-                <Share2 className="h-3.5 w-3.5" />
-                Share
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onNewProject}
-                className="flex-1 gap-1.5"
-              >
-                New Project
-              </Button>
-            </div>
-          </div>
+      {/* ── Actions Bar ── */}
+      <div className="w-full max-w-4xl mx-auto space-y-3">
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => {
+              if (!exportState.videoUrl) return;
+              const safeName = title.replace(/[^a-z0-9]/gi, "_").slice(0, 50) || "video";
+              downloadVideo(exportState.videoUrl, `${safeName}.mp4`, true);
+            }}
+            disabled={exportState.status !== "complete" || !exportState.videoUrl}
+            className="gap-1.5"
+          >
+            <Download className="h-4 w-4" />
+            Download
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowScenes(!showScenes)}
+            className="gap-1.5"
+          >
+            {showScenes ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {showScenes ? "Hide Scenes" : `Edit / Adjust Scenes (${scenes.length})`}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => downloadImagesAsZip(scenes, title)}
+            disabled={zipState.status === "downloading" || zipState.status === "zipping"}
+            className="gap-1.5"
+          >
+            <Download className="h-3.5 w-3.5" />
+            {zipState.status === "downloading" || zipState.status === "zipping" ? "..." : "Images"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={copyScript} className="gap-1.5">
+            <Copy className="h-3.5 w-3.5" />
+            Copy Script
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (exportState.videoUrl) {
+                navigator.clipboard.writeText(exportState.videoUrl).then(
+                  () => toast({ title: "Video link copied!" }),
+                  () => {}
+                );
+              }
+            }}
+            disabled={!exportState.videoUrl}
+            className="gap-1.5"
+          >
+            <Share2 className="h-3.5 w-3.5" />
+            Share
+          </Button>
+          <Button variant="outline" size="sm" onClick={onNewProject} className="gap-1.5">
+            New
+          </Button>
         </div>
       </div>
 

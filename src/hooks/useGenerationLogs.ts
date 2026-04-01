@@ -21,7 +21,7 @@ export function useGenerationLogs(
       .from("system_logs")
       .select("id,created_at,message,category,event_type")
       .order("created_at", { ascending: false })
-      .limit(100);
+      .limit(500);
 
     if (generationId) {
       query = query.eq("generation_id", generationId);

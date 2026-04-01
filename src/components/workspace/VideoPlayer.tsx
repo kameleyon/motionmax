@@ -213,9 +213,9 @@ export function VideoPlayer({
       <div
         className={cn(
           "relative rounded-xl overflow-hidden bg-black",
-          format === "portrait"  && "h-[28rem] aspect-[9/16]",
-          format === "square"    && "h-[28rem] aspect-square",
-          format === "landscape" && "w-full aspect-video",
+          format === "portrait"  && "h-[700px] aspect-[9/16]",
+          format === "square"    && "h-[700px] aspect-square",
+          format === "landscape" && "w-full h-[700px]",
         )}
         onMouseMove={resetControlsTimer}
         onMouseEnter={() => setShowControls(true)}
@@ -247,7 +247,7 @@ export function VideoPlayer({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.6 }}
-                className="text-xs text-white/40 italic"
+                className="text-xs text-white/75 italic"
               >
                 {funMessage}
               </motion.p>

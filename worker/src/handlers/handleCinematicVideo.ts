@@ -292,15 +292,15 @@ function buildVideoPrompt(
 
   parts.push(
     `CAMERA MOVEMENT: ${cameraMotion} ` +
-    `Mix camera motion with character action for maximum dynamism. ` +
-    `Continue the movement through the entire shot.`
+    `Camera motion must be CONFIDENT and FAST — not lazy or drifting. ` +
+    `Continue the movement through the entire shot with ENERGY.`
   );
 
   parts.push(
     `RULES: No talking, no lip movement, no addressing camera. ` +
     `Expressive faces that match the scene mood — curious, amused, hopeful, surprised, determined. ` +
-    `Dynamic body movement at natural speed — never slow motion, never static. ` +
-    `Match narration energy. Same character appearance throughout.`
+    `FAST, ENERGETIC body movement at real-time speed — NEVER slow motion, NEVER sluggish, NEVER lethargic. ` +
+    `Everything moves with URGENCY and LIFE. Match narration energy. Same character appearance throughout.`
   );
 
   let prompt = parts.join("\n\n");

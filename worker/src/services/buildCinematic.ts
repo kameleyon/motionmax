@@ -110,7 +110,7 @@ You are writing prompts for a generative video AI that CANNOT do lip-sync.
    - Every scene must have DYNAMIC movement — characters walking, running, gesturing, reacting, reaching, turning.
    - No static poses. No standing still. No "character stands in front of..." without action.
    - Combine character action with environment action: "She runs through the rain-soaked alley as neon signs flicker and steam rises from grates."
-   - All motion at NATURAL human speed — never slow motion unless explicitly needed for dramatic impact.
+   - All motion at FAST, ENERGETIC, REAL-TIME speed — NEVER slow motion, NEVER sluggish, NEVER lethargic. Every movement should feel ALIVE and URGENT.
 
 === CAMERA MOVEMENT VOCABULARY (MANDATORY — use varied moves across scenes) ===
 ⛔ BANNED: Zoom in, zoom out, dolly zoom, Vertigo effect — do NOT use any zoom.
@@ -126,9 +126,11 @@ You are writing prompts for a generative video AI that CANNOT do lip-sync.
 6. **Handheld** — Camera held by operator. Raw, shaky, naturalistic feel. Heightens tension and realism.
 7. **Rack Focus** — Lens focus shifts mid-shot from one subject to another in the same frame. Redirects attention.
 
-PACING: Scenes MUST feel DYNAMIC with natural-pace movement (not slow-motion, not sped-up — real human rhythm).
-- Vary speed: some scenes fast and energetic, others measured and deliberate
-- Combine camera movement with character action for maximum dynamism
+PACING: Scenes MUST feel DYNAMIC, FAST, and ENERGETIC — real-time human speed, NEVER slow motion, NEVER sluggish.
+⛔ BANNED PACING: slow, slow motion, slomo, sluggish, lethargic, gentle, drifting, floating, crawling, glacial
+✅ REQUIRED PACING: brisk, swift, energetic, urgent, punchy, snappy, lively, rapid
+- Camera movements should be CONFIDENT and PURPOSEFUL — not lazy or drifting
+- Combine FAST camera movement with ACTIVE character motion for maximum dynamism
 - Mix and combine multiple camera techniques within a single scene when it enhances the storytelling
 
 === SPECIAL EFFECTS & VISUAL DYNAMICS (CRITICAL) ===

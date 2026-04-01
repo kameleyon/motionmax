@@ -17,7 +17,7 @@ export function useAdminLogs(generationId: string | null, step: string) {
       .select("*")
       .eq("generation_id", genId)
       .order("created_at", { ascending: false })
-      .limit(50);
+      .limit(500);
     if (data) setAdminLogs(data);
   }, [isAdmin]);
 

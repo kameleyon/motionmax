@@ -61,9 +61,9 @@ export interface SceneVideoResult {
 function buildVideoPrompt(visualPrompt: string): string {
   return `${visualPrompt}
 
-Cinematic motion: steady camera movement at natural pace, subtle parallax, atmospheric dynamics.
+Cinematic motion: confident, brisk camera movement at real-time pace, dynamic parallax, atmospheric dynamics.
 Focus on camera motion (dolly, pan, tilt) and environmental motion (wind, particles, light shifts).
-Maintain stable composition. No rapid cuts or jarring transitions.`;
+FAST and ENERGETIC movement — never slow motion, never sluggish. Maintain stable composition.`;
 }
 
 // ── Main API ─────────────────────────────────────────────────────────

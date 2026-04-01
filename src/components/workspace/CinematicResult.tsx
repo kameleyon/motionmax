@@ -109,6 +109,30 @@ export function CinematicResult({
 
   const { state: exportState, exportVideo, downloadVideo, reset: resetExport, loadExistingVideo } = useVideoExport();
   const { isAdmin } = useAdminAuth();
+
+  // Admin: compute full wall-clock time (generation created → export done)
+  const [fullTimeMs, setFullTimeMs] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isAdmin || !generationId) return;
+    (async () => {
+      const { data: gen } = await supabase
+        .from("generations")
+        .select("created_at")
+        .eq("id", generationId)
+        .maybeSingle();
+      if (!gen?.created_at) return;
+      const { data: logs } = await supabase
+        .from("system_logs")
+        .select("created_at")
+        .or(`generation_id.eq.${generationId},project_id.eq.${projectId}`)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      const lastLog = logs?.[0]?.created_at;
+      if (lastLog) {
+        setFullTimeMs(new Date(lastLog).getTime() - new Date(gen.created_at).getTime());
+      }
+    })();
+  }, [isAdmin, generationId, projectId, exportState.status]);
   const reRenderTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasAutoExportedRef = useRef(false);
 
@@ -307,9 +331,11 @@ export function CinematicResult({
         {/* Admin-only: generation stats */}
         {isAdmin && (
           <div className="inline-flex flex-wrap items-center justify-center gap-3 text-xs text-muted-foreground/70 bg-muted/30 rounded-lg px-3 py-1.5 border border-border/30">
-            {totalTimeMs && (
-              <span>Time: {Math.floor(totalTimeMs / 60000)}m {Math.floor((totalTimeMs % 60000) / 1000)}s</span>
-            )}
+            {fullTimeMs ? (
+              <span>Total: {Math.floor(fullTimeMs / 60000)}m {Math.floor((fullTimeMs % 60000) / 1000)}s</span>
+            ) : totalTimeMs ? (
+              <span>Gen: {Math.floor(totalTimeMs / 60000)}m {Math.floor((totalTimeMs % 60000) / 1000)}s</span>
+            ) : null}
             <span>Scenes: {localScenes.length}</span>
             <span>Videos: {scenesWithVideo.length}</span>
             <span>Est. cost: ~${(

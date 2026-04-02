@@ -8,18 +8,28 @@ import {
 } from "@/components/ui/select";
 
 export type SpeakerVoice =
+  // Qwen3 voices (multi-language default)
   | "Nova" | "Atlas" | "Kai" | "Marcus" | "Luna"
   | "Leo" | "Maya" | "Sage" | "Aria"
-  | "Pierre" | "Marie";
+  // Haitian Creole (Gemini TTS)
+  | "Pierre" | "Marie"
+  // French (Fish Audio)
+  | "Jacques" | "Camille"
+  // Spanish (Fish Audio)
+  | "Carlos" | "Isabella"
+  // English specific (LemonFox / Fish Audio)
+  | "Adam" | "River";
 
 interface SpeakerSelectorProps {
   value: SpeakerVoice;
   onChange: (value: SpeakerVoice) => void;
-  /** When "ht" (Haitian Creole), only show Pierre/Marie */
+  /** Language code — determines which voices are shown */
   language?: string;
 }
 
-const standardSpeakers: { id: SpeakerVoice; label: string; description: string }[] = [
+interface SpeakerOption { id: SpeakerVoice; label: string; description: string }
+
+const qwenSpeakers: SpeakerOption[] = [
   { id: "Nova", label: "Nova", description: "Warm female" },
   { id: "Aria", label: "Aria", description: "Expressive female" },
   { id: "Luna", label: "Luna", description: "Gentle female" },
@@ -31,14 +41,52 @@ const standardSpeakers: { id: SpeakerVoice; label: string; description: string }
   { id: "Sage", label: "Sage", description: "Mature male" },
 ];
 
-const creoleSpeakers: { id: SpeakerVoice; label: string; description: string }[] = [
+const creoleSpeakers: SpeakerOption[] = [
   { id: "Pierre", label: "Pierre", description: "Male" },
   { id: "Marie", label: "Marie", description: "Female" },
 ];
 
+const frenchSpeakers: SpeakerOption[] = [
+  { id: "Jacques", label: "Jacques", description: "Male" },
+  { id: "Camille", label: "Camille", description: "Female" },
+  ...qwenSpeakers, // Also show Qwen3 voices as options
+];
+
+const spanishSpeakers: SpeakerOption[] = [
+  { id: "Carlos", label: "Carlos", description: "Male" },
+  { id: "Isabella", label: "Isabella", description: "Female" },
+  ...qwenSpeakers,
+];
+
+const englishSpeakers: SpeakerOption[] = [
+  { id: "Adam", label: "Adam", description: "Male" },
+  { id: "River", label: "River", description: "Female" },
+  ...qwenSpeakers,
+];
+
+function getSpeakersForLanguage(language?: string): SpeakerOption[] {
+  switch (language) {
+    case "ht": return creoleSpeakers;
+    case "fr": return frenchSpeakers;
+    case "es": return spanishSpeakers;
+    case "en": return englishSpeakers;
+    default: return qwenSpeakers; // Other languages: Qwen3 only
+  }
+}
+
+/** Get the default speaker for a language */
+export function getDefaultSpeaker(language: string): SpeakerVoice {
+  switch (language) {
+    case "ht": return "Pierre";
+    case "fr": return "Camille";
+    case "es": return "Isabella";
+    case "en": return "Nova";
+    default: return "Nova";
+  }
+}
+
 export function SpeakerSelector({ value, onChange, language }: SpeakerSelectorProps) {
-  const isCreole = language === "ht";
-  const speakers = isCreole ? creoleSpeakers : standardSpeakers;
+  const speakers = getSpeakersForLanguage(language);
   const selected = speakers.find((s) => s.id === value) || speakers[0];
 
   return (

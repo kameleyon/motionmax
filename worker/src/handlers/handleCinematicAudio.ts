@@ -142,27 +142,66 @@ export async function handleCinematicAudio(
       config,
     );
   } else {
-    // ── All other languages: Qwen3 TTS ──
-    const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
-    if (!replicateApiKey) throw new Error("REPLICATE_API_KEY not configured");
-
-    // Get speaker from project voice_name or default
     const voiceName = generation.projects?.voice_name || "Nova";
-    const styleInstruction = inferStyleInstruction(voiceover);
 
-    console.log(`[CinematicAudio] Scene ${sceneIndex}: Qwen3 TTS speaker=${voiceName} lang=${resolvedLanguage} style="${styleInstruction}"`);
+    // ── Fish Audio / LemonFox speakers → legacy audio router ──
+    // These map specific speaker names to the standard TTS providers
+    const LEGACY_SPEAKER_MAP: Record<string, { gender: string; language: string }> = {
+      "Jacques":  { gender: "male",   language: "fr" },
+      "Camille":  { gender: "female", language: "fr" },
+      "Carlos":   { gender: "male",   language: "es" },
+      "Isabella": { gender: "female", language: "es" },
+      "Adam":     { gender: "male",   language: "en" },
+      "River":    { gender: "female", language: "en" },
+    };
 
-    result = await generateQwen3TTS(
-      {
-        text: voiceover,
-        sceneNumber: sceneIndex + 1,
+    const legacyMapping = LEGACY_SPEAKER_MAP[voiceName];
+
+    if (legacyMapping) {
+      // Route to Fish Audio / LemonFox via standard audio router
+      console.log(`[CinematicAudio] Scene ${sceneIndex}: ${voiceName} → legacy router (${legacyMapping.language}/${legacyMapping.gender})`);
+
+      const googleApiKeys = [
+        process.env.GOOGLE_TTS_API_KEY_3,
+        process.env.GOOGLE_TTS_API_KEY_2,
+        process.env.GOOGLE_TTS_API_KEY,
+      ].filter(Boolean) as string[];
+
+      const config: AudioConfig = {
         projectId,
-        speaker: voiceName,
-        language: resolvedLanguage,
-        styleInstruction,
-      },
-      replicateApiKey,
-    );
+        googleApiKeys,
+        elevenLabsApiKey: process.env.ELEVENLABS_API_KEY,
+        lemonfoxApiKey: process.env.LEMONFOX_API_KEY,
+        fishAudioApiKey: process.env.FISH_AUDIO_API_KEY,
+        replicateApiKey: process.env.REPLICATE_API_KEY || "",
+        voiceGender: legacyMapping.gender,
+        language: legacyMapping.language,
+      };
+
+      result = await generateSceneAudio(
+        { number: sceneIndex + 1, voiceover, duration: scene.duration || 10 },
+        config,
+      );
+    } else {
+      // ── Qwen3 TTS for all other speakers ──
+      const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
+      if (!replicateApiKey) throw new Error("REPLICATE_API_KEY not configured");
+
+      const styleInstruction = inferStyleInstruction(voiceover);
+      console.log(`[CinematicAudio] Scene ${sceneIndex}: Qwen3 TTS speaker=${voiceName} lang=${resolvedLanguage} style="${styleInstruction}"`);
+
+      result = await generateQwen3TTS(
+        {
+          text: voiceover,
+          sceneNumber: sceneIndex + 1,
+          projectId,
+          speaker: voiceName,
+          language: resolvedLanguage,
+          styleInstruction,
+        },
+        replicateApiKey,
+      );
+    }
   }
 
   if (!result.url) {

@@ -11,7 +11,7 @@ import { ContentInput } from "./ContentInput";
 import { FormatSelector, type VideoFormat } from "./FormatSelector";
 import { LengthSelector, type VideoLength } from "./LengthSelector";
 import { StyleSelector, type VisualStyle } from "./StyleSelector";
-import { SpeakerSelector, type SpeakerVoice } from "./SpeakerSelector";
+import { SpeakerSelector, type SpeakerVoice, getDefaultSpeaker } from "./SpeakerSelector";
 import { LanguageSelector, type Language } from "./LanguageSelector";
 import { PresenterFocusInput } from "./PresenterFocusInput";
 import { CharacterDescriptionInput } from "./CharacterDescriptionInput";
@@ -392,10 +392,8 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                       <div className="sm:flex-shrink-0">
                         <LanguageSelector value={language} onChange={(lang) => {
                           setLanguage(lang);
-                          // Auto-switch to Creole voices when Haitian Creole selected
-                          if (lang === "ht") {
-                            setSpeaker("Pierre");
-                          }
+                          // Auto-switch to the default speaker for the selected language
+                          setSpeaker(getDefaultSpeaker(lang));
                         }} />
                       </div>
                       <div className="sm:flex-shrink-0">

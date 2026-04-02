@@ -11,7 +11,7 @@ import { ContentInput } from "./ContentInput";
 import { FormatSelector, type VideoFormat } from "./FormatSelector";
 import { LengthSelector, type VideoLength } from "./LengthSelector";
 import { StyleSelector, type VisualStyle } from "./StyleSelector";
-import { VoiceSelector, type VoiceSelection } from "./VoiceSelector";
+import { SpeakerSelector, type SpeakerVoice } from "./SpeakerSelector";
 import { LanguageSelector, type Language } from "./LanguageSelector";
 import { PresenterFocusInput } from "./PresenterFocusInput";
 import { CharacterDescriptionInput } from "./CharacterDescriptionInput";
@@ -47,7 +47,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
     const [style, setStyle] = useState<VisualStyle>("realistic");
     const [customStyle, setCustomStyle] = useState("");
     const [customStyleImage, setCustomStyleImage] = useState<string | null>(null);
-    const [voice, setVoice] = useState<VoiceSelection>({ type: "standard", gender: "female" });
+    const [speaker, setSpeaker] = useState<SpeakerVoice>("Nova");
     const [language, setLanguage] = useState<Language>("en");
     const [presenterFocus, setPresenterFocus] = useState("");
     const [characterDescription, setCharacterDescription] = useState("");
@@ -217,9 +217,8 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
         characterDescription: characterDescription.trim() || undefined,
         disableExpressions: false,
         characterConsistencyEnabled: true,
-        voiceType: voice.type,
-        voiceId: voice.voiceId,
-        voiceName: voice.type === "custom" ? voice.voiceName : voice.gender,
+        voiceType: "standard",
+        voiceName: speaker,
         language,
         projectType: "cinematic",
       });
@@ -235,7 +234,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
       setStyle("realistic");
       setCustomStyle("");
       setCustomStyleImage(null);
-      setVoice({ type: "standard", gender: "female" });
+      setSpeaker("Nova");
       setLanguage("en");
       setPresenterFocus("");
       setCharacterDescription("");
@@ -271,13 +270,8 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
 
       if (project.character_description) setCharacterDescription(project.character_description);
       if (project.presenter_focus) setPresenterFocus(project.presenter_focus);
-      if (project.voice_type) {
-        setVoice({
-          type: project.voice_type as "standard" | "custom",
-          voiceId: project.voice_id ?? undefined,
-          voiceName: project.voice_name ?? undefined,
-          gender: project.voice_name as "male" | "female" | undefined,
-        });
+      if (project.voice_name) {
+        setSpeaker(project.voice_name as SpeakerVoice);
       }
       if (project.brand_mark) {
         setBrandMarkEnabled(true);
@@ -396,7 +390,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                     {/* Voice and Language (length locked to short for cinematic) */}
                     <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
                       <div className="sm:flex-shrink-0">
-                        <VoiceSelector selected={voice} onSelect={setVoice} />
+                        <SpeakerSelector value={speaker} onChange={setSpeaker} />
                       </div>
                       <div className="sm:flex-shrink-0">
                         <LanguageSelector value={language} onChange={setLanguage} />

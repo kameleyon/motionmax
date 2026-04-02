@@ -310,8 +310,9 @@ async function imageAudioToClip(
  *  Strategy:
  *    1. Target clip duration = audio duration + 1s padding
  *    2. Loop video if needed, stretch via setpts to fill the full duration
- *    3. Generate silent audio to fill the gap between voiceover end and clip end
- *    4. The extra 1s is pure silence — crossfade trims into silence, not speech
+ *    3. Audio is passed through as-is (no resampling, no filter chain)
+ *    4. -t extends the clip so audio has 1s of silence after the voiceover ends
+ *       (ffmpeg auto-pads audio with silence when -t exceeds audio length)
  */
 async function muxVideoAudio(
   videoPath: string,
@@ -341,29 +342,23 @@ async function muxVideoAudio(
     ? ["-stream_loop", "-1", "-i", videoPath]
     : ["-i", videoPath];
 
-  // Use the real audio + a silent audio source, then overlay them.
-  // The silent source ensures the audio track extends to clipDuration
-  // without using apad (which can fail on non-standard channel layouts).
+  // Simple mux: stretch video to match audio + padding.
+  // Audio is re-encoded to AAC stereo 44100Hz (handles any input format).
+  // -t extends past audio end — ffmpeg fills the gap with silence automatically.
   await runFfmpeg([
     ...videoInputArgs,
     "-i", audioPath,
-    "-f", "lavfi", "-i", `anullsrc=r=44100:cl=stereo`,
-    "-filter_complex",
-    [
-      // Normalize audio to stereo 44100Hz, then concat with silence to fill duration
-      `[1:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo[speech]`,
-      `[2:a]atrim=0:${AUDIO_PAD_SECONDS.toFixed(1)}[silence]`,
-      `[speech][silence]concat=n=2:v=0:a=1[aout]`,
-    ].join(";"),
     "-vf", `setpts=${ratio.toFixed(6)}*PTS,${scaleAndPad(config.width, config.height)}`,
     "-map", "0:v:0",
-    "-map", "[aout]",
+    "-map", "1:a:0",
     "-c:v", "libx264",
     "-preset", "ultrafast",
     "-crf", "23",
     "-pix_fmt", "yuv420p",
     "-c:a", "aac",
     "-b:a", "128k",
+    "-ar", "44100",
+    "-ac", "2",
     "-t", String(clipDuration),
     "-movflags", "+faststart",
     ...X264_MEM_FLAGS,

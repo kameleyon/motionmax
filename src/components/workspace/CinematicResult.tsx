@@ -43,6 +43,7 @@ import { callPhase } from "@/hooks/generation/callPhase";
 import { cn } from "@/lib/utils";
 import { SUPABASE_URL } from "@/lib/supabaseUrl";
 import { CinematicEditModal } from "./CinematicEditModal";
+import { CaptionStyleSelector, type CaptionStyle as CaptionStyleType, previewStyles } from "./CaptionStyleSelector";
 import { SceneVersionHistory } from "./SceneVersionHistory";
 import { VideoPlayer } from "./VideoPlayer";
 import {
@@ -71,6 +72,8 @@ interface CinematicResultProps {
   onRegenerate?: () => void;
   format?: "landscape" | "portrait" | "square";
   totalTimeMs?: number;
+  captionStyle?: string;
+  onCaptionStyleChange?: (style: string) => void;
 }
 
 function safeFileBase(name: string) {
@@ -87,6 +90,8 @@ export function CinematicResult({
   onRegenerate,
   format = "landscape",
   totalTimeMs,
+  captionStyle: initialCaptionStyle = "none",
+  onCaptionStyleChange,
 }: CinematicResultProps) {
   const navigate = useNavigate();
 
@@ -201,7 +206,7 @@ export function CinematicResult({
         number: s.number, voiceover: s.voiceover, visualPrompt: s.visualPrompt,
         duration: s.duration, videoUrl: s.videoUrl, audioUrl: s.audioUrl, imageUrl: s.imageUrl,
       }));
-      void exportVideo(exportScenes, format, undefined, projectId, "cinematic", generationId).catch(() => {});
+      void exportVideo(exportScenes, format, undefined, projectId, "cinematic", generationId, initialCaptionStyle).catch(() => {});
     })();
   }, [projectId, generationId, finalVideoUrl, format, exportVideo, exportState.status, localScenes, scenesWithVideo.length]);
 
@@ -212,7 +217,7 @@ export function CinematicResult({
       number: s.number, voiceover: s.voiceover, visualPrompt: s.visualPrompt,
       duration: s.duration, videoUrl: s.videoUrl, audioUrl: s.audioUrl, imageUrl: s.imageUrl,
     }));
-    void exportVideo(exportScenes, format, undefined, projectId, "cinematic").catch(() => {});
+    void exportVideo(exportScenes, format, undefined, projectId, "cinematic", undefined, initialCaptionStyle).catch(() => {});
   }, [resetExport, exportVideo, localScenes, format, projectId]);
 
   // Regenerate all stale videos (missing videoUrl) then re-export
@@ -260,7 +265,7 @@ export function CinematicResult({
         number: s.number, voiceover: s.voiceover, visualPrompt: s.visualPrompt,
         duration: s.duration, videoUrl: s.videoUrl, audioUrl: s.audioUrl, imageUrl: s.imageUrl,
       }));
-      await exportVideo(freshScenes, format, undefined, projectId, "cinematic", generationId);
+      await exportVideo(freshScenes, format, undefined, projectId, "cinematic", generationId, initialCaptionStyle);
     } catch (err) {
       console.error("Render changes failed:", err);
       toast({ variant: "destructive", title: "Render Failed", description: (err as Error).message });
@@ -426,6 +431,24 @@ export function CinematicResult({
             className="gap-1.5 text-muted-foreground hover:text-destructive hover:border-destructive/50">
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
+        </div>
+
+        {/* Caption style selector with preview */}
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <CaptionStyleSelector
+            value={(initialCaptionStyle || "none") as CaptionStyleType}
+            onChange={(style) => {
+              onCaptionStyleChange?.(style);
+              setHasUnsavedEdits(true);
+            }}
+          />
+          {initialCaptionStyle && initialCaptionStyle !== "none" && (
+            <div className="relative w-48 h-12 bg-black rounded-lg overflow-hidden flex items-end justify-center pb-1.5">
+              <span className={previewStyles[initialCaptionStyle as CaptionStyleType] || ""}>
+                Sample caption text
+              </span>
+            </div>
+          )}
         </div>
       </div>
 

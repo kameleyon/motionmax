@@ -13,6 +13,7 @@ import { LengthSelector, type VideoLength } from "./LengthSelector";
 import { StyleSelector, type VisualStyle } from "./StyleSelector";
 import { SpeakerSelector, type SpeakerVoice, getDefaultSpeaker } from "./SpeakerSelector";
 import { LanguageSelector, type Language } from "./LanguageSelector";
+import { CaptionStyleSelector, type CaptionStyle } from "./CaptionStyleSelector";
 import { PresenterFocusInput } from "./PresenterFocusInput";
 import { CharacterDescriptionInput } from "./CharacterDescriptionInput";
 import { CharacterConsistencyToggle } from "./CharacterConsistencyToggle";
@@ -48,6 +49,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
     const [customStyle, setCustomStyle] = useState("");
     const [customStyleImage, setCustomStyleImage] = useState<string | null>(null);
     const [speaker, setSpeaker] = useState<SpeakerVoice>("Nova");
+    const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("none");
     const [language, setLanguage] = useState<Language>("en");
     const [presenterFocus, setPresenterFocus] = useState("");
     const [characterDescription, setCharacterDescription] = useState("");
@@ -235,6 +237,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
       setCustomStyle("");
       setCustomStyleImage(null);
       setSpeaker("Nova");
+      setCaptionStyle("none");
       setLanguage("en");
       setPresenterFocus("");
       setCharacterDescription("");
@@ -399,6 +402,9 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                       <div className="sm:flex-shrink-0">
                         <SpeakerSelector value={speaker} onChange={setSpeaker} language={language} />
                       </div>
+                      <div className="sm:flex-shrink-0">
+                        <CaptionStyleSelector value={captionStyle} onChange={setCaptionStyle} />
+                      </div>
                     </div>
                     <div className="h-px bg-border/30" />
                     <StyleSelector
@@ -480,6 +486,8 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                     onRegenerate={handleRegenerate}
                     format={format}
                     totalTimeMs={generationState.totalTimeMs}
+                    captionStyle={captionStyle}
+                    onCaptionStyleChange={setCaptionStyle}
                   />
                   {isAdmin && <AdminLogsPanel logs={adminLogs} show={showAdminLogs} onToggle={() => setShowAdminLogs(!showAdminLogs)} />}
                 </motion.div>

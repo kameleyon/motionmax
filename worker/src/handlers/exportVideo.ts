@@ -21,6 +21,7 @@ import { concatFiles } from "./export/concatScenes.js";
 import { concatWithCrossfade } from "./export/transitions.js";
 import { compressIfNeeded } from "./export/compressVideo.js";
 import { uploadToSupabase, removeFiles } from "./export/storageHelpers.js";
+import { generateAssSubtitles, writeAssFile, type CaptionStyle } from "../services/captionBuilder.js";
 import { getTargetResolution } from "./export/kenBurns.js";
 import {
   initSceneProgress,
@@ -374,6 +375,42 @@ export async function handleExportVideo(
 
     // Free individual scene MP4s
     for (const f of clipPaths) removeFiles(f);
+
+    // ── 2.5. Burn captions into video (if requested) ───────────────
+
+    const captionStyle = (payload.caption_style || "none") as CaptionStyle;
+    if (captionStyle !== "none") {
+      sceneProgress.overallMessage = "Burning captions into video...";
+      await flushSceneProgress(jobId);
+      await supabase.from("video_generation_jobs").update({ progress: 78, updated_at: new Date().toISOString() }).eq("id", jobId);
+
+      const assContent = generateAssSubtitles(scenes, captionStyle, exportConfig.width, exportConfig.height);
+      if (assContent) {
+        const assPath = await writeAssFile(assContent, tempDir);
+        const captionedPath = path.join(tempDir, "captioned_export.mp4");
+
+        // Burn ASS subtitles into video using ffmpeg's ass filter
+        const { runFfmpeg } = await import("./export/ffmpegCmd.js");
+        await runFfmpeg([
+          "-i", finalOutputPath,
+          "-vf", `ass='${assPath.replace(/\\/g, "/").replace(/'/g, "'\\''")}'`,
+          "-c:v", "libx264",
+          "-preset", "ultrafast",
+          "-crf", "23",
+          "-pix_fmt", "yuv420p",
+          "-c:a", "copy",
+          "-movflags", "+faststart",
+          captionedPath,
+        ], 30 * 60 * 1000); // 30 min timeout for large videos
+
+        // Replace the final output with the captioned version
+        removeFiles(finalOutputPath);
+        fs.renameSync(captionedPath, finalOutputPath);
+        removeFiles(assPath);
+
+        console.log(`[ExportVideo] Captions burned in (style: ${captionStyle})`);
+      }
+    }
 
     sceneProgress.overallMessage = "Scenes stitched. Compressing...";
     await flushSceneProgress(jobId);

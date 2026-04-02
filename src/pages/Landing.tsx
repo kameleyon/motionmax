@@ -1,13 +1,12 @@
 ﻿import { useState, useEffect, useRef } from "react";
-import { useTheme } from "next-themes";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Menu } from "lucide-react";
 import { PLAN_PRICES } from "@/config/products";
 import { LANDING_FEATURES } from "@/config/landingContent";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { trackEvent, useScrollDepthTracker } from "@/hooks/useAnalytics";
+import { useForceDarkMode } from "@/hooks/useForceDarkMode";
 import SeoHead from "@/components/landing/SeoHead";
 import FeatureCard from "@/components/landing/FeatureCard";
 import TrustIndicators from "@/components/landing/TrustIndicators";
@@ -15,8 +14,6 @@ import FaqSection from "@/components/landing/FaqSection";
 import featuresBackgroundDark from "@/assets/features-bg-dark.png";
 import motionmaxLogo from "@/assets/motionmax-logo.png";
 import motionMaxHeroLogo from "@/assets/motionmax-hero-logo.png";
-import heroPromoVideo from "@/assets/hero-promo-optimized.mp4";
-import heroVideoPoster from "@/assets/hero-video-poster.png";
 import LandingPricing from "@/components/landing/LandingPricing";
 import LandingCta from "@/components/landing/LandingCta";
 import LandingAbout from "@/components/landing/LandingAbout";
@@ -25,12 +22,12 @@ import BeforeAfterComparison from "@/components/landing/BeforeAfterComparison";
 
 export default function Landing() {
   const navigate = useNavigate();
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === "dark";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [videoError, setVideoError] = useState(false);
   const menuToggleRef = useRef<HTMLButtonElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
+
+  // Force dark mode on Landing — always dark
+  useForceDarkMode();
 
   // Analytics: track scroll depth milestones
   useScrollDepthTracker();
@@ -42,27 +39,23 @@ export default function Landing() {
     const menuElement = mobileMenuRef.current;
     if (!menuElement) return;
 
-    // Get all focusable elements within the menu
     const focusableElements = menuElement.querySelectorAll<HTMLElement>(
       'a[href], button:not([disabled])'
     );
     const firstFocusable = focusableElements[0];
     const lastFocusable = focusableElements[focusableElements.length - 1];
 
-    // Focus first element when menu opens
     firstFocusable?.focus();
 
     const handleTabKey = (e: KeyboardEvent) => {
       if (e.key !== 'Tab') return;
 
       if (e.shiftKey) {
-        // Shift + Tab: moving backwards
         if (document.activeElement === firstFocusable) {
           e.preventDefault();
           lastFocusable?.focus();
         }
       } else {
-        // Tab: moving forwards
         if (document.activeElement === lastFocusable) {
           e.preventDefault();
           firstFocusable?.focus();
@@ -86,13 +79,6 @@ export default function Landing() {
     };
   }, [mobileMenuOpen]);
 
-  // Respect prefers-reduced-motion and data-saver preferences before autoplaying video
-  const prefersReducedMotion = typeof window !== "undefined"
-    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const saveData = typeof navigator !== "undefined"
-    && (navigator as unknown as { connection?: { saveData?: boolean } }).connection?.saveData === true;
-  const showVideo = !videoError && !prefersReducedMotion && !saveData;
-
   /** Navigate to auth and fire analytics event */
   function handleCta(label: string) {
     trackEvent("cta_click", { cta_label: label, page: "landing" });
@@ -101,7 +87,7 @@ export default function Landing() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[hsl(185,30%,95%)] via-[hsl(185,25%,97%)] to-[hsl(180,20%,98%)] dark:bg-none dark:bg-background">
+    <div className="min-h-screen bg-background">
       <SeoHead />
 
       {/* Navigation with frosted glass effect */}
@@ -125,7 +111,6 @@ export default function Landing() {
           </nav>
           
           <div className="flex items-center gap-3">
-            <ThemeToggle />
             <Button
               ref={menuToggleRef}
               variant="ghost"
@@ -190,79 +175,59 @@ export default function Landing() {
         </AnimatePresence>
       </header>
 
-      {/* Hero Section */}
-      <section className="relative min-h-screen flex items-center pt-32 md:pt-40 xl:pt-16">
-        <div className="mx-auto max-w-7xl px-6 sm:px-8 w-full pb-16 md:pb-24">
-          <div className="flex flex-col xl:grid xl:grid-cols-2 gap-8 xl:gap-16 items-center">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className="max-w-2xl text-center xl:text-left"
-            >
-              <img 
-                src={motionMaxHeroLogo} 
-                alt="MotionMax" 
-                className="w-full max-w-sm sm:max-w-md md:max-w-lg xl:max-w-xl mx-auto xl:mx-0"
-              />
-              
-              <p className="mt-8 text-3xl sm:text-4xl md:text-5xl font-medium leading-tight uppercase tracking-wide text-foreground/85">
-                Turn Text Into Engaging Visual Content.
-              </p>
-              
-              <Button
-                size="lg"
-                className="mt-10 rounded-lg bg-primary px-10 py-7 text-lg font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
-                onClick={() => handleCta("Try for Free")}
-              >
-                Try for Free
-              </Button>
-              <p className="mt-4 text-sm text-muted-foreground">
-                Free to start · Paid plans from {PLAN_PRICES.starter.monthly}/mo · No credit card required
-              </p>
-            </motion.div>
+      {/* Hero Section — herobackground.png as full background */}
+      <section
+        className="relative min-h-screen flex items-center pt-32 md:pt-40 xl:pt-16"
+        style={{
+          backgroundImage: "url(/herobackground.png)",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+        }}
+      >
+        {/* Dark overlay for text readability */}
+        <div className="absolute inset-0 bg-black/50" />
 
-            {/* Hero Video with error fallback */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.8, delay: 0.2 }}
-              className="w-full max-w-2xl"
+        <div className="relative z-10 mx-auto max-w-7xl px-6 sm:px-8 w-full pb-16 md:pb-24">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="max-w-2xl mx-auto text-center"
+          >
+            <img 
+              src={motionMaxHeroLogo} 
+              alt="MotionMax" 
+              className="w-full max-w-sm sm:max-w-md md:max-w-lg xl:max-w-xl mx-auto"
+            />
+            
+            <p className="mt-8 text-3xl sm:text-4xl md:text-5xl font-medium leading-tight uppercase tracking-wide text-white/90">
+              Turn Text Into Engaging Visual Content.
+            </p>
+            
+            <Button
+              size="lg"
+              className="mt-10 rounded-lg bg-primary px-10 py-7 text-lg font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
+              onClick={() => handleCta("Try for Free")}
             >
-              <div className="w-full rounded-2xl shadow-2xl overflow-hidden">
-                {!showVideo ? (
-                  <img
-                    src={heroVideoPoster}
-                    alt="MotionMax — AI video creation"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <video
-                    src={heroPromoVideo}
-                    className="w-full h-full"
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    poster={heroVideoPoster}
-                    onError={() => setVideoError(true)}
-                  />
-                )}
-              </div>
-            </motion.div>
-          </div>
+              Try for Free
+            </Button>
+            <p className="mt-4 text-sm text-white/70">
+              Free to start · Paid plans from {PLAN_PRICES.starter.monthly}/mo · No credit card required
+            </p>
+          </motion.div>
         </div>
       </section>
 
-      {/* Features Section — theme-aware background */}
+      {/* Features Section — always dark background */}
       <section
         id="features"
-        className={`py-24 sm:py-32 relative overflow-hidden ${isDark ? "" : "bg-muted/30"}`}
-        style={isDark ? {
+        className="py-24 sm:py-32 relative overflow-hidden"
+        style={{
           backgroundImage: `url(${featuresBackgroundDark})`,
           backgroundSize: "cover",
           backgroundPosition: "center",
-        } : {}}
+        }}
       >
         <div className="mx-auto max-w-6xl px-6 sm:px-8 relative z-10">
           <motion.div
@@ -271,10 +236,10 @@ export default function Landing() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className={`text-3xl sm:text-4xl font-bold tracking-tight ${isDark ? 'text-white' : 'text-foreground'}`}>
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
               Why MotionMax?
             </h2>
-            <p className={`mt-4 text-lg max-w-2xl mx-auto ${isDark ? 'text-white/90' : 'text-muted-foreground'}`}>
+            <p className="mt-4 text-lg max-w-2xl mx-auto text-white/90">
               From idea to polished content in minutes. Our AI handles the heavy lifting so you can focus on your message.
             </p>
           </motion.div>

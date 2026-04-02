@@ -1,5 +1,6 @@
 ﻿import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { SUPABASE_URL } from "@/lib/supabaseUrl";
 import {
   Download,
   FolderArchive,
@@ -118,7 +119,7 @@ export function ResultActionBar({
 
       // Use the backend function URL for social sharing - it serves proper OG meta tags
       // and redirects humans to the branded /share/:token page.
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseUrl = SUPABASE_URL;
       const metaUrl = `${supabaseUrl}/functions/v1/share-meta?token=${token}&v=${Date.now()}`;
       setShareUrl(metaUrl);
       

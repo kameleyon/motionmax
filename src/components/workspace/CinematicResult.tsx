@@ -40,6 +40,7 @@ import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useCinematicRegeneration } from "@/hooks/useCinematicRegeneration";
 import { useVideoExport } from "@/hooks/useVideoExport";
 import { cn } from "@/lib/utils";
+import { SUPABASE_URL } from "@/lib/supabaseUrl";
 import { CinematicEditModal } from "./CinematicEditModal";
 import { SceneVersionHistory } from "./SceneVersionHistory";
 import { VideoPlayer } from "./VideoPlayer";
@@ -238,7 +239,7 @@ export function CinematicResult({
         if (!user) throw new Error("Not authenticated");
         await supabase.from("project_shares").insert({ project_id: projectId, user_id: user.id, share_token: token });
       }
-      const backendUrl = import.meta.env.VITE_SUPABASE_URL;
+      const backendUrl = SUPABASE_URL;
       const shareMetaUrl = `${backendUrl}/functions/v1/share-meta?token=${token}`;
       setShareUrl(shareMetaUrl);
       setDisplayUrl(shareMetaUrl);

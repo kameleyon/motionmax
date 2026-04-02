@@ -2,17 +2,17 @@
  * Platform-aware video download and share helpers.
  *
  * Browser strategies:
- *   - iOS Safari/Chrome: Open URL directly → native video player with share/save
- *   - Android Chrome: Open URL directly → native download manager
- *   - macOS Safari: Direct anchor link (avoids blob memory issues on large files)
- *   - Desktop Chrome/Edge/Firefox: Blob anchor download (reliable for any size)
+ *   - iOS Safari/Chrome: Share as File via Web Share API → "Save Video" appears
+ *   - Android Chrome: Share as File → system save/share dialog
+ *   - macOS Safari: Direct anchor link (avoids blob memory issues)
+ *   - Desktop Chrome/Edge/Firefox: Blob anchor download
  *   - Fallback: window.open in new tab
  */
 
 const LOG = "[Export:Download]";
 
-/** Guard against concurrent navigator.share() calls */
-let shareInProgress = false;
+/** Guard against concurrent share/download calls */
+let operationInProgress = false;
 
 /** Detect platform once */
 function detectPlatform() {
@@ -26,7 +26,7 @@ function detectPlatform() {
   return { isIOS, isAndroid, isSafari, isMacSafari, isFirefox, isMobile };
 }
 
-/** Fetch video URL as a Blob (works for cross-origin Supabase Storage URLs) */
+/** Fetch video URL as a Blob */
 async function fetchAsBlob(url: string): Promise<Blob> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Download failed: ${response.status} ${response.statusText}`);
@@ -48,10 +48,7 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
   }, 5000);
 }
 
-/**
- * Open the URL directly — lets the browser's native handler take over.
- * Safari shows the video player with share/save. Chrome triggers download manager.
- */
+/** Direct anchor link download — browser's native handler takes over */
 function triggerDirectDownload(url: string, filename: string): void {
   const a = document.createElement("a");
   a.href = url;
@@ -64,96 +61,93 @@ function triggerDirectDownload(url: string, filename: string): void {
   setTimeout(() => document.body.removeChild(a), 1000);
 }
 
-/** Share video using the Web Share API (primarily for mobile) */
-export async function shareVideo(url: string, filename = "video.mp4"): Promise<boolean> {
-  if (!url) return false;
-  if (shareInProgress) {
-    console.log(LOG, "Share already in progress, skipping");
+/**
+ * Share a video file via Web Share API.
+ * Fetches blob → creates File → navigator.share({ files: [...] })
+ * This is the ONLY way to get "Save Video" / "Save to Photos" on iOS.
+ */
+async function shareAsFile(url: string, filename: string): Promise<boolean> {
+  if (!navigator.share || !navigator.canShare) return false;
+
+  try {
+    console.log(LOG, "Fetching video for file share...");
+    const blob = await fetchAsBlob(url);
+    const file = new File([blob], filename, { type: "video/mp4" });
+
+    if (!navigator.canShare({ files: [file] })) {
+      console.log(LOG, "canShare returned false for video file");
+      return false;
+    }
+
+    await navigator.share({ files: [file], title: filename });
+    console.log(LOG, "File share successful");
+    return true;
+  } catch (e: any) {
+    if (e?.name === "AbortError") return true; // user cancelled = handled
+    console.warn(LOG, "File share failed:", e);
     return false;
   }
-  try {
-    shareInProgress = true;
-    console.log(LOG, "Attempting share", { filename });
+}
 
-    // Try sharing the URL directly first (no blob download needed)
+/** Share video using the Web Share API (for share buttons, not download) */
+export async function shareVideo(url: string, filename = "video.mp4"): Promise<boolean> {
+  if (!url || operationInProgress) return false;
+  operationInProgress = true;
+  try {
+    // Try sharing URL directly (lighter, for messaging apps)
     if (navigator.share) {
       try {
         await navigator.share({ url, title: filename });
-        console.log(LOG, "Share URL successful");
         return true;
       } catch (e: any) {
         if (e?.name === "AbortError") return true;
-        console.log(LOG, "URL share failed, trying file share");
       }
     }
-
-    // Fallback: download as blob and share as file
-    const blob = await fetchAsBlob(url);
-    const file = new File([blob], filename, { type: "video/mp4" });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: filename });
-      console.log(LOG, "Share file successful");
-      return true;
-    }
-    console.log(LOG, "Share API not available for this content");
-  } catch (e) {
-    console.warn(LOG, "Share failed:", e);
+    return false;
   } finally {
-    shareInProgress = false;
+    operationInProgress = false;
   }
-  return false;
 }
 
 /**
- * Download video with platform-specific strategies.
- *
- * @param userGesture Pass true when called from a click handler.
+ * Download/save video with platform-specific strategies.
  */
 export async function downloadVideo(url: string, filename = "video.mp4", userGesture = false): Promise<void> {
   if (!url) return;
+  if (operationInProgress) {
+    console.log(LOG, "Operation already in progress, skipping");
+    return;
+  }
+  operationInProgress = true;
 
-  const { isIOS, isAndroid, isSafari, isMacSafari, isMobile } = detectPlatform();
-  console.log(LOG, "Starting download", { filename, isIOS, isAndroid, isSafari, isMacSafari, isMobile, userGesture });
+  const { isIOS, isAndroid, isMacSafari, isMobile } = detectPlatform();
+  console.log(LOG, "Starting download", { filename, isIOS, isAndroid, isMacSafari, isMobile, userGesture });
 
   try {
-    // ── iOS (Safari + Chrome): use native share sheet ──
-    // iOS cannot download files via blob or anchor. navigator.share with a URL
-    // shows the native share sheet where the user can tap "Save Video".
+    // ── iOS: share as File to get "Save Video" in share sheet ──
     if (isIOS) {
-      if (navigator.share) {
-        try {
-          console.log(LOG, "iOS: using share sheet for save");
-          await navigator.share({ url, title: filename });
-          return;
-        } catch (e: any) {
-          if (e?.name === "AbortError") return; // user cancelled
-          console.warn(LOG, "iOS: share sheet failed, opening in new tab:", e);
-        }
-      }
-      // Fallback: open in new tab (user can long-press to save)
-      console.log(LOG, "iOS: fallback to new tab");
+      console.log(LOG, "iOS: sharing as file for Save Video option");
+      const shared = await shareAsFile(url, filename);
+      if (shared) return;
+
+      // Fallback: open in new tab (user can long-press video to save)
+      console.log(LOG, "iOS: fallback — opening in new tab");
       window.open(url, "_blank");
       return;
     }
 
-    // ── Android: use native share sheet → direct link fallback ──
+    // ── Android: share as File → direct link fallback ──
     if (isAndroid) {
-      if (navigator.share) {
-        try {
-          console.log(LOG, "Android: using share sheet for save");
-          await navigator.share({ url, title: filename });
-          return;
-        } catch (e: any) {
-          if (e?.name === "AbortError") return;
-          console.warn(LOG, "Android: share sheet failed, trying direct link:", e);
-        }
-      }
-      console.log(LOG, "Android: direct link download");
+      console.log(LOG, "Android: sharing as file for save option");
+      const shared = await shareAsFile(url, filename);
+      if (shared) return;
+
+      console.log(LOG, "Android: fallback — direct link download");
       triggerDirectDownload(url, filename);
       return;
     }
 
-    // ── macOS Safari: direct link (avoids blob memory issue) ──
+    // ── macOS Safari: direct link (avoids blob memory stall) ──
     if (isMacSafari) {
       console.log(LOG, "macOS Safari: direct link download");
       triggerDirectDownload(url, filename);
@@ -166,8 +160,9 @@ export async function downloadVideo(url: string, filename = "video.mp4", userGes
     triggerBlobDownload(blob, filename);
 
   } catch (e) {
-    // Last resort: open in new tab
     console.warn(LOG, "Download failed, opening in new tab:", e);
     window.open(url, "_blank");
+  } finally {
+    operationInProgress = false;
   }
 }

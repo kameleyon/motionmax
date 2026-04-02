@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { useForceDarkMode } from "@/hooks/useForceDarkMode";
 import { ThemedLogo } from "@/components/ThemedLogo";
 import { supabase } from "@/integrations/supabase/client";
 import { getAuthErrorMessage } from "@/lib/authErrors";
@@ -28,7 +28,6 @@ function AuthPageHeader({ onLogoClick }: { onLogoClick: () => void }) {
         <button onClick={onLogoClick} className="flex items-center gap-2">
           <ThemedLogo className="h-10 w-auto" />
         </button>
-        <ThemeToggle />
       </div>
     </header>
   );
@@ -46,6 +45,9 @@ function AuthPageFooter() {
 }
 
 export default function Auth() {
+  // Force dark mode on Auth page — always dark
+  useForceDarkMode();
+
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const modeParam = searchParams.get("mode");

@@ -343,14 +343,6 @@ export function VideoPlayer({
                 >
                   <Maximize className="h-4 w-4" />
                 </Button>
-                <Button
-                  size="sm"
-                  onClick={handleDownload}
-                  className="gap-1.5 bg-primary hover:bg-primary/90"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  Download
-                </Button>
               </div>
             </div>
           </motion.div>

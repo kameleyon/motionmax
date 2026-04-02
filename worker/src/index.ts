@@ -208,6 +208,10 @@ async function processJob(job: Job) {
     } else if (job.task_type === 'regenerate_audio' as any) {
       const audioRegenResult = await handleRegenerateAudio(job.id, job.payload as any, job.user_id);
       finalPayload = { ...finalPayload, ...audioRegenResult };
+    } else if (job.task_type === 'voice_preview' as any) {
+      const { handleVoicePreview } = await import("./handlers/handleVoicePreview.js");
+      const previewResult = await handleVoicePreview(job.id, job.payload as any, job.user_id);
+      finalPayload = { ...finalPayload, ...previewResult };
     } else if (job.task_type === 'cinematic_video' as any) {
       const result = await handleCinematicVideo(job.id, job.payload as any, job.user_id);
       finalPayload = { ...finalPayload, ...result };

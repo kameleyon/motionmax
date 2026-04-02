@@ -126,7 +126,9 @@ export async function handleCinematicAudio(
       lemonfoxApiKey: process.env.LEMONFOX_API_KEY,
       fishAudioApiKey: process.env.FISH_AUDIO_API_KEY,
       replicateApiKey: process.env.REPLICATE_API_KEY || "",
-      voiceGender: generation.projects?.voice_name || "female",
+      voiceGender: generation.projects?.voice_name === "Pierre" ? "male"
+        : generation.projects?.voice_name === "Marie" ? "female"
+        : generation.projects?.voice_name || "female",
       forceHaitianCreole: true,
       language: "ht",
     };

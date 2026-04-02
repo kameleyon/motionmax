@@ -387,13 +387,19 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                     <FormatSelector selected={format} onSelect={setFormat} disabledFormats={disabledFormats} />
                     <div className="h-px bg-border/30" />
                     
-                    {/* Voice and Language (length locked to short for cinematic) */}
+                    {/* Language and Voice (length locked to short for cinematic) */}
                     <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
                       <div className="sm:flex-shrink-0">
-                        <SpeakerSelector value={speaker} onChange={setSpeaker} />
+                        <LanguageSelector value={language} onChange={(lang) => {
+                          setLanguage(lang);
+                          // Auto-switch to Creole voices when Haitian Creole selected
+                          if (lang === "ht") {
+                            setSpeaker("Pierre");
+                          }
+                        }} />
                       </div>
                       <div className="sm:flex-shrink-0">
-                        <LanguageSelector value={language} onChange={setLanguage} />
+                        <SpeakerSelector value={speaker} onChange={setSpeaker} language={language} />
                       </div>
                     </div>
                     <div className="h-px bg-border/30" />

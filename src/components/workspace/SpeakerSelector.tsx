@@ -9,14 +9,17 @@ import {
 
 export type SpeakerVoice =
   | "Nova" | "Atlas" | "Kai" | "Marcus" | "Luna"
-  | "Leo" | "Maya" | "Sage" | "Aria";
+  | "Leo" | "Maya" | "Sage" | "Aria"
+  | "Pierre" | "Marie";
 
 interface SpeakerSelectorProps {
   value: SpeakerVoice;
   onChange: (value: SpeakerVoice) => void;
+  /** When "ht" (Haitian Creole), only show Pierre/Marie */
+  language?: string;
 }
 
-const speakers: { id: SpeakerVoice; label: string; description: string }[] = [
+const standardSpeakers: { id: SpeakerVoice; label: string; description: string }[] = [
   { id: "Nova", label: "Nova", description: "Warm female" },
   { id: "Aria", label: "Aria", description: "Expressive female" },
   { id: "Luna", label: "Luna", description: "Gentle female" },
@@ -28,7 +31,14 @@ const speakers: { id: SpeakerVoice; label: string; description: string }[] = [
   { id: "Sage", label: "Sage", description: "Mature male" },
 ];
 
-export function SpeakerSelector({ value, onChange }: SpeakerSelectorProps) {
+const creoleSpeakers: { id: SpeakerVoice; label: string; description: string }[] = [
+  { id: "Pierre", label: "Pierre", description: "Male" },
+  { id: "Marie", label: "Marie", description: "Female" },
+];
+
+export function SpeakerSelector({ value, onChange, language }: SpeakerSelectorProps) {
+  const isCreole = language === "ht";
+  const speakers = isCreole ? creoleSpeakers : standardSpeakers;
   const selected = speakers.find((s) => s.id === value) || speakers[0];
 
   return (

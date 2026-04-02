@@ -75,21 +75,21 @@ export function SmartFlowResult({
     return formatVideoExportLogs(getVideoExportLogs());
   })();
 
-  // Handle scenes update from regeneration — debounced auto re-render
+  // Handle scenes update — NO auto re-render
+  const [hasUnsavedEdits, setHasUnsavedEdits] = useState(false);
+
   const handleScenesUpdate = useCallback((updatedScenes: Scene[]) => {
     setScenes(updatedScenes);
     onScenesUpdate?.(updatedScenes);
+    if (enableVoice) setHasUnsavedEdits(true);
+  }, [onScenesUpdate, enableVoice]);
 
-    if (!enableVoice) return; // SmartFlow without voice doesn't export
-
-    setIsReRendering(true);
-    if (reRenderTimerRef.current) clearTimeout(reRenderTimerRef.current);
-    reRenderTimerRef.current = setTimeout(() => {
-      setIsReRendering(false);
-      clearVideoExportLogs();
-      void exportVideo(updatedScenes, format as any, brandMark, projectId, "smartflow", generationId).catch(() => {});
-    }, 3000);
-  }, [onScenesUpdate, exportVideo, format, brandMark, projectId, enableVoice, generationId]);
+  const handleRenderChanges = useCallback(() => {
+    setHasUnsavedEdits(false);
+    resetExport();
+    clearVideoExportLogs();
+    void exportVideo(scenes, format as any, brandMark, projectId, "smartflow", generationId).catch(() => {});
+  }, [resetExport, exportVideo, scenes, format, brandMark, projectId, generationId]);
 
   const {
     isRegenerating,
@@ -189,6 +189,21 @@ export function SmartFlowResult({
           </div>
         )}
       </div>
+
+      {/* ── Pending Changes Banner ── */}
+      {hasUnsavedEdits && (
+        <div className="w-full max-w-4xl mx-auto">
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+            <p className="text-sm text-foreground">
+              You have unsaved edits. Press <strong>Render</strong> to re-export your video with the changes.
+            </p>
+            <Button size="sm" onClick={handleRenderChanges} className="gap-1.5 shrink-0">
+              <RefreshCw className="h-4 w-4" />
+              Render
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* ── Actions Bar ── */}
       <div className="w-full max-w-4xl mx-auto space-y-3">

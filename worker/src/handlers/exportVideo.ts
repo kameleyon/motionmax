@@ -170,12 +170,27 @@ export async function handleExportVideo(
     throw new Error(`Export failed: no scenes for project ${project_id}`);
   }
 
-  // Detect cinematic projects (scenes have AI-generated videoUrls)
+  // Detect project type and adjust export config accordingly
+  const projectType = payload.project_type || "";
   const isCinematic = scenes.some((s: any) => !!s.videoUrl);
+  const isSmartFlow = projectType === "smartflow";
+
   if (isCinematic) {
-    // Cinematic clips are self-contained — just concat directly, no crossfade
+    // Cinematic clips are self-contained — just concat directly, no transitions
     exportConfig.crossfadeDuration = 0;
-    console.log(`[ExportVideo] Cinematic detected — using direct concat`);
+    exportConfig.kenBurns = false;
+    console.log(`[ExportVideo] Cinematic detected — direct concat, no Ken Burns`);
+  } else if (isSmartFlow) {
+    // SmartFlow = static image + voice, no animation at all
+    exportConfig.crossfadeDuration = 0;
+    exportConfig.kenBurns = false;
+    console.log(`[ExportVideo] SmartFlow detected — static images, no animation`);
+  } else {
+    // Standard (storytelling/explainer): simple fade transitions, no Ken Burns
+    exportConfig.kenBurns = false;
+    // Use a simple fade instead of crossfade
+    exportConfig.crossfadeDuration = 0.3;
+    console.log(`[ExportVideo] Standard project — fade transitions, no Ken Burns`);
   }
 
   // ── Initialize per-scene progress tracking ──────────────────────
@@ -314,8 +329,8 @@ export async function handleExportVideo(
         message: `Applying ${exportConfig.crossfadeDuration}s crossfade to ${clipPaths.length} clips`,
       });
 
-      // Cinematic projects use fadeblack (more visible), standard uses fade (dissolve)
-      const transitionType = isCinematic ? "fadeblack" : "fade";
+      // Standard projects use fadeblack (clean fade to black between scenes)
+      const transitionType = "fadeblack";
 
       usedCrossfade = await concatWithCrossfade(clipPaths, finalOutputPath, {
         duration: exportConfig.crossfadeDuration,

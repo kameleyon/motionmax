@@ -82,20 +82,22 @@ export function GenerationResult({
     return formatVideoExportLogs(getVideoExportLogs());
   })();
 
-  // Handle scenes update from regeneration
+  // Handle scenes update from regeneration — NO auto re-render.
+  // User edits freely, then manually re-exports.
+  const [hasUnsavedEdits, setHasUnsavedEdits] = useState(false);
+
   const handleScenesUpdate = useCallback((updatedScenes: Scene[]) => {
     setScenes(updatedScenes);
     onScenesUpdate?.(updatedScenes);
+    setHasUnsavedEdits(true);
+  }, [onScenesUpdate]);
 
-    // Debounced auto re-render: wait 3s after last change
-    setIsReRendering(true);
-    if (reRenderTimerRef.current) clearTimeout(reRenderTimerRef.current);
-    reRenderTimerRef.current = setTimeout(() => {
-      setIsReRendering(false);
-      clearVideoExportLogs();
-      void exportVideo(updatedScenes, format, brandMark, projectId, projectType, generationId).catch(() => {});
-    }, 3000);
-  }, [onScenesUpdate, exportVideo, format, brandMark, projectId, projectType, generationId]);
+  const handleRenderChanges = useCallback(() => {
+    setHasUnsavedEdits(false);
+    resetExport();
+    clearVideoExportLogs();
+    void exportVideo(scenes, format, brandMark, projectId, projectType, generationId).catch(() => {});
+  }, [resetExport, exportVideo, scenes, format, brandMark, projectId, projectType, generationId]);
 
   const {
     isRegenerating,
@@ -190,6 +192,21 @@ export function GenerationResult({
           format={format}
         />
       </div>
+
+      {/* ── Pending Changes Banner ── */}
+      {hasUnsavedEdits && (
+        <div className="w-full max-w-4xl mx-auto">
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+            <p className="text-sm text-foreground">
+              You have unsaved edits. Press <strong>Render</strong> to re-export your video with the changes.
+            </p>
+            <Button size="sm" onClick={handleRenderChanges} className="gap-1.5 shrink-0">
+              <RefreshCw className="h-4 w-4" />
+              Render
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* ── Actions Bar ── */}
       <div className="w-full max-w-4xl mx-auto space-y-3">

@@ -18,7 +18,16 @@ import path from "path";
 
 // ── Types ──────────────────────────────────────────────────────────
 
-export type CaptionStyle = "classic" | "bold" | "neon" | "karaoke" | "minimal" | "box" | "none";
+export type CaptionStyle =
+  | "none"
+  // Original styles
+  | "classic" | "bold" | "neon" | "karaoke" | "minimal" | "box"
+  // New: text effects
+  | "typewriter" | "gradient" | "subtitleBar"
+  // New: from caption.png reference
+  | "whiteStroke" | "blueStroke" | "redFire" | "orangeGlow"
+  | "yellowOutline" | "greenPill" | "goldScript" | "comicPop"
+  | "blueWhite" | "redBlack" | "yellowRed";
 
 export interface CaptionWord {
   text: string;
@@ -81,8 +90,13 @@ const WHITE = assColor(255, 255, 255);
 const BLACK = assColor(0, 0, 0);
 const AQUA = assColor(0x11, 0xC4, 0xD0);
 const YELLOW = assColor(0xE4, 0xC8, 0x75);
+const GOLD = assColor(0xD4, 0xA9, 0x29);
+const RED = assColor(0xE0, 0x30, 0x30);
+const ORANGE = assColor(0xFF, 0x8C, 0x00);
+const BLUE = assColor(0x30, 0x60, 0xE0);
+const GREEN = assColor(0x2E, 0xA8, 0x4E);
 const GRAY = assColor(180, 180, 180);
-const DARK_BG = assColor(0, 0, 0, 0x80); // semi-transparent black
+const DARK_BG = assColor(0, 0, 0, 0x80);
 
 interface AssStyleDef {
   fontName: string;

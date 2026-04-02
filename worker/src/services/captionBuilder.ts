@@ -20,11 +20,12 @@ import path from "path";
 
 export type CaptionStyle =
   | "none"
-  // Original styles
+  // Core styles
   | "classic" | "bold" | "neon" | "karaoke" | "minimal" | "box"
-  // New: text effects
-  | "typewriter" | "gradient" | "subtitleBar"
-  // New: from caption.png reference
+  // Text effects
+  | "typewriter" | "gradient" | "subtitleBar" | "outlineOnly" | "shadowPop"
+  | "handwritten" | "topCenter" | "allCapsGlow"
+  // From caption.png reference
   | "whiteStroke" | "blueStroke" | "redFire" | "orangeGlow"
   | "yellowOutline" | "greenPill" | "goldScript" | "comicPop"
   | "blueWhite" | "redBlack" | "yellowRed";
@@ -115,6 +116,7 @@ interface AssStyleDef {
 }
 
 const STYLE_DEFS: Record<Exclude<CaptionStyle, "none">, AssStyleDef> = {
+  // ── Core styles ──
   classic: {
     fontName: "Arial", fontSize: 48, primaryColor: WHITE, secondaryColor: YELLOW,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0xA0), bold: true,
@@ -144,6 +146,103 @@ const STYLE_DEFS: Record<Exclude<CaptionStyle, "none">, AssStyleDef> = {
     fontName: "Arial", fontSize: 46, primaryColor: WHITE, secondaryColor: YELLOW,
     outlineColor: assColor(0x11, 0xC4, 0xD0), backColor: assColor(0x11, 0xC4, 0xD0, 0x30), bold: true,
     outline: 12, shadow: 0, alignment: 2, marginV: 45, borderStyle: 3,
+  },
+  // ── Text effect styles ──
+  typewriter: {
+    fontName: "Courier New", fontSize: 42, primaryColor: WHITE, secondaryColor: WHITE,
+    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0x80), bold: false,
+    outline: 1, shadow: 0, alignment: 2, marginV: 40, borderStyle: 1,
+  },
+  gradient: {
+    fontName: "Arial Black", fontSize: 52, primaryColor: AQUA, secondaryColor: GOLD,
+    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 3, shadow: 1, alignment: 2, marginV: 45, borderStyle: 1,
+  },
+  subtitleBar: {
+    fontName: "Arial", fontSize: 44, primaryColor: WHITE, secondaryColor: WHITE,
+    outlineColor: assColor(0, 0, 0, 0), backColor: assColor(0, 0, 0, 0x99), bold: false,
+    outline: 15, shadow: 0, alignment: 2, marginV: 0, borderStyle: 3,
+  },
+  outlineOnly: {
+    fontName: "Arial Black", fontSize: 54, primaryColor: assColor(0, 0, 0, 0xFE), secondaryColor: AQUA,
+    outlineColor: WHITE, backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 3, shadow: 0, alignment: 2, marginV: 40, borderStyle: 1,
+  },
+  shadowPop: {
+    fontName: "Arial Black", fontSize: 56, primaryColor: WHITE, secondaryColor: YELLOW,
+    outlineColor: assColor(0, 0, 0, 0), backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 0, shadow: 4, alignment: 2, marginV: 45, borderStyle: 1,
+  },
+  handwritten: {
+    fontName: "Comic Sans MS", fontSize: 46, primaryColor: WHITE, secondaryColor: YELLOW,
+    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: false,
+    outline: 2, shadow: 1, alignment: 2, marginV: 40, borderStyle: 1,
+  },
+  topCenter: {
+    fontName: "Arial", fontSize: 44, primaryColor: WHITE, secondaryColor: YELLOW,
+    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0xA0), bold: true,
+    outline: 2, shadow: 1, alignment: 8, marginV: 30, borderStyle: 1,
+  },
+  allCapsGlow: {
+    fontName: "Arial Black", fontSize: 52, primaryColor: WHITE, secondaryColor: WHITE,
+    outlineColor: AQUA, backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 4, shadow: 3, alignment: 2, marginV: 45, borderStyle: 1, uppercase: true,
+  },
+  // ── From caption.png reference ──
+  whiteStroke: {
+    fontName: "Arial Black", fontSize: 56, primaryColor: WHITE, secondaryColor: WHITE,
+    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 5, shadow: 0, alignment: 2, marginV: 45, borderStyle: 1,
+  },
+  blueStroke: {
+    fontName: "Arial Black", fontSize: 54, primaryColor: BLUE, secondaryColor: WHITE,
+    outlineColor: WHITE, backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 4, shadow: 1, alignment: 2, marginV: 45, borderStyle: 1,
+  },
+  redFire: {
+    fontName: "Arial Black", fontSize: 56, primaryColor: RED, secondaryColor: YELLOW,
+    outlineColor: YELLOW, backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 3, shadow: 2, alignment: 2, marginV: 45, borderStyle: 1,
+  },
+  orangeGlow: {
+    fontName: "Arial Black", fontSize: 54, primaryColor: ORANGE, secondaryColor: WHITE,
+    outlineColor: WHITE, backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 4, shadow: 1, alignment: 2, marginV: 45, borderStyle: 1,
+  },
+  yellowOutline: {
+    fontName: "Arial Black", fontSize: 54, primaryColor: WHITE, secondaryColor: YELLOW,
+    outlineColor: YELLOW, backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 4, shadow: 1, alignment: 2, marginV: 45, borderStyle: 1,
+  },
+  greenPill: {
+    fontName: "Arial", fontSize: 46, primaryColor: WHITE, secondaryColor: WHITE,
+    outlineColor: GREEN, backColor: GREEN, bold: true,
+    outline: 14, shadow: 0, alignment: 2, marginV: 45, borderStyle: 3,
+  },
+  goldScript: {
+    fontName: "Georgia", fontSize: 50, primaryColor: GOLD, secondaryColor: YELLOW,
+    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: false,
+    outline: 2, shadow: 1, alignment: 2, marginV: 40, borderStyle: 1,
+  },
+  comicPop: {
+    fontName: "Arial Black", fontSize: 58, primaryColor: RED, secondaryColor: WHITE,
+    outlineColor: YELLOW, backColor: YELLOW, bold: true,
+    outline: 5, shadow: 3, alignment: 2, marginV: 45, borderStyle: 1, uppercase: true,
+  },
+  blueWhite: {
+    fontName: "Arial Black", fontSize: 54, primaryColor: WHITE, secondaryColor: BLUE,
+    outlineColor: BLUE, backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 4, shadow: 0, alignment: 2, marginV: 45, borderStyle: 1,
+  },
+  redBlack: {
+    fontName: "Arial Black", fontSize: 56, primaryColor: RED, secondaryColor: WHITE,
+    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 4, shadow: 2, alignment: 2, marginV: 45, borderStyle: 1,
+  },
+  yellowRed: {
+    fontName: "Arial Black", fontSize: 54, primaryColor: YELLOW, secondaryColor: RED,
+    outlineColor: RED, backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 4, shadow: 1, alignment: 2, marginV: 45, borderStyle: 1,
   },
 };
 
@@ -272,10 +371,32 @@ export async function writeAssFile(
 /** List of available caption styles for the frontend */
 export const CAPTION_STYLES: Array<{ id: CaptionStyle; label: string; description: string }> = [
   { id: "none", label: "None", description: "No captions" },
+  // Core
   { id: "classic", label: "Classic", description: "White text, black outline" },
   { id: "bold", label: "Bold", description: "Large uppercase, heavy border" },
   { id: "neon", label: "Neon", description: "Aqua glow, dark background" },
   { id: "karaoke", label: "Karaoke", description: "Word-by-word highlight" },
   { id: "minimal", label: "Minimal", description: "Small, subtle, clean" },
-  { id: "box", label: "Box", description: "Text in colored rectangle" },
+  { id: "box", label: "Box", description: "Text in aqua rectangle" },
+  // Text effects
+  { id: "typewriter", label: "Typewriter", description: "Monospace, letter by letter" },
+  { id: "gradient", label: "Gradient", description: "Aqua to gold colors" },
+  { id: "subtitleBar", label: "Subtitle Bar", description: "Dark bar across bottom" },
+  { id: "outlineOnly", label: "Outline Only", description: "No fill, white outline" },
+  { id: "shadowPop", label: "Shadow Pop", description: "White text, heavy shadow" },
+  { id: "handwritten", label: "Handwritten", description: "Casual script font" },
+  { id: "topCenter", label: "Top Center", description: "White text at top" },
+  { id: "allCapsGlow", label: "All Caps Glow", description: "Uppercase, aqua glow" },
+  // Colorful (from caption.png)
+  { id: "whiteStroke", label: "White Stroke", description: "White, thick black outline" },
+  { id: "blueStroke", label: "Blue Stroke", description: "Blue text, white outline" },
+  { id: "redFire", label: "Red Fire", description: "Red text, yellow outline" },
+  { id: "orangeGlow", label: "Orange Glow", description: "Orange text, white glow" },
+  { id: "yellowOutline", label: "Yellow Outline", description: "White text, yellow border" },
+  { id: "greenPill", label: "Green Pill", description: "White text in green badge" },
+  { id: "goldScript", label: "Gold Script", description: "Elegant gold text" },
+  { id: "comicPop", label: "Comic Pop", description: "Red text, yellow burst" },
+  { id: "blueWhite", label: "Blue White", description: "White text, blue outline" },
+  { id: "redBlack", label: "Red Black", description: "Red text, black outline" },
+  { id: "yellowRed", label: "Yellow Red", description: "Yellow text, red outline" },
 ];

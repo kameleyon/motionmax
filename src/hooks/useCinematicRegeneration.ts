@@ -161,32 +161,21 @@ export function useCinematicRegeneration(
 
         if (!result?.success) throw new Error(result?.error || "Image edit failed");
 
-        // Update image + clear stale videoUrl
-        const nextScenes = scenes.map((s, i) =>
-          i === idx ? { ...s, imageUrl: result.imageUrl, videoUrl: undefined } : s
-        );
+        // Update image + clear stale videos:
+        // - Current scene's video (this image is its start frame)
+        // - Previous scene's video (this image is its end_image transition target)
+        const nextScenes = scenes.map((s, i) => {
+          if (i === idx) return { ...s, imageUrl: result.imageUrl, videoUrl: undefined };
+          if (i === idx - 1) return { ...s, videoUrl: undefined };
+          return s;
+        });
         onScenesUpdate(nextScenes);
-        toast({ title: "Image Edited", description: `Scene ${idx + 1} image updated. Generating video...` });
 
-        // Auto-trigger video regeneration from the new image
-        try {
-          const vidResult = await callPhase({
-            phase: "video",
-            generationId,
-            projectId,
-            sceneIndex: idx,
-            regenerate: true,
-          }, 10 * 60 * 1000);
-          if (vidResult?.success && vidResult.videoUrl) {
-            const withVideo = nextScenes.map((s, i) =>
-              i === idx ? { ...s, videoUrl: vidResult.videoUrl } : s
-            );
-            onScenesUpdate(withVideo);
-            toast({ title: "Video Generated", description: `Scene ${idx + 1} video ready.` });
-          }
-        } catch (vidErr) {
-          console.warn("Auto video regen after edit failed:", vidErr);
-        }
+        const affectedCount = idx > 0 ? 2 : 1;
+        toast({
+          title: "Image Edited",
+          description: `Scene ${idx + 1} image updated. ${affectedCount} video(s) need regeneration — press Render when done editing.`,
+        });
       } catch (error) {
         console.error("Image edit error:", error);
         toast({
@@ -225,32 +214,19 @@ export function useCinematicRegeneration(
 
         if (!result?.success) throw new Error(result?.error || "Image regeneration failed");
 
-        // Update image + clear stale videoUrl
-        const nextScenes = scenes.map((s, i) =>
-          i === idx ? { ...s, imageUrl: result.imageUrl, videoUrl: undefined } : s
-        );
+        // Update image + clear stale videos (current + previous scene)
+        const nextScenes = scenes.map((s, i) => {
+          if (i === idx) return { ...s, imageUrl: result.imageUrl, videoUrl: undefined };
+          if (i === idx - 1) return { ...s, videoUrl: undefined };
+          return s;
+        });
         onScenesUpdate(nextScenes);
-        toast({ title: "Image Regenerated", description: `Scene ${idx + 1} image updated. Generating video...` });
 
-        // Auto-trigger video regeneration from the new image
-        try {
-          const vidResult = await callPhase({
-            phase: "video",
-            generationId,
-            projectId,
-            sceneIndex: idx,
-            regenerate: true,
-          }, 10 * 60 * 1000);
-          if (vidResult?.success && vidResult.videoUrl) {
-            const withVideo = nextScenes.map((s, i) =>
-              i === idx ? { ...s, videoUrl: vidResult.videoUrl } : s
-            );
-            onScenesUpdate(withVideo);
-            toast({ title: "Video Generated", description: `Scene ${idx + 1} video ready.` });
-          }
-        } catch (vidErr) {
-          console.warn("Auto video regen after image regen failed:", vidErr);
-        }
+        const affectedCount = idx > 0 ? 2 : 1;
+        toast({
+          title: "Image Regenerated",
+          description: `Scene ${idx + 1} image updated. ${affectedCount} video(s) need regeneration — press Render when done editing.`,
+        });
       } catch (error) {
         console.error("Image regeneration error:", error);
         toast({

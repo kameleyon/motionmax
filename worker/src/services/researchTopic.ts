@@ -34,14 +34,16 @@ For EVERY event mentioned:
 - **CULTURAL SIGNIFICANCE**: Why does this matter? What's the emotional context?
 
 IMPORTANT RULES:
+- For REAL PEOPLE (celebrities, athletes, politicians, historical/biblical figures): You MUST describe their ACTUAL appearance based on verified knowledge. Kylian Mbappé is Black with dark brown skin. Jesus of Nazareth was a Middle Eastern Jewish man — NOT white with blue eyes. Moses was a Hebrew man from Egypt. Martin Luther King Jr. was a Black man. DO NOT whitewash or Europeanize anyone.
 - If you're not sure about a detail, say "UNVERIFIED" — never make up facts
 - If the topic is fictional, note what's established canon vs interpretation
-- If the topic is historical, prioritize scholarly consensus
-- Be specific: "dark brown skin, close-cropped black hair, athletic build" not "African American man"
-- Include VISUAL details the AI image/video generator needs
+- If the topic is historical, prioritize scholarly consensus and regional ethnic accuracy
+- Be HYPER-SPECIFIC with physical descriptions: "warm dark brown skin, close-cropped tightly coiled black hair, strong jawline, athletic 6'0 build" — NOT "African American man"
+- Include VISUAL details the AI image/video generator needs — this is for creating IMAGES and VIDEOS, not text
+- For sports events: specify EXACT jersey colors, numbers, and team kits for THAT SPECIFIC match/event
 
-Return your research as a structured brief in plain text (NOT JSON). Keep it under 800 words.
-Use sections: ## KEY FACTS, ## CHARACTER DESCRIPTIONS, ## VISUAL SETTING, ## CULTURAL CONTEXT`;
+Return your research as a structured brief in plain text (NOT JSON). Keep it under 1000 words.
+Use sections: ## KEY FACTS, ## CHARACTER DESCRIPTIONS (with FULL physical appearance), ## VISUAL SETTING, ## CULTURAL CONTEXT`;
 
 /**
  * Research a topic before script generation.

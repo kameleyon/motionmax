@@ -172,14 +172,28 @@ export async function handleGenerateVideo(
   );
 
   // ── Step 1.5: Research phase (cinematic + storytelling) ──────────
-  // AI researches the topic for factual accuracy before scriptwriting:
-  // character appearances, cultural context, historical details, etc.
+  // AI researches the topic for factual accuracy before scriptwriting.
+  // Research is injected into SYSTEM prompt (not user) so the LLM treats
+  // it as authoritative ground truth, not a suggestion.
   if (projectType === "cinematic" || projectType === "storytelling") {
     await updateJobProgress(jobId, 7);
     const researchBrief = await researchTopic(payload.content || "");
     if (researchBrief) {
-      promptResult.user += `\n\n=== VERIFIED RESEARCH (USE THIS FOR ACCURACY) ===\nThe following research has been verified. Use these facts for visual accuracy — character appearances, clothing, settings, cultural details. Do NOT contradict this research unless the user explicitly overrides it.\n\n${researchBrief}`;
-      console.log(`[GenerateVideo] Research brief injected (${researchBrief.length} chars)`);
+      promptResult.system += `
+
+=== MANDATORY RESEARCH DATA — YOU MUST USE THIS (NON-NEGOTIABLE) ===
+⛔ WARNING: The following research has been independently verified. You MUST use these EXACT facts.
+DO NOT invent, assume, or override ANY detail provided below. If the research says a person has
+dark brown skin and black hair, your visualPrompt MUST describe dark brown skin and black hair.
+If the research says the team wore blue jerseys, your visualPrompt MUST show blue jerseys.
+EVERY character description in your "characters" object MUST match the research data below.
+EVERY visualPrompt MUST reflect the verified appearance, clothing, setting, and cultural details.
+If you contradict this research, the ENTIRE generation will be rejected and restarted.
+
+${researchBrief}
+
+=== END OF RESEARCH DATA ===`;
+      console.log(`[GenerateVideo] Research brief injected into SYSTEM prompt (${researchBrief.length} chars)`);
     }
   }
 

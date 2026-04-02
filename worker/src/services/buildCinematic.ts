@@ -242,30 +242,46 @@ AVOID any words that trigger safety filters:
 - No profanity, slurs, drug references, sexual content, self-harm
 Use safe alternatives: "Suddenly...", "In a flash...", "A loud impact..."
 
-=== CHARACTER BIBLE (REQUIRED) ===
+=== CHARACTER BIBLE (REQUIRED — ZERO TOLERANCE FOR INACCURACY) ===
 Create a "characters" object defining EVERY person/entity for VISUAL CONSISTENCY.
 
-For each character:
-- GENDER (male/female/other)
-- AGE (specific age or range)
-- Ethnicity/skin tone (be specific)
-- Hair (color, style, length)
-- Body type (build, height)
-- Clothing (period/age-appropriate, consistent)
-- Distinguishing features that remain CONSTANT
+⚠️ IF RESEARCH DATA IS PROVIDED ABOVE: You MUST copy the EXACT physical descriptions from the research.
+DO NOT invent appearances. DO NOT default to generic descriptions. DO NOT whitewash or change ethnicity.
+If the research says "Kylian Mbappé — dark brown skin, close-cropped black hair, athletic build, wearing blue France jersey #10" then your character description MUST say EXACTLY that.
 
-When writing visualPrompt, COPY the full character description — don't just reference the name.
+For each character:
+- GENDER (verified — DO NOT assume)
+- AGE (specific age or range — look it up for real people)
+- RACE & SKIN TONE (be SPECIFIC — "warm dark brown skin" not "dark skin")
+- ETHNICITY (be SPECIFIC — "Haitian", "Moroccan", "Brazilian" etc.)
+- Hair (color, style, length — verified for real people)
+- Facial features (be detailed — "strong jawline, high cheekbones, full lips")
+- Body type (build, height — verified for athletes/celebrities)
+- Clothing (EXACT for the specific event/context — jersey colors, numbers, period-accurate)
+- Distinguishing features that remain CONSTANT across all scenes
+
+⛔ For REAL PEOPLE (celebrities, athletes, politicians, historical figures):
+   You MUST describe what they ACTUALLY look like. Not a generic placeholder.
+   If you don't know, USE THE RESEARCH DATA. If no research, describe them accurately.
+   NEVER depict a Black person as white, an Asian person as European, etc.
+
+When writing visualPrompt, COPY the FULL character description — don't just reference the name.
 
 ${PROMPT_ENGINEERING_SECTION}
 
 ${buildCoverTitleSection('"The Untold Story", "When Everything Changed", "Against All Odds", "Rise to Power"', styleDesc)}
 
-=== HISTORICAL, CULTURAL & VISUAL ACCURACY (CRITICAL) ===
-- Historical accuracy: ALL visual elements must match the era
+=== HISTORICAL, CULTURAL & VISUAL ACCURACY (CRITICAL — ZERO TOLERANCE) ===
+⛔ THIS IS THE #1 PRIORITY. Getting appearances wrong is WORSE than a bad script.
+- Historical accuracy: ALL visual elements must match the era — no anachronisms
 - Geographic accuracy: Landscapes, vegetation, weather must match real locations
-- Ethnic & facial accuracy: Characters must reflect correct ethnicity
-- Cultural accuracy: Clothing, rituals, symbols must be authentic
-- Context coherence: No anachronisms
+- Ethnic & facial accuracy: Characters MUST reflect their CORRECT ethnicity, skin color, and features
+  - A Black man MUST be depicted as Black. An Asian woman MUST be depicted as Asian.
+  - NEVER default to white/European features for any character unless they ARE white/European.
+  - For real people: look at the RESEARCH DATA and describe their ACTUAL appearance.
+- Cultural accuracy: Clothing, hairstyles, rituals, symbols must be authentic to the culture
+- Sports accuracy: Jersey colors, team logos, stadium details must match the SPECIFIC game/event
+- Context coherence: No anachronisms — if it's 1960, no smartphones; if it's ancient Rome, no jeans
 
 === OUTPUT FORMAT (STRICT JSON) ===
 Return ONLY valid JSON (no markdown, no \`\`\`json blocks):

@@ -39,6 +39,7 @@ import { toast } from "@/hooks/use-toast";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useCinematicRegeneration } from "@/hooks/useCinematicRegeneration";
 import { useVideoExport } from "@/hooks/useVideoExport";
+import { callPhase } from "@/hooks/generation/callPhase";
 import { cn } from "@/lib/utils";
 import { SUPABASE_URL } from "@/lib/supabaseUrl";
 import { CinematicEditModal } from "./CinematicEditModal";
@@ -132,7 +133,6 @@ export function CinematicResult({
       }
     })();
   }, [isAdmin, generationId, projectId, exportState.status]);
-  const reRenderTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasAutoExportedRef = useRef(false);
 
   const exportLogText = (() => {
@@ -142,23 +142,14 @@ export function CinematicResult({
 
   const scenesWithVideo = useMemo(() => localScenes.filter((s) => !!s.videoUrl), [localScenes]);
 
-  // Cinematic regeneration hook
+  // Cinematic regeneration hook — NO auto re-render.
+  // User edits images/audio freely, then manually triggers render.
+  const [hasUnsavedEdits, setHasUnsavedEdits] = useState(false);
+
   const handleScenesUpdate = useCallback((updatedScenes: CinematicScene[]) => {
     setLocalScenes(updatedScenes);
-
-    // Debounced auto re-render: wait 3s after last scene change
-    setIsReRendering(true);
-    if (reRenderTimerRef.current) clearTimeout(reRenderTimerRef.current);
-    reRenderTimerRef.current = setTimeout(() => {
-      setIsReRendering(false);
-      clearVideoExportLogs();
-      const exportScenes = updatedScenes.map((s) => ({
-        number: s.number, voiceover: s.voiceover, visualPrompt: s.visualPrompt,
-        duration: s.duration, videoUrl: s.videoUrl, audioUrl: s.audioUrl, imageUrl: s.imageUrl,
-      }));
-      void exportVideo(exportScenes, format, undefined, projectId, "cinematic", generationId).catch(() => {});
-    }, 3000);
-  }, [exportVideo, format, projectId, generationId]);
+    setHasUnsavedEdits(true);
+  }, []);
 
   const {
     isRegenerating,
@@ -223,6 +214,60 @@ export function CinematicResult({
     }));
     void exportVideo(exportScenes, format, undefined, projectId, "cinematic").catch(() => {});
   }, [resetExport, exportVideo, localScenes, format, projectId]);
+
+  // Regenerate all stale videos (missing videoUrl) then re-export
+  const [isRenderingChanges, setIsRenderingChanges] = useState(false);
+  const handleRenderChanges = useCallback(async () => {
+    if (!generationId || !projectId) return;
+    setIsRenderingChanges(true);
+    setHasUnsavedEdits(false);
+
+    try {
+      // Find scenes with missing videos
+      const staleIndices = localScenes
+        .map((s, i) => (!s.videoUrl && s.imageUrl ? i : -1))
+        .filter((i) => i >= 0);
+
+      if (staleIndices.length > 0) {
+        toast({ title: "Regenerating Videos", description: `Regenerating ${staleIndices.length} video(s)...` });
+
+        // Regenerate stale videos in batches of 4
+        for (let start = 0; start < staleIndices.length; start += 4) {
+          const batch = staleIndices.slice(start, start + 4);
+          const results = await Promise.allSettled(
+            batch.map((idx) =>
+              callPhase({ phase: "video", generationId, projectId, sceneIndex: idx, regenerate: true }, 10 * 60 * 1000)
+            )
+          );
+
+          // Update local scenes with new video URLs
+          const updatedScenes = [...localScenes];
+          for (let j = 0; j < results.length; j++) {
+            const r = results[j];
+            if (r.status === "fulfilled" && r.value?.success && r.value.videoUrl) {
+              updatedScenes[batch[j]] = { ...updatedScenes[batch[j]], videoUrl: r.value.videoUrl };
+            }
+          }
+          setLocalScenes(updatedScenes);
+        }
+      }
+
+      // Now re-export with all videos
+      resetExport();
+      clearVideoExportLogs();
+      // Re-read local scenes after updates
+      const freshScenes = localScenes.map((s) => ({
+        number: s.number, voiceover: s.voiceover, visualPrompt: s.visualPrompt,
+        duration: s.duration, videoUrl: s.videoUrl, audioUrl: s.audioUrl, imageUrl: s.imageUrl,
+      }));
+      await exportVideo(freshScenes, format, undefined, projectId, "cinematic", generationId);
+    } catch (err) {
+      console.error("Render changes failed:", err);
+      toast({ variant: "destructive", title: "Render Failed", description: (err as Error).message });
+    } finally {
+      setIsRenderingChanges(false);
+    }
+  }, [generationId, projectId, localScenes, format, resetExport, exportVideo, toast]);
 
   // Share
   const handleShare = useCallback(async () => {
@@ -320,6 +365,26 @@ export function CinematicResult({
           format={format}
         />
       </div>
+
+      {/* ── Pending Changes Banner ── */}
+      {hasUnsavedEdits && (
+        <div className="w-full max-w-4xl mx-auto">
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+            <p className="text-sm text-foreground">
+              You have unsaved edits. Press <strong>Render</strong> when you're done editing to regenerate affected videos and re-export.
+            </p>
+            <Button
+              size="sm"
+              onClick={handleRenderChanges}
+              disabled={isRenderingChanges}
+              className="gap-1.5 shrink-0"
+            >
+              {isRenderingChanges ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              Render
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* ── Actions Bar ── */}
       <div className="w-full max-w-4xl mx-auto space-y-3">

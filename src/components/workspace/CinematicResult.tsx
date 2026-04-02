@@ -301,7 +301,7 @@ export function CinematicResult({
               0.02 + // OpenRouter script (~$0.02)
               localScenes.length * 0.01 + // Audio (~$0.01/scene)
               localScenes.length * 0.04 + // Images (~$0.04/scene)
-              scenesWithVideo.length * 0.70 // Video ($0.70/scene Kling V2.6)
+              scenesWithVideo.length * 0.35 // Video ($0.35/scene Kling 10s)
             ).toFixed(2)}</span>
           </div>
         )}

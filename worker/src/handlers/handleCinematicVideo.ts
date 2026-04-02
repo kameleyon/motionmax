@@ -254,7 +254,7 @@ export async function handleCinematicVideo(
     category: "system_info",
     eventType: "cinematic_video_completed",
     message: `Cinematic video completed for scene ${sceneIndex} (${provider}, 10s${endImageUrl ? ", with transition" : ""})`,
-    details: { provider, hasTransition: !!endImageUrl, cost: 0.70 },
+    details: { provider, hasTransition: !!endImageUrl, cost: 0.35 },
   });
 
   return {
@@ -264,7 +264,7 @@ export async function handleCinematicVideo(
     sceneIndex,
     provider,
     hasTransition: !!endImageUrl,
-    cost: 0.70,
+    cost: 0.35,
   };
 }
 

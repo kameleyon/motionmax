@@ -5,6 +5,7 @@ import {
   Download,
   Loader2,
   Pencil,
+  RefreshCw,
   Trash2,
   Volume2,
   X,
@@ -53,6 +54,7 @@ export function GenerationResult({
   scenes: initialScenes,
   format,
   onNewProject,
+  onRegenerateAll,
   totalTimeMs,
   costTracking,
   generationId,
@@ -140,17 +142,6 @@ export function GenerationResult({
     })();
   }, [initialScenes, projectId, generationId, format, brandMark, projectType, exportVideo, exportState.status, loadExistingVideo]);
 
-  // Copy script to clipboard
-  const copyScript = useCallback(() => {
-    const script = scenes
-      .map((s, i) => `Scene ${s.number || i + 1}:\n${s.voiceover}`)
-      .join("\n\n");
-    navigator.clipboard.writeText(script).then(
-      () => toast({ title: "Script copied!" }),
-      () => toast({ variant: "destructive", title: "Failed to copy" })
-    );
-  }, [scenes]);
-
   const handleRetryExport = useCallback(() => {
     resetExport();
     clearVideoExportLogs();
@@ -236,10 +227,12 @@ export function GenerationResult({
             <Download className="h-3.5 w-3.5" />
             {zipState.status === "downloading" || zipState.status === "zipping" ? "..." : "Images"}
           </Button>
-          <Button variant="outline" size="sm" onClick={copyScript} className="gap-1.5">
-            <Copy className="h-3.5 w-3.5" />
-            Copy Script
-          </Button>
+          {onRegenerateAll && (
+            <Button variant="outline" size="sm" onClick={onRegenerateAll} className="gap-1.5">
+              <RefreshCw className="h-4 w-4" />
+              Regenerate
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -256,9 +249,6 @@ export function GenerationResult({
           >
             <Share2 className="h-3.5 w-3.5" />
             Share
-          </Button>
-          <Button variant="outline" size="sm" onClick={onNewProject} className="gap-1.5">
-            New Project
           </Button>
         </div>
       </div>

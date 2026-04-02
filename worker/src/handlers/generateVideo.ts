@@ -25,6 +25,7 @@ import {
 } from "../services/openrouter.js";
 import type { PromptResult } from "../services/openrouter.js";
 import { getStylePrompt, extractJsonFromLLMResponse } from "../services/prompts.js";
+import { researchTopic } from "../services/researchTopic.js";
 import {
   postProcessScenes,
   type ParsedScene,
@@ -169,6 +170,18 @@ export async function handleGenerateVideo(
   console.log(
     `[GenerateVideo] Built ${projectType} prompt (maxTokens=${promptResult.maxTokens})`,
   );
+
+  // ── Step 1.5: Research phase (cinematic + storytelling) ──────────
+  // AI researches the topic for factual accuracy before scriptwriting:
+  // character appearances, cultural context, historical details, etc.
+  if (projectType === "cinematic" || projectType === "storytelling") {
+    await updateJobProgress(jobId, 7);
+    const researchBrief = await researchTopic(payload.content || "");
+    if (researchBrief) {
+      promptResult.user += `\n\n=== VERIFIED RESEARCH (USE THIS FOR ACCURACY) ===\nThe following research has been verified. Use these facts for visual accuracy — character appearances, clothing, settings, cultural details. Do NOT contradict this research unless the user explicitly overrides it.\n\n${researchBrief}`;
+      console.log(`[GenerateVideo] Research brief injected (${researchBrief.length} chars)`);
+    }
+  }
 
   // ── Step 2: Call OpenRouter LLM ───────────────────────────────────
   await updateJobProgress(jobId, 10);

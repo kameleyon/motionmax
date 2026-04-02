@@ -124,44 +124,52 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
     // IMPORTANT: Only triggers loadProject when the generation is NOT already being actively
     // processed on the client side. Without this guard, loadProject would see missing videos,
     // start a new resumeCinematic loop, and the effect would keep spawning duplicates every 5s.
+    // DB polling: detect if generation completed while app was backgrounded.
+    // Only runs when actively generating (not when viewing a completed project).
     const isResumeInFlightRef = useRef(false);
+    const hasReloadedRef = useRef<string | null>(null);
     useEffect(() => {
+      // Only poll when actively generating — NOT when viewing a complete/error project
       if (
-        generationState.projectId && 
-        generationState.isGenerating && 
-        generationState.step !== "complete" && 
-        generationState.step !== "error"
+        !generationState.projectId ||
+        !generationState.isGenerating ||
+        generationState.step === "complete" ||
+        generationState.step === "error" ||
+        generationState.step === "idle"
       ) {
-        const checkGenerationStatus = async () => {
-          // Don't re-trigger if a resume is already in flight
-          if (isResumeInFlightRef.current) return;
-
-          const { data } = await supabase
-            .from("generations")
-            .select("id,status,progress,scenes,error_message")
-            .eq("project_id", generationState.projectId!)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-          // Only reload if backend says complete AND we haven't reached complete on client
-          // AND the generation truly has all videos (otherwise the current resume handles it)
-          if (data?.status === "complete" && generationState.step !== "complete") {
-            const scenes = Array.isArray(data.scenes) ? data.scenes : [];
-            const allVideos = scenes.every((s: any) => !!s?.videoUrl);
-            if (allVideos) {
-              console.log("[CinematicWorkspace] All videos done in DB, reloading project");
-              isResumeInFlightRef.current = true;
-              await loadProject(generationState.projectId!);
-              isResumeInFlightRef.current = false;
-            }
-          }
-        };
-
-        checkGenerationStatus();
-        const intervalId = setInterval(checkGenerationStatus, 10000);
-        return () => clearInterval(intervalId);
+        return;
       }
+
+      // Don't poll if we already reloaded this project
+      if (hasReloadedRef.current === generationState.projectId) return;
+
+      const checkGenerationStatus = async () => {
+        if (isResumeInFlightRef.current) return;
+
+        const { data } = await supabase
+          .from("generations")
+          .select("id,status,progress,scenes,error_message")
+          .eq("project_id", generationState.projectId!)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (data?.status === "complete" && generationState.step !== "complete") {
+          const scenes = Array.isArray(data.scenes) ? data.scenes : [];
+          const allVideos = scenes.every((s: any) => !!s?.videoUrl);
+          if (allVideos) {
+            console.log("[CinematicWorkspace] All videos done in DB, reloading project");
+            isResumeInFlightRef.current = true;
+            hasReloadedRef.current = generationState.projectId!;
+            await loadProject(generationState.projectId!);
+            isResumeInFlightRef.current = false;
+          }
+        }
+      };
+
+      checkGenerationStatus();
+      const intervalId = setInterval(checkGenerationStatus, 10000);
+      return () => clearInterval(intervalId);
     }, [generationState.projectId, generationState.isGenerating, generationState.step, loadProject]);
 
     const handleGenerate = async () => {
@@ -287,6 +295,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
 
     // Load project from URL if provided, or reset if project param removed (tab click)
     useEffect(() => {
+      hasReloadedRef.current = null; // Reset reload guard on project switch
       if (initialProjectId) {
         void handleOpenProject(initialProjectId);
       } else {
@@ -389,10 +398,10 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                       <div className="sm:flex-shrink-0">
                         <VoiceSelector selected={voice} onSelect={setVoice} />
                       </div>
+                      <div className="sm:flex-shrink-0">
+                        <LanguageSelector value={language} onChange={setLanguage} />
+                      </div>
                     </div>
-                    <div className="h-px bg-border/30" />
-                    <LanguageSelector value={language} onChange={setLanguage} />
-                    
                     <div className="h-px bg-border/30" />
                     <StyleSelector
                       selected={style}

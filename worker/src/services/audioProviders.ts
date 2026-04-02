@@ -88,7 +88,7 @@ async function callGeminiTTSModel(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: `[Speak with natural enthusiasm and warmth] ${voiceoverText}` }] }],
+        contents: [{ parts: [{ text: `[Speak with natural enthusiasm, warmth, and varied pacing. Use a conversational storytelling tone — sometimes faster with excitement, sometimes slower for emphasis. Breathe naturally between sentences. Sound like a captivating documentary narrator, not a robot reading text.] ${voiceoverText}` }] }],
         generationConfig: {
           responseModalities: ["AUDIO"],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Enceladus" } } },
@@ -154,7 +154,7 @@ export async function generateGeminiTTS(
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                contents: [{ parts: [{ text: `[Speak with natural enthusiasm] ${voiceoverText}` }] }],
+                contents: [{ parts: [{ text: `[Speak with natural enthusiasm, warmth, and varied pacing. Use a conversational storytelling tone — sometimes faster with excitement, sometimes slower for emphasis. Sound like a captivating documentary narrator.] ${voiceoverText}` }] }],
                 generationConfig: {
                   responseModalities: ["AUDIO"],
                   speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Enceladus" } } },
@@ -208,7 +208,7 @@ export async function generateElevenLabsTTS(
     method: "POST",
     headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
     body: JSON.stringify({ text: sanitized, model_id: "eleven_multilingual_v2",
-      voice_settings: { stability: 0.3, similarity_boost: 0.75, style: 0.65, use_speaker_boost: true } }),
+      voice_settings: { stability: 0.25, similarity_boost: 0.8, style: 0.75, use_speaker_boost: true } }),
   });
 
   if (!res.ok) return { url: null, error: `ElevenLabs TTS ${res.status}` };
@@ -233,7 +233,7 @@ export async function transformElevenLabsSTS(
     enc.encode(`--${boundary}\r\nContent-Disposition: form-data; name="audio"; filename="source.wav"\r\nContent-Type: audio/wav\r\n\r\n`),
     srcBytes,
     enc.encode(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="model_id"\r\n\r\neleven_multilingual_sts_v2\r\n`),
-    enc.encode(`--${boundary}\r\nContent-Disposition: form-data; name="voice_settings"\r\n\r\n{"stability":0.3,"similarity_boost":0.75,"style":0.65,"use_speaker_boost":true}\r\n`),
+    enc.encode(`--${boundary}\r\nContent-Disposition: form-data; name="voice_settings"\r\n\r\n{"stability":0.25,"similarity_boost":0.8,"style":0.75,"use_speaker_boost":true}\r\n`),
     enc.encode(`--${boundary}--\r\n`),
   ];
   const total = parts.reduce((s, p) => s + p.length, 0);
@@ -266,7 +266,7 @@ export async function generateLemonfoxTTS(
     const res = await fetch("https://api.lemonfox.ai/v1/audio/speech", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ input: sanitized, voice, response_format: "mp3" }),
+      body: JSON.stringify({ input: sanitized, voice, response_format: "mp3", speed: 1.05 }),
     });
     if (!res.ok) {
       if ((res.status === 429 || res.status >= 500) && attempt < 3) { await sleep(2000 * attempt); continue; }
@@ -293,7 +293,7 @@ export async function generateFishAudioTTS(
     const res = await fetch("https://api.fish.audio/v1/tts", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", model: "s2" },
-      body: JSON.stringify({ text, reference_id: referenceId, format: "mp3" }),
+      body: JSON.stringify({ text, reference_id: referenceId, format: "mp3", normalize: true, latency: "normal" }),
     });
     if (!res.ok) {
       const errBody = await res.text().catch(() => "");
@@ -325,7 +325,7 @@ export async function generateChatterboxTTS(
         const createRes = await fetch("https://api.replicate.com/v1/models/resemble-ai/chatterbox-turbo/predictions", {
           method: "POST",
           headers: { Authorization: `Bearer ${replicateApiKey}`, "Content-Type": "application/json", Prefer: "wait" },
-          body: JSON.stringify({ input: { text: chunk, voice, temperature: 0.85, top_p: 1, top_k: 1800, repetition_penalty: 2 } }),
+          body: JSON.stringify({ input: { text: chunk, voice, temperature: 0.9, top_p: 0.95, top_k: 2000, repetition_penalty: 1.8 } }),
         });
         if (!createRes.ok) throw new Error(`Chatterbox chunk ${idx} failed: ${createRes.status}`);
         let pred = await createRes.json();

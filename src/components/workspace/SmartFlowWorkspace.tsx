@@ -216,6 +216,11 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
       setBrandMarkText("");
     };
 
+    const handleRegenerate = () => {
+      reset();
+      setTimeout(() => handleGenerate(), 100);
+    };
+
     const handleOpenProject = async (projectId: string) => {
       const project = await loadProject(projectId);
       if (!project) return;
@@ -432,6 +437,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
                     format={generationState.format || format}
                     enableVoice={enableVoice}
                     onNewProject={handleNewProject}
+                    onRegenerate={handleRegenerate}
                     totalTimeMs={generationState.totalTimeMs}
                     costTracking={generationState.costTracking}
                     generationId={generationState.generationId}

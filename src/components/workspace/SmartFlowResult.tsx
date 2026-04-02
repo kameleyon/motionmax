@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  Copy,
   Download,
   Loader2,
   Pencil,
+  RefreshCw,
   Share2,
   X,
   Clock,
@@ -35,6 +35,7 @@ interface SmartFlowResultProps {
   format: VideoFormat;
   enableVoice: boolean;
   onNewProject: () => void;
+  onRegenerate?: () => void;
   totalTimeMs?: number;
   costTracking?: CostTracking;
   generationId?: string;
@@ -49,6 +50,7 @@ export function SmartFlowResult({
   format,
   enableVoice,
   onNewProject,
+  onRegenerate,
   totalTimeMs,
   costTracking,
   generationId,
@@ -139,13 +141,6 @@ export function SmartFlowResult({
     void exportVideo(scenes, format as any, brandMark, projectId, "smartflow", generationId).catch(() => {});
   };
 
-  const copyScript = () => {
-    const text = scene.voiceover || scene.title || "";
-    navigator.clipboard.writeText(text).then(
-      () => toast({ title: "Script copied!" }),
-      () => toast({ variant: "destructive", title: "Failed to copy" })
-    );
-  };
 
   return (
     <div className="space-y-6 pb-8">
@@ -233,14 +228,28 @@ export function SmartFlowResult({
             <Download className="h-3.5 w-3.5" />
             {zipState.status === "downloading" || zipState.status === "zipping" ? "..." : "Image"}
           </Button>
-          {scene.voiceover && (
-            <Button variant="outline" size="sm" onClick={copyScript} className="gap-1.5">
-              <Copy className="h-3.5 w-3.5" />
-              Copy Script
+          {onRegenerate && (
+            <Button variant="outline" size="sm" onClick={onRegenerate} className="gap-1.5">
+              <RefreshCw className="h-4 w-4" />
+              Regenerate
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={onNewProject} className="gap-1.5">
-            New Project
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (exportState.videoUrl) {
+                navigator.clipboard.writeText(exportState.videoUrl).then(
+                  () => toast({ title: "Link copied!" }),
+                  () => {}
+                );
+              }
+            }}
+            disabled={!exportState.videoUrl}
+            className="gap-1.5"
+          >
+            <Share2 className="h-3.5 w-3.5" />
+            Share
           </Button>
         </div>
       </div>

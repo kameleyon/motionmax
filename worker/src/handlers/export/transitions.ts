@@ -135,16 +135,21 @@ async function pairwiseCrossfade(
       `${opts.transition} at ${offset.toFixed(1)}s`
     );
 
-    // VIDEO: xfade visual transition
-    // AUDIO: clip1 trimmed to offset + faded out, clip2 faded in, CONCATENATED (no overlap)
-    const audioTrimEnd = offset;
-    const audioFadeOutStart = Math.max(0, audioTrimEnd - audioFade);
+    // VIDEO: xfade visual transition at the offset point
+    // AUDIO: clip1 plays in FULL up to the transition point (no early trim),
+    //        then fades out gently. Clip2 fades in. Audio tracks are concatenated
+    //        with ZERO overlap — voiceovers never cut mid-word.
+    //
+    // The 1s audio padding from muxVideoAudio ensures the voiceover finishes
+    // before the trim point, so only silence gets cut.
+    const audioTrimEnd = offset + 0.3; // Extend 0.3s past transition for safety
+    const audioFadeOutStart = Math.max(0, offset - audioFade);
 
     const filterComplex = [
       // Video: smooth visual transition
       `[0:v][1:v]xfade=transition=${opts.transition}:duration=${opts.duration}:offset=${offset.toFixed(3)}[vout]`,
-      // Audio clip 1: trim to transition point, fade out
-      `[0:a]atrim=0:${audioTrimEnd.toFixed(3)},afade=t=out:st=${audioFadeOutStart.toFixed(3)}:d=${audioFade.toFixed(3)},asetpts=PTS-STARTPTS[a0]`,
+      // Audio clip 1: keep audio slightly past transition point, fade out smoothly
+      `[0:a]atrim=0:${audioTrimEnd.toFixed(3)},afade=t=out:st=${audioFadeOutStart.toFixed(3)}:d=${(audioFade + 0.3).toFixed(3)},asetpts=PTS-STARTPTS[a0]`,
       // Audio clip 2: fade in, play in full
       `[1:a]afade=t=in:d=${audioFade.toFixed(3)},asetpts=PTS-STARTPTS[a1]`,
       // Concatenate audio tracks — ZERO overlap

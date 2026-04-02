@@ -303,11 +303,16 @@ async function imageAudioToClip(
 
 /** Mux video + audio with duration matching.
  *
- *  Stretches or trims video to match audio duration, then merges.
- *  When video is shorter than audio (e.g. 10s video, 15s audio),
- *  the video is looped and then stretched via setpts so the output
- *  covers the full audio duration without cutting audio short.
- *  Uses CRF 23 for reasonable file size. */
+ *  AUDIO IS KING — the audio track is never cut, sped up, or modified.
+ *  The video is stretched/looped to match audio duration + 1s safety padding.
+ *  This ensures voiceovers are never clipped, even with crossfade trimming.
+ *
+ *  Strategy:
+ *    1. Pad audio with 1s silence at the end (safety margin for crossfade)
+ *    2. Target clip duration = audio duration + 1s padding
+ *    3. Loop video if needed, stretch via setpts to fill the full duration
+ *    4. Cut at padded duration so audio has breathing room
+ */
 async function muxVideoAudio(
   videoPath: string,
   audioPath: string,
@@ -321,24 +326,30 @@ async function muxVideoAudio(
     probeDuration(audioPath),
   ]);
 
-  const clipDuration = audioDur;
+  // Pad audio with 1s silence so crossfade trimming never clips the last word
+  const AUDIO_PAD_SECONDS = 1.0;
+  const paddedAudioDur = audioDur + AUDIO_PAD_SECONDS;
+  const clipDuration = paddedAudioDur;
   const ratio = clipDuration / videoDur;
+
   console.log(
-    `[SceneEncoder] Scene ${sceneIndex} mux: video=${videoDur.toFixed(1)}s audio=${audioDur.toFixed(1)}s clip=${clipDuration.toFixed(1)}s ratio=${ratio.toFixed(3)}`
+    `[SceneEncoder] Scene ${sceneIndex} mux: video=${videoDur.toFixed(1)}s audio=${audioDur.toFixed(1)}s ` +
+    `padded=${paddedAudioDur.toFixed(1)}s clip=${clipDuration.toFixed(1)}s ratio=${ratio.toFixed(3)}`
   );
 
-  // When video is shorter than audio, loop the video input so ffmpeg has
-  // enough frames to fill the full audio duration after setpts stretching.
-  // -stream_loop -1 loops the video infinitely; -t cuts at the target duration.
-  const videoInputArgs = videoDur < audioDur
+  // Loop video if it's shorter than the padded audio duration
+  const videoInputArgs = videoDur < clipDuration
     ? ["-stream_loop", "-1", "-i", videoPath]
     : ["-i", videoPath];
 
-  // Single pass: loop (if needed) + stretch video + scale + merge audio
+  // Audio filter: pad with 1s silence at the end
+  const audioFilter = `apad=pad_dur=${AUDIO_PAD_SECONDS}`;
+
   await runFfmpeg([
     ...videoInputArgs,
     "-i", audioPath,
     "-vf", `setpts=${ratio.toFixed(6)}*PTS,${scaleAndPad(config.width, config.height)}`,
+    "-af", audioFilter,
     "-map", "0:v:0",
     "-map", "1:a:0",
     "-c:v", "libx264",

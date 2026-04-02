@@ -303,15 +303,15 @@ async function imageAudioToClip(
 
 /** Mux video + audio with duration matching.
  *
- *  AUDIO IS KING — the audio track is never cut, sped up, or modified.
+ *  AUDIO IS KING — the voiceover is never cut, sped up, or modified.
  *  The video is stretched/looped to match audio duration + 1s safety padding.
  *  This ensures voiceovers are never clipped, even with crossfade trimming.
  *
  *  Strategy:
- *    1. Pad audio with 1s silence at the end (safety margin for crossfade)
- *    2. Target clip duration = audio duration + 1s padding
- *    3. Loop video if needed, stretch via setpts to fill the full duration
- *    4. Cut at padded duration so audio has breathing room
+ *    1. Target clip duration = audio duration + 1s padding
+ *    2. Loop video if needed, stretch via setpts to fill the full duration
+ *    3. Generate silent audio to fill the gap between voiceover end and clip end
+ *    4. The extra 1s is pure silence — crossfade trims into silence, not speech
  */
 async function muxVideoAudio(
   videoPath: string,
@@ -326,32 +326,38 @@ async function muxVideoAudio(
     probeDuration(audioPath),
   ]);
 
-  // Pad audio with 1s silence so crossfade trimming never clips the last word
+  // Add 1s safety padding so crossfade trimming cuts silence, not speech
   const AUDIO_PAD_SECONDS = 1.0;
-  const paddedAudioDur = audioDur + AUDIO_PAD_SECONDS;
-  const clipDuration = paddedAudioDur;
+  const clipDuration = audioDur + AUDIO_PAD_SECONDS;
   const ratio = clipDuration / videoDur;
 
   console.log(
     `[SceneEncoder] Scene ${sceneIndex} mux: video=${videoDur.toFixed(1)}s audio=${audioDur.toFixed(1)}s ` +
-    `padded=${paddedAudioDur.toFixed(1)}s clip=${clipDuration.toFixed(1)}s ratio=${ratio.toFixed(3)}`
+    `clip=${clipDuration.toFixed(1)}s ratio=${ratio.toFixed(3)}`
   );
 
-  // Loop video if it's shorter than the padded audio duration
+  // Loop video if it's shorter than the target clip duration
   const videoInputArgs = videoDur < clipDuration
     ? ["-stream_loop", "-1", "-i", videoPath]
     : ["-i", videoPath];
 
-  // Audio filter: pad with 1s silence at the end
-  const audioFilter = `apad=pad_dur=${AUDIO_PAD_SECONDS}`;
-
+  // Use the real audio + a silent audio source, then overlay them.
+  // The silent source ensures the audio track extends to clipDuration
+  // without using apad (which can fail on non-standard channel layouts).
   await runFfmpeg([
     ...videoInputArgs,
     "-i", audioPath,
+    "-f", "lavfi", "-i", `anullsrc=r=44100:cl=stereo`,
+    "-filter_complex",
+    [
+      // Normalize audio to stereo 44100Hz, then concat with silence to fill duration
+      `[1:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo[speech]`,
+      `[2:a]atrim=0:${AUDIO_PAD_SECONDS.toFixed(1)}[silence]`,
+      `[speech][silence]concat=n=2:v=0:a=1[aout]`,
+    ].join(";"),
     "-vf", `setpts=${ratio.toFixed(6)}*PTS,${scaleAndPad(config.width, config.height)}`,
-    "-af", audioFilter,
     "-map", "0:v:0",
-    "-map", "1:a:0",
+    "-map", "[aout]",
     "-c:v", "libx264",
     "-preset", "ultrafast",
     "-crf", "23",

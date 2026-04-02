@@ -123,21 +123,21 @@ async function runCinematicAudio(projectId: string, generationId: string, sceneC
   console.log(LOG, "Audio phase complete");
 }
 
-/** Two-phase visuals: all images first, then all videos.
+/** Two-phase visuals: all images first (all at once), then all videos.
  *
- *  Phase A: Generate all images in parallel batches of 4
+ *  Phase A: Generate ALL images in parallel (all scenes at once)
  *  Phase B: Generate all videos in parallel batches of 4
- *           (Grok Video I2V — each scene uses its own image only)
+ *           (Kling I2V with end_image transitions)
  */
 async function runCinematicVisuals(projectId: string, generationId: string, sceneCount: number, ctx: PipelineContext) {
   console.log(LOG, "Starting visuals: images → videos", { sceneCount });
   ctx.setState((prev) => ({ ...prev, progress: 35, statusMessage: "Audio complete. Generating images..." }));
 
-  const BATCH_SIZE = 4;
+  const VIDEO_BATCH_SIZE = 4;
   let completedImages = 0;
   let completedVideos = 0;
 
-  // ── Phase A: All images ──────────────────────────────────────────
+  // ── Phase A: ALL images in parallel ─────────────────────────────
   const processImage = async (i: number) => {
     const now = Date.now();
     if (now - lastRateLimitTime < GLOBAL_COOLDOWN_MS) {
@@ -167,13 +167,11 @@ async function runCinematicVisuals(projectId: string, generationId: string, scen
     }));
   };
 
-  for (let start = 0; start < sceneCount; start += BATCH_SIZE) {
-    const end = Math.min(start + BATCH_SIZE, sceneCount);
-    const batch = [];
-    for (let i = start; i < end; i++) batch.push(processImage(i));
-    console.log(LOG, `Image batch ${start + 1}–${end}`);
-    await Promise.allSettled(batch);
-  }
+  // Fire all images at once (no batching)
+  const allImagePromises = [];
+  for (let i = 0; i < sceneCount; i++) allImagePromises.push(processImage(i));
+  console.log(LOG, `All ${sceneCount} images dispatched in parallel`);
+  await Promise.allSettled(allImagePromises);
 
   // Retry missing images (1 round)
   await retryMissingImages(generationId, sceneCount, ctx, projectId);
@@ -207,8 +205,8 @@ async function runCinematicVisuals(projectId: string, generationId: string, scen
     }));
   };
 
-  for (let start = 0; start < sceneCount; start += BATCH_SIZE) {
-    const end = Math.min(start + BATCH_SIZE, sceneCount);
+  for (let start = 0; start < sceneCount; start += VIDEO_BATCH_SIZE) {
+    const end = Math.min(start + VIDEO_BATCH_SIZE, sceneCount);
     const batch = [];
     for (let i = start; i < end; i++) batch.push(processVideo(i));
     console.log(LOG, `Video batch ${start + 1}–${end}`);

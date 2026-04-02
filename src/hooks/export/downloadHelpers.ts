@@ -116,20 +116,38 @@ export async function downloadVideo(url: string, filename = "video.mp4", userGes
   console.log(LOG, "Starting download", { filename, isIOS, isAndroid, isSafari, isMacSafari, isMobile, userGesture });
 
   try {
-    // ── iOS (Safari + Chrome): open URL directly ──
-    // iOS cannot download files via blob or anchor. Opening the URL triggers
-    // the native video player where the user can tap share → Save Video.
-    // This MUST happen synchronously from the user gesture — no await before it.
+    // ── iOS (Safari + Chrome): use native share sheet ──
+    // iOS cannot download files via blob or anchor. navigator.share with a URL
+    // shows the native share sheet where the user can tap "Save Video".
     if (isIOS) {
-      console.log(LOG, "iOS: opening URL directly for native save");
+      if (navigator.share) {
+        try {
+          console.log(LOG, "iOS: using share sheet for save");
+          await navigator.share({ url, title: filename });
+          return;
+        } catch (e: any) {
+          if (e?.name === "AbortError") return; // user cancelled
+          console.warn(LOG, "iOS: share sheet failed, opening in new tab:", e);
+        }
+      }
+      // Fallback: open in new tab (user can long-press to save)
+      console.log(LOG, "iOS: fallback to new tab");
       window.open(url, "_blank");
       return;
     }
 
-    // ── Android: open URL directly ──
-    // Android Chrome's download manager handles direct URLs reliably.
-    // Blob downloads often fail on older Android or low-memory devices.
+    // ── Android: use native share sheet → direct link fallback ──
     if (isAndroid) {
+      if (navigator.share) {
+        try {
+          console.log(LOG, "Android: using share sheet for save");
+          await navigator.share({ url, title: filename });
+          return;
+        } catch (e: any) {
+          if (e?.name === "AbortError") return;
+          console.warn(LOG, "Android: share sheet failed, trying direct link:", e);
+        }
+      }
       console.log(LOG, "Android: direct link download");
       triggerDirectDownload(url, filename);
       return;

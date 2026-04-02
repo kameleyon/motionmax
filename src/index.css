@@ -19,9 +19,9 @@
     --brand-aqua-dark: 186 85% 35%; /* #0D99A8 - Deep Aqua */
     --brand-aqua: 184 85% 44%; /* #11C4D0 - Primary Aqua */
     --brand-aqua-light: 184 75% 55%; /* #3DD4E0 - Light Aqua */
-    --brand-gold-dark: 45 90% 45%; /* #D4A929 - Deep Gold */
-    --brand-gold: 45 90% 55%; /* #F2C144 - Primary Gold */
-    --brand-gold-light: 45 85% 65%; /* #F5D06C - Light Gold */
+    --brand-gold-dark: 45 67% 50%; /* Deep Gold */
+    --brand-gold: 45 67% 68%; /* #e4c875 - Primary Gold */
+    --brand-gold-light: 45 67% 78%; /* Light Gold */
 
     /* Semantic Tokens - Light Mode */
     --background: 0 0% 99%;
@@ -45,11 +45,11 @@
     --muted-foreground: 200 9% 35%;
 
     /* Accent - Gold */
-    --accent: 45 90% 55%;
+    --accent: 45 67% 68%;
     --accent-foreground: 200 9% 10%;
 
     /* Gold tokens for charts and highlights */
-    --gold: 45 90% 55%;
+    --gold: 45 67% 68%;
     --gold-foreground: 200 9% 10%;
 
     /* Warning - Unified amber */
@@ -85,15 +85,15 @@
 
     /* Chart colors - Aqua and Gold palette */
     --chart-1: 184 85% 44%; /* Aqua */
-    --chart-2: 45 90% 55%; /* Gold */
+    --chart-2: 45 67% 68%; /* Gold */
     --chart-3: 184 75% 60%; /* Light Aqua */
-    --chart-4: 45 85% 65%; /* Light Gold */
+    --chart-4: 45 67% 78%; /* Light Gold */
     --chart-5: 186 85% 35%; /* Deep Aqua */
   }
 
   .dark {
-    /* Dark Mode - Aqua & Gold - Using #0F1112 base */
-    --background: 200 9% 6%;
+    /* Dark Mode - Aqua & Gold - Using #040a0e base */
+    --background: 204 56% 4%;
     --foreground: 0 0% 96%;
 
     /* Cards slightly lighter for visibility */
@@ -115,11 +115,11 @@
     --muted-foreground: 200 8% 60%;
 
     /* Accent - Gold (brighter in dark mode) */
-    --accent: 45 90% 60%;
+    --accent: 45 67% 72%;
     --accent-foreground: 200 9% 10%;
 
     /* Gold tokens */
-    --gold: 45 90% 60%;
+    --gold: 45 67% 72%;
     --gold-foreground: 200 9% 10%;
 
     /* Warning - Unified amber */
@@ -153,9 +153,9 @@
 
     /* Chart colors - Aqua and Gold palette (brighter in dark mode) */
     --chart-1: 184 85% 50%; /* Brighter Aqua */
-    --chart-2: 45 90% 60%; /* Brighter Gold */
+    --chart-2: 45 67% 72%; /* Brighter Gold */
     --chart-3: 184 75% 65%; /* Light Aqua */
-    --chart-4: 45 85% 70%; /* Light Gold */
+    --chart-4: 45 67% 78%; /* Light Gold */
     --chart-5: 186 85% 40%; /* Deep Aqua */
   }
 }

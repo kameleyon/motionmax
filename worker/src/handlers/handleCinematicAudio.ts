@@ -56,7 +56,7 @@ function inferStyleInstruction(voiceover: string): string {
     return "Speak with curiosity and intrigue, inviting the listener to think";
 
   // Default: viral social media energy
-  return "Speak with raw social media energy, punchy pacing, dramatic pauses for emphasis, hype moments that hit like a plot twist, vocal reactions like gasps and laughs and 'BRO WHAT,' emotional peaks and valleys, whisper-to-shout dynamics, and the unhinged confidence of a creator who KNOWS this take is about to go viral.";
+  return "Speak with raw social media energy, punchy pacing, dramatic pauses for emphasis, hype moments that hit like a plot twist, enthusiast, energetic and mysterious, witty and fun, showing all kind of emotion matching the context";
 }
 
 export async function handleCinematicAudio(

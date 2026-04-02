@@ -90,10 +90,16 @@ const STARTER_PERKS = [
 ];
 
 export function AppSidebar() {
-  const { state, isMobile, toggleSidebar } = useSidebar();
+  const { state, isMobile, toggleSidebar, setOpenMobile } = useSidebar();
   const isCollapsed = state === "collapsed" && !isMobile;
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
+
+  /** Navigate and close the mobile sidebar */
+  const navTo = (path: string) => {
+    navigate(path);
+    if (isMobile) setOpenMobile(false);
+  };
   const { isAdmin } = useAdminAuth();
   const { plan, cancelAtPeriodEnd, createCheckout, isLoading: subscriptionLoading } = useSubscription();
   const navigate = useNavigate();
@@ -237,16 +243,16 @@ export function AppSidebar() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56 rounded-xl border-border/50 shadow-sm">
-                <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-accent focus:text-accent-foreground" onClick={() => { navigate("/settings"); toggleSidebar(); }}>
+                <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-accent focus:text-accent-foreground" onClick={() => navTo("/settings")}>
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Settings</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-accent focus:text-accent-foreground" onClick={() => { navigate("/usage"); toggleSidebar(); }}>
+                <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-accent focus:text-accent-foreground" onClick={() => navTo("/usage")}>
                   <History className="mr-2 h-4 w-4" />
                   <span>Usage & Billing</span>
                 </DropdownMenuItem>
                 {isAdmin && (
-                  <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-accent focus:text-accent-foreground" onClick={() => { navigate("/admin"); toggleSidebar(); }}>
+                  <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-accent focus:text-accent-foreground" onClick={() => navTo("/admin")}>
                     <Shield className="mr-2 h-4 w-4" />
                     <span>Admin</span>
                   </DropdownMenuItem>
@@ -295,7 +301,7 @@ export function AppSidebar() {
         {(!isCollapsed || isMobile) && (
           <div>
             <ProjectSearch onSelectProject={(projectId) => {
-              navigate(`/app/create?project=${projectId}`);
+              navTo(`/app/create?project=${projectId}`);
             }} />
           </div>
         )}
@@ -311,7 +317,7 @@ export function AppSidebar() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <SidebarMenuButton
-                      onClick={() => navigate("/app")}
+                      onClick={() => navTo("/app")}
                       className={`cursor-pointer rounded-lg py-2.5 transition-colors ${
                         isActiveRoute("/app") 
                           ? "bg-primary/10 text-primary" 
@@ -331,7 +337,7 @@ export function AppSidebar() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <SidebarMenuButton
-                      onClick={() => navigate("/app/create?mode=doc2video")}
+                      onClick={() => navTo("/app/create?mode=doc2video")}
                       className={`cursor-pointer rounded-lg py-2.5 transition-colors ${
                         isCreateRoute && currentMode === "doc2video" && !new URLSearchParams(location.search).has("project")
                           ? "bg-primary/10 text-primary" 
@@ -351,7 +357,7 @@ export function AppSidebar() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <SidebarMenuButton
-                      onClick={() => navigate("/app/create?mode=storytelling")}
+                      onClick={() => navTo("/app/create?mode=storytelling")}
                       className={`cursor-pointer rounded-lg py-2.5 transition-colors ${
                         isCreateRoute && currentMode === "storytelling" && !new URLSearchParams(location.search).has("project")
                           ? "bg-primary/10 text-primary" 
@@ -371,7 +377,7 @@ export function AppSidebar() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <SidebarMenuButton
-                      onClick={() => navigate("/app/create?mode=smartflow")}
+                      onClick={() => navTo("/app/create?mode=smartflow")}
                       className={`cursor-pointer rounded-lg py-2.5 transition-colors ${
                         isCreateRoute && currentMode === "smartflow" && !new URLSearchParams(location.search).has("project")
                           ? "bg-primary/10 text-primary" 
@@ -394,7 +400,7 @@ export function AppSidebar() {
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <SidebarMenuButton
-                          onClick={() => canAccessCinematic && navigate("/app/create?mode=cinematic")}
+                          onClick={() => canAccessCinematic && navTo("/app/create?mode=cinematic")}
                           className={`rounded-lg py-2.5 transition-colors ${
                             !canAccessCinematic
                               ? "opacity-40 cursor-not-allowed"
@@ -426,7 +432,7 @@ export function AppSidebar() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <SidebarMenuButton
-                      onClick={() => navigate("/voice-lab")}
+                      onClick={() => navTo("/voice-lab")}
                       className={`cursor-pointer rounded-lg py-2.5 transition-colors ${
                         isActiveRoute("/voice-lab") 
                           ? "bg-primary/10 text-primary" 
@@ -446,7 +452,7 @@ export function AppSidebar() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <SidebarMenuButton
-                      onClick={() => navigate("/projects")}
+                      onClick={() => navTo("/projects")}
                       className={`cursor-pointer rounded-lg py-2.5 transition-colors ${
                         isActiveRoute("/projects") 
                           ? "bg-primary/10 text-primary" 
@@ -504,7 +510,7 @@ export function AppSidebar() {
                       <SidebarMenuItem key={project.id} className="group relative">
                       <SidebarMenuButton
                           onClick={() => {
-                            navigate(`/app/create?mode=${projectMode}&project=${project.id}`);
+                            navTo(`/app/create?mode=${projectMode}&project=${project.id}`);
                           }}
                           className={`w-full cursor-pointer rounded-lg px-3 py-2 sm:py-2.5 transition-colors pr-8 ${
                             isActiveProject 
@@ -573,16 +579,16 @@ export function AppSidebar() {
               {isCollapsed && <TooltipContent side="right">Account</TooltipContent>}
             </Tooltip>
             <DropdownMenuContent align="start" side="top" className="w-56 rounded-xl border-border/50 shadow-sm">
-              <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-accent focus:text-accent-foreground" onClick={() => navigate("/settings")}>
+              <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-accent focus:text-accent-foreground" onClick={() => navTo("/settings")}>
                 <Settings className="mr-2 h-4 w-4" />
                 <span>Settings</span>
               </DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-accent focus:text-accent-foreground" onClick={() => navigate("/usage")}>
+              <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-accent focus:text-accent-foreground" onClick={() => navTo("/usage")}>
                 <History className="mr-2 h-4 w-4" />
                 <span>Usage & Billing</span>
               </DropdownMenuItem>
               {isAdmin && (
-                <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-accent focus:text-accent-foreground" onClick={() => navigate("/admin")}>
+                <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-accent focus:text-accent-foreground" onClick={() => navTo("/admin")}>
                   <Shield className="mr-2 h-4 w-4" />
                   <span>Admin</span>
                 </DropdownMenuItem>

@@ -268,8 +268,9 @@ export async function handleExportVideo(
       }
 
       const pct = Math.floor(10 + (end / scenes.length) * 45);
-      await supabase.from("video_generation_jobs").update({ progress: pct }).eq("id", jobId);
+      sceneProgress.overallMessage = `Encoding scenes ${end}/${scenes.length}...`;
       await flushSceneProgress(jobId);
+      await supabase.from("video_generation_jobs").update({ progress: pct, updated_at: new Date().toISOString() }).eq("id", jobId);
 
       console.log(`[ExportVideo] Batch ${start}-${end - 1} done (${pct}%)`);
     }
@@ -323,9 +324,13 @@ export async function handleExportVideo(
         onPairComplete: async (completed, total) => {
           // Progress range for crossfade: 55% → 80%
           const pct = Math.floor(55 + (completed / total) * 25);
-          sceneProgress.overallMessage = `Crossfade transition ${completed}/${total}...`;
+          sceneProgress.overallMessage = `Stitching scenes ${completed}/${total}...`;
+          sceneProgress.overallPhase = "concatenating";
+          // Update progress + message in payload together
           await flushSceneProgress(jobId);
-          await supabase.from("video_generation_jobs").update({ progress: pct }).eq("id", jobId);
+          await supabase.from("video_generation_jobs")
+            .update({ progress: pct, updated_at: new Date().toISOString() })
+            .eq("id", jobId);
         },
       });
 
@@ -355,22 +360,26 @@ export async function handleExportVideo(
     // Free individual scene MP4s
     for (const f of clipPaths) removeFiles(f);
 
-    await supabase.from("video_generation_jobs").update({ progress: 80 }).eq("id", jobId);
+    sceneProgress.overallMessage = "Scenes stitched. Compressing...";
+    await flushSceneProgress(jobId);
+    await supabase.from("video_generation_jobs").update({ progress: 80, updated_at: new Date().toISOString() }).eq("id", jobId);
 
     // ── 3. Compress if too large ────────────────────────────────────
 
     sceneProgress.overallPhase = "compressing";
-    sceneProgress.overallMessage = "Compressing final video if needed...";
+    sceneProgress.overallMessage = "Compressing final video...";
     await flushSceneProgress(jobId);
 
     const uploadPath = await compressIfNeeded(finalOutputPath, tempDir);
 
-    await supabase.from("video_generation_jobs").update({ progress: 90 }).eq("id", jobId);
+    sceneProgress.overallMessage = "Uploading final video...";
+    await flushSceneProgress(jobId);
+    await supabase.from("video_generation_jobs").update({ progress: 90, updated_at: new Date().toISOString() }).eq("id", jobId);
 
     // ── 4. Upload final video ───────────────────────────────────────
 
     sceneProgress.overallPhase = "uploading";
-    sceneProgress.overallMessage = "Uploading final video...";
+    sceneProgress.overallMessage = "Uploading to cloud storage...";
     await flushSceneProgress(jobId);
 
     const finalFileName = `export_${project_id}_${Date.now()}.mp4`;

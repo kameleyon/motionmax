@@ -7,9 +7,9 @@ import fs from "fs";
 import { runFfmpeg, X264_MEM_FLAGS } from "./ffmpegCmd.js";
 
 /** Files above this size trigger a compression re-encode before upload.
- *  The videos bucket limit is 2 GB — compress anything over 1.5 GB
- *  to leave headroom for container overhead. */
-const COMPRESS_THRESHOLD_BYTES = 1.5 * 1024 * 1024 * 1024; // 1.5 GB
+ *  Supabase Storage rejects files over ~500 MB even with TUS.
+ *  Compress anything over 400 MB to stay safely under the limit. */
+const COMPRESS_THRESHOLD_BYTES = 400 * 1024 * 1024; // 400 MB
 
 /** Compression timeout — 20 minutes for very large files. */
 const COMPRESS_TIMEOUT_MS = 20 * 60 * 1000;

@@ -1,16 +1,12 @@
 /**
  * Platform-aware video download and share helpers.
- * Handles iOS Safari/Chrome, Android, macOS Safari, and desktop strategies.
  *
- * Key browser considerations:
- *   - Safari (macOS): Blob downloads fail silently on large files. Use direct
- *     link with Content-Disposition or window.open fallback.
- *   - Safari (iOS): No filesystem download. Must use Web Share API.
- *   - Chrome/Edge/Firefox: Blob anchor works reliably for all sizes.
- *   - Firefox: Respects `a.download` attribute on same-origin and blob URLs.
- *   - All browsers: `a.click()` must happen in the same task as the user
- *     gesture or within a short microtask. Long async gaps (e.g. fetching a
- *     200MB file) break the gesture chain and browsers silently block the click.
+ * Browser strategies:
+ *   - iOS Safari/Chrome: Open URL directly → native video player with share/save
+ *   - Android Chrome: Open URL directly → native download manager
+ *   - macOS Safari: Direct anchor link (avoids blob memory issues on large files)
+ *   - Desktop Chrome/Edge/Firefox: Blob anchor download (reliable for any size)
+ *   - Fallback: window.open in new tab
  */
 
 const LOG = "[Export:Download]";
@@ -25,10 +21,9 @@ function detectPlatform() {
   const isAndroid = /Android/i.test(ua);
   const isSafari = /Safari/i.test(ua) && !/Chrome|CriOS|FxiOS|Edg/i.test(ua);
   const isMacSafari = /Macintosh/i.test(ua) && isSafari;
-  const isIOSChrome = isIOS && /CriOS/i.test(ua);
   const isFirefox = /Firefox/i.test(ua);
   const isMobile = isIOS || isAndroid;
-  return { isIOS, isAndroid, isSafari, isMacSafari, isIOSChrome, isFirefox, isMobile };
+  return { isIOS, isAndroid, isSafari, isMacSafari, isFirefox, isMobile };
 }
 
 /** Fetch video URL as a Blob (works for cross-origin Supabase Storage URLs) */
@@ -54,16 +49,14 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
 }
 
 /**
- * Open the URL directly in a new tab / trigger native download.
- * Safari handles this reliably for large files — the browser's native
- * download manager takes over instead of loading into JS memory.
+ * Open the URL directly — lets the browser's native handler take over.
+ * Safari shows the video player with share/save. Chrome triggers download manager.
  */
 function triggerDirectDownload(url: string, filename: string): void {
-  // Try anchor with download attribute first (same-origin or CORS-allowed)
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
-  a.target = "_blank";        // fallback: opens in new tab if download blocked
+  a.target = "_blank";
   a.rel = "noopener";
   a.style.display = "none";
   document.body.appendChild(a);
@@ -81,11 +74,25 @@ export async function shareVideo(url: string, filename = "video.mp4"): Promise<b
   try {
     shareInProgress = true;
     console.log(LOG, "Attempting share", { filename });
+
+    // Try sharing the URL directly first (no blob download needed)
+    if (navigator.share) {
+      try {
+        await navigator.share({ url, title: filename });
+        console.log(LOG, "Share URL successful");
+        return true;
+      } catch (e: any) {
+        if (e?.name === "AbortError") return true;
+        console.log(LOG, "URL share failed, trying file share");
+      }
+    }
+
+    // Fallback: download as blob and share as file
     const blob = await fetchAsBlob(url);
     const file = new File([blob], filename, { type: "video/mp4" });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({ files: [file], title: filename });
-      console.log(LOG, "Share successful");
+      console.log(LOG, "Share file successful");
       return true;
     }
     console.log(LOG, "Share API not available for this content");
@@ -100,61 +107,48 @@ export async function shareVideo(url: string, filename = "video.mp4"): Promise<b
 /**
  * Download video with platform-specific strategies.
  *
- * @param userGesture Pass true when called from a click handler (enables Share API on mobile).
- *                    Auto-downloads from useEffect should pass false to avoid gesture errors.
+ * @param userGesture Pass true when called from a click handler.
  */
 export async function downloadVideo(url: string, filename = "video.mp4", userGesture = false): Promise<void> {
   if (!url) return;
 
-  const { isIOS, isAndroid, isSafari, isMacSafari, isFirefox, isMobile } = detectPlatform();
-  console.log(LOG, "Starting download", { filename, isIOS, isAndroid, isSafari, isMacSafari, isFirefox, isMobile, userGesture });
+  const { isIOS, isAndroid, isSafari, isMacSafari, isMobile } = detectPlatform();
+  console.log(LOG, "Starting download", { filename, isIOS, isAndroid, isSafari, isMacSafari, isMobile, userGesture });
 
   try {
-    // ── Mobile (iOS + Android): Web Share API for saving files ──
-    if (isMobile) {
-      const blob = await fetchAsBlob(url);
-      const file = new File([blob], filename, { type: "video/mp4" });
-      if (!shareInProgress && navigator.share) {
-        try {
-          shareInProgress = true;
-          console.log(LOG, "Mobile: using Share API to save file");
-          await navigator.share({ files: [file], title: filename });
-          console.log(LOG, "Mobile: Share API save successful");
-          return;
-        } catch (shareErr: any) {
-          if (shareErr?.name === 'AbortError') {
-            console.log(LOG, "Mobile: user cancelled share dialog");
-            return;
-          }
-          console.warn(LOG, "Mobile: Share API failed, trying blob download:", shareErr);
-        } finally {
-          shareInProgress = false;
-        }
-      }
-      // Fallback: blob anchor (may open in browser on iOS)
-      console.log(LOG, "Mobile: fallback blob anchor download");
-      triggerBlobDownload(blob, filename);
+    // ── iOS (Safari + Chrome): open URL directly ──
+    // iOS cannot download files via blob or anchor. Opening the URL triggers
+    // the native video player where the user can tap share → Save Video.
+    // This MUST happen synchronously from the user gesture — no await before it.
+    if (isIOS) {
+      console.log(LOG, "iOS: opening URL directly for native save");
+      window.open(url, "_blank");
       return;
     }
 
-    // ── macOS Safari: direct link download (avoid blob for large files) ──
-    // Safari silently fails on large blob downloads because the fetch-to-blob
-    // breaks the user gesture chain. Instead, trigger the browser's native
-    // download manager via a direct link.
-    if (isMacSafari) {
-      console.log(LOG, "macOS Safari: direct link download (avoids blob memory issue)");
+    // ── Android: open URL directly ──
+    // Android Chrome's download manager handles direct URLs reliably.
+    // Blob downloads often fail on older Android or low-memory devices.
+    if (isAndroid) {
+      console.log(LOG, "Android: direct link download");
       triggerDirectDownload(url, filename);
       return;
     }
 
-    // ── Desktop Chrome, Edge, Firefox, Opera: blob anchor download ──
-    // These browsers handle blob downloads reliably for any file size.
+    // ── macOS Safari: direct link (avoids blob memory issue) ──
+    if (isMacSafari) {
+      console.log(LOG, "macOS Safari: direct link download");
+      triggerDirectDownload(url, filename);
+      return;
+    }
+
+    // ── Desktop Chrome, Edge, Firefox, Opera: blob anchor ──
     console.log(LOG, "Desktop: blob anchor download");
     const blob = await fetchAsBlob(url);
     triggerBlobDownload(blob, filename);
 
   } catch (e) {
-    // Last resort: open in new tab so the user can right-click → Save As
+    // Last resort: open in new tab
     console.warn(LOG, "Download failed, opening in new tab:", e);
     window.open(url, "_blank");
   }

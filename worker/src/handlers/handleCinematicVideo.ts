@@ -176,13 +176,30 @@ export async function handleCinematicVideo(
   const apiKey = (process.env.HYPEREAL_API_KEY || "").trim();
   if (!apiKey) throw new Error("HYPEREAL_API_KEY not configured");
 
-  // Add morph timing instruction to prompt when using end_image transitions
-  const morphInstruction = endImageUrl
-    ? `\n\nTRANSITION: The scene MUST transition/morph to the next scene's image ONLY in the LAST 2-3 seconds. ` +
-      `For the first 7-8 seconds, focus entirely on the current scene's action matching the voiceover. ` +
-      `Do NOT start the morph/transition early or in the middle of the clip.`
-    : "";
-  const finalPrompt = videoPrompt + morphInstruction;
+  // Add scene-specific instructions based on transition type
+  let sceneInstruction = "";
+  if (endImageUrl) {
+    // Scenes WITH transition to next scene
+    sceneInstruction =
+      `\n\nTRANSITION RULES (CRITICAL):` +
+      `\n- For the first 7-8 seconds: focus ENTIRELY on the current scene's action matching the voiceover.` +
+      `\n- ONLY in the LAST 2-3 seconds: begin a NATURAL transition to the next scene.` +
+      `\n- The transition MUST be a natural camera movement (pan away, fade to new setting, walk through doorway, turn a corner).` +
+      `\n- NEVER morph a person's body into another person or object. NO body contortions, NO limbs stretching, NO faces melting into other faces.` +
+      `\n- NEVER make characters fly, levitate, or defy physics unless the story explicitly calls for it.` +
+      `\n- Characters must maintain physical integrity — heads face forward, bodies stay proportioned.` +
+      `\n- Think FILM CUT, not shapeshifting. The camera moves AWAY from the current scene and TOWARD the next.`;
+  } else {
+    // LAST scene — no transition, must end naturally
+    sceneInstruction =
+      `\n\nFINAL SCENE RULES (CRITICAL):` +
+      `\n- This is the LAST scene. There is NO next scene to transition to.` +
+      `\n- Generate FORWARD-MOVING action that reaches a natural conclusion by the end of the 10 seconds.` +
+      `\n- Do NOT create a looping animation. Do NOT have the camera or subject return to its starting position.` +
+      `\n- End with a DECISIVE moment: character walks away into distance, camera pulls back to wide shot, fade to a closing frame.` +
+      `\n- The motion should SLOW DOWN naturally in the last 2 seconds, coming to a satisfying visual rest.`;
+  }
+  const finalPrompt = videoPrompt + sceneInstruction;
 
   const transitionInfo = endImageUrl ? `→ scene ${sceneIndex + 1}` : "(no end_image)";
   console.log(

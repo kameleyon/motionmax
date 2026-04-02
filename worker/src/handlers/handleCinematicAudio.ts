@@ -55,8 +55,8 @@ function inferStyleInstruction(voiceover: string): string {
   if (lower.includes("question") || lower.includes("what if") || lower.includes("why"))
     return "Speak with curiosity and intrigue, inviting the listener to think";
 
-  // Default: energetic documentary narrator
-  return "Speak with natural enthusiasm, varied pacing, and compelling storytelling energy";
+  // Default: viral social media energy
+  return "Speak with raw social media energy, punchy pacing, dramatic pauses for emphasis, hype moments that hit like a plot twist, vocal reactions like gasps and laughs and 'BRO WHAT,' emotional peaks and valleys, whisper-to-shout dynamics, and the unhinged confidence of a creator who KNOWS this take is about to go viral.";
 }
 
 export async function handleCinematicAudio(
@@ -150,7 +150,7 @@ export async function handleCinematicAudio(
     const voiceName = generation.projects?.voice_name || "Nova";
     const styleInstruction = inferStyleInstruction(voiceover);
 
-    console.log(`[CinematicAudio] Scene ${sceneIndex}: Qwen3 TTS speaker=${voiceName} lang=${resolvedLanguage} style="${styleInstruction.substring(0, 50)}"`);
+    console.log(`[CinematicAudio] Scene ${sceneIndex}: Qwen3 TTS speaker=${voiceName} lang=${resolvedLanguage} style="${styleInstruction}"`);
 
     result = await generateQwen3TTS(
       {

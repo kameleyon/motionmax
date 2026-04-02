@@ -198,11 +198,12 @@ GOOD: ✓ "Inside a cluttered home kitchen at 2AM, dirty dishes in the sink, dim
 ${p.length === "short" ? `
 ⚠️ YOUTUBE SHORTS FORMAT — HARD LIMITS:
 - The ENTIRE video MUST be under 2 minutes. NEVER exceed 2 minutes.
-- EACH scene voiceover: 8–10 seconds MAX (${targetWords} words MAXIMUM at ~2.5 words/sec)
-- COUNT YOUR WORDS. If a voiceover exceeds ${targetWords} words, the generation WILL FAIL.
-- Write TIGHT, punchy narration. Cut filler words ruthlessly.
-` : `- EACH SCENE VOICEOVER: 8-10 seconds (approx ${targetWords} words at ~2.5 words/sec)
-`}- MAX per scene: ${cfg.maxPerScene} seconds
+` : ``}
+⚠️ VOICEOVER LENGTH — EXACTLY 10 SECONDS PER SCENE — ZERO TOLERANCE:
+- EACH scene voiceover MUST be EXACTLY ${targetWords} words. NOT 26. NOT 30. EXACTLY ${targetWords}.
+- At 2.5 words/sec, ${targetWords} words = EXACTLY 10 seconds of audio.
+- COUNT YOUR WORDS FOR EVERY SCENE. If ANY voiceover exceeds ${targetWords} words, the ENTIRE generation FAILS.
+- Write TIGHT, punchy narration. Cut filler words ruthlessly. Every word must earn its place.
 - Set each scene "duration" to ${cfg.maxPerScene}
 
 === NARRATIVE ARC (10-BEAT STRUCTURE) ===

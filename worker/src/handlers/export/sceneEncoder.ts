@@ -284,7 +284,7 @@ async function imageAudioToClip(
   const silentVidPath = path.join(tempDir, `scene_${sceneIndex}_imgvid.mp4`);
   await imageToSilentClip(imagePath, silentVidPath, audioDur, sceneIndex, config);
 
-  // Merge video + audio (stream-copy video)
+  // Merge video + audio (stream-copy video, re-encode audio to normalize format)
   await runFfmpeg([
     "-i", silentVidPath,
     "-i", audioPath,
@@ -293,6 +293,8 @@ async function imageAudioToClip(
     "-c:v", "copy",
     "-c:a", "aac",
     "-b:a", "128k",
+    "-ar", "44100",
+    "-ac", "2",
     "-movflags", "+faststart",
     outputPath,
   ]);
@@ -399,7 +401,7 @@ async function slideshowFromImages(
   await concatFiles(subClips, slideshowPath, true);
   removeFiles(...subClips);
 
-  // 3. Add audio track (stream-copy video)
+  // 3. Add audio track (stream-copy video, re-encode audio to normalize format)
   await runFfmpeg([
     "-i", slideshowPath,
     "-i", audioPath,
@@ -408,6 +410,8 @@ async function slideshowFromImages(
     "-c:v", "copy",
     "-c:a", "aac",
     "-b:a", "128k",
+    "-ar", "44100",
+    "-ac", "2",
     "-movflags", "+faststart",
     outputPath,
   ]);

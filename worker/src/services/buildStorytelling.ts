@@ -177,5 +177,6 @@ ${buildOutputFormat({
   })}`;
 
   const user = `=== STORY IDEA ===\n${p.storyIdea}\n${inspirationSec}${toneSec}${genreSec}${charGuidance}${brandSec}`;
-  return { system, user, maxTokens: 10000 };
+  const maxTokens = p.length === "presentation" ? 24000 : p.length === "brief" ? 16000 : 10000;
+  return { system, user, maxTokens };
 }

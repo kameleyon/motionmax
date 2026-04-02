@@ -230,10 +230,27 @@ export function extractJsonFromLLMResponse(raw: string, label: string): unknown 
     const openBrackets = (fixedContent.match(/\[/g) || []).length;
     const closeBrackets = (fixedContent.match(/]/g) || []).length;
 
-    // Remove any trailing partial key-value pair (e.g., truncated mid-string)
-    fixedContent = fixedContent.replace(/,\s*"[^"]*"?\s*:?\s*"?[^"]*$/, "");
-    // Also remove trailing comma after cleanup
-    fixedContent = fixedContent.replace(/,\s*$/, "");
+    // Remove trailing partial content from truncated JSON:
+    // 1. If truncated mid-string-value, find the last complete key-value pair
+    // 2. Strip everything after the last complete object/array element
+
+    // Close any unclosed string (truncated mid-value)
+    const quoteCount = (fixedContent.match(/(?<!\\)"/g) || []).length;
+    if (quoteCount % 2 !== 0) {
+      // Odd quotes = truncated inside a string. Find last complete line and trim
+      const lastNewline = fixedContent.lastIndexOf("\n");
+      if (lastNewline > fixedContent.length * 0.5) {
+        fixedContent = fixedContent.substring(0, lastNewline);
+      } else {
+        fixedContent += '"';
+      }
+    }
+
+    // Remove trailing partial key-value pairs and objects
+    fixedContent = fixedContent
+      .replace(/,\s*\{[^}]*$/, "")        // trailing partial object in array
+      .replace(/,\s*"[^"]*"?\s*:?\s*"?[^"]*$/, "")  // trailing partial key-value
+      .replace(/,\s*$/, "");                // trailing comma
 
     // Close unclosed brackets and braces
     for (let i = 0; i < openBrackets - closeBrackets; i++) fixedContent += "]";

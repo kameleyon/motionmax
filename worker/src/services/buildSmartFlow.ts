@@ -113,5 +113,5 @@ ${p.content}
 === EXTRACTION GOAL ===
 Assess the request thoroughly, take the time to understand what exactly it is requested of you. Extract the main key insights that fit the topic, analyze the best way to present the topic based on targeted population, identified key points and visual elements that should be included in the visual content, come up with the full design concept/idea and present the topic based on the requested task in an educational, visually rich format.`;
 
-  return { system, user, maxTokens: 4000 };
+  return { system, user, maxTokens: 8000 };
 }

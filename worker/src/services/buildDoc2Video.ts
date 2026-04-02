@@ -39,7 +39,7 @@ export function buildDoc2VideoPrompt(p: Doc2VideoParams): PromptResult {
   const styleDesc = getStylePrompt(p.style, p.customStyle);
   const dims = getImageDimensions(p.format);
   const includeText = TEXT_OVERLAY_STYLES.includes(p.style.toLowerCase());
-  const maxTokens = p.length === "presentation" ? 12000 : p.length === "brief" ? 10000 : 6000;
+  const maxTokens = p.length === "presentation" ? 24000 : p.length === "brief" ? 16000 : 10000;
 
   const presenterGuidance = p.presenterFocus
     ? `\n=== PRESENTER GUIDANCE ===\n${p.presenterFocus}\n` : "";

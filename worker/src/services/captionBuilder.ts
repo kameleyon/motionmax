@@ -4,13 +4,8 @@
  * Generates word-level timed captions from scene voiceovers and burns them
  * into the exported video via ffmpeg's ass filter.
  *
- * Supports multiple visual styles:
- *   - classic: White text, black outline, bottom center
- *   - bold: Large white text, heavy black border, uppercase
- *   - neon: Colored glow (aqua), dark background
- *   - karaoke: Word-by-word highlight — current word changes color
- *   - minimal: Small gray text, no background, lower third
- *   - box: White text inside colored rounded rectangle
+ * Timing: Uses actual scene clip durations (from audio probe) — NOT the
+ * configured `duration` field — so captions sync with the spoken audio.
  */
 
 import fs from "fs";
@@ -25,7 +20,7 @@ export type CaptionStyle =
   // Text effects
   | "typewriter" | "gradient" | "subtitleBar" | "outlineOnly" | "shadowPop"
   | "handwritten" | "topCenter" | "allCapsGlow"
-  // From caption.png reference
+  // Colorful (from caption.png)
   | "whiteStroke" | "blueStroke" | "redFire" | "orangeGlow"
   | "yellowOutline" | "greenPill" | "goldScript" | "comicPop"
   | "blueWhite" | "redBlack" | "yellowRed";
@@ -39,39 +34,47 @@ export interface CaptionWord {
 export interface SceneCaption {
   sceneIndex: number;
   voiceover: string;
-  startMs: number;   // Scene start time in the final video timeline
-  durationMs: number; // Scene duration in ms
+  startMs: number;
+  durationMs: number;
   words: CaptionWord[];
 }
 
 // ── Word Timing Estimation ─────────────────────────────────────────
 
 /**
- * Estimate word-level timing from voiceover text and scene duration.
- * Distributes words evenly across the duration with natural pauses at punctuation.
+ * Estimate word-level timing from voiceover text and actual clip duration.
+ * Words are distributed proportionally — shorter words get less time,
+ * longer words get more. Punctuation adds natural pauses.
  */
 function estimateWordTimings(voiceover: string, startMs: number, durationMs: number): CaptionWord[] {
   const words = voiceover.trim().split(/\s+/).filter(Boolean);
   if (words.length === 0) return [];
 
-  // Leave 200ms padding at start and end
-  const PAD = 200;
-  const usableDuration = durationMs - PAD * 2;
-  const baseWordDur = usableDuration / words.length;
+  // Leave 300ms at start (TTS ramp-up) and 500ms at end (natural tail)
+  const START_PAD = 300;
+  const END_PAD = 500;
+  const usableDuration = Math.max(durationMs - START_PAD - END_PAD, durationMs * 0.5);
+
+  // Weight words by character length + punctuation pauses
+  const weights = words.map(w => {
+    let weight = w.length;
+    if (/[.!?]$/.test(w)) weight += 4; // sentence end = longer pause
+    if (/[,;:]$/.test(w)) weight += 2; // mid-sentence pause
+    return weight;
+  });
+  const totalWeight = weights.reduce((a, b) => a + b, 0);
 
   const result: CaptionWord[] = [];
-  let cursor = startMs + PAD;
+  let cursor = startMs + START_PAD;
 
   for (let i = 0; i < words.length; i++) {
-    const word = words[i];
-    // Add slight pause after punctuation
-    const endsWithPause = /[.!?,;:]$/.test(word);
-    const wordDur = endsWithPause ? baseWordDur * 1.3 : baseWordDur;
+    const wordDur = (weights[i] / totalWeight) * usableDuration;
+    const GAP = 30; // 30ms gap between words
 
     result.push({
-      text: word,
+      text: words[i],
       startMs: Math.round(cursor),
-      endMs: Math.round(cursor + wordDur * 0.9), // Small gap between words
+      endMs: Math.round(cursor + wordDur - GAP),
     });
     cursor += wordDur;
   }
@@ -81,7 +84,7 @@ function estimateWordTimings(voiceover: string, startMs: number, durationMs: num
 
 // ── ASS Style Definitions ──────────────────────────────────────────
 
-/** ASS color format: &HAABBGGRR (hex, reversed RGB, AA = alpha 00=opaque FF=transparent) */
+/** ASS color format: &HAABBGGRR */
 function assColor(r: number, g: number, b: number, a = 0): string {
   const hex = (n: number) => n.toString(16).padStart(2, "0").toUpperCase();
   return `&H${hex(a)}${hex(b)}${hex(g)}${hex(r)}`;
@@ -97,152 +100,152 @@ const ORANGE = assColor(0xFF, 0x8C, 0x00);
 const BLUE = assColor(0x30, 0x60, 0xE0);
 const GREEN = assColor(0x2E, 0xA8, 0x4E);
 const GRAY = assColor(180, 180, 180);
-const DARK_BG = assColor(0, 0, 0, 0x80);
 
 interface AssStyleDef {
   fontName: string;
   fontSize: number;
   primaryColor: string;
-  secondaryColor: string;   // Used for karaoke highlight
+  secondaryColor: string;
   outlineColor: string;
   backColor: string;
   bold: boolean;
+  italic?: boolean;
   outline: number;
   shadow: number;
-  alignment: number;        // 1=left-bottom, 2=center-bottom, 5=center-top, 8=center-middle
+  alignment: number;  // 2=bottom-center, 8=top-center, 5=middle-center
   marginV: number;
-  borderStyle: number;      // 1=outline+shadow, 3=opaque box
+  borderStyle: number; // 1=outline+shadow, 3=opaque box
   uppercase?: boolean;
 }
 
 const STYLE_DEFS: Record<Exclude<CaptionStyle, "none">, AssStyleDef> = {
-  // ── Core styles ──
+  // ── Core ──
   classic: {
-    fontName: "Arial", fontSize: 48, primaryColor: WHITE, secondaryColor: YELLOW,
+    fontName: "DejaVu Sans", fontSize: 44, primaryColor: WHITE, secondaryColor: YELLOW,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0xA0), bold: true,
-    outline: 2, shadow: 1, alignment: 2, marginV: 40, borderStyle: 1,
+    outline: 2, shadow: 1, alignment: 2, marginV: 60, borderStyle: 1,
   },
   bold: {
-    fontName: "Arial Black", fontSize: 60, primaryColor: WHITE, secondaryColor: YELLOW,
+    fontName: "Liberation Sans", fontSize: 56, primaryColor: WHITE, secondaryColor: YELLOW,
     outlineColor: BLACK, backColor: BLACK, bold: true,
-    outline: 4, shadow: 2, alignment: 2, marginV: 50, borderStyle: 1, uppercase: true,
+    outline: 4, shadow: 2, alignment: 2, marginV: 70, borderStyle: 1, uppercase: true,
   },
   neon: {
-    fontName: "Arial", fontSize: 50, primaryColor: AQUA, secondaryColor: WHITE,
-    outlineColor: assColor(0x08, 0x80, 0x88), backColor: assColor(0, 0, 0, 0x90), bold: true,
-    outline: 3, shadow: 0, alignment: 2, marginV: 40, borderStyle: 3,
+    fontName: "DejaVu Sans", fontSize: 46, primaryColor: AQUA, secondaryColor: WHITE,
+    outlineColor: assColor(0x08, 0x60, 0x68), backColor: assColor(0, 0, 0, 0x90), bold: true,
+    outline: 3, shadow: 0, alignment: 2, marginV: 60, borderStyle: 3,
   },
   karaoke: {
-    fontName: "Arial", fontSize: 48, primaryColor: WHITE, secondaryColor: AQUA,
+    fontName: "DejaVu Sans", fontSize: 44, primaryColor: WHITE, secondaryColor: AQUA,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0xA0), bold: true,
-    outline: 2, shadow: 1, alignment: 2, marginV: 40, borderStyle: 1,
+    outline: 2, shadow: 1, alignment: 2, marginV: 60, borderStyle: 1,
   },
   minimal: {
-    fontName: "Helvetica Neue", fontSize: 36, primaryColor: GRAY, secondaryColor: WHITE,
+    fontName: "DejaVu Sans", fontSize: 34, primaryColor: GRAY, secondaryColor: WHITE,
     outlineColor: assColor(0, 0, 0, 0x60), backColor: assColor(0, 0, 0, 0), bold: false,
-    outline: 1, shadow: 0, alignment: 2, marginV: 30, borderStyle: 1,
+    outline: 1, shadow: 0, alignment: 2, marginV: 50, borderStyle: 1,
   },
   box: {
-    fontName: "Arial", fontSize: 46, primaryColor: WHITE, secondaryColor: YELLOW,
-    outlineColor: assColor(0x11, 0xC4, 0xD0), backColor: assColor(0x11, 0xC4, 0xD0, 0x30), bold: true,
-    outline: 12, shadow: 0, alignment: 2, marginV: 45, borderStyle: 3,
+    fontName: "DejaVu Sans", fontSize: 42, primaryColor: WHITE, secondaryColor: YELLOW,
+    outlineColor: assColor(0x11, 0xC4, 0xD0), backColor: assColor(0x11, 0xC4, 0xD0, 0x40), bold: true,
+    outline: 14, shadow: 0, alignment: 2, marginV: 60, borderStyle: 3,
   },
-  // ── Text effect styles ──
+  // ── Text effects ──
   typewriter: {
-    fontName: "Courier New", fontSize: 42, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "DejaVu Sans Mono", fontSize: 38, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0x80), bold: false,
-    outline: 1, shadow: 0, alignment: 2, marginV: 40, borderStyle: 1,
+    outline: 1, shadow: 0, alignment: 2, marginV: 60, borderStyle: 1,
   },
   gradient: {
-    fontName: "Arial Black", fontSize: 52, primaryColor: AQUA, secondaryColor: GOLD,
+    fontName: "Liberation Sans", fontSize: 48, primaryColor: AQUA, secondaryColor: GOLD,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 3, shadow: 1, alignment: 2, marginV: 45, borderStyle: 1,
+    outline: 3, shadow: 1, alignment: 2, marginV: 65, borderStyle: 1,
   },
   subtitleBar: {
-    fontName: "Arial", fontSize: 44, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "DejaVu Sans", fontSize: 40, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: assColor(0, 0, 0, 0), backColor: assColor(0, 0, 0, 0x99), bold: false,
-    outline: 15, shadow: 0, alignment: 2, marginV: 0, borderStyle: 3,
+    outline: 20, shadow: 0, alignment: 2, marginV: 0, borderStyle: 3,
   },
   outlineOnly: {
-    fontName: "Arial Black", fontSize: 54, primaryColor: assColor(0, 0, 0, 0xFE), secondaryColor: AQUA,
+    fontName: "Liberation Sans", fontSize: 50, primaryColor: assColor(0, 0, 0, 0xFE), secondaryColor: AQUA,
     outlineColor: WHITE, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 3, shadow: 0, alignment: 2, marginV: 40, borderStyle: 1,
+    outline: 3, shadow: 0, alignment: 2, marginV: 60, borderStyle: 1,
   },
   shadowPop: {
-    fontName: "Arial Black", fontSize: 56, primaryColor: WHITE, secondaryColor: YELLOW,
+    fontName: "Liberation Sans", fontSize: 52, primaryColor: WHITE, secondaryColor: YELLOW,
     outlineColor: assColor(0, 0, 0, 0), backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 0, shadow: 4, alignment: 2, marginV: 45, borderStyle: 1,
+    outline: 0, shadow: 4, alignment: 2, marginV: 65, borderStyle: 1,
   },
   handwritten: {
-    fontName: "Comic Sans MS", fontSize: 46, primaryColor: WHITE, secondaryColor: YELLOW,
-    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: false,
-    outline: 2, shadow: 1, alignment: 2, marginV: 40, borderStyle: 1,
+    fontName: "DejaVu Serif", fontSize: 42, primaryColor: WHITE, secondaryColor: YELLOW,
+    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: false, italic: true,
+    outline: 2, shadow: 1, alignment: 2, marginV: 60, borderStyle: 1,
   },
   topCenter: {
-    fontName: "Arial", fontSize: 44, primaryColor: WHITE, secondaryColor: YELLOW,
+    fontName: "DejaVu Sans", fontSize: 42, primaryColor: WHITE, secondaryColor: YELLOW,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0xA0), bold: true,
-    outline: 2, shadow: 1, alignment: 8, marginV: 30, borderStyle: 1,
+    outline: 2, shadow: 1, alignment: 8, marginV: 40, borderStyle: 1,
   },
   allCapsGlow: {
-    fontName: "Arial Black", fontSize: 52, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Liberation Sans", fontSize: 48, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: AQUA, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 3, alignment: 2, marginV: 45, borderStyle: 1, uppercase: true,
+    outline: 4, shadow: 3, alignment: 2, marginV: 65, borderStyle: 1, uppercase: true,
   },
-  // ── From caption.png reference ──
+  // ── Colorful (from caption.png) ──
   whiteStroke: {
-    fontName: "Arial Black", fontSize: 56, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Liberation Sans", fontSize: 52, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 5, shadow: 0, alignment: 2, marginV: 45, borderStyle: 1,
+    outline: 5, shadow: 0, alignment: 2, marginV: 65, borderStyle: 1,
   },
   blueStroke: {
-    fontName: "Arial Black", fontSize: 54, primaryColor: BLUE, secondaryColor: WHITE,
+    fontName: "Liberation Sans", fontSize: 50, primaryColor: BLUE, secondaryColor: WHITE,
     outlineColor: WHITE, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 1, alignment: 2, marginV: 45, borderStyle: 1,
+    outline: 4, shadow: 1, alignment: 2, marginV: 65, borderStyle: 1,
   },
   redFire: {
-    fontName: "Arial Black", fontSize: 56, primaryColor: RED, secondaryColor: YELLOW,
+    fontName: "Liberation Sans", fontSize: 52, primaryColor: RED, secondaryColor: YELLOW,
     outlineColor: YELLOW, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 3, shadow: 2, alignment: 2, marginV: 45, borderStyle: 1,
+    outline: 3, shadow: 2, alignment: 2, marginV: 65, borderStyle: 1,
   },
   orangeGlow: {
-    fontName: "Arial Black", fontSize: 54, primaryColor: ORANGE, secondaryColor: WHITE,
+    fontName: "Liberation Sans", fontSize: 50, primaryColor: ORANGE, secondaryColor: WHITE,
     outlineColor: WHITE, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 1, alignment: 2, marginV: 45, borderStyle: 1,
+    outline: 4, shadow: 1, alignment: 2, marginV: 65, borderStyle: 1,
   },
   yellowOutline: {
-    fontName: "Arial Black", fontSize: 54, primaryColor: WHITE, secondaryColor: YELLOW,
+    fontName: "Liberation Sans", fontSize: 50, primaryColor: WHITE, secondaryColor: YELLOW,
     outlineColor: YELLOW, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 1, alignment: 2, marginV: 45, borderStyle: 1,
+    outline: 4, shadow: 1, alignment: 2, marginV: 65, borderStyle: 1,
   },
   greenPill: {
-    fontName: "Arial", fontSize: 46, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "DejaVu Sans", fontSize: 42, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: GREEN, backColor: GREEN, bold: true,
-    outline: 14, shadow: 0, alignment: 2, marginV: 45, borderStyle: 3,
+    outline: 16, shadow: 0, alignment: 2, marginV: 65, borderStyle: 3,
   },
   goldScript: {
-    fontName: "Georgia", fontSize: 50, primaryColor: GOLD, secondaryColor: YELLOW,
-    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: false,
-    outline: 2, shadow: 1, alignment: 2, marginV: 40, borderStyle: 1,
+    fontName: "DejaVu Serif", fontSize: 46, primaryColor: GOLD, secondaryColor: YELLOW,
+    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: false, italic: true,
+    outline: 2, shadow: 1, alignment: 2, marginV: 60, borderStyle: 1,
   },
   comicPop: {
-    fontName: "Arial Black", fontSize: 58, primaryColor: RED, secondaryColor: WHITE,
+    fontName: "Liberation Sans", fontSize: 54, primaryColor: RED, secondaryColor: WHITE,
     outlineColor: YELLOW, backColor: YELLOW, bold: true,
-    outline: 5, shadow: 3, alignment: 2, marginV: 45, borderStyle: 1, uppercase: true,
+    outline: 5, shadow: 3, alignment: 2, marginV: 65, borderStyle: 1, uppercase: true,
   },
   blueWhite: {
-    fontName: "Arial Black", fontSize: 54, primaryColor: WHITE, secondaryColor: BLUE,
+    fontName: "Liberation Sans", fontSize: 50, primaryColor: WHITE, secondaryColor: BLUE,
     outlineColor: BLUE, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 0, alignment: 2, marginV: 45, borderStyle: 1,
+    outline: 4, shadow: 0, alignment: 2, marginV: 65, borderStyle: 1,
   },
   redBlack: {
-    fontName: "Arial Black", fontSize: 56, primaryColor: RED, secondaryColor: WHITE,
+    fontName: "Liberation Sans", fontSize: 52, primaryColor: RED, secondaryColor: WHITE,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 2, alignment: 2, marginV: 45, borderStyle: 1,
+    outline: 4, shadow: 2, alignment: 2, marginV: 65, borderStyle: 1,
   },
   yellowRed: {
-    fontName: "Arial Black", fontSize: 54, primaryColor: YELLOW, secondaryColor: RED,
+    fontName: "Liberation Sans", fontSize: 50, primaryColor: YELLOW, secondaryColor: RED,
     outlineColor: RED, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 1, alignment: 2, marginV: 45, borderStyle: 1,
+    outline: 4, shadow: 1, alignment: 2, marginV: 65, borderStyle: 1,
   },
 };
 
@@ -268,15 +271,15 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,${s.fontName},${s.fontSize},${s.primaryColor},${s.secondaryColor},${s.outlineColor},${s.backColor},${s.bold ? -1 : 0},0,0,0,100,100,0,0,${s.borderStyle},${s.outline},${s.shadow},${s.alignment},20,20,${s.marginV},1
+Style: Default,${s.fontName},${s.fontSize},${s.primaryColor},${s.secondaryColor},${s.outlineColor},${s.backColor},${s.bold ? -1 : 0},${s.italic ? -1 : 0},0,0,100,100,0,0,${s.borderStyle},${s.outline},${s.shadow},${s.alignment},30,30,${s.marginV},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
 }
 
 /**
- * Build dialogue lines for a scene's captions.
- * Groups words into subtitle lines (max ~6 words per line for readability).
+ * Build dialogue lines. Groups words into readable subtitle lines
+ * (max ~5 words per line, ~2 lines visible at a time).
  */
 function buildDialogueLines(
   caption: SceneCaption,
@@ -287,7 +290,7 @@ function buildDialogueLines(
   if (words.length === 0) return [];
 
   const lines: string[] = [];
-  const WORDS_PER_LINE = 6;
+  const WORDS_PER_LINE = 5;
 
   for (let i = 0; i < words.length; i += WORDS_PER_LINE) {
     const chunk = words.slice(i, i + WORDS_PER_LINE);
@@ -297,8 +300,7 @@ function buildDialogueLines(
     let text: string;
 
     if (style === "karaoke") {
-      // Karaoke: each word gets a \k tag with duration in centiseconds
-      text = chunk.map((w, idx) => {
+      text = chunk.map(w => {
         const durCs = Math.round((w.endMs - w.startMs) / 10);
         return `{\\kf${durCs}}${w.text}`;
       }).join(" ");
@@ -317,23 +319,31 @@ function buildDialogueLines(
 
 /**
  * Generate ASS subtitle content from scene data.
- * Returns the full .ass file content as a string.
+ *
+ * @param scenes Array of scene objects with voiceover text
+ * @param style Caption style preset
+ * @param width Video width
+ * @param height Video height
+ * @param actualDurations Optional array of actual clip durations in seconds
+ *        (from audio probe). If not provided, falls back to scene.duration.
  */
 export function generateAssSubtitles(
   scenes: Array<{ voiceover: string; duration: number }>,
   style: CaptionStyle,
   width = 1920,
   height = 1080,
+  actualDurations?: number[],
 ): string | null {
   if (style === "none") return null;
 
-  // Build scene captions with word-level timing
   const captions: SceneCaption[] = [];
   let timelineMs = 0;
 
   for (let i = 0; i < scenes.length; i++) {
     const scene = scenes[i];
-    const durationMs = (scene.duration || 10) * 1000;
+    // Use actual duration if available (from audio probe), otherwise config value
+    const durationSec = actualDurations?.[i] ?? scene.duration ?? 10;
+    const durationMs = durationSec * 1000;
     const words = estimateWordTimings(scene.voiceover || "", timelineMs, durationMs);
 
     captions.push({
@@ -347,7 +357,6 @@ export function generateAssSubtitles(
     timelineMs += durationMs;
   }
 
-  // Build ASS file
   const header = buildAssHeader(style, width, height);
   const dialogues = captions.flatMap(c => buildDialogueLines(c, style));
 
@@ -379,22 +388,22 @@ export const CAPTION_STYLES: Array<{ id: CaptionStyle; label: string; descriptio
   { id: "minimal", label: "Minimal", description: "Small, subtle, clean" },
   { id: "box", label: "Box", description: "Text in aqua rectangle" },
   // Text effects
-  { id: "typewriter", label: "Typewriter", description: "Monospace, letter by letter" },
-  { id: "gradient", label: "Gradient", description: "Aqua to gold colors" },
+  { id: "typewriter", label: "Typewriter", description: "Monospace font" },
+  { id: "gradient", label: "Gradient", description: "Aqua to gold" },
   { id: "subtitleBar", label: "Subtitle Bar", description: "Dark bar across bottom" },
   { id: "outlineOnly", label: "Outline Only", description: "No fill, white outline" },
   { id: "shadowPop", label: "Shadow Pop", description: "White text, heavy shadow" },
-  { id: "handwritten", label: "Handwritten", description: "Casual script font" },
+  { id: "handwritten", label: "Handwritten", description: "Italic serif font" },
   { id: "topCenter", label: "Top Center", description: "White text at top" },
   { id: "allCapsGlow", label: "All Caps Glow", description: "Uppercase, aqua glow" },
-  // Colorful (from caption.png)
+  // Colorful
   { id: "whiteStroke", label: "White Stroke", description: "White, thick black outline" },
   { id: "blueStroke", label: "Blue Stroke", description: "Blue text, white outline" },
   { id: "redFire", label: "Red Fire", description: "Red text, yellow outline" },
   { id: "orangeGlow", label: "Orange Glow", description: "Orange text, white glow" },
   { id: "yellowOutline", label: "Yellow Outline", description: "White text, yellow border" },
   { id: "greenPill", label: "Green Pill", description: "White text in green badge" },
-  { id: "goldScript", label: "Gold Script", description: "Elegant gold text" },
+  { id: "goldScript", label: "Gold Script", description: "Elegant gold italic" },
   { id: "comicPop", label: "Comic Pop", description: "Red text, yellow burst" },
   { id: "blueWhite", label: "Blue White", description: "White text, blue outline" },
   { id: "redBlack", label: "Red Black", description: "Red text, black outline" },

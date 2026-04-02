@@ -187,11 +187,11 @@ export async function handleExportVideo(
     exportConfig.kenBurns = false;
     console.log(`[ExportVideo] SmartFlow detected — static images, no animation`);
   } else {
-    // Standard (storytelling/explainer): simple fade transitions, no Ken Burns
+    // Standard (storytelling/explainer): direct concat, no Ken Burns, no crossfade.
+    // Crossfade uses pairwise re-encoding (N-1 passes) which destroys audio quality.
     exportConfig.kenBurns = false;
-    // Use a simple fade instead of crossfade
-    exportConfig.crossfadeDuration = 0.3;
-    console.log(`[ExportVideo] Standard project — fade transitions, no Ken Burns`);
+    exportConfig.crossfadeDuration = 0;
+    console.log(`[ExportVideo] Standard project — direct concat, no Ken Burns, no crossfade`);
   }
 
   // ── Initialize per-scene progress tracking ──────────────────────
@@ -384,7 +384,19 @@ export async function handleExportVideo(
       await flushSceneProgress(jobId);
       await supabase.from("video_generation_jobs").update({ progress: 78, updated_at: new Date().toISOString() }).eq("id", jobId);
 
-      const assContent = generateAssSubtitles(scenes, captionStyle, exportConfig.width, exportConfig.height);
+      // Probe the final video to get actual total duration, then estimate per-scene durations
+      // from audio lengths for accurate caption sync
+      const { probeDuration } = await import("./export/ffmpegCmd.js");
+      const totalVideoDur = await probeDuration(finalOutputPath);
+      // Estimate per-scene durations proportionally from voiceover word count
+      const totalWords = scenes.reduce((sum: number, s: any) => sum + ((s.voiceover || "").split(/\s+/).length || 1), 0);
+      const actualDurations = scenes.map((s: any) => {
+        const words = (s.voiceover || "").split(/\s+/).length || 1;
+        return (words / totalWords) * totalVideoDur;
+      });
+      console.log(`[ExportVideo] Caption timing: total=${totalVideoDur.toFixed(1)}s, scenes=${actualDurations.map((d: number) => d.toFixed(1)).join(",")}`);
+
+      const assContent = generateAssSubtitles(scenes, captionStyle, exportConfig.width, exportConfig.height, actualDurations);
       if (assContent) {
         const assPath = await writeAssFile(assContent, tempDir);
         const captionedPath = path.join(tempDir, "captioned_export.mp4");

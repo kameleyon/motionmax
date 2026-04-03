@@ -119,9 +119,7 @@ export function ResultActionBar({
       const supabaseUrl = SUPABASE_URL;
       const metaUrl = `${supabaseUrl}/functions/v1/share-meta?token=${token}&v=${Date.now()}`;
       setShareUrl(metaUrl);
-      
-      // Show branded URL in the UI for better UX
-      setDisplayUrl(`${window.location.origin}/share/${token}`);
+      setDisplayUrl(metaUrl);
     } catch (error) {
       console.error("Failed to create share:", error);
       toast.success("Failed to create share link", { description: "Please try again",

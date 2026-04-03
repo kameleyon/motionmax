@@ -79,8 +79,7 @@ export function ResultActionBar({
 
   const handleShare = async () => {
     if (!projectId) {
-      toast.success("Cannot share", { description: "Project must be saved first",
-        variant: "destructive" });
+      toast.error("Cannot share", { description: "Project must be saved first" });
       return;
     }
 
@@ -115,16 +114,13 @@ export function ResultActionBar({
       }
 
       // Branded URL for users to share (resolves via SPA /share/:token route)
-      const brandedUrl = `${window.location.origin}/share/${token}`;
-      // Edge function URL for social bots (serves OG meta tags, then redirects to branded URL)
       const supabaseUrl = SUPABASE_URL;
-      const metaUrl = `${supabaseUrl}/functions/v1/share-meta?token=${token}&v=${Date.now()}`;
+      const metaUrl = `${supabaseUrl}/functions/v1/share-meta?token=${token}`;
       setShareUrl(metaUrl);
-      setDisplayUrl(brandedUrl);
+      setDisplayUrl(metaUrl);
     } catch (error) {
       console.error("Failed to create share:", error);
-      toast.success("Failed to create share link", { description: "Please try again",
-        variant: "destructive" });
+      toast.error("Failed to create share link");
       setIsShareDialogOpen(false);
     } finally {
       setIsCreatingShare(false);
@@ -139,8 +135,7 @@ export function ResultActionBar({
       toast.success("Link copied!", { description: "Share this link with anyone to let them view your video" });
       setTimeout(() => setHasCopied(false), 2000);
     } catch {
-      toast.success("Failed to copy", { description: "Please copy the link manually",
-        variant: "destructive" });
+      toast.error("Failed to copy");
     }
   };
 
@@ -150,8 +145,7 @@ export function ResultActionBar({
       await navigator.clipboard.writeText(shareUrl);
       toast.success("Social preview link copied", { description: "Use this if a platform doesn't show the right thumbnail" });
     } catch {
-      toast.success("Failed to copy", { description: "Please copy the link manually",
-        variant: "destructive" });
+      toast.error("Failed to copy");
     }
   };
 
@@ -182,8 +176,7 @@ export function ResultActionBar({
       toast.success("Project deleted", { description: "Your project has been permanently deleted" });
     } catch (error) {
       console.error("Failed to delete project:", error);
-      toast.success("Failed to delete", { description: "Please try again",
-        variant: "destructive" });
+      toast.error("Failed to delete");
     } finally {
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);

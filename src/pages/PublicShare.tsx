@@ -33,7 +33,7 @@ interface SharedProject {
   description: string | null;
   format: string;
   style: string;
-  status: string;
+  status?: string;
   project_type?: string;
 }
 

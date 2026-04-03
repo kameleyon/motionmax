@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { Lightbulb, Menu, Video, Film, Clapperboard, Wallpaper, AlertCircle, FolderOpen } from "lucide-react";
+import { Lightbulb, Menu, Video, Film, Clapperboard, Wallpaper, AlertCircle, FolderOpen, Sparkles } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { supabase } from "@/integrations/supabase/client";
@@ -268,9 +268,33 @@ export default function Dashboard() {
           {/* Quick Actions */}
           <DashboardQuickActions />
 
-          {/* Onboarding Checklist for new users */}
+          {/* Onboarding for new users */}
           {!isLoadingProjects && recentProjects.length === 0 && (
-            <OnboardingChecklist hasProjects={false} />
+            <>
+              <OnboardingChecklist hasProjects={false} />
+
+              {/* First-time sample prompt */}
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-lg bg-primary/10 shrink-0">
+                    <Sparkles className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="type-h4 text-foreground">Try it now — one click</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      See what MotionMax can do. We'll generate a short explainer video from a sample topic.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  className="w-full sm:w-auto gap-2"
+                  onClick={() => navigate("/app/create?mode=doc2video&template=sample")}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Create a Sample Video
+                </Button>
+              </div>
+            </>
           )}
 
           {/* Recent Projects */}

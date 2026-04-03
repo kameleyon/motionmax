@@ -34,8 +34,8 @@ const pricingPlans = [
       { text: "Voice cloning", included: !PLAN_LIMITS.free.allowVoiceCloning },
       { text: "Infographics", included: PLAN_LIMITS.free.infographicsPerMonth > 0 },
     ],
-    buttonText: "Get Started",
-    buttonVariant: "outline" as const,
+    buttonText: "Start Free",
+    buttonVariant: "default" as const,
     popular: false,
   },
   {

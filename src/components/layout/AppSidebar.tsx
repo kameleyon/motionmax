@@ -114,22 +114,8 @@ export function AppSidebar() {
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [upgradeLoading, setUpgradeLoading] = useState(false);
 
-  // Show upgrade modal for free tier or cancelled users (once per session per tier version)
-  useEffect(() => {
-    if (subscriptionLoading) return;
-    
-    const modalKey = "upgrade-modal-shown-v2"; // Reset key for new tiers
-    const hasSeenModal = sessionStorage.getItem(modalKey);
-    const shouldShowModal = (plan === "free" || cancelAtPeriodEnd) && !hasSeenModal;
-    
-    if (shouldShowModal) {
-      const timer = setTimeout(() => {
-        setUpgradeModalOpen(true);
-        sessionStorage.setItem(modalKey, "true");
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [plan, cancelAtPeriodEnd, subscriptionLoading]);
+  // Upgrade modal is now contextual — shown only when user hits a feature limit
+  // (triggered by workspace validation, not auto-shown on session start)
 
   const handleUpgradeNow = async () => {
     try {

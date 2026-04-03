@@ -212,9 +212,21 @@ export default function Landing() {
             >
               Try for Free
             </Button>
-            <p className="mt-4 text-sm text-white/70">
-              Free to start · Paid plans from {PLAN_PRICES.starter.monthly}/mo · No credit card required
+            <p className="mt-4 text-sm text-white/50">
+              Free to start · No credit card required
             </p>
+
+            {/* Social proof */}
+            <div className="mt-8 flex items-center justify-center gap-3">
+              <div className="flex -space-x-2">
+                {[1,2,3,4,5].map(i => (
+                  <div key={i} className="h-7 w-7 rounded-full border-2 border-background bg-gradient-to-br from-primary/60 to-primary/30" />
+                ))}
+              </div>
+              <p className="text-sm text-white/60">
+                <span className="text-white/90 font-medium">1,000+</span> creators already making videos
+              </p>
+            </div>
           </motion.div>
         </div>
       </section>

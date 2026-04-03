@@ -19,7 +19,20 @@ import Admin from "./pages/Admin";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import AcceptableUse from "./pages/AcceptableUse";
+import { Suspense } from "react";
 import NotFound from "./pages/NotFound";
+import { GlobalErrorBoundary } from "./components/GlobalErrorBoundary";
+
+function PageLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      </div>
+    </div>
+  );
+}
 
 const queryClient = new QueryClient({
   queryCache: new QueryCache({
@@ -31,11 +44,13 @@ const queryClient = new QueryClient({
 });
 
 const App = () => (
+  <GlobalErrorBoundary>
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="light" disableTransitionOnChange>
       <TooltipProvider>
         <Sonner />
         <BrowserRouter>
+          <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/auth" element={<Auth />} />
@@ -62,10 +77,12 @@ const App = () => (
             <Route path="/acceptable-use" element={<AcceptableUse />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </Suspense>
         </BrowserRouter>
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>
+  </GlobalErrorBoundary>
 );
 
 export default App;

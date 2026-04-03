@@ -206,7 +206,6 @@ export default function Landing() {
             </p>
             
             <Button
-              size="lg"
               size="hero"
               className="mt-10"
               onClick={() => handleCta("Try for Free")}

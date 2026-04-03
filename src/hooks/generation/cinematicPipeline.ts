@@ -82,7 +82,7 @@ export async function runCinematicPipeline(
   // Phase 5: Finalize
   await finalizeCinematic(projectId, generationId, sceneCount, params.format, ctx);
 
-  ctx.toast.success("Cinematic Video Generated!", { description: `"${title}" is ready.` });
+  ctx.toast({ title: "Cinematic Video Generated!", description: `"${title}" is ready.` });
 }
 
 // ---- Sub-Phases ----
@@ -369,11 +369,11 @@ export async function resumeCinematicPipeline(
     // Phase 5: Finalize
     await finalizeCinematic(projectId, generationId, sceneCount, project.format, ctx);
 
-    ctx.toast.success("Generation Resumed!", { description: `"${project.title}" is ready.` });
+    ctx.toast({ title: "Generation Resumed!", description: `"${project.title}" is ready.` });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "Resume failed";
     console.error(LOG, "Resume failed:", errorMessage);
     ctx.setState((prev) => ({ ...prev, step: "error" as const, isGenerating: false, error: errorMessage, statusMessage: errorMessage }));
-    ctx.toast.error("Resume Failed", { description: errorMessage });
+    ctx.toast({ variant: "destructive", title: "Resume Failed", description: errorMessage });
   }
 }

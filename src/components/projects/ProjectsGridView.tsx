@@ -93,7 +93,7 @@ export function ProjectsGridView({
                 {/* Thumbnail */}
                 <div className={cn("relative w-full overflow-hidden", getAspectRatio(project.format))}>
                   <img
-                    src={gridThumbnailUrl(project.thumbnailUrl) || defaultThumbnail}
+                    src={project.thumbnailUrl || defaultThumbnail}
                     alt={project.title}
                     loading="lazy"
                     decoding="async"

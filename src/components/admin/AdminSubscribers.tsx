@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
-import { Loader2, Search, ChevronLeft, ChevronRight, Eye, AlertTriangle, DollarSign } from "lucide-react";
+import { Loader2, Search, ChevronLeft, ChevronRight, Eye, AlertTriangle, DollarSign, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AdminUserDetails } from "./AdminUserDetails";
 import { format } from "date-fns";
@@ -52,11 +53,14 @@ export function AdminSubscribers() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [sortField, setSortField] = useState<string>("createdAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [planFilter, setPlanFilter] = useState<string>("all");
 
   const fetchSubscribers = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await callAdminApi("subscribers_list", { page, search, limit: 20 });
+      const result = await callAdminApi("subscribers_list", { page, search, limit: 50 });
       setData(result);
       setError(null);
     } catch (err) {
@@ -67,12 +71,54 @@ export function AdminSubscribers() {
   }, [callAdminApi, page, search]);
 
   useEffect(() => {
-    const debounce = setTimeout(() => {
-      fetchSubscribers();
-    }, 300);
-
+    const debounce = setTimeout(() => { fetchSubscribers(); }, 300);
     return () => clearTimeout(debounce);
   }, [fetchSubscribers]);
+
+  // Client-side sort + filter (API returns all users, we sort/filter locally)
+  const sortedUsers = (() => {
+    if (!data?.users) return [];
+    let users = [...data.users];
+
+    // Plan filter
+    if (planFilter !== "all") {
+      users = users.filter(u => u.plan === planFilter);
+    }
+
+    // Sort
+    users.sort((a, b) => {
+      let av: number | string = 0, bv: number | string = 0;
+      switch (sortField) {
+        case "plan": av = a.plan; bv = b.plan; break;
+        case "credits": av = a.creditsBalance; bv = b.creditsBalance; break;
+        case "generations": av = a.generationCount; bv = b.generationCount; break;
+        case "flags": av = a.flagCount; bv = b.flagCount; break;
+        case "createdAt": av = a.createdAt; bv = b.createdAt; break;
+        case "costs": av = a.costs?.total || 0; bv = b.costs?.total || 0; break;
+        default: av = a.createdAt; bv = b.createdAt;
+      }
+      if (typeof av === "string" && typeof bv === "string") {
+        return sortOrder === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+      }
+      return sortOrder === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number);
+    });
+
+    return users;
+  })();
+
+  const toggleSort = (field: string) => {
+    if (sortField === field) {
+      setSortOrder(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortOrder("desc");
+    }
+  };
+
+  const SortIcon = ({ field }: { field: string }) => {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 text-muted-foreground/50" />;
+    return sortOrder === "asc" ? <ArrowUp className="h-3 w-3 text-primary" /> : <ArrowDown className="h-3 w-3 text-primary" />;
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,20 +167,29 @@ export function AdminSubscribers() {
           </p>
         </div>
 
-        <form onSubmit={handleSearch} className="flex gap-2 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-64">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-56">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search by email or name..."
+              placeholder="Search email or name..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               className="pl-9"
             />
           </div>
-          <Button type="submit" variant="secondary">
-            Search
-          </Button>
-        </form>
+          <Select value={planFilter} onValueChange={(v) => { setPlanFilter(v); setPage(1); }}>
+            <SelectTrigger className="w-32">
+              <SelectValue placeholder="Plan" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Plans</SelectItem>
+              <SelectItem value="free">Free</SelectItem>
+              <SelectItem value="starter">Starter</SelectItem>
+              <SelectItem value="creator">Creator</SelectItem>
+              <SelectItem value="professional">Professional</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Card className="shadow-sm overflow-hidden">
@@ -158,17 +213,29 @@ export function AdminSubscribers() {
                   <TableHeader>
                     <TableRow className="text-xs">
                       <TableHead className="py-2 px-2">User</TableHead>
-                      <TableHead className="py-2 px-2">Plan</TableHead>
-                      <TableHead className="py-2 px-2 text-center">Credits</TableHead>
-                      <TableHead className="py-2 px-2 text-center">Gens</TableHead>
-                      <TableHead className="py-2 px-2 text-center">Flags</TableHead>
-                      <TableHead className="py-2 px-2">Costs</TableHead>
-                      <TableHead className="py-2 px-2">Joined</TableHead>
+                      <TableHead className="py-2 px-2 cursor-pointer select-none" onClick={() => toggleSort("plan")}>
+                        <span className="flex items-center gap-1">Plan <SortIcon field="plan" /></span>
+                      </TableHead>
+                      <TableHead className="py-2 px-2 text-center cursor-pointer select-none" onClick={() => toggleSort("credits")}>
+                        <span className="flex items-center justify-center gap-1">Credits <SortIcon field="credits" /></span>
+                      </TableHead>
+                      <TableHead className="py-2 px-2 text-center cursor-pointer select-none" onClick={() => toggleSort("generations")}>
+                        <span className="flex items-center justify-center gap-1">Gens <SortIcon field="generations" /></span>
+                      </TableHead>
+                      <TableHead className="py-2 px-2 text-center cursor-pointer select-none" onClick={() => toggleSort("flags")}>
+                        <span className="flex items-center justify-center gap-1">Flags <SortIcon field="flags" /></span>
+                      </TableHead>
+                      <TableHead className="py-2 px-2 cursor-pointer select-none" onClick={() => toggleSort("costs")}>
+                        <span className="flex items-center gap-1">Costs <SortIcon field="costs" /></span>
+                      </TableHead>
+                      <TableHead className="py-2 px-2 cursor-pointer select-none" onClick={() => toggleSort("createdAt")}>
+                        <span className="flex items-center gap-1">Joined <SortIcon field="createdAt" /></span>
+                      </TableHead>
                       <TableHead className="py-2 px-2 w-10"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {data?.users.map((user) => (
+                    {sortedUsers.map((user) => (
                       <TableRow key={user.id} className="text-xs">
                         <TableCell className="py-2 px-2">
                           <div className="flex items-center gap-2 min-w-0">
@@ -179,8 +246,8 @@ export function AdminSubscribers() {
                               </AvatarFallback>
                             </Avatar>
                             <div className="min-w-0">
-                              <div className="font-medium truncate max-w-[120px]">{user.displayName}</div>
-                              <div className="text-muted-foreground truncate max-w-[120px]">{user.email}</div>
+                              <div className="font-medium truncate max-w-[200px]">{user.displayName}</div>
+                              <div className="text-muted-foreground truncate max-w-[200px]">{user.email}</div>
                             </div>
                           </div>
                         </TableCell>
@@ -278,7 +345,7 @@ export function AdminSubscribers() {
 
               {/* Mobile/Tablet Card Layout */}
               <div className="lg:hidden divide-y">
-                {data?.users.map((user) => (
+                {sortedUsers.map((user) => (
                   <div key={user.id} className="p-3 space-y-1.5 text-xs">
                     {/* Row 1: Name | Plan + Eye */}
                     <div className="flex items-center justify-between gap-2">
@@ -289,7 +356,10 @@ export function AdminSubscribers() {
                             {user.displayName?.charAt(0)?.toUpperCase() || "U"}
                           </AvatarFallback>
                         </Avatar>
-                        <span className="font-medium truncate">{user.displayName}</span>
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{user.displayName}</div>
+                          <div className="text-muted-foreground truncate">{user.email}</div>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {getStatusBadge(user)}

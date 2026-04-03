@@ -96,17 +96,18 @@ export function AppSidebar() {
   const isCollapsed = state === "collapsed" && !isMobile;
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
+  const { isAdmin } = useAdminAuth();
+  const { plan, cancelAtPeriodEnd, createCheckout, isLoading: subscriptionLoading } = useSubscription();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
+  const isCreateRoute = location.pathname === "/app/create";
 
   /** Navigate and close the mobile sidebar */
   const navTo = (path: string) => {
     navigate(path);
     if (isMobile) setOpenMobile(false);
   };
-  const { isAdmin } = useAdminAuth();
-  const { plan, cancelAtPeriodEnd, createCheckout, isLoading: subscriptionLoading } = useSubscription();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(isCreateRoute);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<{ id: string; title: string } | null>(null);
@@ -225,7 +226,6 @@ export function AppSidebar() {
   };
 
   const isActiveRoute = (path: string) => location.pathname === path;
-  const isCreateRoute = location.pathname === "/app/create";
   const currentMode = new URLSearchParams(location.search).get("mode") || "doc2video";
 
   return (

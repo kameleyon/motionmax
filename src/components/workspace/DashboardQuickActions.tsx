@@ -2,10 +2,10 @@ import { useNavigate } from "react-router-dom";
 import { Video, Clapperboard, Wallpaper, Film } from "lucide-react";
 
 const QUICK_ACTIONS = [
-  { mode: "doc2video",    title: "Explainers",     description: "Script to narrated video",    icon: Video },
-  { mode: "storytelling", title: "Visual Stories",  description: "Story ideas to cinematic",    icon: Clapperboard },
-  { mode: "smartflow",    title: "Smart Flow",      description: "Infographic slide decks",     icon: Wallpaper },
-  { mode: "cinematic",    title: "Cinematic",       description: "Scene-by-scene film",         icon: Film },
+  { mode: "doc2video",    title: "Explainers",     description: "Paste text, get a narrated video",         icon: Video },
+  { mode: "storytelling", title: "Visual Stories",  description: "Describe a story, watch it come to life",  icon: Clapperboard },
+  { mode: "smartflow",    title: "Smart Flow",      description: "Upload data, get visual slides",           icon: Wallpaper },
+  { mode: "cinematic",    title: "Cinematic",       description: "Direct each scene of your film",           icon: Film },
 ];
 
 export function DashboardQuickActions() {

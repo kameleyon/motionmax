@@ -127,7 +127,7 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
       fetchDetails();
       onFlagCreated?.();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Action failed");
+      toast.error("Action failed. Please try again.");
     } finally {
       setActionLoading(false);
     }

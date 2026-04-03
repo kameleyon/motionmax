@@ -308,9 +308,9 @@ export default function Dashboard() {
               <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm shadow-sm">
                 <EmptyState
                   icon={FolderOpen}
-                  title="No projects yet"
-                  description="Create your first video to get started."
-                  actionLabel="Create Your First Project"
+                  title="Your studio is empty — not for long"
+                  description="Create your first video in under 5 minutes. Paste any text, pick a style, and let AI handle the rest."
+                  actionLabel="Create Your First Video"
                   onAction={() => navigate("/app/create")}
                   className="py-8"
                 />

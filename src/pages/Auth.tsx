@@ -210,7 +210,7 @@ export default function Auth() {
               </h1>
               <p className="mt-2 text-sm text-muted-foreground">
                 {mode === "login" ? "Sign in to continue creating videos"
-                  : mode === "signup" ? "Start turning your knowledge into cinema"
+                  : mode === "signup" ? "Create professional videos from your text in minutes"
                   : mode === "reset" ? "We'll email you a reset link"
                   : "Choose a new password to finish resetting"}
               </p>

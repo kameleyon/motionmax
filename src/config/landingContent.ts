@@ -63,18 +63,18 @@ export interface TrustItem {
 export const TRUST_INDICATORS: TrustItem[] = [
   {
     icon: Shield,
-    label: "Enterprise-Grade Security",
-    detail: "End-to-end encryption · GDPR compliant",
+    label: "Secure by Design",
+    detail: "Your data stays yours · Supabase-hosted infrastructure",
   },
   {
     icon: Users,
-    label: "Trusted by Creators",
-    detail: "Thousands of videos generated every week",
+    label: "Built for Creators",
+    detail: "From solo creators to teams — no video editing skills needed",
   },
   {
     icon: Globe,
-    label: "Global Platform",
-    detail: "Accessible worldwide with multi-language narration",
+    label: "11 Languages Supported",
+    detail: "Create videos in English, French, Spanish, and 8 more languages",
   },
 ];
 

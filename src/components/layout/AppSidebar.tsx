@@ -180,7 +180,7 @@ export function AppSidebar() {
         .select("id, title, created_at, project_type")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
-        .limit(15);
+        .limit(5);
       if (error) throw error;
       return data || [];
     },
@@ -202,7 +202,7 @@ export function AppSidebar() {
       toast.success("Project deleted successfully");
     },
     onError: (error) => {
-      toast.error("Failed to delete project: " + error.message);
+      toast.error("Failed to delete project. Please try again.");
     },
   });
 

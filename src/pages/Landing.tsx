@@ -203,10 +203,10 @@ export default function Landing() {
             transition={{ duration: 0.6 }}
             className="max-w-2xl mx-auto text-center"
           >
-            <img 
-              src={motionMaxHeroLogo} 
-              alt="MotionMax" 
-              className="w-full max-w-[240px] sm:max-w-sm md:max-w-lg xl:max-w-xl mx-auto"
+            <img
+              src="/motion.png"
+              alt="MotionMax"
+              className="w-full max-w-[200px] sm:max-w-[300px] md:max-w-[400px] xl:max-w-[480px] mx-auto"
             />
             
             <p className="mt-6 text-xl sm:text-2xl md:text-4xl font-medium leading-snug text-white/90">

@@ -185,8 +185,8 @@ export default function Landing() {
           backgroundRepeat: "no-repeat",
         }}
       >
-        {/* Dark overlay for text readability */}
-        <div className="absolute inset-0 bg-black/50" />
+        {/* Dark overlay (70%) + blur for text dominance */}
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
 
         <div className="relative z-10 mx-auto max-w-7xl px-6 sm:px-8 w-full pb-16 md:pb-24">
           <motion.div

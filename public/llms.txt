@@ -1,0 +1,44 @@
+# MotionMax — AI Video Generator
+
+> MotionMax is an AI video creation platform that transforms text into professional cinematic videos, explainer content, visual stories, and infographics.
+
+## What MotionMax Does
+
+MotionMax takes any text input (articles, topics, ideas, documents) and generates complete videos with:
+
+- AI-written scripts (Claude Sonnet 4.6) with narrative arcs and character bibles
+- AI-generated scene images (Hypereal/Gemini Flash) with style consistency
+- AI image-to-video conversion (Kling V2.5/V2.6 Pro) with seamless scene transitions
+- AI voiceover narration (Qwen3 TTS, Fish Audio, ElevenLabs, LemonFox) in 11 languages
+- 25+ caption/subtitle styles burned into the video
+- Server-side video rendering with FFmpeg
+
+## Product Types
+
+- **Cinematic** — 15-scene AI videos with image-to-video transitions, camera motions, and end-image morphing
+- **Explainer** — Document/article to narrated slideshow videos with multiple images per scene
+- **Visual Stories** — AI scriptwriting + image generation + voiceover storytelling
+- **Smart Flow** — Data-to-infographic with optional narration
+
+## Key Capabilities
+
+- AI topic research for factual accuracy (character appearances, cultural context)
+- Scene-by-scene editing (image edit, audio regen, video regen)
+- Image editing with natural language (Nano Banana Edit)
+- Voice cloning (ElevenLabs)
+- Multi-language: English, French, Spanish, Portuguese, German, Italian, Russian, Chinese, Japanese, Korean, Haitian Creole
+- Social media sharing with OG meta previews
+- Mobile-friendly with native share sheet for downloads
+
+## Pricing
+
+- Free: 10 credits/month
+- Starter: 30 credits/month ($9.99/mo)
+- Creator: 100 credits/month ($29.99/mo)
+- Professional: 300 credits/month ($79.99/mo)
+
+## Links
+
+- Website: https://motionmax.io
+- App: https://motionmax.io/app
+- Pricing: https://motionmax.io/pricing

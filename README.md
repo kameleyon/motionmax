@@ -1,73 +1,89 @@
-# Welcome to your Lovable project
+# MotionMax — AI Video Generator
 
-## Project info
+MotionMax is a full-stack AI video creation platform that transforms text, articles, and ideas into professional cinematic videos, explainer content, visual stories, and infographics — all powered by AI.
 
-**URL**: https://lovable.dev/projects/ec1ffb69-6081-4f85-9ac7-64b6751e9302
+## What MotionMax Does
 
-## How can I edit this code?
+- **Cinematic Videos** — AI-generated video scenes with image-to-video transitions (Kling V2.5/V2.6), voiceover narration, and seamless scene morphing
+- **Explainer Videos** — Turn documents, articles, or any text into narrated slideshow videos with multiple visual styles
+- **Visual Stories** — AI scriptwriting + image generation + voiceover for storytelling content
+- **Smart Flow Infographics** — Transform data into narrated visual infographics
+- **25+ Caption Styles** — Burn-in captions with styles from Classic to Karaoke word-by-word highlighting
+- **Voice Cloning** — Clone voices for consistent narration across projects
+- **Multi-Language** — English, French, Spanish, Portuguese, German, Italian, Russian, Chinese, Japanese, Korean, Haitian Creole
 
-There are several ways of editing your application.
+## Key Features
 
-**Use Lovable**
+- **AI Research Phase** — Claude Sonnet 4.6 researches topics before scriptwriting for factual accuracy (verified character appearances, cultural context, historical details)
+- **AI Script Generation** — Claude Sonnet 4.6 via OpenRouter writes cinematic scripts with character bibles, camera directions, and narrative arcs
+- **AI Image Generation** — Hypereal (Gemini Flash) creates scene images with style consistency
+- **AI Video Generation** — Kling V2.5/V2.6 Pro I2V creates 10-second video clips with end-image transitions between scenes
+- **AI Voice Generation** — Qwen3 TTS, Fish Audio, LemonFox, ElevenLabs, Google Gemini TTS with style instructions per scene
+- **Scene Editing** — Edit individual scenes (image edit via Nano Banana Edit, audio regeneration, video regeneration) with automatic affected-video regeneration
+- **Video Export** — Server-side ffmpeg rendering with audio-video sync, caption burn-in, compression, and TUS resumable upload
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/ec1ffb69-6081-4f85-9ac7-64b6751e9302) and start prompting.
+## Tech Stack
 
-Changes made via Lovable will be committed automatically to this repo.
+### Frontend
+- **React 18** + TypeScript + Vite
+- **Tailwind CSS** + shadcn/ui components
+- **Framer Motion** for animations
+- **Supabase Realtime** for live progress tracking
 
-**Use your preferred IDE**
+### Backend
+- **Node.js worker** on Render.com — handles all heavy processing
+- **Supabase** — PostgreSQL database, Auth, Storage, Edge Functions
+- **FFmpeg** — video encoding, concatenation, caption burn-in
+- **OpenRouter** — LLM API (Claude Sonnet 4.6)
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### AI Services
+- **Hypereal** — Image generation (Gemini Flash), video generation (Kling V2.5/V2.6), image editing (Nano Banana Edit)
+- **Replicate** — Qwen3 TTS, Chatterbox TTS
+- **Fish Audio** — TTS (English, French, Spanish)
+- **LemonFox** — TTS (English)
+- **ElevenLabs** — TTS + Voice Cloning + Speech-to-Speech
+- **Google Gemini** — TTS (Haitian Creole)
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## Architecture
 
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```
+Frontend (Vite/React) → Supabase (Auth + DB + Storage + Realtime)
+                                    ↓
+                         Worker (Render.com Node.js)
+                         ├── Script Generation (OpenRouter/Claude)
+                         ├── Research Phase (OpenRouter/Claude)
+                         ├── Audio Generation (Qwen3/Fish/LemonFox/ElevenLabs/Gemini)
+                         ├── Image Generation (Hypereal)
+                         ├── Video Generation (Hypereal/Kling)
+                         ├── Image Editing (Hypereal/Nano Banana Edit)
+                         └── Video Export (FFmpeg + Caption burn-in)
 ```
 
-**Edit a file directly in GitHub**
+## Project Structure
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```
+src/                          # Frontend React app
+  components/workspace/       # Workspace UIs (Cinematic, Storytelling, SmartFlow, Doc2Video)
+  hooks/                      # React hooks (generation pipeline, video export, subscriptions)
+  pages/                      # Page components (Landing, Dashboard, Auth, etc.)
 
-**Use GitHub Codespaces**
+worker/                       # Backend Node.js worker
+  src/handlers/               # Job handlers (script, audio, image, video, export)
+  src/services/               # AI service integrations (OpenRouter, Hypereal, TTS providers)
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+supabase/                     # Supabase configuration
+  functions/                  # Edge functions (share-meta, generate-video, etc.)
+  migrations/                 # Database migrations
+```
 
-## What technologies are used for this project?
+## Subscription Plans
 
-This project is built with:
+- **Free** — 10 credits/month, short videos, landscape/square
+- **Starter** — 30 credits/month, short/brief videos, all formats, infographics
+- **Creator** — 100 credits/month, all lengths, custom styles, brand mark, voice cloning
+- **Professional** — 300 credits/month, cinematic videos, priority rendering
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Links
 
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/ec1ffb69-6081-4f85-9ac7-64b6751e9302) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- **Website**: [motionmax.io](https://motionmax.io)
+- **App**: [motionmax.io/app](https://motionmax.io/app)

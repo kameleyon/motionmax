@@ -221,7 +221,7 @@ export function useGenerationPipeline() {
     }
 
     return project;
-  }, [toast, state.sceneCount, resumeCinematic]);
+  }, [state.sceneCount, resumeCinematic]);
 
   const reset = useCallback(() => {
     log.debug("reset");

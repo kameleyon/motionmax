@@ -85,7 +85,7 @@ export function useCinematicRegeneration(
         setState({ isRegenerating: false, sceneIndex: null, type: null });
       }
     },
-    [generationId, projectId, scenes, onScenesUpdate, persistScenes, onStopPlayback, toast]
+    [generationId, projectId, scenes, onScenesUpdate, persistScenes, onStopPlayback]
   );
 
   // ── Video regeneration → worker ──────────────────────────────────────────
@@ -125,7 +125,7 @@ export function useCinematicRegeneration(
         setState({ isRegenerating: false, sceneIndex: null, type: null });
       }
     },
-    [generationId, projectId, scenes, onScenesUpdate, persistScenes, onStopPlayback, toast]
+    [generationId, projectId, scenes, onScenesUpdate, persistScenes, onStopPlayback]
   );
 
   // ── Apply image edit → worker ────────────────────────────────────────────
@@ -160,7 +160,7 @@ export function useCinematicRegeneration(
       onScenesUpdate(updatedScenes);
       toast.success("Videos Updated", { description: `${affectedIndices.length} video(s) regenerated.` });
     },
-    [generationId, projectId, onScenesUpdate, toast]
+    [generationId, projectId, onScenesUpdate]
   );
 
   const applyImageEdit = useCallback(
@@ -204,7 +204,7 @@ export function useCinematicRegeneration(
         setState({ isRegenerating: false, sceneIndex: null, type: null });
       }
     },
-    [generationId, projectId, scenes, onScenesUpdate, onStopPlayback, toast, regenAffectedVideos]
+    [generationId, projectId, scenes, onScenesUpdate, onStopPlayback, regenAffectedVideos]
   );
 
   // ── Image regeneration → worker ──────────────────────────────────────────
@@ -250,7 +250,7 @@ export function useCinematicRegeneration(
         setState({ isRegenerating: false, sceneIndex: null, type: null });
       }
     },
-    [generationId, projectId, scenes, onScenesUpdate, onStopPlayback, toast, regenAffectedVideos]
+    [generationId, projectId, scenes, onScenesUpdate, onStopPlayback, regenAffectedVideos]
   );
 
   // ── Undo regeneration → worker ──────────────────────────────────────────
@@ -288,7 +288,7 @@ export function useCinematicRegeneration(
         setState({ isRegenerating: false, sceneIndex: null, type: null });
       }
     },
-    [generationId, projectId, scenes, onScenesUpdate, onStopPlayback, toast]
+    [generationId, projectId, scenes, onScenesUpdate, onStopPlayback]
   );
 
   return {

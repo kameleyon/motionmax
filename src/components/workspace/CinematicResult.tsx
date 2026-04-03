@@ -272,7 +272,7 @@ export function CinematicResult({
     } finally {
       setIsRenderingChanges(false);
     }
-  }, [generationId, projectId, localScenes, format, resetExport, exportVideo, toast, initialCaptionStyle]);
+  }, [generationId, projectId, localScenes, format, resetExport, exportVideo, initialCaptionStyle]);
 
   // Share
   const handleShare = useCallback(async () => {

@@ -93,7 +93,7 @@ export function useWorkspaceSubscription(): WorkspaceSubscriptionReturn {
 
       return true;
     },
-    [plan, creditsBalance, subscriptionStatus, toast],
+    [plan, creditsBalance, subscriptionStatus],
   );
 
   return {

@@ -64,7 +64,7 @@ export function useSceneRegeneration(
         setState({ isRegenerating: false, regeneratingType: null, sceneIndex: null });
       }
     },
-    [generationId, projectId, scenes, onScenesUpdate, toast]
+    [generationId, projectId, scenes, onScenesUpdate]
   );
 
   // ── Regenerate (or edit) a specific scene image ────────────────────
@@ -125,7 +125,7 @@ export function useSceneRegeneration(
         setState({ isRegenerating: false, regeneratingType: null, sceneIndex: null });
       }
     },
-    [generationId, projectId, scenes, onScenesUpdate, toast]
+    [generationId, projectId, scenes, onScenesUpdate]
   );
 
   // ── Undo regeneration ──────────────────────────────────────────────────
@@ -167,7 +167,7 @@ export function useSceneRegeneration(
         setState({ isRegenerating: false, regeneratingType: null, sceneIndex: null });
       }
     },
-    [generationId, projectId, scenes, onScenesUpdate, toast]
+    [generationId, projectId, scenes, onScenesUpdate]
   );
 
   return {

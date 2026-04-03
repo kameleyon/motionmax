@@ -126,7 +126,9 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
             <button
               onClick={() => setBillingInterval(billingInterval === "monthly" ? "yearly" : "monthly")}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${billingInterval === "yearly" ? "bg-primary" : "bg-muted"}`}
-              aria-label="Toggle billing interval"
+              role="switch"
+              aria-checked={billingInterval === "yearly"}
+              aria-label={`Billing interval: ${billingInterval === "yearly" ? "yearly" : "monthly"}`}
             >
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${billingInterval === "yearly" ? "translate-x-6" : "translate-x-1"}`} />
             </button>

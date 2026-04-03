@@ -230,6 +230,8 @@ export default function Auth() {
                     <Input
                       id="email"
                       type="email"
+                      autoFocus
+                      autoComplete="email"
                       placeholder="you@example.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}

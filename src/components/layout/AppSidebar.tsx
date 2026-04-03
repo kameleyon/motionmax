@@ -290,6 +290,7 @@ export function AppSidebar() {
                   variant="ghost"
                   size="icon"
                   onClick={toggleSidebar}
+                  aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
                   className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg text-muted-foreground hover:bg-sidebar-accent hover:text-accent"
                 >
                   {isCollapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
@@ -321,9 +322,10 @@ export function AppSidebar() {
                   <TooltipTrigger asChild>
                     <SidebarMenuButton
                       onClick={() => navTo("/app")}
+                      aria-current={isActiveRoute("/app") ? "page" : undefined}
                       className={`cursor-pointer rounded-lg py-2.5 transition-colors ${
-                        isActiveRoute("/app") 
-                          ? "bg-primary/10 text-primary" 
+                        isActiveRoute("/app")
+                          ? "bg-primary/10 text-primary"
                           : "hover:bg-sidebar-accent/50"
                       } ${isCollapsed ? "w-10 h-10 p-0 flex items-center justify-center" : "w-full px-3"}`}
                     >

@@ -185,7 +185,8 @@ export default function Landing() {
         }}
       >
         {/* Dark overlay (70%) + blur for text dominance */}
-        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" aria-hidden="true" />
+        <span className="sr-only">Background showing code and data visualizations being transformed into video content</span>
 
         <div className="relative z-10 mx-auto max-w-7xl px-6 sm:px-8 w-full pb-16 md:pb-24">
           <motion.div

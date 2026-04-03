@@ -112,7 +112,11 @@
     --secondary-foreground: 0 0% 96%;
 
     --muted: 200 8% 14%;
-    --muted-foreground: 200 8% 60%;
+    --muted-foreground: 200 8% 65%;
+
+    /* Explicit text hierarchy tokens (no opacity modifiers needed) */
+    --text-secondary: 200 8% 65%;   /* ~8.5:1 contrast vs background */
+    --text-tertiary: 200 8% 50%;    /* ~5.5:1 contrast vs background — AA for 14px+ */
 
     /* Accent - Gold (brighter in dark mode) */
     --accent: 45 67% 72%;

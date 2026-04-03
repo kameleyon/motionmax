@@ -288,8 +288,8 @@ export default function Landing() {
                 tag: "Doc to Video",
                 description: "Turn articles, documents, or any text into narrated slideshow videos. Multiple images per scene with professional voiceover.",
                 example: "\"Paste a 5-page report\" → 8 min narrated explainer video",
-                color: "from-blue-500/20 to-blue-500/5",
-                borderColor: "hover:border-blue-400/40",
+                color: "from-[#e4c875]/20 to-[#e4c875]/5",
+                borderColor: "hover:border-[#e4c875]/40",
                 mode: "doc2video",
               },
               {
@@ -297,8 +297,8 @@ export default function Landing() {
                 tag: "Storytelling",
                 description: "AI writes the script from your story idea, generates scene images, and narrates with matched emotion. Full creative control over tone and style.",
                 example: "\"A bedtime story about a brave robot\" → animated visual story",
-                color: "from-purple-500/20 to-purple-500/5",
-                borderColor: "hover:border-purple-400/40",
+                color: "from-[#0D99A8]/20 to-[#0D99A8]/5",
+                borderColor: "hover:border-[#0D99A8]/40",
                 mode: "storytelling",
               },
               {
@@ -306,8 +306,8 @@ export default function Landing() {
                 tag: "Infographics",
                 description: "Transform data and key insights into stunning visual infographics with optional narration. Perfect for social media content.",
                 example: "\"Top 10 AI trends in 2026\" → visual infographic with voiceover",
-                color: "from-amber-500/20 to-amber-500/5",
-                borderColor: "hover:border-amber-400/40",
+                color: "from-[#D4A929]/20 to-[#D4A929]/5",
+                borderColor: "hover:border-[#D4A929]/40",
                 mode: "smartflow",
               },
             ].map((product, index) => (

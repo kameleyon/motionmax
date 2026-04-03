@@ -291,8 +291,8 @@ export function CinematicResult({
       }
       const backendUrl = SUPABASE_URL;
       const shareMetaUrl = `${backendUrl}/functions/v1/share-meta?token=${token}`;
-      setShareUrl(shareMetaUrl);
-      setDisplayUrl(shareMetaUrl);
+      setShareUrl(shareMetaUrl);  // Actual URL copied — bots get OG tags from this
+      setDisplayUrl(`https://motionmax.io/share/${token}`);  // Clean URL shown in UI
     } catch {
       toast.error("Failed to create share link");
       setIsShareDialogOpen(false);
@@ -564,7 +564,7 @@ export function CinematicResult({
               <div className="flex items-center gap-2">
                 <Input value={displayUrl} readOnly className="flex-1 text-sm" />
                 <Button onClick={async () => {
-                  await navigator.clipboard.writeText(displayUrl).catch(() => {});
+                  await navigator.clipboard.writeText(shareUrl).catch(() => {});
                   setHasCopied(true);
                   toast.success("Link copied!");
                   setTimeout(() => setHasCopied(false), 2000);

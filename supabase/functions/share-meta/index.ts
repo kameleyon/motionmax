@@ -188,12 +188,12 @@ Deno.serve(async (req) => {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${escapeHtml(title)} | MotionMax</title>
     <meta name="description" content="${escapeHtml(description)}">
-    
+
     <meta property="og:type" content="video.other">
     <meta property="og:url" content="${appUrl}">
-    <meta property="og:title" content="${escapeHtml(title)}">
+    <meta property="og:title" content="${escapeHtml(title)} | MotionMax">
     <meta property="og:description" content="${escapeHtml(description)}">
-    <meta property="og:image" content="${cacheBustedImageUrl}">
+    <meta property="og:image" content="${imageUrl}">
     <meta property="og:image:width" content="1920">
     <meta property="og:image:height" content="1080">
     <meta property="og:image:alt" content="${escapeHtml(title)} — Created with MotionMax.io">
@@ -202,7 +202,7 @@ Deno.serve(async (req) => {
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="${escapeHtml(title)}">
     <meta name="twitter:description" content="${escapeHtml(description)}">
-    <meta name="twitter:image" content="${cacheBustedImageUrl}">
+    <meta name="twitter:image" content="${imageUrl}">
     <meta name="twitter:site" content="@motionmaxio">
 
     ${shouldRedirect ? `<meta http-equiv="refresh" content="0;url=${appUrl}">` : ''}

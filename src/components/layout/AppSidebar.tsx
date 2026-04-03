@@ -22,6 +22,8 @@ import {
   MicVocal,
   Shield,
   Film,
+  ChevronDown,
+  Plus,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -105,6 +107,7 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
+  const [createOpen, setCreateOpen] = useState(isCreateRoute);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<{ id: string; title: string } | null>(null);
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
@@ -176,7 +179,7 @@ export function AppSidebar() {
         .select("id, title, created_at, project_type")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
-        .limit(10);
+        .limit(5);
       if (error) throw error;
       return data || [];
     },
@@ -332,100 +335,78 @@ export function AppSidebar() {
                 </Tooltip>
               </SidebarMenuItem>
 
-              {/* Explainers (formerly Doc-to-Video) */}
+              {/* Create — collapsible group with 4 modes */}
               <SidebarMenuItem className={isCollapsed ? "w-auto" : "w-full"}>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <SidebarMenuButton
-                      onClick={() => navTo("/app/create?mode=doc2video")}
+                      onClick={() => isCollapsed ? navTo("/app/create?mode=doc2video") : setCreateOpen(!createOpen)}
                       className={`cursor-pointer rounded-lg py-2.5 transition-colors ${
-                        isCreateRoute && currentMode === "doc2video" && !new URLSearchParams(location.search).has("project")
-                          ? "bg-primary/10 text-primary" 
+                        isCreateRoute && !new URLSearchParams(location.search).has("project")
+                          ? "bg-primary/10 text-primary"
                           : "hover:bg-sidebar-accent/50"
                       } ${isCollapsed ? "w-10 h-10 p-0 flex items-center justify-center" : "w-full px-3"}`}
                     >
-                      <Video className="h-4 w-4 shrink-0" />
-                      {!isCollapsed && <span className="text-sm">Explainers</span>}
+                      <Plus className="h-4 w-4 shrink-0" />
+                      {!isCollapsed && (
+                        <>
+                          <span className="text-sm flex-1">Create</span>
+                          <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${createOpen ? "rotate-180" : ""}`} />
+                        </>
+                      )}
                     </SidebarMenuButton>
                   </TooltipTrigger>
-                  {isCollapsed && <TooltipContent side="right">Explainers</TooltipContent>}
+                  {isCollapsed && <TooltipContent side="right">Create</TooltipContent>}
                 </Tooltip>
-              </SidebarMenuItem>
 
-              {/* Visual Stories (formerly Storytelling) */}
-              <SidebarMenuItem className={isCollapsed ? "w-auto" : "w-full"}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <SidebarMenuButton
-                      onClick={() => navTo("/app/create?mode=storytelling")}
-                      className={`cursor-pointer rounded-lg py-2.5 transition-colors ${
-                        isCreateRoute && currentMode === "storytelling" && !new URLSearchParams(location.search).has("project")
-                          ? "bg-primary/10 text-primary" 
-                          : "hover:bg-sidebar-accent/50"
-                      } ${isCollapsed ? "w-10 h-10 p-0 flex items-center justify-center" : "w-full px-3"}`}
-                    >
-                      <Clapperboard className="h-4 w-4 shrink-0" />
-                      {!isCollapsed && <span className="text-sm">Visual Stories</span>}
-                    </SidebarMenuButton>
-                  </TooltipTrigger>
-                  {isCollapsed && <TooltipContent side="right">Visual Stories</TooltipContent>}
-                </Tooltip>
-              </SidebarMenuItem>
+                {/* Sub-menu — creation modes */}
+                {!isCollapsed && createOpen && (
+                  <div className="ml-5 mt-1 space-y-0.5 border-l border-border/30 pl-2">
+                    {[
+                      { mode: "doc2video", label: "Explainers", icon: Video },
+                      { mode: "storytelling", label: "Visual Stories", icon: Clapperboard },
+                      { mode: "smartflow", label: "Smart Flow", icon: Wallpaper },
+                    ].map(({ mode, label, icon: Icon }) => (
+                      <button
+                        key={mode}
+                        onClick={() => navTo(`/app/create?mode=${mode}`)}
+                        className={`flex items-center gap-2 w-full rounded-lg px-2.5 py-2 text-sm transition-colors ${
+                          isCreateRoute && currentMode === mode && !new URLSearchParams(location.search).has("project")
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50"
+                        }`}
+                      >
+                        <Icon className="h-3.5 w-3.5 shrink-0" />
+                        {label}
+                      </button>
+                    ))}
 
-              {/* Smart Flow */}
-              <SidebarMenuItem className={isCollapsed ? "w-auto" : "w-full"}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <SidebarMenuButton
-                      onClick={() => navTo("/app/create?mode=smartflow")}
-                      className={`cursor-pointer rounded-lg py-2.5 transition-colors ${
-                        isCreateRoute && currentMode === "smartflow" && !new URLSearchParams(location.search).has("project")
-                          ? "bg-primary/10 text-primary" 
-                          : "hover:bg-sidebar-accent/50"
-                      } ${isCollapsed ? "w-10 h-10 p-0 flex items-center justify-center" : "w-full px-3"}`}
-                    >
-                      <Wallpaper className="h-4 w-4 shrink-0" />
-                      {!isCollapsed && <span className="text-sm">Smart Flow</span>}
-                    </SidebarMenuButton>
-                  </TooltipTrigger>
-                  {isCollapsed && <TooltipContent side="right">Smart Flow</TooltipContent>}
-                </Tooltip>
-              </SidebarMenuItem>
-
-              {/* Cinematic - Beta */}
-              {(() => {
-                const canAccessCinematic = isAdmin || plan === "professional" || plan === "enterprise";
-                return (
-                  <SidebarMenuItem className={isCollapsed ? "w-auto" : "w-full"}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <SidebarMenuButton
+                    {/* Cinematic — with lock for non-pro */}
+                    {(() => {
+                      const canAccessCinematic = isAdmin || plan === "professional" || plan === "enterprise";
+                      return (
+                        <button
                           onClick={() => canAccessCinematic && navTo("/app/create?mode=cinematic")}
-                          className={`rounded-lg py-2.5 transition-colors ${
+                          className={`flex items-center gap-2 w-full rounded-lg px-2.5 py-2 text-sm transition-colors ${
                             !canAccessCinematic
-                              ? "opacity-40 cursor-not-allowed"
+                              ? "opacity-40 cursor-not-allowed text-muted-foreground"
                               : isCreateRoute && currentMode === "cinematic" && !new URLSearchParams(location.search).has("project")
-                                ? "bg-primary/10 text-primary cursor-pointer"
-                                : "hover:bg-sidebar-accent/50 cursor-pointer"
-                          } ${isCollapsed ? "w-10 h-10 p-0 flex items-center justify-center" : "w-full px-3"}`}
+                                ? "bg-primary/10 text-primary"
+                                : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50"
+                          }`}
                         >
-                          <Film className="h-4 w-4 shrink-0" />
-                          {!isCollapsed && (
-                            <span className="text-sm flex items-center gap-2">
-                              Cinematic
-                              <span className="text-xs px-1.5 py-0.5 rounded bg-primary/20 text-primary">Beta</span>
-                              {!canAccessCinematic && (
-                                <Crown className="h-3 w-3 text-[hsl(var(--gold))]" />
-                              )}
-                            </span>
-                          )}
-                        </SidebarMenuButton>
-                      </TooltipTrigger>
-                      {isCollapsed && <TooltipContent side="right">Cinematic - Beta{!canAccessCinematic ? " (Pro plan required)" : ""}</TooltipContent>}
-                    </Tooltip>
-                  </SidebarMenuItem>
-                );
-              })()}
+                          <Film className="h-3.5 w-3.5 shrink-0" />
+                          <span className="flex items-center gap-1.5">
+                            Cinematic
+                            <span className="text-[10px] px-1 py-0.5 rounded bg-primary/20 text-primary leading-none">Beta</span>
+                            {!canAccessCinematic && <Crown className="h-3 w-3 text-[hsl(var(--gold))]" />}
+                          </span>
+                        </button>
+                      );
+                    })()}
+                  </div>
+                )}
+              </SidebarMenuItem>
 
               {/* Voice Lab */}
               <SidebarMenuItem className={isCollapsed ? "w-auto" : "w-full"}>

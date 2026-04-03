@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Menu } from "lucide-react";
+import { X, Menu, Play } from "lucide-react";
 import { PLAN_PRICES } from "@/config/products";
 import { LANDING_FEATURES } from "@/config/landingContent";
 import { Button } from "@/components/ui/button";
@@ -213,13 +213,23 @@ export default function Landing() {
               Cinematic visuals. Natural voiceover.<br className="hidden sm:block" />Seamless transitions. <span className="text-primary">From one idea.</span>
             </p>
             
-            <Button
-              size="hero"
-              className="mt-10"
-              onClick={() => handleCta("Try for Free")}
-            >
-              Try for Free
-            </Button>
+            <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Button
+                size="hero"
+                onClick={() => handleCta("Try for Free")}
+              >
+                Try for Free
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="gap-2 border-white/20 text-white/80 hover:bg-white/10 hover:text-white"
+                onClick={() => document.querySelector("#demo")?.scrollIntoView({ behavior: "smooth" })}
+              >
+                <Play className="h-4 w-4" />
+                Watch Demo
+              </Button>
+            </div>
             <p className="mt-4 text-sm text-white/50">
               Free to start · No credit card required
             </p>
@@ -240,7 +250,7 @@ export default function Landing() {
       </section>
 
       {/* Product Demo Section */}
-      <section className="py-12 sm:py-20 bg-white/[0.02]">
+      <section id="demo" className="py-12 sm:py-20 bg-white/[0.02]">
         <div className="mx-auto max-w-4xl px-6 sm:px-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -263,15 +273,15 @@ export default function Landing() {
             transition={{ delay: 0.1 }}
             className="relative rounded-xl overflow-hidden border border-border/50 bg-black aspect-video"
           >
-            {/* Replace src with your actual demo video URL */}
-            <video
-              src="/hero-promo-optimized.mp4"
-              className="w-full h-full object-cover"
-              autoPlay
-              muted
-              loop
-              playsInline
-              poster="/hero-video-poster.png"
+            <iframe
+              src="https://embed.app.guidde.com/playbooks/wvJwFaqbh66kuXS3hZ23ir?mode=videoOnly"
+              title="Demonstrate Visual Content Creation With MotionMax"
+              frameBorder="0"
+              referrerPolicy="unsafe-url"
+              allowFullScreen
+              allow="clipboard-write"
+              sandbox="allow-popups allow-popups-to-escape-sandbox allow-scripts allow-forms allow-same-origin allow-presentation"
+              className="w-full h-full rounded-xl"
             />
           </motion.div>
 

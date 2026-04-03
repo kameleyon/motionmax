@@ -215,7 +215,7 @@ export default function Landing() {
             
             <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
               <Button
-                size="hero"
+                size="lg"
                 onClick={() => handleCta("Try for Free")}
               >
                 Try for Free

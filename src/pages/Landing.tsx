@@ -201,8 +201,8 @@ export default function Landing() {
               className="w-full max-w-sm sm:max-w-md md:max-w-lg xl:max-w-xl mx-auto"
             />
             
-            <p className="mt-8 text-3xl sm:text-4xl md:text-5xl font-medium leading-tight uppercase tracking-wide text-white/90">
-              Turn Text Into Engaging Visual Content.
+            <p className="mt-8 text-2xl sm:text-3xl md:text-4xl font-medium leading-snug text-white/90">
+              Cinematic visuals. Natural voiceover.<br />Seamless transitions. <span className="text-primary">From one idea.</span>
             </p>
             
             <Button
@@ -222,7 +222,7 @@ export default function Landing() {
       {/* Features Section — always dark background */}
       <section
         id="features"
-        className="py-24 sm:py-32 relative overflow-hidden"
+        className="py-16 sm:py-24 relative overflow-hidden"
         style={{
           backgroundImage: `url(${featuresBackgroundDark})`,
           backgroundSize: "cover",

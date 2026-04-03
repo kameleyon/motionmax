@@ -12,7 +12,7 @@ interface LandingCtaProps {
 
 export default function LandingCta({ onCtaClick }: LandingCtaProps) {
   return (
-    <section className="py-24 sm:py-32 border-t border-border/30">
+    <section className="py-16 sm:py-24">
       <div className="mx-auto max-w-3xl px-6 sm:px-8 text-center">
         <motion.div
           initial={{ opacity: 0, y: 20 }}

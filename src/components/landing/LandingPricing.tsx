@@ -103,7 +103,7 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
   const [billingInterval, setBillingInterval] = useState<"monthly" | "yearly">("monthly");
 
   return (
-    <section id="pricing" className="py-24 sm:py-32 border-t border-border/30">
+    <section id="pricing" className="py-16 sm:py-24 bg-white/[0.02]">
       <div className="mx-auto max-w-7xl px-6 sm:px-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}

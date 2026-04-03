@@ -24,7 +24,7 @@ export default function FaqSection() {
     <section
       ref={ref}
       id="faq"
-      className="py-24 sm:py-32 border-t border-border/30"
+      className="py-16 sm:py-24 bg-white/[0.02]"
     >
       <div className="mx-auto max-w-3xl px-6 sm:px-8">
         <motion.div

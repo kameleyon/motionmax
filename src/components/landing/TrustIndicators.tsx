@@ -13,7 +13,7 @@ export default function TrustIndicators() {
   useTrackImpression("trust_section_view", ref);
 
   return (
-    <section ref={ref} className="py-16 sm:py-20 border-t border-border/30">
+    <section ref={ref} className="py-14 sm:py-18 bg-white/[0.02]">
       <div className="mx-auto max-w-6xl px-6 sm:px-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}

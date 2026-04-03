@@ -38,7 +38,7 @@ export default function BeforeAfterComparison() {
   useTrackImpression("before_after_section_view", ref);
 
   return (
-    <section ref={ref} className="py-20 sm:py-28 border-t border-border/30">
+    <section ref={ref} className="py-16 sm:py-20">
       <div className="mx-auto max-w-6xl px-6 sm:px-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}

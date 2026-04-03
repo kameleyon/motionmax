@@ -11,7 +11,6 @@ import SeoHead from "@/components/landing/SeoHead";
 import FeatureCard from "@/components/landing/FeatureCard";
 import TrustIndicators from "@/components/landing/TrustIndicators";
 import FaqSection from "@/components/landing/FaqSection";
-import featuresBackgroundDark from "@/assets/features-bg-dark.png";
 import motionmaxLogo from "@/assets/motionmax-logo.png";
 import motionMaxHeroLogo from "@/assets/motionmax-hero-logo.png";
 import LandingPricing from "@/components/landing/LandingPricing";
@@ -219,32 +218,33 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Features Section — always dark background */}
+      {/* Features Section */}
       <section
         id="features"
         className="py-16 sm:py-24 relative overflow-hidden"
-        style={{
-          backgroundImage: `url(${featuresBackgroundDark})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        }}
       >
+        {/* Subtle gradient background */}
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/[0.03] to-transparent" />
+
         <div className="mx-auto max-w-6xl px-6 sm:px-8 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-center mb-16"
+            className="text-center mb-12"
           >
+            <span className="inline-block mb-3 text-xs font-medium uppercase tracking-widest text-primary">
+              Features
+            </span>
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
-              Why MotionMax?
+              Everything you need. Nothing you don't.
             </h2>
-            <p className="mt-4 text-lg max-w-2xl mx-auto text-white/90">
-              From idea to polished content in minutes. Our AI handles the heavy lifting so you can focus on your message.
+            <p className="mt-4 text-base max-w-xl mx-auto text-white/50">
+              AI handles research, scriptwriting, visuals, voiceover, and editing. You bring the idea.
             </p>
           </motion.div>
 
-          <div className="grid gap-6 md:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {LANDING_FEATURES.map((feature, index) => (
               <FeatureCard key={feature.title} feature={feature} index={index} />
             ))}

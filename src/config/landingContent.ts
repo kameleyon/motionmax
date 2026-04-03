@@ -1,4 +1,4 @@
-import { FileText, Volume2, Clapperboard, Shield, Users, Globe, type LucideIcon } from "lucide-react";
+import { Film, Mic, Sparkles, Subtitles, Globe, Pencil, Shield, Users, type LucideIcon } from "lucide-react";
 
 /* ──────────────────────────────────────────────
  * Feature cards shown on the landing page.
@@ -13,22 +13,40 @@ export interface FeatureItem {
 
 export const LANDING_FEATURES: FeatureItem[] = [
   {
-    title: "Document to Video",
+    title: "Cinematic AI Videos",
     description:
-      "Transform your documents and text into engaging narrated videos with AI-generated visuals.",
-    icon: FileText,
+      "15-scene videos with AI image-to-video, seamless transitions between scenes, and camera motion direction.",
+    icon: Film,
   },
   {
-    title: "Natural Voiceovers",
+    title: "AI Voiceover & Cloning",
     description:
-      "Create professional audio with natural-sounding AI voices that bring your content to life.",
-    icon: Volume2,
+      "9+ AI voices with emotion-aware style. Clone your own voice for consistent narration across projects.",
+    icon: Mic,
   },
   {
-    title: "AI Video Generation",
+    title: "AI Research & Script",
     description:
-      "Generate fully produced videos with AI visuals, scene-by-scene storytelling, and professional narration.",
-    icon: Clapperboard,
+      "Claude AI researches your topic for accuracy — verified facts, real appearances, cultural context — then writes the script.",
+    icon: Sparkles,
+  },
+  {
+    title: "25+ Caption Styles",
+    description:
+      "From Classic to Karaoke word-by-word. Captions burned directly into the video. Pick your style, change it anytime.",
+    icon: Subtitles,
+  },
+  {
+    title: "11 Languages",
+    description:
+      "English, French, Spanish, Portuguese, German, Italian, Russian, Chinese, Japanese, Korean, Haitian Creole.",
+    icon: Globe,
+  },
+  {
+    title: "Scene-by-Scene Editing",
+    description:
+      "Edit any image with AI text instructions. Regenerate audio or video per scene. Affected transitions auto-update.",
+    icon: Pencil,
   },
 ];
 

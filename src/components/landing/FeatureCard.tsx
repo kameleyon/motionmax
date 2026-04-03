@@ -1,13 +1,7 @@
 import { useRef } from "react";
 import { motion } from "framer-motion";
-import { useTheme } from "next-themes";
 import { useTrackImpression } from "@/hooks/useAnalytics";
 import type { FeatureItem } from "@/config/landingContent";
-
-/* ──────────────────────────────────────────────
- * Single feature card used in the Features grid.
- * Tracks an impression event when scrolled into view.
- * ────────────────────────────────────────────── */
 
 interface FeatureCardProps {
   feature: FeatureItem;
@@ -16,8 +10,6 @@ interface FeatureCardProps {
 
 export default function FeatureCard({ feature, index }: FeatureCardProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === "dark";
   const IconComponent = feature.icon;
 
   useTrackImpression("feature_view", ref, { feature_title: feature.title });
@@ -25,26 +17,22 @@ export default function FeatureCard({ feature, index }: FeatureCardProps) {
   return (
     <motion.div
       ref={ref}
-      key={feature.title}
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 24 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
-      transition={{ delay: index * 0.1 }}
-      className={`text-center p-6 rounded-2xl backdrop-blur-sm border shadow-lg ${
-        isDark
-          ? 'bg-black/25 border-white/20'
-          : 'bg-white/60 border-border'
-      }`}
+      transition={{ delay: index * 0.08, duration: 0.5 }}
+      className="group relative rounded-2xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur-sm transition-all duration-300 hover:border-primary/30 hover:bg-white/[0.07] hover:shadow-[0_8px_30px_-12px_rgba(17,196,208,0.15)]"
     >
-      <div className={`mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl ${
-        isDark ? 'bg-white/20' : 'bg-primary/10'
-      }`}>
-        <IconComponent className={`h-7 w-7 ${isDark ? 'text-white' : 'text-primary'}`} />
+      {/* Subtle top gradient line */}
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 transition-colors group-hover:bg-primary/20">
+        <IconComponent className="h-6 w-6 text-primary" />
       </div>
-      <h3 className={`text-lg font-semibold mb-3 ${isDark ? 'text-white' : 'text-foreground'}`}>
+      <h3 className="text-base font-semibold text-white mb-2">
         {feature.title}
       </h3>
-      <p className={`text-sm leading-relaxed ${isDark ? 'text-white/90' : 'text-muted-foreground'}`}>
+      <p className="text-sm leading-relaxed text-white/60">
         {feature.description}
       </p>
     </motion.div>

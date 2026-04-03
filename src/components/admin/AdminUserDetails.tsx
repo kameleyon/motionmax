@@ -3,7 +3,7 @@ import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Mail, Calendar, CreditCard, Activity, Flag, Coins, DollarSign, Trash2, ShieldAlert, ShieldX, ShieldCheck } from "lucide-react";
+import { Loader2, Mail, Calendar, CreditCard, Activity, Flag, Coins, DollarSign, Trash2, ShieldAlert, ShieldX, ShieldCheck, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -181,7 +181,7 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
                   variant="outline"
                   size="sm"
                   onClick={() => setActionDialog({ type: "suspend", open: true })}
-                  className="gap-1.5"
+                  className="gap-1.5 text-warning border-warning/50 hover:bg-warning/10"
                 >
                   <ShieldX className="h-3.5 w-3.5" />
                   Suspend
@@ -190,7 +190,7 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
                   variant="outline"
                   size="sm"
                   onClick={() => setActionDialog({ type: "ban", open: true })}
-                  className="gap-1.5"
+                  className="gap-1.5 text-destructive border-destructive/50 hover:bg-destructive/10"
                 >
                   <ShieldAlert className="h-3.5 w-3.5" />
                   Ban
@@ -283,7 +283,7 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
       </div>
 
       {/* Compact Stats Row */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="p-3">
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
             <Coins className="h-3.5 w-3.5" />
@@ -327,12 +327,14 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
         </Card>
       </div>
 
-      {/* Worker System Logs */}
+      {/* Worker System Logs — collapsed by default */}
       {data.recentUserLogs && data.recentUserLogs.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Worker System Logs (Errors & Status)</CardTitle>
-          </CardHeader>
+          <details>
+          <summary className="px-6 py-4 cursor-pointer text-sm font-medium flex items-center justify-between list-none">
+            <span>Worker System Logs ({data.recentUserLogs.length})</span>
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          </summary>
           <CardContent>
             <Table>
               <TableHeader>
@@ -361,15 +363,18 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
               </TableBody>
             </Table>
           </CardContent>
+          </details>
         </Card>
       )}
 
-      {/* Recent Transactions */}
+      {/* Recent Transactions — collapsed by default */}
       {data.recentTransactions && data.recentTransactions.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Recent Transactions</CardTitle>
-          </CardHeader>
+          <details>
+          <summary className="px-6 py-4 cursor-pointer text-sm font-medium flex items-center justify-between list-none">
+            <span>Recent Transactions ({data.recentTransactions.length})</span>
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          </summary>
           <CardContent>
             <Table>
               <TableHeader>
@@ -400,15 +405,18 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
               </TableBody>
             </Table>
           </CardContent>
+          </details>
         </Card>
       )}
 
-      {/* Flags */}
+      {/* Flags — expanded by default (most actionable) */}
       {data.flags && data.flags.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">User Flags</CardTitle>
-          </CardHeader>
+          <details open>
+          <summary className="px-6 py-4 cursor-pointer text-sm font-medium flex items-center justify-between list-none">
+            <span>User Flags ({data.flags.length})</span>
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          </summary>
           <CardContent>
             <Table>
               <TableHeader>
@@ -441,6 +449,7 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
               </TableBody>
             </Table>
           </CardContent>
+          </details>
         </Card>
       )}
 
@@ -471,9 +480,14 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
             <Button variant="outline" onClick={() => setActionDialog({ type: "suspend", open: false })}>
               Cancel
             </Button>
-            <Button onClick={handleAction} disabled={actionLoading}>
+            <Button
+              onClick={handleAction}
+              disabled={actionLoading}
+              variant={actionDialog.type === "ban" ? "destructive" : "default"}
+              className={actionDialog.type === "suspend" ? "bg-warning text-warning-foreground hover:bg-warning/90" : ""}
+            >
               {actionLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              {actionDialog.type === "ban" && "Ban User"}
+              {actionDialog.type === "ban" && "Permanently Ban User"}
               {actionDialog.type === "suspend" && "Suspend User"}
               {actionDialog.type === "unblock" && "Unblock User"}
             </Button>

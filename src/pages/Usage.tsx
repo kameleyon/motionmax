@@ -279,7 +279,7 @@ export default function Usage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="text-xl sm:text-2xl font-bold text-foreground">
-                      {isLoadingSub ? "..." : planInfo.label}
+                      {isLoadingSub ? <span className="inline-block h-4 w-16 rounded bg-muted animate-pulse" /> : planInfo.label}
                     </p>
                     <Badge variant="secondary" className="text-xs">Current</Badge>
                     {cancelAtPeriodEnd && (
@@ -356,7 +356,7 @@ export default function Usage() {
               <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
                 <div className="flex items-end justify-between">
                   <span className="text-2xl sm:text-3xl font-bold">
-                    {isLoadingSub ? "..." : creditsBalance}
+                    {isLoadingSub ? <span className="inline-block h-6 w-12 rounded bg-muted animate-pulse" /> : creditsBalance}
                   </span>
                   <span className="text-sm text-muted-foreground">credits</span>
                 </div>
@@ -526,8 +526,17 @@ export default function Usage() {
             </CardHeader>
             <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
               {isLoadingActivity ? (
-                <div className="py-8 text-center text-sm text-muted-foreground">
-                  Loading activity...
+                <div className="py-4 space-y-3">
+                  {[1,2,3,4].map(i => (
+                    <div key={i} className="flex items-center gap-3 px-4 py-3">
+                      <div className="h-8 w-8 rounded-lg bg-muted animate-pulse" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-3 w-3/4 rounded bg-muted animate-pulse" />
+                        <div className="h-2 w-1/2 rounded bg-muted animate-pulse" />
+                      </div>
+                      <div className="h-3 w-16 rounded bg-muted animate-pulse" />
+                    </div>
+                  ))}
                 </div>
               ) : filteredActivity.length === 0 ? (
                 <div className="py-8 text-center">

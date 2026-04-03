@@ -356,13 +356,19 @@ export default function Dashboard() {
                               alt={project.title}
                               loading="lazy"
                               decoding="async"
-                              className="absolute inset-0 w-full h-full object-cover"
+                              className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                               onError={(e) => {
                                 const img = e.target as HTMLImageElement;
                                 img.onerror = null;
                                 img.src = defaultThumbnail;
                               }}
                             />
+                            {/* Hover overlay with play icon */}
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-300 flex items-center justify-center">
+                              <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 p-2 rounded-full bg-white/20 backdrop-blur-sm">
+                                <Film className="h-5 w-5 text-white" />
+                              </div>
+                            </div>
                             <div className="absolute bottom-2 right-2 p-1.5 rounded-md bg-black/50 backdrop-blur-sm z-10">
                               <ProjectIcon className="h-4 w-4 text-white" />
                             </div>

@@ -252,6 +252,100 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Product Modes Showcase */}
+      <section className="py-16 sm:py-24 relative bg-white/[0.02]">
+        <div className="mx-auto max-w-6xl px-6 sm:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <span className="inline-block mb-3 text-xs font-medium uppercase tracking-widest text-primary">
+              4 Ways to Create
+            </span>
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
+              One platform. Four creative modes.
+            </h2>
+            <p className="mt-4 text-base max-w-xl mx-auto text-white/50">
+              Pick the format that fits your content. Each mode is purpose-built.
+            </p>
+          </motion.div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            {[
+              {
+                title: "Cinematic",
+                tag: "AI Video",
+                description: "15 AI-generated video scenes with image-to-video transitions, camera motion, and natural voiceover. Paste an idea, get a cinematic short film.",
+                example: "\"The untold story of Haiti's revolution\" → 2.5 min cinematic video",
+                color: "from-primary/20 to-primary/5",
+                borderColor: "hover:border-primary/40",
+                mode: "cinematic",
+              },
+              {
+                title: "Explainers",
+                tag: "Doc to Video",
+                description: "Turn articles, documents, or any text into narrated slideshow videos. Multiple images per scene with professional voiceover.",
+                example: "\"Paste a 5-page report\" → 8 min narrated explainer video",
+                color: "from-blue-500/20 to-blue-500/5",
+                borderColor: "hover:border-blue-400/40",
+                mode: "doc2video",
+              },
+              {
+                title: "Visual Stories",
+                tag: "Storytelling",
+                description: "AI writes the script from your story idea, generates scene images, and narrates with matched emotion. Full creative control over tone and style.",
+                example: "\"A bedtime story about a brave robot\" → animated visual story",
+                color: "from-purple-500/20 to-purple-500/5",
+                borderColor: "hover:border-purple-400/40",
+                mode: "storytelling",
+              },
+              {
+                title: "Smart Flow",
+                tag: "Infographics",
+                description: "Transform data and key insights into stunning visual infographics with optional narration. Perfect for social media content.",
+                example: "\"Top 10 AI trends in 2026\" → visual infographic with voiceover",
+                color: "from-amber-500/20 to-amber-500/5",
+                borderColor: "hover:border-amber-400/40",
+                mode: "smartflow",
+              },
+            ].map((product, index) => (
+              <motion.div
+                key={product.mode}
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.1, duration: 0.5 }}
+                className={`group relative rounded-2xl border border-white/10 bg-gradient-to-br ${product.color} p-6 sm:p-8 transition-all duration-300 ${product.borderColor}`}
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <span className="text-xs font-medium uppercase tracking-wider text-white/40">{product.tag}</span>
+                    <h3 className="text-xl font-bold text-white mt-1">{product.title}</h3>
+                  </div>
+                </div>
+                <p className="text-sm leading-relaxed text-white/60 mb-4">
+                  {product.description}
+                </p>
+                <div className="rounded-lg bg-black/30 px-4 py-2.5 mb-5">
+                  <p className="text-xs text-white/40 italic">{product.example}</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 border-white/20 text-white/80 hover:bg-white/10 hover:text-white"
+                  onClick={() => handleCta(`Try ${product.title}`)}
+                >
+                  Try {product.title}
+                  <span className="text-primary">→</span>
+                </Button>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Trust Indicators */}
       <TrustIndicators />
 

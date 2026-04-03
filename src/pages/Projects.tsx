@@ -161,11 +161,10 @@ export default function Projects() {
       const from = pageParam * ITEMS_PER_PAGE;
       const to = from + ITEMS_PER_PAGE - 1;
 
-      // Single query: join projects with their latest complete generation
-      // to extract thumbnail in one round-trip instead of two
+      // Step 1: Fetch projects (no generation join — cleaner, faster)
       let q = supabase
         .from("projects")
-        .select("*, generations(project_id, scenes, status, created_at)")
+        .select("*, thumbnail_url")
         .eq("user_id", user.id)
         .order("is_favorite", { ascending: false })
         .order(sortField, { ascending: sortOrder === "asc" })
@@ -184,42 +183,46 @@ export default function Projects() {
 
       if (!projectsData?.length) return { projects: [], nextCursor: null };
 
-      const projects = projectsData.map(p => {
-        // Use existing thumbnail_url if set
-        if (p.thumbnail_url) {
-          return { ...p, generations: undefined, thumbnailUrl: gridThumbnailUrl(p.thumbnail_url) } as unknown as Project;
-        }
+      // Step 2: For projects missing thumbnail_url, fetch from completed generations
+      const missingIds = projectsData.filter(p => !p.thumbnail_url).map(p => p.id);
+      const thumbnailMap: Record<string, string | null> = {};
 
-        // Extract thumbnail from joined generations data — prefer latest with scenes
-        const gens = (p as any).generations as Array<{ project_id: string; scenes: any; status?: string; created_at?: string }> | null;
-        let fallbackUrl: string | null = null;
+      if (missingIds.length > 0) {
+        const { data: generations } = await supabase
+          .from("generations")
+          .select("project_id, scenes")
+          .in("project_id", missingIds)
+          .eq("status", "complete")
+          .order("created_at", { ascending: false });
 
-        if (Array.isArray(gens) && gens.length > 0) {
-          // Sort by created_at descending to get the latest generation first
-          const sorted = [...gens].sort((a, b) =>
-            (b.created_at || "").localeCompare(a.created_at || "")
-          );
-
-          for (const gen of sorted) {
+        if (generations) {
+          for (const gen of generations) {
+            if (thumbnailMap[gen.project_id] !== undefined) continue;
             const scenes = gen.scenes as any[];
             if (!Array.isArray(scenes) || scenes.length === 0) continue;
 
-            // Search all scenes for a usable image, not just the first
             for (const scene of scenes) {
-              const imageUrl = scene?.imageUrl ||
-                              scene?.image_url ||
-                              (Array.isArray(scene?.imageUrls) && scene.imageUrls.length > 0 ? scene.imageUrls[0] : null);
-              if (imageUrl) {
-                fallbackUrl = imageUrl;
+              const url =
+                scene?.imageUrl ||
+                scene?.image_url ||
+                (Array.isArray(scene?.imageUrls) && scene.imageUrls.length > 0 ? scene.imageUrls[0] : null);
+              if (url) {
+                thumbnailMap[gen.project_id] = url;
                 break;
               }
             }
-            if (fallbackUrl) break;
+            if (thumbnailMap[gen.project_id] === undefined) {
+              thumbnailMap[gen.project_id] = null;
+            }
           }
         }
+      }
 
-        return { ...p, generations: undefined, thumbnailUrl: gridThumbnailUrl(fallbackUrl) } as unknown as Project;
-      });
+      // Step 3: Merge thumbnails
+      const projects = projectsData.map(p => ({
+        ...p,
+        thumbnailUrl: gridThumbnailUrl(p.thumbnail_url ?? thumbnailMap[p.id] ?? null),
+      })) as unknown as Project[];
 
       return {
         projects,

@@ -19,7 +19,7 @@ export function DashboardQuickActions() {
           <button
             key={mode}
             onClick={() => navigate(`/app/create?mode=${mode}`)}
-            className="rounded-xl border border-primary/75 bg-white/90 dark:bg-card/80 backdrop-blur-sm p-4 text-left hover:border-primary transition-colors shadow-sm group"
+            className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm p-4 text-left hover:border-primary transition-colors shadow-sm group"
           >
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 mb-3">
               <ActionIcon className="h-5 w-5 text-primary" />

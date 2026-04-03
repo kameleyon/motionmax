@@ -209,7 +209,7 @@ export default function Dashboard() {
           {/* Stats Row */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Credits Card */}
-            <div className="rounded-xl border border-primary/75 bg-white/90 dark:bg-card/80 backdrop-blur-sm p-5 shadow-sm">
+            <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm p-5 shadow-sm">
               <div className="flex items-center gap-5">
                 <div className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-primary/30 bg-primary/10 shrink-0">
                   {isCreditsError ? (
@@ -235,7 +235,7 @@ export default function Dashboard() {
             </div>
 
             {/* Did You Know */}
-            <div className="rounded-xl border border-primary/75 bg-white/90 dark:bg-card/80 backdrop-blur-sm p-5 shadow-sm">
+            <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm p-5 shadow-sm">
               <div className="flex items-start gap-3">
                 <div className="p-2 rounded-lg bg-primary/10 shrink-0">
                   <Lightbulb className="h-5 w-5 text-primary" />
@@ -295,7 +295,7 @@ export default function Dashboard() {
             ) : isLoadingProjects ? (
               <div className="flex gap-4 overflow-hidden">
                 {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="shrink-0 w-[200px] rounded-xl border border-primary/75 bg-white/90 dark:bg-card/80 backdrop-blur-sm overflow-hidden shadow-sm">
+                  <div key={i} className="shrink-0 w-[200px] rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm overflow-hidden shadow-sm">
                     <Skeleton className="h-24 w-full" />
                     <div className="p-3 space-y-2">
                       <Skeleton className="h-4 w-3/4" />
@@ -305,7 +305,7 @@ export default function Dashboard() {
                 ))}
               </div>
             ) : recentProjects.length === 0 ? (
-              <div className="rounded-xl border border-primary/75 bg-white/90 dark:bg-card/80 backdrop-blur-sm shadow-sm">
+              <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm shadow-sm">
                 <EmptyState
                   icon={FolderOpen}
                   title="No projects yet"
@@ -324,7 +324,7 @@ export default function Dashboard() {
                       <CarouselItem key={project.id} className="pl-4 basis-[200px] sm:basis-[220px]">
                         <div
                           onClick={() => navigate(`/app/create?mode=${getCreateMode(project.project_type)}&project=${project.id}`)}
-                          className="rounded-xl border border-primary/75 bg-white/90 dark:bg-card/80 backdrop-blur-sm overflow-hidden cursor-pointer hover:border-primary transition-colors shadow-sm group"
+                          className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm overflow-hidden cursor-pointer hover:border-primary transition-colors shadow-sm group"
                         >
                           <div className="h-24 bg-gradient-to-br from-primary/30 via-primary/15 to-muted/20 flex items-center justify-center relative overflow-hidden">
                             <img
@@ -358,8 +358,8 @@ export default function Dashboard() {
                 </CarouselContent>
                 {recentProjects.length > 3 && (
                   <>
-                    <CarouselPrevious className="hidden sm:flex -left-3 border-primary/75" />
-                    <CarouselNext className="hidden sm:flex -right-3 border-primary/75" />
+                    <CarouselPrevious className="hidden sm:flex -left-3 border-border/50" />
+                    <CarouselNext className="hidden sm:flex -right-3 border-border/50" />
                   </>
                 )}
               </Carousel>

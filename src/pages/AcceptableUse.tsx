@@ -9,7 +9,7 @@ export default function AcceptableUse() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 border-b border-border/30 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-3xl items-center gap-4 px-4 sm:px-6">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="rounded-full">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="rounded-lg">
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <ThemedLogo className="h-8 w-auto" />

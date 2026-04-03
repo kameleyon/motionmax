@@ -98,7 +98,7 @@ export function OnboardingChecklist({ hasProjects, hasSharedProject = false }: O
   const allComplete = completedCount === steps.length;
 
   return (
-    <div className="rounded-xl border border-primary/75 bg-white/90 dark:bg-card/80 backdrop-blur-sm p-5 shadow-sm space-y-4">
+    <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm p-5 shadow-sm space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-foreground">Getting Started</h3>
         <div className="flex items-center gap-2">

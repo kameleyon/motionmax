@@ -163,7 +163,7 @@ export default function Auth() {
             transition={{ duration: 0.5 }}
             className="w-full max-w-md"
           >
-            <div className="rounded-2xl border border-border/50 bg-card/50 p-8 shadow-xl backdrop-blur-sm text-center">
+            <div className="rounded-2xl border border-border/50 bg-card/50 p-8 shadow-sm backdrop-blur-sm text-center">
               <div className="flex items-center justify-center mb-4">
                 <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
                   <CheckCircle2 className="h-7 w-7 text-primary" />
@@ -177,7 +177,7 @@ export default function Auth() {
               </p>
               <Button
                 variant="outline"
-                className="w-full rounded-full"
+                className="w-full rounded-lg"
                 onClick={() => { setShowEmailSent(false); setMode("login"); setPassword(""); }}
               >
                 Back to Sign In
@@ -201,7 +201,7 @@ export default function Auth() {
           transition={{ duration: 0.5 }}
           className="w-full max-w-md"
         >
-          <div className="rounded-2xl border border-border/50 bg-card/50 p-8 shadow-xl backdrop-blur-sm">
+          <div className="rounded-2xl border border-border/50 bg-card/50 p-8 shadow-sm backdrop-blur-sm">
             <div className="mb-8 text-center">
               <h1 className="text-2xl font-bold tracking-tight text-foreground">
                 {mode === "login" ? "Welcome back"
@@ -339,7 +339,7 @@ export default function Auth() {
 
               <Button
                 type="submit"
-                className="w-full gap-2 rounded-full bg-primary py-5 font-medium text-primary-foreground"
+                className="w-full gap-2 rounded-lg bg-primary py-5 font-medium text-primary-foreground"
                 disabled={isLoading}
               >
                 {isLoading ? (

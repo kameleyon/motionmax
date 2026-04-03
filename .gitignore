@@ -49,3 +49,6 @@ scripts/fetch-project-script.mjs
 scripts/repair-hypereal-images.mjs
 scripts/repair-imageUrls.mjs
 scripts/clear-stuck-job.mjs
+.claude/worktrees/elated-williamson
+.claude/worktrees/busy-lederberg
+.claude/worktrees/busy-lederberg

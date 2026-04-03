@@ -306,7 +306,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
                       placeholder="Paste your data, article, or source text here..."
                       value={dataContent}
                       onChange={(e) => setDataContent(e.target.value.slice(0, MAX_DATA_LENGTH))}
-                      className="min-h-[120px] sm:min-h-[180px] rounded-xl sm:rounded-2xl border-border/50 bg-muted/50 dark:bg-white/10 p-4 sm:p-6 text-sm resize-none focus:bg-background transition-colors"
+                      className="min-h-[120px] sm:min-h-[180px] rounded-xl border-border/50 bg-muted/50 dark:bg-white/10 p-4 sm:p-6 text-sm resize-none focus:bg-background transition-colors"
                     />
                     <div className="flex justify-end">
                       <span className={`text-xs ${dataContent.length > MAX_DATA_LENGTH * 0.9 ? 'text-destructive' : 'text-muted-foreground/50'}`}>
@@ -331,7 +331,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
                   </div>
 
                   {/* Configuration */}
-                  <div className="space-y-4 sm:space-y-6 rounded-xl sm:rounded-2xl border border-border/50 bg-card/50 p-3 sm:p-6 backdrop-blur-sm shadow-sm overflow-hidden">
+                  <div className="space-y-4 sm:space-y-6 rounded-xl border border-border/50 bg-card/50 p-3 sm:p-6 backdrop-blur-sm shadow-sm overflow-hidden">
                     {/* Style Selector */}
                     <SmartFlowStyleSelector
                       selected={style}

@@ -93,7 +93,7 @@ export function GenerationQueueStatus() {
   };
 
   return (
-    <div className="rounded-xl border border-primary/75 bg-white/90 dark:bg-card/80 backdrop-blur-sm p-5 shadow-sm space-y-3">
+    <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm p-5 shadow-sm space-y-3">
       <div className="flex items-center gap-2">
         <Loader2 className="h-4 w-4 animate-spin text-primary" />
         <h3 className="font-semibold text-foreground text-sm">

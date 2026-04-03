@@ -12,7 +12,7 @@ export default function Terms() {
       <header className="sticky top-0 z-50 border-b border-border/30 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="rounded-full">
+            <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="rounded-lg">
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <button onClick={() => navigate("/")}>

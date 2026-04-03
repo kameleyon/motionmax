@@ -278,7 +278,7 @@ export function AdminLogs() {
       {/* Terminal Log Viewer */}
       <div
         ref={terminalRef}
-        className="bg-black border border-primary/30 rounded-lg overflow-hidden shadow-xl"
+        className="bg-black border border-primary/30 rounded-lg overflow-hidden shadow-sm"
         style={{ fontFamily: "'IBM Plex Mono', monospace" }}
       >
         {/* Terminal Header */}

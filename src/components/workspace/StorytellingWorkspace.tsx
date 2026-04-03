@@ -356,7 +356,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
                   </div>
 
                   {/* Story Settings */}
-                  <div className="space-y-4 sm:space-y-6 rounded-xl sm:rounded-2xl border border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm">
+                  <div className="space-y-4 sm:space-y-6 rounded-xl border border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm">
                     <InspirationSelector selected={inspiration} onSelect={setInspiration} />
                     <div className="h-px bg-border/30" />
                     <ToneSelector selected={tone} onSelect={setTone} />
@@ -365,7 +365,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
                   </div>
 
                   {/* Voice Settings */}
-                  <div className="space-y-4 sm:space-y-6 rounded-xl sm:rounded-2xl border border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm">
+                  <div className="space-y-4 sm:space-y-6 rounded-xl border border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm">
                     <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
                       <div className="flex-1">
                         <VoiceSelector selected={voice} onSelect={setVoice} />
@@ -388,7 +388,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
                   />
 
                   {/* Brand Name (Optional) */}
-                  <div className="rounded-xl sm:rounded-2xl border border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm">
+                  <div className="rounded-xl border border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm">
                     <Label htmlFor="brand-name" className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
                       Brand / Character Name (Optional)
                     </Label>
@@ -406,7 +406,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
 
                   {/* Presenter Focus - Collapsible */}
                   <Collapsible open={presenterFocusOpen} onOpenChange={setPresenterFocusOpen}>
-                    <CollapsibleTrigger className="flex w-full items-center justify-between rounded-xl sm:rounded-2xl border border-border/50 bg-card/50 p-3 sm:p-4 backdrop-blur-sm shadow-sm hover:bg-muted/30 transition-colors">
+                    <CollapsibleTrigger className="flex w-full items-center justify-between rounded-xl border border-border/50 bg-card/50 p-3 sm:p-4 backdrop-blur-sm shadow-sm hover:bg-muted/30 transition-colors">
                       <span className="text-xs sm:text-sm font-medium flex items-center gap-2">
                         <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         Presenter Focus
@@ -414,7 +414,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
                       <ChevronDown className={`h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-200 ${presenterFocusOpen ? "rotate-180" : ""}`} />
                     </CollapsibleTrigger>
                     <CollapsibleContent>
-                      <div className="rounded-b-xl sm:rounded-b-2xl border border-t-0 border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm -mt-2">
+                      <div className="rounded-b-xl border border-t-0 border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm -mt-2">
                         <PresenterFocusInput value={presenterFocus} onChange={setPresenterFocus} />
                       </div>
                     </CollapsibleContent>
@@ -422,7 +422,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
 
                   {/* Character Description - Collapsible */}
                   <Collapsible open={characterDescOpen} onOpenChange={setCharacterDescOpen}>
-                    <CollapsibleTrigger className="flex w-full items-center justify-between rounded-xl sm:rounded-2xl border border-border/50 bg-card/50 p-3 sm:p-4 backdrop-blur-sm shadow-sm hover:bg-muted/30 transition-colors">
+                    <CollapsibleTrigger className="flex w-full items-center justify-between rounded-xl border border-border/50 bg-card/50 p-3 sm:p-4 backdrop-blur-sm shadow-sm hover:bg-muted/30 transition-colors">
                       <span className="text-xs sm:text-sm font-medium flex items-center gap-2">
                         <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         Character Appearance
@@ -430,14 +430,14 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
                       <ChevronDown className={`h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-200 ${characterDescOpen ? "rotate-180" : ""}`} />
                     </CollapsibleTrigger>
                     <CollapsibleContent>
-                      <div className="rounded-b-xl sm:rounded-b-2xl border border-t-0 border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm -mt-2">
+                      <div className="rounded-b-xl border border-t-0 border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm -mt-2">
                         <CharacterDescriptionInput value={characterDescription} onChange={setCharacterDescription} />
                       </div>
                     </CollapsibleContent>
                   </Collapsible>
 
                   {/* Technical Configuration */}
-                  <div className="space-y-4 sm:space-y-6 rounded-xl sm:rounded-2xl border border-border/50 bg-card/50 p-3 sm:p-6 backdrop-blur-sm shadow-sm overflow-hidden">
+                  <div className="space-y-4 sm:space-y-6 rounded-xl border border-border/50 bg-card/50 p-3 sm:p-6 backdrop-blur-sm shadow-sm overflow-hidden">
                     <FormatSelector selected={format} onSelect={setFormat} disabledFormats={disabledFormats} />
                     <div className="h-px bg-border/30" />
                     <StorytellingLengthSelector selected={length} onSelect={setLength} disabledLengths={disabledLengths} />

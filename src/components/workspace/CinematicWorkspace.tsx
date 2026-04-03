@@ -352,7 +352,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                   <div className="space-y-2 sm:space-y-3">
                     {/* Character Description - Collapsible */}
                     <Collapsible open={characterDescOpen} onOpenChange={setCharacterDescOpen}>
-                      <CollapsibleTrigger className="flex w-full items-center justify-between rounded-xl sm:rounded-2xl border border-border/50 bg-card/50 p-3 sm:p-4 backdrop-blur-sm shadow-sm hover:bg-muted/30 transition-colors">
+                      <CollapsibleTrigger className="flex w-full items-center justify-between rounded-xl border border-border/50 bg-card/50 p-3 sm:p-4 backdrop-blur-sm shadow-sm hover:bg-muted/30 transition-colors">
                         <span className="text-xs sm:text-sm font-medium flex items-center gap-2">
                           <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                           Character Appearance
@@ -360,7 +360,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                         <ChevronDown className={`h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-200 ${characterDescOpen ? "rotate-180" : ""}`} />
                       </CollapsibleTrigger>
                       <CollapsibleContent>
-                        <div className="rounded-b-xl sm:rounded-b-2xl border border-t-0 border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm -mt-2">
+                        <div className="rounded-b-xl border border-t-0 border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm -mt-2">
                           <CharacterDescriptionInput value={characterDescription} onChange={setCharacterDescription} />
                         </div>
                       </CollapsibleContent>
@@ -368,7 +368,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
 
                     {/* Presenter Focus - Collapsible */}
                     <Collapsible open={presenterFocusOpen} onOpenChange={setPresenterFocusOpen}>
-                      <CollapsibleTrigger className="flex w-full items-center justify-between rounded-xl sm:rounded-2xl border border-border/50 bg-card/50 p-3 sm:p-4 backdrop-blur-sm shadow-sm hover:bg-muted/30 transition-colors">
+                      <CollapsibleTrigger className="flex w-full items-center justify-between rounded-xl border border-border/50 bg-card/50 p-3 sm:p-4 backdrop-blur-sm shadow-sm hover:bg-muted/30 transition-colors">
                         <span className="text-xs sm:text-sm font-medium flex items-center gap-2">
                           <Lightbulb className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                           Presenter Focus
@@ -376,7 +376,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                         <ChevronDown className={`h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-200 ${presenterFocusOpen ? "rotate-180" : ""}`} />
                       </CollapsibleTrigger>
                       <CollapsibleContent>
-                        <div className="rounded-b-xl sm:rounded-b-2xl border border-t-0 border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm -mt-2">
+                        <div className="rounded-b-xl border border-t-0 border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm -mt-2">
                           <PresenterFocusInput value={presenterFocus} onChange={setPresenterFocus} />
                         </div>
                       </CollapsibleContent>
@@ -386,7 +386,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                   </div>
 
                   {/* Configuration */}
-                  <div className="space-y-4 sm:space-y-6 rounded-xl sm:rounded-2xl border border-border/50 bg-card/50 p-3 sm:p-6 backdrop-blur-sm shadow-sm overflow-hidden">
+                  <div className="space-y-4 sm:space-y-6 rounded-xl border border-border/50 bg-card/50 p-3 sm:p-6 backdrop-blur-sm shadow-sm overflow-hidden">
                     <FormatSelector selected={format} onSelect={setFormat} disabledFormats={disabledFormats} />
                     <div className="h-px bg-border/30" />
                     

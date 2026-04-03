@@ -218,7 +218,7 @@ export default function Settings() {
                             maxLength={50}
                           />
                         </div>
-                        <Button onClick={handleSaveDisplayName} disabled={isSavingName} className="gap-2 rounded-full">
+                        <Button onClick={handleSaveDisplayName} disabled={isSavingName} className="gap-2 rounded-lg">
                           {isSavingName && <Loader2 className="h-4 w-4 animate-spin" />}
                           Save Changes
                         </Button>
@@ -243,7 +243,7 @@ export default function Settings() {
                             <span>Confirmation email sent to <strong>{pendingEmail}</strong>. Check your inbox to complete the change.</span>
                           </div>
                         )}
-                        <Button onClick={handleChangeEmail} disabled={isChangingEmail} variant="outline" className="gap-2 rounded-full">
+                        <Button onClick={handleChangeEmail} disabled={isChangingEmail} variant="outline" className="gap-2 rounded-lg">
                           {isChangingEmail && <Loader2 className="h-4 w-4 animate-spin" />}
                           Update Email
                         </Button>
@@ -296,7 +296,7 @@ export default function Settings() {
                           <Input type="password" placeholder="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
                           <PasswordStrengthMeter password={newPassword} />
                           <Input type="password" placeholder="Confirm new password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
-                          <Button onClick={handleChangePassword} disabled={isChangingPassword} className="gap-2 rounded-full">
+                          <Button onClick={handleChangePassword} disabled={isChangingPassword} className="gap-2 rounded-lg">
                             {isChangingPassword && <Loader2 className="h-4 w-4 animate-spin" />}
                             Update Password
                           </Button>

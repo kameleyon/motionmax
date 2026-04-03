@@ -111,7 +111,7 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
           viewport={{ once: true }}
           className="text-center mb-10"
         >
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
+          <h2 className="type-h1 tracking-tight text-foreground">
             Simple, transparent pricing
           </h2>
           <p className="mt-4 text-lg text-muted-foreground">
@@ -164,7 +164,7 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
                   <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${plan.icon === Crown ? "bg-[hsl(var(--gold))]/15" : "bg-primary/10"}`}>
                     <IconComponent className={`h-4 w-4 ${plan.icon === Crown ? "text-[hsl(var(--gold))]" : "text-primary"}`} />
                   </div>
-                  <h3 className="text-lg font-semibold text-foreground">{plan.name}</h3>
+                  <h3 className="type-h3 text-foreground">{plan.name}</h3>
                 </div>
                 
                 <p className="text-sm text-muted-foreground mb-3">{plan.description}</p>

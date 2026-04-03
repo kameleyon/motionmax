@@ -19,7 +19,7 @@ export default function LandingCta({ onCtaClick }: LandingCtaProps) {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
         >
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
+          <h2 className="type-h1 tracking-tight text-foreground">
             Ready to get started?
           </h2>
           <p className="mt-4 text-lg text-muted-foreground">

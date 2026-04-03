@@ -21,7 +21,7 @@ export default function TrustIndicators() {
           viewport={{ once: true }}
           className="text-center mb-12"
         >
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+          <h2 className="type-h1 tracking-tight text-foreground">
             Trusted by creators worldwide
           </h2>
         </motion.div>

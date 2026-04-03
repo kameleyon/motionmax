@@ -14,7 +14,7 @@ export default function LandingAbout() {
           viewport={{ once: true }}
           className="text-center space-y-6"
         >
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+          <h2 className="type-h1 tracking-tight text-foreground">
             About MotionMax
           </h2>
           <p className="text-muted-foreground leading-relaxed max-w-2xl mx-auto">

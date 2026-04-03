@@ -200,7 +200,7 @@ export default function Dashboard() {
 
           {/* Welcome */}
           <div className="space-y-1">
-            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
+            <h1 className="type-h1 text-foreground">
               {GREETINGS[greetingIndex].greeting}, {displayName}
             </h1>
             <p className="text-muted-foreground">{GREETINGS[greetingIndex].suffix}</p>
@@ -221,7 +221,7 @@ export default function Dashboard() {
                   )}
                 </div>
                 <div>
-                  <h3 className="font-semibold text-foreground mb-1">Credits Remaining</h3>
+                  <h3 className="type-h4 text-foreground mb-1">Credits Remaining</h3>
                   {isCreditsError ? (
                     <p className="text-sm text-destructive">Couldn't load balance</p>
                   ) : (
@@ -241,7 +241,7 @@ export default function Dashboard() {
                   <Lightbulb className="h-5 w-5 text-primary" />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="font-semibold text-foreground mb-2">Did You Know?</h3>
+                  <h3 className="type-h4 text-foreground mb-2">Did You Know?</h3>
                   <AnimatePresence mode="wait">
                     <motion.p
                       key={currentTip}
@@ -276,7 +276,7 @@ export default function Dashboard() {
           {/* Recent Projects */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-foreground">Recent Projects</h2>
+              <h2 className="type-h3 text-foreground">Recent Projects</h2>
               <Button
                 variant="link"
                 className="text-brand-primary dark:text-primary font-semibold p-0 h-auto hover:opacity-80"

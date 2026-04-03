@@ -46,7 +46,7 @@ export default function BeforeAfterComparison() {
           viewport={{ once: true }}
           className="text-center mb-12"
         >
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
+          <h2 className="type-h1 tracking-tight text-foreground">
             Save {TIME_SAVED_PERCENT}% of Your Production Time
           </h2>
           <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">

@@ -236,7 +236,7 @@ export default function Landing() {
             <span className="inline-block mb-3 text-xs font-medium uppercase tracking-widest text-primary">
               Features
             </span>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
+            <h2 className="type-h1 tracking-tight text-white">
               Everything you need. Nothing you don't.
             </h2>
             <p className="mt-4 text-base max-w-xl mx-auto text-white/50">
@@ -264,7 +264,7 @@ export default function Landing() {
             <span className="inline-block mb-3 text-xs font-medium uppercase tracking-widest text-primary">
               4 Ways to Create
             </span>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
+            <h2 className="type-h1 tracking-tight text-white">
               One platform. Four creative modes.
             </h2>
             <p className="mt-4 text-base max-w-xl mx-auto text-white/50">

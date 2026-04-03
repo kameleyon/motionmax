@@ -33,7 +33,7 @@ export default function FaqSection() {
           viewport={{ once: true }}
           className="text-center mb-12"
         >
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
+          <h2 className="type-h1 tracking-tight text-foreground">
             Frequently Asked Questions
           </h2>
           <p className="mt-4 text-lg text-muted-foreground">

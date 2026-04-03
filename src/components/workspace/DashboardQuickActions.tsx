@@ -24,7 +24,7 @@ export function DashboardQuickActions() {
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 mb-3">
               <ActionIcon className="h-5 w-5 text-primary" />
             </div>
-            <p className="font-medium text-sm text-foreground group-hover:text-primary transition-colors">
+            <p className="type-h4 text-foreground group-hover:text-primary transition-colors">
               {title}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">{description}</p>

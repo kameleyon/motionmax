@@ -1890,13 +1890,19 @@ serve(async (req) => {
         })
         .eq("id", generationId);
 
-      await supabase.from("projects").update({ status: "complete" }).eq("id", generation.project_id);
+      // Set thumbnail_url immediately from first scene's imageUrl (always works, even if re-upload fails)
+      const firstSceneWithImage = scenes.find((s) => s.imageUrl);
+      const directThumbnail = firstSceneWithImage?.imageUrl || null;
 
-      // Save permanent thumbnail
+      await supabase.from("projects").update({
+        status: "complete",
+        ...(directThumbnail ? { thumbnail_url: directThumbnail } : {}),
+      }).eq("id", generation.project_id);
+
+      // Try to save a permanent copy in Supabase storage (upgrades the temporary AI URL)
       try {
-        const firstSceneWithImage = scenes.find((s) => s.imageUrl);
-        if (firstSceneWithImage?.imageUrl) {
-          const imageResponse = await fetch(firstSceneWithImage.imageUrl);
+        if (directThumbnail) {
+          const imageResponse = await fetch(directThumbnail);
           if (imageResponse.ok) {
             const imageBytes = new Uint8Array(await imageResponse.arrayBuffer());
             const thumbnailPath = `${generation.user_id}/${generation.project_id}/thumbnail-${Date.now()}.png`;
@@ -1911,12 +1917,12 @@ serve(async (req) => {
                 .from("projects")
                 .update({ thumbnail_url: publicUrlData.publicUrl })
                 .eq("id", generation.project_id);
-              console.log(`[FINALIZE] Cinematic thumbnail saved: ${publicUrlData.publicUrl}`);
+              console.log(`[FINALIZE] Cinematic thumbnail saved permanently: ${publicUrlData.publicUrl}`);
             }
           }
         }
       } catch (thumbErr) {
-        console.error("[FINALIZE] Failed to save cinematic thumbnail:", thumbErr);
+        console.warn("[FINALIZE] Permanent thumbnail save failed (using direct URL):", thumbErr);
       }
 
       // Title from project

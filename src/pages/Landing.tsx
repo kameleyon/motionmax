@@ -184,7 +184,7 @@ export default function Landing() {
 
       {/* Hero Section — herobackground.png as full background */}
       <section
-        className="relative min-h-screen flex items-center pt-20 md:pt-32 xl:pt-16"
+        className="relative min-h-[85vh] sm:min-h-screen flex items-center pt-16 sm:pt-20 md:pt-32 xl:pt-16"
         style={{
           backgroundImage: "url(/herobackground.png)",
           backgroundSize: "cover",

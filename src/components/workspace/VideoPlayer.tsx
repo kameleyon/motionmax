@@ -155,13 +155,14 @@ export function VideoPlayer({
       ? getGenerationLabel(generationState!)
       : "Video will appear here";
 
-  // Auto-play when video becomes available
+  // Auto-play when video becomes available (desktop only — mobile auto-play causes memory crashes)
+  const isMobileDevice = typeof navigator !== "undefined" && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   useEffect(() => {
-    if (isComplete && videoRef.current) {
+    if (isComplete && videoRef.current && !isMobileDevice) {
       videoRef.current.play().catch(() => {});
       setIsPlaying(true);
     }
-  }, [isComplete, videoUrl]);
+  }, [isComplete, videoUrl, isMobileDevice]);
 
   // Hide controls after inactivity
   const resetControlsTimer = useCallback(() => {
@@ -296,7 +297,7 @@ export function VideoPlayer({
           src={videoUrl}
           className="w-full h-full object-contain"
           muted={isMuted}
-          loop
+          loop={!isMobileDevice}
           playsInline
           onClick={togglePlay}
           onPlay={() => setIsPlaying(true)}

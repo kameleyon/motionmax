@@ -158,13 +158,22 @@ export default function Dashboard() {
           for (const gen of generations) {
             if (thumbnailMap[gen.project_id] !== undefined) continue;
             const scenes = gen.scenes as any[];
-            if (Array.isArray(scenes) && scenes.length > 0) {
-              const first = scenes[0];
-              thumbnailMap[gen.project_id] =
-                first?.imageUrl ||
-                first?.image_url ||
-                (Array.isArray(first?.imageUrls) ? first.imageUrls[0] : null) ||
-                null;
+            if (!Array.isArray(scenes) || scenes.length === 0) continue;
+
+            // Search all scenes for a usable image (not just the first)
+            for (const scene of scenes) {
+              const url =
+                scene?.imageUrl ||
+                scene?.image_url ||
+                (Array.isArray(scene?.imageUrls) && scene.imageUrls.length > 0 ? scene.imageUrls[0] : null);
+              if (url) {
+                thumbnailMap[gen.project_id] = url;
+                break;
+              }
+            }
+            // If no image found in any scene, mark as null so we don't re-check
+            if (thumbnailMap[gen.project_id] === undefined) {
+              thumbnailMap[gen.project_id] = null;
             }
           }
         }

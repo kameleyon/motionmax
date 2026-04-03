@@ -478,7 +478,8 @@ export function AppSidebar() {
                     return (
                       <SidebarMenuItem key={project.id} className="group relative">
                       <SidebarMenuButton
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.preventDefault();
                             navTo(`/app/create?mode=${projectMode}&project=${project.id}`);
                           }}
                           className={`w-full cursor-pointer rounded-lg px-3 py-2 sm:py-2.5 transition-colors pr-8 ${

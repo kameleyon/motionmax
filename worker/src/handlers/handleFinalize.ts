@@ -126,9 +126,12 @@ export async function handleFinalizePhase(
     })
     .eq("id", generationId);
 
-  // Extract thumbnail from first scene with an image
-  const thumbnailScene = finalScenes.find((s: any) => s.imageUrl);
-  const thumbnailUrl: string | null = thumbnailScene?.imageUrl || null;
+  // Extract thumbnail from first scene with an image (check imageUrl and imageUrls)
+  let thumbnailUrl: string | null = null;
+  for (const s of finalScenes as any[]) {
+    if (s.imageUrl) { thumbnailUrl = s.imageUrl; break; }
+    if (Array.isArray(s.imageUrls) && s.imageUrls.length > 0 && s.imageUrls[0]) { thumbnailUrl = s.imageUrls[0]; break; }
+  }
 
   // Mark project complete and write thumbnail
   await supabase

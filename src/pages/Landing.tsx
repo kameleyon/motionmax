@@ -148,18 +148,25 @@ export default function Landing() {
               className="md:hidden overflow-hidden border-t border-border/30 bg-background/95 backdrop-blur-md"
             >
               <div className="flex flex-col gap-1 px-6 py-4">
-                <a href="#features" onClick={() => setMobileMenuOpen(false)} className="py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-                  Features
-                </a>
-                <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-                  Pricing
-                </a>
-                <a href="#faq" onClick={() => setMobileMenuOpen(false)} className="py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-                  FAQ
-                </a>
-                <a href="#about" onClick={() => setMobileMenuOpen(false)} className="py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-                  About
-                </a>
+                {[
+                  { href: "#features", label: "Features" },
+                  { href: "#pricing", label: "Pricing" },
+                  { href: "#faq", label: "FAQ" },
+                  { href: "#about", label: "About" },
+                ].map(({ href, label }) => (
+                  <button
+                    key={href}
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      setTimeout(() => {
+                        document.querySelector(href)?.scrollIntoView({ behavior: "smooth" });
+                      }, 50);
+                    }}
+                    className="py-2.5 text-left text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {label}
+                  </button>
+                ))}
                 <div className="pt-2 border-t border-border/30 mt-2">
                   <Button
                     className="w-full rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
@@ -176,7 +183,7 @@ export default function Landing() {
 
       {/* Hero Section — herobackground.png as full background */}
       <section
-        className="relative min-h-screen flex items-center pt-32 md:pt-40 xl:pt-16"
+        className="relative min-h-screen flex items-center pt-20 md:pt-32 xl:pt-16"
         style={{
           backgroundImage: "url(/herobackground.png)",
           backgroundSize: "cover",
@@ -188,7 +195,7 @@ export default function Landing() {
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" aria-hidden="true" />
         <span className="sr-only">Background showing code and data visualizations being transformed into video content</span>
 
-        <div className="relative z-10 mx-auto max-w-7xl px-6 sm:px-8 w-full pb-16 md:pb-24">
+        <div className="relative z-10 mx-auto max-w-7xl px-6 sm:px-8 w-full pb-8 md:pb-24">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -198,11 +205,11 @@ export default function Landing() {
             <img 
               src={motionMaxHeroLogo} 
               alt="MotionMax" 
-              className="w-full max-w-sm sm:max-w-md md:max-w-lg xl:max-w-xl mx-auto"
+              className="w-full max-w-[240px] sm:max-w-sm md:max-w-lg xl:max-w-xl mx-auto"
             />
             
-            <p className="mt-8 text-2xl sm:text-3xl md:text-4xl font-medium leading-snug text-white/90">
-              Cinematic visuals. Natural voiceover.<br />Seamless transitions. <span className="text-primary">From one idea.</span>
+            <p className="mt-6 text-xl sm:text-2xl md:text-4xl font-medium leading-snug text-white/90">
+              Cinematic visuals. Natural voiceover.<br className="hidden sm:block" />Seamless transitions. <span className="text-primary">From one idea.</span>
             </p>
             
             <Button

@@ -60,8 +60,8 @@
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    /* Success - Green */
-    --success: 142 71% 45%;
+    /* Success - Aqua (brand-aligned) */
+    --success: 186 85% 35%;
     --success-foreground: 0 0% 100%;
 
     --border: 184 10% 90%;
@@ -134,8 +134,8 @@
     --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    /* Success - Green */
-    --success: 142 71% 50%;
+    /* Success - Aqua (brand-aligned) */
+    --success: 184 75% 55%;
     --success-foreground: 0 0% 100%;
 
     --border: 200 8% 18%;

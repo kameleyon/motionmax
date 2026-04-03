@@ -303,7 +303,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
     ) : null;
 
     return (
-      <WorkspaceLayout headerActions={headerActions}>
+      <WorkspaceLayout headerActions={headerActions} mode="doc2video" projectTitle={generationState.title}>
             <AnimatePresence mode="wait">
               {generationState.step === "idle" ? (
                 <motion.div

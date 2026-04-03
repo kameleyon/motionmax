@@ -107,7 +107,7 @@ export function OnboardingChecklist({ hasProjects, hasSharedProject = false }: O
           </span>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon" aria-label="Dismiss"
             className="h-6 w-6 text-muted-foreground hover:text-foreground"
             onClick={() => persist({ dismissed: true })}
             aria-label="Dismiss onboarding checklist"

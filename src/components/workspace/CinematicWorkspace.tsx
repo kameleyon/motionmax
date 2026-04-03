@@ -313,7 +313,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
     ) : null;
 
     return (
-      <WorkspaceLayout headerActions={headerActions}>
+      <WorkspaceLayout headerActions={headerActions} mode="cinematic" projectTitle={generationState.title}>
             <AnimatePresence mode="wait">
               {generationState.step === "idle" ? (
                 <motion.div

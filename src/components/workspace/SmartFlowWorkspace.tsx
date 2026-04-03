@@ -253,7 +253,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
     ) : null;
 
     return (
-      <WorkspaceLayout headerActions={headerActions}>
+      <WorkspaceLayout headerActions={headerActions} mode="smartflow" projectTitle={generationState.title}>
             <AnimatePresence mode="wait">
               {generationState.step === "idle" ? (
                 <motion.div

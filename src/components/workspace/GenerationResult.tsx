@@ -345,7 +345,7 @@ export function GenerationResult({
           <Card className="w-full max-w-3xl p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-foreground">Export Logs</h3>
-              <Button variant="ghost" size="icon" onClick={() => setShowExportLogs(false)}>
+              <Button variant="ghost" size="icon" aria-label="Close" onClick={() => setShowExportLogs(false)}>
                 <X className="h-4 w-4" />
               </Button>
             </div>

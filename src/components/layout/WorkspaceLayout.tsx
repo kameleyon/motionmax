@@ -2,15 +2,20 @@ import type { ReactNode } from "react";
 import { Menu } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ThemedLogo } from "@/components/ThemedLogo";
+import { WorkspaceBreadcrumb } from "@/components/workspace/WorkspaceBreadcrumb";
 
 interface WorkspaceLayoutProps {
   /** Optional elements rendered in the right side of the header (e.g. generating indicator) */
   headerActions?: ReactNode;
+  /** Workspace mode for breadcrumb */
+  mode?: string;
+  /** Project title for breadcrumb (when editing an existing project) */
+  projectTitle?: string;
   /** The main workspace content */
   children: ReactNode;
 }
 
-export function WorkspaceLayout({ headerActions, children }: WorkspaceLayoutProps) {
+export function WorkspaceLayout({ headerActions, mode, projectTitle, children }: WorkspaceLayoutProps) {
   return (
     <div className="flex h-screen flex-col bg-background overflow-hidden">
       {/* Top Bar */}
@@ -37,6 +42,7 @@ export function WorkspaceLayout({ headerActions, children }: WorkspaceLayoutProp
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto overflow-x-hidden">
         <div className="mx-auto max-w-4xl px-3 sm:px-6 py-4 sm:py-12">
+          {mode && <WorkspaceBreadcrumb mode={mode} projectTitle={projectTitle} />}
           {children}
         </div>
       </main>

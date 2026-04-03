@@ -320,7 +320,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
     ) : null;
 
     return (
-      <WorkspaceLayout headerActions={headerActions}>
+      <WorkspaceLayout headerActions={headerActions} mode="storytelling" projectTitle={generationState.title}>
             <AnimatePresence mode="wait">
               {generationState.step === "idle" ? (
                 <motion.div

@@ -330,7 +330,7 @@ export function VideoPlayer({
                   size="icon"
                   variant="ghost"
                   className="text-white hover:bg-white/20 h-8 w-8"
-                  onClick={toggleMute}
+                  aria-label={isMuted ? "Unmute" : "Mute"} onClick={toggleMute}
                 >
                   {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
                 </Button>
@@ -340,7 +340,7 @@ export function VideoPlayer({
                   size="icon"
                   variant="ghost"
                   className="text-white hover:bg-white/20 h-8 w-8"
-                  onClick={toggleFullscreen}
+                  aria-label="Fullscreen" onClick={toggleFullscreen}
                 >
                   <Maximize className="h-4 w-4" />
                 </Button>

@@ -114,7 +114,7 @@ export function SceneVersionHistory({
                   {versions.length} {versions.length === 1 ? "version" : "versions"} available
                 </p>
               </div>
-              <Button variant="ghost" size="icon" onClick={onClose}>
+              <Button variant="ghost" size="icon" aria-label="Close" onClick={onClose}>
                 <X className="h-5 w-5" />
               </Button>
             </div>

@@ -165,7 +165,7 @@ export default function Projects() {
       // to extract thumbnail in one round-trip instead of two
       let q = supabase
         .from("projects")
-        .select("*, generations(project_id, scenes)")
+        .select("*, generations(project_id, scenes, status, created_at)")
         .eq("user_id", user.id)
         .order("is_favorite", { ascending: false })
         .order(sortField, { ascending: sortOrder === "asc" })
@@ -190,22 +190,31 @@ export default function Projects() {
           return { ...p, generations: undefined, thumbnailUrl: gridThumbnailUrl(p.thumbnail_url) } as unknown as Project;
         }
 
-        // Extract thumbnail from joined generations data
-        const gens = (p as any).generations as Array<{ project_id: string; scenes: any }> | null;
+        // Extract thumbnail from joined generations data — prefer latest with scenes
+        const gens = (p as any).generations as Array<{ project_id: string; scenes: any; status?: string; created_at?: string }> | null;
         let fallbackUrl: string | null = null;
 
-        if (Array.isArray(gens)) {
-          for (const gen of gens) {
+        if (Array.isArray(gens) && gens.length > 0) {
+          // Sort by created_at descending to get the latest generation first
+          const sorted = [...gens].sort((a, b) =>
+            (b.created_at || "").localeCompare(a.created_at || "")
+          );
+
+          for (const gen of sorted) {
             const scenes = gen.scenes as any[];
             if (!Array.isArray(scenes) || scenes.length === 0) continue;
-            const firstScene = scenes[0];
-            const imageUrl = firstScene?.imageUrl ||
-                            firstScene?.image_url ||
-                            (Array.isArray(firstScene?.imageUrls) ? firstScene.imageUrls[0] : null);
-            if (imageUrl) {
-              fallbackUrl = imageUrl;
-              break;
+
+            // Search all scenes for a usable image, not just the first
+            for (const scene of scenes) {
+              const imageUrl = scene?.imageUrl ||
+                              scene?.image_url ||
+                              (Array.isArray(scene?.imageUrls) && scene.imageUrls.length > 0 ? scene.imageUrls[0] : null);
+              if (imageUrl) {
+                fallbackUrl = imageUrl;
+                break;
+              }
             }
+            if (fallbackUrl) break;
           }
         }
 

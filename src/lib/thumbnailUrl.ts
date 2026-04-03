@@ -31,8 +31,9 @@ export function thumbnailUrl(
 ): string | null {
   if (!imageUrl) return null;
 
-  // Only transform Supabase storage URLs
+  // Only transform Supabase PUBLIC storage URLs (not signed URLs — transforms break signatures)
   if (!SUPABASE_STORAGE_PATTERN.test(imageUrl)) return imageUrl;
+  if (imageUrl.includes("/object/sign/")) return imageUrl; // signed URLs don't support transforms
 
   const opts = { ...DEFAULTS, ...options };
 

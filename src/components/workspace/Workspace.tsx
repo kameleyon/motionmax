@@ -20,7 +20,7 @@ import { useGenerationPipeline } from "@/hooks/useGenerationPipeline";
 import { ThemedLogo } from "@/components/ThemedLogo";
 import { getUserFriendlyErrorMessage } from "@/lib/errorMessages";
 import { useSubscription, validateGenerationAccess, getCreditsRequired, PLAN_LIMITS } from "@/hooks/useSubscription";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { UpgradeRequiredModal } from "@/components/modals/UpgradeRequiredModal";
 import { SubscriptionSuspendedModal } from "@/components/modals/SubscriptionSuspendedModal";
 import { cn } from "@/lib/utils";
@@ -54,7 +54,6 @@ export const Workspace = forwardRef<WorkspaceHandle>(function Workspace(_, ref) 
 
   // Subscription and plan validation
   const { plan, creditsBalance, subscriptionStatus, subscriptionEnd, checkSubscription } = useSubscription();
-  const { toast } = useToast();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgradeReason, setUpgradeReason] = useState("");
   const [showSuspendedModal, setShowSuspendedModal] = useState(false);
@@ -124,11 +123,7 @@ export const Workspace = forwardRef<WorkspaceHandle>(function Workspace(_, ref) 
     );
 
     if (!validation.canGenerate) {
-      toast({
-        variant: "destructive",
-        title: "Cannot Generate",
-        description: validation.error,
-      });
+      toast.error("Cannot Generate", { description: validation.error });
       setUpgradeReason(validation.error || "Please upgrade your plan to continue.");
       setShowUpgradeModal(true);
       return;

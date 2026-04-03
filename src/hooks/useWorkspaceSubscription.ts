@@ -4,7 +4,7 @@
  */
 import { useState, useCallback } from "react";
 import { useSubscription, validateGenerationAccess, PLAN_LIMITS } from "@/hooks/useSubscription";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import type { PlanTier, ValidationResult } from "@/lib/planLimits";
 
 type SuspendedStatus = "past_due" | "unpaid" | "canceled";
@@ -52,7 +52,6 @@ interface WorkspaceSubscriptionReturn {
 
 export function useWorkspaceSubscription(): WorkspaceSubscriptionReturn {
   const { plan, creditsBalance, subscriptionStatus, subscriptionEnd, checkSubscription } = useSubscription();
-  const { toast } = useToast();
 
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgradeReason, setUpgradeReason] = useState("");
@@ -86,11 +85,7 @@ export function useWorkspaceSubscription(): WorkspaceSubscriptionReturn {
       );
 
       if (!validation.canGenerate) {
-        toast({
-          variant: "destructive",
-          title: "Cannot Generate",
-          description: validation.error,
-        });
+        toast.error("Cannot Generate", { description: validation.error });
         setUpgradeReason(validation.error || "Please upgrade your plan to continue.");
         setShowUpgradeModal(true);
         return false;

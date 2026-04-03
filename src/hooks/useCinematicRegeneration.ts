@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { callPhase } from "@/hooks/generation/callPhase";
 
 interface CinematicScene {
@@ -30,7 +30,6 @@ export function useCinematicRegeneration(
   onScenesUpdate: (scenes: CinematicScene[]) => void,
   onStopPlayback?: () => void
 ) {
-  const { toast } = useToast();
   const [state, setState] = useState<RegenerationState>({
     isRegenerating: false,
     sceneIndex: null,
@@ -54,7 +53,7 @@ export function useCinematicRegeneration(
   const regenerateAudio = useCallback(
     async (idx: number, newVoiceover: string) => {
       if (!generationId || !projectId) {
-        toast({ variant: "destructive", title: "Error", description: "Missing generation context" });
+        toast.error("Error", { description: "Missing generation context" });
         return;
       }
 
@@ -78,14 +77,10 @@ export function useCinematicRegeneration(
         onScenesUpdate(nextScenes);
         await persistScenes(nextScenes);
 
-        toast({ title: "Audio Regenerated", description: `Scene ${idx + 1} audio updated.` });
+        toast.success("Audio Regenerated", { description: `Scene ${idx + 1} audio updated.` });
       } catch (error) {
         console.error("Audio regeneration error:", error);
-        toast({
-          variant: "destructive",
-          title: "Regeneration Failed",
-          description: error instanceof Error ? error.message : "Failed to regenerate audio",
-        });
+        toast.error("Regeneration Failed", { description: error instanceof Error ? error.message : "Failed to regenerate audio" });
       } finally {
         setState({ isRegenerating: false, sceneIndex: null, type: null });
       }
@@ -98,7 +93,7 @@ export function useCinematicRegeneration(
   const regenerateVideo = useCallback(
     async (idx: number) => {
       if (!generationId || !projectId) {
-        toast({ variant: "destructive", title: "Error", description: "Missing generation context" });
+        toast.error("Error", { description: "Missing generation context" });
         return;
       }
 
@@ -122,14 +117,10 @@ export function useCinematicRegeneration(
         onScenesUpdate(nextScenes);
         await persistScenes(nextScenes);
         
-        toast({ title: "Video Regenerated", description: `Scene ${idx + 1} video updated.` });
+        toast.success("Video Regenerated", { description: `Scene ${idx + 1} video updated.` });
       } catch (error) {
         console.error("Video regeneration error:", error);
-        toast({
-          variant: "destructive",
-          title: "Regeneration Failed",
-          description: error instanceof Error ? error.message : "Failed to regenerate video",
-        });
+        toast.error("Regeneration Failed", { description: error instanceof Error ? error.message : "Failed to regenerate video" });
       } finally {
         setState({ isRegenerating: false, sceneIndex: null, type: null });
       }
@@ -150,7 +141,7 @@ export function useCinematicRegeneration(
       const affectedIndices: number[] = [idx]; // always regen current scene
       if (idx > 0) affectedIndices.unshift(idx - 1); // previous scene uses this as end_image
 
-      toast({ title: "Regenerating Videos", description: `Updating ${affectedIndices.length} affected video(s)...` });
+      toast.success("Regenerating Videos", { description: `Updating ${affectedIndices.length} affected video(s)...` });
 
       for (const vidIdx of affectedIndices) {
         try {
@@ -167,7 +158,7 @@ export function useCinematicRegeneration(
         }
       }
       onScenesUpdate(updatedScenes);
-      toast({ title: "Videos Updated", description: `${affectedIndices.length} video(s) regenerated.` });
+      toast.success("Videos Updated", { description: `${affectedIndices.length} video(s) regenerated.` });
     },
     [generationId, projectId, onScenesUpdate, toast]
   );
@@ -175,7 +166,7 @@ export function useCinematicRegeneration(
   const applyImageEdit = useCallback(
     async (idx: number, imageModification: string) => {
       if (!generationId || !projectId) {
-        toast({ variant: "destructive", title: "Error", description: "Missing generation context" });
+        toast.error("Error", { description: "Missing generation context" });
         return;
       }
 
@@ -202,17 +193,13 @@ export function useCinematicRegeneration(
         });
         onScenesUpdate(nextScenes);
 
-        toast({ title: "Image Edited", description: `Scene ${idx + 1} updated. Regenerating affected videos...` });
+        toast.success("Image Edited", { description: `Scene ${idx + 1} updated. Regenerating affected videos...` });
 
         // Auto-trigger video regen for affected scenes
         await regenAffectedVideos(idx, nextScenes);
       } catch (error) {
         console.error("Image edit error:", error);
-        toast({
-          variant: "destructive",
-          title: "Image Edit Failed",
-          description: error instanceof Error ? error.message : "Failed to edit image",
-        });
+        toast.error("Image Edit Failed", { description: error instanceof Error ? error.message : "Failed to edit image" });
       } finally {
         setState({ isRegenerating: false, sceneIndex: null, type: null });
       }
@@ -225,7 +212,7 @@ export function useCinematicRegeneration(
   const regenerateImage = useCallback(
     async (idx: number) => {
       if (!generationId || !projectId) {
-        toast({ variant: "destructive", title: "Error", description: "Missing generation context" });
+        toast.error("Error", { description: "Missing generation context" });
         return;
       }
 
@@ -252,17 +239,13 @@ export function useCinematicRegeneration(
         });
         onScenesUpdate(nextScenes);
 
-        toast({ title: "Image Regenerated", description: `Scene ${idx + 1} updated. Regenerating affected videos...` });
+        toast.success("Image Regenerated", { description: `Scene ${idx + 1} updated. Regenerating affected videos...` });
 
         // Auto-trigger video regen for affected scenes
         await regenAffectedVideos(idx, nextScenes);
       } catch (error) {
         console.error("Image regeneration error:", error);
-        toast({
-          variant: "destructive",
-          title: "Image Regeneration Failed",
-          description: error instanceof Error ? error.message : "Failed to regenerate image",
-        });
+        toast.error("Image Regeneration Failed", { description: error instanceof Error ? error.message : "Failed to regenerate image" });
       } finally {
         setState({ isRegenerating: false, sceneIndex: null, type: null });
       }
@@ -275,7 +258,7 @@ export function useCinematicRegeneration(
   const undoRegeneration = useCallback(
     async (idx: number) => {
       if (!generationId || !projectId) {
-        toast({ variant: "destructive", title: "Error", description: "Missing generation context" });
+        toast.error("Error", { description: "Missing generation context" });
         return;
       }
 
@@ -297,14 +280,10 @@ export function useCinematicRegeneration(
         );
         onScenesUpdate(nextScenes);
 
-        toast({ title: "Undo Successful", description: `Scene ${idx + 1} restored to previous state.` });
+        toast.success("Undo Successful", { description: `Scene ${idx + 1} restored to previous state.` });
       } catch (error) {
         console.error("Undo error:", error);
-        toast({
-          variant: "destructive",
-          title: "Undo Failed",
-          description: error instanceof Error ? error.message : "Failed to undo",
-        });
+        toast.error("Undo Failed", { description: error instanceof Error ? error.message : "Failed to undo" });
       } finally {
         setState({ isRegenerating: false, sceneIndex: null, type: null });
       }

@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useForceDarkMode } from "@/hooks/useForceDarkMode";
 import { ThemedLogo } from "@/components/ThemedLogo";
 import { supabase } from "@/integrations/supabase/client";
@@ -67,7 +67,6 @@ export default function Auth() {
   const navigate = useNavigate();
   const returnUrl = searchParams.get("returnUrl") || "/app";
   const { signIn, signUp, resetPassword, updatePassword } = useAuth();
-  const { toast } = useToast();
 
   useEffect(() => {
     // Rely solely on the PASSWORD_RECOVERY event — no fragile manual hash parsing
@@ -93,7 +92,7 @@ export default function Auth() {
           if (failedAttemptsRef.current >= RATE_LIMIT_HINT_THRESHOLD) {
             setShowRateLimitHint(true);
           }
-          toast({ variant: "destructive", title: "Sign in failed", description: getAuthErrorMessage(error.message) });
+          toast.error("Sign in failed", { description: getAuthErrorMessage(error.message) });
           return;
         }
         failedAttemptsRef.current = 0;
@@ -104,12 +103,12 @@ export default function Auth() {
 
       if (mode === "signup") {
         if (!acceptedTerms) {
-          toast({ variant: "destructive", title: "Terms required", description: "You must accept the Terms of Service and Privacy Policy to create an account." });
+          toast.error("Terms required", { description: "You must accept the Terms of Service and Privacy Policy to create an account." });
           return;
         }
         const { error } = await signUp(email, password);
         if (error) {
-          toast({ variant: "destructive", title: "Sign up failed", description: getAuthErrorMessage(error.message) });
+          toast.error("Sign up failed", { description: getAuthErrorMessage(error.message) });
           return;
         }
         // Show persistent confirmation screen instead of just a dismissible toast
@@ -120,32 +119,32 @@ export default function Auth() {
       if (mode === "reset") {
         const { error } = await resetPassword(email);
         if (error) {
-          toast({ variant: "destructive", title: "Reset failed", description: getAuthErrorMessage(error.message) });
+          toast.error("Reset failed", { description: getAuthErrorMessage(error.message) });
           return;
         }
-        toast({ title: "Reset link sent", description: "Check your email for a password reset link." });
+        toast.success("Reset link sent", { description: "Check your email for a password reset link." });
         setMode("login");
         return;
       }
 
       // mode === "update"
       if (password.length < MIN_PASSWORD_LENGTH) {
-        toast({ variant: "destructive", title: "Password too short", description: `Use at least ${MIN_PASSWORD_LENGTH} characters.` });
+        toast.error("Password too short", { description: `Use at least ${MIN_PASSWORD_LENGTH} characters.` });
         return;
       }
       if (password !== confirmPassword) {
-        toast({ variant: "destructive", title: "Passwords don't match", description: "Please retype your password." });
+        toast.error("Passwords don't match", { description: "Please retype your password." });
         return;
       }
 
       const { error } = await updatePassword(password);
       if (error) {
-        toast({ variant: "destructive", title: "Update failed", description: getAuthErrorMessage(error.message) });
+        toast.error("Update failed", { description: getAuthErrorMessage(error.message) });
         return;
       }
 
       window.history.replaceState({}, document.title, window.location.pathname);
-      toast({ title: "Password updated", description: "You're signed in." });
+      toast.success("Password updated", { description: "You're signed in." });
       navigate(returnUrl);
     } finally {
       setIsLoading(false);

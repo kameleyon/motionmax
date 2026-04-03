@@ -19,7 +19,7 @@ import { SmartFlowResult } from "./SmartFlowResult";
 import { useGenerationPipeline } from "@/hooks/useGenerationPipeline";
 import { getUserFriendlyErrorMessage } from "@/lib/errorMessages";
 import { useSubscription, validateGenerationAccess } from "@/hooks/useSubscription";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { UpgradeRequiredModal } from "@/components/modals/UpgradeRequiredModal";
 import { SubscriptionSuspendedModal } from "@/components/modals/SubscriptionSuspendedModal";
 import { useAdminLogs } from "@/hooks/useAdminLogs";
@@ -60,7 +60,6 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
     // Subscription and plan validation
     const { plan, creditsBalance, subscriptionStatus, subscriptionEnd, checkSubscription } = useSubscription();
     const { count: infographicsUsed } = useInfographicsUsage();
-    const { toast } = useToast();
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
     const [upgradeReason, setUpgradeReason] = useState("");
     const [showSuspendedModal, setShowSuspendedModal] = useState(false);
@@ -142,11 +141,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
         const limitMessage = plan === "free"
           ? "You've reached the Free plan limit. Upgrade to Starter or higher to create infographics."
           : `You've reached your monthly limit of ${monthlyLimit} infographics. Upgrade to get more or wait until next month.`;
-        toast({
-          variant: "destructive",
-          title: "Monthly Limit Reached",
-          description: limitMessage,
-        });
+        toast.error("Monthly Limit Reached", { description: limitMessage });
         setUpgradeReason(limitMessage);
         setShowUpgradeModal(true);
         return;
@@ -166,11 +161,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
       );
 
       if (!validation.canGenerate) {
-        toast({
-          variant: "destructive",
-          title: "Cannot Generate",
-          description: validation.error,
-        });
+        toast.error("Cannot Generate", { description: validation.error });
         setUpgradeReason(validation.error || "Please upgrade your plan to continue.");
         setShowUpgradeModal(true);
         return;

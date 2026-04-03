@@ -206,7 +206,8 @@ export default function Landing() {
             
             <Button
               size="lg"
-              className="mt-10 rounded-lg bg-primary px-10 py-7 text-lg font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
+              size="hero"
+              className="mt-10"
               onClick={() => handleCta("Try for Free")}
             >
               Try for Free

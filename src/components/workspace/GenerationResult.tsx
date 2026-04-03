@@ -31,7 +31,7 @@ import {
 import { SceneEditModal } from "./SceneEditModal";
 import { SceneVersionHistory } from "./SceneVersionHistory";
 import { VideoPlayer } from "./VideoPlayer";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 
 interface GenerationResultProps {
@@ -256,7 +256,7 @@ export function GenerationResult({
             onClick={() => {
               if (exportState.videoUrl) {
                 navigator.clipboard.writeText(exportState.videoUrl).then(
-                  () => toast({ title: "Video link copied!" }),
+                  () => toast.success("Video link copied!"),
                   () => {}
                 );
               }
@@ -405,7 +405,7 @@ export function GenerationResult({
           onClose={() => setVersionHistorySceneIndex(null)}
           onVersionRestored={() => {
             setVersionHistorySceneIndex(null);
-            toast({ title: "Version Restored", description: "Please refresh to see the changes" });
+            toast.success("Version Restored", { description: "Please refresh to see the changes" });
           }}
         />
       )}

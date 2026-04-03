@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { format } from "date-fns";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface UserFlag {
   id: string;
@@ -73,18 +73,12 @@ export function AdminFlags() {
     try {
       setResolvingId(flagId);
       await callAdminApi("resolve_flag", { flagId, resolutionNotes });
-      toast({
-        title: "Flag resolved",
-        description: "The flag has been marked as resolved",
-      });
+      toast.success("Flag resolved", { description: "The flag has been marked as resolved" });
       setResolutionNotes("");
       fetchFlags();
     } catch (err) {
-      toast({
-        title: "Error",
-        description: err instanceof Error ? err.message : "Failed to resolve flag",
-        variant: "destructive",
-      });
+      toast.success("Error", { description: err instanceof Error ? err.message : "Failed to resolve flag",
+        variant: "destructive" });
     } finally {
       setResolvingId(null);
     }

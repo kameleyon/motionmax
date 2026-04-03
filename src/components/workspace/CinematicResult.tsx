@@ -35,7 +35,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useCinematicRegeneration } from "@/hooks/useCinematicRegeneration";
 import { useVideoExport } from "@/hooks/useVideoExport";
@@ -234,7 +234,7 @@ export function CinematicResult({
         .filter((i) => i >= 0);
 
       if (staleIndices.length > 0) {
-        toast({ title: "Regenerating Videos", description: `Regenerating ${staleIndices.length} video(s)...` });
+        toast.success("Regenerating Videos", { description: `Regenerating ${staleIndices.length} video(s)...` });
 
         // Regenerate stale videos in batches of 4
         for (let start = 0; start < staleIndices.length; start += 4) {
@@ -268,7 +268,7 @@ export function CinematicResult({
       await exportVideo(freshScenes, format, undefined, projectId, "cinematic", generationId, initialCaptionStyle);
     } catch (err) {
       console.error("Render changes failed:", err);
-      toast({ variant: "destructive", title: "Render Failed", description: (err as Error).message });
+      toast.error("Render Failed", { description: (err as Error).message });
     } finally {
       setIsRenderingChanges(false);
     }
@@ -294,7 +294,7 @@ export function CinematicResult({
       setShareUrl(shareMetaUrl);
       setDisplayUrl(shareMetaUrl);
     } catch {
-      toast({ title: "Failed to create share link", variant: "destructive" });
+      toast.error("Failed to create share link");
       setIsShareDialogOpen(false);
     } finally {
       setIsCreatingShare(false);
@@ -311,9 +311,9 @@ export function CinematicResult({
       await supabase.from("project_characters").delete().eq("project_id", projectId);
       await supabase.from("projects").delete().eq("id", projectId);
       navigate("/projects", { replace: true });
-      toast({ title: "Project deleted" });
+      toast.success("Project deleted");
     } catch {
-      toast({ title: "Failed to delete", variant: "destructive" });
+      toast.error("Failed to delete");
     } finally {
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);
@@ -543,7 +543,7 @@ export function CinematicResult({
           onClose={() => setVersionHistorySceneIndex(null)}
           onVersionRestored={() => {
             setVersionHistorySceneIndex(null);
-            toast({ title: "Version Restored", description: "Refresh to see changes" });
+            toast.success("Version Restored", { description: "Refresh to see changes" });
           }}
         />
       )}
@@ -566,7 +566,7 @@ export function CinematicResult({
                 <Button onClick={async () => {
                   await navigator.clipboard.writeText(displayUrl).catch(() => {});
                   setHasCopied(true);
-                  toast({ title: "Link copied!" });
+                  toast.success("Link copied!");
                   setTimeout(() => setHasCopied(false), 2000);
                 }}>
                   {hasCopied ? "Copied!" : "Copy"}

@@ -28,7 +28,7 @@ import { useGenerationPipeline } from "@/hooks/useGenerationPipeline";
 
 import { getUserFriendlyErrorMessage } from "@/lib/errorMessages";
 import { useSubscription, validateGenerationAccess, getCreditsRequired, PLAN_LIMITS } from "@/hooks/useSubscription";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { UpgradeRequiredModal } from "@/components/modals/UpgradeRequiredModal";
 import { SubscriptionSuspendedModal } from "@/components/modals/SubscriptionSuspendedModal";
 import { TemplateSelector } from "./TemplateSelector";
@@ -72,7 +72,6 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
 
     // Subscription and plan validation  
     const { plan, creditsBalance, subscriptionStatus, subscriptionEnd, checkSubscription } = useSubscription();
-    const { toast } = useToast();
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
     const [upgradeReason, setUpgradeReason] = useState("");
     const [showSuspendedModal, setShowSuspendedModal] = useState(false);
@@ -196,11 +195,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
       );
 
       if (!validation.canGenerate) {
-        toast({
-          variant: "destructive",
-          title: "Cannot Generate",
-          description: validation.error,
-        });
+        toast.error("Cannot Generate", { description: validation.error });
         setUpgradeReason(validation.error || "Please upgrade your plan to continue.");
         setShowUpgradeModal(true);
         return;

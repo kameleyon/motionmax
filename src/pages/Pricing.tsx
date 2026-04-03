@@ -10,7 +10,7 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { yearlyDiscountPercent } from "@/config/products";
 import { PLANS, CREDIT_PACKAGES } from "@/config/pricingPlans";
 import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,7 +42,6 @@ function getCheckoutErrorMessage(error: unknown): string {
 export default function Pricing() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { toast } = useToast();
   const { plan: currentPlan, createCheckout, openCustomerPortal } = useSubscription();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [loadingCredits, setLoadingCredits] = useState<number | null>(null);
@@ -56,11 +55,8 @@ export default function Pricing() {
       setShowDowngradeDialog(false);
       await openCustomerPortal();
     } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to open billing portal",
-        variant: "destructive",
-      });
+      toast.success("Error", { description: error instanceof Error ? error.message : "Failed to open billing portal",
+        variant: "destructive" });
     } finally {
       setLoadingPlan(null);
     }
@@ -70,7 +66,7 @@ export default function Pricing() {
     if (!priceId) return;
 
     if (!user) {
-      toast({ title: "Sign in required", description: "Please sign in to subscribe to a plan", variant: "destructive" });
+      toast.success("Sign in required", { description: "Please sign in to subscribe to a plan", variant: "destructive" });
       navigate("/auth");
       return;
     }
@@ -79,7 +75,7 @@ export default function Pricing() {
       setLoadingPlan(planId);
       await createCheckout(priceId, "subscription");
     } catch (error) {
-      toast({ title: "Error", description: getCheckoutErrorMessage(error), variant: "destructive" });
+      toast.error("Error", { description: getCheckoutErrorMessage(error) });
     } finally {
       setLoadingPlan(null);
     }
@@ -87,7 +83,7 @@ export default function Pricing() {
 
   const handleBuyCredits = async (credits: 15 | 50 | 150 | 500, priceId: string) => {
     if (!user) {
-      toast({ title: "Sign in required", description: "Please sign in to purchase credits", variant: "destructive" });
+      toast.success("Sign in required", { description: "Please sign in to purchase credits", variant: "destructive" });
       navigate("/auth");
       return;
     }
@@ -96,7 +92,7 @@ export default function Pricing() {
       setLoadingCredits(credits);
       await createCheckout(priceId, "payment");
     } catch (error) {
-      toast({ title: "Error", description: getCheckoutErrorMessage(error), variant: "destructive" });
+      toast.error("Error", { description: getCheckoutErrorMessage(error) });
     } finally {
       setLoadingCredits(null);
     }

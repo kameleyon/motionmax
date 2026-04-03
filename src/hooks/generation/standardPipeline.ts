@@ -187,5 +187,5 @@ export async function runStandardPipeline(
   ctx.toast({
     title: "Video Generated!",
     description: `"${finalResult.title}" is ready with ${finalScenes?.length || 0} scenes.`,
-  });
+  });  // Uses ctx.toast adapter which wraps Sonner
 }

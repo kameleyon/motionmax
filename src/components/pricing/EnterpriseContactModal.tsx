@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Loader2, Building2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -18,7 +18,6 @@ interface EnterpriseContactModalProps {
 }
 
 export default function EnterpriseContactModal({ open, onOpenChange }: EnterpriseContactModalProps) {
-  const { toast } = useToast();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [company, setCompany] = useState("");
@@ -28,11 +27,8 @@ export default function EnterpriseContactModal({ open, onOpenChange }: Enterpris
 
   const handleSubmit = () => {
     if (!name.trim() || !email.trim() || !company.trim()) {
-      toast({
-        title: "Required fields missing",
-        description: "Please fill in your name, email, and company.",
-        variant: "destructive",
-      });
+      toast.success("Required fields missing", { description: "Please fill in your name, email, and company.",
+        variant: "destructive" });
       return;
     }
 
@@ -45,10 +41,7 @@ export default function EnterpriseContactModal({ open, onOpenChange }: Enterpris
 
     window.open(`mailto:sales@motionmax.io?subject=${subject}&body=${body}`, "_blank");
 
-    toast({
-      title: "Email client opened",
-      description: "Your enterprise inquiry has been prepared. Please send the email to complete your request.",
-    });
+    toast.success("Email client opened", { description: "Your enterprise inquiry has been prepared. Please send the email to complete your request." });
 
     setSending(false);
     onOpenChange(false);

@@ -28,7 +28,7 @@ export default function LandingCta({ onCtaClick }: LandingCtaProps) {
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
             <Button
               size="lg"
-              className="rounded-lg bg-primary px-8 py-6 text-base font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
+              size="hero"
               onClick={() => onCtaClick("Start Creating Free")}
             >
               Start Creating Free

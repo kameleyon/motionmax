@@ -9,7 +9,7 @@
  */
 import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { createScopedLogger } from "@/lib/logger";
 import { callPhase } from "./generation/callPhase";
 import { runCinematicPipeline, resumeCinematicPipeline } from "./generation/cinematicPipeline";
@@ -31,7 +31,6 @@ export type { GenerationStep, Scene, CostTracking, PhaseTimings, GenerationState
 const log = createScopedLogger("Pipeline");
 
 export function useGenerationPipeline() {
-  const { toast } = useToast();
   const [state, setState] = useState<GenerationState>(INITIAL_GENERATION_STATE);
 
   // Epoch counter: increments on every reset / project switch.
@@ -51,9 +50,15 @@ export function useGenerationPipeline() {
         setState(updater);
       },
       callPhase,
-      toast,
+      toast: (opts) => {
+        if (opts.variant === "destructive") {
+          toast.error(opts.title || "Error", { description: opts.description });
+        } else {
+          toast.success(opts.title || "", { description: opts.description });
+        }
+      },
     };
-  }, [toast]);
+  }, []);
 
   const startGeneration = useCallback(async (params: GenerationParams) => {
     const expectedSceneCount = SCENE_COUNTS[params.length] || 12;
@@ -90,7 +95,7 @@ export function useGenerationPipeline() {
       log.error("Generation error:", error);
       const errorMessage = error instanceof Error ? error.message : "Generation failed";
       setState((prev) => ({ ...prev, step: "error", isGenerating: false, error: errorMessage, statusMessage: errorMessage }));
-      toast({ variant: "destructive", title: "Generation Failed", description: errorMessage });
+      toast.error("Generation Failed", { description: errorMessage });
     }
   }, [toast, createContext]);
 
@@ -112,7 +117,7 @@ export function useGenerationPipeline() {
     const userId = session?.user?.id;
 
     if (!userId) {
-      toast({ variant: "destructive", title: "Not signed in", description: "Please sign in." });
+      toast.error("Not signed in", { description: "Please sign in." });
       return null;
     }
 
@@ -128,7 +133,7 @@ export function useGenerationPipeline() {
     if (projectError || !project) {
       const msg = projectError?.message || "Project not found.";
       log.error("loadProject failed:", msg);
-      toast({ variant: "destructive", title: "Could not load project", description: msg });
+      toast.error("Could not load project", { description: msg });
       setState((prev) => ({ ...prev, step: "error", isGenerating: false, error: msg }));
       return null;
     }

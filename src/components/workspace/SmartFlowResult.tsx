@@ -27,7 +27,7 @@ import {
 } from "@/lib/videoExportDebug";
 import { SceneEditModal } from "./SceneEditModal";
 import { VideoPlayer } from "./VideoPlayer";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface SmartFlowResultProps {
   title: string;
@@ -255,7 +255,7 @@ export function SmartFlowResult({
             onClick={() => {
               if (exportState.videoUrl) {
                 navigator.clipboard.writeText(exportState.videoUrl).then(
-                  () => toast({ title: "Link copied!" }),
+                  () => toast.success("Link copied!"),
                   () => {}
                 );
               }

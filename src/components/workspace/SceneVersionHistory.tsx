@@ -7,7 +7,7 @@ import { useSceneVersions, type SceneVersion } from "@/hooks/useSceneVersions";
 import { formatDistanceToNow } from "date-fns";
 import { useState } from "react";
 import { callPhase } from "@/hooks/generation/callPhase";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface SceneVersionHistoryProps {
   generationId: string;
@@ -29,7 +29,6 @@ export function SceneVersionHistory({
   const { data: versions = [], isLoading, refetch } = useSceneVersions(generationId, sceneIndex);
   const [restoringVersion, setRestoringVersion] = useState<string | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<SceneVersion | null>(null);
-  const { toast } = useToast();
 
   const handleRestoreVersion = async (version: SceneVersion) => {
     setRestoringVersion(version.id);
@@ -41,11 +40,7 @@ export function SceneVersionHistory({
       const undoCount = currentVersionNumber - targetVersionNumber;
 
       if (undoCount <= 0) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Cannot restore to a future version",
-        });
+        toast.error("Error", { description: "Cannot restore to a future version" });
         return;
       }
 
@@ -62,8 +57,7 @@ export function SceneVersionHistory({
         );
       }
 
-      toast({
-        title: "Version Restored",
+      toast.success("Version Restored", {
         description: `Scene ${sceneName} restored to version ${version.version_number}`,
       });
 
@@ -71,11 +65,7 @@ export function SceneVersionHistory({
       onVersionRestored();
     } catch (error) {
       console.error("Failed to restore version:", error);
-      toast({
-        variant: "destructive",
-        title: "Restore Failed",
-        description: error instanceof Error ? error.message : "Failed to restore version",
-      });
+      toast.error("Restore Failed", { description: error instanceof Error ? error.message : "Failed to restore version" });
     } finally {
       setRestoringVersion(null);
     }

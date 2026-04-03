@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useSubscription, CREDIT_PACKS } from "@/hooks/useSubscription";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 const DISMISS_KEY = "sub_alert_dismissed_until";
 const DISMISS_HOURS = 24;
@@ -57,7 +57,6 @@ export function SubscriptionRenewalModal() {
   const { subscribed, plan, subscriptionEnd, creditsBalance, createCheckout } =
     useSubscription();
   const navigate = useNavigate();
-  const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<AlertReason>(null);
   const [topUpLoading, setTopUpLoading] = useState(false);
@@ -87,7 +86,7 @@ export function SubscriptionRenewalModal() {
       await createCheckout(CREDIT_PACKS[50].priceId, "payment");
       handleDismiss();
     } catch {
-      toast({ variant: "destructive", title: "Checkout failed", description: "Please try again." });
+      toast.error("Checkout failed", { description: "Please try again." });
     } finally {
       setTopUpLoading(false);
     }

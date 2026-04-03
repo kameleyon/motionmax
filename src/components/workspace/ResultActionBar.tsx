@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import type { Scene } from "@/hooks/useGenerationPipeline";
 
 interface ResultActionBarProps {
@@ -79,11 +79,8 @@ export function ResultActionBar({
 
   const handleShare = async () => {
     if (!projectId) {
-      toast({
-        title: "Cannot share",
-        description: "Project must be saved first",
-        variant: "destructive",
-      });
+      toast.success("Cannot share", { description: "Project must be saved first",
+        variant: "destructive" });
       return;
     }
 
@@ -127,11 +124,8 @@ export function ResultActionBar({
       setDisplayUrl(`${window.location.origin}/share/${token}`);
     } catch (error) {
       console.error("Failed to create share:", error);
-      toast({
-        title: "Failed to create share link",
-        description: "Please try again",
-        variant: "destructive",
-      });
+      toast.success("Failed to create share link", { description: "Please try again",
+        variant: "destructive" });
       setIsShareDialogOpen(false);
     } finally {
       setIsCreatingShare(false);
@@ -143,17 +137,11 @@ export function ResultActionBar({
       // Copy the branded URL (what users expect to share)
       await navigator.clipboard.writeText(displayUrl);
       setHasCopied(true);
-      toast({
-        title: "Link copied!",
-        description: "Share this link with anyone to let them view your video",
-      });
+      toast.success("Link copied!", { description: "Share this link with anyone to let them view your video" });
       setTimeout(() => setHasCopied(false), 2000);
     } catch {
-      toast({
-        title: "Failed to copy",
-        description: "Please copy the link manually",
-        variant: "destructive",
-      });
+      toast.success("Failed to copy", { description: "Please copy the link manually",
+        variant: "destructive" });
     }
   };
 
@@ -161,16 +149,10 @@ export function ResultActionBar({
     try {
       // Copy the bot-proxy URL that returns OG tags to crawlers (best for social previews)
       await navigator.clipboard.writeText(shareUrl);
-      toast({
-        title: "Social preview link copied",
-        description: "Use this if a platform doesn't show the right thumbnail",
-      });
+      toast.success("Social preview link copied", { description: "Use this if a platform doesn't show the right thumbnail" });
     } catch {
-      toast({
-        title: "Failed to copy",
-        description: "Please copy the link manually",
-        variant: "destructive",
-      });
+      toast.success("Failed to copy", { description: "Please copy the link manually",
+        variant: "destructive" });
     }
   };
 
@@ -198,17 +180,11 @@ export function ResultActionBar({
       // Projects list route is "/projects" ("/app/projects" does not exist)
       navigate("/projects", { replace: true });
       
-      toast({
-        title: "Project deleted",
-        description: "Your project has been permanently deleted",
-      });
+      toast.success("Project deleted", { description: "Your project has been permanently deleted" });
     } catch (error) {
       console.error("Failed to delete project:", error);
-      toast({
-        title: "Failed to delete",
-        description: "Please try again",
-        variant: "destructive",
-      });
+      toast.success("Failed to delete", { description: "Please try again",
+        variant: "destructive" });
     } finally {
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);

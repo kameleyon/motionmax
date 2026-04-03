@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import type { Scene } from "@/hooks/useGenerationPipeline";
 import { callPhase } from "@/hooks/generation/callPhase";
 
@@ -15,7 +15,6 @@ export function useSceneRegeneration(
   scenes: Scene[] | undefined,
   onScenesUpdate: (scenes: Scene[]) => void
 ) {
-  const { toast } = useToast();
   const [state, setState] = useState<RegenerationState>({
     isRegenerating: false,
     regeneratingType: null,
@@ -27,7 +26,7 @@ export function useSceneRegeneration(
   const regenerateAudio = useCallback(
     async (sceneIndex: number, newVoiceover: string) => {
       if (!generationId || !projectId || !scenes) {
-        toast({ variant: "destructive", title: "Error", description: "Missing generation context" });
+        toast.error("Error", { description: "Missing generation context" });
         return;
       }
 
@@ -57,14 +56,10 @@ export function useSceneRegeneration(
         } as Scene;
         onScenesUpdate(updatedScenes);
 
-        toast({ title: "Audio Regenerated", description: `Scene ${sceneIndex + 1} audio updated.` });
+        toast.success("Audio Regenerated", { description: `Scene ${sceneIndex + 1} audio updated.` });
       } catch (error) {
         console.error("Audio regeneration error:", error);
-        toast({
-          variant: "destructive",
-          title: "Regeneration Failed",
-          description: error instanceof Error ? error.message : "Failed to regenerate audio",
-        });
+        toast.error("Regeneration Failed", { description: error instanceof Error ? error.message : "Failed to regenerate audio" });
       } finally {
         setState({ isRegenerating: false, regeneratingType: null, sceneIndex: null });
       }
@@ -77,7 +72,7 @@ export function useSceneRegeneration(
   const regenerateImage = useCallback(
     async (sceneIndex: number, imageModification: string, imageIndex?: number) => {
       if (!generationId || !projectId || !scenes) {
-        toast({ variant: "destructive", title: "Error", description: "Missing generation context" });
+        toast.error("Error", { description: "Missing generation context" });
         return;
       }
 
@@ -120,17 +115,12 @@ export function useSceneRegeneration(
 
         onScenesUpdate(updatedScenes);
 
-        toast({
-          title: "Image Regenerated",
+        toast.success("Image Regenerated", {
           description: `Scene ${sceneIndex + 1}${typeof imageIndex === "number" ? ` image ${imageIndex + 1}` : ""} updated.`,
         });
       } catch (error) {
         console.error("Image regeneration error:", error);
-        toast({
-          variant: "destructive",
-          title: "Regeneration Failed",
-          description: error instanceof Error ? error.message : "Failed to regenerate image",
-        });
+        toast.error("Regeneration Failed", { description: error instanceof Error ? error.message : "Failed to regenerate image" });
       } finally {
         setState({ isRegenerating: false, regeneratingType: null, sceneIndex: null });
       }
@@ -143,7 +133,7 @@ export function useSceneRegeneration(
   const undoRegeneration = useCallback(
     async (sceneIndex: number) => {
       if (!generationId || !projectId || !scenes) {
-        toast({ variant: "destructive", title: "Error", description: "Missing generation context" });
+        toast.error("Error", { description: "Missing generation context" });
         return;
       }
 
@@ -169,14 +159,10 @@ export function useSceneRegeneration(
         };
         onScenesUpdate(updatedScenes);
 
-        toast({ title: "Undo Successful", description: `Scene ${sceneIndex + 1} restored to previous state.` });
+        toast.success("Undo Successful", { description: `Scene ${sceneIndex + 1} restored to previous state.` });
       } catch (error) {
         console.error("Undo error:", error);
-        toast({
-          variant: "destructive",
-          title: "Undo Failed",
-          description: error instanceof Error ? error.message : "Failed to undo",
-        });
+        toast.error("Undo Failed", { description: error instanceof Error ? error.message : "Failed to undo" });
       } finally {
         setState({ isRegenerating: false, regeneratingType: null, sceneIndex: null });
       }

@@ -119,7 +119,7 @@ export type SetGenerationState = (updater: GenerationState | ((prev: GenerationS
 export interface PipelineContext {
   setState: SetGenerationState;
   callPhase: (body: Record<string, unknown>, timeoutMs?: number, endpoint?: string) => Promise<any>;
-  toast: (opts: { title?: string; description?: string; variant?: "default" | "destructive" }) => void;
+  toast: (opts: { title?: string; description?: string; variant?: "default" | "destructive" }) => void;  // Legacy signature — adapter wraps Sonner
 }
 
 // ---- Constants ----

@@ -215,7 +215,7 @@ export default function Dashboard() {
                   {isCreditsError ? (
                     <AlertCircle className="h-6 w-6 text-destructive" />
                   ) : (
-                    <span className={`font-bold text-primary ${creditsBalance >= 100000 ? "text-xs" : creditsBalance >= 10000 ? "text-xs" : creditsBalance >= 1000 ? "text-sm" : "text-lg"}`}>
+                    <span className={`font-semibold text-primary ${creditsBalance >= 100000 ? "text-xs" : creditsBalance >= 10000 ? "text-xs" : creditsBalance >= 1000 ? "text-sm" : "text-lg"}`}>
                       {creditsBalance.toLocaleString()}
                     </span>
                   )}

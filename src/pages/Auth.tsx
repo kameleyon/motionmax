@@ -169,7 +169,7 @@ export default function Auth() {
                   <CheckCircle2 className="h-7 w-7 text-primary" />
                 </div>
               </div>
-              <h1 className="text-xl font-bold text-foreground mb-2">Check your email</h1>
+              <h1 className="text-xl font-semibold text-foreground mb-2">Check your email</h1>
               <p className="text-sm text-muted-foreground mb-1">We sent a confirmation link to</p>
               <p className="text-sm font-semibold text-foreground mb-4 break-all">{email}</p>
               <p className="text-xs text-muted-foreground mb-6">
@@ -203,7 +203,7 @@ export default function Auth() {
         >
           <div className="rounded-2xl border border-border/50 bg-card/50 p-8 shadow-sm backdrop-blur-sm">
             <div className="mb-8 text-center">
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">
                 {mode === "login" ? "Welcome back"
                   : mode === "signup" ? "Create your account"
                   : mode === "reset" ? "Reset your password"

@@ -322,7 +322,7 @@ export default function Landing() {
                 <div className="flex items-start justify-between mb-4">
                   <div>
                     <span className="text-xs font-medium uppercase tracking-wider text-white/40">{product.tag}</span>
-                    <h3 className="text-xl font-bold text-white mt-1">{product.title}</h3>
+                    <h3 className="text-xl font-semibold text-white mt-1">{product.title}</h3>
                   </div>
                 </div>
                 <p className="text-sm leading-relaxed text-white/60 mb-4">

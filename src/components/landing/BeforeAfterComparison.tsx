@@ -90,7 +90,7 @@ export default function BeforeAfterComparison() {
             </div>
             <div className="text-left">
               <p className="text-sm font-medium text-muted-foreground">Time Saved Per Video</p>
-              <p className="text-2xl font-bold text-primary">14+ hours</p>
+              <p className="text-2xl font-semibold text-primary">14+ hours</p>
             </div>
           </div>
           <div className="hidden sm:block h-10 w-px bg-border" />
@@ -159,7 +159,7 @@ function WorkflowCard({ title, icon, steps, total, variant, delay }: WorkflowCar
         isAi ? "border-primary/20" : "border-border/30"
       }`}>
         <span className="text-sm font-medium text-muted-foreground">Total time</span>
-        <span className={`text-lg font-bold ${isAi ? "text-primary" : "text-foreground"}`}>
+        <span className={`text-lg font-semibold ${isAi ? "text-primary" : "text-foreground"}`}>
           {total}
         </span>
       </div>
@@ -191,7 +191,7 @@ function TimeSavedMetrics() {
     <div className="flex items-center gap-6">
       {metrics.map((m) => (
         <div key={m.label} className="text-center">
-          <p className="text-lg font-bold text-foreground">{m.value}</p>
+          <p className="text-lg font-semibold text-foreground">{m.value}</p>
           <p className="text-xs text-muted-foreground leading-tight">{m.label}</p>
         </div>
       ))}

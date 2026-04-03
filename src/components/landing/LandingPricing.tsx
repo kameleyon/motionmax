@@ -170,7 +170,7 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
                 <p className="text-sm text-muted-foreground mb-3">{plan.description}</p>
                 
                 <div className="mb-1">
-                  <span className="text-3xl font-bold text-foreground">{displayPrice}</span>
+                  <span className="text-3xl font-semibold text-foreground">{displayPrice}</span>
                   <span className="text-muted-foreground">/month</span>
                 </div>
                 {billingInterval === "yearly" && plan.name !== "Free" && plan.name !== "Enterprise" && (

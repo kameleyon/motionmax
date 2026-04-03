@@ -10,7 +10,8 @@
 
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
-import { generateImage, editImage } from "../services/imageGenerator.js";
+import { generateImage } from "../services/imageGenerator.js";
+import { editImageWithNanoBanana } from "../services/nanoBananaEdit.js";
 import { getStylePrompt } from "../services/prompts.js";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -76,20 +77,23 @@ export async function handleRegenerateImage(
 
   let imageUrl: string;
 
+  const aspectMap: Record<string, string> = {
+    landscape: "16:9", portrait: "9:16", square: "1:1",
+  };
+  const aspectRatio = aspectMap[format] || "16:9";
+
   if (imageModification) {
-    // Edit via Hypereal generate — original prompt + user modification
+    // Edit via Hypereal Nano Banana Edit — keeps the image, applies text instruction
     const sourceImageUrl = (scene.imageUrls || [])[targetImageIndex] || scene.imageUrl;
     if (!sourceImageUrl) throw new Error("Cannot edit an image that does not exist.");
 
-    imageUrl = await editImage(
-      imageModification,
+    if (!hyperealApiKey) throw new Error("HYPEREAL_API_KEY required for image editing");
+
+    imageUrl = await editImageWithNanoBanana(
       sourceImageUrl,
+      imageModification,
       hyperealApiKey,
-      projectId,
-      scene.visualPrompt || "",
-      replicateApiKey,
-      format,
-      styleDesc,
+      aspectRatio,
     );
   } else {
     // Full Regeneration

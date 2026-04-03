@@ -139,6 +139,39 @@ export function useCinematicRegeneration(
 
   // ── Apply image edit → worker ────────────────────────────────────────────
 
+  /**
+   * Helper: after an image changes at idx, auto-regenerate affected videos.
+   * - Scene idx video (this image is its start frame)
+   * - Scene idx-1 video (this image is its end_image) — unless idx === 0
+   */
+  const regenAffectedVideos = useCallback(
+    async (idx: number, updatedScenes: CinematicScene[]) => {
+      const lastIdx = updatedScenes.length - 1;
+      const affectedIndices: number[] = [idx]; // always regen current scene
+      if (idx > 0) affectedIndices.unshift(idx - 1); // previous scene uses this as end_image
+
+      toast({ title: "Regenerating Videos", description: `Updating ${affectedIndices.length} affected video(s)...` });
+
+      for (const vidIdx of affectedIndices) {
+        try {
+          const vidResult = await callPhase({
+            phase: "video", generationId, projectId, sceneIndex: vidIdx, regenerate: true,
+          }, 10 * 60 * 1000);
+          if (vidResult?.success && vidResult.videoUrl) {
+            updatedScenes = updatedScenes.map((s, i) =>
+              i === vidIdx ? { ...s, videoUrl: vidResult.videoUrl } : s
+            );
+          }
+        } catch (err) {
+          console.warn(`Video regen for scene ${vidIdx} failed:`, err);
+        }
+      }
+      onScenesUpdate(updatedScenes);
+      toast({ title: "Videos Updated", description: `${affectedIndices.length} video(s) regenerated.` });
+    },
+    [generationId, projectId, onScenesUpdate, toast]
+  );
+
   const applyImageEdit = useCallback(
     async (idx: number, imageModification: string) => {
       if (!generationId || !projectId) {
@@ -161,21 +194,18 @@ export function useCinematicRegeneration(
 
         if (!result?.success) throw new Error(result?.error || "Image edit failed");
 
-        // Update image + clear stale videos:
-        // - Current scene's video (this image is its start frame)
-        // - Previous scene's video (this image is its end_image transition target)
-        const nextScenes = scenes.map((s, i) => {
+        // Update image + clear affected videos
+        let nextScenes = scenes.map((s, i) => {
           if (i === idx) return { ...s, imageUrl: result.imageUrl, videoUrl: undefined };
           if (i === idx - 1) return { ...s, videoUrl: undefined };
           return s;
         });
         onScenesUpdate(nextScenes);
 
-        const affectedCount = idx > 0 ? 2 : 1;
-        toast({
-          title: "Image Edited",
-          description: `Scene ${idx + 1} image updated. ${affectedCount} video(s) need regeneration — press Render when done editing.`,
-        });
+        toast({ title: "Image Edited", description: `Scene ${idx + 1} updated. Regenerating affected videos...` });
+
+        // Auto-trigger video regen for affected scenes
+        await regenAffectedVideos(idx, nextScenes);
       } catch (error) {
         console.error("Image edit error:", error);
         toast({
@@ -187,7 +217,7 @@ export function useCinematicRegeneration(
         setState({ isRegenerating: false, sceneIndex: null, type: null });
       }
     },
-    [generationId, projectId, scenes, onScenesUpdate, onStopPlayback, toast]
+    [generationId, projectId, scenes, onScenesUpdate, onStopPlayback, toast, regenAffectedVideos]
   );
 
   // ── Image regeneration → worker ──────────────────────────────────────────
@@ -215,18 +245,17 @@ export function useCinematicRegeneration(
         if (!result?.success) throw new Error(result?.error || "Image regeneration failed");
 
         // Update image + clear stale videos (current + previous scene)
-        const nextScenes = scenes.map((s, i) => {
+        let nextScenes = scenes.map((s, i) => {
           if (i === idx) return { ...s, imageUrl: result.imageUrl, videoUrl: undefined };
           if (i === idx - 1) return { ...s, videoUrl: undefined };
           return s;
         });
         onScenesUpdate(nextScenes);
 
-        const affectedCount = idx > 0 ? 2 : 1;
-        toast({
-          title: "Image Regenerated",
-          description: `Scene ${idx + 1} image updated. ${affectedCount} video(s) need regeneration — press Render when done editing.`,
-        });
+        toast({ title: "Image Regenerated", description: `Scene ${idx + 1} updated. Regenerating affected videos...` });
+
+        // Auto-trigger video regen for affected scenes
+        await regenAffectedVideos(idx, nextScenes);
       } catch (error) {
         console.error("Image regeneration error:", error);
         toast({
@@ -238,7 +267,7 @@ export function useCinematicRegeneration(
         setState({ isRegenerating: false, sceneIndex: null, type: null });
       }
     },
-    [generationId, projectId, scenes, onScenesUpdate, onStopPlayback, toast]
+    [generationId, projectId, scenes, onScenesUpdate, onStopPlayback, toast, regenAffectedVideos]
   );
 
   // ── Undo regeneration → worker ──────────────────────────────────────────

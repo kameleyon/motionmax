@@ -402,6 +402,8 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                       <div className="sm:flex-shrink-0">
                         <SpeakerSelector value={speaker} onChange={setSpeaker} language={language} />
                       </div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
                       <div className="sm:flex-shrink-0">
                         <CaptionStyleSelector value={captionStyle} onChange={setCaptionStyle} />
                       </div>

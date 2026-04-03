@@ -123,43 +123,43 @@ const STYLE_DEFS: Record<Exclude<CaptionStyle, "none">, AssStyleDef> = {
   classic: {
     fontName: "DejaVu Sans", fontSize: 44, primaryColor: WHITE, secondaryColor: YELLOW,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0xA0), bold: true,
-    outline: 2, shadow: 1, alignment: 2, marginV: 60, borderStyle: 1,
+    outline: 2, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1,
   },
   bold: {
     fontName: "Liberation Sans", fontSize: 56, primaryColor: WHITE, secondaryColor: YELLOW,
     outlineColor: BLACK, backColor: BLACK, bold: true,
-    outline: 4, shadow: 2, alignment: 2, marginV: 70, borderStyle: 1, uppercase: true,
+    outline: 4, shadow: 2, alignment: 2, marginV: 300, borderStyle: 1, uppercase: true,
   },
   neon: {
     fontName: "DejaVu Sans", fontSize: 46, primaryColor: AQUA, secondaryColor: WHITE,
     outlineColor: assColor(0x08, 0x60, 0x68), backColor: assColor(0, 0, 0, 0x90), bold: true,
-    outline: 3, shadow: 0, alignment: 2, marginV: 60, borderStyle: 3,
+    outline: 3, shadow: 0, alignment: 2, marginV: 280, borderStyle: 3,
   },
   karaoke: {
     fontName: "DejaVu Sans", fontSize: 44, primaryColor: WHITE, secondaryColor: AQUA,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0xA0), bold: true,
-    outline: 2, shadow: 1, alignment: 2, marginV: 60, borderStyle: 1,
+    outline: 2, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1,
   },
   minimal: {
     fontName: "DejaVu Sans", fontSize: 34, primaryColor: GRAY, secondaryColor: WHITE,
     outlineColor: assColor(0, 0, 0, 0x60), backColor: assColor(0, 0, 0, 0), bold: false,
-    outline: 1, shadow: 0, alignment: 2, marginV: 50, borderStyle: 1,
+    outline: 1, shadow: 0, alignment: 2, marginV: 260, borderStyle: 1,
   },
   box: {
     fontName: "DejaVu Sans", fontSize: 42, primaryColor: WHITE, secondaryColor: YELLOW,
     outlineColor: assColor(0x11, 0xC4, 0xD0), backColor: assColor(0x11, 0xC4, 0xD0, 0x40), bold: true,
-    outline: 14, shadow: 0, alignment: 2, marginV: 60, borderStyle: 3,
+    outline: 14, shadow: 0, alignment: 2, marginV: 280, borderStyle: 3,
   },
   // ── Text effects ──
   typewriter: {
     fontName: "DejaVu Sans Mono", fontSize: 38, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0x80), bold: false,
-    outline: 1, shadow: 0, alignment: 2, marginV: 60, borderStyle: 1,
+    outline: 1, shadow: 0, alignment: 2, marginV: 280, borderStyle: 1,
   },
   gradient: {
     fontName: "Liberation Sans", fontSize: 48, primaryColor: AQUA, secondaryColor: GOLD,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 3, shadow: 1, alignment: 2, marginV: 65, borderStyle: 1,
+    outline: 3, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1,
   },
   subtitleBar: {
     fontName: "DejaVu Sans", fontSize: 40, primaryColor: WHITE, secondaryColor: WHITE,
@@ -169,17 +169,17 @@ const STYLE_DEFS: Record<Exclude<CaptionStyle, "none">, AssStyleDef> = {
   outlineOnly: {
     fontName: "Liberation Sans", fontSize: 50, primaryColor: assColor(0, 0, 0, 0xFE), secondaryColor: AQUA,
     outlineColor: WHITE, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 3, shadow: 0, alignment: 2, marginV: 60, borderStyle: 1,
+    outline: 3, shadow: 0, alignment: 2, marginV: 280, borderStyle: 1,
   },
   shadowPop: {
     fontName: "Liberation Sans", fontSize: 52, primaryColor: WHITE, secondaryColor: YELLOW,
     outlineColor: assColor(0, 0, 0, 0), backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 0, shadow: 4, alignment: 2, marginV: 65, borderStyle: 1,
+    outline: 0, shadow: 4, alignment: 2, marginV: 280, borderStyle: 1,
   },
   handwritten: {
     fontName: "DejaVu Serif", fontSize: 42, primaryColor: WHITE, secondaryColor: YELLOW,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: false, italic: true,
-    outline: 2, shadow: 1, alignment: 2, marginV: 60, borderStyle: 1,
+    outline: 2, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1,
   },
   topCenter: {
     fontName: "DejaVu Sans", fontSize: 42, primaryColor: WHITE, secondaryColor: YELLOW,
@@ -189,63 +189,63 @@ const STYLE_DEFS: Record<Exclude<CaptionStyle, "none">, AssStyleDef> = {
   allCapsGlow: {
     fontName: "Liberation Sans", fontSize: 48, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: AQUA, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 3, alignment: 2, marginV: 65, borderStyle: 1, uppercase: true,
+    outline: 4, shadow: 3, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
   },
   // ── Colorful (from caption.png) ──
   whiteStroke: {
     fontName: "Liberation Sans", fontSize: 52, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 5, shadow: 0, alignment: 2, marginV: 65, borderStyle: 1,
+    outline: 5, shadow: 0, alignment: 2, marginV: 280, borderStyle: 1,
   },
   blueStroke: {
     fontName: "Liberation Sans", fontSize: 50, primaryColor: BLUE, secondaryColor: WHITE,
     outlineColor: WHITE, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 1, alignment: 2, marginV: 65, borderStyle: 1,
+    outline: 4, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1,
   },
   redFire: {
     fontName: "Liberation Sans", fontSize: 52, primaryColor: RED, secondaryColor: YELLOW,
     outlineColor: YELLOW, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 3, shadow: 2, alignment: 2, marginV: 65, borderStyle: 1,
+    outline: 3, shadow: 2, alignment: 2, marginV: 280, borderStyle: 1,
   },
   orangeGlow: {
     fontName: "Liberation Sans", fontSize: 50, primaryColor: ORANGE, secondaryColor: WHITE,
     outlineColor: WHITE, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 1, alignment: 2, marginV: 65, borderStyle: 1,
+    outline: 4, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1,
   },
   yellowOutline: {
     fontName: "Liberation Sans", fontSize: 50, primaryColor: WHITE, secondaryColor: YELLOW,
     outlineColor: YELLOW, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 1, alignment: 2, marginV: 65, borderStyle: 1,
+    outline: 4, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1,
   },
   greenPill: {
     fontName: "DejaVu Sans", fontSize: 42, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: GREEN, backColor: GREEN, bold: true,
-    outline: 16, shadow: 0, alignment: 2, marginV: 65, borderStyle: 3,
+    outline: 16, shadow: 0, alignment: 2, marginV: 280, borderStyle: 3,
   },
   goldScript: {
     fontName: "DejaVu Serif", fontSize: 46, primaryColor: GOLD, secondaryColor: YELLOW,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: false, italic: true,
-    outline: 2, shadow: 1, alignment: 2, marginV: 60, borderStyle: 1,
+    outline: 2, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1,
   },
   comicPop: {
     fontName: "Liberation Sans", fontSize: 54, primaryColor: RED, secondaryColor: WHITE,
     outlineColor: YELLOW, backColor: YELLOW, bold: true,
-    outline: 5, shadow: 3, alignment: 2, marginV: 65, borderStyle: 1, uppercase: true,
+    outline: 5, shadow: 3, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
   },
   blueWhite: {
     fontName: "Liberation Sans", fontSize: 50, primaryColor: WHITE, secondaryColor: BLUE,
     outlineColor: BLUE, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 0, alignment: 2, marginV: 65, borderStyle: 1,
+    outline: 4, shadow: 0, alignment: 2, marginV: 280, borderStyle: 1,
   },
   redBlack: {
     fontName: "Liberation Sans", fontSize: 52, primaryColor: RED, secondaryColor: WHITE,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 2, alignment: 2, marginV: 65, borderStyle: 1,
+    outline: 4, shadow: 2, alignment: 2, marginV: 280, borderStyle: 1,
   },
   yellowRed: {
     fontName: "Liberation Sans", fontSize: 50, primaryColor: YELLOW, secondaryColor: RED,
     outlineColor: RED, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 1, alignment: 2, marginV: 65, borderStyle: 1,
+    outline: 4, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1,
   },
 };
 

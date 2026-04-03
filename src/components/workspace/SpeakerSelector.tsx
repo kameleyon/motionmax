@@ -230,17 +230,17 @@ export function SpeakerSelector({ value, onChange, language }: SpeakerSelectorPr
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 shrink-0"
+          className="h-8 w-8 shrink-0 rounded-full border border-primary/30 hover:bg-primary/10"
           disabled={previewLoading !== null}
           onClick={(e) => playPreview(selected, e)}
           title={previewPlaying === selected.id ? "Stop preview" : "Preview voice"}
         >
           {previewLoading === selected.id ? (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
           ) : previewPlaying === selected.id ? (
-            <Square className="h-3.5 w-3.5 text-primary fill-primary" />
+            <Square className="h-3 w-3 text-primary fill-primary" />
           ) : (
-            <Play className="h-4 w-4 text-muted-foreground" />
+            <Play className="h-3.5 w-3.5 text-primary fill-primary" />
           )}
         </Button>
       </div>

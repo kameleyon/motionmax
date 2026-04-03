@@ -24,12 +24,24 @@ export default {
         foreground: "hsl(var(--foreground))",
         brand: {
           dark: "hsl(var(--brand-dark))",
-          primary: "hsl(var(--brand-primary))",
-          secondary: "hsl(var(--brand-secondary))",
-          accent: "hsl(var(--brand-accent))",
-          light: "hsl(var(--brand-light))",
-          pop: "hsl(var(--brand-pop))",
-          surface: "hsl(var(--brand-surface))",
+          aqua: "hsl(var(--brand-aqua))",
+          "aqua-dark": "hsl(var(--brand-aqua-dark))",
+          "aqua-light": "hsl(var(--brand-aqua-light))",
+          gold: "hsl(var(--brand-gold))",
+          "gold-dark": "hsl(var(--brand-gold-dark))",
+          "gold-light": "hsl(var(--brand-gold-light))",
+        },
+        gold: {
+          DEFAULT: "hsl(var(--gold))",
+          foreground: "hsl(var(--gold-foreground))",
+        },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
         },
         primary: {
           DEFAULT: "hsl(var(--primary))",

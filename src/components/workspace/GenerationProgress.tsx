@@ -32,17 +32,17 @@ interface GenerationProgressProps {
 function SceneStatusIcon({ phase }: { phase: string }) {
   switch (phase) {
     case "complete":
-      return <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />;
+      return <CheckCircle2 className="h-3.5 w-3.5 text-success" />;
     case "failed":
     case "timeout":
-      return <XCircle className="h-3.5 w-3.5 text-red-500" />;
+      return <XCircle className="h-3.5 w-3.5 text-destructive" />;
     case "encoding":
     case "generating":
     case "downloading":
     case "uploading":
       return <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />;
     case "skipped":
-      return <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />;
+      return <AlertTriangle className="h-3.5 w-3.5 text-warning" />;
     default:
       return <Clock className="h-3.5 w-3.5 text-muted-foreground/50" />;
   }

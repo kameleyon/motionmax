@@ -415,7 +415,7 @@ export function AppSidebar() {
                               Cinematic
                               <span className="text-xs px-1.5 py-0.5 rounded bg-primary/20 text-primary">Beta</span>
                               {!canAccessCinematic && (
-                                <Crown className="h-3 w-3 text-muted-foreground" />
+                                <Crown className="h-3 w-3 text-[hsl(var(--gold))]" />
                               )}
                             </span>
                           )}
@@ -640,8 +640,8 @@ export function AppSidebar() {
       <Dialog open={upgradeModalOpen} onOpenChange={setUpgradeModalOpen}>
         <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader className="text-center sm:text-center">
-            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-primary/10">
-              <Crown className="h-6 w-6 text-primary" />
+            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[hsl(var(--gold))]/20 to-[hsl(var(--gold))]/10">
+              <Crown className="h-6 w-6 text-[hsl(var(--gold))]" />
             </div>
             <DialogTitle className="text-lg font-semibold">
               Upgrade to Starter

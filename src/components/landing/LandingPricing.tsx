@@ -154,15 +154,15 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
               >
                 {plan.popular && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="bg-primary text-primary-foreground text-xs font-medium px-3 py-1 rounded-full">
+                    <span className="bg-[hsl(var(--gold))] text-[hsl(var(--accent-foreground))] text-xs font-medium px-3 py-1 rounded-full">
                       Most Popular
                     </span>
                   </div>
                 )}
-                
+
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                    <IconComponent className="h-4 w-4 text-primary" />
+                  <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${plan.icon === Crown ? "bg-[hsl(var(--gold))]/15" : "bg-primary/10"}`}>
+                    <IconComponent className={`h-4 w-4 ${plan.icon === Crown ? "text-[hsl(var(--gold))]" : "text-primary"}`} />
                   </div>
                   <h3 className="text-lg font-semibold text-foreground">{plan.name}</h3>
                 </div>

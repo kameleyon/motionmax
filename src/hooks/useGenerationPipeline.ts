@@ -9,7 +9,7 @@
  */
 import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
+import { toast as sonnerToast } from "sonner";
 import { createScopedLogger } from "@/lib/logger";
 import { callPhase } from "./generation/callPhase";
 import { runCinematicPipeline, resumeCinematicPipeline } from "./generation/cinematicPipeline";
@@ -52,9 +52,9 @@ export function useGenerationPipeline() {
       callPhase,
       toast: (opts) => {
         if (opts.variant === "destructive") {
-          toast.error(opts.title || "Error", { description: opts.description });
+          sonnerToast.error(opts.title || "Error", { description: opts.description });
         } else {
-          toast.success(opts.title || "", { description: opts.description });
+          sonnerToast.success(opts.title || "", { description: opts.description });
         }
       },
     };
@@ -95,9 +95,9 @@ export function useGenerationPipeline() {
       log.error("Generation error:", error);
       const errorMessage = error instanceof Error ? error.message : "Generation failed";
       setState((prev) => ({ ...prev, step: "error", isGenerating: false, error: errorMessage, statusMessage: errorMessage }));
-      toast.error("Generation Failed", { description: errorMessage });
+      sonnerToast.error("Generation Failed", { description: errorMessage });
     }
-  }, [toast, createContext]);
+  }, [createContext]);
 
   const resumeCinematic = useCallback(
     async (project: ProjectRow, generationId: string, existingScenes: any[], resumeFrom: "audio" | "images" | "video" | "finalize") => {
@@ -117,7 +117,7 @@ export function useGenerationPipeline() {
     const userId = session?.user?.id;
 
     if (!userId) {
-      toast.error("Not signed in", { description: "Please sign in." });
+      sonnerToast.error("Not signed in", { description: "Please sign in." });
       return null;
     }
 
@@ -133,7 +133,7 @@ export function useGenerationPipeline() {
     if (projectError || !project) {
       const msg = projectError?.message || "Project not found.";
       log.error("loadProject failed:", msg);
-      toast.error("Could not load project", { description: msg });
+      sonnerToast.error("Could not load project", { description: msg });
       setState((prev) => ({ ...prev, step: "error", isGenerating: false, error: msg }));
       return null;
     }

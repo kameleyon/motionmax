@@ -218,7 +218,7 @@ export function CinematicResult({
       duration: s.duration, videoUrl: s.videoUrl, audioUrl: s.audioUrl, imageUrl: s.imageUrl,
     }));
     void exportVideo(exportScenes, format, undefined, projectId, "cinematic", undefined, initialCaptionStyle).catch(() => {});
-  }, [resetExport, exportVideo, localScenes, format, projectId]);
+  }, [resetExport, exportVideo, localScenes, format, projectId, initialCaptionStyle]);
 
   // Regenerate all stale videos (missing videoUrl) then re-export
   const [isRenderingChanges, setIsRenderingChanges] = useState(false);
@@ -272,7 +272,7 @@ export function CinematicResult({
     } finally {
       setIsRenderingChanges(false);
     }
-  }, [generationId, projectId, localScenes, format, resetExport, exportVideo, toast]);
+  }, [generationId, projectId, localScenes, format, resetExport, exportVideo, toast, initialCaptionStyle]);
 
   // Share
   const handleShare = useCallback(async () => {

@@ -124,7 +124,7 @@ export interface PipelineContext {
 
 // ---- Constants ----
 
-export const SCENE_COUNTS: Record<string, number> = { short: 12, brief: 28, presentation: 36 };
+export const SCENE_COUNTS: Record<string, number> = { short: 15, brief: 28, presentation: 36 };
 export const CINEMATIC_ENDPOINT = "generate-cinematic";
 export const DEFAULT_ENDPOINT = "generate-video";
 

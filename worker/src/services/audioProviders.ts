@@ -325,7 +325,7 @@ export async function generateChatterboxTTS(
         const createRes = await fetch("https://api.replicate.com/v1/models/resemble-ai/chatterbox-turbo/predictions", {
           method: "POST",
           headers: { Authorization: `Bearer ${replicateApiKey}`, "Content-Type": "application/json", Prefer: "wait" },
-          body: JSON.stringify({ input: { text: chunk, voice, temperature: 0.9, top_p: 0.95, top_k: 2000, repetition_penalty: 1.8 } }),
+          body: JSON.stringify({ input: { text: chunk, voice, temperature: 0.8, top_p: 0.95, top_k: 2000, repetition_penalty: 1.8 } }),
         });
         if (!createRes.ok) throw new Error(`Chatterbox chunk ${idx} failed: ${createRes.status}`);
         let pred = await createRes.json();

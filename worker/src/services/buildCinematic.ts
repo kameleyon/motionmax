@@ -40,7 +40,7 @@ export interface CinematicParams {
 
 export function buildCinematicPrompt(p: CinematicParams): PromptResult {
   const lengthCfg: Record<string, { min: number; max: number; target: number; maxPerScene: number; maxWords: number }> = {
-    short:        { min: 10, max: 10, target: 100, maxPerScene: 10, maxWords: 25 },
+    short:        { min: 15, max: 15, target: 150, maxPerScene: 10, maxWords: 25 },
     brief:        { min: 28, max: 28, target: 280, maxPerScene: 10, maxWords: 25 },
     presentation: { min: 36, max: 36, target: 360, maxPerScene: 10, maxWords: 25 },
   };
@@ -206,17 +206,22 @@ ${p.length === "short" ? `
 - Write TIGHT, punchy narration. Cut filler words ruthlessly. Every word must earn its place.
 - Set each scene "duration" to ${cfg.maxPerScene}
 
-=== NARRATIVE ARC (10-BEAT STRUCTURE) ===
-1. HOOK (Scene 1-2): Grab attention immediately — high energy, fast cuts
-2. CONTEXT: Establish the world, introduce characters
-3. RISING ACTION: Build tension and stakes
-4. COMPLICATION: Introduce obstacles or conflict
-5. TURNING POINT: Key revelation or decision
-6. ESCALATION: Stakes increase, tension peaks
-7. CLIMAX: Maximum tension, dramatic payoff
-8. RESOLUTION: Consequences unfold
-9. REFLECTION: Emotional resonance, meaning
-10. CLOSE: Satisfying ending — leave a mark
+=== NARRATIVE ARC (15-BEAT STRUCTURE) ===
+1. HOOK (Scene 1): Grab attention INSTANTLY — shocking statement or question
+2. TEASE (Scene 2): Promise what's coming — "What happened next changed everything"
+3. CONTEXT (Scene 3): Establish the world, introduce characters
+4. BACKSTORY (Scene 4): Deeper context — why this matters
+5. RISING ACTION (Scene 5): Build tension, first stakes revealed
+6. COMPLICATION (Scene 6): Obstacle or conflict introduced
+7. DEEPENING (Scene 7): Explore the complexity — unexpected angle
+8. TURNING POINT (Scene 8): Key revelation or decision
+9. ESCALATION (Scene 9): Stakes increase dramatically
+10. TWIST (Scene 10): Unexpected development — audience gasps
+11. CLIMAX (Scene 11): Maximum tension, dramatic peak
+12. FALLOUT (Scene 12): Immediate consequences unfold
+13. RESOLUTION (Scene 13): The dust settles — new reality
+14. REFLECTION (Scene 14): Emotional resonance — what it all means
+15. CLOSE (Scene 15): Powerful ending — leave a mark, call to action
 
 === VOICEOVER & SCRIPT STYLE (VIRAL SOCIAL MEDIA — CRITICAL) ===
 Write scripts that are HIGHLY CATCHY, ENTERTAINING, and SOCIAL MEDIA CLICKBAIT style:

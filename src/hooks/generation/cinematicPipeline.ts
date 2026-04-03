@@ -90,7 +90,7 @@ export async function runCinematicPipeline(
 async function runCinematicAudio(projectId: string, generationId: string, sceneCount: number, ctx: PipelineContext, language?: string) {
   console.log(LOG, "Starting audio phase", { sceneCount });
 
-  const AUDIO_CONCURRENCY = 3;
+  const AUDIO_CONCURRENCY = 5;
 
   const processAudioScene = async (i: number) => {
     ctx.setState((prev) => ({
@@ -335,7 +335,7 @@ export async function resumeCinematicPipeline(
     // Phase 2: Audio (resume)
     if (resumeFrom === "audio") {
       console.log(LOG, "Resume: starting audio phase");
-      const AUDIO_CONCURRENCY = 3;
+      const AUDIO_CONCURRENCY = 5;
       const processResumeAudio = async (i: number) => {
         if (existingScenes[i]?.audioUrl) { console.log(LOG, `Resume: skipping audio scene ${i + 1} (done)`); return; }
         ctx.setState((prev) => ({ ...prev, statusMessage: `Resuming audio (${i + 1}/${sceneCount})...`, progress: 10 + Math.floor(((i + 0.25) / sceneCount) * 25) }));

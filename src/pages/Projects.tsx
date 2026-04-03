@@ -221,7 +221,7 @@ export default function Projects() {
       // Step 3: Merge thumbnails
       const projects = projectsData.map(p => ({
         ...p,
-        thumbnailUrl: gridThumbnailUrl(p.thumbnail_url ?? thumbnailMap[p.id] ?? null),
+        thumbnailUrl: p.thumbnail_url ?? thumbnailMap[p.id] ?? null,
       })) as unknown as Project[];
 
       return {

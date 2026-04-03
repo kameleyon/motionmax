@@ -10,6 +10,7 @@ import { useForceDarkMode } from "@/hooks/useForceDarkMode";
 import SeoHead from "@/components/landing/SeoHead";
 import FeatureCard from "@/components/landing/FeatureCard";
 import TrustIndicators from "@/components/landing/TrustIndicators";
+import { Testimonials } from "@/components/landing/Testimonials";
 import FaqSection from "@/components/landing/FaqSection";
 import motionmaxLogo from "@/assets/motionmax-logo.png";
 import motionMaxHeroLogo from "@/assets/motionmax-hero-logo.png";
@@ -238,6 +239,54 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Product Demo Section */}
+      <section className="py-12 sm:py-20 bg-white/[0.02]">
+        <div className="mx-auto max-w-4xl px-6 sm:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-8"
+          >
+            <span className="inline-block mb-3 text-xs font-medium uppercase tracking-widest text-primary">
+              See It in Action
+            </span>
+            <h2 className="type-h1 tracking-tight text-foreground">
+              From text to cinematic video in minutes
+            </h2>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.1 }}
+            className="relative rounded-xl overflow-hidden border border-border/50 bg-black aspect-video"
+          >
+            {/* Replace src with your actual demo video URL */}
+            <video
+              src="/hero-promo-optimized.mp4"
+              className="w-full h-full object-cover"
+              autoPlay
+              muted
+              loop
+              playsInline
+              poster="/hero-video-poster.png"
+            />
+          </motion.div>
+
+          <motion.p
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.3 }}
+            className="text-center mt-4 text-sm text-muted-foreground"
+          >
+            Paste any topic. AI writes the script, generates visuals, adds voiceover, and renders your video.
+          </motion.p>
+        </div>
+      </section>
+
       {/* Features Section */}
       <section
         id="features"
@@ -371,6 +420,9 @@ export default function Landing() {
 
       {/* Before/After Comparison — time-saved metric */}
       <BeforeAfterComparison />
+
+      {/* Testimonials */}
+      <Testimonials />
 
       {/* Pricing Section */}
       <LandingPricing onCtaClick={handleCta} />

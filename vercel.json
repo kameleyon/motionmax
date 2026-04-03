@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/api/video/:path*",
+      "destination": "https://ayjbvcikuwknqdrpsdmj.supabase.co/functions/v1/serve-media?bucket=videos&path=:path*"
+    },
+    {
+      "source": "/api/media/:bucket/:path*",
+      "destination": "https://ayjbvcikuwknqdrpsdmj.supabase.co/functions/v1/serve-media?bucket=:bucket&path=:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

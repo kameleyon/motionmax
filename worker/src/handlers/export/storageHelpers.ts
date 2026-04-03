@@ -8,6 +8,14 @@ import { supabase } from "../../lib/supabase.js";
 
 const BUCKET_NAME = "videos";
 
+/** App domain for proxy URLs */
+const APP_DOMAIN = "https://motionmax.io";
+
+/** Convert a Supabase storage path to a proxy URL via motionmax.io */
+function toProxyUrl(storagePath: string, bucket = BUCKET_NAME): string {
+  return `${APP_DOMAIN}/api/video/${storagePath}`;
+}
+
 /**
  * Extract the storage path (bucket/path) from a Supabase signed URL.
  * Returns null if the URL is not a signed storage URL.
@@ -109,8 +117,7 @@ export async function uploadToSupabase(
 
   if (response.ok) {
     console.log(`[StorageUpload] Standard upload succeeded (${sizeMB} MB)`);
-    const { data: publicData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(storagePath);
-    return publicData.publicUrl;
+    return toProxyUrl(storagePath);
   }
 
   const errText = await response.text();
@@ -213,8 +220,7 @@ async function tusResumableUpload(
   }
 
   console.log(`[StorageUpload] TUS resumable upload complete`);
-  const { data: publicData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(storagePath);
-  return publicData.publicUrl;
+  return toProxyUrl(storagePath);
 }
 
 /** Silently remove files (cleanup helper). */

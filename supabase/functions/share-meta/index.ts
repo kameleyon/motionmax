@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
 
     // 3. Fetch share data
     let title = "MotionMax Video";
-    let description = "Watch this AI-generated video on MotionMax — create stunning videos with AI.";
+    let description = "Watch this AI-generated video on MotionMax - create stunning videos with AI.";
     let imageUrl = "https://motionmax.io/og-image.png";
     let appUrl = "https://motionmax.io";
 
@@ -167,7 +167,7 @@ Deno.serve(async (req) => {
         description = first.voiceover
           .substring(0, 150)
           .replace(/\s+/g, " ")
-          .trim() + " — Made with MotionMax.io";
+          .trim() + " - Made with MotionMax.io";
       }
     }
     // -----------------------------
@@ -196,8 +196,8 @@ Deno.serve(async (req) => {
     <meta property="og:image" content="${imageUrl}">
     <meta property="og:image:width" content="1920">
     <meta property="og:image:height" content="1080">
-    <meta property="og:image:alt" content="${escapeHtml(title)} — Created with MotionMax.io">
-    <meta property="og:site_name" content="MotionMax — AI Video Generator">
+    <meta property="og:image:alt" content="${escapeHtml(title)} - Created with MotionMax.io">
+    <meta property="og:site_name" content="MotionMax - AI Video Generator">
 
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="${escapeHtml(title)}">

@@ -33,7 +33,7 @@ interface SharedProject {
   description: string | null;
   format: string;
   style: string;
-  status?: string;
+  status: string;
   project_type?: string;
 }
 
@@ -86,11 +86,30 @@ export default function PublicShare() {
         share: { id: string; view_count: number };
       };
 
+      // Also fetch the latest completed export video URL (stitched/full video)
+      let videoUrl: string | undefined;
+      try {
+        const { data: gen } = await supabase
+          .from("generations")
+          .select("video_url")
+          .eq("project_id", shared.project.id)
+          .eq("status", "complete")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (gen?.video_url) {
+          videoUrl = gen.video_url as string;
+        }
+      } catch {
+        // Non-critical — fall back to scene-by-scene playback
+      }
+
       return {
         project: shared.project,
         scenes: (shared.scenes || []) as Scene[],
         share: shared.share,
-        videoUrl: undefined, // video_url requires RLS bypass; scene-by-scene playback handles this
+        videoUrl,
       };
     },
     enabled: !!token,
@@ -98,7 +117,7 @@ export default function PublicShare() {
   });
 
   const scenes = shareData?.scenes || [];
-  const project = shareData?.project as SharedProject | undefined;
+  const project = shareData?.project as unknown as SharedProject | undefined;
   const sharedVideoUrl = shareData?.videoUrl;
   const isSingleVideo = !!sharedVideoUrl;
 

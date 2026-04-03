@@ -114,13 +114,15 @@ export function ResultActionBar({
       }
 
       // Branded URL for users to share (resolves via SPA /share/:token route)
+      const brandedUrl = `${window.location.origin}/share/${token}`;
+      // Edge function URL for social bots (serves OG meta tags, then redirects to branded URL)
       const supabaseUrl = SUPABASE_URL;
-      const metaUrl = `${supabaseUrl}/functions/v1/share-meta?token=${token}`;
+      const metaUrl = `${supabaseUrl}/functions/v1/share-meta?token=${token}&v=${Date.now()}`;
       setShareUrl(metaUrl);
-      setDisplayUrl(metaUrl);
+      setDisplayUrl(brandedUrl);
     } catch (error) {
       console.error("Failed to create share:", error);
-      toast.error("Failed to create share link");
+      toast.error("Failed to create share link", { description: "Please try again" });
       setIsShareDialogOpen(false);
     } finally {
       setIsCreatingShare(false);
@@ -135,7 +137,7 @@ export function ResultActionBar({
       toast.success("Link copied!", { description: "Share this link with anyone to let them view your video" });
       setTimeout(() => setHasCopied(false), 2000);
     } catch {
-      toast.error("Failed to copy");
+      toast.error("Failed to copy", { description: "Please copy the link manually" });
     }
   };
 
@@ -145,7 +147,7 @@ export function ResultActionBar({
       await navigator.clipboard.writeText(shareUrl);
       toast.success("Social preview link copied", { description: "Use this if a platform doesn't show the right thumbnail" });
     } catch {
-      toast.error("Failed to copy");
+      toast.error("Failed to copy", { description: "Please copy the link manually" });
     }
   };
 
@@ -176,7 +178,7 @@ export function ResultActionBar({
       toast.success("Project deleted", { description: "Your project has been permanently deleted" });
     } catch (error) {
       console.error("Failed to delete project:", error);
-      toast.error("Failed to delete");
+      toast.error("Failed to delete", { description: "Please try again" });
     } finally {
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);

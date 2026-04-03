@@ -65,24 +65,32 @@ export default function PublicShare() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Fetch share data using backend function for fresh signed URLs
+  // Fetch share data via the get_shared_project RPC (SECURITY DEFINER, works with anon key)
   const { data: shareData, isLoading, error } = useQuery({
     queryKey: ["public-share", token],
     queryFn: async () => {
       if (!token) throw new Error("Invalid share link");
 
-      const { data, error } = await supabase.functions.invoke("get-shared-project", {
-        body: { token },
-      });
+      // Call the RPC directly — no edge function dependency
+      const { data: rpcData, error: rpcError } = await supabase.rpc(
+        "get_shared_project",
+        { share_token_param: token },
+      );
 
-      if (error) throw error;
-      if (!data) throw new Error("Share not found or expired");
+      if (rpcError) throw rpcError;
+      if (!rpcData) throw new Error("Share not found or expired");
+
+      const shared = rpcData as unknown as {
+        project: { id: string; title: string; format: string; style: string; description: string | null };
+        scenes: Scene[];
+        share: { id: string; view_count: number };
+      };
 
       return {
-        project: data.project,
-        scenes: (data.scenes || []) as Scene[],
-        share: data.share,
-        videoUrl: (data.videoUrl ?? data.video_url) as string | undefined,
+        project: shared.project,
+        scenes: (shared.scenes || []) as Scene[],
+        share: shared.share,
+        videoUrl: undefined, // video_url requires RLS bypass; scene-by-scene playback handles this
       };
     },
     enabled: !!token,

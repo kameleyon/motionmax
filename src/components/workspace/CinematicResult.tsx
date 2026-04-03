@@ -289,10 +289,13 @@ export function CinematicResult({
         if (!user) throw new Error("Not authenticated");
         await supabase.from("project_shares").insert({ project_id: projectId, user_id: user.id, share_token: token });
       }
+      // Branded URL for users to share (resolves via SPA /share/:token route)
+      const brandedUrl = `${window.location.origin}/share/${token}`;
+      // Edge function URL kept for social bot previews
       const backendUrl = SUPABASE_URL;
       const shareMetaUrl = `${backendUrl}/functions/v1/share-meta?token=${token}`;
       setShareUrl(shareMetaUrl);
-      setDisplayUrl(shareMetaUrl);
+      setDisplayUrl(brandedUrl);
     } catch {
       toast.error("Failed to create share link");
       setIsShareDialogOpen(false);

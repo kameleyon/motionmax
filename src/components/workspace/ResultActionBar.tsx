@@ -114,12 +114,13 @@ export function ResultActionBar({
         if (error) throw error;
       }
 
-      // Use the backend function URL for social sharing - it serves proper OG meta tags
-      // and redirects humans to the branded /share/:token page.
+      // Branded URL for users to share (resolves via SPA /share/:token route)
+      const brandedUrl = `${window.location.origin}/share/${token}`;
+      // Edge function URL for social bots (serves OG meta tags, then redirects to branded URL)
       const supabaseUrl = SUPABASE_URL;
       const metaUrl = `${supabaseUrl}/functions/v1/share-meta?token=${token}&v=${Date.now()}`;
       setShareUrl(metaUrl);
-      setDisplayUrl(metaUrl);
+      setDisplayUrl(brandedUrl);
     } catch (error) {
       console.error("Failed to create share:", error);
       toast.success("Failed to create share link", { description: "Please try again",

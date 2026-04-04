@@ -31,6 +31,11 @@ export interface CaptionWord {
   endMs: number;
 }
 
+/** ASR result per scene — from Hypereal audio-asr */
+export interface ASRSceneResult {
+  words: Array<{ word: string; start: number; end: number }>;
+}
+
 export interface SceneCaption {
   sceneIndex: number;
   voiceover: string;
@@ -39,7 +44,22 @@ export interface SceneCaption {
   words: CaptionWord[];
 }
 
-// ── Word Timing Estimation ─────────────────────────────────────────
+// ── Word Timing: ASR (exact) or Estimation (fallback) ──────────────
+
+/**
+ * Convert ASR word timestamps to CaptionWords, offset to the scene's position in the timeline.
+ */
+function asrWordsToCaptionWords(asrWords: Array<{ word: string; start: number; end: number }>, timelineOffsetMs: number): CaptionWord[] {
+  return asrWords
+    .filter(w => w.word.trim().length > 0)
+    .map(w => ({
+      text: w.word.trim(),
+      startMs: Math.round(w.start * 1000 + timelineOffsetMs),
+      endMs: Math.round(w.end * 1000 + timelineOffsetMs),
+    }));
+}
+
+// ── Word Timing Estimation (fallback) ──────────────────────────────
 
 /**
  * Estimate word-level timing from voiceover text and actual clip duration.
@@ -325,7 +345,7 @@ function buildDialogueLines(
  * @param width Video width
  * @param height Video height
  * @param actualDurations Optional array of actual clip durations in seconds
- *        (from audio probe). If not provided, falls back to scene.duration.
+ * @param asrResults Optional ASR transcription results for exact word timing
  */
 export function generateAssSubtitles(
   scenes: Array<{ voiceover: string; duration: number }>,
@@ -333,18 +353,29 @@ export function generateAssSubtitles(
   width = 1920,
   height = 1080,
   actualDurations?: number[],
+  asrResults?: (ASRSceneResult | null)[],
 ): string | null {
   if (style === "none") return null;
 
   const captions: SceneCaption[] = [];
   let timelineMs = 0;
+  let asrUsed = 0;
 
   for (let i = 0; i < scenes.length; i++) {
     const scene = scenes[i];
-    // Use actual duration if available (from audio probe), otherwise config value
     const durationSec = actualDurations?.[i] ?? scene.duration ?? 10;
     const durationMs = durationSec * 1000;
-    const words = estimateWordTimings(scene.voiceover || "", timelineMs, durationMs);
+
+    // Use ASR word timestamps if available, otherwise fall back to estimation
+    const asr = asrResults?.[i];
+    let words: CaptionWord[];
+
+    if (asr && asr.words && asr.words.length > 0) {
+      words = asrWordsToCaptionWords(asr.words, timelineMs);
+      asrUsed++;
+    } else {
+      words = estimateWordTimings(scene.voiceover || "", timelineMs, durationMs);
+    }
 
     captions.push({
       sceneIndex: i,
@@ -356,6 +387,8 @@ export function generateAssSubtitles(
 
     timelineMs += durationMs;
   }
+
+  console.log(`[Captions] Word timing: ${asrUsed}/${scenes.length} scenes from ASR, ${scenes.length - asrUsed} estimated`);
 
   const header = buildAssHeader(style, width, height);
   const dialogues = captions.flatMap(c => buildDialogueLines(c, style));

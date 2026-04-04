@@ -21,7 +21,8 @@ import { concatFiles } from "./export/concatScenes.js";
 import { concatWithCrossfade } from "./export/transitions.js";
 import { compressIfNeeded } from "./export/compressVideo.js";
 import { uploadToSupabase, removeFiles } from "./export/storageHelpers.js";
-import { generateAssSubtitles, writeAssFile, type CaptionStyle } from "../services/captionBuilder.js";
+import { generateAssSubtitles, writeAssFile, type CaptionStyle, type ASRSceneResult } from "../services/captionBuilder.js";
+import { transcribeAllScenes } from "../services/audioASR.js";
 import { getTargetResolution } from "./export/kenBurns.js";
 import {
   initSceneProgress,
@@ -229,6 +230,23 @@ export async function handleExportVideo(
       .update({ progress: 10, status: "processing" })
       .eq("id", jobId);
 
+    // ── 0.5. Start ASR transcription in parallel (for caption sync) ──
+    const captionStyle = (payload.caption_style || "none") as CaptionStyle;
+    let asrPromise: Promise<(ASRSceneResult | null)[]> | null = null;
+
+    if (captionStyle !== "none") {
+      const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
+      if (hyperealApiKey) {
+        // Fire ASR for all scenes in parallel — runs while scenes encode
+        const scenesWithAudio = scenes.map((s: any) => ({ audioUrl: s.audioUrl, voiceover: s.voiceover }));
+        asrPromise = transcribeAllScenes(scenesWithAudio, hyperealApiKey, "en").catch(err => {
+          console.warn(`[ExportVideo] ASR failed, will use estimation: ${(err as Error).message}`);
+          return scenes.map(() => null);
+        });
+        console.log(`[ExportVideo] ASR transcription started in background for ${scenes.length} scenes`);
+      }
+    }
+
     // ── 1. Encode scenes in sequential batches ──────────────────────
     const sceneResults: (string | null)[] = new Array(scenes.length).fill(null);
     const sceneErrors: string[] = [];
@@ -378,17 +396,21 @@ export async function handleExportVideo(
 
     // ── 2.5. Burn captions into video (if requested) ───────────────
 
-    const captionStyle = (payload.caption_style || "none") as CaptionStyle;
     if (captionStyle !== "none") {
+      sceneProgress.overallMessage = "Syncing captions to audio...";
+      await flushSceneProgress(jobId);
+      await supabase.from("video_generation_jobs").update({ progress: 76, updated_at: new Date().toISOString() }).eq("id", jobId);
+
+      // Await ASR results (already running in parallel since step 0.5)
+      const asrResults = asrPromise ? await asrPromise : null;
+
       sceneProgress.overallMessage = "Burning captions into video...";
       await flushSceneProgress(jobId);
       await supabase.from("video_generation_jobs").update({ progress: 78, updated_at: new Date().toISOString() }).eq("id", jobId);
 
-      // Probe the final video to get actual total duration, then estimate per-scene durations
-      // from audio lengths for accurate caption sync
+      // Probe the final video to get actual total duration
       const { probeDuration } = await import("./export/ffmpegCmd.js");
       const totalVideoDur = await probeDuration(finalOutputPath);
-      // Estimate per-scene durations proportionally from voiceover word count
       const totalWords = scenes.reduce((sum: number, s: any) => sum + ((s.voiceover || "").split(/\s+/).length || 1), 0);
       const actualDurations = scenes.map((s: any) => {
         const words = (s.voiceover || "").split(/\s+/).length || 1;
@@ -396,7 +418,7 @@ export async function handleExportVideo(
       });
       console.log(`[ExportVideo] Caption timing: total=${totalVideoDur.toFixed(1)}s, scenes=${actualDurations.map((d: number) => d.toFixed(1)).join(",")}`);
 
-      const assContent = generateAssSubtitles(scenes, captionStyle, exportConfig.width, exportConfig.height, actualDurations);
+      const assContent = generateAssSubtitles(scenes, captionStyle, exportConfig.width, exportConfig.height, actualDurations, asrResults || undefined);
       if (assContent) {
         const assPath = await writeAssFile(assContent, tempDir);
         const captionedPath = path.join(tempDir, "captioned_export.mp4");

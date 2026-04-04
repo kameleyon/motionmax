@@ -20,6 +20,8 @@ type AuthMode = "login" | "signup" | "reset" | "update";
 const MIN_PASSWORD_LENGTH = 8;
 // Show rate-limit hint after this many consecutive login failures
 const RATE_LIMIT_HINT_THRESHOLD = 3;
+const LOCKOUT_THRESHOLD = 5;
+const LOCKOUT_DURATION_MS = 30_000; // 30 seconds
 
 function AuthPageHeader({ onLogoClick }: { onLogoClick: () => void }) {
   return (
@@ -64,6 +66,7 @@ export default function Auth() {
   const [showRateLimitHint, setShowRateLimitHint] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const failedAttemptsRef = useRef(0);
+  const [lockedUntil, setLockedUntil] = useState<number>(0);
   const navigate = useNavigate();
   const returnUrl = searchParams.get("returnUrl") || "/app";
   const { signIn, signUp, resetPassword, updatePassword } = useAuth();
@@ -82,6 +85,14 @@ export default function Auth() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Lockout check
+    if (Date.now() < lockedUntil) {
+      const secsLeft = Math.ceil((lockedUntil - Date.now()) / 1000);
+      toast.error(`Too many attempts. Try again in ${secsLeft}s.`);
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -89,6 +100,12 @@ export default function Auth() {
         const { error } = await signIn(email, password);
         if (error) {
           failedAttemptsRef.current += 1;
+          if (failedAttemptsRef.current >= LOCKOUT_THRESHOLD) {
+            setLockedUntil(Date.now() + LOCKOUT_DURATION_MS);
+            failedAttemptsRef.current = 0;
+            toast.error("Too many failed attempts. Locked for 30 seconds.");
+            return;
+          }
           if (failedAttemptsRef.current >= RATE_LIMIT_HINT_THRESHOLD) {
             setShowRateLimitHint(true);
           }

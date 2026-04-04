@@ -194,6 +194,11 @@ export default function VoiceLab() {
       return;
     }
 
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error("File too large", { description: "Maximum audio file size is 50 MB." });
+      return;
+    }
+
     // Validate minimum duration (10 seconds) for uploaded files
     try {
       const duration = await getAudioDuration(file);

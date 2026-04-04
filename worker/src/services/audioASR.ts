@@ -108,7 +108,7 @@ export async function transcribeAudio(
     const accessibleUrl = await ensureAccessibleUrl(audioUrl, signUrl);
     console.log(`[ASR] Transcribing: ${accessibleUrl.substring(0, 80)}... lang=${language}`);
 
-    // ── Strategy 1: Send audio URL (per Hypereal docs) ──
+    // ── Strategy 1: Send audio URL with model field ──
     let res = await fetch(HYPEREAL_AUDIO_URL, {
       method: "POST",
       headers: {
@@ -116,6 +116,7 @@ export async function transcribeAudio(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        model: "audio-asr",
         audio: accessibleUrl,
         language,
         ignore_timestamps: false,
@@ -142,6 +143,7 @@ export async function transcribeAudio(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        model: "audio-asr",
         audio: dataUri,
         language,
         ignore_timestamps: false,

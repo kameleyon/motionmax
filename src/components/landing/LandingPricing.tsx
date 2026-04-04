@@ -141,7 +141,7 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
           </div>
         </motion.div>
 
-        <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-4 sm:grid sm:grid-cols-2 sm:overflow-visible sm:snap-none sm:pb-0 lg:grid-cols-4">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           {pricingPlans.map((plan, index) => {
             const IconComponent = plan.icon;
             const displayPrice = billingInterval === "yearly" ? plan.yearlyPrice : plan.monthlyPrice;
@@ -152,7 +152,7 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
-                className={`rounded-2xl border ${plan.popular ? "border-2 border-primary" : "border-border/50"} bg-card p-6 relative flex flex-col min-w-[280px] snap-center sm:min-w-0`}
+                className={`rounded-2xl border ${plan.popular ? "border-2 border-primary" : "border-border/50"} bg-card p-6 relative flex flex-col`}
               >
                 {plan.popular && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">

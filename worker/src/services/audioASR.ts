@@ -58,7 +58,6 @@ export async function transcribeAudio(
 
   try {
     const accessibleUrl = await ensureAccessibleUrl(audioUrl, signUrl);
-    console.log(`[ASR] Transcribing: ${accessibleUrl.substring(0, 80)}... lang=${language}`);
 
     // Docs say: { model: "audio-asr", audio: "<url>", language, ignore_timestamps }
     const payload = {
@@ -68,33 +67,44 @@ export async function transcribeAudio(
       ignore_timestamps: false,
     };
 
-    // Try primary URL (/api/v1/ per curl docs)
-    let res = await fetch(HYPEREAL_ASR_URL, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+    const jsonBody = JSON.stringify(payload);
+    // Log full payload for first scene only (debug)
+    console.log(`[ASR] Request URL: ${HYPEREAL_ASR_URL_ALT}`);
+    console.log(`[ASR] Payload (${jsonBody.length} chars): ${jsonBody.substring(0, 500)}`);
 
-    // If 404, try alternate URL
-    if (res.status === 404) {
-      console.log("[ASR] /api/v1/ returned 404, trying /v1/...");
-      res = await fetch(HYPEREAL_ASR_URL_ALT, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-    }
+    const headers = {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    };
+
+    let res = await fetch(HYPEREAL_ASR_URL_ALT, {
+      method: "POST",
+      headers,
+      body: jsonBody,
+    });
 
     if (res.ok) return handleASRResponse(res, apiKey);
 
     const errText = await res.text();
     console.warn(`[ASR] Failed (${res.status}): ${errText.substring(0, 300)}`);
+
+    // If the URL-based approach fails, try sending the audio as a direct URL string
+    // without the signed token (public URL) in case the token chars are the issue
+    const publicUrl = audioUrl.split("?")[0].replace("/object/sign/", "/object/public/");
+    if (publicUrl !== accessibleUrl) {
+      console.log(`[ASR] Retrying with public URL: ${publicUrl.substring(0, 80)}`);
+      const publicPayload = { ...payload, audio: publicUrl };
+      res = await fetch(HYPEREAL_ASR_URL_ALT, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(publicPayload),
+      });
+
+      if (res.ok) return handleASRResponse(res, apiKey);
+      const errText2 = await res.text();
+      console.warn(`[ASR] Public URL also failed (${res.status}): ${errText2.substring(0, 200)}`);
+    }
+
     return null;
   } catch (err) {
     console.warn(`[ASR] Error: ${(err as Error).message}`);

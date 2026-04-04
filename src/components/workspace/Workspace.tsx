@@ -1,3 +1,4 @@
+import { createScopedLogger } from "@/lib/logger";
 import { useState, forwardRef, useImperativeHandle, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Play, Menu, AlertCircle, RotateCcw, ChevronDown, Lightbulb, Users, MessageSquareOff, ChevronRight, ChevronLeft } from "lucide-react";
@@ -26,6 +27,8 @@ import { SubscriptionSuspendedModal } from "@/components/modals/SubscriptionSusp
 import { cn } from "@/lib/utils";
 import { useAdminLogs } from "@/hooks/useAdminLogs";
 import { AdminLogsPanel } from "./AdminLogsPanel";
+
+const log = createScopedLogger("Workspace");
 
 export interface WorkspaceHandle {
   resetWorkspace: () => void;
@@ -88,7 +91,7 @@ export const Workspace = forwardRef<WorkspaceHandle>(function Workspace(_, ref) 
           .maybeSingle();
 
         if (data?.status === "complete" && generationState.step !== "complete") {
-          console.log("[Workspace] Found completed generation in DB, reloading project");
+          log.debug("Found completed generation in DB, reloading project");
           await loadProject(generationState.projectId!);
         }
       };

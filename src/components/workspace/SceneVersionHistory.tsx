@@ -1,3 +1,4 @@
+import { createScopedLogger } from "@/lib/logger";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, RotateCcw, Image as ImageIcon, Volume2, Clock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,8 @@ import { formatDistanceToNow } from "date-fns";
 import { useState } from "react";
 import { callPhase } from "@/hooks/generation/callPhase";
 import { toast } from "sonner";
+
+const log = createScopedLogger("SceneVersionHistory");
 
 interface SceneVersionHistoryProps {
   generationId: string;
@@ -64,7 +67,7 @@ export function SceneVersionHistory({
       await refetch();
       onVersionRestored();
     } catch (error) {
-      console.error("Failed to restore version:", error);
+      log.error("Failed to restore version:", error);
       toast.error("Restore Failed", { description: error instanceof Error ? error.message : "Failed to restore version" });
     } finally {
       setRestoringVersion(null);

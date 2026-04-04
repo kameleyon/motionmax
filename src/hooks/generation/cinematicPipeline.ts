@@ -12,8 +12,9 @@ import {
   normalizeScenes,
   sleep,
 } from "./types";
+import { createScopedLogger } from "@/lib/logger";
 
-const LOG = "[Pipeline:Cinematic]";
+const log = createScopedLogger("CinematicPipeline");
 
 // Global rate-limit cooldown shared across image and video phases
 let lastRateLimitTime = 0;
@@ -26,7 +27,7 @@ export async function runCinematicPipeline(
   params: GenerationParams,
   ctx: PipelineContext
 ): Promise<void> {
-  console.log(LOG, "Starting cinematic pipeline", { format: params.format, length: params.length, style: params.style });
+  log.debug("Starting cinematic pipeline", { format: params.format, length: params.length, style: params.style });
 
   // Phase 1: Script
   ctx.setState((prev) => ({ ...prev, step: "scripting" as const, progress: 5, statusMessage: "Generating cinematic script..." }));
@@ -61,7 +62,7 @@ export async function runCinematicPipeline(
   const title = scriptResult.title;
   const sceneCount = scriptResult.sceneCount;
 
-  console.log(LOG, "Script phase complete", { projectId, generationId, sceneCount, title });
+  log.debug("Script phase complete", { projectId, generationId, sceneCount, title });
 
   ctx.setState((prev) => ({
     ...prev,
@@ -88,7 +89,7 @@ export async function runCinematicPipeline(
 // ---- Sub-Phases ----
 
 async function runCinematicAudio(projectId: string, generationId: string, sceneCount: number, ctx: PipelineContext, language?: string) {
-  console.log(LOG, "Starting audio phase", { sceneCount });
+  log.debug("Starting audio phase", { sceneCount });
 
   const AUDIO_CONCURRENCY = 5;
 
@@ -105,7 +106,7 @@ async function runCinematicAudio(projectId: string, generationId: string, sceneC
       CINEMATIC_ENDPOINT
     );
     if (!audioRes.success) throw new Error(audioRes.error || "Audio generation failed");
-    console.log(LOG, `Audio scene ${i + 1}/${sceneCount} complete`);
+    log.debug(`Audio scene ${i + 1}/${sceneCount} complete`);
 
     ctx.setState((prev) => ({
       ...prev,
@@ -117,10 +118,10 @@ async function runCinematicAudio(projectId: string, generationId: string, sceneC
     const batchEnd = Math.min(batchStart + AUDIO_CONCURRENCY, sceneCount);
     const batch: Promise<void>[] = [];
     for (let i = batchStart; i < batchEnd; i++) batch.push(processAudioScene(i));
-    console.log(LOG, `Processing audio batch ${batchStart + 1}–${batchEnd}`);
+    log.debug(`Processing audio batch ${batchStart + 1}–${batchEnd}`);
     await Promise.allSettled(batch);
   }
-  console.log(LOG, "Audio phase complete");
+  log.debug("Audio phase complete");
 }
 
 /** Two-phase visuals: all images first (all at once), then all videos.
@@ -130,7 +131,7 @@ async function runCinematicAudio(projectId: string, generationId: string, sceneC
  *           (Kling I2V with end_image transitions)
  */
 async function runCinematicVisuals(projectId: string, generationId: string, sceneCount: number, ctx: PipelineContext) {
-  console.log(LOG, "Starting visuals: images → videos", { sceneCount });
+  log.debug("Starting visuals: images → videos", { sceneCount });
   ctx.setState((prev) => ({ ...prev, progress: 35, statusMessage: "Audio complete. Generating images..." }));
 
   const VIDEO_BATCH_SIZE = 4;
@@ -150,12 +151,12 @@ async function runCinematicVisuals(projectId: string, generationId: string, scen
       );
       if (!r.success) {
         if (r.retryAfterMs && r.retryAfterMs >= 20000) lastRateLimitTime = Date.now();
-        console.warn(LOG, `Scene ${i + 1} image failed: ${r.error}`);
+        log.warn(`Scene ${i + 1} image failed: ${r.error}`);
       } else {
-        console.log(LOG, `Scene ${i + 1} image complete`);
+        log.debug(`Scene ${i + 1} image complete`);
       }
     } catch (err) {
-      console.warn(LOG, `Scene ${i + 1} image error:`, err);
+      log.warn(`Scene ${i + 1} image error:`, err);
     }
     completedImages++;
     ctx.setState((prev) => ({
@@ -170,13 +171,13 @@ async function runCinematicVisuals(projectId: string, generationId: string, scen
   // Fire all images at once (no batching)
   const allImagePromises = [];
   for (let i = 0; i < sceneCount; i++) allImagePromises.push(processImage(i));
-  console.log(LOG, `All ${sceneCount} images dispatched in parallel`);
+  log.debug(`All ${sceneCount} images dispatched in parallel`);
   await Promise.allSettled(allImagePromises);
 
   // Retry missing images (1 round)
   await retryMissingImages(generationId, sceneCount, ctx, projectId);
 
-  console.log(LOG, `All images done (${completedImages}/${sceneCount}). Starting video phase...`);
+  log.debug(`All images done (${completedImages}/${sceneCount}). Starting video phase...`);
   ctx.setState((prev) => ({ ...prev, progress: 65, statusMessage: "Images done. Generating video clips..." }));
 
   // ── Phase B: All videos ──────────────────────────────────────────
@@ -184,7 +185,7 @@ async function runCinematicVisuals(projectId: string, generationId: string, scen
     try {
       const { data: g } = await supabase.from("generations").select("scenes").eq("id", generationId).maybeSingle();
       if ((normalizeScenes(g?.scenes) ?? [])[i]?.videoUrl) {
-        console.log(LOG, `Scene ${i + 1}: already has videoUrl, skipping`);
+        log.debug(`Scene ${i + 1}: already has videoUrl, skipping`);
         completedVideos++;
         return;
       }
@@ -192,10 +193,10 @@ async function runCinematicVisuals(projectId: string, generationId: string, scen
         { phase: "video", projectId, generationId, sceneIndex: i },
         20 * 60 * 1000, CINEMATIC_ENDPOINT
       );
-      if (!r.success) console.warn(LOG, `Scene ${i + 1} video failed: ${r.error}`);
-      else console.log(LOG, `Scene ${i + 1} video complete`);
+      if (!r.success) log.warn(`Scene ${i + 1} video failed: ${r.error}`);
+      else log.debug(`Scene ${i + 1} video complete`);
     } catch (err) {
-      console.warn(LOG, `Scene ${i + 1} video error:`, err);
+      log.warn(`Scene ${i + 1} video error:`, err);
     }
     completedVideos++;
     ctx.setState((prev) => ({
@@ -209,7 +210,7 @@ async function runCinematicVisuals(projectId: string, generationId: string, scen
     const end = Math.min(start + VIDEO_BATCH_SIZE, sceneCount);
     const batch = [];
     for (let i = start; i < end; i++) batch.push(processVideo(i));
-    console.log(LOG, `Video batch ${start + 1}–${end}`);
+    log.debug(`Video batch ${start + 1}–${end}`);
     await Promise.allSettled(batch);
   }
 
@@ -218,7 +219,7 @@ async function runCinematicVisuals(projectId: string, generationId: string, scen
   const latestScenes = normalizeScenes(latestGen?.scenes) ?? [];
   const missingVids = latestScenes.map((s, i) => (!s.videoUrl ? i : -1)).filter((i) => i >= 0);
   if (missingVids.length > 0) {
-    console.log(LOG, `Retrying ${missingVids.length} missing videos`);
+    log.debug(`Retrying ${missingVids.length} missing videos`);
     ctx.setState((prev) => ({ ...prev, statusMessage: `Retrying ${missingVids.length} missing clips...` }));
     for (const idx of missingVids) {
       try {
@@ -227,11 +228,11 @@ async function runCinematicVisuals(projectId: string, generationId: string, scen
     }
   }
 
-  console.log(LOG, "Visuals phase complete");
+  log.debug("Visuals phase complete");
 }
 
 async function finalizeCinematic(projectId: string, generationId: string, sceneCount: number, format: string, ctx: PipelineContext) {
-  console.log(LOG, "Starting finalize phase");
+  log.debug("Starting finalize phase");
   ctx.setState((prev) => ({ ...prev, step: "rendering" as const, progress: 96, statusMessage: "Finalizing cinematic..." }));
 
   const finalRes = await ctx.callPhase(
@@ -242,7 +243,7 @@ async function finalizeCinematic(projectId: string, generationId: string, sceneC
   if (!finalRes.success) throw new Error(finalRes.error || "Finalization failed");
 
   const finalScenes = normalizeScenes(finalRes.scenes);
-  console.log(LOG, "Cinematic pipeline complete", { sceneCount: finalScenes?.length, title: finalRes.title });
+  log.debug("Cinematic pipeline complete", { sceneCount: finalScenes?.length, title: finalRes.title });
 
   ctx.setState({
     step: "complete",
@@ -273,7 +274,7 @@ async function retryMissingImages(generationId: string, sceneCount: number, ctx:
     const missing = scenes.map((s, i) => (!s.imageUrl ? i : -1)).filter((i) => i >= 0);
     if (missing.length === 0) break;
 
-    console.log(LOG, `Image retry round ${round + 1}: ${missing.length} scenes missing`);
+    log.debug(`Image retry round ${round + 1}: ${missing.length} scenes missing`);
     ctx.setState((prev) => ({ ...prev, statusMessage: `Retrying ${missing.length} missing images (round ${round + 1})...` }));
 
     for (const idx of missing) {
@@ -281,7 +282,7 @@ async function retryMissingImages(generationId: string, sceneCount: number, ctx:
       const now = Date.now();
       if (now - lastRateLimitTime < GLOBAL_COOLDOWN_MS) {
         const cooldownWait = GLOBAL_COOLDOWN_MS - (now - lastRateLimitTime);
-        console.log(LOG, `Image retry ${idx + 1}: global cooldown, waiting ${(cooldownWait / 1000).toFixed(1)}s`);
+        log.debug(`Image retry ${idx + 1}: global cooldown, waiting ${(cooldownWait / 1000).toFixed(1)}s`);
         await sleep(cooldownWait);
       }
       try {
@@ -314,7 +315,7 @@ export async function resumeCinematicPipeline(
   const sceneCount = existingScenes.length;
   const phaseLabels = { audio: "Resuming audio...", images: "Resuming images...", video: "Resuming video clips...", finalize: "Finalizing..." };
 
-  console.log(LOG, `Resuming cinematic from "${resumeFrom}"`, { projectId, generationId, sceneCount });
+  log.debug(`Resuming cinematic from "${resumeFrom}"`, { projectId, generationId, sceneCount });
 
   ctx.setState((prev) => ({
     ...prev,
@@ -334,10 +335,10 @@ export async function resumeCinematicPipeline(
   try {
     // Phase 2: Audio (resume)
     if (resumeFrom === "audio") {
-      console.log(LOG, "Resume: starting audio phase");
+      log.debug("Resume: starting audio phase");
       const AUDIO_CONCURRENCY = 5;
       const processResumeAudio = async (i: number) => {
-        if (existingScenes[i]?.audioUrl) { console.log(LOG, `Resume: skipping audio scene ${i + 1} (done)`); return; }
+        if (existingScenes[i]?.audioUrl) { log.debug(`Resume: skipping audio scene ${i + 1} (done)`); return; }
         ctx.setState((prev) => ({ ...prev, statusMessage: `Resuming audio (${i + 1}/${sceneCount})...`, progress: 10 + Math.floor(((i + 0.25) / sceneCount) * 25) }));
         let audioComplete = false;
         while (!audioComplete) {
@@ -356,7 +357,7 @@ export async function resumeCinematicPipeline(
 
     // Phase 3+4: Interleaved Image→Video (resume) — same as main pipeline
     if (resumeFrom === "audio" || resumeFrom === "images" || resumeFrom === "video") {
-      console.log(LOG, "Resume: starting interleaved image→video phase");
+      log.debug("Resume: starting interleaved image→video phase");
       await runCinematicVisuals(projectId, generationId, sceneCount, ctx);
     }
 
@@ -364,7 +365,7 @@ export async function resumeCinematicPipeline(
     const { data: preFinalGen } = await supabase.from("generations").select("scenes").eq("id", generationId).maybeSingle();
     const preFinalScenes = normalizeScenes(preFinalGen?.scenes) ?? [];
     const stillMissing = preFinalScenes.filter((s) => !s.videoUrl && s.imageUrl).length;
-    if (stillMissing > 0) console.warn(LOG, `${stillMissing} scenes still missing after resume retries`);
+    if (stillMissing > 0) log.warn(`${stillMissing} scenes still missing after resume retries`);
 
     // Phase 5: Finalize
     await finalizeCinematic(projectId, generationId, sceneCount, project.format, ctx);
@@ -372,7 +373,7 @@ export async function resumeCinematicPipeline(
     ctx.toast({ title: "Generation Resumed!", description: `"${project.title}" is ready.` });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "Resume failed";
-    console.error(LOG, "Resume failed:", errorMessage);
+    log.error("Resume failed:", errorMessage);
     ctx.setState((prev) => ({ ...prev, step: "error" as const, isGenerating: false, error: errorMessage, statusMessage: errorMessage }));
     ctx.toast({ variant: "destructive", title: "Resume Failed", description: errorMessage });
   }

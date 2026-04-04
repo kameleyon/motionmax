@@ -1,3 +1,4 @@
+import { createScopedLogger } from "@/lib/logger";
 import { useState, forwardRef, useImperativeHandle, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Play, AlertCircle, RotateCcw, ChevronDown, Users, Clapperboard } from "lucide-react";
@@ -36,6 +37,8 @@ import { useWorkspaceDraft } from "@/hooks/useWorkspaceDraft";
 import type { WorkspaceHandle } from "./Doc2VideoWorkspace";
 import { useAdminLogs } from "@/hooks/useAdminLogs";
 import { AdminLogsPanel } from "./AdminLogsPanel";
+
+const log = createScopedLogger("StorytellingWorkspace");
 
 interface StorytellingWorkspaceProps {
   projectId?: string | null;
@@ -148,7 +151,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
 
           // If database says complete but UI shows generating, reload the project
           if (data?.status === "complete" && generationState.step !== "complete") {
-            console.log("[StorytellingWorkspace] Found completed generation in DB, reloading project");
+            log.debug("Found completed generation in DB, reloading project");
             await loadProject(generationState.projectId!);
           }
         };

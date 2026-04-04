@@ -1,3 +1,4 @@
+import { createScopedLogger } from "@/lib/logger";
 import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -5,6 +6,8 @@ import { Loader2, TrendingUp, TrendingDown, DollarSign, Zap, RefreshCw } from "l
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { subDays, format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
+
+const log = createScopedLogger("AdminMetrics");
 
 interface PerformanceMetrics {
   avgTimeByType: {
@@ -192,7 +195,7 @@ export function AdminPerformanceMetrics() {
 
       setError(null);
     } catch (err) {
-      console.error("Failed to fetch performance metrics:", err);
+      log.error("Failed to fetch performance metrics:", err);
       setError(err instanceof Error ? err.message : "Failed to load performance metrics");
     } finally {
       setLoading(false);

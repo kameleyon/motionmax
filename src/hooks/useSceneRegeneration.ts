@@ -2,6 +2,9 @@ import { useState, useCallback } from "react";
 import { toast } from "sonner";
 import type { Scene } from "@/hooks/useGenerationPipeline";
 import { callPhase } from "@/hooks/generation/callPhase";
+import { createScopedLogger } from "@/lib/logger";
+
+const log = createScopedLogger("SceneRegeneration");
 
 interface RegenerationState {
   isRegenerating: boolean;
@@ -58,7 +61,7 @@ export function useSceneRegeneration(
 
         toast.success("Audio Regenerated", { description: `Scene ${sceneIndex + 1} audio updated.` });
       } catch (error) {
-        console.error("Audio regeneration error:", error);
+        log.error("Audio regeneration error:", error);
         toast.error("Regeneration Failed", { description: error instanceof Error ? error.message : "Failed to regenerate audio" });
       } finally {
         setState({ isRegenerating: false, regeneratingType: null, sceneIndex: null });
@@ -119,7 +122,7 @@ export function useSceneRegeneration(
           description: `Scene ${sceneIndex + 1}${typeof imageIndex === "number" ? ` image ${imageIndex + 1}` : ""} updated.`,
         });
       } catch (error) {
-        console.error("Image regeneration error:", error);
+        log.error("Image regeneration error:", error);
         toast.error("Regeneration Failed", { description: error instanceof Error ? error.message : "Failed to regenerate image" });
       } finally {
         setState({ isRegenerating: false, regeneratingType: null, sceneIndex: null });
@@ -161,7 +164,7 @@ export function useSceneRegeneration(
 
         toast.success("Undo Successful", { description: `Scene ${sceneIndex + 1} restored to previous state.` });
       } catch (error) {
-        console.error("Undo error:", error);
+        log.error("Undo error:", error);
         toast.error("Undo Failed", { description: error instanceof Error ? error.message : "Failed to undo" });
       } finally {
         setState({ isRegenerating: false, regeneratingType: null, sceneIndex: null });

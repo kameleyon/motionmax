@@ -4,10 +4,11 @@ import { downloadVideo, shareVideo } from "./export/downloadHelpers";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import type { Scene } from "./generation/types";
+import { createScopedLogger } from "@/lib/logger";
 
 export type { ExportStatus } from "./export/types";
 
-const LOG_PREFIX = "[VideoExport:WorkerQueue]";
+const scopedLog = createScopedLogger("VideoExport");
 
 export function useVideoExport() {
   const [state, setState] = useState<ExportState>({ status: "idle", progress: 0 });
@@ -26,8 +27,8 @@ export function useVideoExport() {
   const resolveRef = useRef<((url: string) => void) | null>(null);
   const rejectRef = useRef<((e: Error) => void) | null>(null);
 
-  const log = useCallback((...args: unknown[]) => console.log(LOG_PREFIX, ...args), []);
-  const err = useCallback((...args: unknown[]) => console.error(LOG_PREFIX, ...args), []);
+  const log = useCallback((...args: unknown[]) => scopedLog.debug(args[0] as string, ...args.slice(1)), []);
+  const err = useCallback((...args: unknown[]) => scopedLog.error(args[0] as string, ...args.slice(1)), []);
 
   // ── Interval helpers ──
   const clearPollInterval = useCallback(() => {
@@ -85,7 +86,7 @@ export function useVideoExport() {
           .eq("id", genId)
           .then(({ error: saveErr }) => {
             if (saveErr) {
-              console.error("[VideoExport] Failed to save video_url to generation:", saveErr.message);
+              scopedLog.error("Failed to save video_url to generation:", saveErr.message);
             } else {
               log("video_url persisted to generation", genId);
             }

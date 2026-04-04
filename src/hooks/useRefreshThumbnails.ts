@@ -1,6 +1,9 @@
 import { useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { SUPABASE_URL } from "@/lib/supabaseUrl";
+import { createScopedLogger } from "@/lib/logger";
+
+const log = createScopedLogger("RefreshThumbnails");
 
 interface ThumbnailInput {
   projectId: string;
@@ -55,7 +58,7 @@ export function useRefreshThumbnails() {
         );
 
         if (!response.ok) {
-          console.warn("[useRefreshThumbnails] Failed to refresh thumbnails");
+          log.warn("Failed to refresh thumbnails");
           thumbnails.forEach((t) => resultMap.set(t.projectId, t.thumbnailUrl));
           return resultMap;
         }
@@ -76,7 +79,7 @@ export function useRefreshThumbnails() {
 
         return resultMap;
       } catch (err) {
-        console.error("[useRefreshThumbnails] Error:", err);
+        log.error("Error:", err);
         // On error, return originals
         thumbnails.forEach((t) => resultMap.set(t.projectId, t.thumbnailUrl));
         return resultMap;

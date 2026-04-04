@@ -1,6 +1,6 @@
-﻿import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+﻿import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
-import { decode as base64Decode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
+import { decode as base64Decode } from "https://deno.land/std@0.190.0/encoding/base64.ts";
 import DOMPurify from "https://esm.sh/dompurify@3.2.4";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 

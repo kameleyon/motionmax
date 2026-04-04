@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
+import { createScopedLogger } from "@/lib/logger";
+
+const log = createScopedLogger("InfographicsUsage");
 
 /**
  * Hook to track the number of infographics (SmartFlow) generated in the current month.
@@ -41,7 +44,7 @@ export function useInfographicsUsage() {
 
         setCount(count ?? 0);
       } catch (err) {
-        console.error("Error fetching infographics usage:", err);
+        log.error("Error fetching infographics usage:", err);
         setError(err instanceof Error ? err.message : "Failed to load usage data");
         setCount(0);
       } finally {

@@ -1,4 +1,5 @@
-﻿import { Wand2, Pencil, Users, Camera, Palette, Laugh, PenTool, Baby, ChevronLeft, ChevronRight, Upload, X, GraduationCap, Loader2, Cherry, Box, Hand, CloudMoon, Blocks, Package } from "lucide-react";
+﻿import { createScopedLogger } from "@/lib/logger";
+import { Wand2, Pencil, Users, Camera, Palette, Laugh, PenTool, Baby, ChevronLeft, ChevronRight, Upload, X, GraduationCap, Loader2, Cherry, Box, Hand, CloudMoon, Blocks, Package } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,8 @@ import customPreview from "@/assets/styles/custom-preview.png";
 /**
  * SmartFlow style selector with all styles from Doc2Video Explainers + chalkboard.
  */
+const log = createScopedLogger("SmartFlowStyleSelector");
+
 export type SmartFlowStyle = "minimalist" | "doodle" | "stick" | "anime" | "realistic" | "3d-pixar" | "claymation" | "storybook" | "caricature" | "moody" | "sketch" | "crayon" | "chalkboard" | "lego" | "cardboard" | "custom";
 
 interface SmartFlowStyleSelectorProps {
@@ -130,7 +133,7 @@ export function SmartFlowStyleSelector({
       const url = await uploadStyleReference(file);
       onCustomStyleImageChange?.(url);
     } catch (err) {
-      console.error("Style reference upload error:", err);
+      log.error("Style reference upload error:", err);
     } finally {
       setUploading(false);
     }

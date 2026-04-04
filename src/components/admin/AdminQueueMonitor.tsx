@@ -1,3 +1,4 @@
+import { createScopedLogger } from "@/lib/logger";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,8 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+
+const log = createScopedLogger("AdminQueue");
 
 interface QueueJob {
   id: string;
@@ -125,7 +128,7 @@ export function AdminQueueMonitor() {
 
         setError(null);
       } catch (err) {
-        console.error("Failed to fetch queue data:", err);
+        log.error("Failed to fetch queue data:", err);
         setError(err instanceof Error ? err.message : "Failed to load queue data");
       } finally {
         setLoading(false);

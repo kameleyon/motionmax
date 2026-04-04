@@ -1,3 +1,4 @@
+import { createScopedLogger } from "@/lib/logger";
 import { AlertCircle, CreditCard, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -9,6 +10,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useSubscription, CREDIT_PACKS } from "@/hooks/useSubscription";
+
+const log = createScopedLogger("UpgradeModal");
 
 interface UpgradeRequiredModalProps {
   open: boolean;
@@ -35,7 +38,7 @@ export function UpgradeRequiredModal({
     try {
       await createCheckout(CREDIT_PACKS[50].priceId, "payment");
     } catch (error) {
-      console.error("Failed to create checkout:", error);
+      log.error("Failed to create checkout:", error);
     }
   };
 

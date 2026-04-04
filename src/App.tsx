@@ -1,4 +1,5 @@
-﻿import { Toaster as Sonner } from "@/components/ui/sonner";
+﻿import { createScopedLogger } from "@/lib/logger";
+import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
@@ -39,12 +40,14 @@ function PageLoader() {
   );
 }
 
+const log = createScopedLogger("QueryClient");
+
 const queryClient = new QueryClient({
   queryCache: new QueryCache({
-    onError: (error) => console.error('[QueryClient:Query]', error),
+    onError: (error) => log.error('[Query]', error),
   }),
   mutationCache: new MutationCache({
-    onError: (error) => console.error('[QueryClient:Mutation]', error),
+    onError: (error) => log.error('[Mutation]', error),
   }),
 });
 

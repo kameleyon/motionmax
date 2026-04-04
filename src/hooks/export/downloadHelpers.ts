@@ -11,7 +11,9 @@
  *   - All platforms: navigator.share({ url }) or clipboard copy
  */
 
-const LOG = "[Export:Download]";
+import { createScopedLogger } from "@/lib/logger";
+
+const log = createScopedLogger("Download");
 
 let saveInProgress = false;
 
@@ -67,52 +69,52 @@ function triggerDirectDownload(url: string, filename: string): void {
  */
 export async function downloadVideo(url: string, filename = "video.mp4", _userGesture = false): Promise<void> {
   if (!url) return;
-  if (saveInProgress) { console.log(LOG, "Save already in progress"); return; }
+  if (saveInProgress) { log.debug("Save already in progress"); return; }
   saveInProgress = true;
 
   const { isIOS, isAndroid, isMacSafari } = detectPlatform();
-  console.log(LOG, "Save video", { filename, isIOS, isAndroid, isMacSafari });
+  log.debug("Save video", { filename, isIOS, isAndroid, isMacSafari });
 
   try {
     // ── Mobile (iOS + Android): fetch as file → native share sheet ──
     if (isIOS || isAndroid) {
-      console.log(LOG, "Mobile: fetching video blob for save...");
+      log.debug("Mobile: fetching video blob for save...");
 
       try {
         const blob = await fetchAsBlob(url);
         const file = new File([blob], filename, { type: "video/mp4" });
 
         if (navigator.share && navigator.canShare?.({ files: [file] })) {
-          console.log(LOG, "Mobile: opening share sheet with video file");
+          log.debug("Mobile: opening share sheet with video file");
           await navigator.share({ files: [file] });
-          console.log(LOG, "Mobile: save/share completed");
+          log.debug("Mobile: save/share completed");
           return;
         }
       } catch (e: any) {
-        if (e?.name === "AbortError") { console.log(LOG, "Mobile: user cancelled"); return; }
-        console.warn(LOG, "Mobile: file share failed:", e);
+        if (e?.name === "AbortError") { log.debug("Mobile: user cancelled"); return; }
+        log.warn("Mobile: file share failed:", e);
       }
 
       // Fallback: navigate to the video URL (opens in native player → user can save from there)
-      console.log(LOG, "Mobile: fallback — opening video in native player");
+      log.debug("Mobile: fallback — opening video in native player");
       window.location.href = url;
       return;
     }
 
     // ── macOS Safari: direct anchor (avoids blob memory stall on large files) ──
     if (isMacSafari) {
-      console.log(LOG, "macOS Safari: direct download");
+      log.debug("macOS Safari: direct download");
       triggerDirectDownload(url, filename);
       return;
     }
 
     // ── Desktop Chrome / Edge / Firefox: blob download ──
-    console.log(LOG, "Desktop: blob download");
+    log.debug("Desktop: blob download");
     const blob = await fetchAsBlob(url);
     triggerBlobDownload(blob, filename);
 
   } catch (e) {
-    console.warn(LOG, "Save failed, opening video URL:", e);
+    log.warn("Save failed, opening video URL:", e);
     window.open(url, "_blank");
   } finally {
     saveInProgress = false;
@@ -135,7 +137,7 @@ export async function shareVideo(url: string, _filename = "video.mp4"): Promise<
       return true;
     } catch (e: any) {
       if (e?.name === "AbortError") return true;
-      console.warn(LOG, "URL share failed:", e);
+      log.warn("URL share failed:", e);
     }
   }
 

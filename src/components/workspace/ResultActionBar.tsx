@@ -1,4 +1,5 @@
-﻿import { useState } from "react";
+﻿import { createScopedLogger } from "@/lib/logger";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { SUPABASE_URL } from "@/lib/supabaseUrl";
 import {
@@ -38,6 +39,8 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { Scene } from "@/hooks/useGenerationPipeline";
+
+const log = createScopedLogger("ResultActionBar");
 
 interface ResultActionBarProps {
   projectId?: string;
@@ -121,7 +124,7 @@ export function ResultActionBar({
       setShareUrl(metaUrl);
       setDisplayUrl(brandedUrl);
     } catch (error) {
-      console.error("Failed to create share:", error);
+      log.error("Failed to create share:", error);
       toast.error("Failed to create share link", { description: "Please try again" });
       setIsShareDialogOpen(false);
     } finally {
@@ -177,7 +180,7 @@ export function ResultActionBar({
       
       toast.success("Project deleted", { description: "Your project has been permanently deleted" });
     } catch (error) {
-      console.error("Failed to delete project:", error);
+      log.error("Failed to delete project:", error);
       toast.error("Failed to delete", { description: "Please try again" });
     } finally {
       setIsDeleting(false);

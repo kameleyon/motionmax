@@ -2,6 +2,9 @@ import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { callPhase } from "@/hooks/generation/callPhase";
+import { createScopedLogger } from "@/lib/logger";
+
+const log = createScopedLogger("CinematicRegeneration");
 
 interface CinematicScene {
   number: number;
@@ -79,7 +82,7 @@ export function useCinematicRegeneration(
 
         toast.success("Audio Regenerated", { description: `Scene ${idx + 1} audio updated.` });
       } catch (error) {
-        console.error("Audio regeneration error:", error);
+        log.error("Audio regeneration error:", error);
         toast.error("Regeneration Failed", { description: error instanceof Error ? error.message : "Failed to regenerate audio" });
       } finally {
         setState({ isRegenerating: false, sceneIndex: null, type: null });
@@ -119,7 +122,7 @@ export function useCinematicRegeneration(
         
         toast.success("Video Regenerated", { description: `Scene ${idx + 1} video updated.` });
       } catch (error) {
-        console.error("Video regeneration error:", error);
+        log.error("Video regeneration error:", error);
         toast.error("Regeneration Failed", { description: error instanceof Error ? error.message : "Failed to regenerate video" });
       } finally {
         setState({ isRegenerating: false, sceneIndex: null, type: null });
@@ -158,7 +161,7 @@ export function useCinematicRegeneration(
             j === vidIdx ? { ...s, videoUrl: r.value.videoUrl } : s
           );
         } else if (r.status === "rejected") {
-          console.warn(`Video regen for scene ${vidIdx} failed:`, r.reason);
+          log.warn(`Video regen for scene ${vidIdx} failed:`, r.reason);
         }
       }
       onScenesUpdate(updatedScenes);
@@ -202,7 +205,7 @@ export function useCinematicRegeneration(
         // Auto-trigger video regen for affected scenes
         await regenAffectedVideos(idx, nextScenes);
       } catch (error) {
-        console.error("Image edit error:", error);
+        log.error("Image edit error:", error);
         toast.error("Image Edit Failed", { description: error instanceof Error ? error.message : "Failed to edit image" });
       } finally {
         setState({ isRegenerating: false, sceneIndex: null, type: null });
@@ -248,7 +251,7 @@ export function useCinematicRegeneration(
         // Auto-trigger video regen for affected scenes
         await regenAffectedVideos(idx, nextScenes);
       } catch (error) {
-        console.error("Image regeneration error:", error);
+        log.error("Image regeneration error:", error);
         toast.error("Image Regeneration Failed", { description: error instanceof Error ? error.message : "Failed to regenerate image" });
       } finally {
         setState({ isRegenerating: false, sceneIndex: null, type: null });
@@ -286,7 +289,7 @@ export function useCinematicRegeneration(
 
         toast.success("Undo Successful", { description: `Scene ${idx + 1} restored to previous state.` });
       } catch (error) {
-        console.error("Undo error:", error);
+        log.error("Undo error:", error);
         toast.error("Undo Failed", { description: error instanceof Error ? error.message : "Failed to undo" });
       } finally {
         setState({ isRegenerating: false, sceneIndex: null, type: null });

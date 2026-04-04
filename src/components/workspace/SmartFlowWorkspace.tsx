@@ -1,3 +1,4 @@
+import { createScopedLogger } from "@/lib/logger";
 import { useState, forwardRef, useImperativeHandle, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Play, AlertCircle, RotateCcw, Wallpaper } from "lucide-react";
@@ -38,6 +39,7 @@ interface SmartFlowWorkspaceProps {
   projectId?: string | null;
 }
 
+const log = createScopedLogger("SmartFlowWorkspace");
 const MAX_DATA_LENGTH = 500000; // 500k characters
 
 export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspaceProps>(
@@ -111,7 +113,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
 
           // If database says complete but UI shows generating, reload the project
           if (data?.status === "complete" && generationState.step !== "complete") {
-            console.log("[SmartFlowWorkspace] Found completed generation in DB, reloading project");
+            log.debug("Found completed generation in DB, reloading project");
             await loadProject(generationState.projectId!);
           }
         };

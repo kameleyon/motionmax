@@ -2,13 +2,16 @@ import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { 
-  PLAN_LIMITS, 
-  getCreditsRequired, 
+import {
+  PLAN_LIMITS,
+  getCreditsRequired,
   validateGenerationAccess,
-  type PlanTier, 
-  type ValidationResult 
+  type PlanTier,
+  type ValidationResult
 } from "@/lib/planLimits";
+import { createScopedLogger } from "@/lib/logger";
+
+const log = createScopedLogger("Subscription");
 
 // Re-export Stripe IDs from the centralised config so existing imports
 // (`import { STRIPE_PLANS } from "@/hooks/useSubscription"`) keep working.
@@ -84,7 +87,7 @@ async function fetchSubscriptionFromDB(): Promise<SubscriptionState> {
       creditsBalance: credits,
     };
   } catch (err) {
-    console.warn("[useSubscription] DB fallback also failed, using free defaults", err);
+    log.warn("DB fallback also failed, using free defaults", err);
     return FREE_STATE;
   }
 }
@@ -133,7 +136,7 @@ async function fetchSubscription(accessToken: string | undefined): Promise<Subsc
 
   // Edge function unreachable → fall back to direct DB query
   if (isEdgeFunctionNetworkError(error)) {
-    console.warn("[useSubscription] Edge function unreachable, falling back to DB query");
+    log.warn("Edge function unreachable, falling back to DB query");
     return fetchSubscriptionFromDB();
   }
 

@@ -1,8 +1,9 @@
 import { supabase } from "@/integrations/supabase/client";
 import { sleep, DEFAULT_ENDPOINT, CINEMATIC_ENDPOINT } from "./types";
 import { SUPABASE_URL } from "@/lib/supabaseUrl";
+import { createScopedLogger } from "@/lib/logger";
 
-const LOG = "[Pipeline:Network]";
+const log = createScopedLogger("CallPhase");
 
 // ── Credit costs per generation type (must match worker/src/index.ts) ──
 const CREDIT_COSTS: Record<string, number> = {
@@ -24,7 +25,7 @@ async function deductCreditsUpfront(projectType: string, length: string): Promis
   else if (projectType === "cinematic") amount = CREDIT_COSTS.cinematic;
   else amount = CREDIT_COSTS[length] || CREDIT_COSTS.brief;
 
-  console.log(LOG, `Deducting ${amount} credits upfront (${projectType}/${length})`);
+  log.debug(`Deducting ${amount} credits upfront (${projectType}/${length})`);
 
   const { data: success, error } = await supabase.rpc("deduct_credits_securely", {
     p_user_id: session.user.id,
@@ -37,7 +38,7 @@ async function deductCreditsUpfront(projectType: string, length: string): Promis
     throw new Error("Insufficient credits. Please purchase more credits to continue.");
   }
 
-  console.log(LOG, `Credits deducted: ${amount}`);
+  log.debug(`Credits deducted: ${amount}`);
   return amount;
 }
 
@@ -122,7 +123,7 @@ async function workerCallPhase(
     throw new Error(`Failed to queue job: ${insertError?.message}`);
   }
 
-  console.log(LOG, "Job queued for worker", { jobId: job.id, taskType, phase: body.phase ?? null });
+  log.debug("Job queued for worker", { jobId: job.id, taskType, phase: body.phase ?? null });
 
   return pollWorkerJob(job.id, pollTimeoutMs);
 }
@@ -156,7 +157,7 @@ async function pollWorkerJob(jobId: string, maxWaitMs: number = 8 * 60 * 1000): 
     const jobRow = row as any;
 
     if (jobRow.status === "completed") {
-      console.log(LOG, "Worker job completed", {
+      log.debug("Worker job completed", {
         jobId,
         elapsedMs: Date.now() - startTime,
       });
@@ -252,7 +253,7 @@ async function legacyCallPhase(body: Record<string, unknown>, timeoutMs: number,
     const requestId = `${endpoint}:${String(phase)}:${attempt}:${requestStartedAt}`;
 
     try {
-      console.log(LOG, "Dispatching edge function request", {
+      log.debug("Dispatching edge function request", {
         requestId,
         endpoint,
         attempt,
@@ -270,7 +271,7 @@ async function legacyCallPhase(body: Record<string, unknown>, timeoutMs: number,
 
       clearTimeout(timeoutId);
 
-      console.log(LOG, "Edge function responded", {
+      log.debug("Edge function responded", {
         requestId,
         endpoint,
         phase,
@@ -291,7 +292,7 @@ async function legacyCallPhase(body: Record<string, unknown>, timeoutMs: number,
           errorMessage = rawErrorText || errorMessage;
         }
 
-        console.error(LOG, "Edge function request failed", {
+        log.error("Edge function request failed", {
           requestId,
           endpoint,
           phase,
@@ -307,7 +308,7 @@ async function legacyCallPhase(body: Record<string, unknown>, timeoutMs: number,
         if (response.status === 402) throw new Error("AI credits exhausted.");
         if (response.status === 401) throw new Error("Session expired.");
         if (response.status === 503 && attempt < MAX_ATTEMPTS) {
-          console.warn(LOG, "Retrying after transient 503 response", { requestId, attempt, endpoint, phase });
+          log.warn("Retrying after transient 503 response", { requestId, attempt, endpoint, phase });
           await sleep(800 * attempt);
           continue;
         }
@@ -315,7 +316,7 @@ async function legacyCallPhase(body: Record<string, unknown>, timeoutMs: number,
       }
 
       const result = await response.json();
-      console.log(LOG, "Edge function request succeeded", {
+      log.debug("Edge function request succeeded", {
         requestId,
         endpoint,
         phase,
@@ -327,7 +328,7 @@ async function legacyCallPhase(body: Record<string, unknown>, timeoutMs: number,
     } catch (error) {
       clearTimeout(timeoutId);
       const elapsedMs = Date.now() - requestStartedAt;
-      console.error(LOG, "Edge function request threw", {
+      log.error("Edge function request threw", {
         requestId,
         endpoint,
         phase,
@@ -345,7 +346,7 @@ async function legacyCallPhase(body: Record<string, unknown>, timeoutMs: number,
       const isCorsGatewayTimeout = isTransientFetch && elapsedMs > 25000;
 
       if (isTransientFetch) {
-        console.error(LOG, "Browser fetch failed before a usable response was returned", {
+        log.error("Browser fetch failed before a usable response was returned", {
           requestId,
           endpoint,
           phase,
@@ -361,7 +362,7 @@ async function legacyCallPhase(body: Record<string, unknown>, timeoutMs: number,
         const backoffMs = isCorsGatewayTimeout
           ? 2000 * attempt + Math.floor(Math.random() * 1000)
           : 750 * attempt + Math.floor(Math.random() * 250);
-        console.warn(LOG, "Retrying after network/fetch failure", {
+        log.warn("Retrying after network/fetch failure", {
           requestId,
           endpoint,
           phase,

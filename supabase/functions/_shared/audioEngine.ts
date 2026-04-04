@@ -14,7 +14,7 @@
  * Batching: processes max BATCH_SIZE=3 scenes at once with 500ms inter-batch delay.
  */
 
-import { decode as base64Decode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
+import { decode as base64Decode } from "https://deno.land/std@0.190.0/encoding/base64.ts";
 // ============= TYPES =============
 
 export interface AudioScene {

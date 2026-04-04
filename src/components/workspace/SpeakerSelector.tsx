@@ -1,3 +1,4 @@
+import { createScopedLogger } from "@/lib/logger";
 import { useState, useRef, useCallback } from "react";
 import { Mic, Play, Square, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,8 @@ export type SpeakerVoice =
   | "Carlos" | "Isabella"
   // English specific (LemonFox / Fish Audio)
   | "Adam" | "River";
+
+const log = createScopedLogger("SpeakerSelector");
 
 interface SpeakerSelectorProps {
   value: SpeakerVoice;
@@ -192,7 +195,7 @@ export function SpeakerSelector({ value, onChange, language }: SpeakerSelectorPr
         if (row?.status === "failed") break;
       }
     } catch (err) {
-      console.warn("Voice preview failed:", err);
+      log.warn("Voice preview failed:", err);
     } finally {
       setPreviewLoading(null);
     }

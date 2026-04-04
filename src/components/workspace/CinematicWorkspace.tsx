@@ -1,3 +1,4 @@
+import { createScopedLogger } from "@/lib/logger";
 import { useState, useRef, forwardRef, useImperativeHandle, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Play, AlertCircle, RotateCcw, ChevronDown, Users, Film, Loader2, Lightbulb, MessageSquareOff, RefreshCw } from "lucide-react";
@@ -34,6 +35,8 @@ import { GenerationLogsPanel } from "./GenerationLogsPanel";
 import { TemplateSelector } from "./TemplateSelector";
 import { useWorkspaceDraft } from "@/hooks/useWorkspaceDraft";
 import type { WorkspaceHandle } from "./Doc2VideoWorkspace";
+
+const log = createScopedLogger("CinematicWorkspace");
 
 interface CinematicWorkspaceProps {
   projectId?: string | null;
@@ -159,7 +162,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
           const scenes = Array.isArray(data.scenes) ? data.scenes : [];
           const allVideos = scenes.every((s: any) => !!s?.videoUrl);
           if (allVideos) {
-            console.log("[CinematicWorkspace] All videos done in DB, reloading project");
+            log.debug("All videos done in DB, reloading project");
             isResumeInFlightRef.current = true;
             hasReloadedRef.current = generationState.projectId!;
             await loadProject(generationState.projectId!);

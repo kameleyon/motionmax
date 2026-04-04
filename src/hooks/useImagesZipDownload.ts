@@ -1,5 +1,8 @@
 import { useState, useCallback } from "react";
 import JSZip from "jszip";
+import { createScopedLogger } from "@/lib/logger";
+
+const log = createScopedLogger("ImagesZipDownload");
 
 interface Scene {
   number: number;
@@ -60,13 +63,13 @@ export function useImagesZipDownload() {
         try {
           const response = await fetch(url);
           if (!response.ok) {
-            console.warn(`Failed to fetch image: ${url}`);
+            log.warn(`Failed to fetch image: ${url}`);
             return;
           }
           const blob = await response.blob();
           folder.file(filename, blob);
         } catch (err) {
-          console.warn(`Error fetching image ${url}:`, err);
+          log.warn(`Error fetching image ${url}:`, err);
         } finally {
           completed++;
           setState({ status: "downloading", progress: Math.round((completed / imageEntries.length) * 80) });

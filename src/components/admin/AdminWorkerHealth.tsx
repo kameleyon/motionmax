@@ -1,3 +1,4 @@
+import { createScopedLogger } from "@/lib/logger";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +9,8 @@ import { formatDistanceToNow, subHours, format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
+
+const log = createScopedLogger("AdminWorkerHealth");
 
 interface WorkerHealth {
   status: "healthy" | "warning" | "error" | "offline";
@@ -123,7 +126,7 @@ export function AdminWorkerHealth() {
 
         setError(null);
       } catch (err) {
-        console.error("Failed to fetch worker health:", err);
+        log.error("Failed to fetch worker health:", err);
         setError(err instanceof Error ? err.message : "Failed to load worker health");
       } finally {
         setLoading(false);

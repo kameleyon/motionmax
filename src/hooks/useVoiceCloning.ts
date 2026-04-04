@@ -3,6 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { createScopedLogger } from "@/lib/logger";
+
+const log = createScopedLogger("VoiceCloning");
 
 export interface UserVoice {
   id: string;
@@ -50,7 +53,7 @@ export function useVoiceCloning() {
       });
 
     if (uploadError) {
-      console.error("Upload error:", uploadError);
+      log.error("Upload error:", uploadError);
       throw new Error("Failed to upload audio file");
     }
 
@@ -93,7 +96,7 @@ export function useVoiceCloning() {
       toast.success("Voice cloned successfully!");
     },
     onError: (error: Error) => {
-      console.error("Clone voice error:", error);
+      log.error("Clone voice error:", error);
       toast.error(error.message || "Failed to clone voice");
     },
     onSettled: () => {

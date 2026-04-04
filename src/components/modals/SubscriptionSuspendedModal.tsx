@@ -1,3 +1,4 @@
+import { createScopedLogger } from "@/lib/logger";
 import { AlertTriangle, CreditCard, ExternalLink } from "lucide-react";
 import {
   Dialog,
@@ -8,6 +9,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useSubscription, CREDIT_PACKS } from "@/hooks/useSubscription";
+
+const log = createScopedLogger("SubscriptionModal");
 
 interface SubscriptionSuspendedModalProps {
   open: boolean;
@@ -26,7 +29,7 @@ export function SubscriptionSuspendedModal({
     try {
       await openCustomerPortal();
     } catch (error) {
-      console.error("Failed to open portal:", error);
+      log.error("Failed to open portal:", error);
     }
   };
 
@@ -34,7 +37,7 @@ export function SubscriptionSuspendedModal({
     try {
       await createCheckout(CREDIT_PACKS[50].priceId, "payment");
     } catch (error) {
-      console.error("Failed to create checkout:", error);
+      log.error("Failed to create checkout:", error);
     }
   };
 

@@ -1,7 +1,7 @@
 ﻿// @ts-nocheck — Deno edge function; not compatible with VS Code's Node.js TypeScript checker
-import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { decode as base64Decode, encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
+import { decode as base64Decode, encode as base64Encode } from "https://deno.land/std@0.190.0/encoding/base64.ts";
 import {
   generateSceneAudio as sharedGenerateSceneAudio,
   isHaitianCreole,

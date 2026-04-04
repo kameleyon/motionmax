@@ -1,3 +1,4 @@
+import { createScopedLogger } from "@/lib/logger";
 import { useState } from "react";
 import { Lock, Users, Sparkles, Crown, Info } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
@@ -12,6 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useSubscription } from "@/hooks/useSubscription";
+
+const log = createScopedLogger("CharacterConsistency");
 
 interface CharacterConsistencyToggleProps {
   enabled: boolean;
@@ -39,7 +42,7 @@ export function CharacterConsistencyToggle({ enabled, onToggle }: CharacterConsi
       // Use the professional plan price ID
       await createCheckout("price_1SqN2U6hfVkBDzkSNCDvRyeP", "subscription");
     } catch (error) {
-      console.error("Failed to create checkout:", error);
+      log.error("Failed to create checkout:", error);
     } finally {
       setIsLoading(false);
     }

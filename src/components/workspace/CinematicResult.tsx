@@ -1,3 +1,4 @@
+import { createScopedLogger } from "@/lib/logger";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
@@ -75,6 +76,8 @@ interface CinematicResultProps {
   captionStyle?: string;
   onCaptionStyleChange?: (style: string) => void;
 }
+
+const log = createScopedLogger("CinematicResult");
 
 function safeFileBase(name: string) {
   return name.replace(/[^a-z0-9]/gi, "_").slice(0, 50) || "cinematic";
@@ -178,7 +181,7 @@ export function CinematicResult({
 
     // 1. Check if the prop already carries a cached video URL (fastest path)
     if (finalVideoUrl) {
-      console.log("[CinematicResult] Using finalVideoUrl prop — skipping export");
+      log.debug("Using finalVideoUrl prop — skipping export");
       loadExistingVideo(finalVideoUrl);
       return;
     }
@@ -194,7 +197,7 @@ export function CinematicResult({
       const existingUrl = (gen as any)?.video_url;
 
       if (existingUrl) {
-        console.log("[CinematicResult] Existing video found in DB — skipping export");
+        log.debug("Existing video found in DB — skipping export");
         loadExistingVideo(existingUrl);
         return;
       }
@@ -267,7 +270,7 @@ export function CinematicResult({
       }));
       await exportVideo(freshScenes, format, undefined, projectId, "cinematic", generationId, initialCaptionStyle);
     } catch (err) {
-      console.error("Render changes failed:", err);
+      log.error("Render changes failed:", err);
       toast.error("Render Failed", { description: (err as Error).message });
     } finally {
       setIsRenderingChanges(false);

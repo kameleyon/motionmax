@@ -1,4 +1,5 @@
-﻿import { Wand2, Pencil, Users, Cherry, Camera, Box, Hand, PenTool, Laugh, ChevronLeft, ChevronRight, Palette, Baby, CloudMoon, GraduationCap, Upload, X, Loader2, Blocks, Package } from "lucide-react";
+﻿import { createScopedLogger } from "@/lib/logger";
+import { Wand2, Pencil, Users, Cherry, Camera, Box, Hand, PenTool, Laugh, ChevronLeft, ChevronRight, Palette, Baby, CloudMoon, GraduationCap, Upload, X, Loader2, Blocks, Package } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -35,6 +36,8 @@ import cardboardPreview from "@/assets/styles/cardboard-preview.png";
  * excludes anime/moody/3d-pixar/claymation) — see SmartFlowStyleSelector.tsx.
  */
 export type VisualStyle = "minimalist" | "doodle" | "stick" | "anime" | "realistic" | "3d-pixar" | "claymation" | "sketch" | "caricature" | "storybook" | "crayon" | "moody" | "chalkboard" | "lego" | "cardboard" | "custom";
+
+const log = createScopedLogger("StyleSelector");
 
 interface StyleSelectorProps {
   selected: VisualStyle;
@@ -134,7 +137,7 @@ export function StyleSelector({
       const url = await uploadStyleReference(file);
       onCustomStyleImageChange?.(url);
     } catch (err) {
-      console.error("Style reference upload error:", err);
+      log.error("Style reference upload error:", err);
     } finally {
       setUploading(false);
     }

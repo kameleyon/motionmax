@@ -1,4 +1,5 @@
-﻿import { useState, useRef, useEffect } from "react";
+﻿import { createScopedLogger } from "@/lib/logger";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Mic, 
@@ -40,6 +41,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
+const log = createScopedLogger("VoiceLab");
 
 export default function VoiceLab() {
   const navigate = useNavigate();
@@ -159,7 +162,7 @@ export default function VoiceLab() {
       updateLevels();
 
     } catch (error) {
-      console.error("Failed to start recording:", error);
+      log.error("Failed to start recording:", error);
       toast.error("Microphone access denied", {
         description: "Please allow microphone access in your browser settings to record audio.",
       });
@@ -210,7 +213,7 @@ export default function VoiceLab() {
       }
     } catch {
       // If we can't determine duration client-side, allow and let backend validate
-      console.warn("[VoiceLab] Could not validate upload duration client-side, proceeding");
+      log.warn("Could not validate upload duration client-side, proceeding");
     }
 
     setUploadedFile(file);
@@ -238,7 +241,7 @@ export default function VoiceLab() {
       }
     } catch {
       // If we can't determine duration, proceed anyway
-      console.warn("[VoiceLab] Could not determine audio duration, proceeding");
+      log.warn("Could not determine audio duration, proceeding");
     }
 
     await cloneVoice({ 

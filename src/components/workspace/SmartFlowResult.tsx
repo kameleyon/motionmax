@@ -1,3 +1,4 @@
+import { createScopedLogger } from "@/lib/logger";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -28,6 +29,8 @@ import {
 import { SceneEditModal } from "./SceneEditModal";
 import { VideoPlayer } from "./VideoPlayer";
 import { toast } from "sonner";
+
+const log = createScopedLogger("SmartFlowResult");
 
 interface SmartFlowResultProps {
   title: string;
@@ -121,7 +124,7 @@ export function SmartFlowResult({
 
         const existingUrl = (gen as any)?.video_url;
         if (existingUrl) {
-          console.log("[SmartFlowResult] Existing video found — skipping export");
+          log.debug("Existing video found — skipping export");
           loadExistingVideo(existingUrl);
           return;
         }

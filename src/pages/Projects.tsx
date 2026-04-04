@@ -1,4 +1,5 @@
-﻿import { useState, useMemo, useEffect, useRef } from "react";
+﻿import { createScopedLogger } from "@/lib/logger";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
@@ -111,6 +112,7 @@ const formatTimestamp = (iso: string) => {
 };
 
 const ITEMS_PER_PAGE = 20;
+const log = createScopedLogger("Projects");
 
 export default function Projects() {
   const navigate = useNavigate();
@@ -259,7 +261,7 @@ export default function Projects() {
         if (!cancelled) setRefreshedThumbnails(refreshedMap);
       })
       .catch(err => {
-        if (!cancelled) console.warn("[Projects] Background thumbnail refresh failed:", err);
+        if (!cancelled) log.warn("Background thumbnail refresh failed:", err);
       })
       .finally(() => {
         refreshInProgressRef.current = false;
@@ -452,7 +454,7 @@ export default function Projects() {
       }
     } catch (err: any) {
       toast.error("Failed to create share link");
-      console.error(err);
+      log.error(err);
     } finally {
       setShareLoading(false);
     }

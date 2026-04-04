@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { adminDirectQuery } from "@/lib/adminDirectQueries";
+import { createScopedLogger } from "@/lib/logger";
 
-const LOG = "[useAdminAuth]";
+const log = createScopedLogger("AdminAuth");
 
 export function useAdminAuth() {
   const { user, session, loading: authLoading } = useAuth();
@@ -32,7 +33,7 @@ export function useAdminAuth() {
           setIsAdmin(!!data);
         }
       } catch (err) {
-        console.error("Error checking admin status:", err);
+        log.error("Error checking admin status:", err);
         setIsAdmin(false);
       } finally {
         setLoading(false);
@@ -53,7 +54,7 @@ export function useAdminAuth() {
       const result = await adminDirectQuery(action, params);
       return result;
     } catch (dbErr) {
-      console.warn(LOG, `Direct query failed for "${action}":`, (dbErr as Error).message);
+      log.warn(`Direct query failed for "${action}":`, (dbErr as Error).message);
     }
 
     // Fallback: edge function (if deployed)
@@ -64,7 +65,7 @@ export function useAdminAuth() {
       if (error) throw new Error(error.message || "Admin API error");
       return data;
     } catch (edgeErr) {
-      console.error(LOG, `Edge function also failed for "${action}":`, (edgeErr as Error).message);
+      log.error(`Edge function also failed for "${action}":`, (edgeErr as Error).message);
       throw new Error(`Admin query failed: ${(edgeErr as Error).message}`);
     }
   }, []);

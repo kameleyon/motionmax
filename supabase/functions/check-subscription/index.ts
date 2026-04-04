@@ -190,7 +190,8 @@ serve(async (req) => {
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep("ERROR", { message: errorMessage });
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    logStep("ERROR", { message: errorMessage, stack: errorStack?.substring(0, 500) });
 
     // If the error is a JWT expiration, return 401 so the client can refresh
     const lowerMsg = errorMessage.toLowerCase();
@@ -201,9 +202,14 @@ serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    // For Stripe or other transient errors, return a 503 with details
+    // so the client can distinguish "server broken" from "auth issue"
+    return new Response(JSON.stringify({
+      error: errorMessage,
+      code: "EDGE_FUNCTION_ERROR",
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
+      status: 503,
     });
   }
 });

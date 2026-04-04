@@ -237,9 +237,19 @@ export async function handleExportVideo(
     if (captionStyle !== "none") {
       const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
       if (hyperealApiKey) {
+        // Signing function for private storage buckets — generates 1hr signed URLs
+        const signUrl = async (bucket: string, filePath: string): Promise<string | null> => {
+          const { data, error } = await supabase.storage.from(bucket).createSignedUrl(filePath, 3600);
+          if (error || !data?.signedUrl) {
+            console.warn(`[ExportVideo] Failed to sign URL for ${bucket}/${filePath}: ${error?.message}`);
+            return null;
+          }
+          return data.signedUrl;
+        };
+
         // Fire ASR for all scenes in parallel — runs while scenes encode
         const scenesWithAudio = scenes.map((s: any) => ({ audioUrl: s.audioUrl, voiceover: s.voiceover }));
-        asrPromise = transcribeAllScenes(scenesWithAudio, hyperealApiKey, "en").catch(err => {
+        asrPromise = transcribeAllScenes(scenesWithAudio, hyperealApiKey, "en", signUrl).catch(err => {
           console.warn(`[ExportVideo] ASR failed, will use estimation: ${(err as Error).message}`);
           return scenes.map(() => null);
         });

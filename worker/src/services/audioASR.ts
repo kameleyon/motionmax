@@ -20,6 +20,27 @@ interface ASRResult {
 }
 
 /**
+ * Ensure audio URL is publicly accessible.
+ * Supabase private bucket URLs need to be converted to signed URLs.
+ */
+async function ensureAccessibleUrl(
+  audioUrl: string,
+  signUrl?: (bucket: string, path: string) => Promise<string | null>,
+): Promise<string> {
+  if (!signUrl) return audioUrl;
+
+  // Extract bucket and path from Supabase storage URL
+  // Format: https://xxx.supabase.co/storage/v1/object/public/audio/project-id/file.mp3
+  // Or:     https://xxx.supabase.co/storage/v1/object/sign/audio/project-id/file.mp3?token=...
+  const match = audioUrl.match(/\/storage\/v1\/object\/(?:public|sign)\/([^/]+)\/(.+?)(?:\?|$)/);
+  if (!match) return audioUrl; // Not a Supabase storage URL
+
+  const [, bucket, filePath] = match;
+  const signedUrl = await signUrl(bucket, filePath);
+  return signedUrl || audioUrl;
+}
+
+/**
  * Transcribe audio and get word-level timestamps.
  * Returns null on failure (caller falls back to estimation).
  */
@@ -27,13 +48,17 @@ export async function transcribeAudio(
   audioUrl: string,
   apiKey: string,
   language = "en",
+  signUrl?: (bucket: string, path: string) => Promise<string | null>,
 ): Promise<ASRResult | null> {
   if (!apiKey || !audioUrl) return null;
 
   try {
-    console.log(`[ASR] Transcribing: ${audioUrl.substring(0, 60)}... lang=${language}`);
+    // Get a URL that Hypereal can actually download
+    const accessibleUrl = await ensureAccessibleUrl(audioUrl, signUrl);
+    console.log(`[ASR] Transcribing: ${accessibleUrl.substring(0, 80)}... lang=${language}`);
 
-    const res = await fetch(HYPEREAL_API_URL, {
+    // Try with "audio" field first, then "input" as fallback
+    let res = await fetch(HYPEREAL_API_URL, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
@@ -41,11 +66,35 @@ export async function transcribeAudio(
       },
       body: JSON.stringify({
         model: "audio-asr",
-        audio: audioUrl,
+        audio: accessibleUrl,
         language,
         ignore_timestamps: false,
       }),
     });
+
+    // If "audio" field didn't work, try "input" field
+    if (!res.ok && res.status === 400) {
+      const errText = await res.text();
+      if (errText.includes("audio is required") || errText.includes("input")) {
+        console.log("[ASR] Retrying with 'input' field name...");
+        res = await fetch(HYPEREAL_API_URL, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "audio-asr",
+            input: accessibleUrl,
+            language,
+            ignore_timestamps: false,
+          }),
+        });
+      } else {
+        console.warn(`[ASR] Failed (${res.status}): ${errText.substring(0, 200)}`);
+        return null;
+      }
+    }
 
     if (!res.ok) {
       const err = await res.text();
@@ -145,11 +194,14 @@ async function pollASRJob(jobId: string, apiKey: string): Promise<ASRResult | nu
 /**
  * Transcribe all scenes' audio in parallel.
  * Returns an array matching the scenes array — null entries fall back to estimation.
+ *
+ * @param signUrl Optional function to generate signed URLs for private storage buckets
  */
 export async function transcribeAllScenes(
   scenes: Array<{ audioUrl?: string; voiceover?: string }>,
   apiKey: string,
   language = "en",
+  signUrl?: (bucket: string, path: string) => Promise<string | null>,
 ): Promise<(ASRResult | null)[]> {
   if (!apiKey) return scenes.map(() => null);
 
@@ -158,7 +210,7 @@ export async function transcribeAllScenes(
 
   const results = await Promise.all(
     scenes.map(scene =>
-      scene.audioUrl ? transcribeAudio(scene.audioUrl, apiKey, language) : Promise.resolve(null)
+      scene.audioUrl ? transcribeAudio(scene.audioUrl, apiKey, language, signUrl) : Promise.resolve(null)
     )
   );
 

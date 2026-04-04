@@ -136,16 +136,20 @@ async function fetchSubscription(accessToken: string | undefined): Promise<Subsc
 
   // Edge function unreachable → fall back to direct DB query
   if (isEdgeFunctionNetworkError(error)) {
-    log.warn("Edge function unreachable, falling back to DB query");
+    log.warn("Edge function unreachable, falling back to DB");
     return fetchSubscriptionFromDB();
   }
 
-  // Handle token expiration specifically
-  const errObj = error as { message?: string } | null;
+  // Check if response body contains error details (data may have error info even with error set)
+  const responseCode = (data?.code as string) || "";
+  const responseError = (data?.error as string) || "";
+  const errMsg = (error as { message?: string })?.message || "";
+
+  // Token expired → refresh and retry once
   const isTokenExpired =
-    errObj?.message?.includes("401") ||
-    data?.code === "TOKEN_EXPIRED" ||
-    (data?.error as string)?.includes?.("Token expired");
+    responseCode === "TOKEN_EXPIRED" ||
+    responseError.includes("Token expired") ||
+    errMsg.includes("401");
 
   if (isTokenExpired) {
     const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
@@ -157,22 +161,16 @@ async function fetchSubscription(accessToken: string | undefined): Promise<Subsc
       const { data: retryData, error: retryError } = await supabase.functions.invoke("check-subscription", {
         headers: { Authorization: `Bearer ${refreshData.session.access_token}` },
       });
-      if (isEdgeFunctionNetworkError(retryError)) return fetchSubscriptionFromDB();
-      if (retryError) {
-        // Retry also failed — fall back to DB instead of throwing
-        log.warn("Subscription check retry failed, falling back to DB", retryError);
-        return fetchSubscriptionFromDB();
-      }
-      return parseResponse(retryData);
-    } catch (retryThrown) {
-      log.warn("Subscription check retry threw, falling back to DB", retryThrown);
-      return fetchSubscriptionFromDB();
+      if (!retryError && retryData) return parseResponse(retryData);
+    } catch {
+      // fall through to DB
     }
+    return fetchSubscriptionFromDB();
   }
 
-  // Any other edge function error (non-2xx that isn't token-related) → fall back to DB
+  // Any edge function error → DB fallback (not a security issue: RLS protects the data)
   if (error) {
-    log.warn("Edge function returned error, falling back to DB", error);
+    log.warn("check-subscription edge fn error, using DB fallback", { code: responseCode, detail: responseError || errMsg });
     return fetchSubscriptionFromDB();
   }
 

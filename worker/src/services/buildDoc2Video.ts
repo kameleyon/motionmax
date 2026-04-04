@@ -142,6 +142,7 @@ ${buildOutputFormat({
   })}`;
 
   const brandSec = buildBrandSection(p.brandMark);
-  const user = `Content: ${p.content}\n${presenterGuidance}${characterGuidance}${brandSec}`;
+  const truncatedContent = p.content.length > 15000 ? p.content.substring(0, 15000) + "\n\n[Content truncated — focus on the key themes above]" : p.content;
+  const user = `Content: ${truncatedContent}\n${presenterGuidance}${characterGuidance}${brandSec}`;
   return { system, user, maxTokens };
 }

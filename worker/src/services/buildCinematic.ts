@@ -58,7 +58,9 @@ export function buildCinematicPrompt(p: CinematicParams): PromptResult {
 
   const brandSec = buildBrandSection(p.brandMark);
   const system = buildCinematicSystem(cfg, targetWords, styleDesc, dims, p, p.language);
-  const user = `Create a cinematic video script based on this idea:\n\n${p.content}\n${presenterGuidance}${characterGuidance}${brandSec}`;
+  // Truncate content to 10,000 chars to prevent API timeouts on massive inputs
+  const truncatedContent = p.content.length > 10000 ? p.content.substring(0, 10000) + "\n\n[Content truncated — focus on the key themes above]" : p.content;
+  const user = `Create a cinematic video script based on this idea:\n\n${truncatedContent}\n${presenterGuidance}${characterGuidance}${brandSec}`;
   return { system, user, maxTokens };
 }
 

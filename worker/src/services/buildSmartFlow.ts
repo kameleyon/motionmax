@@ -107,8 +107,9 @@ IMPORTANT: Do NOT include any style description in visualPrompt - the system wil
 - Create magazine-editorial quality that looks professional
 - Focus on CONTENT and LAYOUT only - do NOT write style descriptions`;
 
+  const truncatedContent = p.content.length > 15000 ? p.content.substring(0, 15000) + "\n\n[Content truncated]" : p.content;
   const user = `=== DATA SOURCE ===
-${p.content}
+${truncatedContent}
 
 === EXTRACTION GOAL ===
 Assess the request thoroughly, take the time to understand what exactly it is requested of you. Extract the main key insights that fit the topic, analyze the best way to present the topic based on targeted population, identified key points and visual elements that should be included in the visual content, come up with the full design concept/idea and present the topic based on the requested task in an educational, visually rich format.`;

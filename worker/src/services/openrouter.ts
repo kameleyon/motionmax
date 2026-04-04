@@ -71,25 +71,35 @@ export async function callOpenRouterLLM(
     console.log(`[OpenRouter] Extended timeout: ${Math.round(totalTimeoutMs / 1000)}s (maxTokens=${options.maxTokens})`);
   }
 
-  let res: Response;
-  try {
-    res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-      signal: controller.signal,
-    });
-  } catch (err: any) {
-    clearTimeout(timeoutId);
-    if (err.name === "AbortError") {
-      throw new Error(`OpenRouter request timed out after ${Math.round(totalTimeoutMs / 1000)}s (model: ${model}, maxTokens: ${options.maxTokens})`);
+  let res: Response | undefined;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+      break; // success
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        clearTimeout(timeoutId);
+        throw new Error(`OpenRouter request timed out after ${Math.round(totalTimeoutMs / 1000)}s (model: ${model}, maxTokens: ${options.maxTokens})`);
+      }
+      if (attempt < 2) {
+        console.warn(`[OpenRouter] Fetch failed (attempt ${attempt}), retrying in 3s...`);
+        await new Promise(r => setTimeout(r, 3000));
+        continue;
+      }
+      clearTimeout(timeoutId);
+      throw err;
     }
-    throw err;
   }
   clearTimeout(timeoutId);
+  if (!res) throw new Error("OpenRouter fetch failed after retries");
 
   if (!res.ok) {
     const body = await res.text();

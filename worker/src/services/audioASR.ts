@@ -41,7 +41,43 @@ async function ensureAccessibleUrl(
 }
 
 /**
+ * Download audio file bytes from a URL.
+ * Returns the ArrayBuffer and inferred MIME type, or null on failure.
+ */
+async function downloadAudioFile(
+  audioUrl: string,
+  signUrl?: (bucket: string, path: string) => Promise<string | null>,
+): Promise<{ buffer: ArrayBuffer; mimeType: string; filename: string } | null> {
+  const accessibleUrl = await ensureAccessibleUrl(audioUrl, signUrl);
+
+  const res = await fetch(accessibleUrl);
+  if (!res.ok) {
+    console.warn(`[ASR] Failed to download audio (${res.status}): ${accessibleUrl.substring(0, 80)}`);
+    return null;
+  }
+
+  const buffer = await res.arrayBuffer();
+  if (buffer.byteLength === 0) {
+    console.warn("[ASR] Downloaded audio file is empty");
+    return null;
+  }
+
+  // Infer MIME type from URL extension or Content-Type header
+  const contentType = res.headers.get("content-type") || "";
+  let mimeType = contentType.split(";")[0].trim();
+  let ext = "mp3";
+
+  if (audioUrl.includes(".wav")) { mimeType = mimeType || "audio/wav"; ext = "wav"; }
+  else if (audioUrl.includes(".ogg")) { mimeType = mimeType || "audio/ogg"; ext = "ogg"; }
+  else if (audioUrl.includes(".webm")) { mimeType = mimeType || "audio/webm"; ext = "webm"; }
+  else { mimeType = mimeType || "audio/mpeg"; ext = "mp3"; }
+
+  return { buffer, mimeType, filename: `audio.${ext}` };
+}
+
+/**
  * Transcribe audio and get word-level timestamps.
+ * Downloads the audio file and sends it as multipart form-data to the ASR API.
  * Returns null on failure (caller falls back to estimation).
  */
 export async function transcribeAudio(
@@ -53,45 +89,49 @@ export async function transcribeAudio(
   if (!apiKey || !audioUrl) return null;
 
   try {
-    // Get a URL that Hypereal can actually download
-    const accessibleUrl = await ensureAccessibleUrl(audioUrl, signUrl);
-    console.log(`[ASR] Transcribing: ${accessibleUrl.substring(0, 80)}... lang=${language}`);
+    console.log(`[ASR] Transcribing: ${audioUrl.substring(0, 80)}... lang=${language}`);
 
-    // Try with "audio" field first, then "input" as fallback
+    // Download audio file from storage
+    const audioFile = await downloadAudioFile(audioUrl, signUrl);
+    if (!audioFile) return null;
+
+    console.log(`[ASR] Downloaded ${(audioFile.buffer.byteLength / 1024).toFixed(1)}KB ${audioFile.mimeType}`);
+
+    // Build multipart form-data with actual audio bytes
+    const blob = new Blob([audioFile.buffer], { type: audioFile.mimeType });
+    const form = new FormData();
+    form.append("model", "audio-asr");
+    form.append("audio", blob, audioFile.filename);
+    form.append("language", language);
+    form.append("ignore_timestamps", "false");
+
     let res = await fetch(HYPEREAL_API_URL, {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "audio-asr",
-        audio: accessibleUrl,
-        language,
-        ignore_timestamps: false,
-      }),
+      headers: { "Authorization": `Bearer ${apiKey}` },
+      body: form,
     });
 
-    // If "audio" field didn't work, try "input" field
+    // If "audio" field didn't work, retry with "file" field name
     if (!res.ok && res.status === 400) {
       const errText = await res.text();
-      if (errText.includes("audio is required") || errText.includes("input")) {
-        console.log("[ASR] Retrying with 'input' field name...");
+      if (errText.includes("audio is required") || errText.includes("file")) {
+        console.log("[ASR] Retrying with 'file' field name...");
+        const form2 = new FormData();
+        form2.append("model", "audio-asr");
+        form2.append("file", blob, audioFile.filename);
+        form2.append("language", language);
+        form2.append("ignore_timestamps", "false");
+
         res = await fetch(HYPEREAL_API_URL, {
           method: "POST",
-          headers: {
-            "Authorization": `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "audio-asr",
-            input: accessibleUrl,
-            language,
-            ignore_timestamps: false,
-          }),
+          headers: { "Authorization": `Bearer ${apiKey}` },
+          body: form2,
         });
-      } else {
-        console.warn(`[ASR] Failed (${res.status}): ${errText.substring(0, 200)}`);
+      }
+
+      if (!res.ok) {
+        const err2 = await res.text().catch(() => "");
+        console.warn(`[ASR] Failed (${res.status}): ${(err2 || errText).substring(0, 200)}`);
         return null;
       }
     }

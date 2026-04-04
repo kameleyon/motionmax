@@ -5,7 +5,7 @@
  * Used during export to get exact word timestamps for caption sync.
  */
 
-const HYPEREAL_ASR_URL = "https://api.hypereal.cloud/v1/audio/transcriptions";
+const HYPEREAL_AUDIO_URL = "https://api.hypereal.cloud/v1/audio/generate";
 
 interface ASRWord {
   word: string;
@@ -75,10 +75,25 @@ async function downloadAudioFile(
   return { buffer, mimeType, filename: `audio.${ext}` };
 }
 
+/** Convert ArrayBuffer to base64 string */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
 /**
  * Transcribe audio and get word-level timestamps.
- * Downloads the audio file and sends it as multipart form-data to the ASR API.
- * Returns null on failure (caller falls back to estimation).
+ * Hypereal audio-asr expects: { audio: URL, language, ignore_timestamps }
+ * No "model" field — the endpoint handles routing.
+ *
+ * Strategy:
+ *   1. JSON body with fresh signed URL (Hypereal downloads the audio)
+ *   2. If Hypereal can't reach the URL, download + send base64 data URI
+ * Returns null on failure (caller falls back to word-per-second estimation).
  */
 export async function transcribeAudio(
   audioUrl: string,
@@ -89,72 +104,66 @@ export async function transcribeAudio(
   if (!apiKey || !audioUrl) return null;
 
   try {
-    console.log(`[ASR] Transcribing: ${audioUrl.substring(0, 80)}... lang=${language}`);
+    // Get a fresh signed URL so Hypereal can download it
+    const accessibleUrl = await ensureAccessibleUrl(audioUrl, signUrl);
+    console.log(`[ASR] Transcribing: ${accessibleUrl.substring(0, 80)}... lang=${language}`);
 
-    // Download audio file from storage
+    // ── Strategy 1: Send audio URL (per Hypereal docs) ──
+    let res = await fetch(HYPEREAL_AUDIO_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        audio: accessibleUrl,
+        language,
+        ignore_timestamps: false,
+      }),
+    });
+
+    if (res.ok) return handleASRResponse(res, apiKey);
+
+    const errText1 = await res.text();
+    console.log(`[ASR] URL strategy failed (${res.status}): ${errText1.substring(0, 150)}`);
+
+    // ── Strategy 2: Download audio, send as base64 data URI ──
     const audioFile = await downloadAudioFile(audioUrl, signUrl);
     if (!audioFile) return null;
 
-    console.log(`[ASR] Downloaded ${(audioFile.buffer.byteLength / 1024).toFixed(1)}KB ${audioFile.mimeType}`);
+    const base64 = arrayBufferToBase64(audioFile.buffer);
+    const dataUri = `data:${audioFile.mimeType};base64,${base64}`;
+    console.log(`[ASR] Downloaded ${(audioFile.buffer.byteLength / 1024).toFixed(1)}KB, sending as base64 data URI`);
 
-    // Build multipart form-data with actual audio bytes
-    const blob = new Blob([audioFile.buffer], { type: audioFile.mimeType });
-    const form = new FormData();
-    form.append("model", "audio-asr");
-    form.append("audio", blob, audioFile.filename);
-    form.append("language", language);
-    form.append("ignore_timestamps", "false");
-
-    let res = await fetch(HYPEREAL_ASR_URL, {
+    res = await fetch(HYPEREAL_AUDIO_URL, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${apiKey}` },
-      body: form,
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        audio: dataUri,
+        language,
+        ignore_timestamps: false,
+      }),
     });
 
-    // If "audio" field didn't work, retry with "file" field name
-    if (!res.ok && res.status === 400) {
-      const errText = await res.text();
-      if (errText.includes("audio is required") || errText.includes("file")) {
-        console.log("[ASR] Retrying with 'file' field name...");
-        const form2 = new FormData();
-        form2.append("model", "audio-asr");
-        form2.append("file", blob, audioFile.filename);
-        form2.append("language", language);
-        form2.append("ignore_timestamps", "false");
+    if (res.ok) return handleASRResponse(res, apiKey);
 
-        res = await fetch(HYPEREAL_ASR_URL, {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${apiKey}` },
-          body: form2,
-        });
-      }
-
-      if (!res.ok) {
-        const err2 = await res.text().catch(() => "");
-        console.warn(`[ASR] Failed (${res.status}): ${(err2 || errText).substring(0, 200)}`);
-        return null;
-      }
-    }
-
-    if (!res.ok) {
-      const err = await res.text();
-      console.warn(`[ASR] Failed (${res.status}): ${err.substring(0, 200)}`);
-      return null;
-    }
-
-    const data = await res.json() as any;
-
-    // Handle async job response
-    if (data.jobId) {
-      return pollASRJob(data.jobId, apiKey);
-    }
-
-    // Direct response
-    return parseASRResponse(data);
+    const errText2 = await res.text();
+    console.warn(`[ASR] Both strategies failed. Last (${res.status}): ${errText2.substring(0, 200)}`);
+    return null;
   } catch (err) {
     console.warn(`[ASR] Error: ${(err as Error).message}`);
     return null;
   }
+}
+
+/** Parse a successful ASR response (handles both sync and async job patterns) */
+async function handleASRResponse(res: Response, apiKey: string): Promise<ASRResult | null> {
+  const data = await res.json() as any;
+  if (data.jobId) return pollASRJob(data.jobId, apiKey);
+  return parseASRResponse(data);
 }
 
 function parseASRResponse(data: any): ASRResult | null {

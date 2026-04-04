@@ -44,29 +44,15 @@ export interface SceneCaption {
 
 /**
  * Convert ASR word timestamps to CaptionWords, offset to the scene's position in the timeline.
- *
- * ASR_DELAY_MS compensates for the gap between when TTS audio actually starts
- * producing speech vs when the ASR model reports the first word. Without this,
- * captions appear slightly before the audio speaks the word.
+ * ASR timestamps are already accurate — no artificial delay needed.
  */
-const ASR_DELAY_MS = 150; // Shift captions later by 150ms to match spoken audio
-
 function asrWordsToCaptionWords(asrWords: Array<{ word: string; start: number; end: number }>, timelineOffsetMs: number): CaptionWord[] {
-  // Find the earliest word start — if the ASR says speech begins at 0.0s
-  // but TTS has a ramp-up silence, we need to detect and compensate
-  const firstWordStart = asrWords.length > 0 ? asrWords[0].start : 0;
-
-  // If the first word reportedly starts before 50ms, the ASR likely isn't
-  // accounting for TTS ramp-up silence. Add minimum padding.
-  const rampUpPad = firstWordStart < 0.05 ? 200 : 0;
-  const totalOffset = timelineOffsetMs + ASR_DELAY_MS + rampUpPad;
-
   return asrWords
     .filter(w => w.word.trim().length > 0)
     .map(w => ({
       text: w.word.trim(),
-      startMs: Math.round(w.start * 1000 + totalOffset),
-      endMs: Math.round(w.end * 1000 + totalOffset),
+      startMs: Math.round(w.start * 1000 + timelineOffsetMs),
+      endMs: Math.round(w.end * 1000 + timelineOffsetMs),
     }));
 }
 
@@ -149,103 +135,107 @@ interface AssStyleDef {
   uppercase?: boolean;
 }
 
+// marginV=640 on 1920px tall canvas = 1/3 from bottom
+// Font sizes scaled up for social media readability (80-100px range)
+const MV = 640; // Default vertical margin (1/3 from bottom on 1080x1920)
+
 const STYLE_DEFS: Record<Exclude<CaptionStyle, "none">, AssStyleDef> = {
   // ── From Reference Visuals ──
   orangeBox: {
-    fontName: "Montserrat", fontSize: 48, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Montserrat", fontSize: 82, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: ORANGE, backColor: ORANGE, bold: true,
-    outline: 14, shadow: 0, alignment: 2, marginV: 280, borderStyle: 3, uppercase: true,
+    outline: 18, shadow: 0, alignment: 2, marginV: MV, borderStyle: 3, uppercase: true,
   },
   yellowSlanted: {
-    fontName: "Montserrat", fontSize: 56, primaryColor: assColor(0xFF, 0xEB, 0x3B), secondaryColor: YELLOW,
+    fontName: "Montserrat", fontSize: 90, primaryColor: assColor(0xFF, 0xEB, 0x3B), secondaryColor: YELLOW,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true, italic: true,
-    outline: 5, shadow: 4, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
+    outline: 7, shadow: 5, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   redSlantedBox: {
-    fontName: "Montserrat", fontSize: 48, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Montserrat", fontSize: 82, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: RED, backColor: RED, bold: true, italic: true,
-    outline: 14, shadow: 0, alignment: 2, marginV: 280, borderStyle: 3, uppercase: true,
+    outline: 18, shadow: 0, alignment: 2, marginV: MV, borderStyle: 3, uppercase: true,
   },
   cyanOutline: {
-    fontName: "Montserrat", fontSize: 52, primaryColor: assColor(0x00, 0xBC, 0xD4), secondaryColor: WHITE,
+    fontName: "Montserrat", fontSize: 86, primaryColor: assColor(0x00, 0xBC, 0xD4), secondaryColor: WHITE,
     outlineColor: WHITE, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 0, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
+    outline: 5, shadow: 0, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   motionBlur: {
-    fontName: "Montserrat", fontSize: 52, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Montserrat", fontSize: 86, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 3, shadow: 2, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
+    outline: 4, shadow: 3, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   yellowSmall: {
-    fontName: "Montserrat", fontSize: 36, primaryColor: assColor(0xFF, 0xEB, 0x3B), secondaryColor: YELLOW,
+    fontName: "Montserrat", fontSize: 64, primaryColor: assColor(0xFF, 0xEB, 0x3B), secondaryColor: YELLOW,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 2, shadow: 1, alignment: 2, marginV: 260, borderStyle: 1, uppercase: true,
+    outline: 3, shadow: 1, alignment: 2, marginV: MV - 40, borderStyle: 1, uppercase: true,
   },
   // ── Trending / Premium ──
   thickStroke: {
-    fontName: "Poppins", fontSize: 54, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Poppins", fontSize: 90, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 6, shadow: 0, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
+    outline: 8, shadow: 0, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   karaokePop: {
-    fontName: "Montserrat", fontSize: 48, primaryColor: WHITE, secondaryColor: assColor(0xFF, 0xEB, 0x3B),
+    fontName: "Montserrat", fontSize: 84, primaryColor: WHITE, secondaryColor: assColor(0xFF, 0xEB, 0x3B),
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0xA0), bold: true,
-    outline: 3, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
+    outline: 4, shadow: 1, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   typewriter: {
-    fontName: "DejaVu Sans Mono", fontSize: 38, primaryColor: assColor(0x39, 0xFF, 0x14), secondaryColor: WHITE,
+    fontName: "DejaVu Sans Mono", fontSize: 64, primaryColor: assColor(0x39, 0xFF, 0x14), secondaryColor: WHITE,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0x80), bold: true,
-    outline: 1, shadow: 0, alignment: 2, marginV: 280, borderStyle: 1,
+    outline: 2, shadow: 0, alignment: 2, marginV: MV, borderStyle: 1,
   },
   neonTeal: {
-    fontName: "Poppins", fontSize: 48, primaryColor: assColor(0x00, 0xE5, 0xFF), secondaryColor: WHITE,
+    fontName: "Poppins", fontSize: 84, primaryColor: assColor(0x00, 0xE5, 0xFF), secondaryColor: WHITE,
     outlineColor: assColor(0x00, 0x80, 0x90), backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 6, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
+    outline: 5, shadow: 8, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   goldLuxury: {
-    fontName: "Pacifico", fontSize: 46, primaryColor: assColor(0xFF, 0xD7, 0x00), secondaryColor: YELLOW,
+    fontName: "Pacifico", fontSize: 78, primaryColor: assColor(0xFF, 0xD7, 0x00), secondaryColor: YELLOW,
     outlineColor: assColor(0x8B, 0x65, 0x08), backColor: assColor(0, 0, 0, 0), bold: false, italic: true,
-    outline: 2, shadow: 2, alignment: 2, marginV: 280, borderStyle: 1,
+    outline: 3, shadow: 3, alignment: 2, marginV: MV, borderStyle: 1,
   },
   bouncyPill: {
-    fontName: "Montserrat", fontSize: 42, primaryColor: assColor(0x1A, 0x1A, 0x1A), secondaryColor: BLACK,
+    fontName: "Montserrat", fontSize: 72, primaryColor: assColor(0x1A, 0x1A, 0x1A), secondaryColor: BLACK,
     outlineColor: WHITE, backColor: WHITE, bold: true,
-    outline: 16, shadow: 0, alignment: 2, marginV: 280, borderStyle: 3,
+    outline: 20, shadow: 0, alignment: 2, marginV: MV, borderStyle: 3,
   },
   glitch: {
-    fontName: "Montserrat", fontSize: 52, primaryColor: WHITE, secondaryColor: assColor(0xFF, 0x00, 0x00),
+    fontName: "Montserrat", fontSize: 86, primaryColor: WHITE, secondaryColor: assColor(0xFF, 0x00, 0x00),
     outlineColor: assColor(0x00, 0x00, 0xFF), backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 3, shadow: 0, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
+    outline: 4, shadow: 0, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   cinematicFade: {
-    fontName: "Montserrat", fontSize: 40, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Montserrat", fontSize: 68, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: assColor(0, 0, 0, 0x60), backColor: assColor(0, 0, 0, 0), bold: false,
-    outline: 1, shadow: 0, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
+    outline: 2, shadow: 0, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   redTag: {
-    fontName: "Poppins", fontSize: 40, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Poppins", fontSize: 72, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: RED, backColor: RED, bold: true,
-    outline: 14, shadow: 0, alignment: 2, marginV: 280, borderStyle: 3,
+    outline: 18, shadow: 0, alignment: 2, marginV: MV, borderStyle: 3,
   },
   blackBox: {
-    fontName: "Liberation Sans", fontSize: 40, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Liberation Sans", fontSize: 68, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: assColor(0, 0, 0, 0), backColor: assColor(0, 0, 0, 0xCC), bold: false,
-    outline: 16, shadow: 0, alignment: 2, marginV: 280, borderStyle: 3,
+    outline: 20, shadow: 0, alignment: 2, marginV: MV, borderStyle: 3,
   },
   comicBurst: {
-    fontName: "Bangers", fontSize: 56, primaryColor: assColor(0xFF, 0xEB, 0x3B), secondaryColor: RED,
+    fontName: "Bangers", fontSize: 94, primaryColor: assColor(0xFF, 0xEB, 0x3B), secondaryColor: RED,
     outlineColor: RED, backColor: assColor(0, 0, 0, 0), bold: false,
-    outline: 4, shadow: 3, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
+    outline: 5, shadow: 4, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   retroTerminal: {
-    fontName: "DejaVu Sans Mono", fontSize: 36, primaryColor: assColor(0x39, 0xFF, 0x14), secondaryColor: WHITE,
+    fontName: "DejaVu Sans Mono", fontSize: 60, primaryColor: assColor(0x39, 0xFF, 0x14), secondaryColor: WHITE,
     outlineColor: assColor(0, 0x40, 0), backColor: assColor(0, 0, 0, 0x90), bold: true,
-    outline: 1, shadow: 0, alignment: 2, marginV: 280, borderStyle: 1,
+    outline: 2, shadow: 0, alignment: 2, marginV: MV, borderStyle: 1,
   },
   heavyDropShadow: {
-    fontName: "Bebas Neue", fontSize: 58, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Bebas Neue", fontSize: 96, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: assColor(0, 0, 0, 0), backColor: assColor(0, 0, 0, 0), bold: false,
-    outline: 0, shadow: 5, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
+    outline: 0, shadow: 7, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
 };
 
@@ -278,8 +268,26 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
 }
 
 /**
- * Build dialogue lines. Groups words into readable subtitle lines
- * (max ~5 words per line, ~2 lines visible at a time).
+ * Styles that show one word at a time (pop on / pop off) — CapCut style.
+ * All other styles show 3-word groups with karaoke highlight on the active word.
+ */
+const SINGLE_WORD_STYLES: Set<string> = new Set([
+  "orangeBox", "yellowSlanted", "redSlantedBox", "motionBlur",
+  "thickStroke", "comicBurst", "heavyDropShadow", "glitch", "bouncyPill",
+]);
+
+/** Subtitle-like styles that show longer lines (documentary / cinematic) */
+const SUBTITLE_STYLES: Set<string> = new Set([
+  "blackBox", "cinematicFade", "retroTerminal", "typewriter",
+]);
+
+/**
+ * Build dialogue lines with word-level timing.
+ *
+ * Three modes depending on style:
+ * 1. Single-word: one word at a time, each word = one dialogue event
+ * 2. Karaoke group: 3 words shown, active word highlighted via \kf tag
+ * 3. Subtitle: 5-word chunks, static text (documentary style)
  */
 function buildDialogueLines(
   caption: SceneCaption,
@@ -290,26 +298,43 @@ function buildDialogueLines(
   if (words.length === 0) return [];
 
   const lines: string[] = [];
-  const WORDS_PER_LINE = 5;
 
-  for (let i = 0; i < words.length; i += WORDS_PER_LINE) {
-    const chunk = words.slice(i, i + WORDS_PER_LINE);
-    const startTime = msToAssTime(chunk[0].startMs);
-    const endTime = msToAssTime(chunk[chunk.length - 1].endMs);
-
-    let text: string;
-
-    if (style === "karaokePop") {
-      text = chunk.map(w => {
-        const durCs = Math.round((w.endMs - w.startMs) / 10);
-        return `{\\kf${durCs}}${w.text}`;
-      }).join(" ");
-    } else {
-      text = chunk.map(w => w.text).join(" ");
+  if (SINGLE_WORD_STYLES.has(style)) {
+    // ── Mode 1: One word at a time ──
+    for (const w of words) {
+      let text = w.text;
       if (styleDef.uppercase) text = text.toUpperCase();
+      lines.push(`Dialogue: 0,${msToAssTime(w.startMs)},${msToAssTime(w.endMs)},Default,,0,0,0,,${text}`);
     }
+  } else if (SUBTITLE_STYLES.has(style)) {
+    // ── Mode 3: 5-word subtitle chunks (documentary) ──
+    const WORDS_PER_LINE = 5;
+    for (let i = 0; i < words.length; i += WORDS_PER_LINE) {
+      const chunk = words.slice(i, i + WORDS_PER_LINE);
+      const startTime = msToAssTime(chunk[0].startMs);
+      const endTime = msToAssTime(chunk[chunk.length - 1].endMs);
+      let text = chunk.map(w => w.text).join(" ");
+      if (styleDef.uppercase) text = text.toUpperCase();
+      lines.push(`Dialogue: 0,${startTime},${endTime},Default,,0,0,0,,${text}`);
+    }
+  } else {
+    // ── Mode 2: 3-word karaoke groups (active word highlights) ──
+    const WORDS_PER_GROUP = 3;
+    for (let i = 0; i < words.length; i += WORDS_PER_GROUP) {
+      const chunk = words.slice(i, i + WORDS_PER_GROUP);
+      const startTime = msToAssTime(chunk[0].startMs);
+      const endTime = msToAssTime(chunk[chunk.length - 1].endMs);
 
-    lines.push(`Dialogue: 0,${startTime},${endTime},Default,,0,0,0,,${text}`);
+      // Each word gets a \kf duration tag — the secondary color sweeps across
+      const text = chunk.map(w => {
+        const durCs = Math.round((w.endMs - w.startMs) / 10);
+        let word = w.text;
+        if (styleDef.uppercase) word = word.toUpperCase();
+        return `{\\kf${durCs}}${word}`;
+      }).join(" ");
+
+      lines.push(`Dialogue: 0,${startTime},${endTime},Default,,0,0,0,,${text}`);
+    }
   }
 
   return lines;

@@ -1,21 +1,20 @@
 import { createScopedLogger } from "@/lib/logger";
 import { useState, useRef, forwardRef, useImperativeHandle, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Play, AlertCircle, RotateCcw, ChevronDown, Users, Film, Loader2, Lightbulb, MessageSquareOff, RefreshCw } from "lucide-react";
+import { Play, AlertCircle, RotateCcw, ChevronDown, Users, Film, Loader2, MessageSquareOff, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { WorkspaceLayout } from "@/components/layout/WorkspaceLayout";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ContentInput } from "./ContentInput";
+import { CinematicSourceInput, type SourceAttachment } from "./CinematicSourceInput";
 import { FormatSelector, type VideoFormat } from "./FormatSelector";
 import { LengthSelector, type VideoLength } from "./LengthSelector";
 import { StyleSelector, type VisualStyle } from "./StyleSelector";
 import { SpeakerSelector, type SpeakerVoice, getDefaultSpeaker } from "./SpeakerSelector";
 import { LanguageSelector, type Language } from "./LanguageSelector";
 import { CaptionStyleSelector, type CaptionStyle } from "./CaptionStyleSelector";
-import { PresenterFocusInput } from "./PresenterFocusInput";
 import { CharacterDescriptionInput } from "./CharacterDescriptionInput";
 import { CharacterConsistencyToggle } from "./CharacterConsistencyToggle";
 import { CinematicResult } from "./CinematicResult";
@@ -54,14 +53,13 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
     const [speaker, setSpeaker] = useState<SpeakerVoice>("Nova");
     const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("none");
     const [language, setLanguage] = useState<Language>("en");
-    const [presenterFocus, setPresenterFocus] = useState("");
     const [characterDescription, setCharacterDescription] = useState("");
-    const [presenterFocusOpen, setPresenterFocusOpen] = useState(false);
     const [characterDescOpen, setCharacterDescOpen] = useState(false);
     const [brandMarkEnabled, setBrandMarkEnabled] = useState(false);
     const [brandMarkText, setBrandMarkText] = useState("");
     const [disableExpressions, setDisableExpressions] = useState(false);
     const [characterConsistencyEnabled, setCharacterConsistencyEnabled] = useState(false);
+    const [sourceAttachments, setSourceAttachments] = useState<SourceAttachment[]>([]);
 
     // Use shared pipeline instead of manual state management
     const { state: generationState, startGeneration, reset, loadProject } = useGenerationPipeline();
@@ -89,7 +87,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
     // Auto-save draft to localStorage
     const { loadDraft } = useWorkspaceDraft(
       "cinematic",
-      { content, format, length, style, presenterFocus, characterDescription },
+      { content, format, length, style, characterDescription },
       generationState.step === "idle"
     );
 
@@ -207,15 +205,30 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
         return;
       }
 
+      // Build enriched content: direction text + all attached source data
+      let enrichedContent = content;
+      if (sourceAttachments.length > 0) {
+        const sections: string[] = [];
+        for (const a of sourceAttachments) {
+          if (a.type === "text") sections.push(`[Attached Text]\n${a.value}`);
+          else if (a.type === "youtube") sections.push(`[YouTube] ${a.value}`);
+          else if (a.type === "github") sections.push(`[GitHub] ${a.value}`);
+          else if (a.type === "gdrive") sections.push(`[Google Drive] ${a.value}`);
+          else if (a.type === "link") sections.push(`[Source URL] ${a.value}`);
+          else if (a.type === "image") sections.push(`[Attached Image] ${a.name}`);
+          else sections.push(`[Attached File] ${a.name}`);
+        }
+        enrichedContent += `\n\n--- ATTACHED SOURCES ---\n${sections.join("\n\n")}`;
+      }
+
       startGeneration({
-        content,
+        content: enrichedContent,
         format,
         length,
         style,
         customStyle: style === "custom" ? customStyle : undefined,
         customStyleImage: style === "custom" ? customStyleImage : undefined,
         brandMark: brandMarkEnabled && brandMarkText.trim() ? brandMarkText.trim() : undefined,
-        presenterFocus: presenterFocus.trim() ? presenterFocus.trim().slice(0, 500000) : undefined,
         characterDescription: characterDescription.trim() || undefined,
         disableExpressions: false,
         characterConsistencyEnabled: true,
@@ -231,6 +244,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
     const handleNewProject = () => {
       reset();
       setContent("");
+      setSourceAttachments([]);
       setFormat("portrait");
       setLength("short");
       setStyle("realistic");
@@ -239,9 +253,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
       setSpeaker("Nova");
       setCaptionStyle("none");
       setLanguage("en");
-      setPresenterFocus("");
       setCharacterDescription("");
-      setPresenterFocusOpen(false);
       setCharacterDescOpen(false);
       setBrandMarkEnabled(false);
       setBrandMarkText("");
@@ -272,7 +284,6 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
       setStyle(savedStyle);
 
       if (project.character_description) setCharacterDescription(project.character_description);
-      if (project.presenter_focus) setPresenterFocus(project.presenter_focus);
       if (project.voice_name) {
         setSpeaker(project.voice_name as SpeakerVoice);
       }
@@ -342,9 +353,14 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                     </p>
                   </div>
 
-                  {/* Content Input */}
+                  {/* Sources & Direction */}
                   <div className="space-y-2">
-                    <ContentInput content={content} onContentChange={setContent} />
+                    <CinematicSourceInput
+                      content={content}
+                      onContentChange={setContent}
+                      attachments={sourceAttachments}
+                      onAttachmentsChange={setSourceAttachments}
+                    />
                     <TemplateSelector mode="cinematic" onSelectTemplate={setContent} />
                   </div>
 
@@ -362,22 +378,6 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                       <CollapsibleContent>
                         <div className="rounded-b-xl border border-t-0 border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm -mt-2">
                           <CharacterDescriptionInput value={characterDescription} onChange={setCharacterDescription} />
-                        </div>
-                      </CollapsibleContent>
-                    </Collapsible>
-
-                    {/* Presenter Focus - Collapsible */}
-                    <Collapsible open={presenterFocusOpen} onOpenChange={setPresenterFocusOpen}>
-                      <CollapsibleTrigger className="flex w-full items-center justify-between rounded-xl border border-border/50 bg-card/50 p-3 sm:p-4 backdrop-blur-sm shadow-sm hover:bg-muted/30 transition-colors">
-                        <span className="text-xs sm:text-sm font-medium flex items-center gap-2">
-                          <Lightbulb className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                          Presenter Focus
-                        </span>
-                        <ChevronDown className={`h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-200 ${presenterFocusOpen ? "rotate-180" : ""}`} />
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <div className="rounded-b-xl border border-t-0 border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm -mt-2">
-                          <PresenterFocusInput value={presenterFocus} onChange={setPresenterFocus} />
                         </div>
                       </CollapsibleContent>
                     </Collapsible>

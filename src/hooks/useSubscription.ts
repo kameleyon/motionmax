@@ -140,11 +140,10 @@ async function fetchSubscription(accessToken: string | undefined): Promise<Subsc
     return fetchSubscriptionFromDB();
   }
 
-  // Handle token expiration
+  // Handle token expiration specifically
   const errObj = error as { message?: string } | null;
   const isTokenExpired =
     errObj?.message?.includes("401") ||
-    errObj?.message?.toLowerCase?.().includes("non-2xx") ||
     data?.code === "TOKEN_EXPIRED" ||
     (data?.error as string)?.includes?.("Token expired");
 
@@ -159,15 +158,24 @@ async function fetchSubscription(accessToken: string | undefined): Promise<Subsc
         headers: { Authorization: `Bearer ${refreshData.session.access_token}` },
       });
       if (isEdgeFunctionNetworkError(retryError)) return fetchSubscriptionFromDB();
-      if (retryError) throw retryError;
+      if (retryError) {
+        // Retry also failed — fall back to DB instead of throwing
+        log.warn("Subscription check retry failed, falling back to DB", retryError);
+        return fetchSubscriptionFromDB();
+      }
       return parseResponse(retryData);
     } catch (retryThrown) {
-      if (isEdgeFunctionNetworkError(retryThrown)) return fetchSubscriptionFromDB();
-      throw retryThrown;
+      log.warn("Subscription check retry threw, falling back to DB", retryThrown);
+      return fetchSubscriptionFromDB();
     }
   }
 
-  if (error) throw error as Error;
+  // Any other edge function error (non-2xx that isn't token-related) → fall back to DB
+  if (error) {
+    log.warn("Edge function returned error, falling back to DB", error);
+    return fetchSubscriptionFromDB();
+  }
+
   return parseResponse(data!);
 }
 

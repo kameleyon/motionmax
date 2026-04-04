@@ -60,6 +60,8 @@ export function AdminLogs() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [textSearch, setTextSearch] = useState("");
+  const [timeRange, setTimeRange] = useState<string>("live");
   const [isPaused, setIsPaused] = useState(false);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -185,7 +187,22 @@ export function AdminLogs() {
     return JSON.stringify(details, null, 2);
   };
 
-  const filteredLogs = categoryFilter === "all" ? logs : logs.filter((log) => log.category === categoryFilter);
+  const filteredLogs = logs.filter((log) => {
+    if (categoryFilter !== "all" && log.category !== categoryFilter) return false;
+    if (textSearch) {
+      const q = textSearch.toLowerCase();
+      if (!(log.message?.toLowerCase().includes(q) || log.event_type?.toLowerCase().includes(q) || log.userId?.toLowerCase().includes(q) || log.generationId?.toLowerCase().includes(q))) return false;
+    }
+    // Time range filter
+    if (timeRange !== "live" && log.created_at) {
+      const logTime = new Date(log.created_at).getTime();
+      const now = Date.now();
+      const ranges: Record<string, number> = { "1h": 3600000, "6h": 21600000, "24h": 86400000, "7d": 604800000 };
+      const maxAge = ranges[timeRange];
+      if (maxAge && now - logTime > maxAge) return false;
+    }
+    return true;
+  });
 
   const getCategoryCount = (category: string) => {
     return logs.filter((log) => log.category === category).length;
@@ -226,6 +243,25 @@ export function AdminLogs() {
         </div>
 
         <div className="flex items-center gap-2">
+          <input
+            type="text"
+            placeholder="Search logs..."
+            value={textSearch}
+            onChange={(e) => setTextSearch(e.target.value)}
+            className="h-8 w-36 rounded-md border border-input bg-background px-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+          <Select value={timeRange} onValueChange={setTimeRange}>
+            <SelectTrigger className="w-[100px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="live">Live</SelectItem>
+              <SelectItem value="1h">Last 1h</SelectItem>
+              <SelectItem value="6h">Last 6h</SelectItem>
+              <SelectItem value="24h">Last 24h</SelectItem>
+              <SelectItem value="7d">Last 7d</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
             <SelectTrigger className="w-[140px]">
               <SelectValue placeholder="All" />
@@ -278,6 +314,9 @@ export function AdminLogs() {
       {/* Terminal Log Viewer */}
       <div
         ref={terminalRef}
+        role="log"
+        aria-live="polite"
+        aria-label="System logs"
         className="bg-black border border-primary/30 rounded-lg overflow-hidden shadow-sm"
         style={{ fontFamily: "'IBM Plex Mono', monospace" }}
       >
@@ -309,8 +348,13 @@ export function AdminLogs() {
             filteredLogs.map((log) => (
               <div
                 key={log.id}
-                className="group hover:bg-white/10 rounded-md px-3 py-2 cursor-pointer transition-colors border-l-2 border-transparent hover:border-primary/50"
+                tabIndex={0}
+                role="button"
+                aria-expanded={expandedLog === log.id}
+                aria-label={`${log.category} log: ${log.message?.substring(0, 80)}`}
+                className="group hover:bg-white/10 rounded-md px-3 py-2 cursor-pointer transition-colors border-l-2 border-transparent hover:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/50"
                 onClick={() => setExpandedLog(expandedLog === log.id ? null : log.id)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpandedLog(expandedLog === log.id ? null : log.id); } }}
               >
                 {/* Main Log Line - BIGGER TEXT */}
                 <div className="flex items-start gap-3 text-base leading-relaxed">

@@ -360,10 +360,19 @@ export function AdminPerformanceMetrics() {
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {performanceByTypeData.map((item) => (
-              <div key={item.type} className="text-center p-4 rounded-lg bg-card border border-primary/20">
-                <div className="text-xs text-muted-foreground mb-1">{item.type}</div>
-                <div className="text-3xl font-bold text-primary">{item.successRate.toFixed(1)}%</div>
-                <div className="text-xs text-muted-foreground mt-1">
+              <div key={item.type} className="p-4 rounded-lg bg-card border border-border/50">
+                <div className="text-xs text-muted-foreground mb-2">{item.type}</div>
+                <div className={`text-2xl font-semibold ${item.successRate >= 90 ? "text-primary" : item.successRate >= 70 ? "text-warning" : "text-destructive"}`}>
+                  {item.successRate.toFixed(1)}%
+                </div>
+                {/* Visual bar */}
+                <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${item.successRate >= 90 ? "bg-primary" : item.successRate >= 70 ? "bg-warning" : "bg-destructive"}`}
+                    style={{ width: `${Math.min(item.successRate, 100)}%` }}
+                  />
+                </div>
+                <div className="text-xs text-muted-foreground mt-1.5">
                   {formatDuration(item.avgTime)} avg
                 </div>
               </div>

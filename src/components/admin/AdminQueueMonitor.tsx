@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import {
@@ -346,7 +347,7 @@ export function AdminQueueMonitor() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium truncate">
-                        {job.phase || "Initializing"}
+                        {job.task_type?.replace(/_/g, " ") || job.phase || "Initializing"}
                       </span>
                       {job.status === "processing" && (
                         <span className="text-xs text-muted-foreground">
@@ -354,20 +355,37 @@ export function AdminQueueMonitor() {
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      Job ID: {job.id.slice(0, 8)}...
+                    <div className="text-xs text-muted-foreground flex items-center gap-2">
+                      <span>ID: {job.id.slice(0, 8)}</span>
+                      {job.user_id && <span>User: {job.user_id.slice(0, 8)}</span>}
+                      {job.project_id && <span>Project: {job.project_id.slice(0, 8)}</span>}
                     </div>
                   </div>
 
-                  <div className="text-xs text-muted-foreground text-right">
-                    <div>
-                      Created {formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}
-                    </div>
-                    {job.started_at && (
-                      <div className="text-primary">
-                        Started {formatDistanceToNow(new Date(job.started_at), { addSuffix: true })}
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs text-muted-foreground text-right">
+                      <div>
+                        Created {formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}
                       </div>
-                    )}
+                      {job.started_at && (
+                        <div className="text-primary">
+                          Started {formatDistanceToNow(new Date(job.started_at), { addSuffix: true })}
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10"
+                      onClick={async () => {
+                        await supabase.from("video_generation_jobs").update({ status: "failed", error_message: "Cancelled by admin" }).eq("id", job.id);
+                        // Refresh after cancel
+                        window.location.reload();
+                      }}
+                      aria-label="Cancel job"
+                    >
+                      Cancel
+                    </Button>
                   </div>
                 </div>
               ))}

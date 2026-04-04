@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/button";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, DollarSign, TrendingUp, CreditCard, RefreshCw } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import { subDays, format } from "date-fns";
 import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 
 interface RevenueStats {
   totalRevenue: number;
@@ -100,16 +102,18 @@ export function AdminRevenue() {
           <p className="text-muted-foreground">Track earnings and subscription performance</p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/30">
           {periodOptions.map((option) => (
-            <Button
+            <button
               key={option.value}
-              variant={period === option.value ? "default" : "outline"}
-              size="sm"
               onClick={() => setPeriod(option.value)}
+              className={cn(
+                "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                period === option.value ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              )}
             >
               {option.label}
-            </Button>
+            </button>
           ))}
         </div>
       </div>
@@ -139,8 +143,8 @@ export function AdminRevenue() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${data?.mrr?.toFixed(2) || "0.00"}</div>
-            <p className="text-xs text-muted-foreground">MRR</p>
+            <div className="text-2xl font-semibold">${data?.mrr?.toFixed(2) || "0.00"}</div>
+            <p className="text-xs text-muted-foreground" title="Estimated from active subscriptions in database. Connect Stripe API for exact MRR.">Est. MRR *</p>
           </CardContent>
         </Card>
 
@@ -233,6 +237,53 @@ export function AdminRevenue() {
           )}
         </CardContent>
       </Card>
+
+      {/* Revenue by Plan */}
+      <PlanBreakdown />
     </div>
+  );
+}
+
+/** Subscription count breakdown by plan tier */
+function PlanBreakdown() {
+  const { data: plans } = useQuery({
+    queryKey: ["admin-plan-breakdown"],
+    queryFn: async () => {
+      const { data } = await supabase.from("subscriptions").select("plan_name, status").eq("status", "active");
+      if (!data) return [];
+      const counts: Record<string, number> = {};
+      for (const sub of data) {
+        const plan = sub.plan_name || "free";
+        counts[plan] = (counts[plan] || 0) + 1;
+      }
+      return Object.entries(counts).map(([plan, count]) => ({ plan, count })).sort((a, b) => b.count - a.count);
+    },
+    staleTime: 120000,
+  });
+
+  if (!plans || plans.length === 0) return null;
+
+  return (
+    <Card className="shadow-sm">
+      <CardHeader>
+        <CardTitle className="type-h4">Active Subscriptions by Plan</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[200px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={plans} layout="vertical" margin={{ left: 80 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} horizontal={false} />
+              <XAxis type="number" fontSize={11} stroke="hsl(var(--muted-foreground))" />
+              <YAxis type="category" dataKey="plan" fontSize={12} stroke="hsl(var(--muted-foreground))" className="capitalize" />
+              <Tooltip
+                formatter={(value: number) => [value, "Subscribers"]}
+                contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }}
+              />
+              <Bar dataKey="count" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

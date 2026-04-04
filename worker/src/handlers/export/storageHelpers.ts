@@ -193,23 +193,36 @@ async function tusResumableUpload(
       const buffer = Buffer.alloc(chunkLen);
       await fd.read(buffer, 0, chunkLen, offset);
 
-      const patchRes = await fetch(uploadLocation, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${supabaseKey}`,
-          apikey: supabaseKey,
-          "Tus-Resumable": "1.0.0",
-          "Upload-Offset": String(offset),
-          "Content-Type": "application/offset+octet-stream",
-          "Content-Length": String(chunkLen),
-        },
-        body: buffer,
-      });
+      // Retry TUS PATCH up to 3 times on transient errors (500, 502, 503)
+      let patchOk = false;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const patchRes = await fetch(uploadLocation, {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${supabaseKey}`,
+            apikey: supabaseKey,
+            "Tus-Resumable": "1.0.0",
+            "Upload-Offset": String(offset),
+            "Content-Type": "application/offset+octet-stream",
+            "Content-Length": String(chunkLen),
+          },
+          body: buffer,
+        });
 
-      if (!patchRes.ok) {
+        if (patchRes.ok) {
+          patchOk = true;
+          break;
+        }
+
         const err = await patchRes.text();
+        if (patchRes.status >= 500 && attempt < 3) {
+          console.warn(`[StorageUpload] TUS PATCH transient error at offset ${offset} (${patchRes.status}), retry ${attempt}/3...`);
+          await new Promise(r => setTimeout(r, 2000 * attempt));
+          continue;
+        }
         throw new Error(`TUS PATCH failed at offset ${offset} (${patchRes.status}): ${err}`);
       }
+      if (!patchOk) throw new Error(`TUS PATCH failed at offset ${offset} after 3 retries`);
 
       offset += chunkLen;
       const pct = Math.round((offset / fileSize) * 100);

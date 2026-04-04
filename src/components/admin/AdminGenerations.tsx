@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { Loader2, Activity, CheckCircle, XCircle, Trash2, Clock, RefreshCw } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
@@ -128,16 +129,18 @@ export function AdminGenerations() {
           <p className="text-muted-foreground">Monitor video generation activity and performance</p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/30">
           {periodOptions.map((option) => (
-            <Button
+            <button
               key={option.value}
-              variant={period === option.value ? "default" : "outline"}
-              size="sm"
               onClick={() => setPeriod(option.value)}
+              className={cn(
+                "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                period === option.value ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              )}
             >
               {option.label}
-            </Button>
+            </button>
           ))}
         </div>
       </div>

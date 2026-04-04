@@ -51,6 +51,11 @@ export function AdminFlags() {
   const [includeResolved, setIncludeResolved] = useState(false);
   const [resolutionNotes, setResolutionNotes] = useState("");
   const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newFlagUserId, setNewFlagUserId] = useState("");
+  const [newFlagType, setNewFlagType] = useState("warning");
+  const [newFlagReason, setNewFlagReason] = useState("");
+  const [creating, setCreating] = useState(false);
 
   const fetchFlags = useCallback(async () => {
     try {
@@ -95,6 +100,31 @@ export function AdminFlags() {
     );
   };
 
+  const handleCreateFlag = async () => {
+    if (!newFlagUserId.trim() || !newFlagReason.trim()) {
+      toast.error("User ID/email and reason are required");
+      return;
+    }
+    setCreating(true);
+    try {
+      await callAdminApi("create_flag", {
+        userId: newFlagUserId.trim(),
+        flagType: newFlagType,
+        reason: newFlagReason.trim(),
+        details: "Created from Flags tab",
+      });
+      toast.success("Flag created");
+      setCreateOpen(false);
+      setNewFlagUserId("");
+      setNewFlagReason("");
+      fetchFlags();
+    } catch (err) {
+      toast.error("Failed to create flag");
+    } finally {
+      setCreating(false);
+    }
+  };
+
   if (loading && !data) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -137,6 +167,40 @@ export function AdminFlags() {
             />
             <Label htmlFor="include-resolved">Show resolved</Label>
           </div>
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-1.5"><Flag className="h-3.5 w-3.5" /> Create Flag</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Create User Flag</DialogTitle></DialogHeader>
+              <div className="space-y-3 py-2">
+                <div>
+                  <Label className="text-xs">User ID or Email</Label>
+                  <input value={newFlagUserId} onChange={(e) => setNewFlagUserId(e.target.value)} placeholder="user-uuid or email@example.com" className="mt-1 w-full h-9 rounded-md border border-input bg-background px-3 text-sm" />
+                </div>
+                <div>
+                  <Label className="text-xs">Flag Type</Label>
+                  <select value={newFlagType} onChange={(e) => setNewFlagType(e.target.value)} className="mt-1 w-full h-9 rounded-md border border-input bg-background px-3 text-sm">
+                    <option value="warning">Warning</option>
+                    <option value="flagged">Flagged</option>
+                    <option value="suspended">Suspended</option>
+                    <option value="banned">Banned</option>
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-xs">Reason</Label>
+                  <Textarea value={newFlagReason} onChange={(e) => setNewFlagReason(e.target.value)} placeholder="Reason for this flag..." rows={3} className="mt-1" />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+                <Button onClick={handleCreateFlag} disabled={creating}>
+                  {creating && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+                  Create Flag
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           <Button onClick={fetchFlags} variant="outline" size="sm">
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh

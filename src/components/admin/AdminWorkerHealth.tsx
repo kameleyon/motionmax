@@ -4,8 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Loader2, Server, Cpu, HardDrive, Clock, CheckCircle, AlertTriangle, XCircle } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, subHours, format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 
 interface WorkerHealth {
   status: "healthy" | "warning" | "error" | "offline";
@@ -380,6 +382,61 @@ export function AdminWorkerHealth() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Job Throughput Chart (24h) */}
+      <ThroughputChart />
     </div>
+  );
+}
+
+function ThroughputChart() {
+  const { data: chartData } = useQuery({
+    queryKey: ["worker-throughput-24h"],
+    queryFn: async () => {
+      const since = subHours(new Date(), 24).toISOString();
+      const { data } = await supabase
+        .from("video_generation_jobs")
+        .select("created_at, status")
+        .gte("created_at", since)
+        .in("status", ["completed", "failed"])
+        .order("created_at", { ascending: true });
+
+      if (!data) return [];
+
+      // Group by hour
+      const hourly: Record<string, { hour: string; completed: number; failed: number }> = {};
+      for (const job of data) {
+        const h = format(new Date(job.created_at), "HH:00");
+        if (!hourly[h]) hourly[h] = { hour: h, completed: 0, failed: 0 };
+        if (job.status === "completed") hourly[h].completed++;
+        else hourly[h].failed++;
+      }
+      return Object.values(hourly);
+    },
+    staleTime: 60000,
+  });
+
+  if (!chartData || chartData.length === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="type-h4">Job Throughput (24h)</CardTitle>
+        <CardDescription>Completed vs failed jobs by hour</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[200px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={chartData}>
+              <XAxis dataKey="hour" fontSize={10} stroke="hsl(var(--muted-foreground))" />
+              <YAxis fontSize={10} stroke="hsl(var(--muted-foreground))" width={30} />
+              <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
+              <Area type="monotone" dataKey="completed" stackId="1" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.3} />
+              <Area type="monotone" dataKey="failed" stackId="1" stroke="hsl(var(--destructive))" fill="hsl(var(--destructive))" fillOpacity={0.3} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

@@ -198,8 +198,18 @@ export function AdminSubscribers() {
         </CardHeader>
         <CardContent className="p-0 sm:p-6">
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <div className="p-4 space-y-3">
+              {[1,2,3,4,5,6,7,8].map(i => (
+                <div key={i} className="flex items-center gap-3 py-2">
+                  <div className="h-6 w-6 rounded-full bg-muted animate-pulse shrink-0" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-3 w-32 rounded bg-muted animate-pulse" />
+                    <div className="h-2.5 w-48 rounded bg-muted animate-pulse" />
+                  </div>
+                  <div className="h-5 w-14 rounded-full bg-muted animate-pulse" />
+                  <div className="h-3 w-10 rounded bg-muted animate-pulse" />
+                </div>
+              ))}
             </div>
           ) : error ? (
             <div className="text-center py-12">
@@ -209,7 +219,7 @@ export function AdminSubscribers() {
             <>
               {/* Desktop Table */}
               <div className="hidden lg:block">
-                <Table>
+                <Table><caption className="sr-only">Subscriber list</caption>
                   <TableHeader>
                     <TableRow className="text-xs">
                       <TableHead className="py-2 px-2">User</TableHead>

@@ -182,8 +182,8 @@ export async function handleCinematicVideo(
     // Scenes WITH transition to next scene
     sceneInstruction =
       `\n\nTRANSITION RULES (CRITICAL):` +
-      `\n- For the first 7-8 seconds: focus ENTIRELY on the current scene's action matching the voiceover.` +
-      `\n- ONLY in the LAST 2-3 seconds: begin a NATURAL transition to the next scene.` +
+      `\n- For the first 9 seconds: focus ENTIRELY on the current scene's action matching the voiceover.` +
+      `\n- ONLY in the LAST 1 second: begin a NATURAL transition to the next scene.` +
       `\n- The transition MUST be a natural camera movement (pan away, fade to new setting, walk through doorway, turn a corner).` +
       `\n- NEVER morph a person's body into another person or object. NO body contortions, NO limbs stretching, NO faces melting into other faces.` +
       `\n- NEVER make characters fly, levitate, or defy physics unless the story explicitly calls for it.` +
@@ -197,7 +197,7 @@ export async function handleCinematicVideo(
       `\n- Generate FORWARD-MOVING action that reaches a natural conclusion by the end of the 10 seconds.` +
       `\n- Do NOT create a looping animation. Do NOT have the camera or subject return to its starting position.` +
       `\n- End with a DECISIVE moment: character walks away into distance, camera pulls back to wide shot, fade to a closing frame.` +
-      `\n- The motion should SLOW DOWN naturally in the last 2 seconds, coming to a satisfying visual rest.`;
+      `\n- The motion should SLOW DOWN naturally in the last 1 second, coming to a satisfying visual rest.`;
   }
   const finalPrompt = videoPrompt + sceneInstruction;
 
@@ -219,7 +219,7 @@ export async function handleCinematicVideo(
       apiKey,
       10,           // duration: 10s
       endImageUrl,  // last_image: next scene's image for seamless transition
-      "blurry, low quality, watermark, text, UI elements, slow motion, sluggish",
+      "blurry, low quality, watermark, text, UI elements, slow motion, sluggish, nudity, naked, exposed body, extra limbs, body contortion, distorted anatomy",
       0.8,          // guidance_scale: 0.8
     );
   } catch (v25Error) {
@@ -235,7 +235,7 @@ export async function handleCinematicVideo(
       apiKey,
       10,           // duration: 10s
       endImageUrl,  // end_image: next scene's image (V2.6 uses `end_image`)
-      "blurry, low quality, watermark, text, UI elements, slow motion, sluggish",
+      "blurry, low quality, watermark, text, UI elements, slow motion, sluggish, nudity, naked, exposed body, extra limbs, body contortion, distorted anatomy",
       0.8,          // cfg_scale: 0.8
     );
   }
@@ -331,7 +331,9 @@ function buildVideoPrompt(
   parts.push(
     `RULES: No talking, no lip movement, no addressing camera. ` +
     `Expressive faces that match the scene mood — curious, amused, hopeful, surprised, determined. ` +
-    `Same character appearance throughout.`
+    `Same character appearance throughout. ` +
+    `NO nudity, NO exposed body parts, NO weird body transformations or contortions. ` +
+    `All characters fully clothed with correct anatomy — no extra limbs, no distorted proportions.`
   );
 
   let prompt = parts.join("\n\n");

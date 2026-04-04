@@ -112,6 +112,15 @@ You are writing prompts for a generative video AI that CANNOT do lip-sync.
    - Combine character action with environment action: "She runs through the rain-soaked alley as neon signs flicker and steam rises from grates."
    - All motion at FAST, ENERGETIC, REAL-TIME speed — NEVER slow motion, NEVER sluggish, NEVER lethargic. Every movement should feel ALIVE and URGENT.
 
+=== BODY & CONTENT SAFETY (STRICT — ZERO TOLERANCE) ===
+⛔ BANNED CONTENT — NEVER include in any visualPrompt:
+- NO nudity, NO exposed buttocks, NO exposed breasts, NO naked body parts
+- NO sexually suggestive poses or clothing (no lingerie, no bikinis unless explicitly beach context)
+- NO weird body transformations, NO body contortions, NO limbs bending unnaturally
+- NO faces melting, NO bodies morphing into other bodies or objects
+- Characters must always have anatomically correct proportions — no extra limbs, no stretched necks, no distorted faces
+- All characters must be FULLY CLOTHED in context-appropriate attire at all times
+
 === CAMERA MOVEMENT VOCABULARY (MANDATORY — use varied moves across scenes) ===
 ⛔ BANNED: Zoom in, zoom out, dolly zoom, Vertigo effect — do NOT use any zoom.
 

@@ -5,7 +5,7 @@
 
 const PROJECT_REF = "ayjbvcikuwknqdrpsdmj";
 const SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF5amJ2Y2lrdXdrbnFkcnBzZG1qIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzEwMTQyMywiZXhwIjoyMDg4Njc3NDIzfQ.GrVfcz55PBPdxuWOimXFCjXrV-TrgsNcr0aJZ25xIcQ";
-const MGMT_TOKEN = "sbp_ebe4d4d2a85f31024d09a5bee0ef4076b18a6c45";
+const MGMT_TOKEN = process.env.SUPABASE_MANAGEMENT_TOKEN;
 const API = `https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`;
 const REST = `https://${PROJECT_REF}.supabase.co/rest/v1`;
 

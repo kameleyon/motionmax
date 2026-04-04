@@ -5,7 +5,7 @@
  */
 
 const TARGET_REF = "ayjbvcikuwknqdrpsdmj";
-const ACCESS_TOKEN = "sbp_ebe4d4d2a85f31024d09a5bee0ef4076b18a6c45";
+const ACCESS_TOKEN = process.env.SUPABASE_MANAGEMENT_TOKEN;
 const DB_API = `https://api.supabase.com/v1/projects/${TARGET_REF}/database/query`;
 
 const BASE = `https://${TARGET_REF}.supabase.co/storage/v1/object/public/audio`;

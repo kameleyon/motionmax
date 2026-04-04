@@ -13,7 +13,7 @@ const SOURCE_URL = "https://hesnceozbedzrgvylqrm.supabase.co";
 const TARGET_URL = "https://ayjbvcikuwknqdrpsdmj.supabase.co";
 const TARGET_SVC = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF5amJ2Y2lrdXdrbnFkcnBzZG1qIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzEwMTQyMywiZXhwIjoyMDg4Njc3NDIzfQ.GrVfcz55PBPdxuWOimXFCjXrV-TrgsNcr0aJZ25xIcQ";
 const TARGET_REF = "ayjbvcikuwknqdrpsdmj";
-const ACCESS_TOKEN = "sbp_ebe4d4d2a85f31024d09a5bee0ef4076b18a6c45";
+const ACCESS_TOKEN = process.env.SUPABASE_MANAGEMENT_TOKEN;
 
 const tgt = createClient(TARGET_URL, TARGET_SVC);
 

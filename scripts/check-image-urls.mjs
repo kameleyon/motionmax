@@ -1,4 +1,4 @@
-const TOKEN = "sbp_ebe4d4d2a85f31024d09a5bee0ef4076b18a6c45";
+const TOKEN = process.env.SUPABASE_MANAGEMENT_TOKEN;
 const URL = "https://api.supabase.com/v1/projects/ayjbvcikuwknqdrpsdmj/database/query";
 
 async function q(query) {

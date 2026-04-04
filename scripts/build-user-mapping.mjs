@@ -22,7 +22,7 @@ import { join } from "path";
 
 // Source (OLD) DB
 const OLD_URL  = "https://hesnceozbedzrgvylqrm.supabase.co";
-const OLD_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhlc25jZW96YmVkenJndnlscXJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgxNTUyOTIsImV4cCI6MjA4MzczMTI5Mn0.YU881FNTJeR_FAbOV3bTGBmUvYbbQfAX5KaHI6uq--U";
+const OLD_ANON = process.env.OLD_SUPABASE_ANON_KEY || "";
 
 // Target (NEW) DB
 const NEW_URL  = "https://ayjbvcikuwknqdrpsdmj.supabase.co";

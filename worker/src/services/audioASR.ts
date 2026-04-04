@@ -10,9 +10,8 @@
  *   NO "model" field — the endpoint routes based on the presence of "audio" vs "input".
  */
 
-// Docs curl shows /api/v1/, other working services use /v1/ — try /api/v1/ first
-const HYPEREAL_ASR_URL = "https://api.hypereal.cloud/api/v1/audio/generate";
-const HYPEREAL_ASR_URL_ALT = "https://api.hypereal.cloud/v1/audio/generate";
+// /api/v1/ returns 404; /v1/ is the working base (matches image/video services)
+const HYPEREAL_ASR_URL = "https://api.hypereal.cloud/v1/audio/generate";
 
 interface ASRWord {
   word: string;
@@ -69,7 +68,7 @@ export async function transcribeAudio(
 
     const jsonBody = JSON.stringify(payload);
     // Log full payload for first scene only (debug)
-    console.log(`[ASR] Request URL: ${HYPEREAL_ASR_URL_ALT}`);
+    console.log(`[ASR] Request URL: ${HYPEREAL_ASR_URL}`);
     console.log(`[ASR] Payload (${jsonBody.length} chars): ${jsonBody.substring(0, 500)}`);
 
     const headers = {
@@ -77,7 +76,7 @@ export async function transcribeAudio(
       "Content-Type": "application/json",
     };
 
-    let res = await fetch(HYPEREAL_ASR_URL_ALT, {
+    let res = await fetch(HYPEREAL_ASR_URL, {
       method: "POST",
       headers,
       body: jsonBody,
@@ -94,7 +93,7 @@ export async function transcribeAudio(
     if (publicUrl !== accessibleUrl) {
       console.log(`[ASR] Retrying with public URL: ${publicUrl.substring(0, 80)}`);
       const publicPayload = { ...payload, audio: publicUrl };
-      res = await fetch(HYPEREAL_ASR_URL_ALT, {
+      res = await fetch(HYPEREAL_ASR_URL, {
         method: "POST",
         headers,
         body: JSON.stringify(publicPayload),

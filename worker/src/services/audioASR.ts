@@ -155,33 +155,57 @@ function parseASRResponse(data: any): ASRResult | null {
 }
 
 async function pollASRJob(jobId: string, apiKey: string): Promise<ASRResult | null> {
-  const maxAttempts = 20;
+  const maxAttempts = 15;
   const pollMs = 2000;
+
+  console.log(`[ASR] Polling job ${jobId}...`);
 
   for (let i = 0; i < maxAttempts; i++) {
     await new Promise(r => setTimeout(r, pollMs));
 
     try {
-      const res = await fetch(`https://api.hypereal.cloud/v1/jobs/${jobId}?model=audio-asr&type=audio`, {
-        headers: { "Authorization": `Bearer ${apiKey}` },
-      });
+      // Try multiple poll URL patterns
+      const pollUrls = [
+        `https://api.hypereal.cloud/v1/jobs/${jobId}`,
+        `https://api.hypereal.cloud/v1/jobs/${jobId}?model=audio-asr&type=audio`,
+      ];
 
-      if (!res.ok) continue;
-      const data = await res.json() as any;
+      let data: any = null;
+      for (const url of pollUrls) {
+        const res = await fetch(url, {
+          headers: { "Authorization": `Bearer ${apiKey}` },
+        });
+
+        if (res.ok) {
+          data = await res.json();
+          break;
+        }
+
+        // Log first poll failure for debugging
+        if (i === 0) {
+          const errText = await res.text();
+          console.log(`[ASR] Poll ${url.substring(40)} → ${res.status}: ${errText.substring(0, 100)}`);
+        }
+      }
+
+      if (!data) continue;
 
       if (data.status === "succeeded" || data.status === "completed") {
-        return parseASRResponse(data);
+        console.log(`[ASR] Job ${jobId} completed on attempt ${i + 1}`);
+        return parseASRResponse(data.output || data.result || data);
       }
       if (data.status === "failed" || data.status === "error") {
-        console.warn(`[ASR] Job failed: ${data.error || "unknown"}`);
+        console.warn(`[ASR] Job ${jobId} failed: ${JSON.stringify(data.error || data.message || "unknown").substring(0, 150)}`);
         return null;
       }
-    } catch {
+      // Still processing — continue polling
+    } catch (err) {
+      if (i === 0) console.warn(`[ASR] Poll error: ${(err as Error).message}`);
       continue;
     }
   }
 
-  console.warn("[ASR] Timed out waiting for transcription");
+  console.warn(`[ASR] Job ${jobId} timed out after ${maxAttempts} attempts`);
   return null;
 }
 

@@ -58,12 +58,15 @@ export async function transcribeAudio(
   try {
     const accessibleUrl = await ensureAccessibleUrl(audioUrl, signUrl);
 
-    // Docs say: { model: "audio-asr", audio: "<url>", language, ignore_timestamps }
+    // Hypereal generic audio endpoint uses { model, input: { ...params } }
+    // Same pattern as TTS: { model: "audio-tts", input: { text, format } }
     const payload = {
       model: "audio-asr",
-      audio: accessibleUrl,
-      language,
-      ignore_timestamps: false,
+      input: {
+        audio: accessibleUrl,
+        language,
+        ignore_timestamps: false,
+      },
     };
 
     const jsonBody = JSON.stringify(payload);
@@ -92,7 +95,10 @@ export async function transcribeAudio(
     const publicUrl = audioUrl.split("?")[0].replace("/object/sign/", "/object/public/");
     if (publicUrl !== accessibleUrl) {
       console.log(`[ASR] Retrying with public URL: ${publicUrl.substring(0, 80)}`);
-      const publicPayload = { ...payload, audio: publicUrl };
+      const publicPayload = {
+        model: "audio-asr",
+        input: { audio: publicUrl, language, ignore_timestamps: false },
+      };
       res = await fetch(HYPEREAL_ASR_URL, {
         method: "POST",
         headers,

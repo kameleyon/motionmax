@@ -15,7 +15,10 @@ const IS_PROD = import.meta.env.PROD;
 export function initSentry(): void {
   if (!DSN) {
     if (IS_PROD) {
-      console.warn("[Sentry] VITE_SENTRY_DSN not set — error tracking disabled");
+      console.error(
+        "[Sentry] VITE_SENTRY_DSN is not set! Production error tracking is DISABLED. " +
+        "Set this environment variable in your deployment platform."
+      );
     }
     return;
   }

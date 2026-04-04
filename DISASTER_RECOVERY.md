@@ -8,7 +8,7 @@
 | Database         | Supabase  | us-east-1    |
 | Storage          | Supabase  | us-east-1    |
 | Edge Functions   | Supabase  | us-east-1    |
-| Worker           | Cloudflare| global       |
+| Worker           | Render    | us-east      |
 | Payments         | Stripe    | global       |
 
 ---
@@ -36,7 +36,7 @@
 | Metric | Target   | Current (estimated) |
 |--------|----------|---------------------|
 | **RTO** (Recovery Time Objective) | 30 min | ~60 min |
-| **RPO** (Recovery Point Objective) | 1 hour | 24 hours (daily snapshot) |
+| **RPO** (Recovery Point Objective) | 1 hour | ~5 min (PITR on Pro plan) |
 
 ---
 
@@ -93,23 +93,24 @@
 
 ## 6. Testing Schedule
 
-| Test Type                  | Frequency  | Last Tested |
-|---------------------------|------------|-------------|
-| Database restore (snapshot)| Quarterly  | _TODO_      |
-| Frontend rollback          | Monthly    | _TODO_      |
-| Edge function rollback     | Quarterly  | _TODO_      |
-| Full disaster simulation   | Annually   | _TODO_      |
+| Test Type                  | Frequency  | Last Tested    | Next Due       |
+|---------------------------|------------|----------------|----------------|
+| Database restore (snapshot)| Quarterly  | Not yet tested | 2026-Q2        |
+| Frontend rollback          | Monthly    | Not yet tested | 2026-05-01     |
+| Edge function rollback     | Quarterly  | Not yet tested | 2026-Q2        |
+| Full disaster simulation   | Annually   | Not yet tested | 2026-Q4        |
 
 ---
 
 ## 7. Escalation Contacts
 
-| Role              | Contact          | Method        |
-|-------------------|------------------|---------------|
-| Lead Engineer     | _TODO_           | Slack / Phone |
-| Supabase Support  | support@supabase.com | Email / Dashboard |
-| Vercel Support    | support@vercel.com   | Email / Dashboard |
-| Stripe Support    | support@stripe.com   | Dashboard     |
+| Role              | Contact                    | Method            |
+|-------------------|----------------------------|-------------------|
+| Lead Engineer     | kameleyon (repo owner)     | GitHub / Email    |
+| Supabase Support  | support@supabase.com       | Email / Dashboard |
+| Vercel Support    | support@vercel.com         | Email / Dashboard |
+| Stripe Support    | support@stripe.com         | Dashboard         |
+| Render Support    | support@render.com         | Email / Dashboard |
 
 ---
 

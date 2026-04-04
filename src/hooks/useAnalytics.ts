@@ -3,10 +3,25 @@ import { useCallback, useEffect, useRef } from "react";
 /* ──────────────────────────────────────────────
  * Lightweight analytics helper.
  *
- * Fires real events when an analytics provider
- * (e.g. Google Analytics / gtag) is loaded on
- * the page.  Falls back to console.debug in dev.
+ * Loads Google Analytics 4 when VITE_GA_MEASUREMENT_ID
+ * is set, then fires events via gtag or dataLayer.
+ * Falls back to console.debug in dev.
  * ────────────────────────────────────────────── */
+
+const GA_ID = import.meta.env.VITE_GA_MEASUREMENT_ID ?? "";
+
+// Self-executing: load GA4 script once on import
+if (GA_ID && typeof window !== "undefined") {
+  const script = document.createElement("script");
+  script.async = true;
+  script.src = `https://www.googletagmanager.com/gtag/js?id=${GA_ID}`;
+  document.head.appendChild(script);
+  (window as any).dataLayer = (window as any).dataLayer || [];
+  function gtag(...args: any[]) { (window as any).dataLayer.push(arguments); }
+  (window as any).gtag = gtag;
+  gtag("js", new Date());
+  gtag("config", GA_ID, { send_page_view: true });
+}
 
 type EventParams = Record<string, string | number | boolean>;
 

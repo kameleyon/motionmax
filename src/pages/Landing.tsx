@@ -182,11 +182,11 @@ export default function Landing() {
         </AnimatePresence>
       </header>
 
-      {/* Hero Section — herobackground.png as full background */}
+      {/* Hero Section — herobackground.webp as full background (PNG fallback kept in /public) */}
       <section
         className="relative min-h-[85vh] sm:min-h-screen flex items-center pt-16 sm:pt-20 md:pt-32 xl:pt-16"
         style={{
-          backgroundImage: "url(/herobackground.png)",
+          backgroundImage: "url(/herobackground.webp)",
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",

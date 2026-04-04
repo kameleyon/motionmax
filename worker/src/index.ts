@@ -177,10 +177,14 @@ async function processJob(job: Job) {
   let finalPayload = { ...job.payload };
 
   try {
-    await supabase
-      .from('video_generation_jobs')
-      .update({ status: 'processing', updated_at: new Date().toISOString() })
-      .eq('id', job.id);
+    // Status already set to 'processing' by claim_pending_job RPC
+    // Only update if job was recovered from startup diagnostic (not via atomic claim)
+    if (job.status !== 'processing') {
+      await supabase
+        .from('video_generation_jobs')
+        .update({ status: 'processing', updated_at: new Date().toISOString() })
+        .eq('id', job.id);
+    }
 
     if (job.task_type === 'generate_video') {
       const scriptResult = await handleGenerateVideo(job.id, job.payload, job.user_id);
@@ -330,75 +334,79 @@ async function pollQueue() {
     const availableSlots = MAX_CONCURRENT_JOBS - activeJobs.size;
     if (availableSlots <= 0) return;
 
-    // Query for export jobs
-    const { data: exportJobs, error: exportError } = await supabase
-      .from('video_generation_jobs')
-      .select('*')
-      .eq('status', 'pending')
-      .eq('task_type', 'export_video')
-      .order('created_at', { ascending: true })
-      .limit(availableSlots);
+    const claimedJobs: any[] = [];
 
-    if (exportError) {
-      console.error("[Worker] Poll export error:", exportError.code, exportError.message);
+    // Claim export jobs first (priority)
+    for (let i = 0; i < availableSlots && claimedJobs.length < availableSlots; i++) {
+      const { data, error } = await supabase.rpc('claim_pending_job', {
+        p_task_type: 'export_video',
+        p_exclude_task_type: null,
+      });
+      if (error) {
+        console.error("[Worker] Claim export job error:", error.code, error.message);
+        break;
+      }
+      if (!data || data.length === 0) break; // No more export jobs
+      claimedJobs.push(data[0]);
     }
 
-    // Query for generation jobs
-    const { data: genJobs, error: genError } = await supabase
-      .from('video_generation_jobs')
-      .select('*')
-      .eq('status', 'pending')
-      .neq('task_type', 'export_video')
-      .order('created_at', { ascending: true })
-      .limit(availableSlots);
-
-    if (genError) {
-      console.error("[Worker] Poll generation error:", genError.code, genError.message);
+    // Claim generation jobs with remaining slots
+    const remainingSlots = availableSlots - claimedJobs.length;
+    for (let i = 0; i < remainingSlots; i++) {
+      const { data, error } = await supabase.rpc('claim_pending_job', {
+        p_task_type: null,
+        p_exclude_task_type: 'export_video',
+      });
+      if (error) {
+        console.error("[Worker] Claim gen job error:", error.code, error.message);
+        break;
+      }
+      if (!data || data.length === 0) break; // No more generation jobs
+      claimedJobs.push(data[0]);
     }
-
-    const allJobs = [...(exportJobs || []), ...(genJobs || [])];
-
-    // Sort by created_at to process oldest first, but we already have them separated
-    allJobs.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-
-    // Take up to availableSlots
-    const jobsToProcess = allJobs.slice(0, availableSlots);
 
     lastPollAt = new Date().toISOString();
 
-    // Queue depth monitoring — detect when queue is backing up
-    const totalPending = allJobs.length;
-    if (totalPending > queueDepthAlertThreshold && Date.now() - lastQueueAlert > QUEUE_ALERT_COOLDOWN_MS) {
-      lastQueueAlert = Date.now();
-      const mem = process.memoryUsage();
-      console.warn(
-        `[Worker] ⚠️ QUEUE DEPTH ALERT: ${totalPending} pending jobs (threshold: ${queueDepthAlertThreshold}), ` +
-        `active: ${activeJobs.size}/${MAX_CONCURRENT_JOBS}, RSS: ${Math.round(mem.rss / 1048576)}MB`
-      );
-      writeSystemLog({
-        category: "system_warning",
-        eventType: "queue_depth_alert",
-        message: `Queue depth ${totalPending} exceeds threshold ${queueDepthAlertThreshold} — consider scaling workers`,
-        details: {
-          pendingJobs: totalPending,
-          activeJobs: activeJobs.size,
-          maxConcurrent: MAX_CONCURRENT_JOBS,
-          rssMb: Math.round(mem.rss / 1048576),
-          cpuCount: os.cpus().length,
-          totalMemMb: Math.round(os.totalmem() / 1048576),
-        },
-      }).catch(() => {});
+    // Queue depth monitoring (keep existing logic but use claimed count)
+    if (claimedJobs.length > 0) {
+      // Check pending count for alerting
+      const { count: totalPending } = await supabase
+        .from('video_generation_jobs')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending');
+
+      if ((totalPending ?? 0) > queueDepthAlertThreshold && Date.now() - lastQueueAlert > QUEUE_ALERT_COOLDOWN_MS) {
+        lastQueueAlert = Date.now();
+        const mem = process.memoryUsage();
+        console.warn(
+          `[Worker] ⚠️ QUEUE DEPTH ALERT: ${totalPending} pending jobs (threshold: ${queueDepthAlertThreshold}), ` +
+          `active: ${activeJobs.size}/${MAX_CONCURRENT_JOBS}, RSS: ${Math.round(mem.rss / 1048576)}MB`
+        );
+        writeSystemLog({
+          category: "system_warning",
+          eventType: "queue_depth_alert",
+          message: `Queue depth ${totalPending} exceeds threshold ${queueDepthAlertThreshold} — consider scaling workers`,
+          details: {
+            pendingJobs: totalPending,
+            activeJobs: activeJobs.size,
+            maxConcurrent: MAX_CONCURRENT_JOBS,
+            rssMb: Math.round(mem.rss / 1048576),
+            cpuCount: os.cpus().length,
+            totalMemMb: Math.round(os.totalmem() / 1048576),
+          },
+        }).catch(() => {});
+      }
     }
 
-    const shouldLog = pollCount % 12 === 1 || jobsToProcess.length > 0 || exportError || genError;
+    const shouldLog = pollCount % 12 === 1 || claimedJobs.length > 0;
     if (shouldLog) {
-      console.log(`[Worker] Poll #${pollCount}: jobs found: ${jobsToProcess.length}, active: ${activeJobs.size}/${MAX_CONCURRENT_JOBS}`);
+      console.log(`[Worker] Poll #${pollCount}: claimed: ${claimedJobs.length}, active: ${activeJobs.size}/${MAX_CONCURRENT_JOBS}`);
     }
 
-    for (const job of jobsToProcess) {
+    for (const job of claimedJobs) {
       if (activeJobs.has(job.id)) continue;
-      console.log(`[Worker] Found job ${job.id} (type: ${job.task_type}, status: ${job.status})`);
-      // Fire and forget
+      console.log(`[Worker] Claimed job ${job.id} (type: ${job.task_type})`);
+      // Fire and forget — job is already marked 'processing' by the RPC
       processJob(job as Job).catch(err => {
         console.error(`[Worker] Unhandled error in processJob for ${job.id}:`, err);
       });

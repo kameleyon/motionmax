@@ -4,24 +4,29 @@ import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from "@ta
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { AdminRoute } from "@/components/AdminRoute";
 import { AppShell } from "@/components/layout/AppShell";
-import Landing from "./pages/Landing";
-import Auth from "./pages/Auth";
-import Dashboard from "./pages/Dashboard";
-import CreateWorkspace from "./pages/CreateWorkspace";
-import Settings from "./pages/Settings";
-import Usage from "./pages/Usage";
-import Pricing from "./pages/Pricing";
-import Projects from "./pages/Projects";
-import VoiceLab from "./pages/VoiceLab";
-import PublicShare from "./pages/PublicShare";
-import Admin from "./pages/Admin";
-import Terms from "./pages/Terms";
-import Privacy from "./pages/Privacy";
-import AcceptableUse from "./pages/AcceptableUse";
-import { Suspense } from "react";
-import NotFound from "./pages/NotFound";
+import { lazy, Suspense } from "react";
 import { GlobalErrorBoundary } from "./components/GlobalErrorBoundary";
+
+// Route-level code splitting — each page loads only when visited
+const Landing = lazy(() => import("./pages/Landing"));
+const Auth = lazy(() => import("./pages/Auth"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const CreateWorkspace = lazy(() => import("./pages/CreateWorkspace"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Usage = lazy(() => import("./pages/Usage"));
+const Pricing = lazy(() => import("./pages/Pricing"));
+const Projects = lazy(() => import("./pages/Projects"));
+const VoiceLab = lazy(() => import("./pages/VoiceLab"));
+const PublicShare = lazy(() => import("./pages/PublicShare"));
+const Terms = lazy(() => import("./pages/Terms"));
+const Privacy = lazy(() => import("./pages/Privacy"));
+const AcceptableUse = lazy(() => import("./pages/AcceptableUse"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+
+// Admin page in its own chunk — never loaded for non-admin users
+const Admin = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/Admin"));
 
 function PageLoader() {
   return (
@@ -69,7 +74,7 @@ const App = () => (
             <Route path="/usage" element={<ProtectedRoute><Usage /></ProtectedRoute>} />
             <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
             <Route path="/voice-lab" element={<ProtectedRoute><VoiceLab /></ProtectedRoute>} />
-            <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+            <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
 
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="/terms" element={<Terms />} />

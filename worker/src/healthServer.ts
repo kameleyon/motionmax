@@ -107,6 +107,17 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
 
   const url = req.url?.split("?")[0] || "/";
 
+  // Bearer token auth for /metrics (if HEALTH_AUTH_TOKEN is set)
+  const authToken = process.env.HEALTH_AUTH_TOKEN;
+  if (url === "/metrics" && authToken) {
+    const auth = req.headers.authorization;
+    if (!auth || auth !== `Bearer ${authToken}`) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ error: "Unauthorized" }));
+      return;
+    }
+  }
+
   if (!vitalsProvider) {
     res.writeHead(503);
     res.end(JSON.stringify({ status: "unavailable", message: "Worker not initialized" }));

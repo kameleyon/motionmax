@@ -141,20 +141,24 @@ export function useCinematicRegeneration(
       const affectedIndices: number[] = [idx]; // always regen current scene
       if (idx > 0) affectedIndices.unshift(idx - 1); // previous scene uses this as end_image
 
-      toast.success("Regenerating Videos", { description: `Updating ${affectedIndices.length} affected video(s)...` });
+      toast.success("Regenerating Videos", { description: `Updating ${affectedIndices.length} video(s) in parallel...` });
 
-      for (const vidIdx of affectedIndices) {
-        try {
-          const vidResult = await callPhase({
-            phase: "video", generationId, projectId, sceneIndex: vidIdx, regenerate: true,
-          }, 10 * 60 * 1000);
-          if (vidResult?.success && vidResult.videoUrl) {
-            updatedScenes = updatedScenes.map((s, i) =>
-              i === vidIdx ? { ...s, videoUrl: vidResult.videoUrl } : s
-            );
-          }
-        } catch (err) {
-          console.warn(`Video regen for scene ${vidIdx} failed:`, err);
+      // Run all affected video regens in parallel (not sequential)
+      const results = await Promise.allSettled(
+        affectedIndices.map(vidIdx =>
+          callPhase({ phase: "video", generationId, projectId, sceneIndex: vidIdx, regenerate: true }, 10 * 60 * 1000)
+        )
+      );
+
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i];
+        const vidIdx = affectedIndices[i];
+        if (r.status === "fulfilled" && r.value?.success && r.value.videoUrl) {
+          updatedScenes = updatedScenes.map((s, j) =>
+            j === vidIdx ? { ...s, videoUrl: r.value.videoUrl } : s
+          );
+        } else if (r.status === "rejected") {
+          console.warn(`Video regen for scene ${vidIdx} failed:`, r.reason);
         }
       }
       onScenesUpdate(updatedScenes);

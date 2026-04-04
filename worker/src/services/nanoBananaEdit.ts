@@ -24,12 +24,10 @@ export async function editImageWithNanoBanana(
     },
     body: JSON.stringify({
       model: "nano-banana-edit",
-      input: {
-        prompt,
-        images: [imageUrl],
-        aspect_ratio: aspectRatio,
-        output_format: "png",
-      },
+      prompt,
+      images: [imageUrl],
+      aspect_ratio: aspectRatio,
+      output_format: "png",
     }),
   });
 

@@ -56,27 +56,49 @@ export async function transcribeAudio(
   if (!apiKey || !audioUrl) return null;
 
   try {
+    // Download the audio file ourselves and send as base64 data URI.
+    // Hypereal's async jobs can't reliably fetch from private Supabase buckets,
+    // so we download first and send the data inline.
     const accessibleUrl = await ensureAccessibleUrl(audioUrl, signUrl);
+    console.log(`[ASR] Downloading audio: ${accessibleUrl.substring(0, 80)}...`);
 
-    // Hypereal generic audio endpoint uses { model, input: { ...params } }
-    // Same pattern as TTS: { model: "audio-tts", input: { text, format } }
+    const audioRes = await fetch(accessibleUrl);
+    if (!audioRes.ok) {
+      console.warn(`[ASR] Failed to download audio (${audioRes.status})`);
+      return null;
+    }
+
+    const buffer = await audioRes.arrayBuffer();
+    if (buffer.byteLength === 0) {
+      console.warn("[ASR] Downloaded audio is empty");
+      return null;
+    }
+
+    // Convert to base64 data URI
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const ext = audioUrl.includes(".wav") ? "wav" : "mpeg";
+    const dataUri = `data:audio/${ext};base64,${btoa(binary)}`;
+    console.log(`[ASR] Sending ${(buffer.byteLength / 1024).toFixed(0)}KB as base64 data URI`);
+
     const payload = {
       model: "audio-asr",
       input: {
-        audio: accessibleUrl,
+        audio: dataUri,
         language,
         ignore_timestamps: false,
       },
     };
 
-    const headers = {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    };
-
-    let res = await fetch(HYPEREAL_ASR_URL, {
+    const res = await fetch(HYPEREAL_ASR_URL, {
       method: "POST",
-      headers,
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(payload),
     });
 
@@ -84,27 +106,6 @@ export async function transcribeAudio(
 
     const errText = await res.text();
     console.warn(`[ASR] Failed (${res.status}): ${errText.substring(0, 300)}`);
-
-    // If the URL-based approach fails, try sending the audio as a direct URL string
-    // without the signed token (public URL) in case the token chars are the issue
-    const publicUrl = audioUrl.split("?")[0].replace("/object/sign/", "/object/public/");
-    if (publicUrl !== accessibleUrl) {
-      console.log(`[ASR] Retrying with public URL: ${publicUrl.substring(0, 80)}`);
-      const publicPayload = {
-        model: "audio-asr",
-        input: { audio: publicUrl, language, ignore_timestamps: false },
-      };
-      res = await fetch(HYPEREAL_ASR_URL, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(publicPayload),
-      });
-
-      if (res.ok) return handleASRResponse(res, apiKey);
-      const errText2 = await res.text();
-      console.warn(`[ASR] Public URL also failed (${res.status}): ${errText2.substring(0, 200)}`);
-    }
-
     return null;
   } catch (err) {
     console.warn(`[ASR] Error: ${(err as Error).message}`);

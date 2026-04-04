@@ -44,7 +44,8 @@ import { callPhase } from "@/hooks/generation/callPhase";
 import { cn } from "@/lib/utils";
 import { SUPABASE_URL } from "@/lib/supabaseUrl";
 import { CinematicEditModal } from "./CinematicEditModal";
-import { CaptionStyleSelector, type CaptionStyle as CaptionStyleType, previewStyles } from "./CaptionStyleSelector";
+import { CaptionStyleSelector, type CaptionStyle as CaptionStyleType } from "./CaptionStyleSelector";
+import { CaptionPreviewAnimation } from "./CaptionPreviewAnimation";
 import { SceneVersionHistory } from "./SceneVersionHistory";
 import { VideoPlayer } from "./VideoPlayer";
 import {
@@ -449,15 +450,7 @@ export function CinematicResult({
             }}
           />
           {initialCaptionStyle && initialCaptionStyle !== "none" && (
-            <div className="relative w-80 aspect-video bg-gradient-to-b from-gray-700 to-gray-900 rounded-xl overflow-hidden flex items-end justify-center shadow-lg border border-border/20">
-              {/* Fake scene image placeholder */}
-              <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgZmlsbD0ibm9uZSI+PHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMDMpIi8+PC9zdmc+')] opacity-30" />
-              <div className="absolute bottom-3 left-0 right-0 text-center px-4">
-                <span className={previewStyles[initialCaptionStyle as CaptionStyleType] || ""}>
-                  This is how your captions will look
-                </span>
-              </div>
-            </div>
+            <CaptionPreviewAnimation captionStyle={initialCaptionStyle as CaptionStyleType} />
           )}
         </div>
       </div>

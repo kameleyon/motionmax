@@ -434,10 +434,14 @@ export async function handleExportVideo(
         const captionedPath = path.join(tempDir, "captioned_export.mp4");
 
         // Burn ASS subtitles into video using ffmpeg's ass filter
+        // Resolve bundled Google Fonts directory for custom caption fonts
+        const fontsDir = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1")), "../../fonts");
+        const fontsDirEsc = fontsDir.replace(/\\/g, "/").replace(/'/g, "'\\''");
+        const assPathEsc = assPath.replace(/\\/g, "/").replace(/'/g, "'\\''");
         const { runFfmpeg } = await import("./export/ffmpegCmd.js");
         await runFfmpeg([
           "-i", finalOutputPath,
-          "-vf", `ass='${assPath.replace(/\\/g, "/").replace(/'/g, "'\\''")}'`,
+          "-vf", `ass='${assPathEsc}':fontsdir='${fontsDirEsc}'`,
           "-c:v", "libx264",
           "-preset", "ultrafast",
           "-crf", "23",

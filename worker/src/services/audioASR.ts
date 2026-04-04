@@ -116,10 +116,18 @@ export async function transcribeAudio(
 /** Parse a successful ASR response (handles both sync and async job patterns) */
 async function handleASRResponse(res: Response, apiKey: string): Promise<ASRResult | null> {
   const data = await res.json() as any;
-  // Log the create response structure to understand what Hypereal returns
-  console.log(`[ASR] Create response: ${JSON.stringify(data).substring(0, 300)}`);
-  if (data.jobId) return pollASRJob(data.jobId, apiKey);
-  // May already have results inline
+
+  // Hypereal returns results inline when status is "completed" — no polling needed
+  if (data.status === "completed" || data.status === "succeeded") {
+    return parseASRResponse(data);
+  }
+
+  // Only poll if status is pending/processing (no inline results)
+  if (data.jobId && data.status !== "completed" && data.status !== "succeeded") {
+    return pollASRJob(data.jobId, apiKey);
+  }
+
+  // Fallback: try parsing whatever came back
   return parseASRResponse(data.output || data.result || data);
 }
 

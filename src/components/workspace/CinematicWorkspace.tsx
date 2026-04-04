@@ -1,7 +1,7 @@
 import { createScopedLogger } from "@/lib/logger";
 import { useState, useRef, forwardRef, useImperativeHandle, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Play, AlertCircle, RotateCcw, ChevronDown, Users, Film, Loader2, MessageSquareOff, RefreshCw } from "lucide-react";
+import { Play, AlertCircle, RotateCcw, ChevronDown, Users, Film, Loader2, MessageSquareOff, RefreshCw, Monitor, Smartphone } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -9,8 +9,8 @@ import { WorkspaceLayout } from "@/components/layout/WorkspaceLayout";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { CinematicSourceInput, type SourceAttachment } from "./CinematicSourceInput";
-import { FormatSelector, type VideoFormat } from "./FormatSelector";
-import { LengthSelector, type VideoLength } from "./LengthSelector";
+import type { VideoFormat } from "./FormatSelector";
+import type { VideoLength } from "./LengthSelector";
 import { StyleSelector, type VisualStyle } from "./StyleSelector";
 import { SpeakerSelector, type SpeakerVoice, getDefaultSpeaker } from "./SpeakerSelector";
 import { LanguageSelector, type Language } from "./LanguageSelector";
@@ -31,7 +31,6 @@ import { useAdminLogs } from "@/hooks/useAdminLogs";
 import { AdminLogsPanel } from "./AdminLogsPanel";
 import { useGenerationLogs } from "@/hooks/useGenerationLogs";
 import { GenerationLogsPanel } from "./GenerationLogsPanel";
-import { TemplateSelector } from "./TemplateSelector";
 import { useWorkspaceDraft } from "@/hooks/useWorkspaceDraft";
 import type { WorkspaceHandle } from "./Doc2VideoWorkspace";
 
@@ -341,9 +340,9 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                 >
                   {/* Hero */}
                   <div className="text-center">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium mb-3">
-                      <Film className="h-3.5 w-3.5" />
-                      Cinematic - Beta
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-muted/50 text-muted-foreground text-xs font-medium mb-3 border border-border/50">
+                      <Film className="h-3.5 w-3.5 text-primary" />
+                      Cinematic
                     </div>
                     <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
                       Create Cinematic Video
@@ -354,74 +353,126 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                   </div>
 
                   {/* Sources & Direction */}
-                  <div className="space-y-2">
-                    <CinematicSourceInput
-                      content={content}
-                      onContentChange={setContent}
-                      attachments={sourceAttachments}
-                      onAttachmentsChange={setSourceAttachments}
-                    />
-                    <TemplateSelector mode="cinematic" onSelectTemplate={setContent} />
-                  </div>
+                  <CinematicSourceInput
+                    content={content}
+                    onContentChange={setContent}
+                    attachments={sourceAttachments}
+                    onAttachmentsChange={setSourceAttachments}
+                  />
 
-                  {/* Collapsible Advanced Options */}
-                  <div className="space-y-2 sm:space-y-3">
-                    {/* Character Description - Collapsible */}
-                    <Collapsible open={characterDescOpen} onOpenChange={setCharacterDescOpen}>
-                      <CollapsibleTrigger className="flex w-full items-center justify-between rounded-xl border border-border/50 bg-card/50 p-3 sm:p-4 backdrop-blur-sm shadow-sm hover:bg-muted/30 transition-colors">
-                        <span className="text-xs sm:text-sm font-medium flex items-center gap-2">
-                          <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                          Character Appearance
-                        </span>
-                        <ChevronDown className={`h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-200 ${characterDescOpen ? "rotate-180" : ""}`} />
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <div className="rounded-b-xl border border-t-0 border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm -mt-2">
-                          <CharacterDescriptionInput value={characterDescription} onChange={setCharacterDescription} />
-                        </div>
-                      </CollapsibleContent>
-                    </Collapsible>
-
-                    {/* Character consistency always ON, expressions always enabled (hardcoded) */}
-                  </div>
-
-                  {/* Configuration */}
-                  <div className="space-y-4 sm:space-y-6 rounded-xl border border-border/50 bg-card/50 p-3 sm:p-6 backdrop-blur-sm shadow-sm overflow-hidden">
-                    <FormatSelector selected={format} onSelect={setFormat} disabledFormats={disabledFormats} />
-                    <div className="h-px bg-border/30" />
-                    
-                    {/* Language and Voice (length locked to short for cinematic) */}
-                    <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
-                      <div className="sm:flex-shrink-0">
-                        <LanguageSelector value={language} onChange={(lang) => {
-                          setLanguage(lang);
-                          // Auto-switch to the default speaker for the selected language
-                          setSpeaker(getDefaultSpeaker(lang));
-                        }} />
-                      </div>
-                      <div className="sm:flex-shrink-0">
-                        <SpeakerSelector value={speaker} onChange={setSpeaker} language={language} />
+                  {/* Compact Configuration Grid */}
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                    {/* Format: Landscape / Portrait */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Format</span>
+                      <div className="flex gap-2">
+                        {([
+                          { id: "landscape" as const, icon: Monitor, label: "16:9" },
+                          { id: "portrait" as const, icon: Smartphone, label: "9:16" },
+                        ]).map(({ id, icon: Icon, label }) => {
+                          const disabled = disabledFormats.includes(id);
+                          return (
+                            <button
+                              key={id}
+                              onClick={() => !disabled && setFormat(id)}
+                              disabled={disabled}
+                              className={cn(
+                                "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors",
+                                format === id
+                                  ? "border-primary/50 bg-primary/10 text-foreground"
+                                  : "border-border/50 bg-muted/30 text-muted-foreground hover:bg-muted/50",
+                                disabled && "opacity-40 cursor-not-allowed",
+                              )}
+                            >
+                              <Icon className="h-3.5 w-3.5" />
+                              {label}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
-                    <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
-                      <div className="sm:flex-shrink-0">
-                        <CaptionStyleSelector value={captionStyle} onChange={setCaptionStyle} />
+
+                    {/* Duration: Short / Brief */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Duration</span>
+                      <div className="flex gap-2">
+                        {([
+                          { id: "short" as const, label: "\u22643 min" },
+                          { id: "brief" as const, label: ">3 min" },
+                        ]).map(({ id, label }) => (
+                          <button
+                            key={id}
+                            onClick={() => setLength(id)}
+                            className={cn(
+                              "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors",
+                              length === id
+                                ? "border-primary/50 bg-primary/10 text-foreground"
+                                : "border-border/50 bg-muted/30 text-muted-foreground hover:bg-muted/50",
+                            )}
+                          >
+                            {label}
+                          </button>
+                        ))}
                       </div>
                     </div>
-                    <div className="h-px bg-border/30" />
-                    <StyleSelector
-                      selected={style}
-                      customStyle={customStyle}
-                      onSelect={setStyle}
-                      onCustomStyleChange={setCustomStyle}
-                      customStyleImage={customStyleImage}
-                      onCustomStyleImageChange={setCustomStyleImage}
-                      brandMarkEnabled={brandMarkEnabled}
-                      brandMarkText={brandMarkText}
-                      onBrandMarkEnabledChange={setBrandMarkEnabled}
-                      onBrandMarkTextChange={setBrandMarkText}
-                    />
+
+                    {/* Language + Speaker stacked */}
+                    <div className="space-y-2">
+                      <LanguageSelector value={language} onChange={(lang) => {
+                        setLanguage(lang);
+                        setSpeaker(getDefaultSpeaker(lang));
+                      }} />
+                      <SpeakerSelector value={speaker} onChange={setSpeaker} language={language} />
+                    </div>
+
+                    {/* Brand + Caption stacked */}
+                    <div className="space-y-2">
+                      <div className="space-y-1.5">
+                        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Brand Name</span>
+                        <input
+                          type="text"
+                          placeholder="Your brand (optional)"
+                          value={brandMarkText}
+                          onChange={(e) => {
+                            setBrandMarkText(e.target.value);
+                            setBrandMarkEnabled(e.target.value.trim().length > 0);
+                          }}
+                          className="flex w-full h-9 rounded-md border border-border bg-muted/30 px-3 text-xs placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
+                        />
+                      </div>
+                      <CaptionStyleSelector value={captionStyle} onChange={setCaptionStyle} />
+                    </div>
                   </div>
+
+                  {/* Character Appearance - Collapsible */}
+                  <Collapsible open={characterDescOpen} onOpenChange={setCharacterDescOpen}>
+                    <CollapsibleTrigger className="flex w-full items-center justify-between rounded-xl border border-border/50 bg-card/50 p-3 hover:bg-muted/30 transition-colors">
+                      <span className="text-xs font-medium flex items-center gap-2 text-muted-foreground">
+                        <Users className="h-3.5 w-3.5" />
+                        Character Appearance
+                      </span>
+                      <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${characterDescOpen ? "rotate-180" : ""}`} />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="rounded-b-xl border border-t-0 border-border/50 bg-card/50 p-4 -mt-1">
+                        <CharacterDescriptionInput value={characterDescription} onChange={setCharacterDescription} />
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+
+                  {/* Visual Style (slideshow) */}
+                  <StyleSelector
+                    selected={style}
+                    customStyle={customStyle}
+                    onSelect={setStyle}
+                    onCustomStyleChange={setCustomStyle}
+                    customStyleImage={customStyleImage}
+                    onCustomStyleImageChange={setCustomStyleImage}
+                    brandMarkEnabled={brandMarkEnabled}
+                    brandMarkText={brandMarkText}
+                    onBrandMarkEnabledChange={setBrandMarkEnabled}
+                    onBrandMarkTextChange={setBrandMarkText}
+                  />
 
                   {/* Credit Cost Display */}
                   <CreditCostDisplay

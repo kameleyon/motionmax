@@ -111,10 +111,12 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
     
     // Auto-switch to allowed format/length if current selection becomes disabled
     useEffect(() => {
+      // Only auto-switch when user is in form entry (idle) — skip when viewing a loaded project
+      if (generationState.step !== "idle") return;
       if (disabledFormats.includes(format) && limits.allowedFormats.length > 0) {
         setFormat(limits.allowedFormats[0] as VideoFormat);
       }
-    }, [plan, format, disabledFormats, limits.allowedFormats]);
+    }, [plan, format, disabledFormats, limits.allowedFormats, generationState.step]);
 
     useEffect(() => {
       if (disabledLengths.includes(length) && allowedStoryLengths.length > 0) {

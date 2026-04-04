@@ -216,7 +216,7 @@ export function VideoPlayer({
           "relative rounded-xl overflow-hidden bg-black",
           format === "portrait"  && "h-[700px] aspect-[9/16]",
           format === "square"    && "h-[700px] aspect-square",
-          format === "landscape" && "w-full h-[700px]",
+          format === "landscape" && "w-full aspect-video",
         )}
         onMouseMove={resetControlsTimer}
         onMouseEnter={() => setShowControls(true)}

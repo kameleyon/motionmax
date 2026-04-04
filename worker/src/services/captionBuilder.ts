@@ -48,14 +48,29 @@ export interface SceneCaption {
 
 /**
  * Convert ASR word timestamps to CaptionWords, offset to the scene's position in the timeline.
+ *
+ * ASR_DELAY_MS compensates for the gap between when TTS audio actually starts
+ * producing speech vs when the ASR model reports the first word. Without this,
+ * captions appear slightly before the audio speaks the word.
  */
+const ASR_DELAY_MS = 150; // Shift captions later by 150ms to match spoken audio
+
 function asrWordsToCaptionWords(asrWords: Array<{ word: string; start: number; end: number }>, timelineOffsetMs: number): CaptionWord[] {
+  // Find the earliest word start — if the ASR says speech begins at 0.0s
+  // but TTS has a ramp-up silence, we need to detect and compensate
+  const firstWordStart = asrWords.length > 0 ? asrWords[0].start : 0;
+
+  // If the first word reportedly starts before 50ms, the ASR likely isn't
+  // accounting for TTS ramp-up silence. Add minimum padding.
+  const rampUpPad = firstWordStart < 0.05 ? 200 : 0;
+  const totalOffset = timelineOffsetMs + ASR_DELAY_MS + rampUpPad;
+
   return asrWords
     .filter(w => w.word.trim().length > 0)
     .map(w => ({
       text: w.word.trim(),
-      startMs: Math.round(w.start * 1000 + timelineOffsetMs),
-      endMs: Math.round(w.end * 1000 + timelineOffsetMs),
+      startMs: Math.round(w.start * 1000 + totalOffset),
+      endMs: Math.round(w.end * 1000 + totalOffset),
     }));
 }
 

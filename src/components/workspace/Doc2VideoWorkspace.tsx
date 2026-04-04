@@ -97,10 +97,12 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
 
     // Auto-switch to allowed values if current selection becomes disabled
     useEffect(() => {
+      // Only auto-switch when user is in form entry (idle) — skip when viewing a loaded project
+      if (generationState.step !== "idle") return;
       if (disabledFormats.includes(format) && limits.allowedFormats.length > 0) {
         setFormat(limits.allowedFormats[0] as VideoFormat);
       }
-    }, [plan, format, disabledFormats, limits.allowedFormats]);
+    }, [plan, format, disabledFormats, limits.allowedFormats, generationState.step]);
 
     useEffect(() => {
       if (disabledLengths.includes(length) && limits.allowedLengths.length > 0) {

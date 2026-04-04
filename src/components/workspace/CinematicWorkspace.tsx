@@ -113,10 +113,12 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
 
     // Auto-switch to allowed values if current selection becomes disabled
     useEffect(() => {
+      // Only auto-switch when user is in form entry (idle) — skip when viewing a loaded project
+      if (generationState.step !== "idle") return;
       if (disabledFormats.includes(format) && limits.allowedFormats.length > 0) {
         setFormat(limits.allowedFormats[0] as VideoFormat);
       }
-    }, [plan, format, disabledFormats, limits.allowedFormats]);
+    }, [plan, format, disabledFormats, limits.allowedFormats, generationState.step]);
 
     useEffect(() => {
       if (disabledLengths.includes(length) && limits.allowedLengths.length > 0) {
@@ -484,7 +486,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                     finalVideoUrl={generationState.finalVideoUrl}
                     onNewProject={handleNewProject}
                     onRegenerate={handleRegenerate}
-                    format={format}
+                    format={generationState.format || format}
                     totalTimeMs={generationState.totalTimeMs}
                     captionStyle={captionStyle}
                     onCaptionStyleChange={setCaptionStyle}
@@ -504,7 +506,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                       exportState={{ status: "idle", progress: 0 }}
                       title={generationState.title || "Untitled Cinematic"}
                       onDownload={() => {}}
-                      format={format}
+                      format={generationState.format || format}
                       generationState={generationState}
                     />
                   </div>

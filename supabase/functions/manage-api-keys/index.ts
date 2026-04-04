@@ -1,5 +1,5 @@
 ﻿import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCorsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 
 const PBKDF2_ITERATIONS = 100_000;
 
@@ -149,9 +149,11 @@ async function decrypt(ciphertext: string, userId: string): Promise<{ value: str
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req.headers.get("origin"));
+
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return handleCorsPreflightRequest(req.headers.get("origin"));
   }
 
   try {

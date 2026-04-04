@@ -447,12 +447,15 @@ ALTER TABLE public.generations          FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.generation_archives  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.generation_archives  FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.generation_costs     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.generation_costs     FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.api_call_logs        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.api_call_logs        FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.system_logs          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.system_logs          FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.project_characters   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.project_characters   FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.project_shares       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.project_shares       FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.user_voices          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_voices          FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.user_roles           ENABLE ROW LEVEL SECURITY;
@@ -462,6 +465,7 @@ ALTER TABLE public.user_flags           FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_logs           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_logs           FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.video_generation_jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.video_generation_jobs FORCE ROW LEVEL SECURITY;
 
 -- profiles
 CREATE POLICY "Authenticated users can view their own profile"   ON public.profiles FOR SELECT TO authenticated USING (auth.uid() = user_id);
@@ -569,9 +573,8 @@ CREATE POLICY "Admins can view all logs"              ON public.admin_logs FOR S
 CREATE POLICY "Admins can insert logs"                ON public.admin_logs FOR INSERT TO authenticated WITH CHECK (public.is_admin(auth.uid()));
 CREATE POLICY "Deny anonymous access to admin_logs"   ON public.admin_logs FOR ALL TO anon USING (false) WITH CHECK (false);
 
--- video_generation_jobs
-CREATE POLICY "anon_worker_select_jobs"       ON public.video_generation_jobs FOR SELECT TO anon USING (true);
-CREATE POLICY "anon_worker_update_jobs"       ON public.video_generation_jobs FOR UPDATE TO anon USING (true);
+-- video_generation_jobs (anon policies removed — worker uses service_role)
+CREATE POLICY "service_role_full_access_jobs" ON public.video_generation_jobs FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "authenticated_select_own_jobs" ON public.video_generation_jobs FOR SELECT TO authenticated USING (user_id = auth.uid());
 CREATE POLICY "authenticated_insert_own_jobs" ON public.video_generation_jobs FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid());
 

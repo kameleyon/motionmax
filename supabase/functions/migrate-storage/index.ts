@@ -6,29 +6,25 @@ import {
   actionManifest,
   actionDownload,
 } from "./storageHelpers.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin":
-    Deno.env.get("ALLOWED_ORIGIN") ?? "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 
 const log = (step: string, details?: unknown) => {
   const d = details ? ` - ${JSON.stringify(details)}` : "";
   console.log(`[MIGRATE-STORAGE] ${step}${d}`);
 };
 
-function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req.headers.get("origin"));
+
+  function jsonResponse(body: unknown, status = 200) {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return handleCorsPreflightRequest(req.headers.get("origin"));
   }
 
   const supabaseAdmin = createClient(

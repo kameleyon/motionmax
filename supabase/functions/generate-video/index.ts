@@ -1,15 +1,8 @@
 ﻿import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { decode as base64Decode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
-import DOMPurify from "https://esm.sh/isomorphic-dompurify@2.16.0";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") ?? "*",
-  // Keep this list broad so browser preflight never fails as client headers evolve.
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-};
+import DOMPurify from "https://esm.sh/dompurify@3.2.4";
+import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 
 // ============= INPUT VALIDATION =============
 const INPUT_LIMITS = {
@@ -5368,6 +5361,7 @@ Professional illustration with dynamic composition and clear visual hierarchy. A
 
 // ============= MAIN HANDLER =============
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req.headers.get("origin"));
   const requestStartedAt = Date.now();
   console.log("[generate-video] Incoming request", {
     method: req.method,
@@ -5379,12 +5373,7 @@ serve(async (req) => {
   });
 
   if (req.method === "OPTIONS") {
-    console.log("[generate-video] Responding to CORS preflight", {
-      origin: req.headers.get("origin"),
-      requestedMethod: req.headers.get("access-control-request-method"),
-      requestedHeaders: req.headers.get("access-control-request-headers"),
-    });
-    return new Response("ok", { headers: corsHeaders });
+    return handleCorsPreflightRequest(req.headers.get("origin"));
   }
 
   try {
@@ -5774,6 +5763,54 @@ serve(async (req) => {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           },
         );
+      }
+
+      // Check monthly infographic limit for paid plans
+      if (projectType === "smartflow" && userPlan !== "free") {
+        const infographicLimits: Record<string, number> = {
+          starter: 10,
+          creator: 50,
+          professional: 999999,
+          enterprise: 999999,
+        };
+        const monthlyLimit = infographicLimits[userPlan] ?? 10;
+
+        if (monthlyLimit < 999999) {
+          const monthStart = new Date();
+          monthStart.setDate(1);
+          monthStart.setHours(0, 0, 0, 0);
+
+          // Get user's smartflow project IDs
+          const { data: sfProjects } = await supabase
+            .from("projects")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("project_type", "smartflow");
+
+          const sfProjectIds = sfProjects?.map((p: any) => p.id) ?? [];
+
+          if (sfProjectIds.length > 0) {
+            const { count: monthlyCount, error: monthlyErr } = await supabase
+              .from("generations")
+              .select("id", { count: "exact", head: true })
+              .in("project_id", sfProjectIds)
+              .gte("created_at", monthStart.toISOString());
+
+            if (!monthlyErr && (monthlyCount ?? 0) >= monthlyLimit) {
+              console.log(`[generate-video] User ${user.id} hit monthly infographic limit: ${monthlyCount}/${monthlyLimit}`);
+              return new Response(
+                JSON.stringify({
+                  error: `Monthly infographic limit reached (${monthlyLimit}). Upgrade your plan or wait until next month.`,
+                  code: "MONTHLY_LIMIT_REACHED",
+                }),
+                {
+                  status: 429,
+                  headers: { ...corsHeaders, "Content-Type": "application/json" },
+                },
+              );
+            }
+          }
+        }
       }
 
       // Check brand mark restriction

@@ -1,50 +1,23 @@
 ﻿import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") ?? "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, stripe-signature",
-};
+import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
+import { creditPackProducts, subscriptionProducts, monthlyCredits } from "../_shared/stripeProducts.ts";
 
 const logStep = (step: string, details?: any) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
   console.log(`[STRIPE-WEBHOOK] ${step}${detailsStr}`);
 };
 
-// Credit pack product IDs - must match useSubscription.ts CREDIT_PACKS
-const creditPackProducts: Record<string, number> = {
-  "prod_Ts3r9EBXzzKKfU": 15,   // 15 credits - $11.99
-  "prod_Tnz0B2aJPD895y": 50,   // 50 credits - $14.99
-  "prod_Tnz1CygtJnMhUz": 150,  // 150 credits - $39.99
-  "prod_Ts3rl1zDT9oLVt": 500,  // 500 credits - $249.99
-  // Legacy packs (keep for existing purchases)
-  "prod_TqznJ5NkfAEdUY": 15,
-  "prod_TqznSfnDazIjj2": 50,
-  "prod_Tqznn5NHeJnhS6": 150,
-  "prod_Tqznoknz2TmraQ": 500,
-  "prod_TnzLJDYSV45eEF": 10,   // 10 credits (legacy)
-  "prod_TnzL0a9nwvoZKm": 50,   // 50 credits (legacy)
-  "prod_TnzL2ewLWIt1hD": 150,  // 150 credits (legacy)
-};
-
-// Subscription plan product IDs - must match useSubscription.ts STRIPE_PLANS
-const subscriptionProducts: Record<string, string> = {
-  "prod_Tnyz2nMLqpHz3R": "starter",
-  "prod_Tnz0KUQX2J5VBH": "creator",
-  "prod_Tnz0BeRmJDdh0V": "professional",
-  // Legacy plans (keep for existing subscriptions)
-  "prod_TqznNZmUhevHh4": "starter",
-  "prod_TqznlgT1Jl6Re7": "creator",
-  "prod_TqznqQYYG4UUY8": "professional",
-  "prod_TnzLdHWPkqAiqr": "starter",   // old premium -> starter
-  "prod_TnzLCasreSakEb": "creator",    // old pro -> creator
-  "prod_TnzLP4tQINtak9": "professional", // old platinum -> professional
-};
-
 serve(async (req) => {
+  const corsHeaders = {
+    ...getCorsHeaders(req.headers.get("origin")),
+    // Stripe webhook signature header must be allowed
+    "Access-Control-Allow-Headers": getCorsHeaders(req.headers.get("origin"))["Access-Control-Allow-Headers"] + ", stripe-signature",
+  };
+
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
@@ -293,7 +266,7 @@ serve(async (req) => {
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = subscription.customer as string;
-        
+
         logStep("Subscription deleted", { subscriptionId: subscription.id });
 
         await supabaseAdmin
@@ -303,6 +276,90 @@ serve(async (req) => {
             plan_name: "free",
           })
           .eq("stripe_customer_id", customerId);
+        break;
+      }
+
+      // 2.1: Monthly credit renewal on subscription invoice payment
+      case "invoice.paid": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId = invoice.customer as string;
+
+        // Only process subscription invoices (not one-time purchases)
+        if (invoice.subscription) {
+          logStep("Invoice paid (subscription renewal)", { invoiceId: invoice.id, customerId });
+
+          // Find the user's subscription to get their plan
+          const { data: subData } = await supabaseAdmin
+            .from("subscriptions")
+            .select("user_id, plan_name")
+            .eq("stripe_customer_id", customerId)
+            .eq("status", "active")
+            .single();
+
+          if (subData) {
+            const credits = monthlyCredits[subData.plan_name] || 0;
+
+            if (credits > 0) {
+              // Grant monthly credits
+              const { error: creditError } = await supabaseAdmin.rpc("increment_user_credits", {
+                p_user_id: subData.user_id,
+                p_credits: credits,
+              });
+
+              if (creditError) {
+                logStep("ERROR: Failed to grant monthly credits", { userId: subData.user_id, credits, error: creditError.message });
+              } else {
+                // Log the transaction
+                await supabaseAdmin.from("credit_transactions").insert({
+                  user_id: subData.user_id,
+                  amount: credits,
+                  transaction_type: "monthly_renewal",
+                  description: `Monthly ${subData.plan_name} plan renewal: ${credits} credits`,
+                });
+                logStep("Monthly credits granted", { userId: subData.user_id, plan: subData.plan_name, credits });
+              }
+            }
+          }
+        }
+        break;
+      }
+
+      // 2.5: Handle refunds — claw back credits
+      case "charge.refunded": {
+        const charge = event.data.object as Stripe.Charge;
+        const customerId = charge.customer as string;
+
+        logStep("Charge refunded", { chargeId: charge.id, customerId, amount: charge.amount_refunded });
+
+        // Find the user
+        const { data: refundSubData } = await supabaseAdmin
+          .from("subscriptions")
+          .select("user_id")
+          .eq("stripe_customer_id", customerId)
+          .single();
+
+        if (refundSubData) {
+          // Check if this was a credit pack purchase — look up by payment intent
+          const { data: txData } = await supabaseAdmin
+            .from("credit_transactions")
+            .select("amount")
+            .eq("user_id", refundSubData.user_id)
+            .eq("transaction_type", "purchase")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .single();
+
+          if (txData && txData.amount > 0) {
+            // Deduct the refunded credits
+            await supabaseAdmin.rpc("deduct_credits_securely", {
+              p_user_id: refundSubData.user_id,
+              p_amount: Math.abs(txData.amount),
+              p_transaction_type: "refund_clawback",
+              p_description: `Credits clawed back due to refund (charge ${charge.id})`,
+            });
+            logStep("Credits clawed back", { userId: refundSubData.user_id, credits: txData.amount });
+          }
+        }
         break;
       }
     }

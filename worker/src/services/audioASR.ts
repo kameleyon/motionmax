@@ -116,8 +116,11 @@ export async function transcribeAudio(
 /** Parse a successful ASR response (handles both sync and async job patterns) */
 async function handleASRResponse(res: Response, apiKey: string): Promise<ASRResult | null> {
   const data = await res.json() as any;
+  // Log the create response structure to understand what Hypereal returns
+  console.log(`[ASR] Create response: ${JSON.stringify(data).substring(0, 300)}`);
   if (data.jobId) return pollASRJob(data.jobId, apiKey);
-  return parseASRResponse(data);
+  // May already have results inline
+  return parseASRResponse(data.output || data.result || data);
 }
 
 function parseASRResponse(data: any): ASRResult | null {
@@ -196,7 +199,8 @@ async function pollASRJob(jobId: string, apiKey: string): Promise<ASRResult | nu
         return parseASRResponse(data.output || data.result || data);
       }
       if (data.status === "failed" || data.status === "error") {
-        console.warn(`[ASR] Job ${jobId} failed: ${JSON.stringify(data.error || data.message || "unknown").substring(0, 150)}`);
+        // Log full response to diagnose Hypereal's internal failure
+        console.warn(`[ASR] Job ${jobId} failed. Full response: ${JSON.stringify(data).substring(0, 500)}`);
         return null;
       }
       // Still processing — continue polling

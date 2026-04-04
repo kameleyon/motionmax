@@ -1,30 +1,41 @@
 project_id = "ayjbvcikuwknqdrpsdmj"
 
+# ── Authenticated functions (require valid JWT) ──
 [functions.generate-video]
-verify_jwt = false
+verify_jwt = true
 
 [functions.generate-cinematic]
-verify_jwt = false
+verify_jwt = true
 
 [functions.create-checkout]
-verify_jwt = false
+verify_jwt = true
 
 [functions.check-subscription]
-verify_jwt = false
+verify_jwt = true
 
 [functions.customer-portal]
-verify_jwt = false
-
-[functions.stripe-webhook]
-verify_jwt = false
+verify_jwt = true
 
 [functions.manage-api-keys]
-verify_jwt = false
+verify_jwt = true
 
 [functions.clone-voice]
-verify_jwt = false
+verify_jwt = true
 
 [functions.delete-voice]
+verify_jwt = true
+
+[functions.admin-stats]
+verify_jwt = true
+
+[functions.migrate-storage]
+verify_jwt = true
+
+[functions.export-my-data]
+verify_jwt = true
+
+# ── Public functions (no JWT required) ──
+[functions.stripe-webhook]
 verify_jwt = false
 
 [functions.get-shared-project]
@@ -33,8 +44,5 @@ verify_jwt = false
 [functions.share-meta]
 verify_jwt = false
 
-[functions.admin-stats]
-verify_jwt = false
-
-[functions.migrate-storage]
+[functions.serve-media]
 verify_jwt = false

@@ -23,7 +23,9 @@ export type CaptionStyle =
   // Colorful (from caption.png)
   | "whiteStroke" | "blueStroke" | "redFire" | "orangeGlow"
   | "yellowOutline" | "greenPill" | "goldScript" | "comicPop"
-  | "blueWhite" | "redBlack" | "yellowRed";
+  | "blueWhite" | "redBlack" | "yellowRed"
+  // Premium / Trending
+  | "yellowHighlight" | "redTag" | "chunkyBlue" | "dualTone" | "purpleNeon";
 
 export interface CaptionWord {
   text: string;
@@ -282,6 +284,32 @@ const STYLE_DEFS: Record<Exclude<CaptionStyle, "none">, AssStyleDef> = {
     outlineColor: RED, backColor: assColor(0, 0, 0, 0), bold: true,
     outline: 4, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1,
   },
+  // ── Premium / Trending ──
+  yellowHighlight: {
+    fontName: "Liberation Sans", fontSize: 54, primaryColor: WHITE, secondaryColor: YELLOW,
+    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 4, shadow: 2, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
+  },
+  redTag: {
+    fontName: "DejaVu Sans", fontSize: 40, primaryColor: WHITE, secondaryColor: WHITE,
+    outlineColor: RED, backColor: RED, bold: true,
+    outline: 14, shadow: 0, alignment: 2, marginV: 280, borderStyle: 3,
+  },
+  chunkyBlue: {
+    fontName: "Liberation Sans", fontSize: 58, primaryColor: assColor(0x70, 0x70, 0xCC), secondaryColor: WHITE,
+    outlineColor: assColor(0x30, 0x30, 0x70), backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 5, shadow: 3, alignment: 2, marginV: 280, borderStyle: 1,
+  },
+  dualTone: {
+    fontName: "Liberation Sans", fontSize: 48, primaryColor: WHITE, secondaryColor: assColor(0x50, 0x50, 0xC8),
+    outlineColor: assColor(0x44, 0x44, 0xA0), backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 3, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1,
+  },
+  purpleNeon: {
+    fontName: "Liberation Sans", fontSize: 50, primaryColor: assColor(0xA8, 0x55, 0xF7), secondaryColor: WHITE,
+    outlineColor: assColor(0x60, 0x20, 0xA0), backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 4, shadow: 6, alignment: 2, marginV: 280, borderStyle: 1,
+  },
 };
 
 // ── ASS File Generation ────────────────────────────────────────────
@@ -456,4 +484,10 @@ export const CAPTION_STYLES: Array<{ id: CaptionStyle; label: string; descriptio
   { id: "blueWhite", label: "Blue White", description: "White text, blue outline" },
   { id: "redBlack", label: "Red Black", description: "Red text, black outline" },
   { id: "yellowRed", label: "Yellow Red", description: "Yellow text, red outline" },
+  // Premium / Trending
+  { id: "yellowHighlight", label: "Yellow Highlight", description: "Gold keyword pop" },
+  { id: "redTag", label: "Red Tag", description: "Red box on active word" },
+  { id: "chunkyBlue", label: "Chunky Blue", description: "Soft periwinkle, heavy" },
+  { id: "dualTone", label: "Dual Tone", description: "White + indigo accent" },
+  { id: "purpleNeon", label: "Purple Neon", description: "Purple glow effect" },
 ];

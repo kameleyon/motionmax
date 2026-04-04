@@ -14,7 +14,8 @@ export type CaptionStyle =
   | "handwritten" | "topCenter" | "allCapsGlow"
   | "whiteStroke" | "blueStroke" | "redFire" | "orangeGlow"
   | "yellowOutline" | "greenPill" | "goldScript" | "comicPop"
-  | "blueWhite" | "redBlack" | "yellowRed";
+  | "blueWhite" | "redBlack" | "yellowRed"
+  | "yellowHighlight" | "redTag" | "chunkyBlue" | "dualTone" | "purpleNeon";
 
 interface CaptionStyleSelectorProps {
   value: CaptionStyle;
@@ -51,6 +52,12 @@ const captionStyles: { id: CaptionStyle; label: string; description: string }[] 
   { id: "blueWhite", label: "Blue White", description: "Blue outline" },
   { id: "redBlack", label: "Red Black", description: "Red, black outline" },
   { id: "yellowRed", label: "Yellow Red", description: "Yellow, red border" },
+  // Premium / Trending
+  { id: "yellowHighlight", label: "Yellow Highlight", description: "Gold keyword pop" },
+  { id: "redTag", label: "Red Tag", description: "Red box on word" },
+  { id: "chunkyBlue", label: "Chunky Blue", description: "Soft periwinkle" },
+  { id: "dualTone", label: "Dual Tone", description: "White + indigo" },
+  { id: "purpleNeon", label: "Purple Neon", description: "Purple glow" },
 ];
 
 /** CSS preview classes that mimic the ASS styles */
@@ -84,6 +91,12 @@ export const previewStyles: Record<CaptionStyle, string> = {
   blueWhite: "text-white font-black text-sm [text-shadow:_2px_2px_0_rgb(48_96_224),_-2px_-2px_0_rgb(48_96_224),_2px_-2px_0_rgb(48_96_224),_-2px_2px_0_rgb(48_96_224)]",
   redBlack: "text-red-500 font-black text-sm [text-shadow:_2px_2px_0_rgb(0_0_0),_-2px_-2px_0_rgb(0_0_0),_2px_-2px_0_rgb(0_0_0),_-2px_2px_0_rgb(0_0_0)]",
   yellowRed: "text-yellow-400 font-black text-sm [text-shadow:_2px_2px_0_rgb(224_48_48),_-2px_-2px_0_rgb(224_48_48),_2px_-2px_0_rgb(224_48_48),_-2px_2px_0_rgb(224_48_48)]",
+  // Premium / Trending
+  yellowHighlight: "text-white font-black text-base uppercase [text-shadow:_2px_2px_0_rgb(0_0_0),_-2px_-2px_0_rgb(0_0_0)] [&]:decoration-yellow-400",
+  redTag: "text-white text-sm lowercase bg-red-600 px-2 py-0.5 rounded",
+  chunkyBlue: "text-indigo-400 font-black text-base [text-shadow:_3px_3px_0_rgb(60_60_120),_-1px_-1px_0_rgb(60_60_120)]",
+  dualTone: "text-white font-bold text-sm [text-shadow:_2px_2px_0_rgb(68_68_160),_-2px_-2px_0_rgb(68_68_160)]",
+  purpleNeon: "text-purple-400 font-bold text-sm [text-shadow:_0_0_8px_rgb(168_85_247),_0_0_20px_rgb(168_85_247)]",
 };
 
 export function CaptionStyleSelector({ value, onChange }: CaptionStyleSelectorProps) {

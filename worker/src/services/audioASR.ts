@@ -69,11 +69,6 @@ export async function transcribeAudio(
       },
     };
 
-    const jsonBody = JSON.stringify(payload);
-    // Log full payload for first scene only (debug)
-    console.log(`[ASR] Request URL: ${HYPEREAL_ASR_URL}`);
-    console.log(`[ASR] Payload (${jsonBody.length} chars): ${jsonBody.substring(0, 500)}`);
-
     const headers = {
       "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json",
@@ -82,7 +77,7 @@ export async function transcribeAudio(
     let res = await fetch(HYPEREAL_ASR_URL, {
       method: "POST",
       headers,
-      body: jsonBody,
+      body: JSON.stringify(payload),
     });
 
     if (res.ok) return handleASRResponse(res, apiKey);
@@ -191,9 +186,12 @@ async function pollASRJob(jobId: string, apiKey: string): Promise<ASRResult | nu
 }
 
 /**
- * Transcribe all scenes' audio in parallel.
- * Returns an array matching the scenes array — null entries fall back to estimation.
+ * Transcribe scenes in batches to avoid rate limiting.
+ * Hypereal allows ~3 concurrent requests before throttling.
  */
+const ASR_BATCH_SIZE = 3;
+const ASR_BATCH_DELAY_MS = 500;
+
 export async function transcribeAllScenes(
   scenes: Array<{ audioUrl?: string; voiceover?: string }>,
   apiKey: string,
@@ -202,14 +200,27 @@ export async function transcribeAllScenes(
 ): Promise<(ASRResult | null)[]> {
   if (!apiKey) return scenes.map(() => null);
 
-  console.log(`[ASR] Transcribing ${scenes.length} scenes in parallel...`);
+  console.log(`[ASR] Transcribing ${scenes.length} scenes in batches of ${ASR_BATCH_SIZE}...`);
   const start = Date.now();
+  const results: (ASRResult | null)[] = new Array(scenes.length).fill(null);
 
-  const results = await Promise.all(
-    scenes.map(scene =>
-      scene.audioUrl ? transcribeAudio(scene.audioUrl, apiKey, language, signUrl) : Promise.resolve(null)
-    )
-  );
+  for (let i = 0; i < scenes.length; i += ASR_BATCH_SIZE) {
+    const batch = scenes.slice(i, i + ASR_BATCH_SIZE);
+    const batchResults = await Promise.all(
+      batch.map(scene =>
+        scene.audioUrl ? transcribeAudio(scene.audioUrl, apiKey, language, signUrl) : Promise.resolve(null)
+      )
+    );
+
+    for (let j = 0; j < batchResults.length; j++) {
+      results[i + j] = batchResults[j];
+    }
+
+    // Delay between batches to avoid rate limiting
+    if (i + ASR_BATCH_SIZE < scenes.length) {
+      await new Promise(r => setTimeout(r, ASR_BATCH_DELAY_MS));
+    }
+  }
 
   const success = results.filter(r => r !== null).length;
   console.log(`[ASR] Done: ${success}/${scenes.length} scenes transcribed (${((Date.now() - start) / 1000).toFixed(1)}s)`);

@@ -9,13 +9,25 @@ import {
 
 export type CaptionStyle =
   | "none"
-  | "classic" | "bold" | "neon" | "karaoke" | "minimal" | "box"
-  | "typewriter" | "gradient" | "subtitleBar" | "outlineOnly" | "shadowPop"
-  | "handwritten" | "topCenter" | "allCapsGlow"
-  | "whiteStroke" | "blueStroke" | "redFire" | "orangeGlow"
-  | "yellowOutline" | "greenPill" | "goldScript" | "comicPop"
-  | "blueWhite" | "redBlack" | "yellowRed"
-  | "yellowHighlight" | "redTag" | "chunkyBlue" | "dualTone" | "purpleNeon";
+  | "orangeBox"
+  | "yellowSlanted"
+  | "redSlantedBox"
+  | "cyanOutline"
+  | "motionBlur"
+  | "yellowSmall"
+  | "thickStroke"
+  | "karaokePop"
+  | "typewriter"
+  | "neonTeal"
+  | "goldLuxury"
+  | "bouncyPill"
+  | "glitch"
+  | "cinematicFade"
+  | "redTag"
+  | "blackBox"
+  | "comicBurst"
+  | "retroTerminal"
+  | "heavyDropShadow";
 
 interface CaptionStyleSelectorProps {
   value: CaptionStyle;
@@ -24,79 +36,53 @@ interface CaptionStyleSelectorProps {
 
 const captionStyles: { id: CaptionStyle; label: string; description: string }[] = [
   { id: "none", label: "None", description: "No captions" },
-  // Core
-  { id: "classic", label: "Classic", description: "White, black outline" },
-  { id: "bold", label: "Bold", description: "Large uppercase" },
-  { id: "neon", label: "Neon", description: "Aqua glow" },
-  { id: "karaoke", label: "Karaoke", description: "Word-by-word" },
-  { id: "minimal", label: "Minimal", description: "Small, subtle" },
-  { id: "box", label: "Box", description: "Aqua rectangle" },
-  // Text effects
-  { id: "typewriter", label: "Typewriter", description: "Monospace" },
-  { id: "gradient", label: "Gradient", description: "Aqua to gold" },
-  { id: "subtitleBar", label: "Subtitle Bar", description: "Dark bar" },
-  { id: "outlineOnly", label: "Outline Only", description: "No fill" },
-  { id: "shadowPop", label: "Shadow Pop", description: "Heavy shadow" },
-  { id: "handwritten", label: "Handwritten", description: "Script font" },
-  { id: "topCenter", label: "Top Center", description: "Top position" },
-  { id: "allCapsGlow", label: "All Caps Glow", description: "Uppercase glow" },
-  // Colorful
-  { id: "whiteStroke", label: "White Stroke", description: "Thick black border" },
-  { id: "blueStroke", label: "Blue Stroke", description: "Blue, white border" },
-  { id: "redFire", label: "Red Fire", description: "Red, yellow border" },
-  { id: "orangeGlow", label: "Orange Glow", description: "Orange, white glow" },
-  { id: "yellowOutline", label: "Yellow Outline", description: "Yellow border" },
-  { id: "greenPill", label: "Green Pill", description: "Green badge" },
-  { id: "goldScript", label: "Gold Script", description: "Elegant gold" },
-  { id: "comicPop", label: "Comic Pop", description: "Red, yellow burst" },
-  { id: "blueWhite", label: "Blue White", description: "Blue outline" },
-  { id: "redBlack", label: "Red Black", description: "Red, black outline" },
-  { id: "yellowRed", label: "Yellow Red", description: "Yellow, red border" },
-  // Premium / Trending
-  { id: "yellowHighlight", label: "Yellow Highlight", description: "Gold keyword pop" },
-  { id: "redTag", label: "Red Tag", description: "Red box on word" },
-  { id: "chunkyBlue", label: "Chunky Blue", description: "Soft periwinkle" },
-  { id: "dualTone", label: "Dual Tone", description: "White + indigo" },
-  { id: "purpleNeon", label: "Purple Neon", description: "Purple glow" },
+  // From Reference Visuals
+  { id: "orangeBox", label: "Orange Box", description: "White text, orange background" },
+  { id: "yellowSlanted", label: "Yellow Slanted", description: "Heavy italic, thick black outline" },
+  { id: "redSlantedBox", label: "Red Slanted", description: "White text, red italic box" },
+  { id: "cyanOutline", label: "Cyan Outline", description: "Cyan text, white outline" },
+  { id: "motionBlur", label: "Motion Blur", description: "White text, high-speed blur entry" },
+  { id: "yellowSmall", label: "Small Yellow", description: "Minimalist yellow text" },
+  // Trending / Premium
+  { id: "thickStroke", label: "Thick Stroke", description: "White text, heavy black border" },
+  { id: "karaokePop", label: "Karaoke Pop", description: "Word-by-word dynamic scale" },
+  { id: "neonTeal", label: "Neon Teal", description: "Aqua/Teal glowing text" },
+  { id: "goldLuxury", label: "Gold Luxury", description: "Elegant gold metallic look" },
+  { id: "bouncyPill", label: "Bouncy Pill", description: "Text inside a rounded pill" },
+  { id: "glitch", label: "Glitch Offset", description: "RGB split shift effect" },
+  { id: "comicBurst", label: "Comic Burst", description: "Explosive superhero style" },
+  { id: "redTag", label: "Red Tag", description: "High-contrast red highlight" },
+  { id: "blackBox", label: "Classic Black Box", description: "Documentary style" },
+  { id: "typewriter", label: "Typewriter", description: "Monospace rigid entry" },
+  { id: "cinematicFade", label: "Cinematic Fade", description: "Slow elegant reveal" },
+  { id: "retroTerminal", label: "Retro Terminal", description: "Green pixel font" },
+  { id: "heavyDropShadow", label: "Heavy Shadow", description: "Thick diagonal shadow" },
 ];
 
-/** CSS preview classes that mimic the ASS styles */
+/** CSS preview classes that mimic the specific template styles */
 export const previewStyles: Record<CaptionStyle, string> = {
   none: "",
-  // Core (Poppins / Montserrat / Bebas Neue)
-  classic: "[font-family:'Poppins',sans-serif] text-white font-bold text-sm [text-shadow:_1px_1px_2px_rgb(0_0_0),_-1px_-1px_2px_rgb(0_0_0)]",
-  bold: "[font-family:'Bebas_Neue',sans-serif] text-white text-lg uppercase tracking-wider [text-shadow:_2px_2px_4px_rgb(0_0_0)]",
-  neon: "[font-family:'Poppins',sans-serif] text-primary font-bold text-sm bg-black/60 px-1.5 py-0.5 rounded",
-  karaoke: "[font-family:'Montserrat',sans-serif] text-white font-bold text-sm [text-shadow:_1px_1px_2px_rgb(0_0_0)]",
-  minimal: "[font-family:'Poppins',sans-serif] text-gray-400 text-xs",
-  box: "[font-family:'Montserrat',sans-serif] text-white font-bold text-sm bg-primary/40 px-2 py-0.5 rounded-md border border-primary/30",
-  // Text effects
-  typewriter: "font-mono text-white text-sm bg-black/50 px-1.5 py-0.5",
-  gradient: "[font-family:'Montserrat',sans-serif] font-black text-sm bg-gradient-to-r from-primary to-yellow-400 bg-clip-text text-transparent",
-  subtitleBar: "[font-family:'Poppins',sans-serif] text-white text-sm bg-black/70 px-4 py-1 w-full text-center",
-  outlineOnly: "[font-family:'Bebas_Neue',sans-serif] text-transparent text-base tracking-wider [-webkit-text-stroke:_1px_white]",
-  shadowPop: "[font-family:'Bangers',cursive] text-white text-base [text-shadow:_3px_3px_0px_rgba(0,0,0,0.5)]",
-  handwritten: "[font-family:'Pacifico',cursive] text-white text-sm [text-shadow:_1px_1px_2px_rgb(0_0_0)]",
-  topCenter: "[font-family:'Montserrat',sans-serif] text-white font-bold text-sm [text-shadow:_1px_1px_2px_rgb(0_0_0)]",
-  allCapsGlow: "[font-family:'Bebas_Neue',sans-serif] text-white text-base uppercase tracking-wider [text-shadow:_0_0_8px_rgb(17_196_208)]",
-  // Colorful
-  whiteStroke: "[font-family:'Montserrat',sans-serif] text-white font-black text-sm [text-shadow:_2px_2px_0_rgb(0_0_0),_-2px_-2px_0_rgb(0_0_0),_2px_-2px_0_rgb(0_0_0),_-2px_2px_0_rgb(0_0_0)]",
-  blueStroke: "[font-family:'Montserrat',sans-serif] text-blue-500 font-bold text-sm [text-shadow:_2px_2px_0_white,_-2px_-2px_0_white,_2px_-2px_0_white,_-2px_2px_0_white]",
-  redFire: "[font-family:'Bangers',cursive] text-red-500 text-base [text-shadow:_2px_2px_0_rgb(234_196_53),_-1px_-1px_0_rgb(234_196_53)]",
-  orangeGlow: "[font-family:'Montserrat',sans-serif] text-orange-500 font-extrabold text-sm [text-shadow:_2px_2px_0_white,_-1px_-1px_0_white,_0_0_8px_white]",
-  yellowOutline: "[font-family:'Montserrat',sans-serif] text-white font-bold text-sm [text-shadow:_2px_2px_0_rgb(234_196_53),_-2px_-2px_0_rgb(234_196_53),_2px_-2px_0_rgb(234_196_53),_-2px_2px_0_rgb(234_196_53)]",
-  greenPill: "[font-family:'Poppins',sans-serif] text-white font-bold text-sm bg-green-600 px-3 py-1 rounded-full",
-  goldScript: "[font-family:'Pacifico',cursive] text-yellow-600 text-sm [text-shadow:_1px_1px_2px_rgb(0_0_0)]",
-  comicPop: "[font-family:'Bangers',cursive] text-red-600 text-base uppercase bg-yellow-400 px-2 py-0.5 rounded [text-shadow:_1px_1px_0_rgb(0_0_0)]",
-  blueWhite: "[font-family:'Montserrat',sans-serif] text-white font-bold text-sm [text-shadow:_2px_2px_0_rgb(48_96_224),_-2px_-2px_0_rgb(48_96_224),_2px_-2px_0_rgb(48_96_224),_-2px_2px_0_rgb(48_96_224)]",
-  redBlack: "[font-family:'Montserrat',sans-serif] text-red-500 font-black text-sm [text-shadow:_2px_2px_0_rgb(0_0_0),_-2px_-2px_0_rgb(0_0_0),_2px_-2px_0_rgb(0_0_0),_-2px_2px_0_rgb(0_0_0)]",
-  yellowRed: "[font-family:'Montserrat',sans-serif] text-yellow-400 font-extrabold text-sm [text-shadow:_2px_2px_0_rgb(224_48_48),_-2px_-2px_0_rgb(224_48_48),_2px_-2px_0_rgb(224_48_48),_-2px_2px_0_rgb(224_48_48)]",
-  // Premium / Trending
-  yellowHighlight: "[font-family:'Montserrat',sans-serif] text-white font-black text-base uppercase [text-shadow:_2px_2px_0_rgb(0_0_0),_-2px_-2px_0_rgb(0_0_0)]",
-  redTag: "[font-family:'Poppins',sans-serif] text-white font-bold text-sm bg-red-600 px-2 py-0.5 rounded",
-  chunkyBlue: "[font-family:'Poppins',sans-serif] text-indigo-400 font-black text-base [text-shadow:_3px_3px_0_rgb(60_60_120),_-1px_-1px_0_rgb(60_60_120)]",
-  dualTone: "[font-family:'Montserrat',sans-serif] text-white font-bold text-sm [text-shadow:_2px_2px_0_rgb(68_68_160),_-2px_-2px_0_rgb(68_68_160)]",
-  purpleNeon: "[font-family:'Poppins',sans-serif] text-purple-400 font-bold text-sm [text-shadow:_0_0_8px_rgb(168_85_247),_0_0_20px_rgb(168_85_247)]",
+  // Reference Visuals
+  orangeBox: "[font-family:'Montserrat',sans-serif] font-black text-white bg-[#FF5722] px-2 py-0.5 rounded-sm uppercase tracking-wider",
+  yellowSlanted: "[font-family:'Montserrat',sans-serif] font-black italic text-[#FFEB3B] uppercase tracking-widest [text-shadow:_-2px_-2px_0_#000,_2px_-2px_0_#000,_-2px_2px_0_#000,_2px_2px_0_#000,_4px_4px_0_#000]",
+  redSlantedBox: "[font-family:'Montserrat',sans-serif] font-black italic text-white bg-[#E53935] px-2 py-0.5 uppercase tracking-wide skew-x-[-10deg]",
+  cyanOutline: "[font-family:'Montserrat',sans-serif] font-black text-[#00BCD4] uppercase tracking-wider [text-shadow:_-2px_-2px_0_#fff,_2px_-2px_0_#fff,_-2px_2px_0_#fff,_2px_2px_0_#fff]",
+  motionBlur: "[font-family:'Montserrat',sans-serif] font-black text-white uppercase tracking-widest drop-shadow-lg",
+  yellowSmall: "[font-family:'Montserrat',sans-serif] font-bold text-[#FFEB3B] text-xs uppercase tracking-widest drop-shadow-md",
+  // Trending / Premium
+  thickStroke: "[font-family:'Poppins',sans-serif] font-black text-white uppercase tracking-wide [text-shadow:_-3px_-3px_0_#000,_3px_-3px_0_#000,_-3px_3px_0_#000,_3px_3px_0_#000]",
+  karaokePop: "[font-family:'Montserrat',sans-serif] font-black text-white uppercase text-shadow-md",
+  neonTeal: "[font-family:'Poppins',sans-serif] font-bold text-[#00E5FF] uppercase tracking-widest [text-shadow:_0_0_10px_#00E5FF,_0_0_20px_#00E5FF]",
+  goldLuxury: "[font-family:'Pacifico',cursive] font-bold italic text-[#FFD700] tracking-wider [text-shadow:_1px_1px_2px_#8B6508]",
+  bouncyPill: "[font-family:'Montserrat',sans-serif] font-bold text-gray-900 bg-white px-3 py-1 rounded-full text-sm",
+  glitch: "[font-family:'Montserrat',sans-serif] font-black text-white uppercase tracking-widest [text-shadow:_2px_0_0_#ff0000,_-2px_0_0_#0000ff]",
+  comicBurst: "[font-family:'Bangers',cursive] text-[#FFEB3B] text-xl uppercase tracking-wide [text-shadow:_2px_2px_0_#E53935,_-1px_-1px_0_#E53935]",
+  redTag: "[font-family:'Poppins',sans-serif] font-bold text-white bg-red-600 px-1.5 py-0.5 text-sm shadow-sm",
+  blackBox: "[font-family:'Helvetica',sans-serif] font-medium text-white bg-black/80 px-2 py-1 text-sm",
+  typewriter: "font-mono font-bold text-green-400 bg-black/50 px-1",
+  cinematicFade: "[font-family:'Montserrat',sans-serif] font-light text-white tracking-[0.2em] uppercase",
+  retroTerminal: "font-mono font-bold text-[#39FF14] text-sm",
+  heavyDropShadow: "[font-family:'Bebas_Neue',sans-serif] text-white text-lg tracking-wider [text-shadow:_4px_4px_0_#000]",
 };
 
 export function CaptionStyleSelector({ value, onChange }: CaptionStyleSelectorProps) {
@@ -109,9 +95,9 @@ export function CaptionStyleSelector({ value, onChange }: CaptionStyleSelectorPr
         Captions
       </h3>
       <Select value={value} onValueChange={(v) => onChange(v as CaptionStyle)}>
-        <SelectTrigger className="w-full sm:w-56">
+        <SelectTrigger className="w-full sm:w-64">
           <SelectValue>
-            <span className="flex items-center gap-2">
+            <span className="flex items-center gap-2 truncate">
               {selected.id !== "none" && (
                 <span className={`inline-block ${previewStyles[selected.id]}`}>Aa</span>
               )}
@@ -119,18 +105,18 @@ export function CaptionStyleSelector({ value, onChange }: CaptionStyleSelectorPr
             </span>
           </SelectValue>
         </SelectTrigger>
-        <SelectContent className="max-h-72">
+        <SelectContent className="max-h-80">
           {captionStyles.map((s) => (
             <SelectItem key={s.id} value={s.id}>
               <span className="flex items-center gap-3">
                 {s.id !== "none" ? (
-                  <span className={`inline-block w-10 text-center ${previewStyles[s.id]}`}>Aa</span>
+                  <span className={`inline-block w-12 text-center ${previewStyles[s.id]}`}>Aa</span>
                 ) : (
-                  <span className="inline-block w-10 text-center text-muted-foreground text-xs">---</span>
+                  <span className="inline-block w-12 text-center text-muted-foreground text-xs">---</span>
                 )}
                 <span className="flex flex-col">
                   <span className="font-medium text-sm">{s.label}</span>
-                  <span className="text-muted-foreground text-xs">{s.description}</span>
+                  <span className="text-muted-foreground text-[10px]">{s.description}</span>
                 </span>
               </span>
             </SelectItem>

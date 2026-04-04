@@ -15,17 +15,11 @@ import path from "path";
 
 export type CaptionStyle =
   | "none"
-  // Core styles
-  | "classic" | "bold" | "neon" | "karaoke" | "minimal" | "box"
-  // Text effects
-  | "typewriter" | "gradient" | "subtitleBar" | "outlineOnly" | "shadowPop"
-  | "handwritten" | "topCenter" | "allCapsGlow"
-  // Colorful (from caption.png)
-  | "whiteStroke" | "blueStroke" | "redFire" | "orangeGlow"
-  | "yellowOutline" | "greenPill" | "goldScript" | "comicPop"
-  | "blueWhite" | "redBlack" | "yellowRed"
-  // Premium / Trending
-  | "yellowHighlight" | "redTag" | "chunkyBlue" | "dualTone" | "purpleNeon";
+  | "orangeBox" | "yellowSlanted" | "redSlantedBox" | "cyanOutline"
+  | "motionBlur" | "yellowSmall" | "thickStroke" | "karaokePop"
+  | "typewriter" | "neonTeal" | "goldLuxury" | "bouncyPill"
+  | "glitch" | "cinematicFade" | "redTag" | "blackBox"
+  | "comicBurst" | "retroTerminal" | "heavyDropShadow";
 
 export interface CaptionWord {
   text: string;
@@ -156,159 +150,102 @@ interface AssStyleDef {
 }
 
 const STYLE_DEFS: Record<Exclude<CaptionStyle, "none">, AssStyleDef> = {
-  // ── Core ──
-  classic: {
-    fontName: "Poppins", fontSize: 44, primaryColor: WHITE, secondaryColor: YELLOW,
-    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0xA0), bold: true,
-    outline: 2, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1,
+  // ── From Reference Visuals ──
+  orangeBox: {
+    fontName: "Montserrat", fontSize: 48, primaryColor: WHITE, secondaryColor: WHITE,
+    outlineColor: ORANGE, backColor: ORANGE, bold: true,
+    outline: 14, shadow: 0, alignment: 2, marginV: 280, borderStyle: 3, uppercase: true,
   },
-  bold: {
-    fontName: "Bebas Neue", fontSize: 64, primaryColor: WHITE, secondaryColor: YELLOW,
-    outlineColor: BLACK, backColor: BLACK, bold: false,
-    outline: 4, shadow: 2, alignment: 2, marginV: 300, borderStyle: 1, uppercase: true,
+  yellowSlanted: {
+    fontName: "Montserrat", fontSize: 56, primaryColor: assColor(0xFF, 0xEB, 0x3B), secondaryColor: YELLOW,
+    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true, italic: true,
+    outline: 5, shadow: 4, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
   },
-  neon: {
-    fontName: "Poppins", fontSize: 46, primaryColor: AQUA, secondaryColor: WHITE,
-    outlineColor: assColor(0x08, 0x60, 0x68), backColor: assColor(0, 0, 0, 0x90), bold: true,
-    outline: 3, shadow: 0, alignment: 2, marginV: 280, borderStyle: 3,
+  redSlantedBox: {
+    fontName: "Montserrat", fontSize: 48, primaryColor: WHITE, secondaryColor: WHITE,
+    outlineColor: RED, backColor: RED, bold: true, italic: true,
+    outline: 14, shadow: 0, alignment: 2, marginV: 280, borderStyle: 3, uppercase: true,
   },
-  karaoke: {
-    fontName: "Montserrat", fontSize: 44, primaryColor: WHITE, secondaryColor: AQUA,
-    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0xA0), bold: true,
-    outline: 2, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1,
+  cyanOutline: {
+    fontName: "Montserrat", fontSize: 52, primaryColor: assColor(0x00, 0xBC, 0xD4), secondaryColor: WHITE,
+    outlineColor: WHITE, backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 4, shadow: 0, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
   },
-  minimal: {
-    fontName: "Poppins", fontSize: 34, primaryColor: GRAY, secondaryColor: WHITE,
-    outlineColor: assColor(0, 0, 0, 0x60), backColor: assColor(0, 0, 0, 0), bold: false,
-    outline: 1, shadow: 0, alignment: 2, marginV: 260, borderStyle: 1,
-  },
-  box: {
-    fontName: "Montserrat", fontSize: 42, primaryColor: WHITE, secondaryColor: YELLOW,
-    outlineColor: assColor(0x11, 0xC4, 0xD0), backColor: assColor(0x11, 0xC4, 0xD0, 0x40), bold: true,
-    outline: 14, shadow: 0, alignment: 2, marginV: 280, borderStyle: 3,
-  },
-  // ── Text effects ──
-  typewriter: {
-    fontName: "DejaVu Sans Mono", fontSize: 38, primaryColor: WHITE, secondaryColor: WHITE,
-    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0x80), bold: false,
-    outline: 1, shadow: 0, alignment: 2, marginV: 280, borderStyle: 1,
-  },
-  gradient: {
-    fontName: "Montserrat", fontSize: 48, primaryColor: AQUA, secondaryColor: GOLD,
-    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 3, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1,
-  },
-  subtitleBar: {
-    fontName: "Poppins", fontSize: 40, primaryColor: WHITE, secondaryColor: WHITE,
-    outlineColor: assColor(0, 0, 0, 0), backColor: assColor(0, 0, 0, 0x99), bold: false,
-    outline: 20, shadow: 0, alignment: 2, marginV: 0, borderStyle: 3,
-  },
-  outlineOnly: {
-    fontName: "Bebas Neue", fontSize: 56, primaryColor: assColor(0, 0, 0, 0xFE), secondaryColor: AQUA,
-    outlineColor: WHITE, backColor: assColor(0, 0, 0, 0), bold: false,
-    outline: 3, shadow: 0, alignment: 2, marginV: 280, borderStyle: 1,
-  },
-  shadowPop: {
-    fontName: "Bangers", fontSize: 52, primaryColor: WHITE, secondaryColor: YELLOW,
-    outlineColor: assColor(0, 0, 0, 0), backColor: assColor(0, 0, 0, 0), bold: false,
-    outline: 0, shadow: 4, alignment: 2, marginV: 280, borderStyle: 1,
-  },
-  handwritten: {
-    fontName: "Pacifico", fontSize: 42, primaryColor: WHITE, secondaryColor: YELLOW,
-    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: false, italic: false,
-    outline: 2, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1,
-  },
-  topCenter: {
-    fontName: "Montserrat", fontSize: 42, primaryColor: WHITE, secondaryColor: YELLOW,
-    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0xA0), bold: true,
-    outline: 2, shadow: 1, alignment: 8, marginV: 40, borderStyle: 1,
-  },
-  allCapsGlow: {
-    fontName: "Bebas Neue", fontSize: 56, primaryColor: WHITE, secondaryColor: WHITE,
-    outlineColor: AQUA, backColor: assColor(0, 0, 0, 0), bold: false,
-    outline: 4, shadow: 3, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
-  },
-  // ── Colorful ──
-  whiteStroke: {
+  motionBlur: {
     fontName: "Montserrat", fontSize: 52, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 5, shadow: 0, alignment: 2, marginV: 280, borderStyle: 1,
+    outline: 3, shadow: 2, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
   },
-  blueStroke: {
-    fontName: "Montserrat", fontSize: 50, primaryColor: BLUE, secondaryColor: WHITE,
-    outlineColor: WHITE, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1,
+  yellowSmall: {
+    fontName: "Montserrat", fontSize: 36, primaryColor: assColor(0xFF, 0xEB, 0x3B), secondaryColor: YELLOW,
+    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 2, shadow: 1, alignment: 2, marginV: 260, borderStyle: 1, uppercase: true,
   },
-  redFire: {
-    fontName: "Bangers", fontSize: 52, primaryColor: RED, secondaryColor: YELLOW,
-    outlineColor: YELLOW, backColor: assColor(0, 0, 0, 0), bold: false,
-    outline: 3, shadow: 2, alignment: 2, marginV: 280, borderStyle: 1,
+  // ── Trending / Premium ──
+  thickStroke: {
+    fontName: "Poppins", fontSize: 54, primaryColor: WHITE, secondaryColor: WHITE,
+    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 6, shadow: 0, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
   },
-  orangeGlow: {
-    fontName: "Montserrat", fontSize: 50, primaryColor: ORANGE, secondaryColor: WHITE,
-    outlineColor: WHITE, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1,
+  karaokePop: {
+    fontName: "Montserrat", fontSize: 48, primaryColor: WHITE, secondaryColor: assColor(0xFF, 0xEB, 0x3B),
+    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0xA0), bold: true,
+    outline: 3, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
   },
-  yellowOutline: {
-    fontName: "Montserrat", fontSize: 50, primaryColor: WHITE, secondaryColor: YELLOW,
-    outlineColor: YELLOW, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1,
+  typewriter: {
+    fontName: "DejaVu Sans Mono", fontSize: 38, primaryColor: assColor(0x39, 0xFF, 0x14), secondaryColor: WHITE,
+    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0x80), bold: true,
+    outline: 1, shadow: 0, alignment: 2, marginV: 280, borderStyle: 1,
   },
-  greenPill: {
-    fontName: "Poppins", fontSize: 42, primaryColor: WHITE, secondaryColor: WHITE,
-    outlineColor: GREEN, backColor: GREEN, bold: true,
+  neonTeal: {
+    fontName: "Poppins", fontSize: 48, primaryColor: assColor(0x00, 0xE5, 0xFF), secondaryColor: WHITE,
+    outlineColor: assColor(0x00, 0x80, 0x90), backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 4, shadow: 6, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
+  },
+  goldLuxury: {
+    fontName: "Pacifico", fontSize: 46, primaryColor: assColor(0xFF, 0xD7, 0x00), secondaryColor: YELLOW,
+    outlineColor: assColor(0x8B, 0x65, 0x08), backColor: assColor(0, 0, 0, 0), bold: false, italic: true,
+    outline: 2, shadow: 2, alignment: 2, marginV: 280, borderStyle: 1,
+  },
+  bouncyPill: {
+    fontName: "Montserrat", fontSize: 42, primaryColor: assColor(0x1A, 0x1A, 0x1A), secondaryColor: BLACK,
+    outlineColor: WHITE, backColor: WHITE, bold: true,
     outline: 16, shadow: 0, alignment: 2, marginV: 280, borderStyle: 3,
   },
-  goldScript: {
-    fontName: "Pacifico", fontSize: 46, primaryColor: GOLD, secondaryColor: YELLOW,
-    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: false, italic: false,
-    outline: 2, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1,
+  glitch: {
+    fontName: "Montserrat", fontSize: 52, primaryColor: WHITE, secondaryColor: assColor(0xFF, 0x00, 0x00),
+    outlineColor: assColor(0x00, 0x00, 0xFF), backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 3, shadow: 0, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
   },
-  comicPop: {
-    fontName: "Bangers", fontSize: 54, primaryColor: RED, secondaryColor: WHITE,
-    outlineColor: YELLOW, backColor: YELLOW, bold: false,
-    outline: 5, shadow: 3, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
-  },
-  blueWhite: {
-    fontName: "Montserrat", fontSize: 50, primaryColor: WHITE, secondaryColor: BLUE,
-    outlineColor: BLUE, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 0, alignment: 2, marginV: 280, borderStyle: 1,
-  },
-  redBlack: {
-    fontName: "Montserrat", fontSize: 52, primaryColor: RED, secondaryColor: WHITE,
-    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 2, alignment: 2, marginV: 280, borderStyle: 1,
-  },
-  yellowRed: {
-    fontName: "Montserrat", fontSize: 50, primaryColor: YELLOW, secondaryColor: RED,
-    outlineColor: RED, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1,
-  },
-  // ── Premium / Trending ──
-  yellowHighlight: {
-    fontName: "Montserrat", fontSize: 54, primaryColor: WHITE, secondaryColor: YELLOW,
-    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 2, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
+  cinematicFade: {
+    fontName: "Montserrat", fontSize: 40, primaryColor: WHITE, secondaryColor: WHITE,
+    outlineColor: assColor(0, 0, 0, 0x60), backColor: assColor(0, 0, 0, 0), bold: false,
+    outline: 1, shadow: 0, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
   },
   redTag: {
     fontName: "Poppins", fontSize: 40, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: RED, backColor: RED, bold: true,
     outline: 14, shadow: 0, alignment: 2, marginV: 280, borderStyle: 3,
   },
-  chunkyBlue: {
-    fontName: "Poppins", fontSize: 58, primaryColor: assColor(0x70, 0x70, 0xCC), secondaryColor: WHITE,
-    outlineColor: assColor(0x30, 0x30, 0x70), backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 5, shadow: 3, alignment: 2, marginV: 280, borderStyle: 1,
+  blackBox: {
+    fontName: "Liberation Sans", fontSize: 40, primaryColor: WHITE, secondaryColor: WHITE,
+    outlineColor: assColor(0, 0, 0, 0), backColor: assColor(0, 0, 0, 0xCC), bold: false,
+    outline: 16, shadow: 0, alignment: 2, marginV: 280, borderStyle: 3,
   },
-  dualTone: {
-    fontName: "Montserrat", fontSize: 48, primaryColor: WHITE, secondaryColor: assColor(0x50, 0x50, 0xC8),
-    outlineColor: assColor(0x44, 0x44, 0xA0), backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 3, shadow: 1, alignment: 2, marginV: 280, borderStyle: 1,
+  comicBurst: {
+    fontName: "Bangers", fontSize: 56, primaryColor: assColor(0xFF, 0xEB, 0x3B), secondaryColor: RED,
+    outlineColor: RED, backColor: assColor(0, 0, 0, 0), bold: false,
+    outline: 4, shadow: 3, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
   },
-  purpleNeon: {
-    fontName: "Poppins", fontSize: 50, primaryColor: assColor(0xA8, 0x55, 0xF7), secondaryColor: WHITE,
-    outlineColor: assColor(0x60, 0x20, 0xA0), backColor: assColor(0, 0, 0, 0), bold: true,
-    outline: 4, shadow: 6, alignment: 2, marginV: 280, borderStyle: 1,
+  retroTerminal: {
+    fontName: "DejaVu Sans Mono", fontSize: 36, primaryColor: assColor(0x39, 0xFF, 0x14), secondaryColor: WHITE,
+    outlineColor: assColor(0, 0x40, 0), backColor: assColor(0, 0, 0, 0x90), bold: true,
+    outline: 1, shadow: 0, alignment: 2, marginV: 280, borderStyle: 1,
+  },
+  heavyDropShadow: {
+    fontName: "Bebas Neue", fontSize: 58, primaryColor: WHITE, secondaryColor: WHITE,
+    outlineColor: assColor(0, 0, 0, 0), backColor: assColor(0, 0, 0, 0), bold: false,
+    outline: 0, shadow: 5, alignment: 2, marginV: 280, borderStyle: 1, uppercase: true,
   },
 };
 
@@ -362,7 +299,7 @@ function buildDialogueLines(
 
     let text: string;
 
-    if (style === "karaoke") {
+    if (style === "karaokePop") {
       text = chunk.map(w => {
         const durCs = Math.round((w.endMs - w.startMs) / 10);
         return `{\\kf${durCs}}${w.text}`;
@@ -456,38 +393,23 @@ export async function writeAssFile(
 /** List of available caption styles for the frontend */
 export const CAPTION_STYLES: Array<{ id: CaptionStyle; label: string; description: string }> = [
   { id: "none", label: "None", description: "No captions" },
-  // Core
-  { id: "classic", label: "Classic", description: "White text, black outline" },
-  { id: "bold", label: "Bold", description: "Large uppercase, heavy border" },
-  { id: "neon", label: "Neon", description: "Aqua glow, dark background" },
-  { id: "karaoke", label: "Karaoke", description: "Word-by-word highlight" },
-  { id: "minimal", label: "Minimal", description: "Small, subtle, clean" },
-  { id: "box", label: "Box", description: "Text in aqua rectangle" },
-  // Text effects
-  { id: "typewriter", label: "Typewriter", description: "Monospace font" },
-  { id: "gradient", label: "Gradient", description: "Aqua to gold" },
-  { id: "subtitleBar", label: "Subtitle Bar", description: "Dark bar across bottom" },
-  { id: "outlineOnly", label: "Outline Only", description: "No fill, white outline" },
-  { id: "shadowPop", label: "Shadow Pop", description: "White text, heavy shadow" },
-  { id: "handwritten", label: "Handwritten", description: "Italic serif font" },
-  { id: "topCenter", label: "Top Center", description: "White text at top" },
-  { id: "allCapsGlow", label: "All Caps Glow", description: "Uppercase, aqua glow" },
-  // Colorful
-  { id: "whiteStroke", label: "White Stroke", description: "White, thick black outline" },
-  { id: "blueStroke", label: "Blue Stroke", description: "Blue text, white outline" },
-  { id: "redFire", label: "Red Fire", description: "Red text, yellow outline" },
-  { id: "orangeGlow", label: "Orange Glow", description: "Orange text, white glow" },
-  { id: "yellowOutline", label: "Yellow Outline", description: "White text, yellow border" },
-  { id: "greenPill", label: "Green Pill", description: "White text in green badge" },
-  { id: "goldScript", label: "Gold Script", description: "Elegant gold italic" },
-  { id: "comicPop", label: "Comic Pop", description: "Red text, yellow burst" },
-  { id: "blueWhite", label: "Blue White", description: "White text, blue outline" },
-  { id: "redBlack", label: "Red Black", description: "Red text, black outline" },
-  { id: "yellowRed", label: "Yellow Red", description: "Yellow text, red outline" },
-  // Premium / Trending
-  { id: "yellowHighlight", label: "Yellow Highlight", description: "Gold keyword pop" },
-  { id: "redTag", label: "Red Tag", description: "Red box on active word" },
-  { id: "chunkyBlue", label: "Chunky Blue", description: "Soft periwinkle, heavy" },
-  { id: "dualTone", label: "Dual Tone", description: "White + indigo accent" },
-  { id: "purpleNeon", label: "Purple Neon", description: "Purple glow effect" },
+  { id: "orangeBox", label: "Orange Box", description: "White text, orange background" },
+  { id: "yellowSlanted", label: "Yellow Slanted", description: "Heavy italic, thick black outline" },
+  { id: "redSlantedBox", label: "Red Slanted", description: "White text, red italic box" },
+  { id: "cyanOutline", label: "Cyan Outline", description: "Cyan text, white outline" },
+  { id: "motionBlur", label: "Motion Blur", description: "White text, high-speed entry" },
+  { id: "yellowSmall", label: "Small Yellow", description: "Minimalist yellow text" },
+  { id: "thickStroke", label: "Thick Stroke", description: "White text, heavy black border" },
+  { id: "karaokePop", label: "Karaoke Pop", description: "Word-by-word dynamic scale" },
+  { id: "neonTeal", label: "Neon Teal", description: "Aqua/Teal glowing text" },
+  { id: "goldLuxury", label: "Gold Luxury", description: "Elegant gold metallic look" },
+  { id: "bouncyPill", label: "Bouncy Pill", description: "Text inside a rounded pill" },
+  { id: "glitch", label: "Glitch Offset", description: "RGB split shift effect" },
+  { id: "comicBurst", label: "Comic Burst", description: "Explosive superhero style" },
+  { id: "redTag", label: "Red Tag", description: "High-contrast red highlight" },
+  { id: "blackBox", label: "Classic Black Box", description: "Documentary style" },
+  { id: "typewriter", label: "Typewriter", description: "Monospace rigid entry" },
+  { id: "cinematicFade", label: "Cinematic Fade", description: "Slow elegant reveal" },
+  { id: "retroTerminal", label: "Retro Terminal", description: "Green pixel font" },
+  { id: "heavyDropShadow", label: "Heavy Shadow", description: "Thick diagonal shadow" },
 ];

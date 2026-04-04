@@ -5,7 +5,7 @@
  * Used during export to get exact word timestamps for caption sync.
  */
 
-const HYPEREAL_API_URL = "https://api.hypereal.cloud/v1/audio/generate";
+const HYPEREAL_ASR_URL = "https://api.hypereal.cloud/v1/audio/transcriptions";
 
 interface ASRWord {
   word: string;
@@ -105,7 +105,7 @@ export async function transcribeAudio(
     form.append("language", language);
     form.append("ignore_timestamps", "false");
 
-    let res = await fetch(HYPEREAL_API_URL, {
+    let res = await fetch(HYPEREAL_ASR_URL, {
       method: "POST",
       headers: { "Authorization": `Bearer ${apiKey}` },
       body: form,
@@ -122,7 +122,7 @@ export async function transcribeAudio(
         form2.append("language", language);
         form2.append("ignore_timestamps", "false");
 
-        res = await fetch(HYPEREAL_API_URL, {
+        res = await fetch(HYPEREAL_ASR_URL, {
           method: "POST",
           headers: { "Authorization": `Bearer ${apiKey}` },
           body: form2,

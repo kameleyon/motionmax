@@ -128,16 +128,14 @@ export async function generateSceneVideo(
       );
 
       // Log the API call
-      await writeApiLog({
+      writeApiLog({
         userId,
-        projectId,
         provider: "hypereal",
         model: "grok-video-i2v",
         status: "success",
-        durationMs: elapsed,
-        cost: 0.05, // estimated cost per video generation
-        requestDetails: { sceneIndex, format, duration },
-      }).catch(() => {}); // non-critical
+        totalDurationMs: elapsed,
+        cost: 0.05,
+      }).catch(() => {});
 
       return {
         url: result.url,
@@ -165,13 +163,12 @@ export async function generateSceneVideo(
       `[SceneVideoGen] Scene ${sceneIndex}: ❌ Failed after ${(elapsed / 1000).toFixed(1)}s — ${errorMsg}`
     );
 
-    await writeApiLog({
+    writeApiLog({
       userId,
-      projectId,
       provider: "hypereal",
       model: "grok-video-i2v",
       status: "error",
-      durationMs: elapsed,
+      totalDurationMs: elapsed,
       cost: 0,
       error: errorMsg,
     }).catch(() => {});

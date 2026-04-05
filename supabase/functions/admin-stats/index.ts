@@ -168,18 +168,32 @@ serve(async (req) => {
         if (stripeKey) {
           try {
             const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-            
-            // Paginate through ALL charges (not just first 100)
+
+            // Paginate through charges using cursor-based pagination (for await may fail in Deno)
             const allCharges: Stripe.Charge[] = [];
-            for await (const charge of stripe.charges.list({ limit: 100 })) {
-              if (charge.status === "succeeded") {
-                allCharges.push(charge);
+            let hasMore = true;
+            let startingAfter: string | undefined;
+
+            while (hasMore) {
+              const params: Record<string, unknown> = { limit: 100 };
+              if (startingAfter) params.starting_after = startingAfter;
+
+              const page = await stripe.charges.list(params as any);
+              for (const charge of page.data) {
+                if (charge.status === "succeeded") {
+                  allCharges.push(charge);
+                }
+              }
+              hasMore = page.has_more;
+              if (page.data.length > 0) {
+                startingAfter = page.data[page.data.length - 1].id;
+              } else {
+                hasMore = false;
               }
             }
-            
+
             totalRevenue = allCharges.reduce((sum, c) => sum + c.amount, 0) / 100;
-            
-            // Separate subscription vs one-time (credit pack) payments
+
             for (const charge of allCharges) {
               if (charge.invoice) {
                 subscriptionRevenue += charge.amount / 100;
@@ -187,9 +201,13 @@ serve(async (req) => {
                 creditPackRevenue += charge.amount / 100;
               }
             }
+
+            logStep("Stripe revenue fetched", { charges: allCharges.length, totalRevenue });
           } catch (stripeErr) {
-            console.error("Stripe error in dashboard_stats:", stripeErr);
+            logStep("ERROR: Stripe revenue fetch failed", { error: String(stripeErr) });
           }
+        } else {
+          logStep("WARNING: STRIPE_SECRET_KEY not set, revenue will show $0");
         }
 
         result = {

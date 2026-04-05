@@ -329,44 +329,7 @@ export function StyleSelector({
         </motion.div>
       )}
 
-      {/* Brand Mark Option */}
-      <div className="pt-4 border-t border-border/30 px-1">
-        <div className="flex items-center gap-3">
-          <Checkbox 
-            id="brand-mark" 
-            checked={brandMarkEnabled}
-            onCheckedChange={(checked) => onBrandMarkEnabledChange?.(checked === true)}
-          />
-          <Label 
-            htmlFor="brand-mark" 
-            className="text-sm font-medium text-muted-foreground cursor-pointer"
-          >
-            Your brand mark
-          </Label>
-        </div>
-        
-        {brandMarkEnabled && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="pt-3 px-1">
-              <Input
-                placeholder="Company name or copyright text..."
-                value={brandMarkText}
-                onChange={(e) => onBrandMarkTextChange?.(e.target.value)}
-                className="rounded-xl border-border/50 bg-muted/30 focus:bg-background text-sm w-full"
-                maxLength={50}
-              />
-              <p className="text-xs text-muted-foreground/60 mt-1.5">
-                Appears bottom-left on all generated images as a signature
-              </p>
-            </div>
-          </motion.div>
-        )}
-      </div>
+      {/* Brand Mark — managed by parent (CinematicWorkspace compact grid) */}
     </div>
   );
 }

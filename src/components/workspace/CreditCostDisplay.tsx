@@ -29,7 +29,7 @@ export function CreditCostDisplay({ projectType, length, creditsBalance }: Credi
           <span className="text-sm text-muted-foreground">
             {creditsBalance} available
           </span>
-          <span className="text-base font-bold text-primary">
+          <span className="text-sm text-primary">
             {creditsRequired} {creditsRequired === 1 ? "credit" : "credits"}
           </span>
         </div>

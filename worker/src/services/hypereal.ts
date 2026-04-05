@@ -341,7 +341,7 @@ async function pollHyperealJob(
     }
   }
 
-  throw new Error(`${model} timed out after ${maxAttempts} polls (~${Math.round(maxAttempts * basePollMs / 60_000)} min).`);
+  throw new Error(`${model} timed out after ${maxAttempts} polls (~${Math.round(maxAttempts * SLOW_POLL_MS / 60_000)} min).`);
 }
 
 // ── Kling V2.5 Turbo Pro I2V (fallback for V2.6) ────────────────────

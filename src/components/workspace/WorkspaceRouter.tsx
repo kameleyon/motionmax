@@ -5,6 +5,7 @@ import { Doc2VideoWorkspace, WorkspaceHandle } from "./Doc2VideoWorkspace";
 import { StorytellingWorkspace } from "./StorytellingWorkspace";
 import { SmartFlowWorkspace } from "./SmartFlowWorkspace";
 import { CinematicWorkspace } from "./CinematicWorkspace";
+import { WorkspaceErrorBoundary } from "./WorkspaceErrorBoundary";
 
 type WorkspaceMode = "doc2video" | "storytelling" | "smartflow" | "cinematic";
 
@@ -91,16 +92,16 @@ export const WorkspaceRouter = forwardRef<WorkspaceHandle>(function WorkspaceRou
   }));
 
   if (mode === "storytelling") {
-    return <StorytellingWorkspace ref={storytellingRef} projectId={projectId} />;
+    return <WorkspaceErrorBoundary><StorytellingWorkspace ref={storytellingRef} projectId={projectId} /></WorkspaceErrorBoundary>;
   }
 
   if (mode === "smartflow") {
-    return <SmartFlowWorkspace ref={smartflowRef} projectId={projectId} />;
+    return <WorkspaceErrorBoundary><SmartFlowWorkspace ref={smartflowRef} projectId={projectId} /></WorkspaceErrorBoundary>;
   }
 
   if (mode === "cinematic") {
-    return <CinematicWorkspace ref={cinematicRef} projectId={projectId} />;
+    return <WorkspaceErrorBoundary><CinematicWorkspace ref={cinematicRef} projectId={projectId} /></WorkspaceErrorBoundary>;
   }
 
-  return <Doc2VideoWorkspace ref={doc2videoRef} projectId={projectId} />;
+  return <WorkspaceErrorBoundary><Doc2VideoWorkspace ref={doc2videoRef} projectId={projectId} /></WorkspaceErrorBoundary>;
 });

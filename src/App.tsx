@@ -9,6 +9,7 @@ import { AdminRoute } from "@/components/AdminRoute";
 import { AppShell } from "@/components/layout/AppShell";
 import { lazy, Suspense } from "react";
 import { GlobalErrorBoundary } from "./components/GlobalErrorBoundary";
+import { CookieConsent } from "./components/CookieConsent";
 
 // Route-level code splitting — each page loads only when visited
 const Landing = lazy(() => import("./pages/Landing"));
@@ -57,6 +58,7 @@ const App = () => (
     <ThemeProvider attribute="class" defaultTheme="light" disableTransitionOnChange>
       <TooltipProvider>
         <Sonner />
+        <CookieConsent />
         <BrowserRouter>
           <Suspense fallback={<PageLoader />}>
           <Routes>

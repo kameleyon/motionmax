@@ -8,20 +8,8 @@ import { useCallback, useEffect, useRef } from "react";
  * Falls back to console.debug in dev.
  * ────────────────────────────────────────────── */
 
-const GA_ID = import.meta.env.VITE_GA_MEASUREMENT_ID ?? "";
-
-// Self-executing: load GA4 script once on import
-if (GA_ID && typeof window !== "undefined") {
-  const script = document.createElement("script");
-  script.async = true;
-  script.src = `https://www.googletagmanager.com/gtag/js?id=${GA_ID}`;
-  document.head.appendChild(script);
-  (window as any).dataLayer = (window as any).dataLayer || [];
-  function gtag(...args: any[]) { (window as any).dataLayer.push(arguments); }
-  (window as any).gtag = gtag;
-  gtag("js", new Date());
-  gtag("config", GA_ID, { send_page_view: true });
-}
+// GA4 is now loaded ONLY after cookie consent via CookieConsent.tsx
+// This file just sends events if gtag is already present
 
 type EventParams = Record<string, string | number | boolean>;
 

@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Security audit
+        run: npm audit --audit-level=high || echo "::warning::npm audit found high-severity vulnerabilities"
+
       - name: Lint
         run: npm run lint
 
@@ -83,6 +86,6 @@ jobs:
           for dir in supabase/functions/*/; do
             if [ -f "$dir/index.ts" ]; then
               echo "Checking $dir..."
-              deno check --no-lock "$dir/index.ts" || true
+              deno check --no-lock "$dir/index.ts"
             fi
           done

@@ -60,12 +60,14 @@ export default function Privacy() {
 
           <section className="space-y-3">
             <h2 className="text-lg font-semibold text-foreground">4. Third-Party Services</h2>
-            <p>We use the following categories of third-party services to operate the platform:</p>
+            <p>We use the following third-party services to operate the platform. Your data is transmitted securely and only as necessary for service delivery:</p>
             <ul className="list-disc pl-6 space-y-1">
-              <li><strong className="text-foreground">AI Model Providers:</strong> We send your text and content inputs to AI providers (including Google and OpenAI) for processing. These providers process data under their own privacy policies.</li>
-              <li><strong className="text-foreground">Voice Synthesis:</strong> Voice recordings and cloning requests are processed by our voice AI partner. Voice data is transmitted securely and not shared further.</li>
-              <li><strong className="text-foreground">Payment Processing:</strong> Stripe handles all payment data. See Stripe's privacy policy at stripe.com/privacy.</li>
-              <li><strong className="text-foreground">Cloud Infrastructure:</strong> Our backend infrastructure is hosted on secure cloud providers. Data is stored in encrypted databases with access controls.</li>
+              <li><strong className="text-foreground">AI Generation:</strong> Hypereal (image, video, speech recognition), Google Gemini (research, text-to-speech), OpenRouter/Anthropic Claude (script generation fallback), Replicate (image generation fallback). We send your text prompts, uploaded content, and scene descriptions to these providers for processing.</li>
+              <li><strong className="text-foreground">Voice Synthesis:</strong> ElevenLabs (voice cloning, text-to-speech), Fish Audio, LemonFox, and Google Cloud TTS. Voice recordings are processed securely. Cloned voice models are stored on ElevenLabs and can be deleted from your Voice Lab at any time.</li>
+              <li><strong className="text-foreground">Payment Processing:</strong> Stripe handles all payment and subscription data. We never store credit card numbers. See Stripe's privacy policy at stripe.com/privacy.</li>
+              <li><strong className="text-foreground">Analytics:</strong> Google Analytics 4 (if you consent via our cookie banner) collects anonymized usage data including page views, feature usage, and session duration. You can opt out at any time by rejecting cookies.</li>
+              <li><strong className="text-foreground">Error Monitoring:</strong> Sentry collects error reports and performance data to help us identify and fix issues. This includes stack traces, browser information, and session replay data on errors. No personal content is included in error reports.</li>
+              <li><strong className="text-foreground">Cloud Infrastructure:</strong> Supabase (database, authentication, file storage), Vercel (frontend hosting), Render (background processing). Data is encrypted at rest and in transit.</li>
             </ul>
           </section>
 

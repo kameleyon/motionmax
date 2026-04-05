@@ -42,6 +42,19 @@ export async function fetchDashboardStats() {
     totalSpent += Number(c.total_cost) || 0;
   });
 
+  // Try to get revenue from Stripe via edge function (async, non-blocking)
+  let revenue = { total: 0, subscriptions: 0, creditPacks: 0 };
+  try {
+    const { data, error } = await supabase.functions.invoke("admin-stats", {
+      body: { action: "dashboard_stats" },
+    });
+    if (!error && data?.revenue) {
+      revenue = data.revenue;
+    }
+  } catch {
+    // Edge function unavailable -- revenue stays at 0
+  }
+
   return {
     totalUsers: profileCount || 0,
     subscriberCount: activeSubs.length,
@@ -58,8 +71,8 @@ export async function fetchDashboardStats() {
       googleTts: totalGoogleTts,
       total: totalSpent,
     },
-    revenue: { total: 0, subscriptions: 0, creditPacks: 0 },
-    profitMargin: -totalSpent,
+    revenue,
+    profitMargin: revenue.total - totalSpent,
   };
 }
 
@@ -363,7 +376,7 @@ export async function fetchUserDetails(params: { userId?: string; targetUserId?:
 
 export async function adminDirectQuery(action: string, params?: Record<string, unknown>): Promise<unknown> {
   switch (action) {
-    case "dashboard_stats": throw new Error("dashboard_stats requires edge function for Stripe revenue");
+    case "dashboard_stats": return fetchDashboardStats();
     case "subscribers_list": return fetchSubscribersList(params as any);
     case "generation_stats": return fetchGenerationStats(params as any);
     case "admin_logs": return fetchAdminLogs(params as any);

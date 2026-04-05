@@ -32,18 +32,13 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace("Bearer ", "");
-    const supabaseAuth = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      { global: { headers: { Authorization: authHeader } } }
-    );
 
-    const { data: claimsData, error: claimsError } = await supabaseAuth.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+    if (userError || !user) {
       throw new Error("Authentication error: Invalid session");
     }
-    
-    const userId = claimsData.claims.sub as string;
+
+    const userId = user.id;
     logStep("User authenticated", { userId });
 
     // Rate limit

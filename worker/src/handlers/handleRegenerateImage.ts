@@ -75,6 +75,26 @@ export async function handleRegenerateImage(
   const style: string = (generation.projects as any)?.style || "realistic";
   const styleDesc = getStylePrompt(style);
 
+  // Extract character bible from scene _meta (set during script generation)
+  const characterBible: Record<string, string> = scene._meta?.characterBible || {};
+  const bibleSummary = Object.entries(characterBible)
+    .map(([name, desc]) => `${name}: ${desc}`)
+    .join("\n");
+
+  // Also get user's character description from project
+  const { data: projectData } = await supabase
+    .from("projects")
+    .select("character_description")
+    .eq("id", projectId)
+    .single();
+  const userCharDesc = projectData?.character_description || "";
+
+  // Combined character consistency block
+  const characterBlock = [
+    userCharDesc,
+    bibleSummary ? `CHARACTER BIBLE (MUST FOLLOW EXACTLY):\n${bibleSummary}` : "",
+  ].filter(Boolean).join("\n\n");
+
   let imageUrl: string;
 
   const aspectMap: Record<string, string> = {
@@ -89,14 +109,21 @@ export async function handleRegenerateImage(
 
     if (!hyperealApiKey) throw new Error("HYPEREAL_API_KEY required for image editing");
 
+    // Inject style and character info into the edit instruction
+    const editInstruction = [
+      imageModification,
+      `STYLE: ${styleDesc}. Maintain this exact visual style.`,
+      characterBlock ? `CHARACTER APPEARANCE: ${characterBlock.substring(0, 300)}. Keep characters IDENTICAL to their description.` : "",
+    ].filter(Boolean).join("\n");
+
     imageUrl = await editImageWithNanoBanana(
       sourceImageUrl,
-      imageModification,
+      editInstruction,
       hyperealApiKey,
       aspectRatio,
     );
   } else {
-    // Full Regeneration
+    // Full Regeneration — include style + character bible in prompt
     let basePrompt: string = scene.visualPrompt || "";
     if (targetImageIndex > 0) {
       const subIdx = targetImageIndex - 1;
@@ -105,7 +132,14 @@ export async function handleRegenerateImage(
         ? scene.subVisuals[subIdx]
         : (subIdx === 0 ? "close-up detail shot, " : "wide establishing shot, ") + scene.visualPrompt;
     }
-    const fullPrompt = `${basePrompt}\n\nSTYLE: ${styleDesc}\n\nProfessional illustration with dynamic composition and clear visual hierarchy.`;
+
+    const promptParts = [
+      basePrompt,
+      `STYLE: ${styleDesc}. Maintain this exact visual style throughout.`,
+      characterBlock ? `CHARACTER CONSISTENCY (MANDATORY):\n${characterBlock.substring(0, 500)}\nCharacters MUST match this description EXACTLY — same hair, same clothes, same skin tone.` : "",
+    ];
+
+    const fullPrompt = promptParts.filter(Boolean).join("\n\n");
     imageUrl = await generateImage(fullPrompt, hyperealApiKey, replicateApiKey, format, projectId);
   }
 

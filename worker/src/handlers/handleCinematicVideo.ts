@@ -93,7 +93,9 @@ export async function handleCinematicVideo(
     .single();
 
   const format = project?.format || "landscape";
-  const style = project?.style || "realistic";
+  const styleId = project?.style || "realistic";
+  const { getStylePrompt: getStyle } = await import("../services/prompts.js");
+  const styleDesc = getStyle(styleId);
   const userCharacterDesc = project?.character_description || "";
 
   // Extract the AI-generated character bible from scene _meta (set during script generation)
@@ -185,7 +187,7 @@ export async function handleCinematicVideo(
   const visualPrompt = scene.visualPrompt || scene.visual_prompt || "";
   const voiceover = scene.voiceover || "";
   const cameraMotion = getCameraMotion(sceneIndex);
-  const videoPrompt = buildVideoPrompt(visualPrompt, voiceover, characterDescription, style, language, cameraMotion);
+  const videoPrompt = buildVideoPrompt(visualPrompt, voiceover, characterDescription, styleDesc, language, cameraMotion);
 
   const apiKey = (process.env.HYPEREAL_API_KEY || "").trim();
   if (!apiKey) throw new Error("HYPEREAL_API_KEY not configured");
@@ -312,7 +314,7 @@ function buildVideoPrompt(
   const MAX_CHARS = 2400;
   const parts: string[] = [];
 
-  parts.push(`STYLE: ${styleName.toUpperCase()}. Maintain this exact visual style throughout.`);
+  parts.push(`VISUAL STYLE (MANDATORY): ${styleName}. Maintain this exact visual style in every frame. Do NOT switch to photorealistic if the style is caricature. Do NOT switch to cartoon if the style is realistic.`);
 
   if (characterDescription) {
     // Give the character bible more space — this is critical for consistency

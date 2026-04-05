@@ -85,7 +85,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
       }
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const canGenerate = content.trim().length > 0 && !generationState.isGenerating;
+    const canGenerate = content.trim().length >= 10 && !generationState.isGenerating;
 
     // Disable formats/lengths based on plan
     const disabledFormats: VideoFormat[] = (["landscape", "portrait", "square"] as VideoFormat[]).filter(

@@ -98,7 +98,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
       if (draft?.content) setContent(draft.content as string);
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const canGenerate = content.trim().length > 0 && !generationState.isGenerating;
+    const canGenerate = content.trim().length >= 10 && !generationState.isGenerating;
 
     // Disable formats/lengths based on plan
     const limits = PLAN_LIMITS[plan];
@@ -422,6 +422,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                           type="text"
                           placeholder="Your brand (optional)"
                           value={brandMarkText}
+                          maxLength={50}
                           onChange={(e) => {
                             setBrandMarkText(e.target.value);
                             setBrandMarkEnabled(e.target.value.trim().length > 0);

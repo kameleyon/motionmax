@@ -82,7 +82,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
       if (draft?.extractionPrompt) setExtractionPrompt(draft.extractionPrompt as string);
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const canGenerate = dataContent.trim().length > 0 && extractionPrompt.trim().length > 0 && !generationState.isGenerating;
+    const canGenerate = dataContent.trim().length >= 10 && extractionPrompt.trim().length > 0 && !generationState.isGenerating;
 
     // Load project if projectId provided, or reset if project param removed (tab click)
     useEffect(() => {

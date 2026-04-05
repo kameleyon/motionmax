@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -23,19 +24,21 @@ const GENRES: { id: StoryGenre; label: string }[] = [
   { id: "news-report", label: "News Report" },
 ];
 
-export function GenreSelector({ selected, onSelect }: GenreSelectorProps) {
+function GenreSelectorInner({ selected, onSelect }: GenreSelectorProps) {
   return (
     <div className="space-y-3">
       <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
         Genre / Style
       </h3>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Genre / Style">
         {GENRES.map((genre) => {
           const isSelected = selected === genre.id;
           return (
             <motion.button
               key={genre.id}
               onClick={() => onSelect(genre.id)}
+              role="radio"
+              aria-checked={selected === genre.id}
               className={cn(
                 "rounded-full border px-3 py-1.5 text-xs font-medium transition-all",
                 isSelected
@@ -53,3 +56,5 @@ export function GenreSelector({ selected, onSelect }: GenreSelectorProps) {
     </div>
   );
 }
+
+export const GenreSelector = memo(GenreSelectorInner);

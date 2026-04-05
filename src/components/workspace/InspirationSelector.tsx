@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import {
@@ -36,7 +37,7 @@ const INSPIRATIONS: { id: InspirationStyle; label: string; description: string }
   { id: "ernest-hemingway", label: "Ernest Hemingway", description: "Sparse, powerful minimalism" },
 ];
 
-export function InspirationSelector({ selected, onSelect }: InspirationSelectorProps) {
+function InspirationSelectorInner({ selected, onSelect }: InspirationSelectorProps) {
   const selectedItem = INSPIRATIONS.find((item) => item.id === selected);
 
   return (
@@ -67,3 +68,5 @@ export function InspirationSelector({ selected, onSelect }: InspirationSelectorP
     </div>
   );
 }
+
+export const InspirationSelector = memo(InspirationSelectorInner);

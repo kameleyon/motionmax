@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, memo } from "react";
 import { User, UserRound, Mic, Play, Pause } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -41,7 +41,7 @@ const standardVoices: { id: VoiceGender; label: string; icon: typeof User }[] = 
   { id: "female", label: "Female", icon: UserRound },
 ];
 
-export function VoiceSelector({ selected, onSelect }: VoiceSelectorProps) {
+function VoiceSelectorInner({ selected, onSelect }: VoiceSelectorProps) {
   const { user } = useAuth();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
@@ -228,3 +228,5 @@ export function VoiceSelector({ selected, onSelect }: VoiceSelectorProps) {
     </div>
   );
 }
+
+export const VoiceSelector = memo(VoiceSelectorInner);

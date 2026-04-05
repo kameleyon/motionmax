@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -6,10 +7,12 @@ interface InclinationSelectorProps {
   onDisabledChange: (disabled: boolean) => void;
 }
 
-export function InclinationSelector({ disabled, onDisabledChange }: InclinationSelectorProps) {
+function InclinationSelectorInner({ disabled, onDisabledChange }: InclinationSelectorProps) {
   return (
     <button
       onClick={() => onDisabledChange(!disabled)}
+      role="radio"
+      aria-checked={disabled}
       className={cn(
         "flex items-center gap-3 w-full rounded-xl border px-4 py-2.5 text-left transition-all",
         disabled
@@ -41,3 +44,5 @@ export function InclinationSelector({ disabled, onDisabledChange }: InclinationS
     </button>
   );
 }
+
+export const InclinationSelector = memo(InclinationSelectorInner);

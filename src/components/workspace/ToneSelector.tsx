@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -25,19 +26,21 @@ const TONES: { id: StoryTone; label: string }[] = [
   { id: "educational", label: "Educational" },
 ];
 
-export function ToneSelector({ selected, onSelect }: ToneSelectorProps) {
+function ToneSelectorInner({ selected, onSelect }: ToneSelectorProps) {
   return (
     <div className="space-y-3">
       <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
         Tone
       </h3>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Tone">
         {TONES.map((tone) => {
           const isSelected = selected === tone.id;
           return (
             <motion.button
               key={tone.id}
               onClick={() => onSelect(tone.id)}
+              role="radio"
+              aria-checked={selected === tone.id}
               className={cn(
                 "rounded-full border px-3 py-1.5 text-xs font-medium transition-all",
                 isSelected
@@ -55,3 +58,5 @@ export function ToneSelector({ selected, onSelect }: ToneSelectorProps) {
     </div>
   );
 }
+
+export const ToneSelector = memo(ToneSelectorInner);

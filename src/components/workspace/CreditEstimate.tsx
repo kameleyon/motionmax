@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Coins } from "lucide-react";
 import { getCreditsRequired } from "@/lib/planLimits";
 import { cn } from "@/lib/utils";
@@ -8,7 +9,7 @@ interface CreditEstimateProps {
   creditsBalance: number;
 }
 
-export function CreditEstimate({ projectType, length, creditsBalance }: CreditEstimateProps) {
+function CreditEstimateInner({ projectType, length, creditsBalance }: CreditEstimateProps) {
   // Guard: smartflow/cinematic return early in getCreditsRequired (length not checked).
   // For doc2video/storytelling, an empty/invalid length would throw — default to 0 so
   // the component renders safely while the user is still selecting options.
@@ -46,3 +47,5 @@ export function CreditEstimate({ projectType, length, creditsBalance }: CreditEs
     </div>
   );
 }
+
+export const CreditEstimate = memo(CreditEstimateInner);

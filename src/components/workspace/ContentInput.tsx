@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Textarea } from "@/components/ui/textarea";
 
 const MAX_CONTENT_LENGTH = 500000;
@@ -7,13 +8,14 @@ interface ContentInputProps {
   onContentChange: (content: string) => void;
 }
 
-export function ContentInput({ content, onContentChange }: ContentInputProps) {
+function ContentInputInner({ content, onContentChange }: ContentInputProps) {
   return (
     <div className="space-y-3">
-      <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+      <label htmlFor="content-input" className="block text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
         Your Source Content
-      </h3>
+      </label>
       <Textarea
+        id="content-input"
         placeholder="Please add all your sources and documentations.
 
 Example: Paste your article, blog post, script, or any text content you want to transform into a video..."
@@ -32,3 +34,5 @@ Example: Paste your article, blog post, script, or any text content you want to 
     </div>
   );
 }
+
+export const ContentInput = memo(ContentInputInner);

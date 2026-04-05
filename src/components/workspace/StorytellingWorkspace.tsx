@@ -94,7 +94,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
       if (draft?.storyIdea) setStoryIdea(draft.storyIdea as string);
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const canGenerate = storyIdea.trim().length > 0 && !generationState.isGenerating;
+    const canGenerate = storyIdea.trim().length >= 10 && !generationState.isGenerating;
 
     // Get disabled formats based on plan (free users can only use landscape)
     const limits = PLAN_LIMITS[plan];
@@ -397,6 +397,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
                       value={brandName}
                       onChange={(e) => setBrandName(e.target.value)}
                       placeholder="e.g., TechCorp, Alex the Explorer"
+                      maxLength={50}
                       className="mt-3"
                     />
                     <p className="text-xs text-muted-foreground/60 mt-2">

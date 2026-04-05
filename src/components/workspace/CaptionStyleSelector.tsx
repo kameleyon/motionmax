@@ -27,7 +27,9 @@ export type CaptionStyle =
   | "blackBox"
   | "comicBurst"
   | "retroTerminal"
-  | "heavyDropShadow";
+  | "heavyDropShadow"
+  | "cleanPop"
+  | "toxicBounce";
 
 interface CaptionStyleSelectorProps {
   value: CaptionStyle;
@@ -57,6 +59,8 @@ const captionStyles: { id: CaptionStyle; label: string; description: string }[] 
   { id: "cinematicFade", label: "Cinematic Fade", description: "Slow elegant reveal" },
   { id: "retroTerminal", label: "Retro Terminal", description: "Green pixel font" },
   { id: "heavyDropShadow", label: "Heavy Shadow", description: "Thick diagonal shadow" },
+  { id: "cleanPop", label: "Clean Pop", description: "White text, smooth scale up" },
+  { id: "toxicBounce", label: "Toxic Bounce", description: "Neon green, heavy outline, bouncy" },
 ];
 
 /** CSS preview classes that mimic the specific template styles */
@@ -83,6 +87,8 @@ export const previewStyles: Record<CaptionStyle, string> = {
   cinematicFade: "[font-family:'Montserrat',sans-serif] font-light text-white tracking-[0.2em] uppercase",
   retroTerminal: "font-mono font-bold text-[#39FF14] text-sm",
   heavyDropShadow: "[font-family:'Bebas_Neue',sans-serif] text-white text-lg tracking-wider [text-shadow:_4px_4px_0_#000]",
+  cleanPop: "[font-family:'Montserrat',sans-serif] font-black text-white uppercase tracking-wide drop-shadow-md",
+  toxicBounce: "[font-family:'Montserrat',sans-serif] font-black text-[#39FF14] uppercase tracking-wider [text-shadow:_-2px_-2px_0_#000,_2px_-2px_0_#000,_-2px_2px_0_#000,_2px_2px_0_#000,_4px_4px_0_#000]",
 };
 
 export function CaptionStyleSelector({ value, onChange }: CaptionStyleSelectorProps) {

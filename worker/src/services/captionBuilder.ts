@@ -19,7 +19,8 @@ export type CaptionStyle =
   | "motionBlur" | "yellowSmall" | "thickStroke" | "karaokePop"
   | "typewriter" | "neonTeal" | "goldLuxury" | "bouncyPill"
   | "glitch" | "cinematicFade" | "redTag" | "blackBox"
-  | "comicBurst" | "retroTerminal" | "heavyDropShadow";
+  | "comicBurst" | "retroTerminal" | "heavyDropShadow"
+  | "cleanPop" | "toxicBounce";
 
 export interface CaptionWord {
   text: string;
@@ -237,6 +238,16 @@ const STYLE_DEFS: Record<Exclude<CaptionStyle, "none">, AssStyleDef> = {
     outlineColor: assColor(0, 0, 0, 0), backColor: assColor(0, 0, 0, 0), bold: false,
     outline: 0, shadow: 7, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
+  cleanPop: {
+    fontName: "Montserrat", fontSize: 88, primaryColor: WHITE, secondaryColor: WHITE,
+    outlineColor: assColor(0, 0, 0, 0x40), backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 2, shadow: 3, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
+  },
+  toxicBounce: {
+    fontName: "Montserrat", fontSize: 90, primaryColor: assColor(0x39, 0xFF, 0x14), secondaryColor: WHITE,
+    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 6, shadow: 5, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
+  },
 };
 
 // ── ASS File Generation ────────────────────────────────────────────
@@ -273,7 +284,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
  */
 const SINGLE_WORD_STYLES: Set<string> = new Set([
   "orangeBox", "yellowSlanted", "redSlantedBox", "motionBlur",
-  "thickStroke", "comicBurst", "heavyDropShadow", "glitch", "bouncyPill",
+  "thickStroke", "comicBurst", "heavyDropShadow", "glitch", "bouncyPill", "cleanPop", "toxicBounce",
 ]);
 
 /** Subtitle-like styles that show longer lines (documentary / cinematic) */
@@ -437,4 +448,6 @@ export const CAPTION_STYLES: Array<{ id: CaptionStyle; label: string; descriptio
   { id: "cinematicFade", label: "Cinematic Fade", description: "Slow elegant reveal" },
   { id: "retroTerminal", label: "Retro Terminal", description: "Green pixel font" },
   { id: "heavyDropShadow", label: "Heavy Shadow", description: "Thick diagonal shadow" },
+  { id: "cleanPop", label: "Clean Pop", description: "White text, smooth scale up" },
+  { id: "toxicBounce", label: "Toxic Bounce", description: "Neon green, heavy outline, bouncy" },
 ];

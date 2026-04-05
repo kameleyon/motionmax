@@ -93,6 +93,14 @@ const styleAnimations: Record<CaptionStyle, Variants> = {
     hidden: { opacity: 0, y: -20 },
     visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 400, damping: 12 } },
   },
+  cleanPop: {
+    hidden: { opacity: 0, scale: 0.8 },
+    visible: { opacity: 1, scale: 1, transition: { type: "spring", stiffness: 400, damping: 25 } },
+  },
+  toxicBounce: {
+    hidden: { opacity: 0, scale: 0.3, rotate: -5 },
+    visible: { opacity: 1, scale: 1, rotate: 0, transition: { type: "spring", bounce: 0.6, duration: 0.4 } },
+  },
 };
 
 export function CaptionPreviewAnimation({ captionStyle }: CaptionPreviewAnimationProps) {

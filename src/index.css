@@ -44,8 +44,8 @@
     --muted: 184 10% 95%;
     --muted-foreground: 200 9% 35%;
 
-    /* Accent - Gold */
-    --accent: 45 67% 68%;
+    /* Accent - Subtle aqua tint for hover/focus states */
+    --accent: 184 15% 92%;
     --accent-foreground: 200 9% 10%;
 
     /* Gold tokens for charts and highlights */
@@ -118,9 +118,9 @@
     --text-secondary: 200 8% 65%;   /* ~8.5:1 contrast vs background */
     --text-tertiary: 200 8% 50%;    /* ~5.5:1 contrast vs background — AA for 14px+ */
 
-    /* Accent - Gold (brighter in dark mode) */
-    --accent: 45 67% 72%;
-    --accent-foreground: 200 9% 10%;
+    /* Accent - Subtle aqua tint for hover/focus states */
+    --accent: 184 20% 18%;
+    --accent-foreground: 184 60% 85%;
 
     /* Gold tokens */
     --gold: 45 67% 72%;

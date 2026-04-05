@@ -89,19 +89,36 @@ export function getDefaultSpeaker(language: string): SpeakerVoice {
   }
 }
 
+/** Sample text in each language for voice preview */
+function getSampleText(speakerName: string, language: string): string {
+  switch (language) {
+    case "ht": return `Bonjou, mwen se ${speakerName}. Se konsa vwa mwen sonnen lè m ap rakonte videyo ou.`;
+    case "fr": return `Bonjour, je suis ${speakerName}. Voici comment sonne ma voix pour vos vid\u00e9os.`;
+    case "es": return `Hola, soy ${speakerName}. As\u00ed suena mi voz cuando narro tu video.`;
+    case "pt": return `Ol\u00e1, eu sou ${speakerName}. \u00c9 assim que minha voz soa ao narrar seu v\u00eddeo.`;
+    case "de": return `Hallo, ich bin ${speakerName}. So klingt meine Stimme bei der Vertonung Ihres Videos.`;
+    case "it": return `Ciao, sono ${speakerName}. Ecco come suona la mia voce quando narro il tuo video.`;
+    case "ru": return `\u041f\u0440\u0438\u0432\u0435\u0442, \u044f ${speakerName}. \u0422\u0430\u043a \u0437\u0432\u0443\u0447\u0438\u0442 \u043c\u043e\u0439 \u0433\u043e\u043b\u043e\u0441 \u043f\u0440\u0438 \u043e\u0437\u0432\u0443\u0447\u0438\u0432\u0430\u043d\u0438\u0438 \u0432\u0430\u0448\u0435\u0433\u043e \u0432\u0438\u0434\u0435\u043e.`;
+    case "zh": return `\u4F60\u597D\uFF0C\u6211\u662F${speakerName}\u3002\u8FD9\u5C31\u662F\u6211\u4E3A\u60A8\u7684\u89C6\u9891\u89E3\u8BF4\u65F6\u7684\u58F0\u97F3\u3002`;
+    case "ja": return `\u3053\u3093\u306B\u3061\u306F\u3001${speakerName}\u3067\u3059\u3002\u52D5\u753B\u306E\u30CA\u30EC\u30FC\u30B7\u30E7\u30F3\u306F\u3053\u306E\u3088\u3046\u306B\u306A\u308A\u307E\u3059\u3002`;
+    case "ko": return `\uC548\uB155\uD558\uC138\uC694, ${speakerName}\uC785\uB2C8\uB2E4. \uBE44\uB514\uC624 \uB0B4\uB808\uC774\uC158 \uBAA9\uC18C\uB9AC\uC785\uB2C8\uB2E4.`;
+    default: return `Hello, I'm ${speakerName}. This is how my voice sounds when narrating your video.`;
+  }
+}
+
 const CACHE_KEY = "motionmax_voice_previews";
 
-function getCachedPreview(speakerId: string): string | null {
+function getCachedPreview(speakerId: string, language: string): string | null {
   try {
     const cache = JSON.parse(localStorage.getItem(CACHE_KEY) || "{}");
-    return cache[speakerId] || null;
+    return cache[`${speakerId}_${language}`] || null;
   } catch { return null; }
 }
 
-function setCachedPreview(speakerId: string, url: string) {
+function setCachedPreview(speakerId: string, language: string, url: string) {
   try {
     const cache = JSON.parse(localStorage.getItem(CACHE_KEY) || "{}");
-    cache[speakerId] = url;
+    cache[`${speakerId}_${language}`] = url;
     localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
   } catch { /* ignore */ }
 }
@@ -133,8 +150,9 @@ export function SpeakerSelector({ value, onChange, language }: SpeakerSelectorPr
 
     stopPlayback();
 
-    // Check cache first
-    const cached = getCachedPreview(speaker.id);
+    // Check cache first (keyed by speaker + language)
+    const lang = language || "en";
+    const cached = getCachedPreview(speaker.id, lang);
     if (cached) {
       const audio = new Audio(cached);
       audioRef.current = audio;
@@ -151,7 +169,7 @@ export function SpeakerSelector({ value, onChange, language }: SpeakerSelectorPr
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const sampleText = `Hello, I'm ${speaker.label}. This is how my voice sounds when narrating your video.`;
+      const sampleText = getSampleText(speaker.label, language || "en");
 
       const { data: job, error } = await supabase
         .from("video_generation_jobs")
@@ -183,7 +201,7 @@ export function SpeakerSelector({ value, onChange, language }: SpeakerSelectorPr
 
         if (row?.status === "completed" && row?.result?.audioUrl) {
           const url = row.result.audioUrl;
-          setCachedPreview(speaker.id, url);
+          setCachedPreview(speaker.id, lang, url);
           const audio = new Audio(url);
           audioRef.current = audio;
           setPreviewPlaying(speaker.id);

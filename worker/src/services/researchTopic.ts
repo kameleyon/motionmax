@@ -73,7 +73,34 @@ export async function researchTopic(content: string): Promise<string> {
   const startTime = Date.now();
 
   try {
-    // Combine system prompt + user content into messages
+    // Extract image URLs from content for multimodal research
+    const imageUrls: string[] = [];
+    const imagePattern = /\[SOURCE IMAGE\]\s*(https?:\/\/[^\s]+)/g;
+    let match;
+    while ((match = imagePattern.exec(content)) !== null) {
+      imageUrls.push(match[1]);
+    }
+
+    // Build user message — include full content (Gemini has 1M context)
+    // Truncate at 50K chars to stay within reasonable request size
+    const userText = `Research this topic for an AI-generated cinematic video:\n\n${content.substring(0, 50000)}`;
+
+    // Build multimodal content parts if images are attached
+    let userContent: any;
+    if (imageUrls.length > 0) {
+      // Multimodal: text + image URLs for Gemini to analyze
+      userContent = [
+        { type: "text", text: userText },
+        ...imageUrls.slice(0, 5).map(url => ({
+          type: "image_url",
+          image_url: { url },
+        })),
+      ];
+      console.log(`[Research] Sending ${imageUrls.length} images for multimodal analysis`);
+    } else {
+      userContent = userText;
+    }
+
     // Hypereal chat API follows OpenAI format: system + user messages
     const res = await fetch("https://api.hypereal.cloud/v1/chat", {
       method: "POST",
@@ -83,12 +110,12 @@ export async function researchTopic(content: string): Promise<string> {
       },
       body: JSON.stringify({
         model: "gemini-3.1-pro",
-        max_tokens: 2000,
-        temperature: 0.3, // Low temperature for factual accuracy
+        max_tokens: 3000,
+        temperature: 0.3,
         stream: false,
         messages: [
           { role: "system", content: buildResearchPrompt() },
-          { role: "user", content: `Research this topic for an AI-generated cinematic video:\n\n${content.substring(0, 5000)}` },
+          { role: "user", content: userContent },
         ],
       }),
       signal: AbortSignal.timeout(60_000), // 60s max for research

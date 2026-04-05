@@ -75,12 +75,16 @@ export async function runCinematicPipeline(
     statusMessage: "Script complete. Generating audio...",
   }));
 
-  // Phase 2: Audio (all scenes in parallel)
-  await runCinematicAudio(projectId, generationId, sceneCount, ctx, params.language);
-  // Phase 3+4: Generate scene 1 image → chain videos sequentially (each uses previous video's last frame)
-  await runCinematicVisuals(projectId, generationId, sceneCount, ctx);
+  // Phase 2+3: Audio AND Images in PARALLEL (they don't depend on each other)
+  // Audio needs: voiceover text + language
+  // Images need: visualPrompt + style
+  // Videos need: images (so they wait for images, but audio runs alongside)
+  log.debug("Starting audio + images in parallel");
+  const audioPromise = runCinematicAudio(projectId, generationId, sceneCount, ctx, params.language);
+  const visualsPromise = runCinematicVisuals(projectId, generationId, sceneCount, ctx);
+  await Promise.all([audioPromise, visualsPromise]);
 
-  // Phase 5: Finalize
+  // Phase 4: Finalize
   await finalizeCinematic(projectId, generationId, sceneCount, params.format, ctx);
 
   ctx.toast({ title: "Cinematic Video Generated!", description: `"${title}" is ready.` });
@@ -124,21 +128,26 @@ async function runCinematicAudio(projectId: string, generationId: string, sceneC
   log.debug("Audio phase complete");
 }
 
-/** Two-phase visuals: all images first (all at once), then all videos.
- *
- *  Phase A: Generate ALL images in parallel (all scenes at once)
- *  Phase B: Generate all videos in parallel batches of 4
- *           (Kling I2V with end_image transitions)
+/** Streaming visuals: images and videos overlap. Each scene's video fires
+ *  as soon as its image (+ next scene's image) is ready. No batching —
+ *  Kling jobs are remote API calls, not local CPU.
  */
 async function runCinematicVisuals(projectId: string, generationId: string, sceneCount: number, ctx: PipelineContext) {
-  log.debug("Starting visuals: images → videos", { sceneCount });
-  ctx.setState((prev) => ({ ...prev, progress: 35, statusMessage: "Audio complete. Generating images..." }));
+  log.debug("Starting streaming visuals: images → videos", { sceneCount });
+  ctx.setState((prev) => ({ ...prev, progress: 35, statusMessage: "Generating images & video clips..." }));
 
-  const VIDEO_BATCH_SIZE = 4;
   let completedImages = 0;
   let completedVideos = 0;
 
-  // ── Phase A: ALL images in parallel ─────────────────────────────
+  // Track which scenes have images ready
+  const imageReady: boolean[] = new Array(sceneCount).fill(false);
+  const imageResolvers: Array<() => void> = [];
+  const imagePromises: Promise<void>[] = [];
+  for (let i = 0; i < sceneCount; i++) {
+    imagePromises.push(new Promise<void>((resolve) => { imageResolvers.push(resolve); }));
+  }
+
+  // ── Generate images (all in parallel) ──────────────────────────
   const processImage = async (i: number) => {
     const now = Date.now();
     if (now - lastRateLimitTime < GLOBAL_COOLDOWN_MS) {
@@ -152,37 +161,31 @@ async function runCinematicVisuals(projectId: string, generationId: string, scen
       if (!r.success) {
         if (r.retryAfterMs && r.retryAfterMs >= 20000) lastRateLimitTime = Date.now();
         log.warn(`Scene ${i + 1} image failed: ${r.error}`);
-      } else {
-        log.debug(`Scene ${i + 1} image complete`);
       }
     } catch (err) {
       log.warn(`Scene ${i + 1} image error:`, err);
     }
     completedImages++;
+    imageReady[i] = true;
+    imageResolvers[i]();
     ctx.setState((prev) => ({
       ...prev,
       completedImages,
       totalImages: sceneCount,
-      statusMessage: `Images ${completedImages}/${sceneCount}`,
-      progress: 35 + Math.floor((completedImages / sceneCount) * 30),
+      statusMessage: `Images ${completedImages}/${sceneCount} | Clips ${completedVideos}/${sceneCount}`,
+      progress: 35 + Math.floor(((completedImages + completedVideos) / (sceneCount * 2)) * 55),
     }));
   };
 
-  // Fire all images at once (no batching)
-  const allImagePromises = [];
-  for (let i = 0; i < sceneCount; i++) allImagePromises.push(processImage(i));
-  log.debug(`All ${sceneCount} images dispatched in parallel`);
-  await Promise.allSettled(allImagePromises);
-
-  // Retry missing images (1 round)
-  await retryMissingImages(generationId, sceneCount, ctx, projectId);
-
-  log.debug(`All images done (${completedImages}/${sceneCount}). Starting video phase...`);
-  ctx.setState((prev) => ({ ...prev, progress: 65, statusMessage: "Images done. Generating video clips..." }));
-
-  // ── Phase B: All videos ──────────────────────────────────────────
+  // ── Generate videos (streams behind images) ────────────────────
   const processVideo = async (i: number) => {
+    // Wait for this scene's image
+    await imagePromises[i];
+    // Wait for next scene's image too (needed for end_image transition)
+    if (i < sceneCount - 1) await imagePromises[i + 1];
+
     try {
+      // Check if already has video
       const { data: g } = await supabase.from("generations").select("scenes").eq("id", generationId).maybeSingle();
       if ((normalizeScenes(g?.scenes) ?? [])[i]?.videoUrl) {
         log.debug(`Scene ${i + 1}: already has videoUrl, skipping`);
@@ -194,38 +197,41 @@ async function runCinematicVisuals(projectId: string, generationId: string, scen
         20 * 60 * 1000, CINEMATIC_ENDPOINT
       );
       if (!r.success) log.warn(`Scene ${i + 1} video failed: ${r.error}`);
-      else log.debug(`Scene ${i + 1} video complete`);
     } catch (err) {
       log.warn(`Scene ${i + 1} video error:`, err);
     }
     completedVideos++;
     ctx.setState((prev) => ({
       ...prev,
-      statusMessage: `Clips ${completedVideos}/${sceneCount}`,
-      progress: 65 + Math.floor((completedVideos / sceneCount) * 30),
+      statusMessage: `Images ${completedImages}/${sceneCount} | Clips ${completedVideos}/${sceneCount}`,
+      progress: 35 + Math.floor(((completedImages + completedVideos) / (sceneCount * 2)) * 55),
     }));
   };
 
-  for (let start = 0; start < sceneCount; start += VIDEO_BATCH_SIZE) {
-    const end = Math.min(start + VIDEO_BATCH_SIZE, sceneCount);
-    const batch = [];
-    for (let i = start; i < end; i++) batch.push(processVideo(i));
-    log.debug(`Video batch ${start + 1}–${end}`);
-    await Promise.allSettled(batch);
-  }
+  // Fire ALL images and ALL videos simultaneously
+  // Videos will self-throttle by waiting on their image dependencies
+  const allPromises: Promise<void>[] = [];
+  for (let i = 0; i < sceneCount; i++) allPromises.push(processImage(i));
+  for (let i = 0; i < sceneCount; i++) allPromises.push(processVideo(i));
+  log.debug(`Dispatched ${sceneCount} images + ${sceneCount} videos (streaming)`);
+  await Promise.allSettled(allPromises);
 
-  // Retry missing videos (1 round)
+  // Retry missing images (1 round, parallel)
+  await retryMissingImages(generationId, sceneCount, ctx, projectId);
+
+  // Retry missing videos (1 round, ALL in parallel)
   const { data: latestGen } = await supabase.from("generations").select("scenes").eq("id", generationId).maybeSingle();
   const latestScenes = normalizeScenes(latestGen?.scenes) ?? [];
   const missingVids = latestScenes.map((s, i) => (!s.videoUrl ? i : -1)).filter((i) => i >= 0);
   if (missingVids.length > 0) {
-    log.debug(`Retrying ${missingVids.length} missing videos`);
+    log.debug(`Retrying ${missingVids.length} missing videos in parallel`);
     ctx.setState((prev) => ({ ...prev, statusMessage: `Retrying ${missingVids.length} missing clips...` }));
-    for (const idx of missingVids) {
-      try {
-        await ctx.callPhase({ phase: "video", projectId, generationId, sceneIndex: idx }, 20 * 60 * 1000, CINEMATIC_ENDPOINT);
-      } catch { /* continue */ }
-    }
+    await Promise.allSettled(
+      missingVids.map((idx) =>
+        ctx.callPhase({ phase: "video", projectId, generationId, sceneIndex: idx }, 20 * 60 * 1000, CINEMATIC_ENDPOINT)
+          .catch(() => {})
+      )
+    );
   }
 
   log.debug("Visuals phase complete");

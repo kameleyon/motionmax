@@ -34,7 +34,7 @@ import {
 // ── Configuration ────────────────────────────────────────────────────
 
 /** Scenes per batch — sequential (1) is safest for memory. */
-const SCENE_BATCH_SIZE = parseInt(process.env.EXPORT_BATCH_SIZE || "1", 10);
+const SCENE_BATCH_SIZE = parseInt(process.env.EXPORT_BATCH_SIZE || "3", 10);
 
 /** Per-scene encoding timeout (ms). Default: 5 minutes per scene. */
 const SCENE_TIMEOUT_MS = parseInt(process.env.EXPORT_SCENE_TIMEOUT_MS || "300000", 10);

@@ -274,7 +274,9 @@ async function pollHyperealJob(
   pollUrl: string | null,
 ): Promise<string> {
   const maxAttempts = 40;
-  const basePollMs = 20_000;    // 20s between polls
+  const FAST_POLL_MS = 10_000;   // 10s for first 6 polls (~first 60s)
+  const SLOW_POLL_MS = 20_000;   // 20s after that
+  const FAST_POLL_COUNT = 6;
   const max429Streak = 4;
   let consecutive429 = 0;
 
@@ -289,7 +291,9 @@ async function pollHyperealJob(
       }
       await sleepWithJitter(delay);
     } else {
-      await sleepWithJitter(basePollMs);
+      // Adaptive polling: fast first, then slow
+      const pollMs = attempt <= FAST_POLL_COUNT ? FAST_POLL_MS : SLOW_POLL_MS;
+      await sleepWithJitter(pollMs);
     }
 
     if (attempt <= 2 || attempt % 5 === 0) {

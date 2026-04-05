@@ -388,9 +388,9 @@ export function CinematicResult({
               size="sm"
               onClick={handleRenderChanges}
               disabled={isRenderingChanges}
-              className="gap-1.5 shrink-0"
+              className="h-8 gap-1.5 text-xs px-3 shrink-0"
             >
-              {isRenderingChanges ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {isRenderingChanges ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
               Render
             </Button>
           </div>
@@ -408,19 +408,19 @@ export function CinematicResult({
               downloadVideo(exportState.videoUrl, `${safeFileBase(title)}.mp4`, true);
             }}
             disabled={exportState.status !== "complete" || !exportState.videoUrl}
-            className="gap-1.5"
+            className="h-8 gap-1.5 text-xs px-3"
           >
-            <Download className="h-4 w-4" />
+            <Download className="h-3.5 w-3.5" />
             Download
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={() => setShowScenes(!showScenes)}
-            className="gap-1.5"
+            className="h-8 gap-1.5 text-xs px-3"
           >
-            {showScenes ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            {showScenes ? "Hide Scenes" : `Edit / Adjust Scenes (${localScenes.length})`}
+            {showScenes ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            {showScenes ? "Hide" : `Scenes (${localScenes.length})`}
           </Button>
           <CaptionStyleSelector
             value={(initialCaptionStyle || "none") as CaptionStyleType}
@@ -430,18 +430,18 @@ export function CinematicResult({
             }}
           />
           {onRegenerate && (
-            <Button variant="outline" size="sm" onClick={onRegenerate} className="gap-1.5">
-              <RefreshCw className="h-4 w-4" />
+            <Button variant="outline" size="sm" onClick={onRegenerate} className="h-8 gap-1.5 text-xs px-3">
+              <RefreshCw className="h-3.5 w-3.5" />
               Regenerate
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={handleShare} disabled={!projectId} className="gap-1.5">
+          <Button variant="outline" size="sm" onClick={handleShare} disabled={!projectId} className="h-8 gap-1.5 text-xs px-3">
             <Share2 className="h-3.5 w-3.5" />
             Share
           </Button>
           <Button variant="outline" size="sm"
             onClick={() => setIsDeleteDialogOpen(true)} disabled={!projectId}
-            className="gap-1.5 text-muted-foreground hover:text-destructive hover:border-destructive/50">
+            className="h-8 gap-1.5 text-xs px-3 text-muted-foreground hover:text-destructive hover:border-destructive/50">
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
         </div>

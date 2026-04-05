@@ -22,6 +22,7 @@ import {
   buildSmartFlowPrompt,
   buildCinematicPrompt,
   callOpenRouterLLM,
+  callLLMWithFallback,
 } from "../services/openrouter.js";
 import type { PromptResult } from "../services/openrouter.js";
 import { getStylePrompt, extractJsonFromLLMResponse } from "../services/prompts.js";
@@ -214,7 +215,7 @@ ${researchBrief}
   await updateJobProgress(jobId, 10);
   // All project types use 0.8 for creative output
   const temperature = 0.8;
-  const rawText = await callOpenRouterLLM(promptResult, {
+  const rawText = await callLLMWithFallback(promptResult, {
     maxTokens: promptResult.maxTokens,
     forceJson: true,
     temperature,

@@ -70,41 +70,43 @@ export async function runStandardPipeline(
     phaseTimings: { script: scriptResult.phaseTime },
   }));
 
-  // ============= PHASE 2: AUDIO (single job) =============
-  if (!isSmartFlowNoVoice) {
-    log.debug("Starting audio phase");
-    ctx.setState((prev) => ({ ...prev, step: "visuals" as const, progress: 15, statusMessage: "Generating voiceover audio..." }));
+  // ============= PHASE 2+3: AUDIO + IMAGES IN PARALLEL =============
+  // Audio and images don't depend on each other — run simultaneously
+  log.debug("Starting audio + images in parallel");
+  ctx.setState((prev) => ({ ...prev, step: "visuals" as const, progress: 15, statusMessage: "Generating audio & images..." }));
 
-    const audioResult = await ctx.callPhase({ phase: "audio", generationId, projectId, audioStartIndex: 0, language: params.language }, 300000); // 5 minutes
+  const audioPromise = isSmartFlowNoVoice
+    ? Promise.resolve(null)
+    : ctx.callPhase({ phase: "audio", generationId, projectId, audioStartIndex: 0, language: params.language }, 300000);
+
+  let imagesResult: any;
+  const imagesPromise = (async () => {
+    try {
+      const result = await ctx.callPhase({ phase: "images", generationId, projectId, imageStartIndex: 0 }, 600000);
+      if (!result.success) {
+        log.warn(`Image phase failed: ${result.error}`);
+        return { totalImages: expectedSceneCount * 3, imagesGenerated: 0 };
+      }
+      return result;
+    } catch (err) {
+      log.warn(`Image phase error:`, err);
+      return { totalImages: expectedSceneCount * 3, imagesGenerated: 0 };
+    }
+  })();
+
+  const [audioResult, imgResult] = await Promise.all([audioPromise, imagesPromise]);
+  imagesResult = imgResult;
+
+  if (audioResult && !isSmartFlowNoVoice) {
     if (!audioResult.success) throw new Error(audioResult.error || "Audio generation failed");
-
     log.debug("Audio phase complete", { generated: audioResult.audioGenerated });
-
     ctx.setState((prev) => ({
       ...prev,
-      progress: typeof audioResult.progress === "number" ? audioResult.progress : prev.progress,
-      statusMessage: `Audio complete (${audioResult.audioSeconds?.toFixed(1) || 0}s). Starting images...`,
+      progress: 50,
+      statusMessage: "Audio & images complete.",
       costTracking: audioResult.costTracking,
       phaseTimings: { ...prev.phaseTimings, audio: audioResult.phaseTime },
     }));
-  }
-
-  // ============= PHASE 3: IMAGES (single job, fault-tolerant) =============
-  log.debug("Starting images phase");
-  ctx.setState((prev) => ({ ...prev, progress: 45, statusMessage: "Generating images..." }));
-
-  let imagesResult: any;
-
-  try {
-    imagesResult = await ctx.callPhase({ phase: "images", generationId, projectId, imageStartIndex: 0 }, 600000); // 10 minutes
-
-    if (!imagesResult.success) {
-      log.warn(`Image phase failed: ${imagesResult.error}`);
-      imagesResult = { totalImages: expectedSceneCount * 3, imagesGenerated: 0 };
-    }
-  } catch (err) {
-    log.warn(`Image phase error:`, err);
-    imagesResult = { totalImages: expectedSceneCount * 3, imagesGenerated: 0 };
   }
 
   ctx.setState((prev) => ({

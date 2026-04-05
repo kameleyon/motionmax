@@ -114,6 +114,88 @@ export async function callOpenRouterLLM(
   return text;
 }
 
+// ── callHyperealLLM (Gemini 3.1 Pro — primary) ──────────────────────
+
+/**
+ * Call Hypereal chat API with Gemini 3.1 Pro.
+ * Same interface as callOpenRouterLLM for easy swap.
+ */
+export async function callHyperealLLM(
+  prompt: { system: string; user: string },
+  options: { maxTokens: number; forceJson?: boolean; temperature?: number },
+): Promise<string> {
+  const apiKey = process.env.HYPEREAL_API_KEY;
+  if (!apiKey) throw new Error("HYPEREAL_API_KEY is not set");
+
+  const temperature = options.temperature ?? 0.7;
+  console.log(`[Hypereal] Calling gemini-3.1-pro (maxTokens=${options.maxTokens}, temp=${temperature}, forceJson=${!!options.forceJson})`);
+
+  const requestBody: Record<string, unknown> = {
+    model: "gemini-3.1-pro",
+    max_tokens: options.maxTokens,
+    temperature,
+    stream: false,
+    messages: [
+      { role: "system", content: prompt.system },
+      { role: "user", content: prompt.user },
+    ],
+  };
+
+  if (options.forceJson) {
+    requestBody.response_format = { type: "json_object" };
+  }
+
+  // Generous timeout: 5 min base + scaling with token count
+  const baseTimeoutMs = 5 * 60 * 1000;
+  const extraTokens = Math.max(0, options.maxTokens - 4000);
+  const extraTimeoutMs = Math.ceil(extraTokens / 2000) * 60 * 1000;
+  const totalTimeoutMs = baseTimeoutMs + extraTimeoutMs;
+
+  const res = await fetch("https://api.hypereal.cloud/v1/chat", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(requestBody),
+    signal: AbortSignal.timeout(totalTimeoutMs),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Hypereal API error ${res.status}: ${body.substring(0, 300)}`);
+  }
+
+  const data = (await res.json()) as any;
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error("Hypereal returned empty content");
+
+  console.log(`[Hypereal] Response received (${text.length} chars, credits: ${data.creditsUsed ?? "?"})`);
+  return text;
+}
+
+// ── callLLM (Hypereal primary, OpenRouter fallback) ──────────────────
+
+/**
+ * Call LLM with automatic fallback: Hypereal/Gemini first, OpenRouter/Claude if that fails.
+ */
+export async function callLLMWithFallback(
+  prompt: { system: string; user: string },
+  options: { maxTokens: number; forceJson?: boolean; temperature?: number },
+): Promise<string> {
+  // Try Hypereal/Gemini first
+  if (process.env.HYPEREAL_API_KEY) {
+    try {
+      return await callHyperealLLM(prompt, options);
+    } catch (err) {
+      console.warn(`[LLM] Hypereal failed: ${(err as Error).message} — falling back to OpenRouter`);
+    }
+  }
+
+  // Fallback to OpenRouter/Claude
+  return callOpenRouterLLM(prompt, options);
+}
+
 // ── Backward-compatible wrapper for legacy generateVideo handler ───
 
 /** @deprecated Use buildDoc2VideoPrompt + callOpenRouterLLM instead. */

@@ -31,7 +31,8 @@ export type CaptionStyle =
   | "retroTerminal"
   | "heavyDropShadow"
   | "cleanPop"
-  | "toxicBounce";
+  | "toxicBounce"
+  | "proShortForm";
 
 interface CaptionStyleSelectorProps {
   value: CaptionStyle;
@@ -61,6 +62,7 @@ const captionStyles: { id: CaptionStyle; label: string }[] = [
   { id: "heavyDropShadow", label: "Heavy Shadow" },
   { id: "cleanPop", label: "Clean Pop" },
   { id: "toxicBounce", label: "Toxic Bounce" },
+  { id: "proShortForm", label: "Pro Short Form" },
 ];
 
 /** CSS classes for each style (scaled down for dropdown) */
@@ -85,8 +87,9 @@ export const previewStyles: Record<CaptionStyle, string> = {
   cinematicFade: "[font-family:'Montserrat',sans-serif] font-light text-white tracking-[0.15em] uppercase text-[9px]",
   retroTerminal: "font-mono font-bold text-[#39FF14] text-[9px]",
   heavyDropShadow: "[font-family:'Bebas_Neue',sans-serif] text-white text-[11px] tracking-wider [text-shadow:_2px_2px_0_#000]",
-  cleanPop: "[font-family:'Montserrat',sans-serif] font-black text-white uppercase text-[10px] tracking-wide drop-shadow-md",
-  toxicBounce: "[font-family:'Montserrat',sans-serif] font-black text-[#39FF14] uppercase text-[10px] tracking-wider [text-shadow:_-1px_-1px_0_#000,_1px_-1px_0_#000,_-1px_1px_0_#000,_1px_1px_0_#000,_2px_2px_0_#000]",
+  cleanPop: "[font-family:'Montserrat',sans-serif] font-black text-white uppercase text-[10px] tracking-wide [filter:drop-shadow(0px_2px_2px_rgba(0,0,0,0.6))]",
+  toxicBounce: "[font-family:'Montserrat',sans-serif] font-black text-[#39FF14] uppercase text-[10px] tracking-wider [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill] [filter:drop-shadow(0px_3px_0px_#000)]",
+  proShortForm: "[font-family:'Montserrat',sans-serif] font-black text-white uppercase text-[10px] tracking-wider [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill] [filter:drop-shadow(0px_1px_2px_rgba(0,0,0,0.5))]",
 };
 
 /** Animation variants — smooth and steady for dropdown preview */
@@ -111,8 +114,9 @@ const styleVariants: Record<CaptionStyle, Variants> = {
   cinematicFade: { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0.6 } } },
   retroTerminal: { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0.1 } } },
   heavyDropShadow: { hidden: { opacity: 0, y: -6 }, visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: "easeOut" } } },
-  cleanPop: { hidden: { opacity: 0, scale: 0.9 }, visible: { opacity: 1, scale: 1, transition: { duration: 0.3, ease: "easeOut" } } },
-  toxicBounce: { hidden: { opacity: 0, scale: 0.7 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", stiffness: 200, damping: 18 } } },
+  cleanPop: { hidden: { opacity: 0, scale: 0.6 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", stiffness: 800, damping: 25, mass: 0.5 } } },
+  toxicBounce: { hidden: { opacity: 0, scale: 0.2, rotate: -8 }, visible: { opacity: 1, scale: 1, rotate: 0, transition: { type: "spring", stiffness: 1000, damping: 18, mass: 0.4 } } },
+  proShortForm: { hidden: { opacity: 0, scale: 0.4, y: 8 }, visible: { opacity: 1, scale: 1, y: 0, transition: { type: "spring", stiffness: 800, damping: 25, mass: 0.5 } } },
 };
 
 const PREVIEW_WORDS = ["Your", "idea", "in", "motion"];
@@ -175,10 +179,9 @@ export function CaptionStyleSelector({ value, onChange }: CaptionStyleSelectorPr
   const selected = captionStyles.find((s) => s.id === value) || captionStyles[0];
 
   return (
-    <div className="space-y-1.5">
-      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Captions</span>
+    <div>
       <Select value={value} onValueChange={(v) => onChange(v as CaptionStyle)}>
-        <SelectTrigger className="w-full">
+        <SelectTrigger className="w-auto h-8 text-xs gap-1 px-3">
           <SelectValue>
             <span className="flex items-center gap-2 truncate text-xs">
               <Subtitles className="h-3 w-3 shrink-0" />

@@ -422,6 +422,13 @@ export function CinematicResult({
             {showScenes ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             {showScenes ? "Hide Scenes" : `Edit / Adjust Scenes (${localScenes.length})`}
           </Button>
+          <CaptionStyleSelector
+            value={(initialCaptionStyle || "none") as CaptionStyleType}
+            onChange={(style) => {
+              onCaptionStyleChange?.(style);
+              setHasUnsavedEdits(true);
+            }}
+          />
           {onRegenerate && (
             <Button variant="outline" size="sm" onClick={onRegenerate} className="gap-1.5">
               <RefreshCw className="h-4 w-4" />
@@ -437,13 +444,6 @@ export function CinematicResult({
             className="gap-1.5 text-muted-foreground hover:text-destructive hover:border-destructive/50">
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
-          <CaptionStyleSelector
-            value={(initialCaptionStyle || "none") as CaptionStyleType}
-            onChange={(style) => {
-              onCaptionStyleChange?.(style);
-              setHasUnsavedEdits(true);
-            }}
-          />
         </div>
       </div>
 

@@ -20,7 +20,7 @@ export type CaptionStyle =
   | "typewriter" | "neonTeal" | "goldLuxury" | "bouncyPill"
   | "glitch" | "cinematicFade" | "redTag" | "blackBox"
   | "comicBurst" | "retroTerminal" | "heavyDropShadow"
-  | "cleanPop" | "toxicBounce";
+  | "cleanPop" | "toxicBounce" | "proShortForm";
 
 export interface CaptionWord {
   text: string;
@@ -248,6 +248,11 @@ const STYLE_DEFS: Record<Exclude<CaptionStyle, "none">, AssStyleDef> = {
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
     outline: 6, shadow: 5, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
+  proShortForm: {
+    fontName: "Montserrat", fontSize: 92, primaryColor: WHITE, secondaryColor: WHITE,
+    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
+    outline: 7, shadow: 3, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
+  },
 };
 
 // ── ASS File Generation ────────────────────────────────────────────
@@ -284,7 +289,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
  */
 const SINGLE_WORD_STYLES: Set<string> = new Set([
   "orangeBox", "yellowSlanted", "redSlantedBox", "motionBlur",
-  "thickStroke", "comicBurst", "heavyDropShadow", "glitch", "bouncyPill", "cleanPop", "toxicBounce",
+  "thickStroke", "comicBurst", "heavyDropShadow", "glitch", "bouncyPill", "cleanPop", "toxicBounce", "proShortForm",
 ]);
 
 /** Subtitle-like styles that show longer lines (documentary / cinematic) */
@@ -450,4 +455,5 @@ export const CAPTION_STYLES: Array<{ id: CaptionStyle; label: string; descriptio
   { id: "heavyDropShadow", label: "Heavy Shadow", description: "Thick diagonal shadow" },
   { id: "cleanPop", label: "Clean Pop", description: "White text, smooth scale up" },
   { id: "toxicBounce", label: "Toxic Bounce", description: "Neon green, heavy outline, bouncy" },
+  { id: "proShortForm", label: "Pro Short Form", description: "White, thick stroke, center pop" },
 ];

@@ -94,12 +94,16 @@ const styleAnimations: Record<CaptionStyle, Variants> = {
     visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 400, damping: 12 } },
   },
   cleanPop: {
-    hidden: { opacity: 0, scale: 0.8 },
-    visible: { opacity: 1, scale: 1, transition: { type: "spring", stiffness: 400, damping: 25 } },
+    hidden: { opacity: 0, scale: 0.6, filter: "blur(6px)" },
+    visible: { opacity: 1, scale: 1, filter: "blur(0px)", transition: { type: "spring", stiffness: 1200, damping: 30, mass: 0.4 } },
   },
   toxicBounce: {
-    hidden: { opacity: 0, scale: 0.3, rotate: -5 },
-    visible: { opacity: 1, scale: 1, rotate: 0, transition: { type: "spring", bounce: 0.6, duration: 0.4 } },
+    hidden: { opacity: 0, scale: 0.1, rotate: -15 },
+    visible: { opacity: 1, scale: 1, rotate: 0, transition: { type: "spring", stiffness: 1500, damping: 20, mass: 0.3 } },
+  },
+  proShortForm: {
+    hidden: { opacity: 0, scale: 0.4, y: 20 },
+    visible: { opacity: 1, scale: 1, y: 0, transition: { type: "spring", stiffness: 1200, damping: 30, mass: 0.4 } },
   },
 };
 

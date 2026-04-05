@@ -36,6 +36,10 @@
         {
           "key": "Strict-Transport-Security",
           "value": "max-age=63072000; includeSubDomains; preload"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://js.stripe.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.supabase.co https://*.replicate.delivery https://replicate.delivery https://oaidalleapiprodscus.blob.core.windows.net https://*.googleusercontent.com https://pub-d259d1d2737843cb8bcb2b1ff98fc9c6.r2.dev; media-src 'self' blob: https://*.supabase.co; connect-src 'self' blob: https://*.supabase.co wss://*.supabase.co https://api.replicate.com https://api.openai.com https://api.stripe.com https://js.stripe.com https://openrouter.ai https://api.hypereal.cloud https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com; frame-src https://js.stripe.com https://hooks.stripe.com https://embed.app.guidde.com; frame-ancestors 'none'; worker-src 'self' blob:;"
         }
       ]
     },

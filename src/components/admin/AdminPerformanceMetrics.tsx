@@ -58,10 +58,10 @@ export function AdminPerformanceMetrics() {
       const daysAgo = period === "7d" ? 7 : period === "30d" ? 30 : 90;
       const startDate = subDays(now, daysAgo);
 
-      // Fetch generations for the period
+      // Fetch generations WITH project type (project_type lives on projects table, not generations)
       const { data: generations } = await supabase
         .from("generations")
-        .select("*")
+        .select("*, projects(project_type)")
         .gte("created_at", startDate.toISOString());
 
       // Calculate metrics from generations
@@ -73,7 +73,7 @@ export function AdminPerformanceMetrics() {
       };
 
       generations?.forEach((gen: any) => {
-        const projectType = gen.project_type || "doc2video";
+        const projectType = (gen.projects as any)?.project_type || "doc2video";
         if (!byType[projectType]) return;
 
         byType[projectType].total++;

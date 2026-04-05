@@ -17,7 +17,7 @@ import os from "os";
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { processScene, type ExportConfig } from "./export/sceneEncoder.js";
-import { concatFiles } from "./export/concatScenes.js";
+import { concatFiles, concatWithCaptions } from "./export/concatScenes.js";
 import { concatWithCrossfade } from "./export/transitions.js";
 import { compressIfNeeded } from "./export/compressVideo.js";
 import { uploadToSupabase, removeFiles } from "./export/storageHelpers.js";
@@ -389,81 +389,78 @@ export async function handleExportVideo(
         });
       }
     } else {
-      // No crossfade: use concat demuxer (re-encode for consistency)
-      await writeSystemLog({
-        jobId,
-        projectId: project_id,
-        userId,
-        category: "system_info",
-        eventType: "concat_started",
-        message: `Concatenating ${clipPaths.length} clips (no transitions)`,
-      });
-      await concatFiles(clipPaths, finalOutputPath, false);
-    }
+      // No crossfade — probe clips, then concat (with or without captions in ONE pass)
 
-    // Probe each individual scene clip for exact durations BEFORE cleanup
-    const { probeDuration } = await import("./export/ffmpegCmd.js");
-    const actualDurations: number[] = [];
-    for (const clipPath of sceneResults) {
-      if (clipPath) {
-        const dur = await probeDuration(clipPath);
-        actualDurations.push(dur);
+      // Probe each individual scene clip for exact durations BEFORE anything else
+      const { probeDuration } = await import("./export/ffmpegCmd.js");
+      const actualDurations: number[] = [];
+      for (const clipPath of sceneResults) {
+        if (clipPath) {
+          const dur = await probeDuration(clipPath);
+          actualDurations.push(dur);
+        } else {
+          actualDurations.push(10);
+        }
+      }
+
+      if (captionStyle !== "none") {
+        // ── SINGLE PASS: concat + caption burn ────────────────────────
+        // Instead of: concat (re-encode) → caption burn (re-encode again)
+        // We do: concat demuxer + ASS filter = ONE encode pass
+
+        sceneProgress.overallMessage = "Syncing captions to audio...";
+        await flushSceneProgress(jobId);
+        await supabase.from("video_generation_jobs").update({ progress: 76, updated_at: new Date().toISOString() }).eq("id", jobId);
+
+        const asrResults = asrPromise ? await asrPromise : null;
+
+        const totalVideoDur = actualDurations.reduce((a, b) => a + b, 0);
+        console.log(`[ExportVideo] Caption timing: total=${totalVideoDur.toFixed(1)}s, scenes=${actualDurations.map((d: number) => d.toFixed(1)).join(",")}`);
+
+        const assContent = generateAssSubtitles(scenes, captionStyle, exportConfig.width, exportConfig.height, actualDurations, asrResults || undefined);
+
+        if (assContent) {
+          const assPath = await writeAssFile(assContent, tempDir);
+          const fontsDir = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1")), "../../fonts");
+
+          sceneProgress.overallMessage = "Stitching video + burning captions...";
+          await flushSceneProgress(jobId);
+          await supabase.from("video_generation_jobs").update({ progress: 78, updated_at: new Date().toISOString() }).eq("id", jobId);
+
+          await writeSystemLog({
+            jobId, projectId: project_id, userId,
+            category: "system_info",
+            eventType: "concat_captions_started",
+            message: `Concat + caption burn (single pass): ${clipPaths.length} clips, style=${captionStyle}`,
+          });
+
+          await concatWithCaptions(clipPaths, assPath, fontsDir, finalOutputPath);
+          removeFiles(assPath);
+          console.log(`[ExportVideo] Concat + captions done in single pass (style: ${captionStyle})`);
+        } else {
+          // ASS generation returned null — just stream-copy concat
+          await writeSystemLog({
+            jobId, projectId: project_id, userId,
+            category: "system_info",
+            eventType: "concat_started",
+            message: `Stream-copy concat: ${clipPaths.length} clips (cinematic, no captions)`,
+          });
+          await concatFiles(clipPaths, finalOutputPath, true);
+        }
       } else {
-        actualDurations.push(10);
+        // ── NO CAPTIONS: stream-copy concat (instant for same-codec clips) ──
+        await writeSystemLog({
+          jobId, projectId: project_id, userId,
+          category: "system_info",
+          eventType: "concat_started",
+          message: `Stream-copy concat: ${clipPaths.length} clips (cinematic, no captions)`,
+        });
+        await concatFiles(clipPaths, finalOutputPath, true);
       }
     }
 
     // Free individual scene MP4s
     for (const f of clipPaths) removeFiles(f);
-
-    // ── 2.5. Burn captions into video (if requested) ───────────────
-
-    if (captionStyle !== "none") {
-      sceneProgress.overallMessage = "Syncing captions to audio...";
-      await flushSceneProgress(jobId);
-      await supabase.from("video_generation_jobs").update({ progress: 76, updated_at: new Date().toISOString() }).eq("id", jobId);
-
-      // Await ASR results (already running in parallel since step 0.5)
-      const asrResults = asrPromise ? await asrPromise : null;
-
-      sceneProgress.overallMessage = "Burning captions into video...";
-      await flushSceneProgress(jobId);
-      await supabase.from("video_generation_jobs").update({ progress: 78, updated_at: new Date().toISOString() }).eq("id", jobId);
-
-      const totalVideoDur = actualDurations.reduce((a, b) => a + b, 0);
-      console.log(`[ExportVideo] Caption timing: total=${totalVideoDur.toFixed(1)}s, scenes=${actualDurations.map((d: number) => d.toFixed(1)).join(",")}`);
-
-      const assContent = generateAssSubtitles(scenes, captionStyle, exportConfig.width, exportConfig.height, actualDurations, asrResults || undefined);
-      if (assContent) {
-        const assPath = await writeAssFile(assContent, tempDir);
-        const captionedPath = path.join(tempDir, "captioned_export.mp4");
-
-        // Burn ASS subtitles into video using ffmpeg's ass filter
-        // Resolve bundled Google Fonts directory for custom caption fonts
-        const fontsDir = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1")), "../../fonts");
-        const fontsDirEsc = fontsDir.replace(/\\/g, "/").replace(/'/g, "'\\''");
-        const assPathEsc = assPath.replace(/\\/g, "/").replace(/'/g, "'\\''");
-        const { runFfmpeg } = await import("./export/ffmpegCmd.js");
-        await runFfmpeg([
-          "-i", finalOutputPath,
-          "-vf", `ass='${assPathEsc}':fontsdir='${fontsDirEsc}'`,
-          "-c:v", "libx264",
-          "-preset", "fast",
-          "-crf", "20",
-          "-pix_fmt", "yuv420p",
-          "-c:a", "copy",
-          "-movflags", "+faststart",
-          captionedPath,
-        ], 30 * 60 * 1000); // 30 min timeout for large videos
-
-        // Replace the final output with the captioned version
-        removeFiles(finalOutputPath);
-        fs.renameSync(captionedPath, finalOutputPath);
-        removeFiles(assPath);
-
-        console.log(`[ExportVideo] Captions burned in (style: ${captionStyle})`);
-      }
-    }
 
     sceneProgress.overallMessage = "Scenes stitched. Compressing...";
     await flushSceneProgress(jobId);

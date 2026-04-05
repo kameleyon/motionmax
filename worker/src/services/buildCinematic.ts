@@ -314,7 +314,7 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
       "visualPrompt": "'THE JOURNEY BEGINS' in bold typography fading in over morning mist. A 32-year-old woman with shoulder-length black hair steps into frame, coat billowing. Shallow depth of field, lens flare kissing edge of frame. Warm golden hour light.\nCamera: Pan right to left, steady pace, revealing the landscape as the subject walks into frame.",
       "visualStyle": "Cinematic establishing shot with atmospheric depth",
       "coverTitle": "Catchy Cover Title",
-      "duration": 15
+      "duration": 10
     }
   ]
 }`;

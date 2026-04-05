@@ -9,6 +9,7 @@ import { WorkspaceLayout } from "@/components/layout/WorkspaceLayout";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { CinematicSourceInput, type SourceAttachment } from "./CinematicSourceInput";
+import { processAttachments } from "@/lib/attachmentProcessor";
 import type { VideoFormat } from "./FormatSelector";
 import type { VideoLength } from "./LengthSelector";
 import { StyleSelector, type VisualStyle } from "./StyleSelector";
@@ -204,21 +205,9 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
         return;
       }
 
-      // Build enriched content: direction text + all attached source data
-      let enrichedContent = content;
-      if (sourceAttachments.length > 0) {
-        const sections: string[] = [];
-        for (const a of sourceAttachments) {
-          if (a.type === "text") sections.push(`[Attached Text]\n${a.value}`);
-          else if (a.type === "youtube") sections.push(`[YouTube] ${a.value}`);
-          else if (a.type === "github") sections.push(`[GitHub] ${a.value}`);
-          else if (a.type === "gdrive") sections.push(`[Google Drive] ${a.value}`);
-          else if (a.type === "link") sections.push(`[Source URL] ${a.value}`);
-          else if (a.type === "image") sections.push(`[Attached Image] ${a.name}`);
-          else sections.push(`[Attached File] ${a.name}`);
-        }
-        enrichedContent += `\n\n--- ATTACHED SOURCES ---\n${sections.join("\n\n")}`;
-      }
+      // Process attachments: upload images, read files, tag URLs for worker
+      const attachmentContent = await processAttachments(sourceAttachments);
+      const enrichedContent = content + attachmentContent;
 
       startGeneration({
         content: enrichedContent,

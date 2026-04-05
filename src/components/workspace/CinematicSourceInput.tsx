@@ -47,6 +47,20 @@ function truncateName(name: string, max = 40): string {
   return name.length > max ? name.substring(0, max) + "..." : name;
 }
 
+/** Read a file as text. Returns null for binary files. */
+function readFileAsText(file: File): Promise<string | null> {
+  const TEXT_EXTENSIONS = /\.(txt|md|csv|json|xml|html|htm|rtf|log|yaml|yml|toml|ini|cfg|env|sh|bat|py|js|ts|jsx|tsx|sql|css|scss)$/i;
+  if (!file.type.startsWith("text/") && !TEXT_EXTENSIONS.test(file.name)) {
+    return Promise.resolve(null);
+  }
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => resolve(null);
+    reader.readAsText(file);
+  });
+}
+
 // ── Component ──
 
 export function CinematicSourceInput({
@@ -121,12 +135,31 @@ export function CinematicSourceInput({
   const handleFileSelect = (accept: string, type: "file" | "image") => {
     if (!fileInputRef.current) return;
     fileInputRef.current.accept = accept;
-    fileInputRef.current.onchange = (e) => {
+    fileInputRef.current.onchange = async (e) => {
       const files = (e.target as HTMLInputElement).files;
       if (!files) return;
       for (const file of Array.from(files)) {
-        const url = URL.createObjectURL(file);
-        addAttachment({ id: makeId(), type, name: file.name, value: url });
+        if (type === "image") {
+          // Store as blob URL — will be uploaded to Supabase before generation
+          const url = URL.createObjectURL(file);
+          addAttachment({ id: makeId(), type: "image", name: file.name, value: url });
+        } else {
+          // Read text content from files
+          const text = await readFileAsText(file);
+          if (text) {
+            const preview = text.substring(0, 60).replace(/\n/g, " ") + "...";
+            const clipped = text.substring(0, MAX_ATTACHMENT_CHARS);
+            addAttachment({
+              id: makeId(), type: "file",
+              name: `${file.name} (${(clipped.length / 1000).toFixed(0)}K chars)`,
+              value: clipped,
+            });
+          } else {
+            // Binary file — store blob URL, mark as unreadable
+            const url = URL.createObjectURL(file);
+            addAttachment({ id: makeId(), type: "file", name: file.name, value: url });
+          }
+        }
       }
       if (fileInputRef.current) fileInputRef.current.value = "";
     };
@@ -152,14 +185,28 @@ export function CinematicSourceInput({
   };
 
   const handleDrop = useCallback(
-    (e: DragEvent<HTMLTextAreaElement>) => {
+    async (e: DragEvent<HTMLTextAreaElement>) => {
       const files = e.dataTransfer?.files;
       if (!files?.length) return;
       e.preventDefault();
       for (const file of Array.from(files)) {
-        const url = URL.createObjectURL(file);
-        const type = file.type.startsWith("image/") ? "image" as const : "file" as const;
-        addAttachment({ id: makeId(), type, name: file.name, value: url });
+        if (file.type.startsWith("image/")) {
+          const url = URL.createObjectURL(file);
+          addAttachment({ id: makeId(), type: "image", name: file.name, value: url });
+        } else {
+          const text = await readFileAsText(file);
+          if (text) {
+            const clipped = text.substring(0, MAX_ATTACHMENT_CHARS);
+            addAttachment({
+              id: makeId(), type: "file",
+              name: `${file.name} (${(clipped.length / 1000).toFixed(0)}K chars)`,
+              value: clipped,
+            });
+          } else {
+            const url = URL.createObjectURL(file);
+            addAttachment({ id: makeId(), type: "file", name: file.name, value: url });
+          }
+        }
       }
     },
     [addAttachment],

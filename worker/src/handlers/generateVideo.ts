@@ -26,6 +26,7 @@ import {
 import type { PromptResult } from "../services/openrouter.js";
 import { getStylePrompt, extractJsonFromLLMResponse } from "../services/prompts.js";
 import { researchTopic } from "../services/researchTopic.js";
+import { processContentAttachments } from "../services/processAttachments.js";
 import {
   postProcessScenes,
   type ParsedScene,
@@ -172,6 +173,18 @@ export async function handleGenerateVideo(
   );
 
   // ── Step 1.5: Research phase (cinematic + storytelling) ──────────
+  // Process source attachments: fetch URLs, YouTube transcripts, GitHub READMEs
+  // This enriches the content with actual data from linked sources.
+  if (projectType === "cinematic" || projectType === "storytelling") {
+    await updateJobProgress(jobId, 5);
+    const rawContent = payload.content || "";
+    if (rawContent.includes("--- ATTACHED SOURCES ---")) {
+      console.log("[GenerateVideo] Processing attached sources...");
+      payload.content = await processContentAttachments(rawContent);
+      console.log(`[GenerateVideo] Content enriched: ${rawContent.length} → ${payload.content.length} chars`);
+    }
+  }
+
   // AI researches the topic for factual accuracy before scriptwriting.
   // Research is injected into SYSTEM prompt (not user) so the LLM treats
   // it as authoritative ground truth, not a suggestion.

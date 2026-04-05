@@ -363,7 +363,7 @@ export async function fetchUserDetails(params: { userId?: string; targetUserId?:
 
 export async function adminDirectQuery(action: string, params?: Record<string, unknown>): Promise<unknown> {
   switch (action) {
-    case "dashboard_stats": return fetchDashboardStats();
+    case "dashboard_stats": throw new Error("dashboard_stats requires edge function for Stripe revenue");
     case "subscribers_list": return fetchSubscribersList(params as any);
     case "generation_stats": return fetchGenerationStats(params as any);
     case "admin_logs": return fetchAdminLogs(params as any);

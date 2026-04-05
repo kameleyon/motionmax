@@ -215,6 +215,13 @@ export async function handleCinematicAudio(
 
   await updateSceneField(generationId, sceneIndex, "audioUrl", result.url);
 
+  // Update duration with estimate based on word count (~2.5 words/sec)
+  // This replaces the hardcoded "15" or "10" from the script with a realistic value.
+  // The export step will probe the actual file for exact duration.
+  const wordCount = (scene.voiceover || "").trim().split(/\s+/).length;
+  const estimatedDuration = Math.max(3, Math.ceil(wordCount / 2.5));
+  await updateSceneField(generationId, sceneIndex, "duration", String(estimatedDuration));
+
   await updateSceneProgress(jobId, sceneIndex, "complete", {
     message: `Scene ${sceneIndex + 1} cinematic audio complete (${result.provider})`,
   });

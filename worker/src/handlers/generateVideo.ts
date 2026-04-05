@@ -254,6 +254,13 @@ ${researchBrief}
   );
   const phaseTime = Date.now() - phaseStart;
 
+  // Force scene duration to 10s for cinematic (AI sometimes outputs 15)
+  if (projectType === "cinematic") {
+    for (const s of scenes) {
+      (s as any).duration = 10;
+    }
+  }
+
   console.log(
     `[GenerateVideo] Script parsed: ${scenes.length} scenes, ${totalImages} images, ${phaseTime}ms`,
   );

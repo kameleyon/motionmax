@@ -297,7 +297,6 @@ export function VideoPlayer({
           src={videoUrl}
           className="w-full h-full object-contain"
           muted={isMuted}
-          loop={!isMobileDevice}
           playsInline
           onClick={togglePlay}
           onPlay={() => setIsPlaying(true)}

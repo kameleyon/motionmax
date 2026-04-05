@@ -306,15 +306,15 @@ async function imageAudioToClip(
 /** Mux video + audio with duration matching.
  *
  *  AUDIO IS KING — the voiceover is never cut, sped up, or modified.
- *  The video is stretched/looped to match audio duration + 1s safety padding.
- *  This ensures voiceovers are never clipped, even with crossfade trimming.
+ *  The video is speed-adjusted (setpts) so its duration exactly matches the audio.
  *
  *  Strategy:
- *    1. Target clip duration = audio duration + 1s padding
- *    2. Loop video if needed, stretch via setpts to fill the full duration
- *    3. Audio is passed through as-is (no resampling, no filter chain)
- *    4. -t extends the clip so audio has 1s of silence after the voiceover ends
- *       (ffmpeg auto-pads audio with silence when -t exceeds audio length)
+ *    1. Probe both video and audio durations
+ *    2. Compute setpts factor = audioDur / videoDur
+ *       - If audio is longer → factor > 1 → video slows down (stretches)
+ *       - If audio is shorter → factor < 1 → video speeds up
+ *    3. No looping, no padding — output duration = audio duration exactly
+ *    4. Audio is passed through as-is (no resampling, no filter chain)
  */
 async function muxVideoAudio(
   videoPath: string,

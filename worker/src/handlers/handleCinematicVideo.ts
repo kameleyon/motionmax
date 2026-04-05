@@ -94,7 +94,17 @@ export async function handleCinematicVideo(
 
   const format = project?.format || "landscape";
   const style = project?.style || "realistic";
-  const characterDescription = project?.character_description || "";
+  const userCharacterDesc = project?.character_description || "";
+
+  // Extract the AI-generated character bible from scene _meta (set during script generation)
+  const characterBible: Record<string, string> = scene._meta?.characterBible || {};
+  // Build full character description: user's input + AI character bible
+  const bibleSummary = Object.entries(characterBible)
+    .map(([name, desc]) => `${name}: ${desc}`)
+    .join("\n");
+  const characterDescription = bibleSummary
+    ? `${userCharacterDesc}\n\n--- CHARACTER BIBLE (MUST FOLLOW EXACTLY) ---\n${bibleSummary}`
+    : userCharacterDesc;
   const language = project?.voice_inclination || "en";
 
   // ── Get this scene's image ───────────────────────────────────────
@@ -103,7 +113,11 @@ export async function handleCinematicVideo(
     console.log(`[CinematicVideo] Scene ${sceneIndex}: no image, generating fallback`);
     const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
     const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
-    const prompt = scene.visualPrompt || scene.visual_prompt || "Cinematic scene";
+    let prompt = scene.visualPrompt || scene.visual_prompt || "Cinematic scene";
+    // Inject character bible into image prompt for consistency
+    if (bibleSummary) {
+      prompt = `${prompt}\n\nCHARACTER APPEARANCE (follow exactly): ${bibleSummary.substring(0, 400)}`;
+    }
     imageUrl = await generateImage(prompt, hyperealApiKey, replicateApiKey, format, projectId);
     await updateSceneField(generationId, sceneIndex, "imageUrl", imageUrl);
   }
@@ -301,7 +315,8 @@ function buildVideoPrompt(
   parts.push(`STYLE: ${styleName.toUpperCase()}. Maintain this exact visual style throughout.`);
 
   if (characterDescription) {
-    parts.push(`CHARACTER: ${characterDescription.substring(0, 200)}. Same appearance in every frame.`);
+    // Give the character bible more space — this is critical for consistency
+    parts.push(`CHARACTER CONSISTENCY (MANDATORY — FOLLOW EXACTLY):\n${characterDescription.substring(0, 600)}\nEvery character MUST look IDENTICAL to this description in every frame — same hair, same clothes, same skin tone, same build. NO variations.`);
   }
 
   parts.push(visualPrompt.substring(0, 500));
@@ -331,7 +346,8 @@ function buildVideoPrompt(
   parts.push(
     `RULES: No talking, no lip movement, no addressing camera. ` +
     `Expressive faces that match the scene mood — curious, amused, hopeful, surprised, determined. ` +
-    `Same character appearance throughout. ` +
+    `CRITICAL: Character must have the EXACT SAME hair style, hair color, clothing, skin tone, and body type as described in the CHARACTER section above. ` +
+    `If they wear a blue jacket in the description, they wear a blue jacket here. No exceptions. ` +
     `NO nudity, NO exposed body parts, NO weird body transformations or contortions. ` +
     `All characters fully clothed with correct anatomy — no extra limbs, no distorted proportions.`
   );

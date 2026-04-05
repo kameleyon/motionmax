@@ -1,5 +1,6 @@
 ﻿import { createClient } from "npm:@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rateLimit.ts";
 
 // Extract storage path from a signed URL
 function extractStoragePath(signedUrl: string): string | null {
@@ -100,6 +101,20 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "Invalid token" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Rate limit
+    const rateLimitResult = await checkRateLimit(supabase, {
+      key: "refresh-thumbnails",
+      maxRequests: 3,
+      windowSeconds: 60,
+      userId: user?.id,
+    });
+    if (!rateLimitResult.allowed) {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again later." }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 429,
+      });
     }
 
     const { thumbnails } = await req.json() as { thumbnails: ThumbnailRequest[] };

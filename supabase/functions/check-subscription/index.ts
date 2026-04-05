@@ -2,6 +2,7 @@
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rateLimit.ts";
 
 const logStep = (step: string, details?: any) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -52,11 +53,25 @@ serve(async (req) => {
 
     const userId = user.id;
     const userEmail = user.email as string;
-    
+
     if (!userId || !userEmail) {
       throw new Error("User not authenticated or email not available");
     }
     logStep("User authenticated", { userId, email: userEmail });
+
+    // Rate limit
+    const rateLimitResult = await checkRateLimit(supabaseAdmin, {
+      key: "check-subscription",
+      maxRequests: 30,
+      windowSeconds: 60,
+      userId,
+    });
+    if (!rateLimitResult.allowed) {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again later." }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 429,
+      });
+    }
 
     // First check for manual/enterprise subscriptions in the database
     const { data: dbSubscription } = await supabaseAdmin

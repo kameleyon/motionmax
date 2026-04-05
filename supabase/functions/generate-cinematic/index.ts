@@ -10,6 +10,7 @@ import {
   type StorageStrategy,
 } from "../_shared/audioEngine.ts";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rateLimit.ts";
 
 type Phase = "script" | "audio" | "images" | "video" | "finalize" | "image-edit" | "image-regen";
 
@@ -1370,6 +1371,20 @@ serve(async (req) => {
     const userEmail = claimsData.claims.email as string;
     if (!userId) return jsonResponse({ error: "Invalid authentication" }, { status: 401 });
     const user = { id: userId, email: userEmail };
+
+    // Rate limit
+    const rateLimitResult = await checkRateLimit(supabase, {
+      key: "generate-cinematic",
+      maxRequests: 3,
+      windowSeconds: 60,
+      userId: user?.id,
+    });
+    if (!rateLimitResult.allowed) {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again later." }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 429,
+      });
+    }
 
     // Verify plan access: Professional, Enterprise, or Admin
     const { data: isAdmin } = await supabase.rpc("is_admin", { _user_id: user.id });

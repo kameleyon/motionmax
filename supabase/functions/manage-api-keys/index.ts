@@ -1,5 +1,6 @@
 ﻿import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rateLimit.ts";
 
 const PBKDF2_ITERATIONS = 100_000;
 
@@ -187,6 +188,21 @@ Deno.serve(async (req) => {
     }
 
     const userId = claimsData.claims.sub as string;
+
+    // Rate limit
+    const rateLimitResult = await checkRateLimit(serviceClient, {
+      key: "manage-api-keys",
+      maxRequests: 10,
+      windowSeconds: 60,
+      userId,
+    });
+    if (!rateLimitResult.allowed) {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again later." }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 429,
+      });
+    }
+
     const method = req.method;
 
     if (method === "GET") {

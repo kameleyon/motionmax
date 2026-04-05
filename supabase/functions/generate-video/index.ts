@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { decode as base64Decode } from "https://deno.land/std@0.190.0/encoding/base64.ts";
 import DOMPurify from "https://esm.sh/dompurify@3.2.4";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rateLimit.ts";
 
 // ============= INPUT VALIDATION =============
 const INPUT_LIMITS = {
@@ -5455,6 +5456,20 @@ serve(async (req) => {
         emailPresent: Boolean(user.email),
         elapsedMs: Date.now() - requestStartedAt,
       });
+
+      // Rate limit
+      const rateLimitResult = await checkRateLimit(supabase, {
+        key: "generate-video",
+        maxRequests: 3,
+        windowSeconds: 60,
+        userId: user?.id,
+      });
+      if (!rateLimitResult.allowed) {
+        return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again later." }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 429,
+        });
+      }
     } catch (authError) {
       console.error("Auth validation error:", authError);
       return new Response(

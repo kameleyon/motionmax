@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rateLimit.ts";
 
 const logStep = (step: string, details?: unknown) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -44,6 +45,20 @@ serve(async (req) => {
     
     const userId = claimsData.claims.sub as string;
     logStep("User authenticated", { userId });
+
+    // Rate limit
+    const rateLimitResult = await checkRateLimit(supabaseAdmin, {
+      key: "admin-stats",
+      maxRequests: 30,
+      windowSeconds: 60,
+      userId,
+    });
+    if (!rateLimitResult.allowed) {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again later." }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 429,
+      });
+    }
 
     // Check if user is admin using direct query (service role bypasses RLS)
     const { data: adminRole, error: roleError } = await supabaseAdmin

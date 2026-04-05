@@ -1,3 +1,6 @@
+# Audit reports (internal, not for public repo)
+AUDIT_REPORT*.md
+
 # Migration scripts (contain DB exports with sensitive data)
 scripts/export/
 scripts/export-source-db.mjs

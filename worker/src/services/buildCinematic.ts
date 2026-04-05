@@ -281,7 +281,19 @@ For each character:
    If you don't know, USE THE RESEARCH DATA. If no research, describe them accurately.
    NEVER depict a Black person as white, an Asian person as European, etc.
 
-When writing visualPrompt, COPY the FULL character description — don't just reference the name.
+⛔ CHARACTER CONSISTENCY ENFORCEMENT — NON-NEGOTIABLE:
+When writing visualPrompt, you MUST COPY-PASTE the EXACT character description from the "characters" object into EVERY scene where that character appears. Do NOT paraphrase, abbreviate, or "vary" the description.
+
+THE FOLLOWING MUST BE IDENTICAL IN EVERY SCENE FOR THE SAME CHARACTER:
+- EXACT same hair color, style, and length (no switching from braids to straight hair)
+- EXACT same clothing and outfit (no random wardrobe changes between scenes)
+- EXACT same skin tone description
+- EXACT same body type and distinguishing features
+
+If a character wears a "navy blue hoodie and white sneakers" in scene 1, they MUST wear "navy blue hoodie and white sneakers" in ALL scenes unless the story EXPLICITLY requires a change (e.g. "she changed into her uniform").
+
+BAD: Scene 1: "woman with curly brown hair in a red dress" → Scene 5: "woman with straight dark hair in jeans"
+GOOD: Scene 1: "woman with curly brown hair in a red dress" → Scene 5: "woman with curly brown hair in a red dress, now running through the park"
 
 ${PROMPT_ENGINEERING_SECTION}
 

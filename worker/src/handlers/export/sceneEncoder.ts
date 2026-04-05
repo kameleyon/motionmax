@@ -329,33 +329,34 @@ async function muxVideoAudio(
     probeDuration(audioPath),
   ]);
 
-  // Add 1s safety padding so crossfade trimming cuts silence, not speech
-  const AUDIO_PAD_SECONDS = 1.0;
+  // AUDIO IS KING — clip duration = audio duration + small pad
+  // Video plays at NORMAL speed. If video is longer, it gets trimmed.
+  // If video is shorter, it loops. No speed changes.
+  const AUDIO_PAD_SECONDS = 0.5;
   const clipDuration = audioDur + AUDIO_PAD_SECONDS;
-  const ratio = clipDuration / videoDur;
 
   console.log(
     `[SceneEncoder] Scene ${sceneIndex} mux: video=${videoDur.toFixed(1)}s audio=${audioDur.toFixed(1)}s ` +
-    `clip=${clipDuration.toFixed(1)}s ratio=${ratio.toFixed(3)}`
+    `clip=${clipDuration.toFixed(1)}s`
   );
 
-  // Loop video if it's shorter than the target clip duration
+  // Loop video if it's shorter than the audio clip duration
   const videoInputArgs = videoDur < clipDuration
     ? ["-stream_loop", "-1", "-i", videoPath]
     : ["-i", videoPath];
 
-  // Simple mux: stretch video to match audio + padding.
-  // Audio is re-encoded to AAC stereo 44100Hz (handles any input format).
-  // -t extends past audio end — ffmpeg fills the gap with silence automatically.
+  // Mux: video at normal speed, trimmed to audio length.
+  // -t cuts everything at clipDuration (audio + 0.5s pad).
+  // No setpts speed change — video plays at natural pace.
   await runFfmpeg([
     ...videoInputArgs,
     "-i", audioPath,
-    "-vf", `setpts=${ratio.toFixed(6)}*PTS,${scaleAndPad(config.width, config.height)}`,
+    "-vf", scaleAndPad(config.width, config.height),
     "-map", "0:v:0",
     "-map", "1:a:0",
     "-c:v", "libx264",
-    "-preset", "ultrafast",
-    "-crf", "23",
+    "-preset", "fast",
+    "-crf", "20",
     "-pix_fmt", "yuv420p",
     "-c:a", "aac",
     "-b:a", "128k",

@@ -418,14 +418,18 @@ export async function handleExportVideo(
       await flushSceneProgress(jobId);
       await supabase.from("video_generation_jobs").update({ progress: 78, updated_at: new Date().toISOString() }).eq("id", jobId);
 
-      // Probe the final video to get actual total duration
+      // Probe each individual scene clip for exact durations (not estimated)
       const { probeDuration } = await import("./export/ffmpegCmd.js");
-      const totalVideoDur = await probeDuration(finalOutputPath);
-      const totalWords = scenes.reduce((sum: number, s: any) => sum + ((s.voiceover || "").split(/\s+/).length || 1), 0);
-      const actualDurations = scenes.map((s: any) => {
-        const words = (s.voiceover || "").split(/\s+/).length || 1;
-        return (words / totalWords) * totalVideoDur;
-      });
+      const actualDurations: number[] = [];
+      for (const clipPath of sceneResults) {
+        if (clipPath) {
+          const dur = await probeDuration(clipPath);
+          actualDurations.push(dur);
+        } else {
+          actualDurations.push(10); // fallback for failed scenes
+        }
+      }
+      const totalVideoDur = actualDurations.reduce((a, b) => a + b, 0);
       console.log(`[ExportVideo] Caption timing: total=${totalVideoDur.toFixed(1)}s, scenes=${actualDurations.map((d: number) => d.toFixed(1)).join(",")}`);
 
       const assContent = generateAssSubtitles(scenes, captionStyle, exportConfig.width, exportConfig.height, actualDurations, asrResults || undefined);

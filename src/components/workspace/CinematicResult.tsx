@@ -45,7 +45,6 @@ import { cn } from "@/lib/utils";
 import { SUPABASE_URL } from "@/lib/supabaseUrl";
 import { CinematicEditModal } from "./CinematicEditModal";
 import { CaptionStyleSelector, type CaptionStyle as CaptionStyleType } from "./CaptionStyleSelector";
-import { CaptionPreviewAnimation } from "./CaptionPreviewAnimation";
 import { SceneVersionHistory } from "./SceneVersionHistory";
 import { VideoPlayer } from "./VideoPlayer";
 import {
@@ -438,10 +437,6 @@ export function CinematicResult({
             className="gap-1.5 text-muted-foreground hover:text-destructive hover:border-destructive/50">
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
-        </div>
-
-        {/* Caption style selector with live preview */}
-        <div className="flex flex-col items-center gap-3">
           <CaptionStyleSelector
             value={(initialCaptionStyle || "none") as CaptionStyleType}
             onChange={(style) => {
@@ -449,9 +444,6 @@ export function CinematicResult({
               setHasUnsavedEdits(true);
             }}
           />
-          {initialCaptionStyle && initialCaptionStyle !== "none" && (
-            <CaptionPreviewAnimation captionStyle={initialCaptionStyle as CaptionStyleType} />
-          )}
         </div>
       </div>
 

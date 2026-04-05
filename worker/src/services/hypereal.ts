@@ -1,3 +1,5 @@
+import { writeApiLog } from "../lib/logger.js";
+
 const HYPEREAL_IMAGE_URL = "https://api.hypereal.cloud/v1/images/generate";
 const HYPEREAL_VIDEO_URL = "https://api.hypereal.cloud/v1/videos/generate";
 
@@ -273,6 +275,7 @@ async function pollHyperealJob(
   model: string,
   pollUrl: string | null,
 ): Promise<string> {
+  const pollStartTime = Date.now();
   const maxAttempts = 40;
   const FAST_POLL_MS = 10_000;   // 10s for first 6 polls (~first 60s)
   const SLOW_POLL_MS = 20_000;   // 20s after that
@@ -308,7 +311,9 @@ async function pollHyperealJob(
       consecutive429++;
       if (consecutive429 >= max429Streak) {
         console.warn(`[Hypereal] ${model} ${jobId} — ${max429Streak} consecutive 429s, bailing`);
-        throw new Error(`Hypereal rate-limited: ${max429Streak} consecutive 429 responses`);
+        const rlErr = new Error(`Hypereal rate-limited: ${max429Streak} consecutive 429 responses`);
+        writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: rlErr.message }).catch(() => {});
+        throw rlErr;
       }
       continue;
     }
@@ -327,13 +332,18 @@ async function pollHyperealJob(
       console.log(`[Hypereal] ✅ ${model} ${data.status} ${jobId} — ${String(videoUrl).substring(0, 80)}...`);
       if (!videoUrl) {
         console.log(`[Hypereal] Full response: ${JSON.stringify(data)}`);
-        throw new Error(`${model} job ${data.status} but no URL found in response`);
+        const err = new Error(`${model} job ${data.status} but no URL found in response`);
+        writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: err.message }).catch(() => {});
+        throw err;
       }
+      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model, status: "success", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: undefined }).catch(() => {});
       return videoUrl;
     }
 
     if (data.status === "failed" || data.status === "error") {
-      throw new Error(`${model} job failed: ${data.error || JSON.stringify(data)}`);
+      const err = new Error(`${model} job failed: ${data.error || JSON.stringify(data)}`);
+      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: err.message }).catch(() => {});
+      throw err;
     }
 
     if (attempt % 10 === 0) {
@@ -341,7 +351,9 @@ async function pollHyperealJob(
     }
   }
 
-  throw new Error(`${model} timed out after ${maxAttempts} polls (~${Math.round(maxAttempts * SLOW_POLL_MS / 60_000)} min).`);
+  const timeoutErr = new Error(`${model} timed out after ${maxAttempts} polls (~${Math.round(maxAttempts * SLOW_POLL_MS / 60_000)} min).`);
+  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: timeoutErr.message }).catch(() => {});
+  throw timeoutErr;
 }
 
 // ── Kling V2.5 Turbo Pro I2V (fallback for V2.6) ────────────────────

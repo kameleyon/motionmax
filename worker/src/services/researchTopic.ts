@@ -10,6 +10,8 @@
  * Uses Gemini 3.1 Pro via Hypereal (1M context, $0.80/M input, $4.80/M output).
  */
 
+import { writeApiLog } from "../lib/logger.js";
+
 // Built at request time with current date injected — see buildResearchPrompt()
 function buildResearchPrompt(): string {
   const now = new Date();
@@ -124,6 +126,7 @@ export async function researchTopic(content: string): Promise<string> {
     if (!res.ok) {
       const body = await res.text();
       console.warn(`[Research] Hypereal error ${res.status}: ${body.substring(0, 200)}`);
+      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-pro", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: `Hypereal error ${res.status}` }).catch(() => {});
       return "";
     }
 
@@ -132,9 +135,11 @@ export async function researchTopic(content: string): Promise<string> {
     const elapsed = Date.now() - startTime;
 
     console.log(`[Research] Complete (${brief.length} chars, ${(elapsed / 1000).toFixed(1)}s, credits: ${data.creditsUsed ?? "?"})`);
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-pro", status: "success", totalDurationMs: elapsed, cost: 0, error: undefined }).catch(() => {});
     return brief;
   } catch (err) {
     console.warn(`[Research] Failed: ${(err as Error).message} — continuing without research`);
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-pro", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: (err as Error).message }).catch(() => {});
     return "";
   }
 }

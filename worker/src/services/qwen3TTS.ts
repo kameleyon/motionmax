@@ -10,6 +10,7 @@
  */
 
 import { supabase } from "../lib/supabase.js";
+import { writeApiLog } from "../lib/logger.js";
 
 const REPLICATE_API_URL = "https://api.replicate.com/v1/models/qwen/qwen3-tts/predictions";
 
@@ -83,6 +84,8 @@ export async function generateQwen3TTS(
   if (!text || text.trim().length < 2) {
     return { url: null, error: "No text" };
   }
+
+  const startTime = Date.now();
 
   // Resolve speaker name
   const qwenSpeaker = SPEAKER_MAP[speaker] || "Serena";
@@ -176,6 +179,7 @@ export async function generateQwen3TTS(
       const durationSeconds = Math.max(1, bytes.length / (44100 * 2)); // rough estimate for 16-bit mono WAV
 
       console.log(`[Qwen3TTS] Scene ${sceneNumber}: success (${bytes.length} bytes, ~${durationSeconds.toFixed(1)}s)`);
+      writeApiLog({ userId: undefined, generationId: undefined, provider: "qwen3", model: "qwen3-tts", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch(() => {});
       return { url, durationSeconds, provider: `Qwen3 TTS (${speaker})` };
 
     } catch (err) {
@@ -184,5 +188,6 @@ export async function generateQwen3TTS(
     }
   }
 
+  writeApiLog({ userId: undefined, generationId: undefined, provider: "qwen3", model: "qwen3-tts", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: "Qwen3 TTS failed after 3 attempts" }).catch(() => {});
   return { url: null, error: "Qwen3 TTS failed after 3 attempts" };
 }

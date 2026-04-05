@@ -422,10 +422,10 @@ serve(async (req) => {
 
         const allGenerations = [
           ...(generations || []).map(g => ({ ...g, deleted: false })),
-          ...(archives || []).map(a => ({ 
-            ...a, 
-            created_at: a.original_created_at,
-            deleted: true 
+          ...(archives || []).map(a => ({
+            ...a,
+            created_at: a.original_created_at || a.archived_at || a.created_at,
+            deleted: true
           })),
         ];
 

@@ -10,6 +10,7 @@
  */
 
 import { supabase } from "../lib/supabase.js";
+import { writeApiLog } from "../lib/logger.js";
 import { v4 as uuidv4 } from "uuid";
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -214,11 +215,14 @@ export async function generateImage(
   format: string,
   projectId: string,
 ): Promise<string> {
+  const startTime = Date.now();
+
   // Primary: Hypereal → download bytes → upload to Supabase
   if (hyperealApiKey) {
     const bytes = await tryHypereal(prompt, hyperealApiKey, format);
     if (bytes) {
       const url = await uploadToStorage(bytes, projectId);
+      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3-1-flash-t2i", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch(() => {});
       return url;
     }
     console.warn("[ImageGen] Hypereal exhausted — falling back to Replicate");
@@ -227,10 +231,15 @@ export async function generateImage(
   // Fallback: Replicate (already uploads to Supabase internally)
   if (replicateApiKey) {
     const url = await tryReplicate(prompt, replicateApiKey, format, projectId);
-    if (url) return url;
+    if (url) {
+      writeApiLog({ userId: undefined, generationId: undefined, provider: "replicate", model: "nano-banana-2", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch(() => {});
+      return url;
+    }
   }
 
-  throw new Error("Image generation failed: both Hypereal and Replicate exhausted");
+  const err = new Error("Image generation failed: both Hypereal and Replicate exhausted");
+  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3-1-flash-t2i", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch(() => {});
+  throw err;
 }
 
 /**

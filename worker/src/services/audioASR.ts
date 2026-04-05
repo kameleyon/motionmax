@@ -10,6 +10,8 @@
  *   NO "model" field — the endpoint routes based on the presence of "audio" vs "input".
  */
 
+import { writeApiLog } from "../lib/logger.js";
+
 // /api/v1/ returns 404; /v1/ is the working base (matches image/video services)
 const HYPEREAL_ASR_URL = "https://api.hypereal.cloud/v1/audio/generate";
 
@@ -55,6 +57,7 @@ export async function transcribeAudio(
 ): Promise<ASRResult | null> {
   if (!apiKey || !audioUrl) return null;
 
+  const startTime = Date.now();
   try {
     // Download the audio file ourselves and send as base64 data URI.
     // Hypereal's async jobs can't reliably fetch from private Supabase buckets,
@@ -102,13 +105,19 @@ export async function transcribeAudio(
       body: JSON.stringify(payload),
     });
 
-    if (res.ok) return handleASRResponse(res, apiKey);
+    if (res.ok) {
+      const result = await handleASRResponse(res, apiKey);
+      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "audio-asr", status: result ? "success" : "error", totalDurationMs: Date.now() - startTime, cost: 0, error: result ? undefined : "ASR returned no usable result" }).catch(() => {});
+      return result;
+    }
 
     const errText = await res.text();
     console.warn(`[ASR] Failed (${res.status}): ${errText.substring(0, 300)}`);
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "audio-asr", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: `ASR failed ${res.status}` }).catch(() => {});
     return null;
   } catch (err) {
     console.warn(`[ASR] Error: ${(err as Error).message}`);
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "audio-asr", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: (err as Error).message }).catch(() => {});
     return null;
   }
 }

@@ -14,18 +14,17 @@ interface LogPayload {
   details?: Record<string, any>;
 }
 
-// New API Logging Format
+// API call logging -- matches api_call_logs table schema exactly
 interface ApiCallPayload {
   userId?: string;
-  projectId?: string;
   generationId?: string;
-  provider: "openrouter" | "hypereal" | "elevenlabs" | "replicate" | "google_tts";
+  provider: "openrouter" | "hypereal" | "elevenlabs" | "replicate" | "google_tts" | "fish_audio" | "lemonfox" | "qwen3";
   model: string;
   status: "success" | "error";
-  durationMs: number;
+  queueTimeMs?: number;
+  runningTimeMs?: number;
+  totalDurationMs: number;
   cost: number;
-  requestDetails?: any;
-  responseDetails?: any;
   error?: string;
 }
 
@@ -92,15 +91,14 @@ export async function writeApiLog(payload: ApiCallPayload) {
     await supabase.from("api_call_logs").insert({
       id: uuidv4(),
       user_id: payload.userId || null,
-      project_id: payload.projectId || null,
       generation_id: payload.generationId || null,
       provider: payload.provider,
       model: payload.model,
       status: payload.status,
-      duration_ms: payload.durationMs,
-      estimated_cost: payload.cost,
-      request_details: payload.requestDetails || {},
-      response_details: Object.keys(payload.responseDetails || {}).length > 0 ? payload.responseDetails : undefined,
+      queue_time_ms: payload.queueTimeMs || null,
+      running_time_ms: payload.runningTimeMs || null,
+      total_duration_ms: payload.totalDurationMs,
+      cost: payload.cost,
       error_message: payload.error || null,
       created_at: new Date().toISOString()
     });

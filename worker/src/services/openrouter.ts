@@ -6,6 +6,8 @@
  * with NO timeout (that's the whole point of the worker).
  */
 
+import { writeApiLog } from "../lib/logger.js";
+
 // ── Re-exports ─────────────────────────────────────────────────────
 
 export { buildDoc2VideoPrompt } from "./buildDoc2Video.js";
@@ -41,6 +43,7 @@ export async function callOpenRouterLLM(
 
   const model = options.model || "anthropic/claude-sonnet-4.6";
   const temperature = options.temperature ?? 0.7;
+  const startTime = Date.now();
   console.log(`[OpenRouter] Calling ${model} (maxTokens=${options.maxTokens}, temp=${temperature}, forceJson=${!!options.forceJson})`);
 
   const requestBody: Record<string, unknown> = {
@@ -103,14 +106,21 @@ export async function callOpenRouterLLM(
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`OpenRouter API error ${res.status}: ${body}`);
+    const err = new Error(`OpenRouter API error ${res.status}: ${body}`);
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "openrouter", model, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch(() => {});
+    throw err;
   }
 
   const data = (await res.json()) as any;
   const text = data.choices?.[0]?.message?.content;
-  if (!text) throw new Error("OpenRouter returned empty content");
+  if (!text) {
+    const err = new Error("OpenRouter returned empty content");
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "openrouter", model, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch(() => {});
+    throw err;
+  }
 
   console.log(`[OpenRouter] Response received (${text.length} chars)`);
+  writeApiLog({ userId: undefined, generationId: undefined, provider: "openrouter", model, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch(() => {});
   return text;
 }
 
@@ -128,6 +138,7 @@ export async function callHyperealLLM(
   if (!apiKey) throw new Error("HYPEREAL_API_KEY is not set");
 
   const temperature = options.temperature ?? 0.7;
+  const startTime = Date.now();
   console.log(`[Hypereal] Calling gemini-3.1-pro (maxTokens=${options.maxTokens}, temp=${temperature}, forceJson=${!!options.forceJson})`);
 
   const requestBody: Record<string, unknown> = {
@@ -163,14 +174,21 @@ export async function callHyperealLLM(
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Hypereal API error ${res.status}: ${body.substring(0, 300)}`);
+    const err = new Error(`Hypereal API error ${res.status}: ${body.substring(0, 300)}`);
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-pro", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch(() => {});
+    throw err;
   }
 
   const data = (await res.json()) as any;
   const text = data.choices?.[0]?.message?.content;
-  if (!text) throw new Error("Hypereal returned empty content");
+  if (!text) {
+    const err = new Error("Hypereal returned empty content");
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-pro", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch(() => {});
+    throw err;
+  }
 
   console.log(`[Hypereal] Response received (${text.length} chars, credits: ${data.creditsUsed ?? "?"})`);
+  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-pro", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch(() => {});
   return text;
 }
 

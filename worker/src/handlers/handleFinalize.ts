@@ -10,10 +10,22 @@ import { writeSystemLog } from "../lib/logger.js";
 // ── Pricing (matches edge function PRICING constants) ──────────────
 
 const PRICING = {
-  scriptPerToken: 0.000003,
-  audioPerSecond: 0.002,
-  imageNanoBanana: 0.04,
-  imageNanoBananaPro: 0.04,
+  // Script generation (per token)
+  openrouterPerToken: 0.000003,   // Claude Sonnet via OpenRouter
+  hyperealLlmPerToken: 0.0000008, // Gemini via Hypereal ($0.80/M input)
+  // Audio (per second)
+  qwen3PerSecond: 0.001,          // Qwen3 TTS via Replicate
+  elevenlabsPerSecond: 0.003,     // ElevenLabs TTS
+  googleTtsPerSecond: 0.004,      // Google Cloud TTS
+  fishAudioPerSecond: 0.001,      // Fish Audio
+  lemonfoxPerSecond: 0.001,       // LemonFox
+  // Images (per image)
+  hyperealImage: 0.04,            // Hypereal image gen
+  replicateImage: 0.05,           // Replicate image gen
+  // Video (per 10s clip)
+  hyperealVideo: 0.10,            // Kling I2V via Hypereal
+  // ASR (per minute)
+  hyperealAsr: 0.01,              // Hypereal audio-asr
 };
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -85,20 +97,48 @@ export async function handleFinalizePhase(
     return rest;
   });
 
-  // Record generation costs
-  const scriptCost = costTracking.scriptTokens * PRICING.scriptPerToken;
-  const audioCost = costTracking.audioSeconds * PRICING.audioPerSecond;
-  const imageCost = costTracking.imagesGenerated * PRICING.imageNanoBanana;
+  // Record generation costs -- attribute to correct providers
+  const projectType = (generation.projects as any)?.project_type || "doc2video";
+  const isCinematic = projectType === "cinematic";
+  const sceneCount = scenes.length;
+
+  // Script: Hypereal (Gemini) primary, OpenRouter (Claude) fallback
+  // We default to Hypereal since that's the primary now
+  const scriptCost = costTracking.scriptTokens * PRICING.hyperealLlmPerToken;
+
+  // Audio: depends on provider used (tracked in scene metadata or estimated)
+  const audioSeconds = costTracking.audioSeconds || (sceneCount * 8); // ~8s per scene avg
+  const audioCost = audioSeconds * PRICING.qwen3PerSecond; // Most scenes use Qwen3
+
+  // Images: Hypereal for cinematic, mix for others
+  const imageCount = costTracking.imagesGenerated || sceneCount;
+  const imageCost = imageCount * PRICING.hyperealImage;
+
+  // Video: Kling I2V for cinematic only
+  const videoCost = isCinematic ? sceneCount * PRICING.hyperealVideo : 0;
+
+  // Research: ~1 Hypereal Gemini call for cinematic/storytelling
+  const researchCost = (isCinematic || projectType === "storytelling") ? 0.005 : 0;
+
+  // ASR: ~1 credit per scene for caption transcription (cinematic only)
+  const asrCost = isCinematic ? (sceneCount * (8 / 60) * PRICING.hyperealAsr) : 0;
+
+  // Attribution: most costs go to Hypereal now (images, video, LLM, ASR)
+  const hyperealTotal = scriptCost + imageCost + videoCost + researchCost + asrCost;
+  const replicateTotal = audioCost; // Qwen3 TTS runs on Replicate
+  const openrouterTotal = 0; // Only used as fallback now
+  const googleTtsTotal = 0; // Only used for Haitian Creole
 
   try {
     await supabase.from("generation_costs").insert({
       generation_id: generationId,
       user_id: userId || null,
-      openrouter_cost: scriptCost,
-      replicate_cost: imageCost + audioCost,
-      hypereal_cost: 0,
-      google_tts_cost: 0,
+      openrouter_cost: openrouterTotal,
+      replicate_cost: replicateTotal,
+      hypereal_cost: hyperealTotal,
+      google_tts_cost: googleTtsTotal,
     });
+    console.log(`[Finalize] Costs recorded: hypereal=$${hyperealTotal.toFixed(4)} replicate=$${replicateTotal.toFixed(4)} (${sceneCount} scenes, ${projectType})`);
   } catch (err) {
     console.warn("[Finalize] Cost recording failed (non-fatal):", err);
   }

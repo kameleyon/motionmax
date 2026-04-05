@@ -6,6 +6,8 @@
  * based on a text instruction (e.g. "change the sky to sunset").
  */
 
+import { writeApiLog } from "../lib/logger.js";
+
 const HYPEREAL_IMAGE_URL = "https://api.hypereal.cloud/v1/images/generate";
 
 export async function editImageWithNanoBanana(
@@ -15,6 +17,7 @@ export async function editImageWithNanoBanana(
   aspectRatio: string = "16:9",
 ): Promise<string> {
   console.log(`[NanoBananaEdit] Editing image: "${prompt.substring(0, 60)}..." aspect=${aspectRatio}`);
+  const startTime = Date.now();
 
   const response = await fetch(HYPEREAL_IMAGE_URL, {
     method: "POST",
@@ -33,7 +36,9 @@ export async function editImageWithNanoBanana(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Nano Banana Edit API Error: ${response.status} - ${errorText}`);
+    const err = new Error(`Nano Banana Edit API Error: ${response.status} - ${errorText}`);
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "nano-banana-edit", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch(() => {});
+    throw err;
   }
 
   const data = await response.json() as any;
@@ -45,12 +50,17 @@ export async function editImageWithNanoBanana(
     // If async job, poll for result
     const jobId = data?.jobId;
     if (jobId) {
-      return pollNanoBananaJob(jobId, apiKey);
+      const result = await pollNanoBananaJob(jobId, apiKey);
+      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "nano-banana-edit", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch(() => {});
+      return result;
     }
-    throw new Error(`No image URL returned from Nano Banana Edit: ${JSON.stringify(data).substring(0, 200)}`);
+    const err = new Error(`No image URL returned from Nano Banana Edit: ${JSON.stringify(data).substring(0, 200)}`);
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "nano-banana-edit", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch(() => {});
+    throw err;
   }
 
   console.log(`[NanoBananaEdit] Edit complete: ${editedUrl.substring(0, 80)}...`);
+  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "nano-banana-edit", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch(() => {});
   return editedUrl;
 }
 

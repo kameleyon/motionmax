@@ -401,6 +401,18 @@ export async function handleExportVideo(
       await concatFiles(clipPaths, finalOutputPath, false);
     }
 
+    // Probe each individual scene clip for exact durations BEFORE cleanup
+    const { probeDuration } = await import("./export/ffmpegCmd.js");
+    const actualDurations: number[] = [];
+    for (const clipPath of sceneResults) {
+      if (clipPath) {
+        const dur = await probeDuration(clipPath);
+        actualDurations.push(dur);
+      } else {
+        actualDurations.push(10);
+      }
+    }
+
     // Free individual scene MP4s
     for (const f of clipPaths) removeFiles(f);
 
@@ -418,17 +430,6 @@ export async function handleExportVideo(
       await flushSceneProgress(jobId);
       await supabase.from("video_generation_jobs").update({ progress: 78, updated_at: new Date().toISOString() }).eq("id", jobId);
 
-      // Probe each individual scene clip for exact durations (not estimated)
-      const { probeDuration } = await import("./export/ffmpegCmd.js");
-      const actualDurations: number[] = [];
-      for (const clipPath of sceneResults) {
-        if (clipPath) {
-          const dur = await probeDuration(clipPath);
-          actualDurations.push(dur);
-        } else {
-          actualDurations.push(10); // fallback for failed scenes
-        }
-      }
       const totalVideoDur = actualDurations.reduce((a, b) => a + b, 0);
       console.log(`[ExportVideo] Caption timing: total=${totalVideoDur.toFixed(1)}s, scenes=${actualDurations.map((d: number) => d.toFixed(1)).join(",")}`);
 

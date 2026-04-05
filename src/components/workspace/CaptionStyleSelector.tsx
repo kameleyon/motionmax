@@ -89,34 +89,34 @@ export const previewStyles: Record<CaptionStyle, string> = {
   toxicBounce: "[font-family:'Montserrat',sans-serif] font-black text-[#39FF14] uppercase text-[10px] tracking-wider [text-shadow:_-1px_-1px_0_#000,_1px_-1px_0_#000,_-1px_1px_0_#000,_1px_1px_0_#000,_2px_2px_0_#000]",
 };
 
-/** Animation variants per style (lightweight version for dropdown) */
+/** Animation variants — smooth and steady for dropdown preview */
 const styleVariants: Record<CaptionStyle, Variants> = {
   none: { hidden: { opacity: 0 }, visible: { opacity: 0 } },
-  orangeBox: { hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", stiffness: 400, damping: 15 } } },
-  yellowSlanted: { hidden: { opacity: 0, scale: 1.8, rotate: -8 }, visible: { opacity: 1, scale: 1, rotate: 0, transition: { type: "spring", stiffness: 350, damping: 18 } } },
-  redSlantedBox: { hidden: { opacity: 0, x: -20 }, visible: { opacity: 1, x: 0, transition: { duration: 0.2, ease: "easeOut" } } },
-  cyanOutline: { hidden: { opacity: 0, scale: 0.7 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.5 } } },
-  motionBlur: { hidden: { opacity: 0, x: -40, filter: "blur(8px)" }, visible: { opacity: 1, x: 0, filter: "blur(0px)", transition: { duration: 0.2 } } },
-  yellowSmall: { hidden: { opacity: 0, y: 5 }, visible: { opacity: 1, y: 0, transition: { duration: 0.12 } } },
-  thickStroke: { hidden: { opacity: 0, scale: 1.4 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", stiffness: 500, damping: 25 } } },
-  karaokePop: { hidden: { opacity: 0.4, scale: 0.9 }, visible: { opacity: 1, scale: 1.15, transition: { type: "spring", stiffness: 400 } } },
-  neonTeal: { hidden: { opacity: 0, filter: "brightness(0.4)" }, visible: { opacity: 1, filter: "brightness(1)", transition: { duration: 0.25 } } },
-  goldLuxury: { hidden: { opacity: 0, y: 6 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "backOut" } } },
-  bouncyPill: { hidden: { opacity: 0, scale: 0 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.65 } } },
-  glitch: { hidden: { opacity: 0, x: 6, skewX: 15 }, visible: { opacity: 1, x: 0, skewX: 0, transition: { duration: 0.08 } } },
-  comicBurst: { hidden: { opacity: 0, scale: 0.2, rotate: -20 }, visible: { opacity: 1, scale: 1.05, rotate: 3, transition: { type: "spring", stiffness: 300, damping: 10 } } },
-  redTag: { hidden: { opacity: 0, x: -8 }, visible: { opacity: 1, x: 0, transition: { duration: 0.12 } } },
-  blackBox: { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0.08 } } },
-  typewriter: { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0.04 } } },
-  cinematicFade: { hidden: { opacity: 0, filter: "blur(3px)" }, visible: { opacity: 1, filter: "blur(0px)", transition: { duration: 0.5 } } },
-  retroTerminal: { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0.06 } } },
-  heavyDropShadow: { hidden: { opacity: 0, y: -12 }, visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 400, damping: 12 } } },
-  cleanPop: { hidden: { opacity: 0, scale: 0.8 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", stiffness: 400, damping: 25 } } },
-  toxicBounce: { hidden: { opacity: 0, scale: 0.3, rotate: -5 }, visible: { opacity: 1, scale: 1, rotate: 0, transition: { type: "spring", bounce: 0.6, duration: 0.4 } } },
+  orangeBox: { hidden: { opacity: 0, scale: 0.85 }, visible: { opacity: 1, scale: 1, transition: { duration: 0.25, ease: "easeOut" } } },
+  yellowSlanted: { hidden: { opacity: 0, scale: 1.2 }, visible: { opacity: 1, scale: 1, transition: { duration: 0.3, ease: "easeOut" } } },
+  redSlantedBox: { hidden: { opacity: 0, x: -10 }, visible: { opacity: 1, x: 0, transition: { duration: 0.25, ease: "easeOut" } } },
+  cyanOutline: { hidden: { opacity: 0, scale: 0.85 }, visible: { opacity: 1, scale: 1, transition: { duration: 0.3, ease: "easeOut" } } },
+  motionBlur: { hidden: { opacity: 0, x: -15 }, visible: { opacity: 1, x: 0, transition: { duration: 0.25, ease: "easeOut" } } },
+  yellowSmall: { hidden: { opacity: 0, y: 3 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2 } } },
+  thickStroke: { hidden: { opacity: 0, scale: 1.1 }, visible: { opacity: 1, scale: 1, transition: { duration: 0.25, ease: "easeOut" } } },
+  karaokePop: { hidden: { opacity: 0.5, scale: 0.95 }, visible: { opacity: 1, scale: 1.05, transition: { duration: 0.3, ease: "easeOut" } } },
+  neonTeal: { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0.35 } } },
+  goldLuxury: { hidden: { opacity: 0, y: 4 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } } },
+  bouncyPill: { hidden: { opacity: 0, scale: 0.7 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", stiffness: 200, damping: 20 } } },
+  glitch: { hidden: { opacity: 0, x: 3 }, visible: { opacity: 1, x: 0, transition: { duration: 0.1 } } },
+  comicBurst: { hidden: { opacity: 0, scale: 0.7 }, visible: { opacity: 1, scale: 1, transition: { duration: 0.3, ease: "backOut" } } },
+  redTag: { hidden: { opacity: 0, x: -5 }, visible: { opacity: 1, x: 0, transition: { duration: 0.2 } } },
+  blackBox: { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0.15 } } },
+  typewriter: { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0.08 } } },
+  cinematicFade: { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0.6 } } },
+  retroTerminal: { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0.1 } } },
+  heavyDropShadow: { hidden: { opacity: 0, y: -6 }, visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: "easeOut" } } },
+  cleanPop: { hidden: { opacity: 0, scale: 0.9 }, visible: { opacity: 1, scale: 1, transition: { duration: 0.3, ease: "easeOut" } } },
+  toxicBounce: { hidden: { opacity: 0, scale: 0.7 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", stiffness: 200, damping: 18 } } },
 };
 
 const PREVIEW_WORDS = ["Your", "idea", "in", "motion"];
-const WORD_MS = 350;
+const WORD_MS = 600;
 
 /** Animated preview row for a single caption style in the dropdown */
 const CaptionPreviewRow = memo(function CaptionPreviewRow({ styleId }: { styleId: CaptionStyle }) {
@@ -147,7 +147,7 @@ const CaptionPreviewRow = memo(function CaptionPreviewRow({ styleId }: { styleId
   ].includes(styleId);
 
   return (
-    <div className="flex items-center justify-center h-7 w-full bg-gray-900/80 rounded overflow-hidden">
+    <div className="flex items-center justify-center h-6 w-full overflow-hidden">
       <AnimatePresence mode="popLayout">
         {PREVIEW_WORDS.map((word, idx) => {
           if (isSingleWord && idx !== activeIdx) return null;
@@ -192,10 +192,7 @@ export function CaptionStyleSelector({ value, onChange }: CaptionStyleSelectorPr
               {s.id === "none" ? (
                 <span className="text-xs text-muted-foreground">No captions</span>
               ) : (
-                <div className="w-full">
-                  <CaptionPreviewRow styleId={s.id} />
-                  <span className="text-[9px] text-muted-foreground/60 mt-0.5 block">{s.label}</span>
-                </div>
+                <CaptionPreviewRow styleId={s.id} />
               )}
             </SelectItem>
           ))}

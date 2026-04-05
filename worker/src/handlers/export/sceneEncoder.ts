@@ -329,29 +329,27 @@ async function muxVideoAudio(
     probeDuration(audioPath),
   ]);
 
-  // AUDIO IS KING — clip duration = audio duration + small pad
-  // Video plays at NORMAL speed. If video is longer, it gets trimmed.
-  // If video is shorter, it loops. No speed changes.
-  const AUDIO_PAD_SECONDS = 0.5;
-  const clipDuration = audioDur + AUDIO_PAD_SECONDS;
+  // AUDIO IS KING — video duration must EXACTLY match audio duration.
+  // No looping. No trimming. Speed up or slow down the video to fit.
+  const clipDuration = audioDur;
+  const speedRatio = videoDur / audioDur; // >1 = video longer, speed up. <1 = video shorter, slow down.
+  const ptsFactor = speedRatio; // setpts=N*PTS: N>1 slows down, N<1 speeds up — but we need inverse
+  // setpts: to make video SHORTER (speed up), use factor < 1
+  // to make video LONGER (slow down), use factor > 1
+  // We want video to last exactly audioDur seconds:
+  // newDur = videoDur / speedFactor → speedFactor = videoDur / audioDur
+  // setpts = (1/speedFactor)*PTS = (audioDur/videoDur)*PTS
+  const setptsFactor = (audioDur / videoDur).toFixed(6);
 
   console.log(
     `[SceneEncoder] Scene ${sceneIndex} mux: video=${videoDur.toFixed(1)}s audio=${audioDur.toFixed(1)}s ` +
-    `clip=${clipDuration.toFixed(1)}s`
+    `speed=${speedRatio.toFixed(2)}x setpts=${setptsFactor}`
   );
 
-  // Loop video if it's shorter than the audio clip duration
-  const videoInputArgs = videoDur < clipDuration
-    ? ["-stream_loop", "-1", "-i", videoPath]
-    : ["-i", videoPath];
-
-  // Mux: video at normal speed, trimmed to audio length.
-  // -t cuts everything at clipDuration (audio + 0.5s pad).
-  // No setpts speed change — video plays at natural pace.
   await runFfmpeg([
-    ...videoInputArgs,
+    "-i", videoPath,
     "-i", audioPath,
-    "-vf", scaleAndPad(config.width, config.height),
+    "-vf", `setpts=${setptsFactor}*PTS,${scaleAndPad(config.width, config.height)}`,
     "-map", "0:v:0",
     "-map", "1:a:0",
     "-c:v", "libx264",

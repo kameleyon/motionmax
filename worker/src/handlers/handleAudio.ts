@@ -187,17 +187,28 @@ export async function handleAudioPhase(
       await flushSceneProgress(jobId);
     }
 
-    // Update progress periodically
+    // Update progress — re-read scenes from DB to merge with parallel image phase updates
     const progress = Math.min(39, 10 + Math.floor((batchEnd / scenes.length) * 30));
-    const updatedScenes = scenes.map((s: any, i: number) => ({
+
+    const { data: freshGen } = await supabase
+      .from("generations")
+      .select("scenes")
+      .eq("id", generationId)
+      .maybeSingle();
+    const freshScenes: any[] = freshGen?.scenes || [];
+
+    const mergedScenes = scenes.map((s: any, i: number) => ({
       ...s,
+      // Preserve imageUrl/imageUrls from the fresh DB copy (written by parallel images phase)
+      imageUrl: freshScenes[i]?.imageUrl || s.imageUrl,
+      imageUrls: freshScenes[i]?.imageUrls || s.imageUrls,
       audioUrl: audioUrls[i],
       _meta: { ...(s._meta || {}), statusMessage: `Audio ${i < batchEnd ? "complete" : "pending"}` },
     }));
 
     await supabase
       .from("generations")
-      .update({ progress, scenes: updatedScenes })
+      .update({ progress, scenes: mergedScenes })
       .eq("id", generationId);
   }
 

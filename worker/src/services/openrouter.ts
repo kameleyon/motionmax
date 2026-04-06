@@ -246,6 +246,24 @@ export async function callLLMWithFallback(
         text = text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
       }
 
+      // Repair common Hypereal JSON malformations (runs AFTER <think> stripping)
+      if (options.forceJson) {
+        // Fix double braces from assistant pre-fill echo
+        text = text.replace(/^\s*\{\{/, "{");
+        text = text.replace(/\}\}\s*$/, "}");
+
+        // Strip stray non-JSON lines (e.g. "Menu", markdown fences, model artifacts)
+        text = text.split("\n").filter(line => {
+          const t = line.trim();
+          if (!t) return true; // keep blanks (harmless in JSON)
+          // Drop bare words/phrases with no JSON punctuation
+          if (/^[a-zA-Z_][a-zA-Z0-9_ ]*$/.test(t) && !/^(true|false|null)$/.test(t)) return false;
+          // Drop markdown code fences
+          if (t.startsWith("```")) return false;
+          return true;
+        }).join("\n");
+      }
+
       // If forceJson requested, verify response actually contains parseable JSON
       if (options.forceJson) {
         const braceIdx = text.indexOf("{");
@@ -255,13 +273,19 @@ export async function callLLMWithFallback(
           throw new Error("Hypereal response is not JSON");
         }
 
+        // Extract just the JSON object and strip trailing commas before closing brackets
+        const extracted = text.slice(braceIdx, lastBrace + 1).replace(/,\s*([\]}])/g, "$1");
+
         // Quick sanity check: try to parse the JSON portion
         try {
-          JSON.parse(text.slice(braceIdx, lastBrace + 1).replace(/,\s*([\]}])/g, "$1"));
+          JSON.parse(extracted);
         } catch {
           console.warn(`[LLM] Hypereal returned malformed JSON (${text.length} chars, starts with: "${text.substring(0, 120)}") — falling back to OpenRouter`);
           throw new Error("Hypereal response is malformed JSON");
         }
+
+        // Use the clean extracted JSON as the return value
+        text = extracted;
       }
 
       return text;

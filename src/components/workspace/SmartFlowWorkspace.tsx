@@ -1,17 +1,17 @@
 import { createScopedLogger } from "@/lib/logger";
 import { useState, forwardRef, useImperativeHandle, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Play, AlertCircle, RotateCcw, Wallpaper, Monitor, Smartphone } from "lucide-react";
+import { Play, AlertCircle, RotateCcw, Wallpaper } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { WorkspaceLayout } from "@/components/layout/WorkspaceLayout";
 import { CinematicSourceInput, type SourceAttachment } from "./CinematicSourceInput";
 import { processAttachments } from "@/lib/attachmentProcessor";
 import type { VideoFormat } from "./FormatSelector";
-import { SpeakerSelector, type SpeakerVoice, getDefaultSpeaker } from "./SpeakerSelector";
-import { LanguageSelector, type Language } from "./LanguageSelector";
-import { CaptionStyleSelector, type CaptionStyle } from "./CaptionStyleSelector";
+import type { SpeakerVoice } from "./SpeakerSelector";
+import type { Language } from "./LanguageSelector";
+import type { CaptionStyle } from "./CaptionStyleSelector";
+import { WorkspaceConfigGrid } from "./WorkspaceConfigGrid";
 import { CreditCostDisplay } from "./CreditCostDisplay";
 import { VideoPlayer } from "./VideoPlayer";
 
@@ -262,20 +262,10 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
                 >
                   {/* Hero */}
                   <div className="text-center space-y-3">
-                    <div className="flex flex-col items-center gap-2">
-                      <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                        <Wallpaper className="h-3.5 w-3.5" />
-                        Smart Flow
-                      </span>
-                      {plan !== "free" && (
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <span>
-                            {infographicsUsed} / {PLAN_LIMITS[plan].infographicsPerMonth === 999999 ? "∞" : PLAN_LIMITS[plan].infographicsPerMonth}
-                          </span>
-                          <span className="text-muted-foreground/50">infographics this month</span>
-                        </div>
-                      )}
-                    </div>
+                    <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                      <Wallpaper className="h-3.5 w-3.5" />
+                      Smart Flow
+                    </span>
                     <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
                       Create Your Infographic
                     </h1>
@@ -293,80 +283,21 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
                   />
 
                   {/* Compact Configuration Grid */}
-                  <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                    {/* Format: Landscape / Portrait */}
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Format</span>
-                      <div className="flex gap-2">
-                        {([
-                          { id: "landscape" as const, icon: Monitor, label: "16:9" },
-                          { id: "portrait" as const, icon: Smartphone, label: "9:16" },
-                        ]).map(({ id, icon: Icon, label }) => (
-                          <button
-                            key={id}
-                            onClick={() => setFormat(id)}
-                            className={cn(
-                              "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors",
-                              format === id
-                                ? "border-primary/50 bg-primary/10 text-foreground"
-                                : "border-border/50 bg-muted/30 text-muted-foreground hover:bg-muted/50",
-                            )}
-                          >
-                            <Icon className="h-3.5 w-3.5" />
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Duration - fixed short for SmartFlow, shown for consistency */}
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Duration</span>
-                      <div className="flex gap-2">
-                        {([
-                          { id: "short" as const, label: "\u22643 min" },
-                        ]).map(({ id, label }) => (
-                          <button
-                            key={id}
-                            className={cn(
-                              "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors",
-                              "border-primary/50 bg-primary/10 text-foreground",
-                            )}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Language + Speaker stacked */}
-                    <div className="space-y-2">
-                      <LanguageSelector value={language} onChange={(lang) => {
-                        setLanguage(lang);
-                        setSpeaker(getDefaultSpeaker(lang));
-                      }} />
-                      <SpeakerSelector value={speaker} onChange={setSpeaker} language={language} />
-                    </div>
-
-                    {/* Brand + Caption stacked */}
-                    <div className="space-y-2">
-                      <div className="space-y-1.5">
-                        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Brand Name</span>
-                        <input
-                          type="text"
-                          placeholder="Your brand (optional)"
-                          value={brandMarkText}
-                          maxLength={50}
-                          onChange={(e) => {
-                            setBrandMarkText(e.target.value);
-                            setBrandMarkEnabled(e.target.value.trim().length > 0);
-                          }}
-                          className="flex w-full h-9 rounded-md border border-border bg-muted/30 px-3 text-xs placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
-                        />
-                      </div>
-                      <CaptionStyleSelector value={captionStyle} onChange={setCaptionStyle} />
-                    </div>
-                  </div>
+                  <WorkspaceConfigGrid
+                    format={format}
+                    onFormatChange={setFormat}
+                    duration="short"
+                    onDurationChange={() => {}}
+                    durationOptions={[{ id: "short", label: "\u22643 min" }]}
+                    language={language}
+                    onLanguageChange={setLanguage}
+                    speaker={speaker}
+                    onSpeakerChange={setSpeaker}
+                    captionStyle={captionStyle}
+                    onCaptionStyleChange={setCaptionStyle}
+                    brandMarkText={brandMarkText}
+                    onBrandMarkTextChange={(text) => { setBrandMarkText(text); setBrandMarkEnabled(text.trim().length > 0); }}
+                  />
 
                   {/* Visual Style */}
                   <SmartFlowStyleSelector

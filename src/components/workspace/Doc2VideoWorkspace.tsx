@@ -1,9 +1,8 @@
 import { useState, forwardRef, useImperativeHandle, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Play, AlertCircle, RotateCcw, ChevronDown, Users, Video, Monitor, Smartphone } from "lucide-react";
+import { Play, AlertCircle, RotateCcw, ChevronDown, Users, Video } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { WorkspaceLayout } from "@/components/layout/WorkspaceLayout";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { CinematicSourceInput, type SourceAttachment } from "./CinematicSourceInput";
@@ -11,9 +10,10 @@ import { processAttachments } from "@/lib/attachmentProcessor";
 import type { VideoFormat } from "./FormatSelector";
 import type { VideoLength } from "./LengthSelector";
 import { StyleSelector, type VisualStyle } from "./StyleSelector";
-import { SpeakerSelector, type SpeakerVoice, getDefaultSpeaker } from "./SpeakerSelector";
-import { LanguageSelector, type Language } from "./LanguageSelector";
-import { CaptionStyleSelector, type CaptionStyle } from "./CaptionStyleSelector";
+import type { SpeakerVoice } from "./SpeakerSelector";
+import type { Language } from "./LanguageSelector";
+import type { CaptionStyle } from "./CaptionStyleSelector";
+import { WorkspaceConfigGrid } from "./WorkspaceConfigGrid";
 import { CharacterDescriptionInput } from "./CharacterDescriptionInput";
 import { CharacterConsistencyToggle } from "./CharacterConsistencyToggle";
 import { GenerationResult } from "./GenerationResult";
@@ -321,94 +321,21 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
                   />
 
                   {/* Compact Configuration Grid */}
-                  <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                    {/* Format: Landscape / Portrait */}
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Format</span>
-                      <div className="flex gap-2">
-                        {([
-                          { id: "landscape" as const, icon: Monitor, label: "16:9" },
-                          { id: "portrait" as const, icon: Smartphone, label: "9:16" },
-                        ]).map(({ id, icon: Icon, label }) => {
-                          const disabled = disabledFormats.includes(id);
-                          return (
-                            <button
-                              key={id}
-                              onClick={() => !disabled && setFormat(id)}
-                              disabled={disabled}
-                              className={cn(
-                                "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors",
-                                format === id
-                                  ? "border-primary/50 bg-primary/10 text-foreground"
-                                  : "border-border/50 bg-muted/30 text-muted-foreground hover:bg-muted/50",
-                                disabled && "opacity-40 cursor-not-allowed",
-                              )}
-                            >
-                              <Icon className="h-3.5 w-3.5" />
-                              {label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Duration */}
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Duration</span>
-                      <div className="flex gap-2">
-                        {([
-                          { id: "short" as const, label: "\u22643 min" },
-                          { id: "brief" as const, label: ">3 min" },
-                        ]).map(({ id, label }) => {
-                          const disabled = disabledLengths.includes(id);
-                          return (
-                            <button
-                              key={id}
-                              onClick={() => !disabled && setLength(id)}
-                              disabled={disabled}
-                              className={cn(
-                                "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors",
-                                length === id
-                                  ? "border-primary/50 bg-primary/10 text-foreground"
-                                  : "border-border/50 bg-muted/30 text-muted-foreground hover:bg-muted/50",
-                                disabled && "opacity-40 cursor-not-allowed",
-                              )}
-                            >
-                              {label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Language + Speaker stacked */}
-                    <div className="space-y-2">
-                      <LanguageSelector value={language} onChange={(lang) => {
-                        setLanguage(lang);
-                        setSpeaker(getDefaultSpeaker(lang));
-                      }} />
-                      <SpeakerSelector value={speaker} onChange={setSpeaker} language={language} />
-                    </div>
-
-                    {/* Brand + Caption stacked */}
-                    <div className="space-y-2">
-                      <div className="space-y-1.5">
-                        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Brand Name</span>
-                        <input
-                          type="text"
-                          placeholder="Your brand (optional)"
-                          value={brandMarkText}
-                          maxLength={50}
-                          onChange={(e) => {
-                            setBrandMarkText(e.target.value);
-                            setBrandMarkEnabled(e.target.value.trim().length > 0);
-                          }}
-                          className="flex w-full h-9 rounded-md border border-border bg-muted/30 px-3 text-xs placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
-                        />
-                      </div>
-                      <CaptionStyleSelector value={captionStyle} onChange={setCaptionStyle} />
-                    </div>
-                  </div>
+                  <WorkspaceConfigGrid
+                    format={format}
+                    onFormatChange={setFormat}
+                    disabledFormats={disabledFormats}
+                    duration={length}
+                    onDurationChange={setLength}
+                    language={language}
+                    onLanguageChange={setLanguage}
+                    speaker={speaker}
+                    onSpeakerChange={setSpeaker}
+                    captionStyle={captionStyle}
+                    onCaptionStyleChange={setCaptionStyle}
+                    brandMarkText={brandMarkText}
+                    onBrandMarkTextChange={(text) => { setBrandMarkText(text); setBrandMarkEnabled(text.trim().length > 0); }}
+                  />
 
                   {/* Character Consistency Toggle - Pro Feature */}
                   <CharacterConsistencyToggle

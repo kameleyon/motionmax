@@ -212,8 +212,7 @@ export function CaptionStyleSelector({ value, onChange }: CaptionStyleSelectorPr
   const selected = captionStyles.find((s) => s.id === value) || captionStyles[0];
 
   return (
-    <div className="space-y-1.5">
-      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Captions</span>
+    <div>
       <Select value={value} onValueChange={(v) => onChange(v as CaptionStyle)}>
         <SelectTrigger className={cn("w-auto h-8 text-xs gap-1 px-3")}>
           <SelectValue>

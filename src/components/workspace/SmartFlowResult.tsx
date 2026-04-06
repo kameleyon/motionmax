@@ -45,6 +45,7 @@ interface SmartFlowResultProps {
   projectId?: string;
   onScenesUpdate?: (scenes: Scene[]) => void;
   brandMark?: string;
+  captionStyle?: string;
 }
 
 export function SmartFlowResult({
@@ -60,6 +61,7 @@ export function SmartFlowResult({
   projectId,
   onScenesUpdate,
   brandMark,
+  captionStyle,
 }: SmartFlowResultProps) {
   const [scenes, setScenes] = useState(initialScenes);
   const [showScenes, setShowScenes] = useState(false);
@@ -91,8 +93,8 @@ export function SmartFlowResult({
     setHasUnsavedEdits(false);
     resetExport();
     clearVideoExportLogs();
-    void exportVideo(scenes, format as any, brandMark, projectId, "smartflow", generationId).catch(() => {});
-  }, [resetExport, exportVideo, scenes, format, brandMark, projectId, generationId]);
+    void exportVideo(scenes, format as any, brandMark, projectId, "smartflow", generationId, captionStyle).catch(() => {});
+  }, [resetExport, exportVideo, scenes, format, brandMark, projectId, generationId, captionStyle]);
 
   const {
     isRegenerating,
@@ -131,9 +133,9 @@ export function SmartFlowResult({
       }
 
       clearVideoExportLogs();
-      void exportVideo(initialScenes, format as any, brandMark, projectId, "smartflow", generationId).catch(() => {});
+      void exportVideo(initialScenes, format as any, brandMark, projectId, "smartflow", generationId, captionStyle).catch(() => {});
     })();
-  }, [initialScenes, projectId, generationId, format, brandMark, enableVoice, exportVideo, exportState.status, loadExistingVideo]);
+  }, [initialScenes, projectId, generationId, format, brandMark, enableVoice, exportVideo, exportState.status, loadExistingVideo, captionStyle]);
 
   const scene = scenes[0];
   if (!scene) return null;
@@ -141,7 +143,7 @@ export function SmartFlowResult({
   const handleRetryExport = () => {
     resetExport();
     clearVideoExportLogs();
-    void exportVideo(scenes, format as any, brandMark, projectId, "smartflow", generationId).catch(() => {});
+    void exportVideo(scenes, format as any, brandMark, projectId, "smartflow", generationId, captionStyle).catch(() => {});
   };
 
 

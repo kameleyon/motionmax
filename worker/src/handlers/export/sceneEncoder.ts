@@ -60,7 +60,7 @@ export const DEFAULT_EXPORT_CONFIG: ExportConfig = {
   width: 1920,
   height: 1080,
   fps: 24,
-  kenBurns: true,
+  kenBurns: false,
   crossfadeDuration: 0.5,
   aiVideo: false,
   aiVideoTimeoutMs: 5 * 60 * 1000,

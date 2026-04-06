@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { FormatSelector, type VideoFormat } from "./FormatSelector";
 import { VoiceSelector, type VoiceSelection } from "./VoiceSelector";
 import { LanguageSelector, type Language } from "./LanguageSelector";
+import { CaptionStyleSelector, type CaptionStyle } from "./CaptionStyleSelector";
 import { CreditCostDisplay } from "./CreditCostDisplay";
 import { VideoPlayer } from "./VideoPlayer";
 
@@ -55,6 +56,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
     const [language, setLanguage] = useState<Language>("en");
     const [brandMarkEnabled, setBrandMarkEnabled] = useState(false);
     const [brandMarkText, setBrandMarkText] = useState("");
+    const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("none");
 
     const { state: generationState, startGeneration, reset, loadProject } = useGenerationPipeline();
     const { isAdmin, adminLogs, showAdminLogs, setShowAdminLogs } = useAdminLogs(generationState.generationId, generationState.step);
@@ -185,9 +187,10 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
         voiceId: enableVoice ? voice.voiceId : undefined,
         // For standard voices, pass gender as voiceName (e.g., "male" or "female")
         // For custom voices, pass the actual voice name
-        voiceName: enableVoice 
-          ? (voice.type === "custom" ? voice.voiceName : voice.gender) 
+        voiceName: enableVoice
+          ? (voice.type === "custom" ? voice.voiceName : voice.gender)
           : undefined,
+        captionStyle,
       });
 
       // Refresh subscription state after starting generation
@@ -207,6 +210,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
       setLanguage("en");
       setBrandMarkEnabled(false);
       setBrandMarkText("");
+      setCaptionStyle("none");
     };
 
     const handleRegenerate = () => {
@@ -345,9 +349,11 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
                     <FormatSelector selected={format} onSelect={setFormat} />
                     <div className="h-px bg-border/30" />
                     <LanguageSelector value={language} onChange={setLanguage} />
-                    
                     <div className="h-px bg-border/30" />
-                    
+                    <CaptionStyleSelector value={captionStyle} onChange={setCaptionStyle} />
+
+                    <div className="h-px bg-border/30" />
+
                     {/* Voice Toggle */}
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
@@ -439,6 +445,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
                       // Update local state if needed for regeneration
                     }}
                     brandMark={brandMarkEnabled && brandMarkText.trim() ? brandMarkText.trim() : undefined}
+                    captionStyle={captionStyle}
                   />
                   {isAdmin && <AdminLogsPanel logs={adminLogs} show={showAdminLogs} onToggle={() => setShowAdminLogs(!showAdminLogs)} />}
                 </motion.div>

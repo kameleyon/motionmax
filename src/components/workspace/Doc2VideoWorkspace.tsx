@@ -12,6 +12,7 @@ import { LengthSelector, type VideoLength } from "./LengthSelector";
 import { StyleSelector, type VisualStyle } from "./StyleSelector";
 import { VoiceSelector, type VoiceSelection } from "./VoiceSelector";
 import { LanguageSelector, type Language } from "./LanguageSelector";
+import { CaptionStyleSelector, type CaptionStyle } from "./CaptionStyleSelector";
 import { PresenterFocusInput } from "./PresenterFocusInput";
 import { CharacterDescriptionInput } from "./CharacterDescriptionInput";
 import { CharacterConsistencyToggle } from "./CharacterConsistencyToggle";
@@ -57,6 +58,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
     const [brandMarkText, setBrandMarkText] = useState("");
     const [disableExpressions, setDisableExpressions] = useState(false);
     const [characterConsistencyEnabled, setCharacterConsistencyEnabled] = useState(false);
+    const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("none");
 
     const { state: generationState, startGeneration, reset, loadProject } = useGenerationPipeline();
     const { isAdmin, adminLogs, showAdminLogs, setShowAdminLogs } = useAdminLogs(generationState.generationId ?? null, generationState.step);
@@ -167,6 +169,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
         voiceType: voice.type,
         voiceId: voice.voiceId,
         voiceName: voice.type === "custom" ? voice.voiceName : voice.gender,
+        captionStyle,
       });
     };
 
@@ -211,6 +214,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
       setBrandMarkText("");
       setDisableExpressions(false);
       setCharacterConsistencyEnabled(false);
+      setCaptionStyle("none");
     };
 
     const handleOpenProject = async (projectId: string) => {
@@ -425,7 +429,9 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
                     </div>
                     <div className="h-px bg-border/30" />
                     <LanguageSelector value={language} onChange={setLanguage} />
-                    
+                    <div className="h-px bg-border/30" />
+                    <CaptionStyleSelector value={captionStyle} onChange={setCaptionStyle} />
+
                     <div className="h-px bg-border/30" />
                     <StyleSelector
                       selected={style}
@@ -496,6 +502,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
                     generationId={generationState.generationId}
                     projectId={generationState.projectId}
                     brandMark={brandMarkEnabled && brandMarkText.trim() ? brandMarkText.trim() : undefined}
+                    captionStyle={captionStyle}
                   />
                   {isAdmin && <AdminLogsPanel logs={adminLogs} show={showAdminLogs} onToggle={() => setShowAdminLogs(!showAdminLogs)} />}
                 </motion.div>

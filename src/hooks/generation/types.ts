@@ -88,6 +88,7 @@ export interface GenerationParams {
   voiceInclination?: string;
   brandName?: string;
   language?: string;
+  captionStyle?: string;
 }
 
 export type ProjectRow = {

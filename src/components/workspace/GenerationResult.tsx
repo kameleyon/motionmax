@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { CaptionStyleSelector, type CaptionStyle } from "./CaptionStyleSelector";
 import type { Scene, CostTracking, PhaseTimings } from "@/hooks/useGenerationPipeline";
 import { useVideoExport } from "@/hooks/useVideoExport";
 import { supabase } from "@/integrations/supabase/client";
@@ -50,6 +51,8 @@ interface GenerationResultProps {
   onScenesUpdate?: (scenes: Scene[]) => void;
   brandMark?: string;
   projectType?: string;
+  captionStyle?: string;
+  onCaptionStyleChange?: (style: string) => void;
 }
 
 export function GenerationResult({
@@ -65,6 +68,8 @@ export function GenerationResult({
   onScenesUpdate,
   brandMark,
   projectType = "storytelling",
+  captionStyle: initialCaptionStyle = "none",
+  onCaptionStyleChange,
 }: GenerationResultProps) {
   const [scenes, setScenes] = useState(initialScenes);
   const [showScenes, setShowScenes] = useState(false);
@@ -99,8 +104,8 @@ export function GenerationResult({
     setHasUnsavedEdits(false);
     resetExport();
     clearVideoExportLogs();
-    void exportVideo(scenes, format, brandMark, projectId, projectType, generationId).catch(() => {});
-  }, [resetExport, exportVideo, scenes, format, brandMark, projectId, projectType, generationId]);
+    void exportVideo(scenes, format, brandMark, projectId, projectType, generationId, initialCaptionStyle).catch(() => {});
+  }, [resetExport, exportVideo, scenes, format, brandMark, projectId, projectType, generationId, initialCaptionStyle]);
 
   const {
     isRegenerating,
@@ -143,15 +148,15 @@ export function GenerationResult({
       // No existing video — trigger export
       clearVideoExportLogs();
       appendVideoExportLog("log", ["[UI] Auto-export triggered on completion"]);
-      void exportVideo(initialScenes, format, brandMark, projectId, projectType, generationId).catch(() => {});
+      void exportVideo(initialScenes, format, brandMark, projectId, projectType, generationId, initialCaptionStyle).catch(() => {});
     })();
-  }, [initialScenes, projectId, generationId, format, brandMark, projectType, exportVideo, exportState.status, loadExistingVideo]);
+  }, [initialScenes, projectId, generationId, format, brandMark, projectType, exportVideo, exportState.status, loadExistingVideo, initialCaptionStyle]);
 
   const handleRetryExport = useCallback(() => {
     resetExport();
     clearVideoExportLogs();
-    void exportVideo(scenes, format, brandMark, projectId, projectType, generationId).catch(() => {});
-  }, [resetExport, exportVideo, scenes, format, brandMark, projectId, projectType, generationId]);
+    void exportVideo(scenes, format, brandMark, projectId, projectType, generationId, initialCaptionStyle).catch(() => {});
+  }, [resetExport, exportVideo, scenes, format, brandMark, projectId, projectType, generationId, initialCaptionStyle]);
 
   return (
     <div className="space-y-6 pb-8">
@@ -237,6 +242,13 @@ export function GenerationResult({
             {showScenes ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             {showScenes ? "Hide Scenes" : `Edit / Adjust Scenes (${scenes.length})`}
           </Button>
+          <CaptionStyleSelector
+            value={(initialCaptionStyle || "none") as CaptionStyle}
+            onChange={(style) => {
+              onCaptionStyleChange?.(style);
+              setHasUnsavedEdits(true);
+            }}
+          />
           <Button
             variant="outline"
             size="sm"

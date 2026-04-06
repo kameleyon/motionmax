@@ -13,6 +13,7 @@ import { FormatSelector, type VideoFormat } from "./FormatSelector";
 import { StyleSelector, type VisualStyle } from "./StyleSelector";
 import { VoiceSelector, type VoiceSelection } from "./VoiceSelector";
 import { LanguageSelector, type Language } from "./LanguageSelector";
+import { CaptionStyleSelector, type CaptionStyle } from "./CaptionStyleSelector";
 import { CharacterDescriptionInput } from "./CharacterDescriptionInput";
 import { PresenterFocusInput } from "./PresenterFocusInput";
 import { InspirationSelector, type InspirationStyle } from "./InspirationSelector";
@@ -69,6 +70,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
     const [characterDescOpen, setCharacterDescOpen] = useState(false);
     const [brandMarkEnabled, setBrandMarkEnabled] = useState(false);
     const [brandMarkText, setBrandMarkText] = useState("");
+    const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("none");
 
     const { state: generationState, startGeneration, reset, loadProject } = useGenerationPipeline();
     const { isAdmin, adminLogs, showAdminLogs, setShowAdminLogs } = useAdminLogs(generationState.generationId, generationState.step);
@@ -227,6 +229,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
         voiceType: voice.type,
         voiceId: voice.voiceId,
         voiceName: voice.type === "custom" ? voice.voiceName : voice.gender,
+        captionStyle,
       });
 
       setTimeout(() => checkSubscription(), 2000);
@@ -254,6 +257,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
       setCharacterDescOpen(false);
       setBrandMarkEnabled(false);
       setBrandMarkText("");
+      setCaptionStyle("none");
     };
 
     const handleOpenProject = async (projectId: string) => {
@@ -379,6 +383,8 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
                     </div>
                     <div className="h-px bg-border/30" />
                     <LanguageSelector value={language} onChange={setLanguage} />
+                    <div className="h-px bg-border/30" />
+                    <CaptionStyleSelector value={captionStyle} onChange={setCaptionStyle} />
                   </div>
 
                   {/* Character Consistency - Pro Feature */}
@@ -517,6 +523,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
                     generationId={generationState.generationId}
                     projectId={generationState.projectId}
                     brandMark={brandMarkEnabled && brandMarkText.trim() ? brandMarkText.trim() : undefined}
+                    captionStyle={captionStyle}
                   />
                   {isAdmin && <AdminLogsPanel logs={adminLogs} show={showAdminLogs} onToggle={() => setShowAdminLogs(!showAdminLogs)} />}
                 </motion.div>

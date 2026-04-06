@@ -431,12 +431,14 @@ export default function Projects() {
     setShareLoading(true);
 
     try {
+      if (!user?.id) throw new Error("Not authenticated");
+
       // Check if share already exists
       const { data: existingShare } = await supabase
         .from("project_shares")
         .select("share_token")
         .eq("project_id", project.id)
-        .eq("user_id", user?.id)
+        .eq("user_id", user.id)
         .maybeSingle();
 
       if (existingShare?.share_token) {
@@ -446,7 +448,7 @@ export default function Projects() {
         const shareToken = crypto.randomUUID().replace(/-/g, "");
         const { error } = await supabase.from("project_shares").insert({
           project_id: project.id,
-          user_id: user?.id,
+          user_id: user.id,
           share_token: shareToken,
         });
 

@@ -5,14 +5,7 @@ import { createScopedLogger } from "@/lib/logger";
 
 const log = createScopedLogger("CallPhase");
 
-// ── Credit costs per generation type (must match worker/src/index.ts) ──
-const CREDIT_COSTS: Record<string, number> = {
-  short: 1,
-  brief: 2,
-  presentation: 4,
-  smartflow: 1,
-  cinematic: 12,
-};
+import { getCreditsRequired } from "@/lib/planLimits";
 
 /** Deduct credits upfront before dispatching a generation job.
  *  Returns the number of credits deducted (for refund on failure). */
@@ -20,10 +13,8 @@ async function deductCreditsUpfront(projectType: string, length: string): Promis
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) throw new Error("Not authenticated");
 
-  let amount: number;
-  if (projectType === "smartflow") amount = CREDIT_COSTS.smartflow;
-  else if (projectType === "cinematic") amount = CREDIT_COSTS.cinematic;
-  else amount = CREDIT_COSTS[length] || CREDIT_COSTS.brief;
+  const type = (projectType || "doc2video") as "doc2video" | "storytelling" | "smartflow" | "cinematic";
+  const amount = getCreditsRequired(type, length || "short");
 
   log.debug(`Deducting ${amount} credits upfront (${projectType}/${length})`);
 

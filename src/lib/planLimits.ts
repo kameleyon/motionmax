@@ -1,111 +1,129 @@
 /**
- * Plan limits and credit costs configuration
- * This file defines the restrictions for each subscription tier
+ * Plan limits and credit costs configuration.
+ *
+ * Credit economy: 1 credit = 1 second of standard video output.
+ * Cinematic uses a 5x multiplier (heavier compute).
+ * Re-edits (image/video/audio regen) are FREE -- no extra credit cost.
  */
 
-export type PlanTier = "free" | "starter" | "creator" | "professional" | "enterprise";
+export type PlanTier = "free" | "creator" | "studio" | "enterprise";
 
 export interface PlanLimits {
   creditsPerMonth: number;
-  allowedLengths: ("short" | "brief" | "presentation")[];
-  allowedFormats: ("landscape" | "portrait" | "square")[];
-  infographicsPerMonth: number;
+  dailyFreeCredits: number;
+  allowedFormats: ("landscape" | "portrait")[];
+  maxResolution: "720p" | "1080p" | "4k";
   voiceClones: number;
   allowBrandMark: boolean;
   allowCustomStyle: boolean;
   allowVoiceCloning: boolean;
+  allowCharacterConsistency: boolean;
+  priorityRendering: boolean;
+  watermark: boolean;
+  smartFlowLimit: number;
 }
 
 export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   free: {
-    creditsPerMonth: 10,
-    allowedLengths: ["short"],
-    allowedFormats: ["landscape", "square"],
-    infographicsPerMonth: 0,
+    creditsPerMonth: 0,        // Free trial: 150 credits one-time (no monthly renewal)
+    dailyFreeCredits: 0,
+    allowedFormats: ["landscape"],
+    maxResolution: "720p",
     voiceClones: 0,
     allowBrandMark: false,
     allowCustomStyle: false,
     allowVoiceCloning: false,
-  },
-  starter: {
-    creditsPerMonth: 30,
-    allowedLengths: ["short", "brief"],
-    allowedFormats: ["landscape", "portrait", "square"],
-    infographicsPerMonth: 10,
-    voiceClones: 0,
-    allowBrandMark: false,
-    allowCustomStyle: false,
-    allowVoiceCloning: false,
+    allowCharacterConsistency: false,
+    priorityRendering: false,
+    watermark: true,
+    smartFlowLimit: 3,
   },
   creator: {
-    creditsPerMonth: 100,
-    allowedLengths: ["short", "brief", "presentation"],
-    allowedFormats: ["landscape", "portrait", "square"],
-    infographicsPerMonth: 50,
+    creditsPerMonth: 500,
+    dailyFreeCredits: 60,
+    allowedFormats: ["landscape", "portrait"],
+    maxResolution: "1080p",
     voiceClones: 1,
-    allowBrandMark: true,
+    allowBrandMark: false,
     allowCustomStyle: true,
     allowVoiceCloning: true,
+    allowCharacterConsistency: false,
+    priorityRendering: false,
+    watermark: false,
+    smartFlowLimit: 20,
   },
-  professional: {
-    creditsPerMonth: 300,
-    allowedLengths: ["short", "brief", "presentation"],
-    allowedFormats: ["landscape", "portrait", "square"],
-    infographicsPerMonth: 999999,
-    voiceClones: 3,
+  studio: {
+    creditsPerMonth: 2500,
+    dailyFreeCredits: 150,
+    allowedFormats: ["landscape", "portrait"],
+    maxResolution: "4k",
+    voiceClones: 5,
     allowBrandMark: true,
     allowCustomStyle: true,
     allowVoiceCloning: true,
+    allowCharacterConsistency: true,
+    priorityRendering: true,
+    watermark: false,
+    smartFlowLimit: 999999,
   },
   enterprise: {
     creditsPerMonth: 999999,
-    allowedLengths: ["short", "brief", "presentation"],
-    allowedFormats: ["landscape", "portrait", "square"],
-    infographicsPerMonth: 999999,
+    dailyFreeCredits: 999999,
+    allowedFormats: ["landscape", "portrait"],
+    maxResolution: "4k",
     voiceClones: 999,
     allowBrandMark: true,
     allowCustomStyle: true,
     allowVoiceCloning: true,
+    allowCharacterConsistency: true,
+    priorityRendering: true,
+    watermark: false,
+    smartFlowLimit: 999999,
   },
 };
 
-export const CREDIT_COSTS = {
-  short: 1,
-  brief: 2,
-  presentation: 4,
-  smartflow: 1, // Infographic
-  cinematic: 12,
-} as const;
+// ── Credit Cost Calculation ──────────────────────────────────────
+
+/** Base seconds per video length */
+const LENGTH_SECONDS: Record<string, number> = {
+  short: 150,         // ~2.5 min (15 scenes x 10s)
+  brief: 280,         // ~4.7 min (28 scenes x 10s)
+  presentation: 360,  // ~6 min (36 scenes x 10s)
+};
+
+/** Compute multiplier per product type */
+const PRODUCT_MULTIPLIER: Record<string, number> = {
+  doc2video: 1,
+  storytelling: 1,
+  smartflow: 0.5,
+  cinematic: 5,
+};
 
 /**
- * Calculate credits required for a generation
+ * Calculate credits required for a generation.
+ * Formula: estimated_seconds x product_multiplier
  */
-const VIDEO_LENGTHS = ["short", "brief", "presentation"] as const;
-type VideoLength = (typeof VIDEO_LENGTHS)[number];
-
-function isVideoLength(value: string): value is VideoLength {
-  return (VIDEO_LENGTHS as readonly string[]).includes(value);
-}
-
 export function getCreditsRequired(
   projectType: "doc2video" | "storytelling" | "smartflow" | "cinematic",
-  length: string
+  length: string,
 ): number {
-  if (projectType === "smartflow") {
-    return CREDIT_COSTS.smartflow;
-  }
-  if (projectType === "cinematic") {
-    return CREDIT_COSTS.cinematic;
-  }
-  if (!isVideoLength(length)) {
-    throw new Error(`Invalid video length "${length}". Expected one of: ${VIDEO_LENGTHS.join(", ")}`);
-  }
-  return CREDIT_COSTS[length];
+  const seconds = LENGTH_SECONDS[length] || LENGTH_SECONDS.short;
+  const multiplier = PRODUCT_MULTIPLIER[projectType] || 1;
+  return Math.ceil(seconds * multiplier);
 }
 
-/**
- * Validate if user can generate based on their plan
- */
+/** Get the multiplier for display purposes */
+export function getMultiplier(projectType: string): number {
+  return PRODUCT_MULTIPLIER[projectType] || 1;
+}
+
+/** Get estimated duration in seconds */
+export function getEstimatedSeconds(length: string): number {
+  return LENGTH_SECONDS[length] || LENGTH_SECONDS.short;
+}
+
+// ── Validation ──────────────────────────────────────────────────
+
 export interface ValidationResult {
   canGenerate: boolean;
   error?: string;
@@ -124,7 +142,6 @@ export function validateGenerationAccess(
   subscriptionStatus?: string,
   subscriptionEnd?: string | null,
 ): ValidationResult {
-  // Check subscription status first
   if (subscriptionStatus === "past_due" || subscriptionStatus === "unpaid") {
     return {
       canGenerate: false,
@@ -141,7 +158,6 @@ export function validateGenerationAccess(
     };
   }
 
-  // Check if subscription has expired (end date has passed)
   if (subscriptionEnd && plan !== "free") {
     const endDate = new Date(subscriptionEnd);
     if (endDate < new Date()) {
@@ -156,64 +172,50 @@ export function validateGenerationAccess(
   const limits = PLAN_LIMITS[plan];
   const creditsRequired = getCreditsRequired(projectType, length);
 
-  // Check credits — must have enough balance
   if (creditsBalance < creditsRequired) {
+    const mult = PRODUCT_MULTIPLIER[projectType] || 1;
+    const secs = Math.round(creditsRequired / mult);
     return {
       canGenerate: false,
-      error: `Insufficient credits. You need ${creditsRequired} credit(s) but have ${creditsBalance}. Please add credits or upgrade your plan.`,
+      error: `Insufficient credits. You need ${creditsRequired} credits (${secs}s x ${mult}x) but have ${creditsBalance}. Add credits or upgrade your plan.`,
       upgradeRequired: true,
     };
   }
 
-  // Check length restrictions
-  if (!isVideoLength(length) || !limits.allowedLengths.includes(length)) {
-    const requiredPlan = length === "presentation" ? "creator" : "starter";
-    return {
-      canGenerate: false,
-      error: `${length.charAt(0).toUpperCase() + length.slice(1)} videos are not available on the ${plan} plan. Upgrade to ${requiredPlan} or higher.`,
-      upgradeRequired: true,
-      requiredPlan,
-    };
-  }
-
-  // Check format restrictions (only for free plan)
   const validFormats: readonly string[] = limits.allowedFormats;
   if (!validFormats.includes(format)) {
     return {
       canGenerate: false,
-      error: `${format.charAt(0).toUpperCase() + format.slice(1)} format is not available on the ${plan} plan. Upgrade to unlock all formats.`,
+      error: `${format} format requires the Creator plan or higher.`,
       upgradeRequired: true,
-      requiredPlan: "starter",
+      requiredPlan: "creator",
     };
   }
 
-  // Check brand mark
   if (hasBrandMark && !limits.allowBrandMark) {
     return {
       canGenerate: false,
-      error: "Brand mark feature requires Creator plan or higher.",
+      error: "Brand kit requires the Studio plan.",
       upgradeRequired: true,
-      requiredPlan: "creator",
+      requiredPlan: "studio",
     };
   }
 
-  // Check custom style
   if (hasCustomStyle && !limits.allowCustomStyle) {
     return {
       canGenerate: false,
-      error: "Custom styles require Creator plan or higher.",
+      error: "Custom styles require the Creator plan or higher.",
       upgradeRequired: true,
       requiredPlan: "creator",
     };
   }
 
-  // Check infographics limit for smartflow
-  if (projectType === "smartflow" && limits.infographicsPerMonth === 0) {
+  if (projectType === "smartflow" && limits.smartFlowLimit === 0) {
     return {
       canGenerate: false,
-      error: "Infographics are not available on the Free plan. Upgrade to Starter or higher.",
+      error: "Smart Flow is not available on the Free plan.",
       upgradeRequired: true,
-      requiredPlan: "starter",
+      requiredPlan: "creator",
     };
   }
 

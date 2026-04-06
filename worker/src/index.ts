@@ -89,13 +89,15 @@ let totalJobsFailed = 0;
 const SHUTDOWN_DRAIN_TIMEOUT_MS = parseInt(process.env.SHUTDOWN_DRAIN_TIMEOUT || "300000", 10); // 5 minutes
 
 /* ---- Credit refund helper ---- */
-const CREDIT_COSTS = {
-  short: 1,
-  brief: 2,
-  presentation: 4,
-  smartflow: 1,
-  cinematic: 12,
-} as const;
+// 1 credit = 1 second. Multipliers: standard 1x, cinematic 5x, smartflow 0.5x
+const LENGTH_SECONDS: Record<string, number> = { short: 150, brief: 280, presentation: 360 };
+const PRODUCT_MULT: Record<string, number> = { doc2video: 1, storytelling: 1, smartflow: 0.5, cinematic: 5 };
+
+function getCreditCost(projectType: string, length: string): number {
+  const secs = LENGTH_SECONDS[length] || 150;
+  const mult = PRODUCT_MULT[projectType] || 1;
+  return Math.ceil(secs * mult);
+}
 
 async function refundCreditsOnFailure(job: Job) {
   if (!job.user_id) {
@@ -108,19 +110,8 @@ async function refundCreditsOnFailure(job: Job) {
     const projectType = payload.projectType || "doc2video";
     const length = payload.length || "brief";
 
-    // Calculate credits to refund
-    let creditsToRefund = 0;
-    if (projectType === "smartflow") {
-      creditsToRefund = CREDIT_COSTS.smartflow;
-    } else if (projectType === "cinematic") {
-      creditsToRefund = CREDIT_COSTS.cinematic;
-    } else if (length === "short") {
-      creditsToRefund = CREDIT_COSTS.short;
-    } else if (length === "presentation") {
-      creditsToRefund = CREDIT_COSTS.presentation;
-    } else {
-      creditsToRefund = CREDIT_COSTS.brief;
-    }
+    // Calculate credits to refund (same formula as deduction)
+    const creditsToRefund = getCreditCost(projectType, length);
 
     console.log(`[Refund] Attempting to refund ${creditsToRefund} credits for user ${job.user_id} (job ${job.id}, type ${projectType}/${length})`);
 

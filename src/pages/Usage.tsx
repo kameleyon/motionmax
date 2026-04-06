@@ -32,7 +32,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { ThemedLogo } from "@/components/ThemedLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
-import { getCreditsRequired, CREDIT_COSTS } from "@/lib/planLimits";
+import { getCreditsRequired } from "@/lib/planLimits";
 import { supabase } from "@/integrations/supabase/client";
 import { normalizeProjectType } from "@/lib/projectUtils";
 import { formatDistanceToNow, format, startOfMonth, endOfMonth, subMonths, isSameMonth } from "date-fns";
@@ -67,10 +67,8 @@ const planLimits: Record<string, { credits: number; label: string; color: string
 
 /** Compute the credit cost for a generation based on project type + length */
 function getCreditCostForGeneration(projectType: string | undefined, length: string | undefined): number {
-  if (projectType === "smartflow" || projectType === "smart-flow") return CREDIT_COSTS.smartflow;
-  if (projectType === "cinematic") return CREDIT_COSTS.cinematic;
-  if (length && length in CREDIT_COSTS) return CREDIT_COSTS[length as keyof typeof CREDIT_COSTS];
-  return CREDIT_COSTS.short;
+  const type = (projectType === "smart-flow" ? "smartflow" : projectType || "doc2video") as "doc2video" | "storytelling" | "smartflow" | "cinematic";
+  return getCreditsRequired(type, length || "short");
 }
 
 export default function Usage() {

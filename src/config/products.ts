@@ -48,34 +48,25 @@ export type ProductId = Product["id"];
 
 // Single source of truth for subscription plan display prices
 export const PLAN_PRICES = {
-  free:         { monthly: "$0",     yearly: "$0" },
-  starter:      { monthly: "$14.99", yearly: "$9.99" },
-  creator:      { monthly: "$39.99", yearly: "$26.66" },
-  professional: { monthly: "$89.99", yearly: "$59.99" },
-  enterprise:   { monthly: "Custom", yearly: "Custom" },
+  free:       { monthly: "$0",     yearly: "$0" },
+  creator:    { monthly: "$29",    yearly: "$19" },
+  studio:     { monthly: "$99",    yearly: "$66" },
+  enterprise: { monthly: "Custom", yearly: "Custom" },
 } as const;
 
-// Single source of truth for credit pack display prices
+// Credit pack display prices
 export const CREDIT_PACK_PRICES: Record<number, { price: string; perCredit: string }> = {
-  15:  { price: "$11.99",  perCredit: "$0.80" },
-  50:  { price: "$14.99",  perCredit: "$0.30" },
-  150: { price: "$39.99",  perCredit: "$0.27" },
-  500: { price: "$249.99", perCredit: "$0.50" },
+  300:   { price: "$9.99",  perCredit: "$0.033" },
+  900:   { price: "$24.99", perCredit: "$0.028" },
+  2500:  { price: "$59.99", perCredit: "$0.024" },
 };
 
-/**
- * Computes the rounded integer discount percentage for yearly billing vs monthly.
- * All paid plans use the same discount rate so starter is used as the reference.
- */
 export function yearlyDiscountPercent(): number {
-  const monthly = parseFloat(PLAN_PRICES.starter.monthly.replace("$", ""));
-  const yearly  = parseFloat(PLAN_PRICES.starter.yearly.replace("$", ""));
+  const monthly = parseFloat(PLAN_PRICES.creator.monthly.replace("$", ""));
+  const yearly  = parseFloat(PLAN_PRICES.creator.yearly.replace("$", ""));
   return Math.round((1 - yearly / monthly) * 100);
 }
 
-/**
- * Calculates annual savings (monthly * 12) - (yearly * 12) for a given plan
- */
 export function getAnnualSavings(plan: keyof typeof PLAN_PRICES): number {
   if (plan === "free" || plan === "enterprise") return 0;
   const monthly = parseFloat(PLAN_PRICES[plan].monthly.replace("$", ""));

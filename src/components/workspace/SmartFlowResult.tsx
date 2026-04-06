@@ -93,7 +93,10 @@ export function SmartFlowResult({
     setHasUnsavedEdits(false);
     resetExport();
     clearVideoExportLogs();
-    void exportVideo(scenes, format as any, brandMark, projectId, "smartflow", generationId, captionStyle).catch(() => {});
+    void exportVideo(scenes, format as any, brandMark, projectId, "smartflow", generationId, captionStyle).catch((err) => {
+      log.error("Export failed:", err);
+      toast.error("Export failed", { description: err?.message || "Please try again" });
+    });
   }, [resetExport, exportVideo, scenes, format, brandMark, projectId, generationId, captionStyle]);
 
   const {
@@ -133,7 +136,10 @@ export function SmartFlowResult({
       }
 
       clearVideoExportLogs();
-      void exportVideo(initialScenes, format as any, brandMark, projectId, "smartflow", generationId, captionStyle).catch(() => {});
+      void exportVideo(initialScenes, format as any, brandMark, projectId, "smartflow", generationId, captionStyle).catch((err) => {
+      log.error("Export failed:", err);
+      toast.error("Export failed", { description: err?.message || "Please try again" });
+    });
     })();
   }, [initialScenes, projectId, generationId, format, brandMark, enableVoice, exportVideo, exportState.status, loadExistingVideo, captionStyle]);
 
@@ -143,7 +149,10 @@ export function SmartFlowResult({
   const handleRetryExport = () => {
     resetExport();
     clearVideoExportLogs();
-    void exportVideo(scenes, format as any, brandMark, projectId, "smartflow", generationId, captionStyle).catch(() => {});
+    void exportVideo(scenes, format as any, brandMark, projectId, "smartflow", generationId, captionStyle).catch((err) => {
+      log.error("Export failed:", err);
+      toast.error("Export failed", { description: err?.message || "Please try again" });
+    });
   };
 
 

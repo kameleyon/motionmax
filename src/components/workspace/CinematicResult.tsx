@@ -209,7 +209,10 @@ export function CinematicResult({
         number: s.number, voiceover: s.voiceover, visualPrompt: s.visualPrompt,
         duration: s.duration, videoUrl: s.videoUrl, audioUrl: s.audioUrl, imageUrl: s.imageUrl,
       }));
-      void exportVideo(exportScenes, format, undefined, projectId, "cinematic", generationId, initialCaptionStyle).catch(() => {});
+      void exportVideo(exportScenes, format, undefined, projectId, "cinematic", generationId, initialCaptionStyle).catch((err) => {
+        log.error("Export failed:", err);
+        toast.error("Export failed", { description: err?.message || "Please try again" });
+      });
     })();
   }, [projectId, generationId, finalVideoUrl, format, exportVideo, exportState.status, localScenes, scenesWithVideo.length]);
 
@@ -220,7 +223,10 @@ export function CinematicResult({
       number: s.number, voiceover: s.voiceover, visualPrompt: s.visualPrompt,
       duration: s.duration, videoUrl: s.videoUrl, audioUrl: s.audioUrl, imageUrl: s.imageUrl,
     }));
-    void exportVideo(exportScenes, format, undefined, projectId, "cinematic", undefined, initialCaptionStyle).catch(() => {});
+    void exportVideo(exportScenes, format, undefined, projectId, "cinematic", undefined, initialCaptionStyle).catch((err) => {
+      log.error("Export failed:", err);
+      toast.error("Export failed", { description: err?.message || "Please try again" });
+    });
   }, [resetExport, exportVideo, localScenes, format, projectId, initialCaptionStyle]);
 
   // Regenerate all stale videos (missing videoUrl) then re-export

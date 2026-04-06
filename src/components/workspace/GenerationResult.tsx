@@ -111,7 +111,10 @@ export function GenerationResult({
     setHasUnsavedEdits(false);
     resetExport();
     clearVideoExportLogs();
-    void exportVideo(scenes, format, brandMark, projectId, projectType, generationId, initialCaptionStyle).catch(() => {});
+    void exportVideo(scenes, format, brandMark, projectId, projectType, generationId, initialCaptionStyle).catch((err) => {
+      log.error("Export failed:", err);
+      toast.error("Export failed", { description: err?.message || "Please try again" });
+    });
   }, [resetExport, exportVideo, scenes, format, brandMark, projectId, projectType, generationId, initialCaptionStyle]);
 
   const {
@@ -155,14 +158,20 @@ export function GenerationResult({
       // No existing video — trigger export
       clearVideoExportLogs();
       appendVideoExportLog("log", ["[UI] Auto-export triggered on completion"]);
-      void exportVideo(initialScenes, format, brandMark, projectId, projectType, generationId, initialCaptionStyle).catch(() => {});
+      void exportVideo(initialScenes, format, brandMark, projectId, projectType, generationId, initialCaptionStyle).catch((err) => {
+        log.error("Export failed:", err);
+        toast.error("Export failed", { description: err?.message || "Please try again" });
+      });
     })();
   }, [initialScenes, projectId, generationId, format, brandMark, projectType, exportVideo, exportState.status, loadExistingVideo, initialCaptionStyle]);
 
   const handleRetryExport = useCallback(() => {
     resetExport();
     clearVideoExportLogs();
-    void exportVideo(scenes, format, brandMark, projectId, projectType, generationId, initialCaptionStyle).catch(() => {});
+    void exportVideo(scenes, format, brandMark, projectId, projectType, generationId, initialCaptionStyle).catch((err) => {
+      log.error("Export failed:", err);
+      toast.error("Export failed", { description: err?.message || "Please try again" });
+    });
   }, [resetExport, exportVideo, scenes, format, brandMark, projectId, projectType, generationId, initialCaptionStyle]);
 
   return (

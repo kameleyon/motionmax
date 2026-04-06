@@ -123,7 +123,16 @@ async function runCinematicAudio(projectId: string, generationId: string, sceneC
     const batch: Promise<void>[] = [];
     for (let i = batchStart; i < batchEnd; i++) batch.push(processAudioScene(i));
     log.debug(`Processing audio batch ${batchStart + 1}–${batchEnd}`);
-    await Promise.allSettled(batch);
+    const results = await Promise.allSettled(batch);
+    const failures = results.filter(r => r.status === "rejected");
+    if (failures.length > 0) {
+      log.warn(`${failures.length}/${batch.length} audio scenes failed`, {
+        errors: failures.map(f => (f as PromiseRejectedResult).reason?.message),
+      });
+    }
+    if (failures.length === batch.length) {
+      throw new Error(`All ${batch.length} audio scenes failed in batch`);
+    }
   }
   log.debug("Audio phase complete");
 }
@@ -357,7 +366,16 @@ export async function resumeCinematicPipeline(
       for (let batchStart = 0; batchStart < sceneCount; batchStart += AUDIO_CONCURRENCY) {
         const batch: Promise<void>[] = [];
         for (let i = batchStart; i < Math.min(batchStart + AUDIO_CONCURRENCY, sceneCount); i++) batch.push(processResumeAudio(i));
-        await Promise.allSettled(batch);
+        const results = await Promise.allSettled(batch);
+        const failures = results.filter(r => r.status === "rejected");
+        if (failures.length > 0) {
+          log.warn(`Resume: ${failures.length}/${batch.length} audio scenes failed`, {
+            errors: failures.map(f => (f as PromiseRejectedResult).reason?.message),
+          });
+        }
+        if (failures.length === batch.length) {
+          throw new Error(`All ${batch.length} audio scenes failed in resume batch`);
+        }
       }
     }
 

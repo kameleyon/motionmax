@@ -75,7 +75,7 @@ const captionStyles: { id: CaptionStyle; label: string }[] = [
 export const previewStyles: Record<CaptionStyle, string> = {
   none: "",
   // Pro styles
-  cleanPop: "[font-family:'Rubik_Dirt',cursive] font-black text-white uppercase tracking-wide [filter:drop-shadow(0px_2px_3px_rgba(0,0,0,0.6))]",
+  cleanPop: "[font-family:'Luckiest_Guy',cursive] font-black text-white uppercase tracking-wide [filter:drop-shadow(0px_2px_3px_rgba(0,0,0,0.6))]",
   toxicBounce: "[font-family:'Bangers',cursive] text-[#39FF14] uppercase tracking-wider [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill] [filter:drop-shadow(0px_3px_0px_#000)]",
   proShortForm: "[font-family:'Oswald',sans-serif] font-bold text-white uppercase tracking-wider [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill] [filter:drop-shadow(0px_2px_2px_rgba(0,0,0,0.5))]",
   // Reference visuals
@@ -86,7 +86,7 @@ export const previewStyles: Record<CaptionStyle, string> = {
   motionBlur: "[font-family:'Montserrat',sans-serif] font-black text-white uppercase drop-shadow-lg",
   yellowSmall: "[font-family:'Montserrat',sans-serif] font-bold text-[#FFEB3B] uppercase drop-shadow-md",
   // Trending
-  thickStroke: "[font-family:'Poppins',sans-serif] font-black text-white uppercase [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill]",
+  thickStroke: "[font-family:'Flavors',cursive] font-black text-white uppercase [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill]",
   karaokePop: "[font-family:'Rubik_Mono_One',sans-serif] text-white uppercase tracking-[0.15em]",
   neonTeal: "[font-family:'Poppins',sans-serif] font-bold text-[#00E5FF] uppercase [text-shadow:_0_0_8px_#00E5FF,_0_0_16px_#00E5FF]",
   goldLuxury: "[font-family:'Pangolin',cursive] text-[#e3c774] text-base [text-shadow:_1px_1px_2px_#8B6508]",
@@ -96,7 +96,7 @@ export const previewStyles: Record<CaptionStyle, string> = {
   redTag: "[font-family:'Poppins',sans-serif] font-bold text-white bg-red-600 px-3 py-1 rounded",
   blackBox: "[font-family:'Special_Elite',cursive] text-white bg-black/80 px-2 py-0.5",
   typewriter: "font-mono font-bold text-green-400 bg-black/50 px-1",
-  cinematicFade: "[font-family:'Montserrat',sans-serif] font-light text-white tracking-[0.15em] uppercase",
+  cinematicFade: "[font-family:'Vina_Sans',sans-serif] font-light text-white tracking-[0.15em] uppercase",
   retroTerminal: "font-mono font-bold text-[#39FF14]",
   heavyDropShadow: "[font-family:'Bebas_Neue',sans-serif] text-white tracking-wider [text-shadow:_3px_3px_0_#000]",
 };

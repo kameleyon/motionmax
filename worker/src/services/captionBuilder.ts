@@ -174,7 +174,7 @@ const STYLE_DEFS: Record<Exclude<CaptionStyle, "none">, AssStyleDef> = {
   },
   // ── Trending / Premium ──
   thickStroke: {
-    fontName: "Poppins", fontSize: 90, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Flavors", fontSize: 90, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
     outline: 8, shadow: 0, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
@@ -209,7 +209,7 @@ const STYLE_DEFS: Record<Exclude<CaptionStyle, "none">, AssStyleDef> = {
     outline: 4, shadow: 0, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   cinematicFade: {
-    fontName: "Montserrat", fontSize: 68, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Vina Sans", fontSize: 68, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: assColor(0, 0, 0, 0x60), backColor: assColor(0, 0, 0, 0), bold: false,
     outline: 2, shadow: 0, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
@@ -239,7 +239,7 @@ const STYLE_DEFS: Record<Exclude<CaptionStyle, "none">, AssStyleDef> = {
     outline: 0, shadow: 7, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   cleanPop: {
-    fontName: "Rubik Dirt", fontSize: 88, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Luckiest Guy", fontSize: 88, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: assColor(0, 0, 0, 0x40), backColor: assColor(0, 0, 0, 0), bold: false,
     outline: 2, shadow: 3, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },

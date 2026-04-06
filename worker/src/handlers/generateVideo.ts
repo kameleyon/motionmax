@@ -244,6 +244,14 @@ ${researchBrief}
     throw new Error(`LLM returned no scenes for ${projectType} script`);
   }
 
+  // SmartFlow: if scene voiceover is empty, pull from top-level fields
+  if (projectType === "smartflow" && parsed.scenes.length === 1) {
+    const scene = parsed.scenes[0];
+    if (!scene.voiceover && !scene.narration) {
+      scene.voiceover = (parsed.voiceover as string) || (parsed.narration as string) || (parsed as any).script || "";
+    }
+  }
+
   // ── Step 4: Post-process scenes ──────────────────────────────────
   const stylePrompt = getStylePrompt(style, customStyle, projectType);
   const length: string = payload.length || "brief";

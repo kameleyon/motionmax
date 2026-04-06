@@ -116,7 +116,10 @@ export function postProcessScenes(
     const vp = s.visualPrompt || s.visual_prompt || "";
     const subs = s.subVisuals || s.sub_visuals || [];
 
-    let voiceover = sanitizeVoiceover(s.voiceover);
+    // LLMs sometimes use alternative field names for voiceover
+    let voiceover = sanitizeVoiceover(
+      s.voiceover || (s as any).narration || (s as any).script || (s as any).narrative || (s as any).text || ""
+    );
     // SmartFlow has a single scene with long narration — don't cap it
     if (isShort && projectType !== "smartflow") voiceover = capVoiceover(voiceover, SHORT_MAX_WORDS);
 

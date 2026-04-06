@@ -234,7 +234,7 @@ ${researchBrief}
       {
         number: 1,
         visualPrompt: parsed.visualPrompt || parsed.visual_prompt || "",
-        voiceover: parsed.voiceover || parsed.narration || "",
+        voiceover: (parsed.voiceover as string) || (parsed.narration as string) || "",
         duration: 60,
       },
     ];

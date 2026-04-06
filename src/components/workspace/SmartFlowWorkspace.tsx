@@ -44,7 +44,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
   function SmartFlowWorkspace({ projectId: initialProjectId }, ref) {
     const [content, setContent] = useState("");
     const [sourceAttachments, setSourceAttachments] = useState<SourceAttachment[]>([]);
-    const [format, setFormat] = useState<VideoFormat>("portrait");
+    const [format, setFormat] = useState<"landscape" | "portrait">("portrait");
     const [style, setStyle] = useState<SmartFlowStyle>("minimalist");
     const [customStyle, setCustomStyle] = useState("");
     const [customStyleImage, setCustomStyleImage] = useState<string | null>(null);
@@ -55,7 +55,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
     const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("none");
 
     const { state: generationState, startGeneration, reset, loadProject } = useGenerationPipeline();
-    const { isAdmin, adminLogs, showAdminLogs, setShowAdminLogs } = useAdminLogs(generationState.generationId, generationState.step);
+    const { isAdmin, adminLogs, showAdminLogs, setShowAdminLogs } = useAdminLogs(generationState.generationId ?? null, generationState.step);
 
     // Subscription and plan validation
     const { plan, creditsBalance, subscriptionStatus, subscriptionEnd, checkSubscription } = useSubscription();
@@ -135,7 +135,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
       }
 
       // Check monthly infographics limit
-      const monthlyLimit = PLAN_LIMITS[plan].infographicsPerMonth;
+      const monthlyLimit = PLAN_LIMITS[plan].smartFlowLimit;
       if (monthlyLimit !== 999999 && infographicsUsed >= monthlyLimit) {
         const limitMessage = plan === "free"
           ? "You've reached the Free plan limit. Upgrade to Starter or higher to create infographics."

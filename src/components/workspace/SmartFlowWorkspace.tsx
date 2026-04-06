@@ -288,7 +288,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
                     onFormatChange={setFormat}
                     duration="short"
                     onDurationChange={() => {}}
-                    durationOptions={[{ id: "short", label: "\u22643 min" }]}
+                    hideDuration
                     language={language}
                     onLanguageChange={setLanguage}
                     speaker={speaker}

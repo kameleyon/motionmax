@@ -17,6 +17,7 @@ interface WorkspaceConfigGridProps {
   duration: string;
   onDurationChange: (duration: string) => void;
   durationOptions?: { id: string; label: string }[];
+  hideDuration?: boolean;
 
   language: Language;
   onLanguageChange: (lang: Language) => void;
@@ -37,7 +38,7 @@ const DEFAULT_DURATIONS = [
 
 export function WorkspaceConfigGrid({
   format, onFormatChange, disabledFormats = [],
-  duration, onDurationChange, durationOptions = DEFAULT_DURATIONS,
+  duration, onDurationChange, durationOptions = DEFAULT_DURATIONS, hideDuration = false,
   language, onLanguageChange,
   speaker, onSpeakerChange,
   captionStyle, onCaptionStyleChange,
@@ -76,25 +77,27 @@ export function WorkspaceConfigGrid({
           </div>
         </div>
 
-        <div className="space-y-1.5 min-w-[120px]">
-          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Duration</span>
-          <div className="flex gap-2">
-            {durationOptions.map(({ id, label }) => (
-              <button
-                key={id}
-                onClick={() => onDurationChange(id)}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors",
-                  duration === id
-                    ? "border-primary/50 bg-primary/10 text-foreground"
-                    : "border-border/50 bg-muted/30 text-muted-foreground hover:bg-muted/50",
-                )}
-              >
-                {label}
-              </button>
-            ))}
+        {!hideDuration && (
+          <div className="space-y-1.5 min-w-[120px]">
+            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Duration</span>
+            <div className="flex gap-2">
+              {durationOptions.map(({ id, label }) => (
+                <button
+                  key={id}
+                  onClick={() => onDurationChange(id)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors",
+                    duration === id
+                      ? "border-primary/50 bg-primary/10 text-foreground"
+                      : "border-border/50 bg-muted/30 text-muted-foreground hover:bg-muted/50",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Row 2: Language + Speaker -- full width on mobile, side by side on desktop */}

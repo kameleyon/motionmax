@@ -75,13 +75,18 @@ async function fetchSubscriptionFromDB(): Promise<SubscriptionState> {
     const sub = subResult.data;
     const credits = creditResult.data?.credits_balance ?? 0;
 
+    log.debug("DB fallback result", { sub: sub?.plan_name, credits, subError: subResult.error?.message, creditError: creditResult.error?.message });
+
     if (!sub) {
       return { ...FREE_STATE, creditsBalance: credits };
     }
 
+    const normalizedPlan = normalizePlanName(sub.plan_name || "free");
+    log.debug("Normalized plan", { raw: sub.plan_name, normalized: normalizedPlan });
+
     return {
       subscribed: true,
-      plan: normalizePlanName(sub.plan_name || "free"),
+      plan: normalizedPlan,
       subscriptionStatus: sub.cancel_at_period_end ? "canceling" : "active",
       subscriptionEnd: sub.current_period_end || null,
       cancelAtPeriodEnd: sub.cancel_at_period_end || false,

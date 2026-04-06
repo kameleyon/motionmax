@@ -1,5 +1,12 @@
 import { Subtitles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export type CaptionStyle =
   | "none"
@@ -85,48 +92,35 @@ export const previewStyles: Record<CaptionStyle, string> = {
 };
 
 export function CaptionStyleSelector({ value, onChange }: CaptionStyleSelectorProps) {
+  const selected = captionStyles.find((s) => s.id === value) || captionStyles[0];
+
   return (
-    <div className="space-y-2 w-full overflow-hidden">
-      <h3 className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60 flex items-center gap-1.5">
-        <Subtitles className="h-3 w-3" />
-        Captions
-      </h3>
-
-      {/* Horizontal scrollable grid -- CapCut style */}
-      <div className="flex w-full overflow-x-auto pb-2 gap-2 snap-x scrollbar-thin scrollbar-thumb-border/50">
-        {captionStyles.map((s) => {
-          const isSelected = value === s.id;
-
-          return (
-            <button
-              key={s.id}
-              onClick={() => onChange(s.id)}
-              className={cn(
-                "relative flex flex-col items-center justify-center w-[72px] h-[72px] shrink-0 snap-start rounded-lg border transition-all overflow-hidden",
-                isSelected
-                  ? "border-primary ring-1 ring-primary"
-                  : "border-border/30 hover:border-border/60",
-              )}
-            >
-              {/* Preview square */}
-              <div className="flex-1 w-full flex items-center justify-center bg-gray-950/70">
+    <div className="space-y-1.5">
+      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Captions</span>
+      <Select value={value} onValueChange={(v) => onChange(v as CaptionStyle)}>
+        <SelectTrigger className={cn("w-auto h-8 text-xs gap-1 px-3")}>
+          <SelectValue>
+            <span className="flex items-center gap-2 truncate text-xs">
+              <Subtitles className="h-3 w-3 shrink-0" />
+              {selected.label}
+            </span>
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent className="max-h-80 w-[260px]">
+          {captionStyles.map((s) => (
+            <SelectItem key={s.id} value={s.id} className="py-1">
+              <span className="flex items-center gap-3">
                 {s.id !== "none" ? (
-                  <span className={`inline-block text-[10px] leading-none ${previewStyles[s.id]}`}>
-                    Aa
-                  </span>
+                  <span className={cn("inline-block w-10 text-center", previewStyles[s.id])}>Aa</span>
                 ) : (
-                  <span className="text-muted-foreground/30 text-[10px]">--</span>
+                  <span className="inline-block w-10 text-center text-muted-foreground text-xs">---</span>
                 )}
-              </div>
-
-              {/* Label */}
-              <div className="h-5 w-full flex items-center justify-center bg-background/80 border-t border-border/20">
-                <span className="text-[8px] font-medium truncate px-0.5 text-muted-foreground">{s.label}</span>
-              </div>
-            </button>
-          );
-        })}
-      </div>
+                <span className="text-xs font-medium">{s.label}</span>
+              </span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

@@ -15,3 +15,13 @@ export type VisualStyle =
   | "crayon" | "moody" | "chalkboard" | "lego" | "cardboard" | "custom";
 
 export type Language = "en" | "fr" | "es" | "ht" | "pt" | "de" | "it" | "ru" | "zh" | "ja" | "ko";
+
+export function toVideoFormat(s: string | null | undefined): VideoFormat {
+  if (s === "landscape" || s === "portrait" || s === "square") return s;
+  return "portrait";
+}
+
+export function toVideoLength(s: string | null | undefined): VideoLength {
+  if (s === "short" || s === "brief" || s === "presentation") return s;
+  return "short";
+}

@@ -173,6 +173,11 @@ export async function callPhase(
   timeoutMs: number = 300000, // 5 minutes max wait for video to render
   endpoint: string = DEFAULT_ENDPOINT
 ): Promise<any> {
+  const VALID_PHASES = ["script", "audio", "images", "video", "finalize", "regenerate-image", "regenerate-audio", "undo"] as const;
+  if (!VALID_PHASES.includes(body.phase as any)) {
+    throw new Error(`Unknown generation phase: ${body.phase}`);
+  }
+
   // Script phase → worker queue
   if (body.phase === "script") {
     // Auto-detect cinematic from endpoint when projectType not explicitly set

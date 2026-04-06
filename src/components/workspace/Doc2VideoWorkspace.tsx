@@ -9,6 +9,7 @@ import { CinematicSourceInput, type SourceAttachment } from "./CinematicSourceIn
 import { processAttachments } from "@/lib/attachmentProcessor";
 import type { VideoFormat } from "./FormatSelector";
 import type { VideoLength } from "./LengthSelector";
+import { toVideoLength } from "@/types/domain";
 import { StyleSelector, type VisualStyle } from "./StyleSelector";
 import type { SpeakerVoice } from "./SpeakerSelector";
 import type { Language } from "./LanguageSelector";
@@ -217,8 +218,8 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
       const nextFormat = project.format ?? "portrait";
       setFormat(nextFormat === "landscape" ? "landscape" : "portrait");
 
-      const nextLength = (project.length as VideoLength) ?? "brief";
-      setLength(["short", "brief", "presentation"].includes(nextLength) ? nextLength : "brief");
+      const nextLength = toVideoLength(project.length);
+      setLength(nextLength);
 
       const savedStyle = (project.style ?? "minimalist") as VisualStyle;
       if (

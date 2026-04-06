@@ -27,6 +27,23 @@ export class WorkspaceErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("[WorkspaceErrorBoundary] Caught error:", error, info.componentStack);
+
+    // Auto-reload on stale chunk errors (happens after a new deployment)
+    if (
+      error.message?.includes("Failed to fetch dynamically imported module") ||
+      error.message?.includes("Loading chunk") ||
+      error.message?.includes("Loading CSS chunk")
+    ) {
+      const reloadKey = "workspace_chunk_reload";
+      const lastReload = sessionStorage.getItem(reloadKey);
+      const now = Date.now();
+      // Only auto-reload once per 30s to avoid infinite loops
+      if (!lastReload || now - Number(lastReload) > 30_000) {
+        sessionStorage.setItem(reloadKey, String(now));
+        window.location.reload();
+        return;
+      }
+    }
   }
 
   handleReset = () => {

@@ -1,3 +1,5 @@
+import { useState, useEffect, memo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Subtitles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -91,6 +93,40 @@ export const previewStyles: Record<CaptionStyle, string> = {
   yellowSmall: "font-bold text-[#FFEB3B] uppercase drop-shadow-sm",
 };
 
+const WORDS = ["Your", "idea", "in", "motion"];
+const WORD_MS = 500;
+const PAUSE_MS = 1200;
+
+const CaptionPreviewLine = memo(function CaptionPreviewLine({ styleId }: { styleId: CaptionStyle }) {
+  const [idx, setIdx] = useState(0);
+
+  useEffect(() => {
+    const delay = idx >= WORDS.length ? PAUSE_MS : WORD_MS;
+    const t = setTimeout(() => setIdx(prev => prev >= WORDS.length ? 0 : prev + 1), delay);
+    return () => clearTimeout(t);
+  }, [idx]);
+
+  const css = previewStyles[styleId];
+
+  return (
+    <div className="flex items-center justify-center gap-1 py-1 min-h-[28px] w-full">
+      <AnimatePresence mode="popLayout">
+        {WORDS.slice(0, idx + 1).map((word, i) => (
+          <motion.span
+            key={`${word}-${i}`}
+            initial={{ opacity: 0, scale: 0.7 }}
+            animate={{ opacity: i === idx ? 1 : 0.7, scale: i === idx ? 1.05 : 1 }}
+            transition={{ type: "spring", stiffness: 600, damping: 25, mass: 0.5 }}
+            className={cn("inline-block text-[11px] leading-none", css)}
+          >
+            {word}
+          </motion.span>
+        ))}
+      </AnimatePresence>
+    </div>
+  );
+});
+
 export function CaptionStyleSelector({ value, onChange }: CaptionStyleSelectorProps) {
   const selected = captionStyles.find((s) => s.id === value) || captionStyles[0];
 
@@ -106,17 +142,14 @@ export function CaptionStyleSelector({ value, onChange }: CaptionStyleSelectorPr
             </span>
           </SelectValue>
         </SelectTrigger>
-        <SelectContent className="max-h-80 w-[260px]">
+        <SelectContent className="max-h-96 w-[300px] p-1">
           {captionStyles.map((s) => (
-            <SelectItem key={s.id} value={s.id} className="py-1">
-              <span className="flex items-center gap-3">
-                {s.id !== "none" ? (
-                  <span className={cn("inline-block w-10 text-center", previewStyles[s.id])}>Aa</span>
-                ) : (
-                  <span className="inline-block w-10 text-center text-muted-foreground text-xs">---</span>
-                )}
-                <span className="text-xs font-medium">{s.label}</span>
-              </span>
+            <SelectItem key={s.id} value={s.id} className="py-0.5 px-1">
+              {s.id === "none" ? (
+                <span className="text-xs text-muted-foreground py-1">No captions</span>
+              ) : (
+                <CaptionPreviewLine styleId={s.id} />
+              )}
             </SelectItem>
           ))}
         </SelectContent>

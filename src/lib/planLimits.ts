@@ -11,6 +11,7 @@ export type PlanTier = "free" | "creator" | "studio" | "enterprise";
 export interface PlanLimits {
   creditsPerMonth: number;
   dailyFreeCredits: number;
+  allowedLengths: ("short" | "brief" | "presentation")[];
   allowedFormats: ("landscape" | "portrait")[];
   maxResolution: "720p" | "1080p" | "4k";
   voiceClones: number;
@@ -37,8 +38,9 @@ export function normalizePlanName(plan: string): PlanTier {
 
 export const PLAN_LIMITS: Record<PlanTier, PlanLimits> & Record<string, PlanLimits> = {
   free: {
-    creditsPerMonth: 0,        // Free trial: 150 credits one-time (no monthly renewal)
+    creditsPerMonth: 0,
     dailyFreeCredits: 0,
+    allowedLengths: ["short"],
     allowedFormats: ["landscape"],
     maxResolution: "720p",
     voiceClones: 0,
@@ -53,6 +55,7 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> & Record<string, PlanLimi
   creator: {
     creditsPerMonth: 500,
     dailyFreeCredits: 60,
+    allowedLengths: ["short", "brief"],
     allowedFormats: ["landscape", "portrait"],
     maxResolution: "1080p",
     voiceClones: 1,
@@ -67,6 +70,7 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> & Record<string, PlanLimi
   studio: {
     creditsPerMonth: 2500,
     dailyFreeCredits: 150,
+    allowedLengths: ["short", "brief", "presentation"],
     allowedFormats: ["landscape", "portrait"],
     maxResolution: "4k",
     voiceClones: 5,
@@ -81,6 +85,7 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> & Record<string, PlanLimi
   enterprise: {
     creditsPerMonth: 999999,
     dailyFreeCredits: 999999,
+    allowedLengths: ["short", "brief", "presentation"],
     allowedFormats: ["landscape", "portrait"],
     maxResolution: "4k",
     voiceClones: 999,

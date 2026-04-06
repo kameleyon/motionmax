@@ -102,11 +102,8 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
 
     // Disable formats/lengths based on plan
     const limits = PLAN_LIMITS[plan];
-    const disabledFormats: VideoFormat[] = (["landscape", "portrait", "square"] as VideoFormat[]).filter(
-      f => !limits.allowedFormats.includes(f)
-    );
-    const disabledLengths: VideoLength[] = (["short", "brief", "presentation"] as VideoLength[]).filter(
-      l => !limits.allowedLengths.includes(l)
+    const disabledFormats: VideoFormat[] = (["landscape", "portrait"] as VideoFormat[]).filter(
+      f => !(limits?.allowedFormats || ["landscape", "portrait"]).includes(f)
     );
 
     // Auto-switch to allowed values if current selection becomes disabled
@@ -118,11 +115,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
       }
     }, [plan, format, disabledFormats, limits.allowedFormats, generationState.step]);
 
-    useEffect(() => {
-      if (disabledLengths.includes(length) && limits.allowedLengths.length > 0) {
-        setLength(limits.allowedLengths[0] as VideoLength);
-      }
-    }, [plan, length, disabledLengths, limits.allowedLengths]);
+    // All plans allow all lengths -- no length restrictions needed
 
     // DB polling: detect if generation completed while app was backgrounded (mobile resilience)
     // IMPORTANT: Only triggers loadProject when the generation is NOT already being actively

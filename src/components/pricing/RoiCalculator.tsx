@@ -25,8 +25,8 @@ interface PlanOption {
 }
 
 const PLAN_OPTIONS: PlanOption[] = [
-  { label: "Creator", monthlyPrice: parseFloat(PLAN_PRICES.creator.monthly.replace("$", "")), creditsIncluded: 100, extraCreditCost: 0.27 },
-  { label: "Professional", monthlyPrice: parseFloat(PLAN_PRICES.professional.monthly.replace("$", "")), creditsIncluded: 300, extraCreditCost: 0.27 },
+  { label: "Creator", monthlyPrice: parseFloat(PLAN_PRICES.creator.monthly.replace("$", "")), creditsIncluded: 500, extraCreditCost: 0.033 },
+  { label: "Studio", monthlyPrice: parseFloat(PLAN_PRICES.studio.monthly.replace("$", "")), creditsIncluded: 2500, extraCreditCost: 0.024 },
 ];
 
 export default function RoiCalculator() {

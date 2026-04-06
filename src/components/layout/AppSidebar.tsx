@@ -82,12 +82,12 @@ import { toast } from "sonner";
 
 import { PLAN_LIMITS } from "@/lib/planLimits";
 
-const STARTER_PERKS = [
-  `${PLAN_LIMITS.starter.creditsPerMonth} credits per month`,
-  "Short + Brief videos",
+const CREATOR_PERKS = [
+  `${PLAN_LIMITS.creator.creditsPerMonth} credits/month + ${PLAN_LIMITS.creator.dailyFreeCredits} daily`,
+  "All video types",
   "1080p HD quality",
-  "10 visual styles",
-  "Standard narration voices",
+  "All 23 visual styles",
+  "All caption styles",
   "No watermark",
 ];
 
@@ -622,7 +622,7 @@ export function AppSidebar() {
           </DialogHeader>
           
           <div className="my-3 space-y-2">
-            {STARTER_PERKS.map((perk, index) => (
+            {CREATOR_PERKS.map((perk, index) => (
               <div key={index} className="flex items-center gap-2">
                 <div className="flex h-4 w-4 items-center justify-center rounded-full bg-primary/10">
                   <Check className="h-2.5 w-2.5 text-primary" />

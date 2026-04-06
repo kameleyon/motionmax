@@ -11,7 +11,7 @@ import { processAttachments } from "@/lib/attachmentProcessor";
 import type { VideoFormat } from "./FormatSelector";
 import type { VideoLength } from "./LengthSelector";
 import { StyleSelector, type VisualStyle } from "./StyleSelector";
-import { VoiceSelector, type VoiceSelection } from "./VoiceSelector";
+import { SpeakerSelector, type SpeakerVoice, getDefaultSpeaker } from "./SpeakerSelector";
 import { LanguageSelector, type Language } from "./LanguageSelector";
 import { CaptionStyleSelector, type CaptionStyle } from "./CaptionStyleSelector";
 import { CharacterDescriptionInput } from "./CharacterDescriptionInput";
@@ -25,7 +25,6 @@ import { AdminLogsPanel } from "./AdminLogsPanel";
 import { useWorkspaceSubscription } from "@/hooks/useWorkspaceSubscription";
 import { WorkspaceModals } from "./WorkspaceModals";
 
-import { TemplateSelector } from "./TemplateSelector";
 import { useWorkspaceDraft } from "@/hooks/useWorkspaceDraft";
 
 import { getUserFriendlyErrorMessage } from "@/lib/errorMessages";
@@ -48,7 +47,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
     const [style, setStyle] = useState<VisualStyle>("minimalist");
     const [customStyle, setCustomStyle] = useState("");
     const [customStyleImage, setCustomStyleImage] = useState<string | null>(null);
-    const [voice, setVoice] = useState<VoiceSelection>({ type: "standard", gender: "female" });
+    const [speaker, setSpeaker] = useState<SpeakerVoice>("Nova");
     const [language, setLanguage] = useState<Language>("en");
     const [characterDescription, setCharacterDescription] = useState("");
     const [characterDescOpen, setCharacterDescOpen] = useState(false);
@@ -160,13 +159,11 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
         brandMark: brandMarkEnabled && brandMarkText.trim() ? brandMarkText.trim() : undefined,
         characterDescription: characterDescription.trim() || undefined,
         disableExpressions: true,
-        characterConsistencyEnabled,
+        characterConsistencyEnabled: plan === "studio" || plan === "enterprise" || characterConsistencyEnabled,
         language,
         projectType: "doc2video",
-        // Voice selection - pass gender for standard voices, voiceName for custom
-        voiceType: voice.type,
-        voiceId: voice.voiceId,
-        voiceName: voice.type === "custom" ? voice.voiceName : voice.gender,
+        voiceType: "standard",
+        voiceName: speaker,
         captionStyle,
       });
     };
@@ -203,7 +200,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
       setStyle("minimalist");
       setCustomStyle("");
       setCustomStyleImage(null);
-      setVoice({ type: "standard", gender: "female" });
+      setSpeaker("Nova");
       setLanguage("en");
       setCharacterDescription("");
       setCharacterDescOpen(false);
@@ -252,17 +249,8 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
       if (project.character_description) setCharacterDescOpen(true);
 
       // Restore voice settings
-      if (project.voice_type === "custom" && project.voice_id) {
-        setVoice({ 
-          type: "custom", 
-          voiceId: project.voice_id, 
-          voiceName: project.voice_name ?? undefined 
-        });
-      } else {
-        const gender = (project.voice_name === "male" || project.voice_name === "female") 
-          ? project.voice_name 
-          : "female";
-        setVoice({ type: "standard", gender });
+      if (project.voice_name) {
+        setSpeaker(project.voice_name as SpeakerVoice);
       }
 
       // Restore brand mark
@@ -325,15 +313,12 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
                   </div>
 
                   {/* Content Input */}
-                  <div className="space-y-2">
-                    <CinematicSourceInput
-                      content={content}
-                      onContentChange={setContent}
-                      attachments={sourceAttachments}
-                      onAttachmentsChange={setSourceAttachments}
-                    />
-                    <TemplateSelector mode="doc2video" onSelectTemplate={setContent} />
-                  </div>
+                  <CinematicSourceInput
+                    content={content}
+                    onContentChange={setContent}
+                    attachments={sourceAttachments}
+                    onAttachmentsChange={setSourceAttachments}
+                  />
 
                   {/* Compact Configuration Grid */}
                   <div className="grid grid-cols-2 gap-3 sm:gap-4">
@@ -396,15 +381,17 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
                       </div>
                     </div>
 
-                    {/* Language + Voice stacked */}
+                    {/* Language + Speaker stacked */}
                     <div className="space-y-2">
-                      <LanguageSelector value={language} onChange={setLanguage} />
-                      <VoiceSelector selected={voice} onSelect={setVoice} />
+                      <LanguageSelector value={language} onChange={(lang) => {
+                        setLanguage(lang);
+                        setSpeaker(getDefaultSpeaker(lang));
+                      }} />
+                      <SpeakerSelector value={speaker} onChange={setSpeaker} language={language} />
                     </div>
 
-                    {/* Caption + Brand stacked */}
+                    {/* Brand + Caption stacked */}
                     <div className="space-y-2">
-                      <CaptionStyleSelector value={captionStyle} onChange={setCaptionStyle} />
                       <div className="space-y-1.5">
                         <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Brand Name</span>
                         <input
@@ -419,6 +406,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
                           className="flex w-full h-9 rounded-md border border-border bg-muted/30 px-3 text-xs placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
                         />
                       </div>
+                      <CaptionStyleSelector value={captionStyle} onChange={setCaptionStyle} />
                     </div>
                   </div>
 

@@ -19,6 +19,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { CaptionStyleSelector, type CaptionStyle } from "./CaptionStyleSelector";
+import { useAdminLogs } from "@/hooks/useAdminLogs";
+import { AdminLogsPanel } from "./AdminLogsPanel";
+import { useGenerationLogs } from "@/hooks/useGenerationLogs";
+import { GenerationLogsPanel } from "./GenerationLogsPanel";
 import type { Scene, CostTracking, PhaseTimings } from "@/hooks/useGenerationPipeline";
 import { useVideoExport } from "@/hooks/useVideoExport";
 import { supabase } from "@/integrations/supabase/client";
@@ -71,6 +75,9 @@ export function GenerationResult({
   captionStyle: initialCaptionStyle = "none",
   onCaptionStyleChange,
 }: GenerationResultProps) {
+  const { isAdmin, adminLogs, showAdminLogs, setShowAdminLogs } = useAdminLogs(generationId, null);
+  const { logs: generationLogs, showLogs, setShowLogs } = useGenerationLogs(generationId, projectId, false);
+
   const [scenes, setScenes] = useState(initialScenes);
   const [showScenes, setShowScenes] = useState(false);
   const [editingSceneIndex, setEditingSceneIndex] = useState<number | null>(null);
@@ -80,7 +87,7 @@ export function GenerationResult({
   const [isReRendering, setIsReRendering] = useState(false);
 
   const { state: exportState, exportVideo, downloadVideo, shareVideo, reset: resetExport, loadExistingVideo } = useVideoExport();
-  const { isAdmin } = useAdminAuth();
+  // isAdmin comes from useAdminLogs above
   const { state: zipState, downloadImagesAsZip } = useImagesZipDownload();
   const reRenderTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasAutoExportedRef = useRef(false);
@@ -425,6 +432,10 @@ export function GenerationResult({
           }}
         />
       )}
+
+      {/* Admin logs */}
+      {isAdmin && <AdminLogsPanel logs={adminLogs} show={showAdminLogs} onToggle={() => setShowAdminLogs(!showAdminLogs)} />}
+      <GenerationLogsPanel logs={generationLogs} show={showLogs} onToggle={() => setShowLogs(!showLogs)} />
     </div>
   );
 }

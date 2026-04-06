@@ -11,7 +11,7 @@ import { CinematicSourceInput, type SourceAttachment } from "./CinematicSourceIn
 import { processAttachments } from "@/lib/attachmentProcessor";
 import type { VideoFormat } from "./FormatSelector";
 import { StyleSelector, type VisualStyle } from "./StyleSelector";
-import { VoiceSelector, type VoiceSelection } from "./VoiceSelector";
+import { SpeakerSelector, type SpeakerVoice, getDefaultSpeaker } from "./SpeakerSelector";
 import { LanguageSelector, type Language } from "./LanguageSelector";
 import { CaptionStyleSelector, type CaptionStyle } from "./CaptionStyleSelector";
 import { CharacterDescriptionInput } from "./CharacterDescriptionInput";
@@ -30,7 +30,6 @@ import { useSubscription, validateGenerationAccess, getCreditsRequired, PLAN_LIM
 import { toast } from "sonner";
 import { UpgradeRequiredModal } from "@/components/modals/UpgradeRequiredModal";
 import { SubscriptionSuspendedModal } from "@/components/modals/SubscriptionSuspendedModal";
-import { TemplateSelector } from "./TemplateSelector";
 import { useWorkspaceDraft } from "@/hooks/useWorkspaceDraft";
 import type { WorkspaceHandle } from "./Doc2VideoWorkspace";
 import { useAdminLogs } from "@/hooks/useAdminLogs";
@@ -50,7 +49,6 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
     const [inspiration, setInspiration] = useState<InspirationStyle>("none");
     const [tone, setTone] = useState<StoryTone>("casual");
     const [genre, setGenre] = useState<StoryGenre>("documentary");
-    const [brandName, setBrandName] = useState("");
     const [characterConsistencyEnabled, setCharacterConsistencyEnabled] = useState(false);
     
     // Shared inputs
@@ -59,7 +57,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
     const [style, setStyle] = useState<VisualStyle>("minimalist");
     const [customStyle, setCustomStyle] = useState("");
     const [customStyleImage, setCustomStyleImage] = useState<string | null>(null);
-    const [voice, setVoice] = useState<VoiceSelection>({ type: "standard", gender: "female" });
+    const [speaker, setSpeaker] = useState<SpeakerVoice>("Nova");
     const [language, setLanguage] = useState<Language>("en");
     const [characterDescription, setCharacterDescription] = useState("");
     const [characterDescOpen, setCharacterDescOpen] = useState(false);
@@ -221,11 +219,10 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
         storyGenre: genre,
         disableExpressions: true,
         language,
-        brandName: brandName.trim() || undefined,
-        characterConsistencyEnabled,
-        voiceType: voice.type,
-        voiceId: voice.voiceId,
-        voiceName: voice.type === "custom" ? voice.voiceName : voice.gender,
+        brandName: brandMarkText.trim() || undefined,
+        characterConsistencyEnabled: plan === "studio" || plan === "enterprise" || characterConsistencyEnabled,
+        voiceType: "standard",
+        voiceName: speaker,
         captionStyle,
       });
 
@@ -239,14 +236,13 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
       setInspiration("none");
       setTone("casual");
       setGenre("documentary");
-      setBrandName("");
       setCharacterConsistencyEnabled(false);
       setFormat("portrait");
       setLength("brief");
       setStyle("minimalist");
       setCustomStyle("");
       setCustomStyleImage(null);
-      setVoice({ type: "standard", gender: "female" });
+      setSpeaker("Nova");
       setLanguage("en");
       setCharacterDescription("");
       setCharacterDescOpen(false);
@@ -344,15 +340,12 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
                   </div>
 
                   {/* Story Idea Input */}
-                  <div className="space-y-2">
-                    <CinematicSourceInput
-                      content={storyIdea}
-                      onContentChange={setStoryIdea}
-                      attachments={sourceAttachments}
-                      onAttachmentsChange={setSourceAttachments}
-                    />
-                    <TemplateSelector mode="storytelling" onSelectTemplate={setStoryIdea} />
-                  </div>
+                  <CinematicSourceInput
+                    content={storyIdea}
+                    onContentChange={setStoryIdea}
+                    attachments={sourceAttachments}
+                    onAttachmentsChange={setSourceAttachments}
+                  />
 
                   {/* Story Settings */}
                   <div className="space-y-4 sm:space-y-6 rounded-xl border border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm">
@@ -425,26 +418,32 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
                       </div>
                     </div>
 
-                    {/* Language + Voice stacked */}
+                    {/* Language + Speaker stacked */}
                     <div className="space-y-2">
-                      <LanguageSelector value={language} onChange={setLanguage} />
-                      <VoiceSelector selected={voice} onSelect={setVoice} />
+                      <LanguageSelector value={language} onChange={(lang) => {
+                        setLanguage(lang);
+                        setSpeaker(getDefaultSpeaker(lang));
+                      }} />
+                      <SpeakerSelector value={speaker} onChange={setSpeaker} language={language} />
                     </div>
 
-                    {/* Caption + Brand stacked */}
+                    {/* Brand + Caption stacked */}
                     <div className="space-y-2">
-                      <CaptionStyleSelector value={captionStyle} onChange={setCaptionStyle} />
                       <div className="space-y-1.5">
                         <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Brand Name</span>
                         <input
                           type="text"
                           placeholder="Your brand (optional)"
-                          value={brandName}
+                          value={brandMarkText}
                           maxLength={50}
-                          onChange={(e) => setBrandName(e.target.value)}
+                          onChange={(e) => {
+                            setBrandMarkText(e.target.value);
+                            setBrandMarkEnabled(e.target.value.trim().length > 0);
+                          }}
                           className="flex w-full h-9 rounded-md border border-border bg-muted/30 px-3 text-xs placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
                         />
                       </div>
+                      <CaptionStyleSelector value={captionStyle} onChange={setCaptionStyle} />
                     </div>
                   </div>
 

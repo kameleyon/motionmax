@@ -1,16 +1,16 @@
 import { createScopedLogger } from "@/lib/logger";
 import { useState, forwardRef, useImperativeHandle, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Play, AlertCircle, RotateCcw, Wallpaper } from "lucide-react";
+import { Play, AlertCircle, RotateCcw, Wallpaper, Monitor, Smartphone } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { WorkspaceLayout } from "@/components/layout/WorkspaceLayout";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { FormatSelector, type VideoFormat } from "./FormatSelector";
-import { VoiceSelector, type VoiceSelection } from "./VoiceSelector";
+import type { VideoFormat } from "./FormatSelector";
+import { SpeakerSelector, type SpeakerVoice, getDefaultSpeaker } from "./SpeakerSelector";
 import { LanguageSelector, type Language } from "./LanguageSelector";
 import { CaptionStyleSelector, type CaptionStyle } from "./CaptionStyleSelector";
 import { CreditCostDisplay } from "./CreditCostDisplay";
@@ -26,7 +26,6 @@ import { UpgradeRequiredModal } from "@/components/modals/UpgradeRequiredModal";
 import { SubscriptionSuspendedModal } from "@/components/modals/SubscriptionSuspendedModal";
 import { useAdminLogs } from "@/hooks/useAdminLogs";
 import { AdminLogsPanel } from "./AdminLogsPanel";
-import { TemplateSelector } from "./TemplateSelector";
 import { useWorkspaceDraft } from "@/hooks/useWorkspaceDraft";
 import { useInfographicsUsage } from "@/hooks/useInfographicsUsage";
 import { PLAN_LIMITS } from "@/lib/planLimits";
@@ -51,8 +50,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
     const [style, setStyle] = useState<SmartFlowStyle>("minimalist");
     const [customStyle, setCustomStyle] = useState("");
     const [customStyleImage, setCustomStyleImage] = useState<string | null>(null);
-    const [enableVoice, setEnableVoice] = useState(false);
-    const [voice, setVoice] = useState<VoiceSelection>({ type: "standard", gender: "female" });
+    const [speaker, setSpeaker] = useState<SpeakerVoice>("Nova");
     const [language, setLanguage] = useState<Language>("en");
     const [brandMarkEnabled, setBrandMarkEnabled] = useState(false);
     const [brandMarkText, setBrandMarkText] = useState("");
@@ -182,14 +180,8 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
         brandMark: brandMarkEnabled && brandMarkText.trim() ? brandMarkText.trim() : undefined,
         language,
         projectType: "smartflow", // Smart Flow uses dedicated single-scene backend
-        // Voice selection (only if enabled)
-        voiceType: enableVoice ? voice.type : undefined,
-        voiceId: enableVoice ? voice.voiceId : undefined,
-        // For standard voices, pass gender as voiceName (e.g., "male" or "female")
-        // For custom voices, pass the actual voice name
-        voiceName: enableVoice
-          ? (voice.type === "custom" ? voice.voiceName : voice.gender)
-          : undefined,
+        voiceType: "standard",
+        voiceName: speaker,
         captionStyle,
       });
 
@@ -205,8 +197,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
       setStyle("minimalist");
       setCustomStyle("");
       setCustomStyleImage(null);
-      setEnableVoice(false);
-      setVoice({ type: "standard", gender: "female" });
+      setSpeaker("Nova");
       setLanguage("en");
       setBrandMarkEnabled(false);
       setBrandMarkText("");
@@ -232,9 +223,10 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
       const validStyles: SmartFlowStyle[] = ["minimalist", "doodle", "stick", "realistic", "storybook", "caricature", "sketch", "crayon", "chalkboard"];
       setStyle(validStyles.includes(savedStyle) ? savedStyle : "minimalist");
       
-      // Restore voice setting - if voice_type is set and not undefined, voice was enabled
-      const hasVoice = !!project.voice_type && project.voice_type !== "none";
-      setEnableVoice(hasVoice);
+      // Restore voice settings
+      if (project.voice_name) {
+        setSpeaker(project.voice_name as SpeakerVoice);
+      }
 
       // Restore language from voice_inclination
       const savedLang = project.voice_inclination as Language | null;
@@ -311,7 +303,6 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
                       </span>
                     </div>
                   </div>
-                  <TemplateSelector mode="smartflow" onSelectTemplate={setDataContent} />
 
                   {/* Extraction Prompt */}
                   <div className="space-y-2">
@@ -327,62 +318,95 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
                     />
                   </div>
 
-                  {/* Configuration */}
-                  <div className="space-y-4 sm:space-y-6 rounded-xl border border-border/50 bg-card/50 p-3 sm:p-6 backdrop-blur-sm shadow-sm overflow-hidden">
-                    {/* Style Selector */}
-                    <SmartFlowStyleSelector
-                      selected={style}
-                      onSelect={setStyle}
-                      customStyle={customStyle}
-                      onCustomStyleChange={setCustomStyle}
-                      customStyleImage={customStyleImage}
-                      onCustomStyleImageChange={setCustomStyleImage}
-                      brandMarkEnabled={brandMarkEnabled}
-                      brandMarkText={brandMarkText}
-                      onBrandMarkEnabledChange={setBrandMarkEnabled}
-                      onBrandMarkTextChange={setBrandMarkText}
-                    />
-                    
-                    <div className="h-px bg-border/30" />
-                    
-                    {/* Format and Language */}
-                    <FormatSelector selected={format} onSelect={setFormat} />
-                    <div className="h-px bg-border/30" />
-                    <LanguageSelector value={language} onChange={setLanguage} />
-                    <div className="h-px bg-border/30" />
-                    <CaptionStyleSelector value={captionStyle} onChange={setCaptionStyle} />
+                  {/* Compact Configuration Grid */}
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                    {/* Format: Landscape / Portrait */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Format</span>
+                      <div className="flex gap-2">
+                        {([
+                          { id: "landscape" as const, icon: Monitor, label: "16:9" },
+                          { id: "portrait" as const, icon: Smartphone, label: "9:16" },
+                        ]).map(({ id, icon: Icon, label }) => (
+                          <button
+                            key={id}
+                            onClick={() => setFormat(id)}
+                            className={cn(
+                              "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors",
+                              format === id
+                                ? "border-primary/50 bg-primary/10 text-foreground"
+                                : "border-border/50 bg-muted/30 text-muted-foreground hover:bg-muted/50",
+                            )}
+                          >
+                            <Icon className="h-3.5 w-3.5" />
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
-                    <div className="h-px bg-border/30" />
+                    {/* Duration - fixed short for SmartFlow, shown for consistency */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Duration</span>
+                      <div className="flex gap-2">
+                        {([
+                          { id: "short" as const, label: "\u22643 min" },
+                        ]).map(({ id, label }) => (
+                          <button
+                            key={id}
+                            className={cn(
+                              "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors",
+                              "border-primary/50 bg-primary/10 text-foreground",
+                            )}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
-                    {/* Voice Toggle */}
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-1">
-                          <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
-                            Enable Voice
-                          </h3>
-                          <p className="text-xs text-muted-foreground/50">
-                            Generate audio narration (creates a mini video)
-                          </p>
-                        </div>
-                        <Switch
-                          checked={enableVoice}
-                          onCheckedChange={setEnableVoice}
+                    {/* Language + Speaker stacked */}
+                    <div className="space-y-2">
+                      <LanguageSelector value={language} onChange={(lang) => {
+                        setLanguage(lang);
+                        setSpeaker(getDefaultSpeaker(lang));
+                      }} />
+                      <SpeakerSelector value={speaker} onChange={setSpeaker} language={language} />
+                    </div>
+
+                    {/* Brand + Caption stacked */}
+                    <div className="space-y-2">
+                      <div className="space-y-1.5">
+                        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Brand Name</span>
+                        <input
+                          type="text"
+                          placeholder="Your brand (optional)"
+                          value={brandMarkText}
+                          maxLength={50}
+                          onChange={(e) => {
+                            setBrandMarkText(e.target.value);
+                            setBrandMarkEnabled(e.target.value.trim().length > 0);
+                          }}
+                          className="flex w-full h-9 rounded-md border border-border bg-muted/30 px-3 text-xs placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
                         />
                       </div>
-                      
-                      {enableVoice && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="pt-2"
-                        >
-                          <VoiceSelector selected={voice} onSelect={setVoice} />
-                        </motion.div>
-                      )}
+                      <CaptionStyleSelector value={captionStyle} onChange={setCaptionStyle} />
                     </div>
                   </div>
+
+                  {/* Visual Style */}
+                  <SmartFlowStyleSelector
+                    selected={style}
+                    onSelect={setStyle}
+                    customStyle={customStyle}
+                    onCustomStyleChange={setCustomStyle}
+                    customStyleImage={customStyleImage}
+                    onCustomStyleImageChange={setCustomStyleImage}
+                    brandMarkEnabled={brandMarkEnabled}
+                    brandMarkText={brandMarkText}
+                    onBrandMarkEnabledChange={setBrandMarkEnabled}
+                    onBrandMarkTextChange={setBrandMarkText}
+                  />
 
                   {/* Credit Cost Display */}
                   <CreditCostDisplay
@@ -434,7 +458,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
                     title={generationState.title || "Untitled Infographic"}
                     scenes={generationState.scenes}
                     format={generationState.format || format}
-                    enableVoice={enableVoice}
+                    enableVoice={true}
                     onNewProject={handleNewProject}
                     onRegenerate={handleRegenerate}
                     totalTimeMs={generationState.totalTimeMs}

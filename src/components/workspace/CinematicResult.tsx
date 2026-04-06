@@ -428,6 +428,7 @@ export function CinematicResult({
               onCaptionStyleChange?.(style);
               setHasUnsavedEdits(true);
             }}
+            showLabel={false}
           />
           {onRegenerate && (
             <Button variant="outline" size="sm" onClick={onRegenerate} className="h-8 gap-1.5 text-xs px-3">

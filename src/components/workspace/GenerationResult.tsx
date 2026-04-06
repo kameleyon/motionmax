@@ -248,6 +248,7 @@ export function GenerationResult({
               onCaptionStyleChange?.(style);
               setHasUnsavedEdits(true);
             }}
+            showLabel={false}
           />
           <Button
             variant="outline"

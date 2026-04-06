@@ -38,6 +38,8 @@ export type CaptionStyle =
 interface CaptionStyleSelectorProps {
   value: CaptionStyle;
   onChange: (value: CaptionStyle) => void;
+  /** Show "Captions" label above the dropdown (default true, set false in result pages) */
+  showLabel?: boolean;
 }
 
 const captionStyles: { id: CaptionStyle; label: string }[] = [
@@ -211,8 +213,11 @@ const CaptionPreviewRow = memo(function CaptionPreviewRow({ styleId }: { styleId
 export function CaptionStyleSelector({ value, onChange }: CaptionStyleSelectorProps) {
   const selected = captionStyles.find((s) => s.id === value) || captionStyles[0];
 
+  const label = showLabel !== false;
+
   return (
-    <div>
+    <div className={label ? "space-y-1.5" : ""}>
+      {label && <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Captions</span>}
       <Select value={value} onValueChange={(v) => onChange(v as CaptionStyle)}>
         <SelectTrigger className={cn("w-auto h-8 text-xs gap-1 px-3")}>
           <SelectValue>

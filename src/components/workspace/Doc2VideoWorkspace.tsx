@@ -1,19 +1,18 @@
 import { useState, forwardRef, useImperativeHandle, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Play, AlertCircle, RotateCcw, ChevronDown, Lightbulb, Users, MessageSquareOff, Video, Info } from "lucide-react";
+import { Play, AlertCircle, RotateCcw, ChevronDown, Users, Video, Monitor, Smartphone } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { WorkspaceLayout } from "@/components/layout/WorkspaceLayout";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ContentInput } from "./ContentInput";
-import { FormatSelector, type VideoFormat } from "./FormatSelector";
-import { LengthSelector, type VideoLength } from "./LengthSelector";
+import type { VideoFormat } from "./FormatSelector";
+import type { VideoLength } from "./LengthSelector";
 import { StyleSelector, type VisualStyle } from "./StyleSelector";
 import { VoiceSelector, type VoiceSelection } from "./VoiceSelector";
 import { LanguageSelector, type Language } from "./LanguageSelector";
 import { CaptionStyleSelector, type CaptionStyle } from "./CaptionStyleSelector";
-import { PresenterFocusInput } from "./PresenterFocusInput";
 import { CharacterDescriptionInput } from "./CharacterDescriptionInput";
 import { CharacterConsistencyToggle } from "./CharacterConsistencyToggle";
 import { GenerationResult } from "./GenerationResult";
@@ -22,7 +21,6 @@ import { CreditCostDisplay } from "./CreditCostDisplay";
 import { useGenerationPipeline } from "@/hooks/useGenerationPipeline";
 import { useAdminLogs } from "@/hooks/useAdminLogs";
 import { AdminLogsPanel } from "./AdminLogsPanel";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useWorkspaceSubscription } from "@/hooks/useWorkspaceSubscription";
 import { WorkspaceModals } from "./WorkspaceModals";
 
@@ -50,13 +48,10 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
     const [customStyleImage, setCustomStyleImage] = useState<string | null>(null);
     const [voice, setVoice] = useState<VoiceSelection>({ type: "standard", gender: "female" });
     const [language, setLanguage] = useState<Language>("en");
-    const [presenterFocus, setPresenterFocus] = useState("");
     const [characterDescription, setCharacterDescription] = useState("");
-    const [presenterFocusOpen, setPresenterFocusOpen] = useState(false);
     const [characterDescOpen, setCharacterDescOpen] = useState(false);
     const [brandMarkEnabled, setBrandMarkEnabled] = useState(false);
     const [brandMarkText, setBrandMarkText] = useState("");
-    const [disableExpressions, setDisableExpressions] = useState(false);
     const [characterConsistencyEnabled, setCharacterConsistencyEnabled] = useState(false);
     const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("none");
 
@@ -72,7 +67,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
     // Auto-save draft to localStorage
     const { clearDraft, loadDraft, hasDraft } = useWorkspaceDraft(
       "doc2video",
-      { content, format, length, style, customStyle, presenterFocus, characterDescription, brandMarkText },
+      { content, format, length, style, customStyle, characterDescription, brandMarkText },
       generationState.step === "idle"
     );
 
@@ -82,7 +77,6 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
       const draft = loadDraft();
       if (draft) {
         if (draft.content) setContent(draft.content as string);
-        if (draft.presenterFocus) { setPresenterFocus(draft.presenterFocus as string); setPresenterFocusOpen(true); }
         if (draft.characterDescription) { setCharacterDescription(draft.characterDescription as string); setCharacterDescOpen(true); }
       }
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -159,9 +153,8 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
         customStyle: style === "custom" ? customStyle : undefined,
         customStyleImage: style === "custom" ? customStyleImage : undefined,
         brandMark: brandMarkEnabled && brandMarkText.trim() ? brandMarkText.trim() : undefined,
-        presenterFocus: presenterFocus.trim() ? presenterFocus.trim().slice(0, 500000) : undefined,
         characterDescription: characterDescription.trim() || undefined,
-        disableExpressions,
+        disableExpressions: true,
         characterConsistencyEnabled,
         language,
         projectType: "doc2video",
@@ -206,13 +199,10 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
       setCustomStyleImage(null);
       setVoice({ type: "standard", gender: "female" });
       setLanguage("en");
-      setPresenterFocus("");
       setCharacterDescription("");
-      setPresenterFocusOpen(false);
       setCharacterDescOpen(false);
       setBrandMarkEnabled(false);
       setBrandMarkText("");
-      setDisableExpressions(false);
       setCharacterConsistencyEnabled(false);
       setCaptionStyle("none");
     };
@@ -251,12 +241,8 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
         setCustomStyle(project.style);
       }
 
-      // Restore presenter focus and character description
-      setPresenterFocus(project.presenter_focus ?? "");
+      // Restore character description
       setCharacterDescription(project.character_description ?? "");
-      
-      // Expand sections if they have content
-      if (project.presenter_focus) setPresenterFocusOpen(true);
       if (project.character_description) setCharacterDescOpen(true);
 
       // Restore voice settings
@@ -282,9 +268,8 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
         setBrandMarkText("");
       }
 
-      // Restore character consistency + expressions
+      // Restore character consistency
       setCharacterConsistencyEnabled(project.character_consistency_enabled ?? false);
-      setDisableExpressions(project.disable_expressions ?? false);
 
       // Restore language from voice_inclination
       const savedLang = project.voice_inclination as Language | null;
@@ -339,113 +324,128 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
                     <TemplateSelector mode="doc2video" onSelectTemplate={setContent} />
                   </div>
 
-                  {/* Collapsible Advanced Options */}
-                  <div className="space-y-2 sm:space-y-3">
-                    {/* Character Description - Collapsible */}
-                    <Collapsible open={characterDescOpen} onOpenChange={setCharacterDescOpen}>
-                      <CollapsibleTrigger className="flex w-full items-center justify-between rounded-xl border border-border/50 bg-card/50 p-3 sm:p-4 backdrop-blur-sm shadow-sm hover:bg-muted/30 transition-colors">
-                        <span className="text-xs sm:text-sm font-medium flex items-center gap-2">
-                          <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                          Character Appearance
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-[240px]">
-                              Describes the visual style of characters in the story scenes (e.g., 'Pixar style 3D characters', 'Hand-drawn sketches').
-                            </TooltipContent>
-                          </Tooltip>
-                        </span>
-                        <ChevronDown className={`h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-200 ${characterDescOpen ? "rotate-180" : ""}`} />
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <div className="rounded-b-xl border border-t-0 border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm -mt-2">
-                          <CharacterDescriptionInput value={characterDescription} onChange={setCharacterDescription} />
-                        </div>
-                      </CollapsibleContent>
-                    </Collapsible>
-
-                    {/* Presenter Focus - Collapsible */}
-                    <Collapsible open={presenterFocusOpen} onOpenChange={setPresenterFocusOpen}>
-                      <CollapsibleTrigger className="flex w-full items-center justify-between rounded-xl border border-border/50 bg-card/50 p-3 sm:p-4 backdrop-blur-sm shadow-sm hover:bg-muted/30 transition-colors">
-                        <span className="text-xs sm:text-sm font-medium flex items-center gap-2">
-                          <Lightbulb className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                          Presenter Focus
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-[240px]">
-                              Describes the person speaking in the video (e.g., 'Professional news anchor', 'Friendly teacher').
-                            </TooltipContent>
-                          </Tooltip>
-                        </span>
-                        <ChevronDown className={`h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-200 ${presenterFocusOpen ? "rotate-180" : ""}`} />
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <div className="rounded-b-xl border border-t-0 border-border/50 bg-card/50 p-4 sm:p-6 backdrop-blur-sm shadow-sm -mt-2">
-                          <PresenterFocusInput value={presenterFocus} onChange={setPresenterFocus} />
-                        </div>
-                      </CollapsibleContent>
-                    </Collapsible>
-
-                    {/* Disable Expressions Toggle */}
-                    <div className="flex items-center gap-2 sm:gap-3 rounded-xl border border-border/50 bg-card/50 p-3 sm:p-4 backdrop-blur-sm shadow-sm">
-                      <Checkbox
-                        id="disable-expressions"
-                        checked={disableExpressions}
-                        onCheckedChange={(checked) => setDisableExpressions(checked === true)}
-                      />
-                      <label
-                        htmlFor="disable-expressions"
-                        className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-medium cursor-pointer flex-wrap"
-                      >
-                        <MessageSquareOff className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
-                        <span>Disable voice expressions</span>
-                        <span className="text-xs sm:text-xs text-muted-foreground/70">(no [chuckle], [sigh], etc.)</span>
-                      </label>
-                    </div>
-
-                    {/* Character Consistency Toggle - Pro Feature */}
-                    <CharacterConsistencyToggle
-                      enabled={characterConsistencyEnabled}
-                      onToggle={setCharacterConsistencyEnabled}
-                    />
-                  </div>
-
-                  {/* Configuration */}
-                  <div className="space-y-4 sm:space-y-6 rounded-xl border border-border/50 bg-card/50 p-3 sm:p-6 backdrop-blur-sm shadow-sm overflow-hidden">
-                    <FormatSelector selected={format} onSelect={setFormat} disabledFormats={disabledFormats} />
-                    <div className="h-px bg-border/30" />
-                    
-                    {/* Length, Voice, and Language */}
-                    <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
-                      <div className="flex-1">
-                        <LengthSelector selected={length} onSelect={setLength} disabledLengths={disabledLengths} />
-                      </div>
-                      <div className="sm:flex-shrink-0">
-                        <VoiceSelector selected={voice} onSelect={setVoice} />
+                  {/* Compact Configuration Grid */}
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                    {/* Format: Landscape / Portrait */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Format</span>
+                      <div className="flex gap-2">
+                        {([
+                          { id: "landscape" as const, icon: Monitor, label: "16:9" },
+                          { id: "portrait" as const, icon: Smartphone, label: "9:16" },
+                        ]).map(({ id, icon: Icon, label }) => {
+                          const disabled = disabledFormats.includes(id);
+                          return (
+                            <button
+                              key={id}
+                              onClick={() => !disabled && setFormat(id)}
+                              disabled={disabled}
+                              className={cn(
+                                "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors",
+                                format === id
+                                  ? "border-primary/50 bg-primary/10 text-foreground"
+                                  : "border-border/50 bg-muted/30 text-muted-foreground hover:bg-muted/50",
+                                disabled && "opacity-40 cursor-not-allowed",
+                              )}
+                            >
+                              <Icon className="h-3.5 w-3.5" />
+                              {label}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
-                    <div className="h-px bg-border/30" />
-                    <LanguageSelector value={language} onChange={setLanguage} />
-                    <div className="h-px bg-border/30" />
-                    <CaptionStyleSelector value={captionStyle} onChange={setCaptionStyle} />
 
-                    <div className="h-px bg-border/30" />
-                    <StyleSelector
-                      selected={style}
-                      customStyle={customStyle}
-                      onSelect={setStyle}
-                      onCustomStyleChange={setCustomStyle}
-                      customStyleImage={customStyleImage}
-                      onCustomStyleImageChange={setCustomStyleImage}
-                      brandMarkEnabled={brandMarkEnabled}
-                      brandMarkText={brandMarkText}
-                      onBrandMarkEnabledChange={setBrandMarkEnabled}
-                      onBrandMarkTextChange={setBrandMarkText}
-                    />
+                    {/* Duration */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Duration</span>
+                      <div className="flex gap-2">
+                        {([
+                          { id: "short" as const, label: "\u22643 min" },
+                          { id: "brief" as const, label: ">3 min" },
+                        ]).map(({ id, label }) => {
+                          const disabled = disabledLengths.includes(id);
+                          return (
+                            <button
+                              key={id}
+                              onClick={() => !disabled && setLength(id)}
+                              disabled={disabled}
+                              className={cn(
+                                "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors",
+                                length === id
+                                  ? "border-primary/50 bg-primary/10 text-foreground"
+                                  : "border-border/50 bg-muted/30 text-muted-foreground hover:bg-muted/50",
+                                disabled && "opacity-40 cursor-not-allowed",
+                              )}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Language + Voice stacked */}
+                    <div className="space-y-2">
+                      <LanguageSelector value={language} onChange={setLanguage} />
+                      <VoiceSelector selected={voice} onSelect={setVoice} />
+                    </div>
+
+                    {/* Caption + Brand stacked */}
+                    <div className="space-y-2">
+                      <CaptionStyleSelector value={captionStyle} onChange={setCaptionStyle} />
+                      <div className="space-y-1.5">
+                        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Brand Name</span>
+                        <input
+                          type="text"
+                          placeholder="Your brand (optional)"
+                          value={brandMarkText}
+                          maxLength={50}
+                          onChange={(e) => {
+                            setBrandMarkText(e.target.value);
+                            setBrandMarkEnabled(e.target.value.trim().length > 0);
+                          }}
+                          className="flex w-full h-9 rounded-md border border-border bg-muted/30 px-3 text-xs placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
+                        />
+                      </div>
+                    </div>
                   </div>
+
+                  {/* Character Consistency Toggle - Pro Feature */}
+                  <CharacterConsistencyToggle
+                    enabled={characterConsistencyEnabled}
+                    onToggle={setCharacterConsistencyEnabled}
+                  />
+
+                  {/* Character Appearance - Collapsible */}
+                  <Collapsible open={characterDescOpen} onOpenChange={setCharacterDescOpen}>
+                    <CollapsibleTrigger className="flex w-full items-center justify-between rounded-xl border border-border/50 bg-card/50 p-3 hover:bg-muted/30 transition-colors">
+                      <span className="text-xs font-medium flex items-center gap-2 text-muted-foreground">
+                        <Users className="h-3.5 w-3.5" />
+                        Character Appearance
+                      </span>
+                      <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${characterDescOpen ? "rotate-180" : ""}`} />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="rounded-b-xl border border-t-0 border-border/50 bg-card/50 p-4 -mt-1">
+                        <CharacterDescriptionInput value={characterDescription} onChange={setCharacterDescription} />
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+
+                  {/* Visual Style */}
+                  <StyleSelector
+                    selected={style}
+                    customStyle={customStyle}
+                    onSelect={setStyle}
+                    onCustomStyleChange={setCustomStyle}
+                    customStyleImage={customStyleImage}
+                    onCustomStyleImageChange={setCustomStyleImage}
+                    brandMarkEnabled={brandMarkEnabled}
+                    brandMarkText={brandMarkText}
+                    onBrandMarkEnabledChange={setBrandMarkEnabled}
+                    onBrandMarkTextChange={setBrandMarkText}
+                  />
 
                   {/* Credit Cost Display */}
                   <CreditCostDisplay

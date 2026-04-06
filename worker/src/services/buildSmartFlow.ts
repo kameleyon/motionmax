@@ -32,7 +32,7 @@ ${languageSection}
 === VISUAL STYLE ===
 - Art Style: ${styleDesc}
 - Format: ${p.format} (${dims.width}x${dims.height})
-- BRANDING: ${p.brandMark ? `Include the text "${p.brandMark}" as a small footer.` : "None"}
+- BRANDING: ${p.brandMark ? `Include the text "${p.brandMark}" as a small branded element in the infographic.` : "None"}
 
 === REFERENCE: NOTEBOOKLM INFOGRAPHIC STYLE ===
 Study this structure used by professional infographics:
@@ -54,7 +54,7 @@ CRITICAL: BASE YOUR OUTPUT ENTIRELY ON THE USER'S "EXTRACTION GOAL" ABOVE.
 === YOUR TASK ===
 1. **Analyze**: Identify 2-4 KEY INSIGHTS that tell a complete story.
 
-2. **Script (Optional Narration)**: Write a 180-word narration script. This is secondary to the visual - the infographic must be self-explanatory without it.
+2. **Script (REQUIRED Narration)**: Write a 200-350 word narration script (30-60 seconds when read aloud). This voiceover is MANDATORY — it will be converted to audio and played over the infographic as a video. The narration should explain and expand on the visual content, providing context, insights, and engagement. Write it as a compelling spoken explanation of the topic, as if presenting to an audience. Do NOT skip or leave the voiceover empty.
 
 3. **Design the Text-Rich Visual**:
    - The image generator CAN render paragraphs of text. EXPLOIT THIS CAPABILITY FULLY.
@@ -89,7 +89,7 @@ Return ONLY valid JSON:
   "title": "Catchy, engaging headline",
   "scenes": [{
     "number": 1,
-    "voiceover": "Optional narration script - but the visual is the star here...",
+    "voiceover": "A compelling 200-350 word narration explaining the content in depth (MANDATORY, 30-60 seconds when spoken)...",
     "visualPrompt": "You are an expert marketing and content creator, you know your targeted population and know how to catch their attention. So, Be extremely creative and using your expert marketing skills to create a catchy, detailed, elegant yet captivating editorial infographic illustration using elements, images and typography that suit best the topic presented. LAYOUT: [Magazine/Panel layout]. MAIN TITLE: Bold text '[YOUR TITLE]' at top center. CENTRAL VISUAL: [Describe the anchor image - a character, object, or symbol]. SECTION 1: Title text '[TITLE 1]' with subtitle '[SUBTITLE]' and description paragraph text '[Full 15-25 word explanation]'. Accompanied by [icon description]. SECTION 2: Title text '[TITLE 2]' with description paragraph text '[explanation]'. [Continue for all sections]. FLOATING ICONS: [List thematic icons around edges]. COLOR PALETTE: [Specify colors matching content theme].",
     "coverTitle": "Catchy Cover Title",
     "duration": 60

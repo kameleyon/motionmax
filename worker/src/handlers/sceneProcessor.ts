@@ -117,7 +117,11 @@ export function postProcessScenes(
     const subs = s.subVisuals || s.sub_visuals || [];
 
     let voiceover = sanitizeVoiceover(s.voiceover);
-    if (isShort) voiceover = capVoiceover(voiceover, SHORT_MAX_WORDS);
+    // SmartFlow has a single scene with long narration — don't cap it
+    if (isShort && projectType !== "smartflow") voiceover = capVoiceover(voiceover, SHORT_MAX_WORDS);
+
+    // SmartFlow single scene needs 30-60s for narration; others default to 15s
+    const duration = projectType === "smartflow" ? (s.duration || 60) : 15;
 
     return {
       ...s,
@@ -125,7 +129,7 @@ export function postProcessScenes(
       voiceover,
       visualPrompt: `${vp}\n\nSTYLE: ${stylePrompt}`,
       subVisuals: subs.map((sv: string) => `${sv}\n\nSTYLE: ${stylePrompt}`),
-      duration: 15,
+      duration,
     };
   });
 

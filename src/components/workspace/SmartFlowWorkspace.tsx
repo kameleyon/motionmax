@@ -307,10 +307,6 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
                     onCustomStyleChange={setCustomStyle}
                     customStyleImage={customStyleImage}
                     onCustomStyleImageChange={setCustomStyleImage}
-                    brandMarkEnabled={brandMarkEnabled}
-                    brandMarkText={brandMarkText}
-                    onBrandMarkEnabledChange={setBrandMarkEnabled}
-                    onBrandMarkTextChange={setBrandMarkText}
                   />
 
                   {/* Credit Cost Display */}

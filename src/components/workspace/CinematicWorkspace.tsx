@@ -70,7 +70,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
     const [upgradeReason, setUpgradeReason] = useState("");
     const [showSuspendedModal, setShowSuspendedModal] = useState(false);
     const [suspendedStatus, setSuspendedStatus] = useState<"past_due" | "unpaid" | "canceled">("past_due");
-    const { isAdmin, adminLogs, showAdminLogs, setShowAdminLogs } = useAdminLogs(generationState.generationId, generationState.step);
+    const { isAdmin, adminLogs, showAdminLogs, setShowAdminLogs } = useAdminLogs(generationState.generationId, generationState.step ?? null);
     const { logs: generationLogs, showLogs, setShowLogs } = useGenerationLogs(generationState.generationId, generationState.projectId, generationState.isGenerating);
     const [isResuming, setIsResuming] = useState(false);
 
@@ -102,8 +102,9 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
 
     // Disable formats/lengths based on plan
     const limits = PLAN_LIMITS[plan];
-    const disabledFormats: VideoFormat[] = (["landscape", "portrait"] as VideoFormat[]).filter(
-      f => !(limits?.allowedFormats || ["landscape", "portrait"]).includes(f)
+    const allowedFmts: string[] = limits?.allowedFormats || ["landscape", "portrait"];
+    const disabledFormats: VideoFormat[] = (["landscape", "portrait", "square"] as VideoFormat[]).filter(
+      f => !allowedFmts.includes(f)
     );
 
     // Auto-switch to allowed values if current selection becomes disabled
@@ -215,7 +216,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
         characterConsistencyEnabled: true,
         voiceType: "standard",
         voiceName: speaker,
-        language,
+        language: language as string,
         projectType: "cinematic",
       });
 
@@ -523,7 +524,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                     format={generationState.format || format}
                     totalTimeMs={generationState.totalTimeMs}
                     captionStyle={captionStyle}
-                    onCaptionStyleChange={setCaptionStyle}
+                    onCaptionStyleChange={(s: string) => setCaptionStyle(s as CaptionStyle)}
                   />
                   {isAdmin && <AdminLogsPanel logs={adminLogs} show={showAdminLogs} onToggle={() => setShowAdminLogs(!showAdminLogs)} />}
                 </motion.div>

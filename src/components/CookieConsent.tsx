@@ -85,15 +85,15 @@ export function CookieConsent() {
 function loadGoogleAnalytics() {
   const gaId = import.meta.env.VITE_GA_MEASUREMENT_ID;
   if (!gaId || typeof window === "undefined") return;
-  if ((window as any).gtag) return; // Already loaded
+  if (window.gtag) return; // Already loaded
 
   const script = document.createElement("script");
   script.async = true;
   script.src = `https://www.googletagmanager.com/gtag/js?id=${gaId}`;
   document.head.appendChild(script);
-  (window as any).dataLayer = (window as any).dataLayer || [];
-  function gtag(...args: any[]) { (window as any).dataLayer.push(arguments); }
-  (window as any).gtag = gtag;
+  window.dataLayer = window.dataLayer || [];
+  function gtag(...args: unknown[]) { window.dataLayer!.push(args as unknown as Record<string, unknown>); }
+  window.gtag = gtag;
   gtag("js", new Date());
   gtag("config", gaId, { send_page_view: true });
 }

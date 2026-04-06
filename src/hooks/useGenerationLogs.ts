@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import type { SystemLogEntry } from "@/types/domain";
 
 /**
  * Hook to fetch generation logs from system_logs in real-time.
@@ -10,7 +11,7 @@ export function useGenerationLogs(
   projectId: string | null | undefined,
   isGenerating: boolean
 ) {
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<SystemLogEntry[]>([]);
   const [showLogs, setShowLogs] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 

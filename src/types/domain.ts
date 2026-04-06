@@ -16,6 +16,15 @@ export type VisualStyle =
 
 export type Language = "en" | "fr" | "es" | "ht" | "pt" | "de" | "it" | "ru" | "zh" | "ja" | "ko";
 
+export interface SystemLogEntry {
+  id: string;
+  created_at: string;
+  message: string;
+  category?: string;
+  event_type?: string;
+  [key: string]: unknown;
+}
+
 export function toVideoFormat(s: string | null | undefined): VideoFormat {
   if (s === "landscape" || s === "portrait" || s === "square") return s;
   return "portrait";

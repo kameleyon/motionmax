@@ -1407,7 +1407,12 @@ serve(async (req) => {
       }
     }
 
-    const body: CinematicRequest = await req.json().catch(() => ({}));
+    let body: CinematicRequest;
+    try {
+      body = await req.json();
+    } catch {
+      return jsonResponse({ error: "Invalid JSON request body" }, { status: 400 });
+    }
     parsedGenerationId = body.generationId; // Cache for error handler
     const phase: Phase = body.phase || "script";
 

@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import type { VideoFormat } from "./FormatSelector";
+import type { VideoFormat } from "@/types/domain";
 import type { Scene, CostTracking } from "@/hooks/useGenerationPipeline";
 import { useVideoExport } from "@/hooks/useVideoExport";
 import { supabase } from "@/integrations/supabase/client";
@@ -93,7 +93,7 @@ export function SmartFlowResult({
     setHasUnsavedEdits(false);
     resetExport();
     clearVideoExportLogs();
-    void exportVideo(scenes, format as any, brandMark, projectId, "smartflow", generationId, captionStyle).catch((err) => {
+    void exportVideo(scenes, format, brandMark, projectId, "smartflow", generationId, captionStyle).catch((err) => {
       log.error("Export failed:", err);
       toast.error("Export failed", { description: err?.message || "Please try again" });
     });
@@ -136,7 +136,7 @@ export function SmartFlowResult({
       }
 
       clearVideoExportLogs();
-      void exportVideo(initialScenes, format as any, brandMark, projectId, "smartflow", generationId, captionStyle).catch((err) => {
+      void exportVideo(initialScenes, format, brandMark, projectId, "smartflow", generationId, captionStyle).catch((err) => {
       log.error("Export failed:", err);
       toast.error("Export failed", { description: err?.message || "Please try again" });
     });
@@ -149,7 +149,7 @@ export function SmartFlowResult({
   const handleRetryExport = () => {
     resetExport();
     clearVideoExportLogs();
-    void exportVideo(scenes, format as any, brandMark, projectId, "smartflow", generationId, captionStyle).catch((err) => {
+    void exportVideo(scenes, format, brandMark, projectId, "smartflow", generationId, captionStyle).catch((err) => {
       log.error("Export failed:", err);
       toast.error("Export failed", { description: err?.message || "Please try again" });
     });

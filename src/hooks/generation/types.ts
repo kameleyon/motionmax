@@ -127,7 +127,7 @@ export interface PipelineContext {
 
 // ---- Constants ----
 
-export const SCENE_COUNTS: Record<string, number> = { short: 15, brief: 28, presentation: 36 };
+export const SCENE_COUNTS: Record<VideoLength, number> = { short: 15, brief: 28, presentation: 36 };
 export const CINEMATIC_ENDPOINT = "generate-cinematic";
 export const DEFAULT_ENDPOINT = "generate-video";
 
@@ -146,21 +146,41 @@ export const INITIAL_GENERATION_STATE: GenerationState = {
 
 export const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+interface RawScene {
+  number?: number;
+  voiceover?: string;
+  narration?: string;
+  visualPrompt?: string;
+  visual_prompt?: string;
+  duration?: number;
+  imageUrl?: string;
+  image_url?: string;
+  imageUrls?: string[];
+  audioUrl?: string;
+  audio_url?: string;
+  videoUrl?: string;
+  video_url?: string;
+  title?: string;
+  subtitle?: string;
+  subVisuals?: string[];
+  [key: string]: unknown;
+}
+
 /** Normalize raw scene data from the database into typed Scene objects */
 export const normalizeScenes = (raw: unknown): Scene[] | undefined => {
   if (!Array.isArray(raw)) return undefined;
-  return raw.map((s: any, idx: number) => ({
+  return raw.map((s: RawScene, idx: number) => ({
     number: s?.number ?? idx + 1,
-    voiceover: s?.voiceover ?? s?.narration ?? "",
-    visualPrompt: s?.visualPrompt ?? s?.visual_prompt ?? "",
-    subVisuals: Array.isArray(s?.subVisuals) ? s.subVisuals : undefined,
-    duration: typeof s?.duration === "number" ? s.duration : 8,
-    imageUrl: s?.imageUrl ?? s?.image_url,
-    imageUrls: Array.isArray(s?.imageUrls) ? s.imageUrls : undefined,
-    audioUrl: s?.audioUrl ?? s?.audio_url,
-    videoUrl: s?.videoUrl ?? s?.video_url,
-    title: s?.title,
-    subtitle: s?.subtitle,
+    voiceover: s.voiceover ?? s.narration ?? "",
+    visualPrompt: s.visualPrompt ?? s.visual_prompt ?? "",
+    subVisuals: Array.isArray(s.subVisuals) ? s.subVisuals : undefined,
+    duration: typeof s.duration === "number" ? s.duration : 8,
+    imageUrl: s.imageUrl ?? s.image_url,
+    imageUrls: Array.isArray(s.imageUrls) ? s.imageUrls : undefined,
+    audioUrl: s.audioUrl ?? s.audio_url,
+    videoUrl: s.videoUrl ?? s.video_url,
+    title: s.title,
+    subtitle: s.subtitle,
   }));
 };
 

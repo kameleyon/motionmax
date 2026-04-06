@@ -3,7 +3,8 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-export type VideoFormat = "landscape" | "portrait" | "square";
+export type { VideoFormat } from "@/types/domain";
+import type { VideoFormat } from "@/types/domain";
 
 interface FormatSelectorProps {
   selected: VideoFormat;

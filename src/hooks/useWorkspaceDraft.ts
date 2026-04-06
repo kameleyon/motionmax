@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useMemo } from "react";
 
 const DRAFT_PREFIX = "motionmax_draft_";
 const AUTO_SAVE_INTERVAL_MS = 10_000;
@@ -12,7 +12,7 @@ export function useWorkspaceDraft<T extends Record<string, unknown>>(
   currentState: T,
   isIdle: boolean
 ) {
-  const storageKey = `${DRAFT_PREFIX}${mode}`;
+  const storageKey = useMemo(() => `${DRAFT_PREFIX}${mode}`, [mode]);
   const stateRef = useRef(currentState);
   stateRef.current = currentState;
 

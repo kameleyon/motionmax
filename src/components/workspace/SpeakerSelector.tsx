@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export type SpeakerVoice =
   // Qwen3 voices (multi-language default)
@@ -214,6 +215,7 @@ export function SpeakerSelector({ value, onChange, language }: SpeakerSelectorPr
       }
     } catch (err) {
       log.warn("Voice preview failed:", err);
+      toast.error("Voice preview unavailable. Please try again.");
     } finally {
       setPreviewLoading(null);
     }

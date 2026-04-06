@@ -22,15 +22,10 @@ export { STRIPE_PLANS, CREDIT_PACKS } from "@/config/stripeProducts";
 export { PLAN_LIMITS, getCreditsRequired, validateGenerationAccess };
 export type { PlanTier, ValidationResult };
 
-// Helper to check if user can use character consistency feature
-export function canUseCharacterConsistency(plan: PlanTier): boolean {
-  return plan === "studio" || (plan as string) === "professional" || plan === "enterprise";
-}
-
 export interface SubscriptionState {
   subscribed: boolean;
   plan: PlanTier;
-  subscriptionStatus: string | null;
+  subscriptionStatus: "active" | "canceling" | "past_due" | "unpaid" | "canceled" | null;
   subscriptionEnd: string | null;
   cancelAtPeriodEnd: boolean;
   creditsBalance: number;
@@ -99,7 +94,7 @@ function parseResponse(d: Record<string, unknown>): SubscriptionState {
   return {
     subscribed: (d.subscribed as boolean) || false,
     plan: normalizePlanName((d.plan as string) || "free"),
-    subscriptionStatus: (d.subscription_status as string) || (d.subscribed ? "active" : null),
+    subscriptionStatus: ((d.subscription_status as string) || (d.subscribed ? "active" : null)) as SubscriptionState["subscriptionStatus"],
     subscriptionEnd: (d.subscription_end as string) || null,
     cancelAtPeriodEnd: (d.cancel_at_period_end as boolean) || false,
     creditsBalance: (d.credits_balance as number) || 0,
@@ -165,8 +160,8 @@ async function fetchSubscription(accessToken: string | undefined): Promise<Subsc
         headers: { Authorization: `Bearer ${refreshData.session.access_token}` },
       });
       if (!retryError && retryData) return parseResponse(retryData);
-    } catch {
-      // fall through to DB
+    } catch (err) {
+      log.warn("Subscription retry failed:", err);
     }
     return fetchSubscriptionFromDB();
   }

@@ -145,7 +145,7 @@ export function GenerationProgress({ state, sceneProgress }: GenerationProgressP
         }
         if (totalImages > 0 && completedImages >= 0) {
           // Get ETA from state if available
-          const eta = (state as any).etaSeconds;
+          const eta = state.etaSeconds;
           if (eta && eta > 0) {
             const minutes = Math.floor(eta / 60);
             const seconds = eta % 60;
@@ -215,7 +215,7 @@ export function GenerationProgress({ state, sceneProgress }: GenerationProgressP
   );
 
   // Calculate ETA display
-  const etaSeconds = sceneProgress?.etaSeconds || (state as any).etaSeconds || 0;
+  const etaSeconds = sceneProgress?.etaSeconds || state.etaSeconds || 0;
   const etaDisplay = etaSeconds > 0
     ? etaSeconds >= 60
       ? `~${Math.floor(etaSeconds / 60)}m ${etaSeconds % 60}s remaining`

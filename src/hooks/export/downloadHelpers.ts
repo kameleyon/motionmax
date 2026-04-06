@@ -186,8 +186,8 @@ async function attemptFileShare(
     await navigator.share({ files: [file] });
     log.debug("Mobile: file share completed");
     return "done";
-  } catch (e: any) {
-    if (e?.name === "AbortError") {
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === "AbortError") {
       log.debug("Mobile: user cancelled file share");
       return "cancelled";
     }
@@ -212,8 +212,8 @@ async function attemptUrlShare(
     await navigator.share({ url, title });
     log.debug("Mobile: URL share completed");
     return "done";
-  } catch (e: any) {
-    if (e?.name === "AbortError") {
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === "AbortError") {
       log.debug("Mobile: user cancelled URL share");
       return "cancelled";
     }
@@ -239,8 +239,8 @@ export async function shareVideo(
     try {
       await navigator.share({ url, title: "Check out this video" });
       return true;
-    } catch (e: any) {
-      if (e?.name === "AbortError") return true;
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name === "AbortError") return true;
       log.warn("URL share failed:", e);
     }
   }

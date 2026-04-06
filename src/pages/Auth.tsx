@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { useForceDarkMode } from "@/hooks/useForceDarkMode";
 import { ThemedLogo } from "@/components/ThemedLogo";
 import { supabase } from "@/integrations/supabase/client";
-import { getAuthErrorMessage } from "@/lib/authErrors";
+import { getAuthErrorMessage } from "@/lib/errorMessages";
 import { PasswordStrengthMeter } from "@/components/ui/password-strength";
 
 type AuthMode = "login" | "signup" | "reset" | "update";
@@ -361,7 +361,7 @@ export default function Auth() {
               <Button
                 type="submit"
                 className="w-full gap-2 rounded-lg bg-primary py-5 font-medium text-primary-foreground"
-                disabled={isLoading}
+                disabled={isLoading || Date.now() < lockedUntil}
               >
                 {isLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

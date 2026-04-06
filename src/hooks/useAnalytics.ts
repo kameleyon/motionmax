@@ -17,13 +17,13 @@ type EventParams = Record<string, string | number | boolean>;
 function sendEvent(name: string, params?: EventParams) {
   try {
     // Google Analytics 4 via gtag.js
-    if (typeof window !== "undefined" && typeof (window as any).gtag === "function") {
-      (window as any).gtag("event", name, params);
+    if (typeof window !== "undefined" && typeof window.gtag === "function") {
+      window.gtag("event", name, params);
       return;
     }
     // Google Tag Manager dataLayer
-    if (typeof window !== "undefined" && Array.isArray((window as any).dataLayer)) {
-      (window as any).dataLayer.push({ event: name, ...params });
+    if (typeof window !== "undefined" && Array.isArray(window.dataLayer)) {
+      window.dataLayer.push({ event: name, ...params });
       return;
     }
     // Dev fallback

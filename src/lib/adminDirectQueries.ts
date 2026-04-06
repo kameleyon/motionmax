@@ -16,6 +16,7 @@ export async function fetchDashboardStats() {
     { data: flags },
     { data: costs },
     { data: transactions },
+    revenueResult,
   ] = await Promise.all([
     supabase.from("profiles").select("*", { count: "exact", head: true }),
     supabase.from("subscriptions").select("*"),
@@ -24,6 +25,10 @@ export async function fetchDashboardStats() {
     supabase.from("user_flags").select("*").is("resolved_at", null),
     supabase.from("generation_costs").select("openrouter_cost, replicate_cost, hypereal_cost, google_tts_cost, total_cost"),
     supabase.from("credit_transactions").select("*").eq("transaction_type", "purchase"),
+    // Revenue from Stripe via edge function — runs in parallel with DB queries
+    supabase.functions.invoke("admin-stats", {
+      body: { action: "dashboard_stats" },
+    }).catch(() => ({ data: null, error: true })),
   ]);
 
   const activeSubs = subscriptions?.filter(s => s.status === "active") || [];
@@ -42,18 +47,11 @@ export async function fetchDashboardStats() {
     totalSpent += Number(c.total_cost) || 0;
   });
 
-  // Try to get revenue from Stripe via edge function (async, non-blocking)
-  let revenue = { total: 0, subscriptions: 0, creditPacks: 0 };
-  try {
-    const { data, error } = await supabase.functions.invoke("admin-stats", {
-      body: { action: "dashboard_stats" },
-    });
-    if (!error && data?.revenue) {
-      revenue = data.revenue;
-    }
-  } catch {
-    // Edge function unavailable -- revenue stays at 0
-  }
+  // Edge function unavailable — revenue stays at $0 default (admin-only, acceptable fallback)
+  const revenueData = (revenueResult as any)?.data?.revenue;
+  let revenue = revenueData
+    ? revenueData
+    : { total: 0, subscriptions: 0, creditPacks: 0 };
 
   return {
     totalUsers: profileCount || 0,
@@ -387,16 +385,16 @@ export async function fetchUserDetails(params: { userId?: string; targetUserId?:
 export async function adminDirectQuery(action: string, params?: Record<string, unknown>): Promise<unknown> {
   switch (action) {
     case "dashboard_stats": return fetchDashboardStats();
-    case "subscribers_list": return fetchSubscribersList(params as any);
-    case "generation_stats": return fetchGenerationStats(params as any);
-    case "admin_logs": return fetchAdminLogs(params as any);
+    case "subscribers_list": return fetchSubscribersList(params as { page?: number; limit?: number; search?: string });
+    case "generation_stats": return fetchGenerationStats(params as { startDate?: string; endDate?: string });
+    case "admin_logs": return fetchAdminLogs(params as { page?: number; limit?: number });
     case "flags_list": return fetchFlagsList();
-    case "create_flag": return createFlag(params as any);
-    case "resolve_flag": return resolveFlag(params as any);
-    case "api_calls_list": return fetchApiCallsList(params as any);
-    case "api_call_detail": return fetchApiCallDetail(params as any);
+    case "create_flag": return createFlag(params as { user_id: string; reason: string; flag_type?: string });
+    case "resolve_flag": return resolveFlag(params as { flagId: string });
+    case "api_calls_list": return fetchApiCallsList(params as { page?: number; limit?: number });
+    case "api_call_detail": return fetchApiCallDetail(params as { id: string });
     case "revenue_stats": return fetchRevenueStats();
-    case "user_details": return fetchUserDetails(params as any);
+    case "user_details": return fetchUserDetails(params as { userId?: string; targetUserId?: string });
     default: throw new Error(`Unknown admin action: ${action}`);
   }
 }

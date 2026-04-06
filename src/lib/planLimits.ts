@@ -36,7 +36,7 @@ export function normalizePlanName(plan: string): PlanTier {
   }
 }
 
-export const PLAN_LIMITS: Record<PlanTier, PlanLimits> & Record<string, PlanLimits> = {
+export const PLAN_LIMITS: Record<PlanTier, PlanLimits> & { starter: PlanLimits; professional: PlanLimits } = {
   free: {
     creditsPerMonth: 0,
     dailyFreeCredits: 0,

@@ -43,7 +43,7 @@ function createDatabaseService() {
      * The `build` callback receives a PostgREST builder so callers
      * can chain `.select()`, `.eq()`, `.order()` etc.
      */
-    async query<T = unknown>(
+    async query<T extends Record<string, unknown> = Record<string, unknown>>(
       table: TableName,
       build: BuildQuery,
     ): Promise<DbResult<T[]>> {
@@ -56,7 +56,7 @@ function createDatabaseService() {
     /**
      * Insert one or more rows.
      */
-    async insert<T = unknown>(
+    async insert<T extends Record<string, unknown> = Record<string, unknown>>(
       table: TableName,
       rows: Record<string, unknown> | Record<string, unknown>[],
     ): Promise<DbResult<T[]>> {
@@ -71,7 +71,7 @@ function createDatabaseService() {
     /**
      * Update rows matching the filters set by `build`.
      */
-    async update<T = unknown>(
+    async update<T extends Record<string, unknown> = Record<string, unknown>>(
       table: TableName,
       values: Record<string, unknown>,
       build: BuildQuery,
@@ -99,7 +99,7 @@ function createDatabaseService() {
      * Invoke a Supabase Edge Function (or any serverless function).
      * Abstracts the transport so we can swap to plain `fetch` later.
      */
-    async invoke<T = unknown>(
+    async invoke<T extends Record<string, unknown> = Record<string, unknown>>(
       fnName: string,
       body?: Record<string, unknown>,
     ): Promise<DbResult<T>> {

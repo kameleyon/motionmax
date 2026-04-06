@@ -31,7 +31,7 @@ interface QueueJob {
   completed_at: string | null;
   user_id: string;
   project_id: string | null;
-  payload: any;
+  payload: Record<string, unknown>;
 }
 
 interface QueueStats {

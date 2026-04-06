@@ -8,13 +8,11 @@ export interface VideoExportLogEntry {
 
 const GLOBAL_KEY = "__motionmax_video_export_logs__";
 const STORAGE_KEY = "motionmax_video_export_logs_v1";
-const LEGACY_GLOBAL_KEY = "__audiomax_video_export_logs__";
-const LEGACY_STORAGE_KEY = "audiomax_video_export_logs_v1";
 
 function loadPersisted(): VideoExportLogEntry[] | null {
   try {
     if (typeof localStorage === "undefined") return null;
-    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as VideoExportLogEntry[];
     if (!Array.isArray(parsed)) return null;
@@ -45,10 +43,6 @@ function getStore(): VideoExportLogEntry[] {
   const g = globalThis as any;
   if (!g[GLOBAL_KEY]) {
     g[GLOBAL_KEY] = (loadPersisted() ?? []) as VideoExportLogEntry[];
-    // Migrate legacy global key if present.
-    if (Array.isArray(g[LEGACY_GLOBAL_KEY]) && g[LEGACY_GLOBAL_KEY].length) {
-      g[GLOBAL_KEY] = [...g[LEGACY_GLOBAL_KEY], ...g[GLOBAL_KEY]].slice(-300);
-    }
   }
   return g[GLOBAL_KEY] as VideoExportLogEntry[];
 }

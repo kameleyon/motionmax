@@ -309,8 +309,8 @@ async function retryMissingImages(generationId: string, sceneCount: number, ctx:
         if (imgRes && imgRes.retryAfterMs && imgRes.retryAfterMs >= 20000) {
           lastRateLimitTime = Date.now();
         }
-      } catch {
-        // Continue with remaining retries
+      } catch (err) {
+        log.warn(`Image retry for scene ${idx} failed:`, err);
       }
     }
   }

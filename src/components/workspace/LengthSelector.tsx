@@ -3,7 +3,8 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-export type VideoLength = "short" | "brief" | "presentation";
+export type { VideoLength } from "@/types/domain";
+import type { VideoLength } from "@/types/domain";
 
 interface LengthSelectorProps {
   selected: VideoLength;

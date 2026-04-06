@@ -133,7 +133,6 @@ export function useCinematicRegeneration(
    */
   const regenAffectedVideos = useCallback(
     async (idx: number, updatedScenes: CinematicScene[]) => {
-      const lastIdx = updatedScenes.length - 1;
       const affectedIndices: number[] = [idx]; // always regen current scene
       if (idx > 0) affectedIndices.unshift(idx - 1); // previous scene uses this as end_image
 

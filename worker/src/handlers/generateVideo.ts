@@ -223,10 +223,33 @@ ${researchBrief}
 
   // ── Step 3: Parse LLM response ───────────────────────────────────
   await updateJobProgress(jobId, 20);
-  const parsed = extractJsonFromLLMResponse(
+  let parsed = extractJsonFromLLMResponse(
     rawText,
     `${projectType} script`,
   ) as ParsedScript;
+
+  // SmartFlow validation: if LLM returned wrong structure (no scenes, no voiceover),
+  // retry with OpenRouter directly
+  if (projectType === "smartflow") {
+    const hasScenes = Array.isArray(parsed.scenes) && parsed.scenes.length > 0;
+    const hasVoiceover = hasScenes
+      ? !!(parsed.scenes![0].voiceover || (parsed.scenes![0] as any).narration)
+      : !!((parsed as any).voiceover || (parsed as any).narration);
+    const hasVisual = hasScenes
+      ? !!(parsed.scenes![0].visualPrompt || parsed.scenes![0].visual_prompt)
+      : !!((parsed as any).visualPrompt || (parsed as any).visual_prompt);
+
+    if (!hasVoiceover || !hasVisual) {
+      console.warn(`[GenerateVideo] SmartFlow: LLM returned wrong structure (voiceover=${hasVoiceover}, visual=${hasVisual}) — retrying with OpenRouter`);
+      const { callOpenRouterLLM } = await import("../services/openrouter.js");
+      const retryText = await callOpenRouterLLM(promptResult, {
+        maxTokens: promptResult.maxTokens,
+        forceJson: true,
+        temperature: 0.8,
+      });
+      parsed = extractJsonFromLLMResponse(retryText, `${projectType} script (retry)`) as ParsedScript;
+    }
+  }
 
   // SmartFlow may return a single scene without a scenes array
   if (projectType === "smartflow" && !Array.isArray(parsed.scenes)) {
@@ -247,7 +270,7 @@ ${researchBrief}
   // SmartFlow: if scene voiceover is empty, pull from top-level fields
   if (projectType === "smartflow" && parsed.scenes.length === 1) {
     const scene = parsed.scenes[0];
-    if (!scene.voiceover && !scene.narration) {
+    if (!scene.voiceover && !(scene as any).narration) {
       scene.voiceover = (parsed.voiceover as string) || (parsed.narration as string) || (parsed as any).script || "";
     }
   }

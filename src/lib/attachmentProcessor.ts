@@ -7,7 +7,10 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { createScopedLogger } from "@/lib/logger";
 import type { SourceAttachment } from "@/components/workspace/CinematicSourceInput";
+
+const log = createScopedLogger("attachmentProcessor");
 
 /**
  * Process all attachments into content sections the worker can use.
@@ -97,8 +100,8 @@ async function uploadImageAttachment(
       .upload(filename, blob, { contentType: blob.type, upsert: true });
 
     if (error) {
-      console.warn("[Attachments] Image upload failed:", error.message);
-      return null;
+      log.error("Image upload failed:", error.message);
+      throw new Error("Failed to upload attachment. Please try again.");
     }
 
     const { data: urlData } = supabase.storage
@@ -107,7 +110,10 @@ async function uploadImageAttachment(
 
     return urlData?.publicUrl || null;
   } catch (err) {
-    console.warn("[Attachments] Image upload error:", (err as Error).message);
-    return null;
+    if (err instanceof Error && err.message === "Failed to upload attachment. Please try again.") {
+      throw err;
+    }
+    log.error("Image upload error:", (err as Error).message);
+    throw new Error("Failed to upload attachment. Please try again.");
   }
 }

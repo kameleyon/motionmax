@@ -238,7 +238,7 @@ async function runCinematicVisuals(projectId: string, generationId: string, scen
     await Promise.allSettled(
       missingVids.map((idx) =>
         ctx.callPhase({ phase: "video", projectId, generationId, sceneIndex: idx }, 20 * 60 * 1000, CINEMATIC_ENDPOINT)
-          .catch(() => {})
+          .catch((err) => log.warn("Video retry failed for scene:", err))
       )
     );
   }

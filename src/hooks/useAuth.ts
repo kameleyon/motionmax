@@ -13,7 +13,8 @@ export function useAuth() {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
-    }).catch(() => {
+    }).catch((err) => {
+      console.error("[Auth] Failed to restore session:", err);
       setLoading(false);
     });
 

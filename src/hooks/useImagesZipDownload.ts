@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import JSZip from "jszip";
+import { toast } from "sonner";
 import { createScopedLogger } from "@/lib/logger";
 
 const log = createScopedLogger("ImagesZipDownload");
@@ -58,18 +59,21 @@ export function useImagesZipDownload() {
       // Download images with concurrency limit to avoid overwhelming the browser
       const CONCURRENCY = 4;
       let completed = 0;
+      let failedCount = 0;
 
       const downloadOne = async ({ url, filename }: { url: string; filename: string }) => {
         try {
           const response = await fetch(url);
           if (!response.ok) {
             log.warn(`Failed to fetch image: ${url}`);
+            failedCount++;
             return;
           }
           const blob = await response.blob();
           folder.file(filename, blob);
         } catch (err) {
           log.warn(`Error fetching image ${url}:`, err);
+          failedCount++;
         } finally {
           completed++;
           setState({ status: "downloading", progress: Math.round((completed / imageEntries.length) * 80) });
@@ -86,6 +90,10 @@ export function useImagesZipDownload() {
 
       // Generate zip file
       const zipBlob = await zip.generateAsync({ type: "blob" });
+
+      if (failedCount > 0) {
+        toast.warning(`${failedCount} images could not be downloaded`);
+      }
       
       // Trigger download
       const safeName = projectTitle.replace(/[^a-z0-9]/gi, "_").slice(0, 50) || "images";

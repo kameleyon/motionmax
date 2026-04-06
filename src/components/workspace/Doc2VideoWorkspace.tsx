@@ -29,10 +29,8 @@ import { useWorkspaceDraft } from "@/hooks/useWorkspaceDraft";
 
 import { getUserFriendlyErrorMessage } from "@/lib/errorMessages";
 
-export interface WorkspaceHandle {
-  resetWorkspace: () => void;
-  openProject: (projectId: string) => Promise<void>;
-}
+import type { WorkspaceHandle } from "./types";
+export type { WorkspaceHandle } from "./types";
 
 interface Doc2VideoWorkspaceProps {
   projectId?: string | null;

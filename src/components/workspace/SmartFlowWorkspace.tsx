@@ -29,10 +29,7 @@ import { useWorkspaceDraft } from "@/hooks/useWorkspaceDraft";
 import { useInfographicsUsage } from "@/hooks/useInfographicsUsage";
 import { PLAN_LIMITS } from "@/lib/planLimits";
 
-export interface WorkspaceHandle {
-  resetWorkspace: () => void;
-  openProject: (projectId: string) => Promise<void>;
-}
+import type { WorkspaceHandle } from "./types";
 
 interface SmartFlowWorkspaceProps {
   projectId?: string | null;

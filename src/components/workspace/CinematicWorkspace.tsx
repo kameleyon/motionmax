@@ -33,7 +33,7 @@ import { AdminLogsPanel } from "./AdminLogsPanel";
 import { useGenerationLogs } from "@/hooks/useGenerationLogs";
 import { GenerationLogsPanel } from "./GenerationLogsPanel";
 import { useWorkspaceDraft } from "@/hooks/useWorkspaceDraft";
-import type { WorkspaceHandle } from "./Doc2VideoWorkspace";
+import type { WorkspaceHandle } from "./types";
 
 const log = createScopedLogger("CinematicWorkspace");
 

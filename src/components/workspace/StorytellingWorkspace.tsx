@@ -31,7 +31,7 @@ import { toast } from "sonner";
 import { UpgradeRequiredModal } from "@/components/modals/UpgradeRequiredModal";
 import { SubscriptionSuspendedModal } from "@/components/modals/SubscriptionSuspendedModal";
 import { useWorkspaceDraft } from "@/hooks/useWorkspaceDraft";
-import type { WorkspaceHandle } from "./Doc2VideoWorkspace";
+import type { WorkspaceHandle } from "./types";
 import { useAdminLogs } from "@/hooks/useAdminLogs";
 import { AdminLogsPanel } from "./AdminLogsPanel";
 

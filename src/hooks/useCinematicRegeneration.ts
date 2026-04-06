@@ -3,18 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { callPhase } from "@/hooks/generation/callPhase";
 import { createScopedLogger } from "@/lib/logger";
+import type { Scene } from "@/hooks/generation/types";
 
 const log = createScopedLogger("CinematicRegeneration");
 
-interface CinematicScene {
-  number: number;
-  voiceover: string;
-  visualPrompt: string;
-  videoUrl?: string;
-  audioUrl?: string;
-  imageUrl?: string;
-  duration: number;
-}
+type CinematicScene = Pick<Scene, "number" | "voiceover" | "visualPrompt" | "videoUrl" | "audioUrl" | "imageUrl" | "duration">;
 
 type RegenType = "audio" | "video" | "image";
 

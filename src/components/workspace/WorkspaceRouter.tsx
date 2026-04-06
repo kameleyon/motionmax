@@ -1,7 +1,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Doc2VideoWorkspace, WorkspaceHandle } from "./Doc2VideoWorkspace";
+import { Doc2VideoWorkspace } from "./Doc2VideoWorkspace";
+import type { WorkspaceHandle } from "./types";
 import { StorytellingWorkspace } from "./StorytellingWorkspace";
 import { SmartFlowWorkspace } from "./SmartFlowWorkspace";
 import { CinematicWorkspace } from "./CinematicWorkspace";

@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { WorkspaceRouter } from "@/components/workspace/WorkspaceRouter";
-import type { WorkspaceHandle } from "@/components/workspace/Doc2VideoWorkspace";
+import type { WorkspaceHandle } from "@/components/workspace/types";
 
 // SidebarProvider + AppSidebar are now provided by AppShell in App.tsx
 const CreateWorkspace = () => {

@@ -194,7 +194,7 @@ export function CinematicResult({
         .eq("id", generationId)
         .maybeSingle();
 
-      const existingUrl = (gen as any)?.video_url;
+      const existingUrl = (gen as { video_url?: string } | null)?.video_url;
 
       if (existingUrl) {
         log.debug("Existing video found in DB — skipping export");

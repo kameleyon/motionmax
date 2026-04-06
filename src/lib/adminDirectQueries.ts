@@ -81,20 +81,39 @@ export async function fetchDashboardStats() {
 export async function fetchSubscribersList(params: { page?: number; limit?: number; search?: string }) {
   const { page = 1, limit = 20, search = "" } = params;
 
+  // Step 1: Fetch paginated profiles (server-side)
+  let profileQuery = supabase
+    .from("profiles")
+    .select("*", { count: "exact" })
+    .order("created_at", { ascending: false });
+
+  if (search) {
+    profileQuery = profileQuery.ilike("display_name", `%${search}%`);
+  }
+
+  const { data: profiles, count: totalCount } = await profileQuery
+    .range((page - 1) * limit, page * limit - 1);
+
+  const total = totalCount || 0;
+  if (!profiles || profiles.length === 0) {
+    return { users: [], total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  // Step 2: Fetch related data only for the current page's user IDs
+  const userIds = profiles.map(p => p.user_id);
+
   const [
-    { data: profiles },
     { data: subscriptions },
     { data: credits },
     { data: generations },
     { data: flags },
     { data: costsData },
   ] = await Promise.all([
-    supabase.from("profiles").select("*"),
-    supabase.from("subscriptions").select("*"),
-    supabase.from("user_credits").select("*"),
-    supabase.from("generations").select("user_id"),
-    supabase.from("user_flags").select("*").is("resolved_at", null),
-    supabase.from("generation_costs").select("user_id, openrouter_cost, replicate_cost, hypereal_cost, google_tts_cost, total_cost"),
+    supabase.from("subscriptions").select("*").in("user_id", userIds),
+    supabase.from("user_credits").select("*").in("user_id", userIds),
+    supabase.from("generations").select("user_id").in("user_id", userIds),
+    supabase.from("user_flags").select("*").is("resolved_at", null).in("user_id", userIds),
+    supabase.from("generation_costs").select("user_id, openrouter_cost, replicate_cost, hypereal_cost, google_tts_cost, total_cost").in("user_id", userIds),
   ]);
 
   const genCounts: Record<string, number> = {};
@@ -113,7 +132,7 @@ export async function fetchSubscribersList(params: { page?: number; limit?: numb
     userCosts[c.user_id].total += Number(c.total_cost) || 0;
   });
 
-  let users = (profiles || []).map(p => {
+  const users = profiles.map(p => {
     const sub = subscriptions?.find(s => s.user_id === p.user_id && s.status === "active");
     const uc = credits?.find(c => c.user_id === p.user_id);
     return {
@@ -134,16 +153,7 @@ export async function fetchSubscribersList(params: { page?: number; limit?: numb
     };
   });
 
-  if (search) {
-    const s = search.toLowerCase();
-    users = users.filter(u => u.displayName?.toLowerCase().includes(s) || u.email?.toLowerCase().includes(s));
-  }
-
-  const total = users.length;
-  const start = (page - 1) * limit;
-  const paged = users.slice(start, start + limit);
-
-  return { users: paged, total, page, limit, totalPages: Math.ceil(total / limit) };
+  return { users, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
 // ── Generation Stats ───────────────────────────────────────────────

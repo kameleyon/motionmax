@@ -38,6 +38,11 @@ export function useGenerationPipeline() {
   // setState calls become no-ops so stale pipelines can't clobber state.
   const epochRef = useRef(0);
 
+  // Ref to avoid loadProject depending on state.sceneCount (which changes
+  // during generation and would recreate loadProject, causing polling storms).
+  const sceneCountRef = useRef(state.sceneCount);
+  sceneCountRef.current = state.sceneCount;
+
   /** Create a pipeline context whose setState is scoped to the current epoch. */
   const createContext = useCallback((): PipelineContext => {
     const epoch = epochRef.current;
@@ -207,8 +212,8 @@ export function useGenerationPipeline() {
       }
     } else if (generation) {
       setState({
-        step: "error", progress: 0, sceneCount: state.sceneCount,
-        currentScene: 0, totalImages: state.sceneCount, completedImages: 0,
+        step: "error", progress: 0, sceneCount: sceneCountRef.current,
+        currentScene: 0, totalImages: sceneCountRef.current, completedImages: 0,
         isGenerating: false, projectId, generationId: generation.id,
         title: project.title, format: project.format as "landscape" | "portrait" | "square",
         error: "This generation was interrupted. Please try again.",
@@ -221,7 +226,7 @@ export function useGenerationPipeline() {
     }
 
     return project;
-  }, [state.sceneCount, resumeCinematic]);
+  }, [resumeCinematic]);
 
   const reset = useCallback(() => {
     log.debug("reset");

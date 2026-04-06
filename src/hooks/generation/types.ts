@@ -3,6 +3,8 @@
  * Extracted from useGenerationPipeline for modularity and testability.
  */
 
+import type { VideoFormat, VideoLength, ProductId, VisualStyle, Language } from "@/types/domain";
+
 // ---- Types ----
 
 export type GenerationStep =
@@ -68,9 +70,9 @@ export interface GenerationState {
 
 export interface GenerationParams {
   content: string;
-  format: string;
-  length: string;
-  style: string;
+  format: VideoFormat;
+  length: VideoLength;
+  style: VisualStyle | string;
   customStyle?: string;
   customStyleImage?: string | null;
   brandMark?: string;
@@ -81,13 +83,13 @@ export interface GenerationParams {
   voiceType?: "standard" | "custom";
   voiceId?: string;
   voiceName?: string;
-  projectType?: "doc2video" | "storytelling" | "smartflow" | "cinematic";
+  projectType?: ProductId;
   inspirationStyle?: string;
   storyTone?: string;
   storyGenre?: string;
   voiceInclination?: string;
   brandName?: string;
-  language?: string;
+  language?: Language | string;
   captionStyle?: string;
 }
 
@@ -95,9 +97,9 @@ export type ProjectRow = {
   id: string;
   title: string;
   content: string;
-  format: string;
-  length: string;
-  style: string;
+  format: VideoFormat | string;
+  length: VideoLength | string;
+  style: VisualStyle | string;
   presenter_focus?: string | null;
   character_description?: string | null;
   voice_type?: string | null;
@@ -110,7 +112,7 @@ export type ProjectRow = {
   story_genre?: string | null;
   voice_inclination?: string | null;
   disable_expressions?: boolean | null;
-  project_type?: string | null;
+  project_type?: ProductId | string | null;
 };
 
 /** Callback matching React.Dispatch<SetStateAction<GenerationState>> */

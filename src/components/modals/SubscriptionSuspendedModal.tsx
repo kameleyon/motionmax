@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useSubscription, CREDIT_PACKS } from "@/hooks/useSubscription";
+import { toast } from "sonner";
 
 const log = createScopedLogger("SubscriptionModal");
 
@@ -30,6 +31,7 @@ export function SubscriptionSuspendedModal({
       await openCustomerPortal();
     } catch (error) {
       log.error("Failed to open portal:", error);
+      toast.error("Failed to open checkout. Please try again.");
     }
   };
 
@@ -38,6 +40,7 @@ export function SubscriptionSuspendedModal({
       await createCheckout(CREDIT_PACKS[300].priceId, "payment");
     } catch (error) {
       log.error("Failed to create checkout:", error);
+      toast.error("Failed to open checkout. Please try again.");
     }
   };
 

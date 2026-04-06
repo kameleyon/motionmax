@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useSubscription } from "@/hooks/useSubscription";
+import { toast } from "sonner";
 
 const log = createScopedLogger("CharacterConsistency");
 
@@ -43,6 +44,7 @@ export function CharacterConsistencyToggle({ enabled, onToggle }: CharacterConsi
       await createCheckout("price_1SqN2U6hfVkBDzkSNCDvRyeP", "subscription");
     } catch (error) {
       log.error("Failed to create checkout:", error);
+      toast.error("Failed to open checkout. Please try again.");
     } finally {
       setIsLoading(false);
     }

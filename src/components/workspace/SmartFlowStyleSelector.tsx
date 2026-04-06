@@ -133,6 +133,7 @@ export function SmartFlowStyleSelector({
       onCustomStyleImageChange?.(url);
     } catch (err) {
       log.error("Style reference upload error:", err);
+      toast.error("Failed to upload style reference. Please try a different image.");
     } finally {
       setUploading(false);
     }

@@ -179,7 +179,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
         brief: "brief",
         extended: "presentation", // "Extended (< 15 min)" → backend's "presentation" tier
       };
-      const mappedLength = lengthMap[length];
+      const mappedLength = lengthMap[length] as "short" | "brief" | "presentation";
 
       // Validate plan access
       const validation = validateGenerationAccess(

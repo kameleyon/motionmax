@@ -23,7 +23,19 @@ export interface PlanLimits {
   smartFlowLimit: number;
 }
 
-export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
+/** Map legacy plan names to new ones */
+export function normalizePlanName(plan: string): PlanTier {
+  switch (plan) {
+    case "starter": return "creator";
+    case "professional": return "studio";
+    case "creator": return "creator";
+    case "studio": return "studio";
+    case "enterprise": return "enterprise";
+    default: return "free";
+  }
+}
+
+export const PLAN_LIMITS: Record<PlanTier, PlanLimits> & Record<string, PlanLimits> = {
   free: {
     creditsPerMonth: 0,        // Free trial: 150 credits one-time (no monthly renewal)
     dailyFreeCredits: 0,
@@ -80,6 +92,9 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
     watermark: false,
     smartFlowLimit: 999999,
   },
+  // Legacy aliases so PLAN_LIMITS.starter / PLAN_LIMITS.professional don't crash
+  get starter() { return this.creator; },
+  get professional() { return this.studio; },
 };
 
 // ── Credit Cost Calculation ──────────────────────────────────────

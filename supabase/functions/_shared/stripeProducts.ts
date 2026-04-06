@@ -1,19 +1,14 @@
 /**
  * Stripe product ID mappings -- shared across all edge functions.
- *
  * Keep in sync with src/config/stripeProducts.ts (frontend).
- *
- * NOTE: When you create new Stripe products for the Creator ($29) and
- * Studio ($99) plans, add their product IDs here and map them to
- * "creator" and "studio" respectively.
  */
 
 // Credit pack product IDs -> number of credits granted
 export const creditPackProducts: Record<string, number> = {
-  // New packs (create in Stripe: $9.99/300, $24.99/900, $59.99/2500)
-  // "prod_NEW_300":  300,
-  // "prod_NEW_900":  900,
-  // "prod_NEW_2500": 2500,
+  // New packs
+  "prod_UHalTrTNeIhUNX": 300,   // 300 credits - $9.99
+  "prod_UHalEgw5TyQdFM": 900,   // 900 credits - $24.99
+  "prod_UHalwIOINit7zr": 2500,  // 2500 credits - $59.99
   // Legacy packs (keep for existing purchases)
   "prod_Ts3r9EBXzzKKfU": 15,
   "prod_Tnz0B2aJPD895y": 50,
@@ -29,13 +24,14 @@ export const creditPackProducts: Record<string, number> = {
 };
 
 // Subscription product IDs -> plan name
-// Map old plan names to new: starter -> creator, professional -> studio
 export const subscriptionProducts: Record<string, string> = {
-  // Current plans (remap to new names)
-  "prod_Tnyz2nMLqpHz3R": "creator",       // was starter
-  "prod_Tnz0KUQX2J5VBH": "creator",       // was creator
-  "prod_Tnz0BeRmJDdh0V": "studio",        // was professional
-  // Legacy plans
+  // New plans
+  "prod_UHakcDFbS7Vw7z": "creator",
+  "prod_UHakOYLBpnWBj8": "studio",
+  // Legacy plans (map to new names)
+  "prod_Tnyz2nMLqpHz3R": "creator",
+  "prod_Tnz0KUQX2J5VBH": "creator",
+  "prod_Tnz0BeRmJDdh0V": "studio",
   "prod_TqznNZmUhevHh4": "creator",
   "prod_TqznlgT1Jl6Re7": "creator",
   "prod_TqznqQYYG4UUY8": "studio",
@@ -48,7 +44,7 @@ export const subscriptionProducts: Record<string, string> = {
 export const monthlyCredits: Record<string, number> = {
   creator: 500,
   studio: 2500,
-  // Legacy mappings (in case old plan names still exist in DB)
+  // Legacy fallbacks
   starter: 500,
   professional: 2500,
 };

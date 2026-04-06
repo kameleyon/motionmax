@@ -6,6 +6,7 @@ import {
   PLAN_LIMITS,
   getCreditsRequired,
   validateGenerationAccess,
+  normalizePlanName,
   type PlanTier,
   type ValidationResult
 } from "@/lib/planLimits";
@@ -80,7 +81,7 @@ async function fetchSubscriptionFromDB(): Promise<SubscriptionState> {
 
     return {
       subscribed: true,
-      plan: (sub.plan_name as PlanTier) || "free",
+      plan: normalizePlanName(sub.plan_name || "free"),
       subscriptionStatus: sub.cancel_at_period_end ? "canceling" : "active",
       subscriptionEnd: sub.current_period_end || null,
       cancelAtPeriodEnd: sub.cancel_at_period_end || false,
@@ -95,7 +96,7 @@ async function fetchSubscriptionFromDB(): Promise<SubscriptionState> {
 function parseResponse(d: Record<string, unknown>): SubscriptionState {
   return {
     subscribed: (d.subscribed as boolean) || false,
-    plan: (d.plan as PlanTier) || "free",
+    plan: normalizePlanName((d.plan as string) || "free"),
     subscriptionStatus: (d.subscription_status as string) || (d.subscribed ? "active" : null),
     subscriptionEnd: (d.subscription_end as string) || null,
     cancelAtPeriodEnd: (d.cancel_at_period_end as boolean) || false,

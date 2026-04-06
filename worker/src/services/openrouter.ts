@@ -137,13 +137,15 @@ export async function callHyperealLLM(
   const apiKey = process.env.HYPEREAL_API_KEY;
   if (!apiKey) throw new Error("HYPEREAL_API_KEY is not set");
 
-  const temperature = options.temperature ?? 0.7;
+  // Lower temperature for JSON output to reduce creative wandering
+  const temperature = options.forceJson ? Math.min(options.temperature ?? 0.7, 0.5) : (options.temperature ?? 0.7);
   const startTime = Date.now();
   console.log(`[Hypereal] Calling gemini-3.1-pro (maxTokens=${options.maxTokens}, temp=${temperature}, forceJson=${!!options.forceJson})`);
 
-  // Reinforce JSON output in the system prompt for Gemini (may not support response_format)
+  // Hypereal API does NOT support response_format -- enforce JSON via prompt only.
+  // Put the JSON instruction FIRST so the model sees it before the creative prompt.
   const systemPrompt = options.forceJson
-    ? prompt.system + "\n\nCRITICAL: Return ONLY valid JSON. No markdown, no ```json blocks, no explanation text. Start with { and end with }."
+    ? `YOU ARE A JSON GENERATOR. Your ENTIRE response must be a single valid JSON object. No thinking, no explanation, no markdown, no \`\`\`json blocks, no text before or after. Start your response with { and end with }. Do NOT use <think> tags.\n\n${prompt.system}`
     : prompt.system;
 
   const requestBody: Record<string, unknown> = {
@@ -156,10 +158,7 @@ export async function callHyperealLLM(
       { role: "user", content: prompt.user },
     ],
   };
-
-  if (options.forceJson) {
-    requestBody.response_format = { type: "json_object" };
-  }
+  // NOTE: response_format NOT sent -- Hypereal API does not support it
 
   // Generous timeout: 5 min base + scaling with token count
   const baseTimeoutMs = 5 * 60 * 1000;

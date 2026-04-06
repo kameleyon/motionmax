@@ -182,8 +182,24 @@ export async function callPhase(
     // Deduct credits upfront before creating the worker job
     const projectType = (body.projectType as string) || "doc2video";
     const length = (body.length as string) || "brief";
-    await deductCreditsUpfront(projectType, length);
-    return workerCallPhase(body, "generate_video", 8 * 60 * 1000);
+    let deductedAmount = 0;
+    try {
+      deductedAmount = await deductCreditsUpfront(projectType, length);
+      return await workerCallPhase(body, "generate_video", 8 * 60 * 1000);
+    } catch (err) {
+      // Refund credits if the worker job failed after deduction
+      if (deductedAmount > 0) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          await supabase.rpc("refund_credits", {
+            p_user_id: session.user.id,
+            p_amount: deductedAmount,
+          }).catch(refundErr => log.error("CRITICAL: Refund failed after generation error", refundErr));
+          log.debug(`Refunded ${deductedAmount} credits after generation failure`);
+        }
+      }
+      throw err;
+    }
   }
 
   // Cinematic video phase → worker queue

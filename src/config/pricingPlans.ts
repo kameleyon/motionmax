@@ -18,11 +18,13 @@ export interface PlanDef {
   yearlyPriceId: string | null;
 }
 
-// Credit top-up packages
+// Credit top-up packages — priceIds from stripeProducts.ts
+import { CREDIT_PACKS } from "@/config/stripeProducts";
+
 export const CREDIT_PACKAGES = [
-  { credits: 300,  price: "$9.99",  perCredit: "$0.033", priceId: "" },
-  { credits: 900,  price: "$24.99", perCredit: "$0.028", priceId: "" },
-  { credits: 2500, price: "$59.99", perCredit: "$0.024", priceId: "" },
+  { credits: 300,  price: "$9.99",  perCredit: "$0.033", priceId: CREDIT_PACKS[300].priceId },
+  { credits: 900,  price: "$24.99", perCredit: "$0.028", priceId: CREDIT_PACKS[900].priceId },
+  { credits: 2500, price: "$59.99", perCredit: "$0.024", priceId: CREDIT_PACKS[2500].priceId },
 ];
 
 // Credit cost info for the pricing breakdown table

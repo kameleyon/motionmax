@@ -2,19 +2,15 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-// Migration 2026-03-10: project moved to ayjbvcikuwknqdrpsdmj.
-// Only honour the env var if it already points to the new project so that a
-// build made before the migration (with the old URL baked in) cannot silently
-// target the wrong project.
-const NEW_REF = "ayjbvcikuwknqdrpsdmj";
-const NEW_URL = `https://${NEW_REF}.supabase.co`;
-const NEW_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF5amJ2Y2lrdXdrbnFkcnBzZG1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxMDE0MjMsImV4cCI6MjA4ODY3NzQyM30.KmOVtLzpzsZXjxyGEi6gxkd5U9Ir7omoCOxqnoN65YI";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-const envUrl = import.meta.env.VITE_SUPABASE_URL ?? "";
-const envKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "";
+if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+  throw new Error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY env vars");
+}
 
-const SUPABASE_URL = envUrl.includes(NEW_REF) ? envUrl : NEW_URL;
-const SUPABASE_PUBLISHABLE_KEY = envUrl.includes(NEW_REF) ? envKey : NEW_ANON;
+/** Exported so supabaseUrl.ts can use the same resolved URL */
+export { SUPABASE_URL };
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";

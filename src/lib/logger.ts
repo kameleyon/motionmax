@@ -52,6 +52,15 @@ function createLogger(prefix?: string) {
     error(...args: unknown[]): void {
       if (!shouldLog("error")) return;
       console.error(tag, ...args);
+      // Bridge to Sentry in production
+      if (!IS_DEV) {
+        import("@sentry/react").then((Sentry) => {
+          Sentry.captureException(
+            args[0] instanceof Error ? args[0] : new Error(String(args[0])),
+            { tags: { scope: prefix || "app" }, extra: { args: args.slice(1) } }
+          );
+        }).catch(() => {});
+      }
     },
   };
 }

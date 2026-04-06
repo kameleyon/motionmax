@@ -6,9 +6,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { WorkspaceLayout } from "@/components/layout/WorkspaceLayout";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { CinematicSourceInput, type SourceAttachment } from "./CinematicSourceInput";
+import { processAttachments } from "@/lib/attachmentProcessor";
 import type { VideoFormat } from "./FormatSelector";
 import { SpeakerSelector, type SpeakerVoice, getDefaultSpeaker } from "./SpeakerSelector";
 import { LanguageSelector, type Language } from "./LanguageSelector";
@@ -40,12 +39,11 @@ interface SmartFlowWorkspaceProps {
 }
 
 const log = createScopedLogger("SmartFlowWorkspace");
-const MAX_DATA_LENGTH = 500000; // 500k characters
 
 export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspaceProps>(
   function SmartFlowWorkspace({ projectId: initialProjectId }, ref) {
-    const [dataContent, setDataContent] = useState("");
-    const [extractionPrompt, setExtractionPrompt] = useState("");
+    const [content, setContent] = useState("");
+    const [sourceAttachments, setSourceAttachments] = useState<SourceAttachment[]>([]);
     const [format, setFormat] = useState<VideoFormat>("portrait");
     const [style, setStyle] = useState<SmartFlowStyle>("minimalist");
     const [customStyle, setCustomStyle] = useState("");
@@ -70,7 +68,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
     // Auto-save draft to localStorage
     const { loadDraft } = useWorkspaceDraft(
       "smartflow",
-      { dataContent, extractionPrompt, format, style },
+      { content, format, style },
       generationState.step === "idle"
     );
 
@@ -78,11 +76,10 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
     useEffect(() => {
       if (initialProjectId) return;
       const draft = loadDraft();
-      if (draft?.dataContent) setDataContent(draft.dataContent as string);
-      if (draft?.extractionPrompt) setExtractionPrompt(draft.extractionPrompt as string);
+      if (draft?.content) setContent(draft.content as string);
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const canGenerate = dataContent.trim().length >= 10 && extractionPrompt.trim().length > 0 && !generationState.isGenerating;
+    const canGenerate = content.trim().length >= 10 && !generationState.isGenerating;
 
     // Load project if projectId provided, or reset if project param removed (tab click)
     useEffect(() => {
@@ -169,9 +166,11 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
         return;
       }
 
+      const attachmentContent = await processAttachments(sourceAttachments);
+      const enrichedContent = content + attachmentContent;
+
       startGeneration({
-        content: dataContent,
-        presenterFocus: extractionPrompt, // Reusing presenterFocus for extraction prompt
+        content: enrichedContent,
         format,
         style,
         customStyle: style === "custom" ? customStyle : undefined,
@@ -191,8 +190,8 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
 
     const handleNewProject = () => {
       reset();
-      setDataContent("");
-      setExtractionPrompt("");
+      setContent("");
+      setSourceAttachments([]);
       setFormat("portrait");
       setStyle("minimalist");
       setCustomStyle("");
@@ -213,7 +212,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
       const project = await loadProject(projectId);
       if (!project) return;
 
-      setDataContent(project.content ?? "");
+      setContent(project.content ?? "");
       // Note: extraction prompt is stored in content or could be extracted from project metadata
 
       const nextFormat = (project.format as VideoFormat) ?? "portrait";
@@ -285,38 +284,13 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
                     </p>
                   </div>
 
-                  {/* Data Input */}
-                  <div className="space-y-2">
-                    <Label htmlFor="data-input" className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
-                      Your Data Source
-                    </Label>
-                    <Textarea
-                      id="data-input"
-                      placeholder="Paste your data, article, or source text here..."
-                      value={dataContent}
-                      onChange={(e) => setDataContent(e.target.value.slice(0, MAX_DATA_LENGTH))}
-                      className="min-h-[120px] sm:min-h-[180px] rounded-xl border-border/50 bg-muted/50 dark:bg-white/10 p-4 sm:p-6 text-sm resize-none focus:bg-background transition-colors"
-                    />
-                    <div className="flex justify-end">
-                      <span className={`text-xs ${dataContent.length > MAX_DATA_LENGTH * 0.9 ? 'text-destructive' : 'text-muted-foreground/50'}`}>
-                        {dataContent.length.toLocaleString()} / {MAX_DATA_LENGTH.toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Extraction Prompt */}
-                  <div className="space-y-2">
-                    <Label htmlFor="extraction-prompt" className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
-                      What key insight should we extract?
-                    </Label>
-                    <Input
-                      id="extraction-prompt"
-                      placeholder="e.g., The top 3 combinations for business success..."
-                      value={extractionPrompt}
-                      onChange={(e) => setExtractionPrompt(e.target.value)}
-                      className="rounded-xl border-border/50 bg-muted/50 dark:bg-white/10 focus:bg-background transition-colors"
-                    />
-                  </div>
+                  {/* Sources & Direction */}
+                  <CinematicSourceInput
+                    content={content}
+                    onContentChange={setContent}
+                    attachments={sourceAttachments}
+                    onAttachmentsChange={setSourceAttachments}
+                  />
 
                   {/* Compact Configuration Grid */}
                   <div className="grid grid-cols-2 gap-3 sm:gap-4">

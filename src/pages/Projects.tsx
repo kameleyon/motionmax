@@ -1,4 +1,5 @@
-﻿import { createScopedLogger } from "@/lib/logger";
+﻿import { downloadVideo } from "@/hooks/export/downloadHelpers";
+import { createScopedLogger } from "@/lib/logger";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -486,17 +487,11 @@ export default function Projects() {
         return;
       }
 
-      // If there's a pre-rendered video URL, let the browser handle the download directly
+      // If there's a pre-rendered video URL, use the cross-platform download helper
+      // (handles iOS Safari share sheet, Android share, desktop blob download)
       if (generation.video_url) {
-        const link = document.createElement("a");
-        link.href = generation.video_url;
-        link.download = `${project.title.replace(/[^a-z0-9]/gi, "_")}.mp4`;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        toast.success("Video download started");
+        const safeName = `${project.title.replace(/[^a-z0-9]/gi, "_")}.mp4`;
+        await downloadVideo(generation.video_url, safeName, true);
         return;
       }
 

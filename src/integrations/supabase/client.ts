@@ -2,11 +2,19 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const ENV_URL = import.meta.env.VITE_SUPABASE_URL;
+const ENV_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-  console.error("[Supabase] Missing VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY — check your build environment.");
+// Fallback for builds where VITE_ env vars aren't injected (e.g. Vercel misconfiguration).
+// The anon key is a public/publishable key — visible in every browser request by design.
+const FALLBACK_URL = "https://ayjbvcikuwknqdrpsdmj.supabase.co";
+const FALLBACK_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF5amJ2Y2lrdXdrbnFkcnBzZG1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxMDE0MjMsImV4cCI6MjA4ODY3NzQyM30.KmOVtLzpzsZXjxyGEi6gxkd5U9Ir7omoCOxqnoN65YI";
+
+export const SUPABASE_URL = ENV_URL || FALLBACK_URL;
+const SUPABASE_PUBLISHABLE_KEY = ENV_KEY || FALLBACK_KEY;
+
+if (!ENV_URL || !ENV_KEY) {
+  console.warn("[Supabase] VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY not set — using fallback. Configure env vars in your build platform.");
 }
 
 // Import the supabase client like this:

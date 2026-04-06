@@ -4,8 +4,6 @@
  * Exports are now handled server-side via the Render.com worker.
  */
 
-export type ExportStatus = "idle" | "loading" | "rendering" | "encoding" | "complete" | "error";
-
 export interface SceneProgressEntry {
   sceneIndex: number;
   phase: string;
@@ -27,12 +25,21 @@ export interface SceneProgressData {
   etaSeconds: number;
 }
 
-export interface ExportState {
-  status: ExportStatus;
-  progress: number;
-  error?: string;
-  warning?: string;
-  videoUrl?: string;
-  /** Per-scene progress data from the worker (available during rendering) */
-  sceneProgress?: SceneProgressData | null;
-}
+/**
+ * Discriminated union on `status` for video export state.
+ * Each variant carries only the fields relevant to that step.
+ *
+ * Optional `undefined` sentinels (videoUrl, error) are included on variants
+ * that don't own them so consumers can safely read the property without
+ * narrowing first (e.g. `exportState.videoUrl` returns `string | undefined`).
+ */
+export type ExportState =
+  | { status: "idle"; progress: 0; videoUrl?: undefined; error?: undefined }
+  | { status: "loading"; progress: number; warning?: string; videoUrl?: undefined; error?: undefined }
+  | { status: "rendering"; progress: number; warning?: string; sceneProgress?: SceneProgressData | null; videoUrl?: undefined; error?: undefined }
+  | { status: "encoding"; progress: number; warning?: string; videoUrl?: undefined; error?: undefined }
+  | { status: "complete"; progress: 100; videoUrl: string; error?: undefined }
+  | { status: "error"; progress: number; error: string; videoUrl?: undefined };
+
+/** Helper union of all possible status string values. */
+export type ExportStatus = ExportState["status"];

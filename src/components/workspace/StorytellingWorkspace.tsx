@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { WorkspaceLayout } from "@/components/layout/WorkspaceLayout";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { StoryIdeaInput } from "./StoryIdeaInput";
+import { CinematicSourceInput, type SourceAttachment } from "./CinematicSourceInput";
+import { processAttachments } from "@/lib/attachmentProcessor";
 import type { VideoFormat } from "./FormatSelector";
 import { StyleSelector, type VisualStyle } from "./StyleSelector";
 import { VoiceSelector, type VoiceSelection } from "./VoiceSelector";
@@ -45,6 +46,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
   function StorytellingWorkspace({ projectId: initialProjectId }, ref) {
     // Story-specific inputs
     const [storyIdea, setStoryIdea] = useState("");
+    const [sourceAttachments, setSourceAttachments] = useState<SourceAttachment[]>([]);
     const [inspiration, setInspiration] = useState<InspirationStyle>("none");
     const [tone, setTone] = useState<StoryTone>("casual");
     const [genre, setGenre] = useState<StoryGenre>("documentary");
@@ -201,8 +203,11 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
         return;
       }
 
+      const attachmentContent = await processAttachments(sourceAttachments);
+      const enrichedContent = storyIdea + attachmentContent;
+
       startGeneration({
-        content: storyIdea,
+        content: enrichedContent,
         format,
         length: mappedLength,
         style,
@@ -230,6 +235,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
     const handleNewProject = () => {
       reset();
       setStoryIdea("");
+      setSourceAttachments([]);
       setInspiration("none");
       setTone("casual");
       setGenre("documentary");
@@ -339,7 +345,12 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
 
                   {/* Story Idea Input */}
                   <div className="space-y-2">
-                    <StoryIdeaInput value={storyIdea} onChange={setStoryIdea} />
+                    <CinematicSourceInput
+                      content={storyIdea}
+                      onContentChange={setStoryIdea}
+                      attachments={sourceAttachments}
+                      onAttachmentsChange={setSourceAttachments}
+                    />
                     <TemplateSelector mode="storytelling" onSelectTemplate={setStoryIdea} />
                   </div>
 

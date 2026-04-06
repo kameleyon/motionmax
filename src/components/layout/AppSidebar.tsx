@@ -132,9 +132,12 @@ export function AppSidebar() {
   const getPlanDisplayName = () => {
     if (cancelAtPeriodEnd) return "Cancelled";
     switch (plan) {
-      case "starter": return "Starter";
       case "creator": return "Creator";
-      case "professional": return "Professional";
+      case "studio": return "Studio";
+      case "enterprise": return "Enterprise";
+      // Legacy names
+      case "starter": return "Creator";
+      case "professional": return "Studio";
       default: return "Free Plan";
     }
   };
@@ -371,7 +374,7 @@ export function AppSidebar() {
 
                     {/* Cinematic — with lock for non-pro */}
                     {(() => {
-                      const canAccessCinematic = isAdmin || plan === "professional" || plan === "enterprise";
+                      const canAccessCinematic = isAdmin || plan === "studio" || plan === "professional" || plan === "enterprise" || plan === "creator";
                       return (
                         <button
                           onClick={() => canAccessCinematic && navTo("/app/create?mode=cinematic")}

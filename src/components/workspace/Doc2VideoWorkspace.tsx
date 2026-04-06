@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { WorkspaceLayout } from "@/components/layout/WorkspaceLayout";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ContentInput } from "./ContentInput";
+import { CinematicSourceInput, type SourceAttachment } from "./CinematicSourceInput";
+import { processAttachments } from "@/lib/attachmentProcessor";
 import type { VideoFormat } from "./FormatSelector";
 import type { VideoLength } from "./LengthSelector";
 import { StyleSelector, type VisualStyle } from "./StyleSelector";
@@ -41,6 +42,7 @@ interface Doc2VideoWorkspaceProps {
 export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspaceProps>(
   function Doc2VideoWorkspace({ projectId: initialProjectId }, ref) {
     const [content, setContent] = useState("");
+    const [sourceAttachments, setSourceAttachments] = useState<SourceAttachment[]>([]);
     const [format, setFormat] = useState<VideoFormat>("portrait");
     const [length, setLength] = useState<VideoLength>("brief");
     const [style, setStyle] = useState<VisualStyle>("minimalist");
@@ -144,9 +146,12 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
       }
     }, [generationState.projectId, generationState.isGenerating, generationState.step, loadProject]);
 
-    const runGeneration = () => {
+    const runGeneration = async () => {
+      const attachmentContent = await processAttachments(sourceAttachments);
+      const enrichedContent = content + attachmentContent;
+
       startGeneration({
-        content,
+        content: enrichedContent,
         format,
         length,
         style,
@@ -192,6 +197,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
     const handleNewProject = () => {
       reset();
       setContent("");
+      setSourceAttachments([]);
       setFormat("portrait");
       setLength("brief");
       setStyle("minimalist");
@@ -320,7 +326,12 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
 
                   {/* Content Input */}
                   <div className="space-y-2">
-                    <ContentInput content={content} onContentChange={setContent} />
+                    <CinematicSourceInput
+                      content={content}
+                      onContentChange={setContent}
+                      attachments={sourceAttachments}
+                      onAttachmentsChange={setSourceAttachments}
+                    />
                     <TemplateSelector mode="doc2video" onSelectTemplate={setContent} />
                   </div>
 

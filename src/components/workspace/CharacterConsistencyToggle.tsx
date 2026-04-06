@@ -26,7 +26,7 @@ export function CharacterConsistencyToggle({ enabled, onToggle }: CharacterConsi
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const canUseFeature = plan === "professional" || plan === "enterprise";
+  const canUseFeature = plan === "studio" || plan === "professional" || plan === "enterprise";
 
   const handleToggleClick = () => {
     if (canUseFeature) {

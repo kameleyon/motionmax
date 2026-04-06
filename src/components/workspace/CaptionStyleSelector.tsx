@@ -210,7 +210,7 @@ const CaptionPreviewRow = memo(function CaptionPreviewRow({ styleId }: { styleId
 
 // ── Main selector ──
 
-export function CaptionStyleSelector({ value, onChange }: CaptionStyleSelectorProps) {
+export function CaptionStyleSelector({ value, onChange, showLabel }: CaptionStyleSelectorProps) {
   const selected = captionStyles.find((s) => s.id === value) || captionStyles[0];
 
   const label = showLabel !== false;

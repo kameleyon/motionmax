@@ -74,27 +74,27 @@ const captionStyles: { id: CaptionStyle; label: string }[] = [
  */
 export const previewStyles: Record<CaptionStyle, string> = {
   none: "",
-  // Pro styles with paint-order stroke rendering
-  cleanPop: "[font-family:'Montserrat',sans-serif] font-black text-white uppercase tracking-wide [filter:drop-shadow(0px_2px_3px_rgba(0,0,0,0.6))]",
-  toxicBounce: "[font-family:'Montserrat',sans-serif] font-black text-[#39FF14] uppercase tracking-wider [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill] [filter:drop-shadow(0px_3px_0px_#000)]",
-  proShortForm: "[font-family:'Montserrat',sans-serif] font-black text-white uppercase tracking-wider [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill] [filter:drop-shadow(0px_2px_2px_rgba(0,0,0,0.5))]",
+  // Pro styles
+  cleanPop: "[font-family:'Rubik_Dirt',cursive] font-black text-white uppercase tracking-wide [filter:drop-shadow(0px_2px_3px_rgba(0,0,0,0.6))]",
+  toxicBounce: "[font-family:'Bangers',cursive] text-[#39FF14] uppercase tracking-wider [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill] [filter:drop-shadow(0px_3px_0px_#000)]",
+  proShortForm: "[font-family:'Oswald',sans-serif] font-bold text-white uppercase tracking-wider [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill] [filter:drop-shadow(0px_2px_2px_rgba(0,0,0,0.5))]",
   // Reference visuals
-  orangeBox: "[font-family:'Montserrat',sans-serif] font-black text-white bg-[#FF5722] px-1.5 py-0.5 rounded-sm uppercase tracking-wider",
+  orangeBox: "[font-family:'Comfortaa',cursive] font-bold text-white bg-[#FF5722] px-1.5 py-0.5 rounded-sm uppercase tracking-wider",
   yellowSlanted: "[font-family:'Montserrat',sans-serif] font-black italic text-[#FFEB3B] uppercase [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill]",
-  redSlantedBox: "[font-family:'Montserrat',sans-serif] font-black italic text-white bg-[#E53935] px-1.5 py-0.5 uppercase skew-x-[-8deg]",
+  redSlantedBox: "[font-family:'Montserrat',sans-serif] font-black italic text-white bg-[#E53935] px-2 py-1 uppercase skew-x-[-8deg] rounded-md",
   cyanOutline: "[font-family:'Montserrat',sans-serif] font-black text-[#00BCD4] uppercase [-webkit-text-stroke:1px_#fff] [paint-order:stroke_fill]",
   motionBlur: "[font-family:'Montserrat',sans-serif] font-black text-white uppercase drop-shadow-lg",
   yellowSmall: "[font-family:'Montserrat',sans-serif] font-bold text-[#FFEB3B] uppercase drop-shadow-md",
   // Trending
   thickStroke: "[font-family:'Poppins',sans-serif] font-black text-white uppercase [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill]",
-  karaokePop: "[font-family:'Montserrat',sans-serif] font-black text-white uppercase",
+  karaokePop: "[font-family:'Rubik_Mono_One',sans-serif] text-white uppercase tracking-[0.15em]",
   neonTeal: "[font-family:'Poppins',sans-serif] font-bold text-[#00E5FF] uppercase [text-shadow:_0_0_8px_#00E5FF,_0_0_16px_#00E5FF]",
-  goldLuxury: "[font-family:'Pacifico',cursive] italic text-[#FFD700] [text-shadow:_1px_1px_2px_#8B6508]",
+  goldLuxury: "[font-family:'Pangolin',cursive] text-[#e3c774] text-base [text-shadow:_1px_1px_2px_#8B6508]",
   bouncyPill: "[font-family:'Montserrat',sans-serif] font-bold text-gray-900 bg-white px-2 py-0.5 rounded-full",
   glitch: "[font-family:'Montserrat',sans-serif] font-black text-white uppercase [text-shadow:_2px_0_#f00,_-2px_0_#00f]",
   comicBurst: "[font-family:'Bangers',cursive] text-[#FFEB3B] uppercase [text-shadow:_2px_2px_0_#E53935,_-1px_-1px_0_#E53935]",
-  redTag: "[font-family:'Poppins',sans-serif] font-bold text-white bg-red-600 px-1.5 py-0.5",
-  blackBox: "font-medium text-white bg-black/80 px-2 py-0.5",
+  redTag: "[font-family:'Poppins',sans-serif] font-bold text-white bg-red-600 px-3 py-1 rounded",
+  blackBox: "[font-family:'Special_Elite',cursive] text-white bg-black/80 px-2 py-0.5",
   typewriter: "font-mono font-bold text-green-400 bg-black/50 px-1",
   cinematicFade: "[font-family:'Montserrat',sans-serif] font-light text-white tracking-[0.15em] uppercase",
   retroTerminal: "font-mono font-bold text-[#39FF14]",
@@ -185,6 +185,10 @@ const CaptionPreviewRow = memo(function CaptionPreviewRow({ styleId }: { styleId
           // Karaoke group: show all, highlight active
           if (!isSingle && !isAccum && i > idx) return null;
 
+          // toxicBounce: random neon highlight per word
+          const toxicColors = ["#39FF14", "#FFEB3B", "#00E5FF"];
+          const wordColor = styleId === "toxicBounce" ? toxicColors[(i + cycle) % toxicColors.length] : undefined;
+
           return (
             <motion.span
               key={`${word}-${i}-${cycle}`}
@@ -198,6 +202,7 @@ const CaptionPreviewRow = memo(function CaptionPreviewRow({ styleId }: { styleId
                 !isSingle && !isAccum && i === idx ? "opacity-100" : "",
                 !isSingle && !isAccum && i < idx ? "opacity-60" : "",
               )}
+              style={wordColor ? { color: wordColor } : undefined}
             >
               {word}
             </motion.span>

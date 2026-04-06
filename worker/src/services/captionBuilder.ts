@@ -143,7 +143,7 @@ const MV = 640; // Default vertical margin (1/3 from bottom on 1080x1920)
 const STYLE_DEFS: Record<Exclude<CaptionStyle, "none">, AssStyleDef> = {
   // ── From Reference Visuals ──
   orangeBox: {
-    fontName: "Montserrat", fontSize: 82, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Comfortaa", fontSize: 82, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: ORANGE, backColor: ORANGE, bold: true,
     outline: 18, shadow: 0, alignment: 2, marginV: MV, borderStyle: 3, uppercase: true,
   },
@@ -155,7 +155,7 @@ const STYLE_DEFS: Record<Exclude<CaptionStyle, "none">, AssStyleDef> = {
   redSlantedBox: {
     fontName: "Montserrat", fontSize: 82, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: RED, backColor: RED, bold: true, italic: true,
-    outline: 18, shadow: 0, alignment: 2, marginV: MV, borderStyle: 3, uppercase: true,
+    outline: 20, shadow: 0, alignment: 2, marginV: MV, borderStyle: 3, uppercase: true,
   },
   cyanOutline: {
     fontName: "Montserrat", fontSize: 86, primaryColor: assColor(0x00, 0xBC, 0xD4), secondaryColor: WHITE,
@@ -179,8 +179,8 @@ const STYLE_DEFS: Record<Exclude<CaptionStyle, "none">, AssStyleDef> = {
     outline: 8, shadow: 0, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   karaokePop: {
-    fontName: "Montserrat", fontSize: 84, primaryColor: WHITE, secondaryColor: assColor(0xFF, 0xEB, 0x3B),
-    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0xA0), bold: true,
+    fontName: "Rubik Mono One", fontSize: 76, primaryColor: WHITE, secondaryColor: assColor(0xFF, 0xEB, 0x3B),
+    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0xA0), bold: false,
     outline: 4, shadow: 1, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   typewriter: {
@@ -194,8 +194,8 @@ const STYLE_DEFS: Record<Exclude<CaptionStyle, "none">, AssStyleDef> = {
     outline: 5, shadow: 8, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   goldLuxury: {
-    fontName: "Pacifico", fontSize: 78, primaryColor: assColor(0xFF, 0xD7, 0x00), secondaryColor: YELLOW,
-    outlineColor: assColor(0x8B, 0x65, 0x08), backColor: assColor(0, 0, 0, 0), bold: false, italic: true,
+    fontName: "Pangolin", fontSize: 92, primaryColor: assColor(0xE3, 0xC7, 0x74), secondaryColor: YELLOW,
+    outlineColor: assColor(0x8B, 0x65, 0x08), backColor: assColor(0, 0, 0, 0), bold: false,
     outline: 3, shadow: 3, alignment: 2, marginV: MV, borderStyle: 1,
   },
   bouncyPill: {
@@ -216,10 +216,10 @@ const STYLE_DEFS: Record<Exclude<CaptionStyle, "none">, AssStyleDef> = {
   redTag: {
     fontName: "Poppins", fontSize: 72, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: RED, backColor: RED, bold: true,
-    outline: 18, shadow: 0, alignment: 2, marginV: MV, borderStyle: 3,
+    outline: 24, shadow: 0, alignment: 2, marginV: MV, borderStyle: 3,
   },
   blackBox: {
-    fontName: "Liberation Sans", fontSize: 68, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Special Elite", fontSize: 68, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: assColor(0, 0, 0, 0), backColor: assColor(0, 0, 0, 0xCC), bold: false,
     outline: 20, shadow: 0, alignment: 2, marginV: MV, borderStyle: 3,
   },
@@ -239,17 +239,17 @@ const STYLE_DEFS: Record<Exclude<CaptionStyle, "none">, AssStyleDef> = {
     outline: 0, shadow: 7, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   cleanPop: {
-    fontName: "Montserrat", fontSize: 88, primaryColor: WHITE, secondaryColor: WHITE,
-    outlineColor: assColor(0, 0, 0, 0x40), backColor: assColor(0, 0, 0, 0), bold: true,
+    fontName: "Rubik Dirt", fontSize: 88, primaryColor: WHITE, secondaryColor: WHITE,
+    outlineColor: assColor(0, 0, 0, 0x40), backColor: assColor(0, 0, 0, 0), bold: false,
     outline: 2, shadow: 3, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   toxicBounce: {
-    fontName: "Montserrat", fontSize: 90, primaryColor: assColor(0x39, 0xFF, 0x14), secondaryColor: WHITE,
-    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
+    fontName: "Bangers", fontSize: 94, primaryColor: assColor(0x39, 0xFF, 0x14), secondaryColor: WHITE,
+    outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: false,
     outline: 6, shadow: 5, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   proShortForm: {
-    fontName: "Montserrat", fontSize: 92, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Oswald", fontSize: 92, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
     outline: 7, shadow: 3, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },

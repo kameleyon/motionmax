@@ -138,25 +138,42 @@ export async function callHyperealLLM(
   if (!apiKey) throw new Error("HYPEREAL_API_KEY is not set");
 
   // Lower temperature for JSON output to reduce creative wandering
-  const temperature = options.forceJson ? Math.min(options.temperature ?? 0.7, 0.5) : (options.temperature ?? 0.7);
+  const temperature = options.forceJson ? Math.min(options.temperature ?? 0.7, 0.4) : (options.temperature ?? 0.7);
   const startTime = Date.now();
   console.log(`[Hypereal] Calling gemini-3.1-pro (maxTokens=${options.maxTokens}, temp=${temperature}, forceJson=${!!options.forceJson})`);
 
-  // Hypereal API does NOT support response_format -- enforce JSON via prompt only.
-  // Put the JSON instruction FIRST so the model sees it before the creative prompt.
+  // Hypereal API does NOT support response_format -- enforce JSON via:
+  // 1. System prompt prefix (seen first)
+  // 2. User prompt suffix (recency bias — models pay attention to the last instruction)
+  // 3. Assistant pre-fill starting with "{" (forces model to continue in JSON)
+  const JSON_SYSTEM_PREFIX = `YOU ARE A JSON GENERATOR. Your ENTIRE response must be a single valid JSON object. No thinking, no explanation, no markdown, no \`\`\`json blocks, no text before or after. Start your response with { and end with }. Do NOT use <think> tags.`;
+  const JSON_USER_SUFFIX = `\n\nREMINDER: Return ONLY raw JSON. No markdown, no explanation, no \`\`\`json fences. Start with { and end with }.`;
+
   const systemPrompt = options.forceJson
-    ? `YOU ARE A JSON GENERATOR. Your ENTIRE response must be a single valid JSON object. No thinking, no explanation, no markdown, no \`\`\`json blocks, no text before or after. Start your response with { and end with }. Do NOT use <think> tags.\n\n${prompt.system}`
+    ? `${JSON_SYSTEM_PREFIX}\n\n${prompt.system}`
     : prompt.system;
+
+  const userPrompt = options.forceJson
+    ? `${prompt.user}${JSON_USER_SUFFIX}`
+    : prompt.user;
+
+  const messages: Array<Record<string, string>> = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userPrompt },
+  ];
+
+  // Assistant pre-fill: prime the model to start outputting JSON immediately.
+  // Many OpenAI-compatible APIs (including Hypereal) support this.
+  if (options.forceJson) {
+    messages.push({ role: "assistant", content: "{" });
+  }
 
   const requestBody: Record<string, unknown> = {
     model: "gemini-3.1-pro",
     max_tokens: options.maxTokens,
     temperature,
     stream: false,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: prompt.user },
-    ],
+    messages,
   };
   // NOTE: response_format NOT sent -- Hypereal API does not support it
 
@@ -184,11 +201,17 @@ export async function callHyperealLLM(
   }
 
   const data = (await res.json()) as any;
-  const text = data.choices?.[0]?.message?.content;
+  let text = data.choices?.[0]?.message?.content;
   if (!text) {
     const err = new Error("Hypereal returned empty content");
     writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-pro", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch(() => {});
     throw err;
+  }
+
+  // If we used assistant pre-fill, the model's response won't include the
+  // leading "{" we sent — prepend it back so the JSON is complete.
+  if (options.forceJson && !text.trimStart().startsWith("{")) {
+    text = "{" + text;
   }
 
   console.log(`[Hypereal] Response received (${text.length} chars, credits: ${data.creditsUsed ?? "?"})`);
@@ -215,10 +238,22 @@ export async function callLLMWithFallback(
         text = text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
       }
 
-      // If forceJson requested, verify response contains JSON
-      if (options.forceJson && !text.includes("{")) {
-        console.warn(`[LLM] Hypereal returned non-JSON (${text.length} chars, starts with: "${text.substring(0, 80)}") — falling back to OpenRouter`);
-        throw new Error("Hypereal response is not JSON");
+      // If forceJson requested, verify response actually contains parseable JSON
+      if (options.forceJson) {
+        const braceIdx = text.indexOf("{");
+        const lastBrace = text.lastIndexOf("}");
+        if (braceIdx === -1 || lastBrace <= braceIdx) {
+          console.warn(`[LLM] Hypereal returned non-JSON (${text.length} chars, starts with: "${text.substring(0, 80)}") — falling back to OpenRouter`);
+          throw new Error("Hypereal response is not JSON");
+        }
+
+        // Quick sanity check: try to parse the JSON portion
+        try {
+          JSON.parse(text.slice(braceIdx, lastBrace + 1).replace(/,\s*([\]}])/g, "$1"));
+        } catch {
+          console.warn(`[LLM] Hypereal returned malformed JSON (${text.length} chars, starts with: "${text.substring(0, 120)}") — falling back to OpenRouter`);
+          throw new Error("Hypereal response is malformed JSON");
+        }
       }
 
       return text;

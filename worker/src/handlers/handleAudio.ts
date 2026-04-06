@@ -81,7 +81,10 @@ export async function handleAudioPhase(
   if (genError || !generation) throw new Error(`Generation not found: ${genError?.message}`);
 
   const voiceType = generation.projects?.voice_type || "standard";
-  const voiceGender = generation.projects?.voice_name || "female"; // "male"|"female"
+  // Derive gender from speaker name — the DB stores the speaker name (e.g. "Marcus"), not "male"/"female"
+  const speakerName = (generation.projects?.voice_name || "").toLowerCase();
+  const MALE_SPEAKERS = ["atlas", "kai", "marcus", "leo", "sage", "jean", "omar", "mateo", "carlos", "hiroshi", "kenji", "min-jun", "dmitri", "hans"];
+  const voiceGender = MALE_SPEAKERS.includes(speakerName) ? "male" : "female";
 
   // Custom voice: only assign if voice_type === "custom" AND voice_id exists
   if (voiceType === "custom" && generation.projects?.voice_id) {

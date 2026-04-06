@@ -141,13 +141,18 @@ export async function callHyperealLLM(
   const startTime = Date.now();
   console.log(`[Hypereal] Calling gemini-3.1-pro (maxTokens=${options.maxTokens}, temp=${temperature}, forceJson=${!!options.forceJson})`);
 
+  // Reinforce JSON output in the system prompt for Gemini (may not support response_format)
+  const systemPrompt = options.forceJson
+    ? prompt.system + "\n\nCRITICAL: Return ONLY valid JSON. No markdown, no ```json blocks, no explanation text. Start with { and end with }."
+    : prompt.system;
+
   const requestBody: Record<string, unknown> = {
     model: "gemini-3.1-pro",
     max_tokens: options.maxTokens,
     temperature,
     stream: false,
     messages: [
-      { role: "system", content: prompt.system },
+      { role: "system", content: systemPrompt },
       { role: "user", content: prompt.user },
     ],
   };

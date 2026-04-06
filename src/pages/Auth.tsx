@@ -68,7 +68,10 @@ export default function Auth() {
   const failedAttemptsRef = useRef(0);
   const [lockedUntil, setLockedUntil] = useState<number>(0);
   const navigate = useNavigate();
-  const returnUrl = searchParams.get("returnUrl") || "/app";
+  const rawReturnUrl = searchParams.get("returnUrl") || "/app";
+  const returnUrl = rawReturnUrl.startsWith("/") && !rawReturnUrl.startsWith("//")
+    ? rawReturnUrl
+    : "/app";
   const { signIn, signUp, resetPassword, updatePassword } = useAuth();
 
   useEffect(() => {

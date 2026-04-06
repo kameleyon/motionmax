@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "ui5@claude-plugins-official": true
+  }
+}

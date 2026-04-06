@@ -63,7 +63,7 @@ const styles: { id: VisualStyle; label: string; icon: React.ElementType; preview
   { id: "realistic", label: "Realistic", icon: Camera, preview: realisticPreview },
   { id: "sketch", label: "Papercut 3D", icon: PenTool, preview: sketchPreview },
   { id: "minimalist", label: "Minimalist", icon: Wand2, preview: minimalistPreview },
-  { id: "3d-pixar", label: "3D Pixar", icon: Box, preview: pixarPreview },
+  { id: "3d-pixar", label: "3D Style", icon: Box, preview: pixarPreview },
   { id: "anime", label: "Anime", icon: Cherry, preview: animePreview },
   { id: "claymation", label: "Claymation", icon: Hand, preview: claymationPreview },
   { id: "crayon", label: "Crayon", icon: Baby, preview: crayonPreview },

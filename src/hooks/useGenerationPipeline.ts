@@ -9,6 +9,7 @@
  */
 import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/lib/databaseService";
 import { toast as sonnerToast } from "sonner";
 import { createScopedLogger } from "@/lib/logger";
 import { callPhase } from "./generation/callPhase";
@@ -128,28 +129,23 @@ export function useGenerationPipeline() {
 
     setState((prev) => ({ ...prev, step: "analysis", progress: 0, isGenerating: true, error: undefined, projectId }));
 
-    const { data: project, error: projectError } = await supabase
-      .from("projects")
-      .select("id,title,content,format,length,style,presenter_focus,character_description,voice_type,voice_id,voice_name,brand_mark,character_consistency_enabled,disable_expressions,inspiration_style,story_tone,story_genre,voice_inclination,project_type")
-      .eq("id", projectId)
-      .eq("user_id", userId)
-      .maybeSingle();
+    const { data: projectRows, error: projectError } = await db.query("projects", (q) =>
+      q.eq("id", projectId).eq("user_id", userId).limit(1)
+    );
+    const project = projectRows?.[0] as ProjectRow | undefined;
 
     if (projectError || !project) {
-      const msg = projectError?.message || "Project not found.";
+      const msg = projectError || "Project not found.";
       log.error("loadProject failed:", msg);
       sonnerToast.error("Could not load project", { description: msg });
       setState((prev) => ({ ...prev, step: "error", isGenerating: false, error: msg }));
       return null;
     }
 
-    const { data: generation } = await supabase
-      .from("generations")
-      .select("id,status,progress,scenes,error_message,video_url")
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const { data: generationRows } = await db.query("generations", (q) =>
+      q.eq("project_id", projectId).order("created_at", { ascending: false }).limit(1)
+    );
+    const generation = generationRows?.[0] as { id: string; status: string; progress: number; scenes: unknown; error_message: string | null; video_url: string | null } | undefined;
 
     log.debug("loadProject: generation", { status: generation?.status, projectType: project.project_type });
 
@@ -178,7 +174,7 @@ export function useGenerationPipeline() {
         const allAudio = errorScenes.every((s) => !!s.audioUrl);
         const allImages = errorScenes.every((s) => !!s.imageUrl);
         const allVideo = errorScenes.every((s) => !!s.videoUrl);
-        await supabase.from("generations").update({ status: "processing", error_message: null }).eq("id", generation.id);
+        await db.update("generations", { status: "processing", error_message: null }, (q) => q.eq("id", generation.id));
         if (allVideo) void resumeCinematic(project, generation.id, errorScenes, "finalize");
         else if (allImages) void resumeCinematic(project, generation.id, errorScenes, "video");
         else if (allAudio) void resumeCinematic(project, generation.id, errorScenes, "images");

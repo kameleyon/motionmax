@@ -2,7 +2,7 @@
  * Standard (non-cinematic) video generation pipeline: script → audio → images → finalize.
  * Handles doc2video, storytelling, and smartflow project types.
  */
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/lib/databaseService";
 import { createScopedLogger } from "@/lib/logger";
 import {
   type GenerationParams,
@@ -121,7 +121,8 @@ export async function runStandardPipeline(
 
   // Retry missing images (up to 2 rounds)
   for (let retryRound = 0; retryRound < 2; retryRound++) {
-    const { data: imgCheckGen } = await supabase.from("generations").select("scenes").eq("id", generationId).maybeSingle();
+    const { data: imgCheckRows } = await db.query("generations", (q) => q.eq("id", generationId).limit(1));
+    const imgCheckGen = imgCheckRows?.[0] as Record<string, unknown> | undefined;
     const imgCheckScenes = normalizeScenes(imgCheckGen?.scenes) ?? [];
     const missingImageScenes = imgCheckScenes.filter((s) => !s.imageUrl).length;
     if (missingImageScenes === 0) break;
@@ -143,7 +144,8 @@ export async function runStandardPipeline(
   }
 
   // Re-fetch final image state
-  const { data: postRetryGen } = await supabase.from("generations").select("scenes").eq("id", generationId).maybeSingle();
+  const { data: postRetryRows } = await db.query("generations", (q) => q.eq("id", generationId).limit(1));
+  const postRetryGen = postRetryRows?.[0] as Record<string, unknown> | undefined;
   const postRetryScenes = normalizeScenes(postRetryGen?.scenes) ?? [];
   const finalImagesGenerated = postRetryScenes.filter((s) => !!s.imageUrl).length;
   const finalTotalImages = imagesResult?.totalImages || postRetryScenes.length * 3;

@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { type ExportState, type SceneProgressData } from "./export/types";
 import { downloadVideo, shareVideo } from "./export/downloadHelpers";
 import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/lib/databaseService";
 import type { Json } from "@/integrations/supabase/types";
 import type { Scene } from "./generation/types";
 import { createScopedLogger } from "@/lib/logger";
@@ -80,13 +81,10 @@ export function useVideoExport() {
       // Persist the exported video URL to the generation so page refreshes skip re-export
       if (finalUrl && generationIdRef.current) {
         const genId = generationIdRef.current;
-        supabase
-          .from("generations")
-          .update({ video_url: finalUrl })
-          .eq("id", genId)
+        db.update("generations", { video_url: finalUrl }, (q) => q.eq("id", genId))
           .then(({ error: saveErr }) => {
             if (saveErr) {
-              scopedLog.error("Failed to save video_url to generation:", saveErr.message);
+              scopedLog.error("Failed to save video_url to generation:", saveErr);
             } else {
               log("video_url persisted to generation", genId);
             }
@@ -105,12 +103,10 @@ export function useVideoExport() {
   const pollJob = useCallback(async (source: string) => {
     if (settledRef.current || !activeJobIdRef.current) return;
     try {
-      const { data } = await supabase
-        .from("video_generation_jobs")
-        .select("*")
-        .eq("id", activeJobIdRef.current)
-        .single();
-      if (data) handleJobUpdate(data as Record<string, unknown>, source);
+      const { data } = await db.query("video_generation_jobs", (q) =>
+        q.eq("id", activeJobIdRef.current).limit(1)
+      );
+      if (data?.[0]) handleJobUpdate(data[0] as Record<string, unknown>, source);
     } catch (e) {
       err("Poll error:", e);
     }
@@ -187,20 +183,17 @@ export function useVideoExport() {
         log("Dropping export job into queue...");
         setState({ status: "rendering", progress: 5, warning: "Sending media to Render Node..." });
 
-        const { data: job, error: insertError } = await supabase
-          .from("video_generation_jobs")
-          .insert({
+        const { data: jobRows, error: insertError } = await db.insert("video_generation_jobs", {
             project_id: resolvedProjectId,
             user_id: user.id,
             task_type: "export_video",
             payload: { scenes, format, brandMark, project_id: resolvedProjectId, project_type: projectType, caption_style: captionStyle || "none" } as unknown as Json,
             status: "pending",
-          })
-          .select()
-          .single();
+          });
 
-        if (insertError) throw insertError;
-        activeJobIdRef.current = job.id;
+        if (insertError) throw new Error(insertError);
+        const job = jobRows![0];
+        activeJobIdRef.current = (job as Record<string, unknown>).id as string;
 
         const result = await new Promise<string>((resolve, reject) => {
           resolveRef.current = resolve;

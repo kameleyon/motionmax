@@ -209,7 +209,20 @@ export async function callLLMWithFallback(
   // Try Hypereal/Gemini first
   if (process.env.HYPEREAL_API_KEY) {
     try {
-      return await callHyperealLLM(prompt, options);
+      let text = await callHyperealLLM(prompt, options);
+
+      // Strip <think> tags (Gemini reasoning output)
+      if (text.includes("<think>")) {
+        text = text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
+      }
+
+      // If forceJson requested, verify response contains JSON
+      if (options.forceJson && !text.includes("{")) {
+        console.warn(`[LLM] Hypereal returned non-JSON (${text.length} chars, starts with: "${text.substring(0, 80)}") — falling back to OpenRouter`);
+        throw new Error("Hypereal response is not JSON");
+      }
+
+      return text;
     } catch (err) {
       console.warn(`[LLM] Hypereal failed: ${(err as Error).message} — falling back to OpenRouter`);
     }

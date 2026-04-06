@@ -186,6 +186,11 @@ export function extractJsonFromLLMResponse(raw: string, label: string): unknown 
 
   let content = raw.trim();
 
+  // Step 0: Strip <think> reasoning tags (Gemini/DeepSeek)
+  if (content.includes("<think>")) {
+    content = content.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
+  }
+
   // Step 1: Strip markdown code fences
   if (content.startsWith("```")) {
     content = content

@@ -46,7 +46,8 @@ export function SceneEditModal({
   const aspectClass =
     format === "portrait" ? "aspect-[9/16]" : format === "square" ? "aspect-square" : "aspect-video";
 
-  const currentImages = scene.imageUrls?.length ? scene.imageUrls : scene.imageUrl ? [scene.imageUrl] : [];
+  const validImageUrls = scene.imageUrls?.filter(Boolean) ?? [];
+  const currentImages = validImageUrls.length ? validImageUrls : scene.imageUrl ? [scene.imageUrl] : [];
   const hasMultipleImages = currentImages.length > 1;
 
   const handleVoiceoverChange = (value: string) => {

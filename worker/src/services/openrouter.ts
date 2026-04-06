@@ -214,6 +214,14 @@ export async function callHyperealLLM(
     text = "{" + text;
   }
 
+  // Fix double braces from assistant pre-fill echo — some APIs return the
+  // pre-fill "{" as part of the completion, so the model's own "{" creates "{{".
+  // Similarly handle doubled closing braces.
+  if (options.forceJson) {
+    text = text.replace(/^\s*\{\{/, "{");
+    text = text.replace(/\}\}\s*$/, "}");
+  }
+
   console.log(`[Hypereal] Response received (${text.length} chars, credits: ${data.creditsUsed ?? "?"})`);
   writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-pro", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch(() => {});
   return text;

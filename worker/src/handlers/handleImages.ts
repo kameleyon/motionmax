@@ -188,23 +188,35 @@ export async function handleImagesPhase(
         const etaSeconds = getEstimatedTimeRemaining(completedSoFar, totalImages);
         const currentSceneNum = sceneIndex + 1;
 
+        // Re-read scenes from DB to merge with audio phase updates (avoids race condition)
+        const { data: freshGen } = await supabase
+          .from("generations")
+          .select("scenes")
+          .eq("id", generationId)
+          .maybeSingle();
+        const freshScenes: any[] = freshGen?.scenes || [];
+
+        // Merge: use our image data but preserve audioUrl from the fresh DB copy
+        const mergedScenes = scenes.map((s: any, idx: number) => ({
+          ...s,
+          audioUrl: freshScenes[idx]?.audioUrl || s.audioUrl,
+          _meta: {
+            ...((scenes[idx] as any)._meta || {}),
+            completedImages: completedSoFar,
+            totalImages,
+            currentScene: currentSceneNum,
+            etaSeconds,
+            statusMessage: etaSeconds > 0
+              ? `Creating visuals... (${completedSoFar}/${totalImages} images, ~${etaSeconds}s remaining)`
+              : `Creating visuals... (${completedSoFar}/${totalImages} images)`,
+          },
+        }));
+
         await supabase
           .from("generations")
           .update({
             progress: progressAfter,
-            scenes: scenes.map((s: any, idx: number) => ({
-              ...s,
-              _meta: {
-                ...((scenes[idx] as any)._meta || {}),
-                completedImages: completedSoFar,
-                totalImages,
-                currentScene: currentSceneNum,
-                etaSeconds,
-                statusMessage: etaSeconds > 0
-                  ? `Creating visuals... (${completedSoFar}/${totalImages} images, ~${etaSeconds}s remaining)`
-                  : `Creating visuals... (${completedSoFar}/${totalImages} images)`,
-              },
-            })),
+            scenes: mergedScenes,
           })
           .eq("id", generationId);
 

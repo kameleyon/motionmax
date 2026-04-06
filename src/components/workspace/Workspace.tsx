@@ -41,7 +41,7 @@ const STEP_LABELS = ["Content", "Art Direction", "Voice & Polish"] as const;
 
 export const Workspace = forwardRef<WorkspaceHandle>(function Workspace(_, ref) {
   const [content, setContent] = useState("");
-  const [format, setFormat] = useState<VideoFormat>("portrait");
+  const [format, setFormat] = useState<"landscape" | "portrait">("portrait");
   const [length, setLength] = useState<VideoLength>("brief");
   const [style, setStyle] = useState<VisualStyle>("minimalist");
   const [customStyle, setCustomStyle] = useState("");
@@ -63,13 +63,13 @@ export const Workspace = forwardRef<WorkspaceHandle>(function Workspace(_, ref) 
   const [suspendedStatus, setSuspendedStatus] = useState<"past_due" | "unpaid" | "canceled">("past_due");
 
   const { state: generationState, startGeneration, reset, loadProject } = useGenerationPipeline();
-  const { isAdmin, adminLogs, showAdminLogs, setShowAdminLogs } = useAdminLogs(generationState.generationId, generationState.step);
+  const { isAdmin, adminLogs, showAdminLogs, setShowAdminLogs } = useAdminLogs(generationState.generationId ?? null, generationState.step);
 
   const canGenerate = content.trim().length > 0 && !generationState.isGenerating;
 
   // Get disabled formats based on plan (free users can only use landscape)
   const limits = PLAN_LIMITS[plan];
-  const disabledFormats: VideoFormat[] = (["landscape", "portrait", "square"] as VideoFormat[]).filter(
+  const disabledFormats: string[] = (["landscape", "portrait"] as const).filter(
     f => !limits.allowedFormats.includes(f)
   );
 
@@ -171,8 +171,8 @@ export const Workspace = forwardRef<WorkspaceHandle>(function Workspace(_, ref) 
 
     setContent(project.content ?? "");
 
-    const nextFormat = (project.format as VideoFormat) ?? "portrait";
-    setFormat(["landscape", "portrait", "square"].includes(nextFormat) ? nextFormat : "portrait");
+    const nextFormat = project.format ?? "portrait";
+    setFormat(nextFormat === "landscape" ? "landscape" : "portrait");
 
     const nextLength = (project.length as VideoLength) ?? "brief";
     setLength(["short", "brief", "presentation"].includes(nextLength) ? nextLength : "brief");
@@ -361,7 +361,7 @@ export const Workspace = forwardRef<WorkspaceHandle>(function Workspace(_, ref) 
                       className="space-y-4 sm:space-y-6"
                     >
                       <div className="rounded-xl border border-border/50 bg-card/50 p-3 sm:p-6 backdrop-blur-sm shadow-sm space-y-4 sm:space-y-6 overflow-hidden">
-                        <FormatSelector selected={format} onSelect={setFormat} disabledFormats={disabledFormats} />
+                        <FormatSelector selected={format} onSelect={(f) => setFormat(f as "landscape" | "portrait")} disabledFormats={disabledFormats as VideoFormat[]} />
                         <div className="h-px bg-border/30" />
                         <LengthSelector selected={length} onSelect={setLength} />
                         <div className="h-px bg-border/30" />

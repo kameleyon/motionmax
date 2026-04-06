@@ -45,7 +45,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
   function CinematicWorkspace({ projectId: initialProjectId }, ref) {
     // Content input (like Doc2Video)
     const [content, setContent] = useState("");
-    const [format, setFormat] = useState<VideoFormat>("portrait");
+    const [format, setFormat] = useState<"landscape" | "portrait">("portrait");
     const [length, setLength] = useState<VideoLength>("short");
     const [style, setStyle] = useState<VisualStyle>("realistic");
     const [customStyle, setCustomStyle] = useState("");
@@ -70,7 +70,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
     const [upgradeReason, setUpgradeReason] = useState("");
     const [showSuspendedModal, setShowSuspendedModal] = useState(false);
     const [suspendedStatus, setSuspendedStatus] = useState<"past_due" | "unpaid" | "canceled">("past_due");
-    const { isAdmin, adminLogs, showAdminLogs, setShowAdminLogs } = useAdminLogs(generationState.generationId, generationState.step ?? null);
+    const { isAdmin, adminLogs, showAdminLogs, setShowAdminLogs } = useAdminLogs(generationState.generationId ?? null, generationState.step);
     const { logs: generationLogs, showLogs, setShowLogs } = useGenerationLogs(generationState.generationId, generationState.projectId, generationState.isGenerating);
     const [isResuming, setIsResuming] = useState(false);
 
@@ -103,7 +103,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
     // Disable formats/lengths based on plan
     const limits = PLAN_LIMITS[plan];
     const allowedFmts: string[] = limits?.allowedFormats || ["landscape", "portrait"];
-    const disabledFormats: VideoFormat[] = (["landscape", "portrait", "square"] as VideoFormat[]).filter(
+    const disabledFormats: string[] = (["landscape", "portrait", "square"]).filter(
       f => !allowedFmts.includes(f)
     );
 
@@ -112,7 +112,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
       // Only auto-switch when user is in form entry (idle) — skip when viewing a loaded project
       if (generationState.step !== "idle") return;
       if (disabledFormats.includes(format) && limits.allowedFormats.length > 0) {
-        setFormat(limits.allowedFormats[0] as VideoFormat);
+        setFormat(limits.allowedFormats[0] as "landscape" | "portrait");
       }
     }, [plan, format, disabledFormats, limits.allowedFormats, generationState.step]);
 
@@ -256,8 +256,8 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
 
       setContent(project.content ?? "");
 
-      const nextFormat = (project.format as VideoFormat) ?? "portrait";
-      setFormat(["landscape", "portrait", "square"].includes(nextFormat) ? nextFormat : "portrait");
+      const nextFormat = project.format ?? "portrait";
+      setFormat(nextFormat === "landscape" ? "landscape" : "portrait");
 
       const nextLength = (project.length as VideoLength) ?? "brief";
       setLength(["short", "brief", "presentation"].includes(nextLength) ? nextLength : "brief");
@@ -349,7 +349,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                     onFormatChange={setFormat}
                     disabledFormats={disabledFormats}
                     duration={length}
-                    onDurationChange={setLength}
+                    onDurationChange={(v: string) => setLength(v as VideoLength)}
                     durationOptions={[{ id: "short", label: "\u22643 min" }, { id: "brief", label: ">3 min" }]}
                     language={language}
                     onLanguageChange={setLanguage}

@@ -9,7 +9,7 @@ interface CreditTopUpProps {
   packages: CreditPackDef[];
   currentPlan: string;
   loadingCredits: number | null;
-  onBuyCredits: (credits: 15 | 50 | 150 | 500, priceId: string) => void;
+  onBuyCredits: (credits: number, priceId: string) => void;
 }
 
 export default function CreditTopUp({

@@ -69,7 +69,7 @@ export function AdminWorkerHealth() {
 
         let avgDuration = 0;
         if (recentJobs && recentJobs.length > 0) {
-          const durations = recentJobs.map((job) => {
+          const durations = recentJobs.map((job: any) => {
             const start = new Date(job.created_at).getTime();
             const end = new Date(job.completed_at!).getTime();
             return (end - start) / 1000; // seconds
@@ -85,9 +85,10 @@ export function AdminWorkerHealth() {
           .or(`completed_at.gte.${fiveMinutesAgo.toISOString()},status.eq.processing`)
           .limit(1);
 
-        const isActive = recentActivity && recentActivity.length > 0;
-        const lastActivity = recentActivity?.[0]?.completed_at
-          ? new Date(recentActivity[0].completed_at)
+        const recentActivityAny = recentActivity as any[] | null;
+        const isActive = recentActivityAny && recentActivityAny.length > 0;
+        const lastActivity = recentActivityAny?.[0]?.completed_at
+          ? new Date(recentActivityAny[0].completed_at)
           : new Date();
 
         // Calculate error rate
@@ -105,7 +106,7 @@ export function AdminWorkerHealth() {
         }
 
         // Calculate uptime from the oldest recent job
-        const oldestJob = recentActivity?.[0];
+        const oldestJob = recentActivityAny?.[0];
         let uptimeSeconds = 0;
         if (oldestJob?.created_at) {
           uptimeSeconds = (now.getTime() - new Date(oldestJob.created_at).getTime()) / 1000;

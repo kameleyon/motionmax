@@ -18,9 +18,9 @@ function monthlyCapacity(creditsPerMonth: number, creditCost: number): string {
 
 const TIER_LABELS: { id: PlanTier; label: string }[] = [
   { id: "free", label: "Free" },
-  { id: "starter", label: "Starter" },
   { id: "creator", label: "Creator" },
-  { id: "professional", label: "Pro" },
+  { id: "studio", label: "Studio" },
+  { id: "enterprise", label: "Enterprise" },
 ];
 
 export default function CreditBreakdownTable() {

@@ -24,7 +24,7 @@ export function useSceneVersions(generationId: string | undefined, sceneIndex: n
       if (!generationId) return [];
 
       const { data, error } = await supabase
-        .from("scene_versions")
+        .from("scene_versions" as any)
         .select("*")
         .eq("generation_id", generationId)
         .eq("scene_index", sceneIndex)
@@ -50,7 +50,7 @@ export function useSceneVersionCount(generationId: string | undefined, sceneInde
       if (!generationId) return 0;
 
       const { count, error } = await supabase
-        .from("scene_versions")
+        .from("scene_versions" as any)
         .select("id", { count: "exact", head: true })
         .eq("generation_id", generationId)
         .eq("scene_index", sceneIndex);

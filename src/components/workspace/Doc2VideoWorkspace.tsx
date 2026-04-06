@@ -42,7 +42,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
   function Doc2VideoWorkspace({ projectId: initialProjectId }, ref) {
     const [content, setContent] = useState("");
     const [sourceAttachments, setSourceAttachments] = useState<SourceAttachment[]>([]);
-    const [format, setFormat] = useState<VideoFormat>("portrait");
+    const [format, setFormat] = useState<"landscape" | "portrait">("portrait");
     const [length, setLength] = useState<VideoLength>("brief");
     const [style, setStyle] = useState<VisualStyle>("minimalist");
     const [customStyle, setCustomStyle] = useState("");
@@ -85,7 +85,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
     const canGenerate = content.trim().length >= 10 && !generationState.isGenerating;
 
     // Disable formats/lengths based on plan
-    const disabledFormats: VideoFormat[] = (["landscape", "portrait", "square"] as VideoFormat[]).filter(
+    const disabledFormats: string[] = (["landscape", "portrait"] as const).filter(
       f => !limits.allowedFormats.includes(f)
     );
     const disabledLengths: VideoLength[] = (["short", "brief", "presentation"] as VideoLength[]).filter(
@@ -97,7 +97,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
       // Only auto-switch when user is in form entry (idle) — skip when viewing a loaded project
       if (generationState.step !== "idle") return;
       if (disabledFormats.includes(format) && limits.allowedFormats.length > 0) {
-        setFormat(limits.allowedFormats[0] as VideoFormat);
+        setFormat(limits.allowedFormats[0] as "landscape" | "portrait");
       }
     }, [plan, format, disabledFormats, limits.allowedFormats, generationState.step]);
 
@@ -216,8 +216,8 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
 
       setContent(project.content ?? "");
 
-      const nextFormat = (project.format as VideoFormat) ?? "portrait";
-      setFormat(["landscape", "portrait", "square"].includes(nextFormat) ? nextFormat : "portrait");
+      const nextFormat = project.format ?? "portrait";
+      setFormat(nextFormat === "landscape" ? "landscape" : "portrait");
 
       const nextLength = (project.length as VideoLength) ?? "brief";
       setLength(["short", "brief", "presentation"].includes(nextLength) ? nextLength : "brief");
@@ -326,7 +326,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
                     onFormatChange={setFormat}
                     disabledFormats={disabledFormats}
                     duration={length}
-                    onDurationChange={setLength}
+                    onDurationChange={(v: string) => setLength(v as VideoLength)}
                     language={language}
                     onLanguageChange={setLanguage}
                     speaker={speaker}

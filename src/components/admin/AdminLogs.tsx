@@ -191,7 +191,7 @@ export function AdminLogs() {
     if (categoryFilter !== "all" && log.category !== categoryFilter) return false;
     if (textSearch) {
       const q = textSearch.toLowerCase();
-      if (!(log.message?.toLowerCase().includes(q) || log.event_type?.toLowerCase().includes(q) || log.userId?.toLowerCase().includes(q) || log.generationId?.toLowerCase().includes(q))) return false;
+      if (!(log.message?.toLowerCase().includes(q) || log.event_type?.toLowerCase().includes(q) || log.user_id?.toLowerCase().includes(q) || log.generation_id?.toLowerCase().includes(q))) return false;
     }
     // Time range filter
     if (timeRange !== "live" && log.created_at) {

@@ -82,8 +82,7 @@ export function AdminFlags() {
       setResolutionNotes("");
       fetchFlags();
     } catch (err) {
-      toast.error("Failed to resolve flag", { description: "Please try again.",
-        variant: "destructive" });
+      toast.error("Failed to resolve flag", { description: "Please try again." });
     } finally {
       setResolvingId(null);
     }

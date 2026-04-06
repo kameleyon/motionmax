@@ -5,7 +5,7 @@ import { useAdminAuth } from "@/hooks/useAdminAuth";
 /**
  * Shared hook to fetch admin-visible generation logs for both success and error states.
  */
-export function useAdminLogs(generationId: string | null, step: string) {
+export function useAdminLogs(generationId: string | null, step: string | null) {
   const { isAdmin } = useAdminAuth();
   const [adminLogs, setAdminLogs] = useState<any[]>([]);
   const [showAdminLogs, setShowAdminLogs] = useState(false);

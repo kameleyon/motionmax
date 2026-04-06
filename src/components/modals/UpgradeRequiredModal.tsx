@@ -36,7 +36,7 @@ export function UpgradeRequiredModal({
 
   const handleBuyCredits = async () => {
     try {
-      await createCheckout(CREDIT_PACKS[50].priceId, "payment");
+      await createCheckout(CREDIT_PACKS[300].priceId, "payment");
     } catch (error) {
       log.error("Failed to create checkout:", error);
     }

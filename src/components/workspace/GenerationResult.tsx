@@ -75,7 +75,7 @@ export function GenerationResult({
   captionStyle: initialCaptionStyle = "none",
   onCaptionStyleChange,
 }: GenerationResultProps) {
-  const { isAdmin, adminLogs, showAdminLogs, setShowAdminLogs } = useAdminLogs(generationId, null);
+  const { isAdmin, adminLogs, showAdminLogs, setShowAdminLogs } = useAdminLogs(generationId ?? null, null);
   const { logs: generationLogs, showLogs, setShowLogs } = useGenerationLogs(generationId, projectId, false);
 
   const [scenes, setScenes] = useState(initialScenes);

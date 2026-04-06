@@ -27,8 +27,7 @@ export default function EnterpriseContactModal({ open, onOpenChange }: Enterpris
 
   const handleSubmit = () => {
     if (!name.trim() || !email.trim() || !company.trim()) {
-      toast.success("Required fields missing", { description: "Please fill in your name, email, and company.",
-        variant: "destructive" });
+      toast.error("Required fields missing", { description: "Please fill in your name, email, and company." });
       return;
     }
 

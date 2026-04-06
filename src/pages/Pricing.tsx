@@ -55,8 +55,7 @@ export default function Pricing() {
       setShowDowngradeDialog(false);
       await openCustomerPortal();
     } catch (error) {
-      toast.success("Error", { description: error instanceof Error ? error.message : "Failed to open billing portal",
-        variant: "destructive" });
+      toast.error("Error", { description: error instanceof Error ? error.message : "Failed to open billing portal" });
     } finally {
       setLoadingPlan(null);
     }
@@ -66,7 +65,7 @@ export default function Pricing() {
     if (!priceId) return;
 
     if (!user) {
-      toast.success("Sign in required", { description: "Please sign in to subscribe to a plan", variant: "destructive" });
+      toast.error("Sign in required", { description: "Please sign in to subscribe to a plan" });
       navigate("/auth");
       return;
     }
@@ -83,7 +82,7 @@ export default function Pricing() {
 
   const handleBuyCredits = async (credits: 15 | 50 | 150 | 500, priceId: string) => {
     if (!user) {
-      toast.success("Sign in required", { description: "Please sign in to purchase credits", variant: "destructive" });
+      toast.error("Sign in required", { description: "Please sign in to purchase credits" });
       navigate("/auth");
       return;
     }

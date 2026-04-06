@@ -74,7 +74,7 @@ export function AdminQueueMonitor() {
 
         if (jobsError) throw jobsError;
 
-        setJobs(activeJobs || []);
+        setJobs((activeJobs as any as QueueJob[]) || []);
 
         // Calculate stats
         const now = new Date();
@@ -105,7 +105,7 @@ export function AdminQueueMonitor() {
 
         let avgTime = 0;
         if (recentCompleted && recentCompleted.length > 0) {
-          const times = recentCompleted.map((job) => {
+          const times = recentCompleted.map((job: any) => {
             const start = new Date(job.created_at).getTime();
             const end = new Date(job.completed_at!).getTime();
             return (end - start) / 1000; // seconds
@@ -350,7 +350,7 @@ export function AdminQueueMonitor() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium truncate">
-                        {job.task_type?.replace(/_/g, " ") || job.phase || "Initializing"}
+                        {(job as any).task_type?.replace(/_/g, " ") || job.phase || "Initializing"}
                       </span>
                       {job.status === "processing" && (
                         <span className="text-xs text-muted-foreground">

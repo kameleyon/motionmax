@@ -89,8 +89,8 @@ export async function runStandardPipeline(
       }
       return result;
     } catch (err) {
-      log.warn(`Image phase error:`, err);
-      return { totalImages: expectedSceneCount * 3, imagesGenerated: 0 };
+      log.error("Image phase failed:", err);
+      throw new Error("Image generation failed. Please try again.");
     }
   })();
 

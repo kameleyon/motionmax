@@ -18,9 +18,17 @@ export interface PlanDef {
   yearlyPriceId: string | null;
 }
 
-// Credit top-up packages — priceIds from stripeProducts.ts
-import { CREDIT_PACKS } from "@/config/stripeProducts";
+export interface CreditPackDef {
+  credits: number;
+  price: string;
+  perCredit: string;
+  priceId: string;
+  popular?: boolean;
+  bestValue?: boolean;
+  label?: string;
+}
 
+// Credit top-up packages — priceIds from stripeProducts.ts (CREDIT_PACKS imported at top via useSubscription)
 export const CREDIT_PACKAGES = [
   { credits: 300,  price: "$9.99",  perCredit: "$0.033", priceId: CREDIT_PACKS[300].priceId },
   { credits: 900,  price: "$24.99", perCredit: "$0.028", priceId: CREDIT_PACKS[900].priceId },

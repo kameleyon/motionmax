@@ -52,7 +52,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
     const [characterConsistencyEnabled, setCharacterConsistencyEnabled] = useState(false);
     
     // Shared inputs
-    const [format, setFormat] = useState<VideoFormat>("portrait");
+    const [format, setFormat] = useState<"landscape" | "portrait">("portrait");
     const [length, setLength] = useState<StoryLength>("brief");
     const [style, setStyle] = useState<VisualStyle>("minimalist");
     const [customStyle, setCustomStyle] = useState("");
@@ -66,7 +66,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
     const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("none");
 
     const { state: generationState, startGeneration, reset, loadProject } = useGenerationPipeline();
-    const { isAdmin, adminLogs, showAdminLogs, setShowAdminLogs } = useAdminLogs(generationState.generationId, generationState.step);
+    const { isAdmin, adminLogs, showAdminLogs, setShowAdminLogs } = useAdminLogs(generationState.generationId ?? null, generationState.step);
 
     // Subscription and plan validation  
     const { plan, creditsBalance, subscriptionStatus, subscriptionEnd, checkSubscription } = useSubscription();
@@ -93,7 +93,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
 
     // Get disabled formats based on plan (free users can only use landscape)
     const limits = PLAN_LIMITS[plan];
-    const disabledFormats: VideoFormat[] = (["landscape", "portrait", "square"] as VideoFormat[]).filter(
+    const disabledFormats: string[] = (["landscape", "portrait"] as const).filter(
       f => !limits.allowedFormats.includes(f)
     );
 
@@ -109,7 +109,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
       // Only auto-switch when user is in form entry (idle) — skip when viewing a loaded project
       if (generationState.step !== "idle") return;
       if (disabledFormats.includes(format) && limits.allowedFormats.length > 0) {
-        setFormat(limits.allowedFormats[0] as VideoFormat);
+        setFormat(limits.allowedFormats[0] as "landscape" | "portrait");
       }
     }, [plan, format, disabledFormats, limits.allowedFormats, generationState.step]);
 
@@ -257,8 +257,8 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
 
       setStoryIdea(project.content ?? "");
 
-      const nextFormat = (project.format as VideoFormat) ?? "portrait";
-      setFormat(["landscape", "portrait", "square"].includes(nextFormat) ? nextFormat : "portrait");
+      const nextFormat = project.format ?? "portrait";
+      setFormat(nextFormat === "landscape" ? "landscape" : "portrait");
 
       // Map project length to story length
       const projectLength = project.length as string;
@@ -362,7 +362,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
                     onFormatChange={setFormat}
                     disabledFormats={disabledFormats}
                     duration={length}
-                    onDurationChange={setLength}
+                    onDurationChange={(v: string) => setLength(v as StoryLength)}
                     durationOptions={[{ id: "short", label: "\u22643 min" }, { id: "brief", label: ">3 min" }, { id: "extended", label: "<15 min" }]}
                     language={language}
                     onLanguageChange={setLanguage}

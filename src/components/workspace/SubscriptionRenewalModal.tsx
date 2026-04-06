@@ -83,7 +83,7 @@ export function SubscriptionRenewalModal() {
   const handleTopUp = async () => {
     setTopUpLoading(true);
     try {
-      await createCheckout(CREDIT_PACKS[50].priceId, "payment");
+      await createCheckout(CREDIT_PACKS[300].priceId, "payment");
       handleDismiss();
     } catch {
       toast.error("Checkout failed", { description: "Please try again." });

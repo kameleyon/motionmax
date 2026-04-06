@@ -24,7 +24,7 @@ export type { PlanTier, ValidationResult };
 
 // Helper to check if user can use character consistency feature
 export function canUseCharacterConsistency(plan: PlanTier): boolean {
-  return plan === "studio" || plan === "professional";
+  return plan === "studio" || (plan as string) === "professional" || plan === "enterprise";
 }
 
 export interface SubscriptionState {

@@ -27,9 +27,9 @@ interface CinematicSourceInputProps {
 
 // ── Constants ──
 
-const AUTO_ATTACH_THRESHOLD = 500;
+const AUTO_ATTACH_THRESHOLD = 5000;
 const MAX_ATTACHMENT_CHARS = 500_000;
-const MAX_DIRECTION_LENGTH = 2000;
+const MAX_DIRECTION_LENGTH = 10_000;
 
 const TYPE_ICONS: Record<SourceAttachment["type"], typeof Link2> = {
   file: FileText, image: Image, link: Link2,

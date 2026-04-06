@@ -215,8 +215,8 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
       setContent(project.content ?? "");
       // Note: extraction prompt is stored in content or could be extracted from project metadata
 
-      const nextFormat = (project.format as VideoFormat) ?? "portrait";
-      setFormat(["landscape", "portrait", "square"].includes(nextFormat) ? nextFormat : "portrait");
+      const nextFormat = (project.format as string) ?? "portrait";
+      setFormat(nextFormat === "landscape" ? "landscape" : "portrait");
 
       const savedStyle = (project.style ?? "minimalist") as SmartFlowStyle;
       const validStyles: SmartFlowStyle[] = ["minimalist", "doodle", "stick", "realistic", "storybook", "caricature", "sketch", "crayon", "chalkboard"];

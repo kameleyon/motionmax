@@ -35,6 +35,8 @@ interface WorkspaceSubscriptionReturn {
   limits: (typeof PLAN_LIMITS)[PlanTier];
   /** Re-fetch subscription state from server */
   checkSubscription: () => Promise<void>;
+  /** Non-null when subscription verification failed (Supabase outage etc.) */
+  fetchError: string | null;
 
   /** Modal state */
   modalState: SubscriptionModalState;
@@ -51,7 +53,7 @@ interface WorkspaceSubscriptionReturn {
 }
 
 export function useWorkspaceSubscription(): WorkspaceSubscriptionReturn {
-  const { plan, creditsBalance, subscriptionStatus, subscriptionEnd, checkSubscription } = useSubscription();
+  const { plan, creditsBalance, subscriptionStatus, subscriptionEnd, checkSubscription, fetchError } = useSubscription();
 
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgradeReason, setUpgradeReason] = useState("");
@@ -102,6 +104,7 @@ export function useWorkspaceSubscription(): WorkspaceSubscriptionReturn {
     subscriptionStatus,
     limits,
     checkSubscription,
+    fetchError,
     modalState: {
       showUpgradeModal,
       upgradeReason,

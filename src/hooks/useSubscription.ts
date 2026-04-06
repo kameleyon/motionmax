@@ -90,8 +90,8 @@ async function fetchSubscriptionFromDB(): Promise<SubscriptionState> {
       creditsBalance: credits,
     };
   } catch (err) {
-    log.warn("DB fallback also failed, using free defaults", err);
-    return FREE_STATE;
+    log.error("DB fallback also failed, using free defaults", err);
+    return { ...FREE_STATE, _fetchFailed: true } as SubscriptionState & { _fetchFailed: true };
   }
 }
 
@@ -247,6 +247,10 @@ export function useSubscription() {
     queryClient.invalidateQueries({ queryKey: SUBSCRIPTION_QUERY_KEY });
   }, [queryClient]);
 
+  const fetchError = (data as any)?._fetchFailed
+    ? "Unable to verify subscription. Some features may be limited."
+    : null;
+
   return {
     subscribed: data?.subscribed ?? false,
     plan: data?.plan ?? "free",
@@ -256,6 +260,7 @@ export function useSubscription() {
     creditsBalance: data?.creditsBalance ?? 0,
     isLoading,
     error: error instanceof Error ? error.message : null,
+    fetchError,
     checkSubscription,
     createCheckout,
     openCustomerPortal,

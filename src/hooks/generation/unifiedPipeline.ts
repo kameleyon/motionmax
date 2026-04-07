@@ -10,6 +10,7 @@
  * Pipeline survives browser close — worker handles all sequencing.
  */
 import { createScopedLogger } from "@/lib/logger";
+import { supabase } from "@/integrations/supabase/client";
 import {
   type GenerationParams,
   type PipelineContext,
@@ -128,14 +129,50 @@ export async function runUnifiedPipeline(
   );
   log.debug(`Submitted finalize job (depends on ${finalizeDeps.length} jobs)`);
 
-  // ============= PHASE 3: WAIT FOR COMPLETION =============
+  // ============= PHASE 3: WAIT FOR COMPLETION WITH PROGRESS =============
   // All jobs are in the queue with proper dependencies.
-  // Just wait for the finalize job — it won't run until everything else completes.
+  // Monitor progress by tracking completed jobs while waiting for finalize.
 
   ctx.setState((prev) => ({ ...prev, statusMessage: "Creating your content..." }));
 
-  // Monitor progress by waiting for finalize (Realtime + fallback polling)
-  const finalResult = await waitForJob(finalizeJobId, 30 * 60 * 1000, "finalize_generation");
+  const totalJobs = audioJobIds.length + imageJobIds.length + videoJobIds.length;
+  const allJobIds = [...audioJobIds, ...imageJobIds, ...videoJobIds];
+
+  // Progress monitor: poll completed job count every 5s
+  const progressInterval = setInterval(async () => {
+    try {
+      const { count } = await (supabase
+        .from("video_generation_jobs") as any)
+        .select("id", { count: "exact", head: true })
+        .in("id", allJobIds)
+        .eq("status", "completed");
+
+      const completed = count || 0;
+      const pct = Math.min(90, 15 + Math.floor((completed / totalJobs) * 75));
+
+      const statusMessages = [
+        "Creating your content...",
+        "Creating your content...",
+        "Making progress...",
+        "Almost there...",
+      ];
+      const msgIdx = Math.min(3, Math.floor((completed / totalJobs) * 4));
+
+      ctx.setState((prev) => ({
+        ...prev,
+        progress: pct,
+        completedImages: Math.min(completed, imageJobIds.length),
+        statusMessage: statusMessages[msgIdx],
+      }));
+    } catch { /* ignore progress poll errors */ }
+  }, 5000);
+
+  let finalResult: any;
+  try {
+    finalResult = await waitForJob(finalizeJobId, 30 * 60 * 1000, "finalize_generation");
+  } finally {
+    clearInterval(progressInterval);
+  }
 
   if (!finalResult.success) throw new Error(finalResult.error || "Generation failed");
 

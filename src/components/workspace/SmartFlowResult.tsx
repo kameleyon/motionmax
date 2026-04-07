@@ -6,6 +6,7 @@ import {
   Loader2,
   Pencil,
   RefreshCw,
+  Save,
   Share2,
   X,
   Clock,
@@ -28,6 +29,7 @@ import {
 } from "@/lib/videoExportDebug";
 import { SceneEditModal } from "./SceneEditModal";
 import { VideoPlayer } from "./VideoPlayer";
+import { downloadImage } from "@/hooks/export/downloadHelpers";
 import { toast } from "sonner";
 
 const log = createScopedLogger("SmartFlowResult");
@@ -222,7 +224,8 @@ export function SmartFlowResult({
       {/* ── Actions Bar ── */}
       <div className="w-full max-w-4xl mx-auto space-y-3">
         <div className="flex flex-wrap items-center justify-center gap-2">
-          {enableVoice && (
+          {/* Save: video download (voice) or image save (no-voice) */}
+          {enableVoice ? (
             <Button
               variant="default"
               size="sm"
@@ -236,6 +239,21 @@ export function SmartFlowResult({
             >
               <Download className="h-4 w-4" />
               Download
+            </Button>
+          ) : (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => {
+                if (!scene.imageUrl) return;
+                const safeName = title.replace(/[^a-z0-9]/gi, "_").slice(0, 50) || "image";
+                downloadImage(scene.imageUrl, `${safeName}.png`);
+              }}
+              disabled={!scene.imageUrl}
+              className="gap-1.5"
+            >
+              <Save className="h-4 w-4" />
+              Save Image
             </Button>
           )}
           <Button
@@ -267,14 +285,15 @@ export function SmartFlowResult({
             variant="outline"
             size="sm"
             onClick={() => {
-              if (exportState.videoUrl) {
-                navigator.clipboard.writeText(exportState.videoUrl).then(
+              const shareUrl = exportState.videoUrl || scene.imageUrl;
+              if (shareUrl) {
+                navigator.clipboard.writeText(shareUrl).then(
                   () => toast.success("Link copied!"),
                   () => {}
                 );
               }
             }}
-            disabled={!exportState.videoUrl}
+            disabled={!exportState.videoUrl && !scene.imageUrl}
             className="gap-1.5"
           >
             <Share2 className="h-3.5 w-3.5" />

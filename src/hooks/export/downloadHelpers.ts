@@ -17,8 +17,13 @@ const log = createScopedLogger("Download");
 
 let saveInProgress = false;
 
-/** Blob fetch timeout for mobile — keeps user gesture alive for share sheet. */
-const MOBILE_BLOB_TIMEOUT_MS = 3000;
+/**
+ * Blob fetch timeouts for mobile share sheet.
+ * iOS Safari needs the share() call within the user gesture chain.
+ * Videos need more time — iOS 15+ preserves the gesture through async fetch chains.
+ */
+const MOBILE_VIDEO_BLOB_TIMEOUT_MS = 20_000;
+const MOBILE_IMAGE_BLOB_TIMEOUT_MS = 10_000;
 
 function detectPlatform() {
   const ua = navigator.userAgent;
@@ -122,7 +127,7 @@ export async function downloadVideo(
     // ── Mobile (iOS + Android): native share sheet ──────────────────
     if (isIOS || isAndroid) {
       // Step 1: Try blob fetch + file share (gives "Save Video" on iOS)
-      const fileShareResult = await attemptFileShare(url, filename);
+      const fileShareResult = await attemptFileShare(url, filename, MOBILE_VIDEO_BLOB_TIMEOUT_MS);
       if (fileShareResult === "done" || fileShareResult === "cancelled") return;
 
       // Step 2: Try URL-only share (gives Messages, Mail, social, Copy)
@@ -165,10 +170,11 @@ type ShareOutcome = "done" | "cancelled" | "failed";
 async function attemptFileShare(
   url: string,
   filename: string,
+  timeoutMs = MOBILE_VIDEO_BLOB_TIMEOUT_MS,
 ): Promise<ShareOutcome> {
   try {
-    log.debug("Mobile: fetching blob (timeout %dms)…", MOBILE_BLOB_TIMEOUT_MS);
-    const blob = await fetchBlobWithTimeout(url, MOBILE_BLOB_TIMEOUT_MS);
+    log.debug("Mobile: fetching blob (timeout %dms)…", timeoutMs);
+    const blob = await fetchBlobWithTimeout(url, timeoutMs);
 
     if (!blob) {
       log.debug("Mobile: blob timed out or failed — skipping file share");
@@ -219,6 +225,78 @@ async function attemptUrlShare(
     }
     log.warn("Mobile: URL share failed:", e);
     return "failed";
+  }
+}
+
+// ── DOWNLOAD / SAVE IMAGE FILE ──────────────────────────────────────
+
+/**
+ * Save an image file to the user's device.
+ *
+ * iOS/Android: navigator.share({ files }) → shows "Save Image" in share sheet.
+ * Desktop: standard blob anchor download.
+ */
+export async function downloadImage(
+  url: string,
+  filename = "image.png",
+): Promise<void> {
+  if (!url) return;
+
+  const { isIOS, isAndroid, isMacSafari } = detectPlatform();
+  log.debug("Save image", { filename, isIOS, isAndroid });
+
+  // Detect MIME type from URL extension
+  const ext = url.split("?")[0].split(".").pop()?.toLowerCase() ?? "png";
+  const mimeMap: Record<string, string> = {
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    webp: "image/webp",
+    gif: "image/gif",
+  };
+  const mime = mimeMap[ext] || "image/png";
+
+  try {
+    // ── Mobile: native share sheet with image file ──────────────────
+    if (isIOS || isAndroid) {
+      log.debug("Mobile: fetching image blob…");
+      const blob = await fetchBlobWithTimeout(url, MOBILE_IMAGE_BLOB_TIMEOUT_MS);
+
+      if (blob) {
+        const file = new File([blob], filename, { type: mime });
+
+        if (navigator.share && navigator.canShare?.({ files: [file] })) {
+          log.debug("Mobile: opening share sheet with image file");
+          await navigator.share({ files: [file] });
+          return;
+        }
+      }
+
+      // Fallback: share URL (no "Save Image" but still useful)
+      if (navigator.share) {
+        log.debug("Mobile: fallback to URL share for image");
+        await navigator.share({ url, title: filename.replace(/\.\w+$/, "") });
+        return;
+      }
+
+      // Last resort: open in new tab
+      window.open(url, "_blank");
+      return;
+    }
+
+    // ── macOS Safari: direct anchor ──
+    if (isMacSafari) {
+      triggerDirectDownload(url, filename);
+      return;
+    }
+
+    // ── Desktop: blob download ──
+    const blob = await fetchAsBlob(url);
+    triggerBlobDownload(blob, filename);
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") return; // user cancelled
+    log.warn("Image save failed, opening in new tab:", e);
+    window.open(url, "_blank");
   }
 }
 

@@ -86,6 +86,7 @@ export async function concatWithCaptions(
   fontsDir: string,
   outputPath: string,
   timeoutMs = 30 * 60 * 1000,
+  brandMark?: string,
 ): Promise<void> {
   if (files.length === 0) throw new Error("concatWithCaptions: no files");
 
@@ -98,14 +99,67 @@ export async function concatWithCaptions(
   const fontsDirEsc = fontsDir.replace(/\\/g, "/").replace(/'/g, "'\\''");
   const assPathEsc = assPath.replace(/\\/g, "/").replace(/'/g, "'\\''");
 
-  console.log(`[ConcatScenes] Joining ${files.length} clips + burning captions (single pass)`);
+  // Build video filter chain: captions + optional brand mark
+  let vf = `ass='${assPathEsc}':fontsdir='${fontsDirEsc}'`;
+  if (brandMark) {
+    const escaped = brandMark.replace(/'/g, "\u2019").replace(/:/g, "\\:").replace(/\\/g, "\\\\");
+    vf += `,drawtext=text='${escaped}':fontsize=24:fontcolor=white@0.6:x=(w-text_w)/2:y=h-40:font=Sans`;
+  }
+
+  console.log(`[ConcatScenes] Joining ${files.length} clips + burning captions${brandMark ? ` + brand "${brandMark}"` : ""} (single pass)`);
 
   try {
     await runFfmpeg([
       "-f", "concat",
       "-safe", "0",
       "-i", listPath,
-      "-vf", `ass='${assPathEsc}':fontsdir='${fontsDirEsc}'`,
+      "-vf", vf,
+      "-c:v", "libx264",
+      "-preset", "fast",
+      "-crf", "20",
+      "-pix_fmt", "yuv420p",
+      "-c:a", "aac",
+      "-b:a", "128k",
+      "-ar", "44100",
+      "-ac", "2",
+      "-movflags", "+faststart",
+      ...X264_MEM_FLAGS,
+      outputPath,
+    ], timeoutMs);
+  } finally {
+    try { fs.unlinkSync(listPath); } catch { /* ignore */ }
+  }
+}
+
+/**
+ * Concat files with brand mark only (no captions).
+ * Re-encodes to burn the drawtext overlay.
+ */
+export async function concatWithBrandMark(
+  files: string[],
+  brandMark: string,
+  outputPath: string,
+  timeoutMs = 30 * 60 * 1000,
+): Promise<void> {
+  if (files.length === 0) throw new Error("concatWithBrandMark: no files");
+
+  const listPath = outputPath + ".concat.txt";
+  const listContent = files
+    .map((f) => `file '${f.replace(/'/g, "'\\''")}'`)
+    .join("\n");
+  await fs.promises.writeFile(listPath, listContent, "utf-8");
+
+  const escaped = brandMark.replace(/'/g, "\u2019").replace(/:/g, "\\:").replace(/\\/g, "\\\\");
+  const vf = `drawtext=text='${escaped}':fontsize=24:fontcolor=white@0.6:x=(w-text_w)/2:y=h-40:font=Sans`;
+
+  console.log(`[ConcatScenes] Joining ${files.length} clips + brand "${brandMark}"`);
+
+  try {
+    await runFfmpeg([
+      "-f", "concat",
+      "-safe", "0",
+      "-i", listPath,
+      "-vf", vf,
       "-c:v", "libx264",
       "-preset", "fast",
       "-crf", "20",

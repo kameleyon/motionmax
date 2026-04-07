@@ -17,7 +17,7 @@ import os from "os";
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { processScene, type ExportConfig } from "./export/sceneEncoder.js";
-import { concatFiles, concatWithCaptions } from "./export/concatScenes.js";
+import { concatFiles, concatWithCaptions, concatWithBrandMark } from "./export/concatScenes.js";
 import { concatWithCrossfade } from "./export/transitions.js";
 import { compressIfNeeded } from "./export/compressVideo.js";
 import { uploadToSupabase, removeFiles } from "./export/storageHelpers.js";
@@ -232,6 +232,7 @@ export async function handleExportVideo(
 
     // ── 0.5. Start ASR transcription in parallel (for caption sync) ──
     const captionStyle = (payload.caption_style || "none") as CaptionStyle;
+    const brandMark: string | undefined = payload.brandMark || payload.brand_mark || undefined;
     let asrPromise: Promise<(ASRSceneResult | null)[]> | null = null;
 
     if (captionStyle !== "none") {
@@ -434,26 +435,34 @@ export async function handleExportVideo(
             message: `Concat + caption burn (single pass): ${clipPaths.length} clips, style=${captionStyle}`,
           });
 
-          await concatWithCaptions(clipPaths, assPath, fontsDir, finalOutputPath);
+          await concatWithCaptions(clipPaths, assPath, fontsDir, finalOutputPath, undefined, brandMark);
           removeFiles(assPath);
           console.log(`[ExportVideo] Concat + captions done in single pass (style: ${captionStyle})`);
+        } else if (brandMark) {
+          // ASS generation returned null but brand mark present — burn brand only
+          await concatWithBrandMark(clipPaths, brandMark, finalOutputPath);
+          console.log(`[ExportVideo] Concat + brand mark (no captions)`);
         } else {
-          // ASS generation returned null — just stream-copy concat
+          // ASS generation returned null, no brand — just stream-copy concat
           await writeSystemLog({
             jobId, projectId: project_id, userId,
             category: "system_info",
             eventType: "concat_started",
-            message: `Stream-copy concat: ${clipPaths.length} clips (cinematic, no captions)`,
+            message: `Stream-copy concat: ${clipPaths.length} clips (no captions)`,
           });
           await concatFiles(clipPaths, finalOutputPath, true);
         }
+      } else if (brandMark) {
+        // ── NO CAPTIONS BUT BRAND MARK: burn brand text ──
+        await concatWithBrandMark(clipPaths, brandMark, finalOutputPath);
+        console.log(`[ExportVideo] Concat + brand mark "${brandMark}" (no captions)`);
       } else {
-        // ── NO CAPTIONS: stream-copy concat (instant for same-codec clips) ──
+        // ── NO CAPTIONS, NO BRAND: stream-copy concat (instant) ──
         await writeSystemLog({
           jobId, projectId: project_id, userId,
           category: "system_info",
           eventType: "concat_started",
-          message: `Stream-copy concat: ${clipPaths.length} clips (cinematic, no captions)`,
+          message: `Stream-copy concat: ${clipPaths.length} clips (no captions, no brand)`,
         });
         await concatFiles(clipPaths, finalOutputPath, true);
       }

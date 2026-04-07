@@ -357,10 +357,10 @@ ${researchBrief}
   );
   const phaseTime = Date.now() - phaseStart;
 
-  // Force scene duration to 10s for cinematic (AI sometimes outputs 15)
+  // Force scene duration to 11s for cinematic (raw audio before 1.1x speed → ~10s output)
   if (projectType === "cinematic") {
     for (const s of scenes) {
-      (s as any).duration = 10;
+      (s as any).duration = 11;
     }
   }
 

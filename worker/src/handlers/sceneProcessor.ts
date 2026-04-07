@@ -78,7 +78,7 @@ export function sanitizeVoiceover(input: unknown): string {
 // ── Voiceover word cap ─────────────────────────────────────────────
 
 /** Max words per scene for "short" length (~15-16s at 2.5 words/sec). */
-const SHORT_MAX_WORDS = 40;
+const SHORT_MAX_WORDS = 28;
 
 /** Truncate voiceover at a sentence boundary to fit the word cap. */
 function capVoiceover(text: string, maxWords: number): string {
@@ -124,7 +124,7 @@ export function postProcessScenes(
     if (isShort && projectType !== "smartflow") voiceover = capVoiceover(voiceover, SHORT_MAX_WORDS);
 
     // SmartFlow single scene needs 30-60s for narration; others default to 15s
-    const duration = projectType === "smartflow" ? (s.duration || 60) : 15;
+    const duration = projectType === "smartflow" ? (s.duration || 60) : 11;
 
     return {
       ...s,

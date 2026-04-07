@@ -40,9 +40,9 @@ export interface CinematicParams {
 
 export function buildCinematicPrompt(p: CinematicParams): PromptResult {
   const lengthCfg: Record<string, { min: number; max: number; target: number; maxPerScene: number; maxWords: number }> = {
-    short:        { min: 15, max: 15, target: 150, maxPerScene: 10, maxWords: 25 },
-    brief:        { min: 28, max: 28, target: 280, maxPerScene: 10, maxWords: 25 },
-    presentation: { min: 36, max: 36, target: 360, maxPerScene: 10, maxWords: 25 },
+    short:        { min: 15, max: 15, target: 165, maxPerScene: 11, maxWords: 28 },
+    brief:        { min: 28, max: 28, target: 308, maxPerScene: 11, maxWords: 28 },
+    presentation: { min: 36, max: 36, target: 396, maxPerScene: 11, maxWords: 28 },
   };
   const cfg = lengthCfg[p.length] || lengthCfg.brief;
   const targetWords = cfg.maxWords;
@@ -326,7 +326,7 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
       "visualPrompt": "'THE JOURNEY BEGINS' in bold typography fading in over morning mist. A 32-year-old woman with shoulder-length black hair steps into frame, coat billowing. Shallow depth of field, lens flare kissing edge of frame. Warm golden hour light.\nCamera: Pan right to left, steady pace, revealing the landscape as the subject walks into frame.",
       "visualStyle": "Cinematic establishing shot with atmospheric depth",
       "coverTitle": "Catchy Cover Title",
-      "duration": 10
+      "duration": 11
     }
   ]
 }`;

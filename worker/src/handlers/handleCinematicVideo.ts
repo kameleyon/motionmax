@@ -226,33 +226,34 @@ export async function handleCinematicVideo(
 
   // ── Generate video ────────────────────────────────────────────────
   let videoUrl: string;
-  let provider = "Kling V2.5 Turbo I2V";
+  let provider: string;
   const negPrompt = "blurry, low quality, watermark, text, UI elements, slow motion, sluggish, nudity, naked, exposed body, extra limbs, body contortion, distorted anatomy, lip sync, talking, mouth movement, speaking";
 
-  videoUrl = await generateKlingV25Video(
-    imageUrl,
-    finalPrompt,
-    apiKey,
-    10,           // duration: 10s
-    endImageUrl,  // last_image: next scene's image for seamless transition
-    negPrompt,
-    0.8,          // guidance_scale
-  );
+  if (endImageUrl) {
+    // PixVerse V6 for scenes WITH transition (start → end image)
+    const cameraMotion = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("—")[0].trim();
+    const shortVoiceover = (scene.voiceover || "").substring(0, 200);
+    const pixVersePrompt = [
+      `Cinematic ${cameraMotion.toLowerCase()} camera movement.`,
+      shortVoiceover ? `Scene context: ${shortVoiceover}` : "",
+      `FAST-PACED dynamic motion throughout. No talking, no lip movement, no mouth movement.`,
+      `In the LAST 1 second: smoothly morph and transition into the end image using a natural camera movement.`,
+      `No body contortions, no faces melting. Think film cut — camera pans away from current scene toward next.`,
+    ].filter(Boolean).join(" ");
 
-  // NOTE: PixVerse V6 Transitions ($0.40/clip) — currently returning 500 errors.
-  // Uncomment when Hypereal fixes the API:
-  // if (endImageUrl) {
-  //   const cameraMotion = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("—")[0].trim();
-  //   const shortVoiceover = (scene.voiceover || "").substring(0, 200);
-  //   const pixVersePrompt = [
-  //     `Cinematic ${cameraMotion.toLowerCase()} camera movement.`,
-  //     shortVoiceover ? `Scene context: ${shortVoiceover}` : "",
-  //     `FAST-PACED dynamic motion. No talking, no lip movement.`,
-  //     `In the LAST 1 second: smoothly morph into the end image.`,
-  //   ].filter(Boolean).join(" ");
-  //   videoUrl = await generatePixVerseTransition(imageUrl, endImageUrl, pixVersePrompt, apiKey);
-  //   provider = "PixVerse V6 Transition";
-  // }
+    try {
+      videoUrl = await generatePixVerseTransition(imageUrl, endImageUrl, pixVersePrompt, apiKey);
+      provider = "PixVerse V6 Transition";
+    } catch (pvError) {
+      console.warn(`[CinematicVideo] Scene ${sceneIndex}: PixVerse V6 failed (${(pvError as Error).message}), falling back to Kling V2.5`);
+      provider = "Kling V2.5 Turbo I2V";
+      videoUrl = await generateKlingV25Video(imageUrl, finalPrompt, apiKey, 10, endImageUrl, negPrompt, 0.8);
+    }
+  } else {
+    // Last scene — no end_image, use Kling V2.5
+    provider = "Kling V2.5 Turbo I2V";
+    videoUrl = await generateKlingV25Video(imageUrl, finalPrompt, apiKey, 10, undefined, negPrompt, 0.8);
+  }
 
   // ── Previous model (Grok Video I2V) — commented out for rollback ──
   // const grokVideoUrl = await generateGrokVideo(

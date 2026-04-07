@@ -529,10 +529,12 @@ export async function generatePixVerseTransition(
   console.log(`[Hypereal] START IMAGE: ${startImageUrl.substring(0, 80)}...`);
   console.log(`[Hypereal] END IMAGE: ${endImageUrl.substring(0, 80)}...`);
 
+  // PixVerse V6 uses the standard Hypereal { model, input } format.
+  // If this fails, try without the input wrapper as a fallback.
   const requestBody = {
     model,
     input: {
-      prompt,
+      prompt: prompt || "Smooth cinematic transition between the two scenes.",
       start_image: startImageUrl,
       end_image: endImageUrl,
     },
@@ -552,7 +554,36 @@ export async function generatePixVerseTransition(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Hypereal PixVerse V6 API Error: ${response.status} - ${errorText}`);
+    console.warn(`[Hypereal] PixVerse V6 first attempt failed (${response.status}): ${errorText}`);
+
+    // Retry without input wrapper (some Hypereal models use flat format)
+    const retryBody = {
+      model,
+      prompt: prompt || "Smooth cinematic transition between the two scenes.",
+      start_image: startImageUrl,
+      end_image: endImageUrl,
+    };
+    console.log(`[Hypereal] PixVerse V6 retry with flat format`);
+    const retryRes = await fetch(HYPEREAL_VIDEO_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(retryBody),
+    });
+
+    if (!retryRes.ok) {
+      const retryError = await retryRes.text();
+      throw new Error(`Hypereal PixVerse V6 API Error: ${retryRes.status} - ${retryError}`);
+    }
+
+    const retryData = await retryRes.json() as any;
+    const retryJobId = retryData.jobId;
+    const retryPollUrl = retryData.pollUrl || null;
+    console.log(`[Hypereal] PixVerse V6 retry job created: ${retryJobId} (credits: ${retryData.creditsUsed})`);
+    if (!retryJobId) throw new Error(`No jobId from PixVerse V6 retry`);
+    return pollHyperealJob(retryJobId, apiKey, model, retryPollUrl);
   }
 
   const data = await response.json() as any;

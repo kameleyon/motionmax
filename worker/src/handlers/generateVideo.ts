@@ -314,10 +314,25 @@ ${researchBrief}
     }
   }
 
-  // Non-SmartFlow: standard scene handling
+  // Non-SmartFlow: if no scenes array, retry with OpenRouter (Gemini sometimes returns flat { title, script } instead of scenes)
   if (!Array.isArray(parsed.scenes) || parsed.scenes.length === 0) {
     if (projectType !== "smartflow") {
-      throw new Error(`LLM returned no scenes for ${projectType} script`);
+      console.warn(`[GenerateVideo] ${projectType}: LLM returned no scenes array (keys: ${Object.keys(parsed).join(", ")}) — retrying with OpenRouter`);
+      const { callOpenRouterLLM } = await import("../services/openrouter.js");
+      const retryText = await callOpenRouterLLM(promptResult, {
+        maxTokens: promptResult.maxTokens,
+        forceJson: true,
+        temperature: 0.8,
+      });
+      const retryParsed = extractJsonFromLLMResponse(retryText, `${projectType} script (no-scenes retry)`) as ParsedScript;
+      if (Array.isArray(retryParsed.scenes) && retryParsed.scenes.length > 0) {
+        console.log(`[GenerateVideo] Retry succeeded: ${retryParsed.scenes.length} scenes`);
+        parsed.scenes = retryParsed.scenes;
+        parsed.title = retryParsed.title || parsed.title;
+        if (retryParsed.characters) parsed.characters = retryParsed.characters;
+      } else {
+        throw new Error(`LLM returned no scenes for ${projectType} script (retry also failed)`);
+      }
     }
   }
 

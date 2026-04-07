@@ -176,8 +176,9 @@ export function useVideoExport() {
       setState({ status: "loading", progress: 0 });
 
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error("Not authenticated");
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) throw new Error("Not authenticated");
+        const user = session.user;
 
         const resolvedProjectId = projectId || crypto.randomUUID();
         log("Dropping export job into queue...");

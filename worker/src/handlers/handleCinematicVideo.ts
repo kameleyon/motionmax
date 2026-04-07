@@ -1,16 +1,16 @@
 /**
- * Cinematic video handler — Veo 3.1 Fast I2V via Hypereal.
+ * Cinematic video handler — Kling V3.0 Standard I2V via Hypereal.
  *
  * Flow:
  *   - All images are generated FIRST (in parallel batches by the frontend)
- *   - Videos use Veo 3.1 Fast I2V with seamless transitions:
+ *   - Videos use Kling V3.0 Std I2V with seamless transitions:
  *     image = Scene N's image (first frame)
- *     last_image = Scene N+1's image (last frame) — creates smooth transition
- *     Last scene has NO last_image (self-contained)
+ *     end_image = Scene N+1's image (last frame) — creates smooth transition
+ *     Last scene has NO end_image (self-contained)
  *   - Camera motion varies per scene (rotated from 7 movement types)
- *   - Duration: 8s, No audio (generate_audio=false)
+ *   - Duration: 10s, No sound
  *
- * Primary: veo-3-1-i2v (72 credits / $0.48 per 8s without audio)
+ * Primary: kling-3-0-std-i2v (42 credits / $0.84 per 10s)
  * Fallback: kling-2-5-i2v (35 credits / $0.70 per 10s)
  *
  * Previous model (commented out): grok-video-i2v (12 credits)
@@ -21,8 +21,9 @@ import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField } from "../lib/sceneUpdate.js";
 import { generateImage } from "../services/imageGenerator.js";
 import {
-  generateVeo31Video,
+  generateKlingV3Video,
   generateKlingV25Video,
+  // generateVeo31Video,     // Veo 3.1 — doesn't follow prompts, generates unwanted audio/lip sync
   // generateKlingV26Video,  // Previous fallback — kept for rollback
   // generateGrokVideo,      // Previous model — kept for rollback
 } from "../services/hypereal.js";
@@ -218,35 +219,32 @@ export async function handleCinematicVideo(
   }
   const finalPrompt = videoPrompt + sceneInstruction;
 
-  // Map format to Veo aspect ratio
-  const veoAspectRatio = format === "portrait" ? "9:16" : "16:9";
-
   const transitionInfo = endImageUrl ? `→ scene ${sceneIndex + 1}` : "(no end_image)";
   console.log(
-    `[CinematicVideo] Scene ${sceneIndex}: Veo 3.1 Fast I2V 8s ${transitionInfo}, ` +
+    `[CinematicVideo] Scene ${sceneIndex}: Kling V3.0 Std I2V 10s ${transitionInfo}, ` +
     `camera=${CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("—")[0].trim()}, ` +
     `prompt=${finalPrompt.length} chars`
   );
 
-  // ── Generate video with Veo 3.1 Fast I2V (primary) ───────────────
+  // ── Generate video with Kling V3.0 Standard I2V (primary) ────────
   let videoUrl: string;
-  let provider = "Veo 3.1 Fast I2V";
-  const negPrompt = "blurry, low quality, watermark, text, UI elements, slow motion, sluggish, nudity, naked, exposed body, extra limbs, body contortion, distorted anatomy";
+  let provider = "Kling V3.0 Std I2V";
+  const negPrompt = "blurry, low quality, watermark, text, UI elements, slow motion, sluggish, nudity, naked, exposed body, extra limbs, body contortion, distorted anatomy, lip sync, talking, mouth movement, speaking";
 
   try {
-    videoUrl = await generateVeo31Video(
+    videoUrl = await generateKlingV3Video(
       imageUrl,
       finalPrompt,
       apiKey,
-      8,              // duration: 8s (Veo max)
-      endImageUrl,    // last_image: next scene's image for seamless transition
+      10,           // duration: 10s
+      endImageUrl,  // end_image: next scene's image for seamless transition
       negPrompt,
-      veoAspectRatio,
+      0.5,          // cfg_scale
     );
-  } catch (veoError) {
+  } catch (v3Error) {
     // Fallback to Kling V2.5 Turbo
     console.warn(
-      `[CinematicVideo] Scene ${sceneIndex}: Veo 3.1 failed (${(veoError as Error).message}), falling back to Kling V2.5`
+      `[CinematicVideo] Scene ${sceneIndex}: Kling V3.0 failed (${(v3Error as Error).message}), falling back to Kling V2.5`
     );
     provider = "Kling V2.5 Turbo I2V";
 
@@ -292,7 +290,7 @@ export async function handleCinematicVideo(
     category: "system_info",
     eventType: "cinematic_video_completed",
     message: `Cinematic video completed for scene ${sceneIndex} (${provider}, 10s${endImageUrl ? ", with transition" : ""})`,
-    details: { provider, hasTransition: !!endImageUrl, cost: 0.48 },
+    details: { provider, hasTransition: !!endImageUrl, cost: 0.84 },
   });
 
   return {
@@ -302,7 +300,7 @@ export async function handleCinematicVideo(
     sceneIndex,
     provider,
     hasTransition: !!endImageUrl,
-    cost: 0.48,
+    cost: 0.84,
   };
 }
 

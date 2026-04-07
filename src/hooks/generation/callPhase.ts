@@ -84,28 +84,26 @@ export async function getFreshSession(): Promise<string> {
 }
 
 /**
- * Route the script phase through the worker queue (Render / Node.js).
- * Inserts a row into `video_generation_jobs`, then polls until
- * the worker marks it completed or failed.
+ * Submit a job to the worker queue WITHOUT waiting for completion.
+ * Returns the job ID so caller can wait later or set up dependencies.
  */
-async function workerCallPhase(
+export async function submitJob(
   body: Record<string, unknown>,
-  taskType: string = "generate_video",
-  pollTimeoutMs: number = 5 * 60 * 1000
-): Promise<any> {
-  // Use getSession() (local-storage read, no network round-trip) instead of
-  // getUser() (makes an auth API call that can fail with "TypeError: Failed to fetch")
+  taskType: string,
+  dependsOn: string[] = [],
+): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) throw new Error("Not authenticated");
 
-  const { data: job, error: insertError } = await supabase
-    .from("video_generation_jobs")
+  const { data: job, error: insertError } = await (supabase
+    .from("video_generation_jobs") as any)
     .insert({
       user_id: session.user.id,
       project_id: (body.projectId as string) ?? null,
       task_type: taskType,
       status: "pending",
-      payload: body as any,
+      payload: body,
+      depends_on: dependsOn,
     })
     .select("id")
     .single();
@@ -114,58 +112,110 @@ async function workerCallPhase(
     throw new Error(`Failed to queue job: ${insertError?.message}`);
   }
 
-  log.debug("Job queued for worker", { jobId: job.id, taskType, phase: body.phase ?? null });
-
-  return pollWorkerJob(job.id, pollTimeoutMs);
+  log.debug("Job submitted", { jobId: job.id, taskType, dependsOn: dependsOn.length, phase: body.phase ?? null });
+  return job.id;
 }
 
 /**
- * Poll `video_generation_jobs` every 3 s until the worker marks the job
- * completed or failed.  Timeout is caller-supplied (default 8 minutes).
+ * Wait for a previously submitted job to complete.
  */
-async function pollWorkerJob(jobId: string, maxWaitMs: number = 8 * 60 * 1000): Promise<any> {
-  const POLL_INTERVAL = 2000;
-  const MAX_WAIT = maxWaitMs;
+export async function waitForJob(jobId: string, timeoutMs: number, taskType?: string): Promise<any> {
+  return pollWorkerJob(jobId, timeoutMs, taskType);
+}
+
+/**
+ * Route a phase through the worker queue — insert + wait (legacy interface).
+ * Used by callPhase() for phases that don't use dependency chains.
+ */
+async function workerCallPhase(
+  body: Record<string, unknown>,
+  taskType: string = "generate_video",
+  pollTimeoutMs: number = 5 * 60 * 1000
+): Promise<any> {
+  const jobId = await submitJob(body, taskType);
+  return pollWorkerJob(jobId, pollTimeoutMs, taskType);
+}
+
+/** Adaptive poll intervals per job type — longer for slow jobs, shorter for fast ones */
+const POLL_INTERVALS: Record<string, number> = {
+  generate_video: 5000,       // Script: 30-120s
+  cinematic_audio: 3000,      // Audio: 10-30s
+  cinematic_image: 5000,      // Image: 5-20s
+  cinematic_video: 15000,     // Kling/Veo: 60-600s
+  finalize_generation: 2000,  // Fast: 2-5s
+  export_video: 10000,        // Export: 2-10 min
+  regenerate_image: 5000,
+  regenerate_audio: 5000,
+  undo_regeneration: 2000,
+};
+
+/**
+ * Wait for a worker job using Supabase Realtime (instant notification)
+ * with adaptive polling as fallback (in case Realtime misses an update).
+ */
+async function pollWorkerJob(jobId: string, maxWaitMs: number = 8 * 60 * 1000, taskType?: string): Promise<any> {
+  const FALLBACK_POLL = POLL_INTERVALS[taskType || ""] || 5000;
   const startTime = Date.now();
 
-  while (true) {
-    if (Date.now() - startTime > MAX_WAIT) {
-      throw new Error(`Worker job timed out after ${Math.round(MAX_WAIT / 60000)} minutes`);
+  return new Promise<any>((resolve, reject) => {
+    let settled = false;
+    let fallbackTimer: ReturnType<typeof setInterval> | null = null;
+    let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    function cleanup() {
+      if (settled) return;
+      settled = true;
+      if (channel) supabase.removeChannel(channel);
+      if (fallbackTimer) clearInterval(fallbackTimer);
+      if (timeoutTimer) clearTimeout(timeoutTimer);
     }
 
-    await sleep(POLL_INTERVAL);
-
-    // The DB has a `result` JSONB column written by the worker.
-    // We cast through `as any` since the auto-generated types may lag.
-    const { data: row, error: pollError } = await (supabase
-      .from("video_generation_jobs") as any)
-      .select("status, error_message, payload, result")
-      .eq("id", jobId)
-      .single();
-
-    if (pollError) throw new Error(`Failed to poll job: ${pollError.message}`);
-
-    const jobRow = row as any;
-
-    if (jobRow.status === "completed") {
-      log.debug("Worker job completed", {
-        jobId,
-        elapsedMs: Date.now() - startTime,
-      });
-      // The worker writes the script result into the `result` column.
-      // If the types don't expose it, fall back to payload which the
-      // worker index.ts also updates on completion.
-      return jobRow.result ?? jobRow.payload;
+    function handleResult(row: any) {
+      if (settled) return;
+      if (row.status === "completed") {
+        log.debug("Worker job completed", { jobId, elapsedMs: Date.now() - startTime });
+        cleanup();
+        resolve(row.result ?? row.payload);
+      } else if (row.status === "failed") {
+        cleanup();
+        reject(new Error(String(row.error_message || "Job failed")));
+      }
     }
 
-    if (jobRow.status === "failed") {
-      throw new Error(
-        String(jobRow.error_message || "Script generation failed")
-      );
-    }
+    // Realtime: instant notification when job status changes
+    channel = supabase
+      .channel(`job_${jobId}`)
+      .on("postgres_changes", {
+        event: "UPDATE",
+        schema: "public",
+        table: "video_generation_jobs",
+        filter: `id=eq.${jobId}`,
+      }, (payload) => {
+        handleResult(payload.new);
+      })
+      .subscribe();
 
-    // status is 'pending' or 'processing' — keep polling
-  }
+    // Fallback poll: catches cases where Realtime misses an update
+    fallbackTimer = setInterval(async () => {
+      if (settled) return;
+      try {
+        const { data: row, error } = await (supabase
+          .from("video_generation_jobs") as any)
+          .select("status, error_message, payload, result")
+          .eq("id", jobId)
+          .single();
+        if (error) return; // ignore poll errors, Realtime will catch it
+        handleResult(row);
+      } catch { /* ignore */ }
+    }, FALLBACK_POLL);
+
+    // Timeout
+    timeoutTimer = setTimeout(() => {
+      cleanup();
+      reject(new Error(`Worker job timed out after ${Math.round(maxWaitMs / 60000)} minutes`));
+    }, maxWaitMs);
+  });
 }
 
 export async function callPhase(

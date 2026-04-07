@@ -25,6 +25,8 @@ export const SPEAKER_MAP: Record<string, string> = {
   "Maya":    "Sohee",
   "Sage":    "Uncle_fu",
   "Aria":    "Vivian",
+  "Adam":    "Aiden",   // Legacy English male → Qwen3
+  "River":   "Serena",  // Legacy English female → Qwen3
 };
 
 /** Map our language codes to Qwen3 language names */

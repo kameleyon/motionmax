@@ -16,9 +16,7 @@ import { createScopedLogger } from "@/lib/logger";
 
 const log = createScopedLogger("CinematicPipeline");
 
-// Global rate-limit cooldown shared across image and video phases
-let lastRateLimitTime = 0;
-const GLOBAL_COOLDOWN_MS = 15000;
+// Rate limiting is handled server-side by the worker.
 
 // ---- Main Pipeline ----
 
@@ -158,17 +156,12 @@ async function runCinematicVisuals(projectId: string, generationId: string, scen
 
   // ── Generate images (all in parallel) ──────────────────────────
   const processImage = async (i: number) => {
-    const now = Date.now();
-    if (now - lastRateLimitTime < GLOBAL_COOLDOWN_MS) {
-      await sleep(GLOBAL_COOLDOWN_MS - (now - lastRateLimitTime));
-    }
     try {
       const r = await ctx.callPhase(
         { phase: "images", projectId, generationId, sceneIndex: i },
         480000, CINEMATIC_ENDPOINT
       );
       if (!r.success) {
-        if (r.retryAfterMs && r.retryAfterMs >= 20000) lastRateLimitTime = Date.now();
         log.warn(`Scene ${i + 1} image failed: ${r.error}`);
       }
     } catch (err) {
@@ -194,13 +187,8 @@ async function runCinematicVisuals(projectId: string, generationId: string, scen
     if (i < sceneCount - 1) await imagePromises[i + 1];
 
     try {
-      // Check if already has video
-      const { data: g } = await supabase.from("generations").select("scenes").eq("id", generationId).maybeSingle();
-      if ((normalizeScenes(g?.scenes) ?? [])[i]?.videoUrl) {
-        log.debug(`Scene ${i + 1}: already has videoUrl, skipping`);
-        completedVideos++;
-        return;
-      }
+      // The unified pipeline only dispatches video jobs for scenes that need them,
+      // so skip the redundant DB read to check videoUrl existence.
       const r = await ctx.callPhase(
         { phase: "video", projectId, generationId, sceneIndex: i },
         20 * 60 * 1000, CINEMATIC_ENDPOINT
@@ -292,27 +280,18 @@ async function retryMissingImages(generationId: string, sceneCount: number, ctx:
     log.debug(`Image retry round ${round + 1}: ${missing.length} scenes missing`);
     ctx.setState((prev) => ({ ...prev, statusMessage: `Retrying ${missing.length} missing images (round ${round + 1})...` }));
 
-    for (const idx of missing) {
-      // Respect global rate-limit cooldown
-      const now = Date.now();
-      if (now - lastRateLimitTime < GLOBAL_COOLDOWN_MS) {
-        const cooldownWait = GLOBAL_COOLDOWN_MS - (now - lastRateLimitTime);
-        log.debug(`Image retry ${idx + 1}: global cooldown, waiting ${(cooldownWait / 1000).toFixed(1)}s`);
-        await sleep(cooldownWait);
-      }
-      try {
-        const imgRes = await ctx.callPhase(
+    // Fire all retries in parallel — rate limiting is handled server-side
+    await Promise.allSettled(
+      missing.map((idx) =>
+        ctx.callPhase(
           { phase: "images", projectId, generationId, sceneIndex: idx },
           480000,
           CINEMATIC_ENDPOINT
-        );
-        if (imgRes && imgRes.retryAfterMs && imgRes.retryAfterMs >= 20000) {
-          lastRateLimitTime = Date.now();
-        }
-      } catch (err) {
-        log.warn(`Image retry for scene ${idx} failed:`, err);
-      }
-    }
+        ).catch((retryErr) => {
+          log.warn(`Image retry for scene ${idx} failed:`, retryErr);
+        })
+      )
+    );
   }
 }
 

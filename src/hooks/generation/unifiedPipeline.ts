@@ -1,25 +1,23 @@
 /**
  * Unified generation pipeline for ALL project types.
- * script → audio + images (per-scene, parallel) → video (cinematic only) → finalize
+ *
+ * Uses server-side job dependencies:
+ * 1. Script job runs first (creates project + generation)
+ * 2. All audio + image jobs pre-submitted with depends_on: [scriptJobId]
+ * 3. Cinematic video jobs depend on their image jobs
+ * 4. Finalize depends on all audio + video (or image) jobs
+ *
+ * Pipeline survives browser close — worker handles all sequencing.
  */
 import { createScopedLogger } from "@/lib/logger";
-import { db } from "@/lib/databaseService";
 import {
   type GenerationParams,
   type PipelineContext,
   normalizeScenes,
-  CINEMATIC_ENDPOINT,
-  DEFAULT_ENDPOINT,
 } from "./types";
+import { submitJob, waitForJob } from "./callPhase";
 
 const log = createScopedLogger("Pipeline:Unified");
-
-const AUDIO_CONCURRENCY = 5;
-
-/** Infer the endpoint from project type */
-function getEndpoint(projectType: string): string {
-  return projectType === "cinematic" ? CINEMATIC_ENDPOINT : DEFAULT_ENDPOINT;
-}
 
 export async function runUnifiedPipeline(
   params: GenerationParams,
@@ -27,11 +25,10 @@ export async function runUnifiedPipeline(
   expectedSceneCount: number
 ): Promise<void> {
   const isCinematic = params.projectType === "cinematic";
-  const endpoint = getEndpoint(params.projectType || "doc2video");
 
   log.debug("Starting unified pipeline", { projectType: params.projectType, format: params.format, length: params.length });
 
-  // ============= PHASE 1: SCRIPT =============
+  // ============= PHASE 1: SCRIPT (must complete first to get IDs) =============
   ctx.setState((prev) => ({ ...prev, step: "scripting" as const, progress: 5, statusMessage: "Generating... this may take a moment" }));
 
   const scriptResult = await ctx.callPhase({
@@ -57,7 +54,7 @@ export async function runUnifiedPipeline(
     voiceInclination: params.voiceInclination,
     brandName: params.brandName,
     language: params.language,
-  }, 480000, endpoint);
+  }, 480000);
 
   if (!scriptResult.success) throw new Error(scriptResult.error || "Script generation failed");
 
@@ -66,8 +63,8 @@ export async function runUnifiedPipeline(
 
   ctx.setState((prev) => ({
     ...prev,
-    step: "scripting" as const,
-    progress: 10,
+    step: "visuals" as const,
+    progress: 15,
     projectId,
     generationId,
     title,
@@ -78,151 +75,69 @@ export async function runUnifiedPipeline(
     phaseTimings: { script: scriptResult.phaseTime },
   }));
 
-  // ============= PHASE 2: AUDIO + IMAGES (per-scene, parallel) =============
-  ctx.setState((prev) => ({ ...prev, step: "visuals" as const, progress: 15, statusMessage: "Creating your content..." }));
+  // ============= PHASE 2: PRE-SUBMIT ALL REMAINING JOBS WITH DEPENDENCIES =============
+  // No more client-side orchestration — worker handles sequencing via depends_on
 
-  // --- Audio: per-scene jobs, batched by AUDIO_CONCURRENCY ---
-  const audioPromise = (async () => {
-    for (let batchStart = 0; batchStart < sceneCount; batchStart += AUDIO_CONCURRENCY) {
-      const batchEnd = Math.min(batchStart + AUDIO_CONCURRENCY, sceneCount);
-      const batch: Promise<unknown>[] = [];
-      for (let i = batchStart; i < batchEnd; i++) {
-        batch.push(
-          ctx.callPhase({ phase: "audio", projectId, generationId, sceneIndex: i, language: params.language }, 300000, endpoint)
-            .catch((err) => { log.warn(`Audio scene ${i} failed:`, err); return { success: false }; })
-        );
-      }
-      const results = await Promise.all(batch);
-      const failures = results.filter((r: any) => r && r.success === false);
-      if (failures.length > 0) {
-        log.warn(`${failures.length}/${batch.length} audio scenes failed in batch`);
-      }
-      if (failures.length === batch.length) {
-        throw new Error(`All ${batch.length} audio scenes failed`);
-      }
+  const audioJobIds: string[] = [];
+  const imageJobIds: string[] = [];
+  const videoJobIds: string[] = [];
 
-      ctx.setState((prev) => ({
-        ...prev,
-        progress: 10 + Math.floor(((batchEnd) / sceneCount) * 25),
-        statusMessage: "Creating your content...",
-      }));
-    }
-  })();
+  // Submit all audio jobs (no dependencies — script already complete)
+  for (let i = 0; i < sceneCount; i++) {
+    const jobId = await submitJob(
+      { phase: "audio", projectId, generationId, sceneIndex: i, language: params.language },
+      "cinematic_audio",
+    );
+    audioJobIds.push(jobId);
+  }
+  log.debug(`Submitted ${audioJobIds.length} audio jobs`);
 
-  // --- Images: all per-scene jobs in parallel ---
-  const imagePromises: Promise<unknown>[] = [];
-  const videoPromises: Promise<unknown>[] = []; // cinematic only
+  // Submit all image jobs (no dependencies — script already complete)
+  for (let i = 0; i < sceneCount; i++) {
+    const jobId = await submitJob(
+      { phase: "images", projectId, generationId, sceneIndex: i },
+      "cinematic_image",
+    );
+    imageJobIds.push(jobId);
+  }
+  log.debug(`Submitted ${imageJobIds.length} image jobs`);
 
-  // For cinematic streaming: track image completion per scene
-  const imageReady: Record<number, Promise<void>> = {};
-  const imageResolvers: Record<number, () => void> = {};
-
+  // Cinematic: submit video jobs with image dependencies
   if (isCinematic) {
     for (let i = 0; i < sceneCount; i++) {
-      imageReady[i] = new Promise<void>((resolve) => { imageResolvers[i] = resolve; });
-    }
-  }
+      // Video[i] depends on image[i] + image[i+1] (for transition)
+      const deps = [imageJobIds[i]];
+      if (i < sceneCount - 1) deps.push(imageJobIds[i + 1]);
 
-  for (let i = 0; i < sceneCount; i++) {
-    const imagePromise = ctx.callPhase(
-      { phase: "images", projectId, generationId, sceneIndex: i },
-      600000, endpoint
-    ).then((result: unknown) => {
-      if (isCinematic && imageResolvers[i]) imageResolvers[i]();
-      ctx.setState((prev) => ({
-        ...prev,
-        completedImages: (prev.completedImages || 0) + 1,
-        progress: Math.min(89, 35 + Math.floor(((prev.completedImages || 0) + 1) / sceneCount * 50)),
-        statusMessage: "Creating your content...",
-      }));
-      return result;
-    }).catch((err: unknown) => {
-      log.warn(`Image scene ${i} failed:`, err);
-      if (isCinematic && imageResolvers[i]) imageResolvers[i](); // unblock video even on failure
-      return { success: false };
-    });
-
-    imagePromises.push(imagePromise);
-
-    // Cinematic: fire video jobs as images complete (streaming)
-    if (isCinematic) {
-      const sceneIdx = i; // capture for closure
-      const videoPromise = (async () => {
-        // Wait for current scene image + next scene image (for transition)
-        await imageReady[sceneIdx];
-        if (sceneIdx < sceneCount - 1) await imageReady[sceneIdx + 1];
-
-        return ctx.callPhase(
-          { phase: "video", projectId, generationId, sceneIndex: sceneIdx },
-          20 * 60 * 1000, endpoint
-        ).then((result: unknown) => {
-          ctx.setState((prev) => ({
-            ...prev,
-            statusMessage: "Almost there...",
-          }));
-          return result;
-        }).catch((err: unknown) => {
-          log.warn(`Video scene ${sceneIdx} failed:`, err);
-          return { success: false };
-        });
-      })();
-      videoPromises.push(videoPromise);
-    }
-  }
-
-  // Wait for audio + images + videos (cinematic) to all complete
-  await Promise.all([audioPromise, ...imagePromises, ...videoPromises]);
-
-  // --- Retry missing images (1 round) ---
-  const { data: checkRows } = await db.query("generations", (q) => q.eq("id", generationId).limit(1));
-  const checkGen = checkRows?.[0] as Record<string, unknown> | undefined;
-  const checkScenes = normalizeScenes(checkGen?.scenes) ?? [];
-  const missingImages = checkScenes.filter((s) => !s.imageUrl).length;
-
-  if (missingImages > 0) {
-    log.debug(`Retrying ${missingImages} missing images`);
-    ctx.setState((prev) => ({ ...prev, statusMessage: "Polishing up a few details..." }));
-    const retryPromises = checkScenes
-      .map((s, i) => (!s.imageUrl ? i : -1))
-      .filter((i) => i >= 0)
-      .map((i) =>
-        ctx.callPhase({ phase: "images", projectId, generationId, sceneIndex: i }, 480000, endpoint)
-          .catch((err: unknown) => log.warn(`Image retry scene ${i} failed:`, err))
+      const jobId = await submitJob(
+        { phase: "video", projectId, generationId, sceneIndex: i },
+        "cinematic_video",
+        deps,
       );
-    await Promise.allSettled(retryPromises);
-  }
-
-  // Cinematic: retry missing videos (1 round)
-  if (isCinematic) {
-    const { data: vidCheckRows } = await db.query("generations", (q) => q.eq("id", generationId).limit(1));
-    const vidCheckGen = vidCheckRows?.[0] as Record<string, unknown> | undefined;
-    const vidCheckScenes = normalizeScenes(vidCheckGen?.scenes) ?? [];
-    const missingVideos = vidCheckScenes.filter((s) => !s.videoUrl).length;
-
-    if (missingVideos > 0) {
-      log.debug(`Retrying ${missingVideos} missing videos`);
-      ctx.setState((prev) => ({ ...prev, statusMessage: "Polishing up a few details..." }));
-      const retryPromises = vidCheckScenes
-        .map((s, i) => (!s.videoUrl ? i : -1))
-        .filter((i) => i >= 0)
-        .map((i) =>
-          ctx.callPhase({ phase: "video", projectId, generationId, sceneIndex: i }, 20 * 60 * 1000, endpoint)
-            .catch((err: unknown) => log.warn(`Video retry scene ${i} failed:`, err))
-        );
-      await Promise.allSettled(retryPromises);
+      videoJobIds.push(jobId);
     }
+    log.debug(`Submitted ${videoJobIds.length} video jobs with image dependencies`);
   }
 
-  ctx.setState((prev) => ({
-    ...prev,
-    progress: 90,
-    statusMessage: "Wrapping up...",
-  }));
+  // Submit finalize job — depends on ALL audio + ALL video (or image) jobs
+  const finalizeDeps = [...audioJobIds, ...(isCinematic ? videoJobIds : imageJobIds)];
+  const finalizeJobId = await submitJob(
+    { phase: "finalize", generationId, projectId },
+    "finalize_generation",
+    finalizeDeps,
+  );
+  log.debug(`Submitted finalize job (depends on ${finalizeDeps.length} jobs)`);
 
-  // ============= PHASE 3: FINALIZE =============
-  log.debug("Starting finalize phase");
-  const finalResult = await ctx.callPhase({ phase: "finalize", generationId, projectId }, 120000, endpoint);
-  if (!finalResult.success) throw new Error(finalResult.error || "Finalization failed");
+  // ============= PHASE 3: WAIT FOR COMPLETION =============
+  // All jobs are in the queue with proper dependencies.
+  // Just wait for the finalize job — it won't run until everything else completes.
+
+  ctx.setState((prev) => ({ ...prev, statusMessage: "Creating your content..." }));
+
+  // Monitor progress by waiting for finalize (Realtime + fallback polling)
+  const finalResult = await waitForJob(finalizeJobId, 30 * 60 * 1000, "finalize_generation");
+
+  if (!finalResult.success) throw new Error(finalResult.error || "Generation failed");
 
   const finalScenes = normalizeScenes(finalResult.scenes);
   log.debug("Unified pipeline complete", { sceneCount: finalScenes?.length, title: finalResult.title });

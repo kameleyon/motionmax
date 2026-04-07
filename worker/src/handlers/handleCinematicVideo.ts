@@ -217,11 +217,12 @@ export async function handleCinematicVideo(
   }
   const finalPrompt = videoPrompt + sceneInstruction;
 
+  const cameraName = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("\u2014")[0].trim();
   const transitionInfo = endImageUrl ? `→ scene ${sceneIndex + 1}` : "(no end_image)";
+  const modelInfo = endImageUrl ? "PixVerse V6 Transition" : "Kling V2.5 (last scene)";
   console.log(
-    `[CinematicVideo] Scene ${sceneIndex}: Kling V2.5 Turbo I2V 10s ${transitionInfo}, ` +
-    `camera=${CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("—")[0].trim()}, ` +
-    `prompt=${finalPrompt.length} chars`
+    `[CinematicVideo] Scene ${sceneIndex}: ${modelInfo} ${transitionInfo}, ` +
+    `camera=${cameraName}, prompt=${finalPrompt.length} chars`
   );
 
   // ── Generate video ────────────────────────────────────────────────

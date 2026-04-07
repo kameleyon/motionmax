@@ -240,98 +240,132 @@ ${researchBrief}
     console.log(`[GenerateVideo] ${projectType}: transforming non-standard LLM response (keys: ${Object.keys(parsed).join(", ")})`);
     const raw = parsed as Record<string, unknown>;
 
-    // Keys that contain spoken narration
-    const NARRATION_KEYS = /voiceover|narration|script|narrative|explanation|overview|summary|presentation|educational|synthesis|insight|content|scene/i;
-    // Keys that contain visual/design specs
-    const VISUAL_KEYS = /visual|design|image|layout|style|illustration|infographic|color|palette|typography|icon|graphic|border|format|aesthetic/i;
-
-    const extractByCategory = (obj: unknown, depth = 0): { narration: string[]; visual: string[] } => {
-      const result = { narration: [] as string[], visual: [] as string[] };
-      if (depth > 5) return result;
-      if (typeof obj === "string" && obj.length > 30) {
-        if (VISUAL_KEYS.test(obj) && obj.length < 200) result.visual.push(obj);
-        else result.narration.push(obj);
-        return result;
-      }
-      if (Array.isArray(obj)) {
-        obj.forEach(item => {
-          const sub = extractByCategory(item, depth + 1);
-          result.narration.push(...sub.narration);
-          result.visual.push(...sub.visual);
-        });
-        return result;
-      }
-      if (obj && typeof obj === "object" && !Array.isArray(obj)) {
-        for (const [key, val] of Object.entries(obj)) {
-          const sub = extractByCategory(val, depth + 1);
-          if (VISUAL_KEYS.test(key)) {
-            result.visual.push(...sub.narration, ...sub.visual);
-          } else if (NARRATION_KEYS.test(key)) {
-            result.narration.push(...sub.narration);
-            result.visual.push(...sub.visual);
-          } else {
-            result.narration.push(...sub.narration);
-            result.visual.push(...sub.visual);
-          }
-        }
-      }
-      return result;
-    };
-
-    const { narration, visual } = extractByCategory(raw);
-    const dedup = (arr: string[]) => {
-      const seen = new Set<string>();
-      return arr.filter(t => { if (seen.has(t)) return false; seen.add(t); return true; });
-    };
-    const uniqueNarration = dedup(narration);
-    const uniqueVisual = dedup(visual);
-    const sortedNarration = [...uniqueNarration].sort((a, b) => b.length - a.length);
-
     // Extract title
     const title = (raw.title as string) || (raw.topic as string) || (raw.headline as string) ||
       (raw.main_title as string) || (raw.coverTitle as string) || "";
     parsed.title = title || parsed.title;
 
-    if (projectType === "smartflow") {
-      // SmartFlow: 1 scene with all content
-      const voiceover = sortedNarration.slice(0, 5).join(" ").trim();
-      const visualPrompt = uniqueVisual.join(" ").trim();
-      parsed.scenes = [{
-        number: 1,
-        voiceover: voiceover || "Unable to extract narration.",
-        visualPrompt: visualPrompt || sortedNarration[0] || "",
-        coverTitle: (raw.coverTitle as string) || (raw.cover_title as string) || title || "",
-        duration: 60,
-      }];
-      console.log(`[GenerateVideo] Transform: 1 scene, voiceover=${voiceover.length} chars, visual=${visualPrompt.length} chars`);
-    } else {
-      // Multi-scene: split narration into scene-sized chunks
-      const expectedCounts: Record<string, number> = { short: 10, brief: 28, presentation: 36 };
-      const targetSceneCount = expectedCounts[payload.length || "brief"] || 10;
-      const allNarration = sortedNarration.join(" ").trim();
-      const allVisual = uniqueVisual.join(" ").trim();
-
-      // Split narration into roughly equal chunks by sentences
-      const sentences = allNarration.split(/(?<=[.!?])\s+/).filter(s => s.length > 10);
-      const scenesPerChunk = Math.max(1, Math.ceil(sentences.length / targetSceneCount));
-
-      const builtScenes: any[] = [];
-      for (let i = 0; i < targetSceneCount && i * scenesPerChunk < sentences.length; i++) {
-        const chunk = sentences.slice(i * scenesPerChunk, (i + 1) * scenesPerChunk).join(" ");
-        builtScenes.push({
-          number: i + 1,
-          voiceover: chunk,
-          visualPrompt: allVisual || chunk,
-          duration: 11,
-        });
+    // ── STEP 1: Look for a scene-like array under any key ──────────
+    // Gemini often returns scenes under non-standard keys like "script_and_visuals",
+    // "sections", "content_blocks", etc. If we find an array of objects, treat each as a scene.
+    let sceneArray: any[] | null = null;
+    for (const [key, val] of Object.entries(raw)) {
+      if (key === "title" || key === "cta" || key === "call_to_action") continue;
+      if (Array.isArray(val) && val.length > 0 && typeof val[0] === "object" && val[0] !== null) {
+        sceneArray = val;
+        console.log(`[GenerateVideo] Found scene-like array under key "${key}" (${val.length} items)`);
+        break;
       }
+    }
 
-      // If we got at least 1 scene, use them
-      if (builtScenes.length > 0) {
-        parsed.scenes = builtScenes;
-        console.log(`[GenerateVideo] Transform: ${builtScenes.length} scenes from ${sentences.length} sentences`);
+    if (sceneArray && sceneArray.length > 1) {
+      // Map each array item to a scene — extract voiceover and visual from whatever fields exist
+      parsed.scenes = sceneArray.map((item: any, idx: number) => {
+        const allStrings = Object.entries(item)
+          .filter(([, v]) => typeof v === "string" && (v as string).length > 20)
+          .map(([k, v]) => ({ key: k, val: v as string }));
+
+        // Find narration: longest string, or one with narration-like key
+        const NARRATION_RE = /voiceover|narration|script|dialogue|text|monologue|content/i;
+        const VISUAL_RE = /visual|image|illustration|design|direction|prompt|scene_description/i;
+
+        const narrationField = allStrings.find(s => NARRATION_RE.test(s.key)) ||
+          allStrings.sort((a, b) => b.val.length - a.val.length)[0];
+        const visualField = allStrings.find(s => VISUAL_RE.test(s.key));
+
+        return {
+          number: idx + 1,
+          voiceover: narrationField?.val || "",
+          visualPrompt: visualField?.val || narrationField?.val || "",
+          duration: projectType === "smartflow" ? 60 : 11,
+        };
+      });
+      console.log(`[GenerateVideo] Transform: ${parsed.scenes.length} scenes from array`);
+    } else {
+      // ── STEP 2: No scene array found — extract all text and split ──
+      const NARRATION_KEYS = /voiceover|narration|script|narrative|explanation|overview|summary|presentation|educational|synthesis|insight|content|scene/i;
+      const VISUAL_KEYS = /visual|design|image|layout|style|illustration|infographic|color|palette|typography|icon|graphic|border|format|aesthetic/i;
+
+      const extractByCategory = (obj: unknown, depth = 0): { narration: string[]; visual: string[] } => {
+        const result = { narration: [] as string[], visual: [] as string[] };
+        if (depth > 5) return result;
+        if (typeof obj === "string" && obj.length > 30) {
+          if (VISUAL_KEYS.test(obj) && obj.length < 200) result.visual.push(obj);
+          else result.narration.push(obj);
+          return result;
+        }
+        if (Array.isArray(obj)) {
+          obj.forEach(item => {
+            const sub = extractByCategory(item, depth + 1);
+            result.narration.push(...sub.narration);
+            result.visual.push(...sub.visual);
+          });
+          return result;
+        }
+        if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+          for (const [key, val] of Object.entries(obj)) {
+            const sub = extractByCategory(val, depth + 1);
+            if (VISUAL_KEYS.test(key)) {
+              result.visual.push(...sub.narration, ...sub.visual);
+            } else if (NARRATION_KEYS.test(key)) {
+              result.narration.push(...sub.narration);
+              result.visual.push(...sub.visual);
+            } else {
+              result.narration.push(...sub.narration);
+              result.visual.push(...sub.visual);
+            }
+          }
+        }
+        return result;
+      };
+
+      const { narration, visual } = extractByCategory(raw);
+      const dedup = (arr: string[]) => {
+        const seen = new Set<string>();
+        return arr.filter(t => { if (seen.has(t)) return false; seen.add(t); return true; });
+      };
+      const uniqueNarration = dedup(narration);
+      const uniqueVisual = dedup(visual);
+      const sortedNarration = [...uniqueNarration].sort((a, b) => b.length - a.length);
+
+      if (projectType === "smartflow") {
+        const voiceover = sortedNarration.slice(0, 5).join(" ").trim();
+        const visualPrompt = uniqueVisual.join(" ").trim();
+        parsed.scenes = [{
+          number: 1,
+          voiceover: voiceover || "Unable to extract narration.",
+          visualPrompt: visualPrompt || sortedNarration[0] || "",
+          coverTitle: (raw.coverTitle as string) || (raw.cover_title as string) || title || "",
+          duration: 60,
+        }];
+        console.log(`[GenerateVideo] Transform: 1 scene, voiceover=${voiceover.length} chars, visual=${visualPrompt.length} chars`);
       } else {
-        throw new Error(`LLM returned no usable content for ${projectType} script`);
+        // Split narration into scene-sized chunks by sentences
+        const expectedCounts: Record<string, number> = { short: 10, brief: 28, presentation: 36 };
+        const targetSceneCount = expectedCounts[payload.length || "brief"] || 10;
+        const allNarration = sortedNarration.join(" ").trim();
+        const allVisual = uniqueVisual.join(" ").trim();
+
+        const sentences = allNarration.split(/(?<=[.!?])\s+/).filter(s => s.length > 10);
+        const scenesPerChunk = Math.max(1, Math.ceil(sentences.length / targetSceneCount));
+
+        const builtScenes: any[] = [];
+        for (let i = 0; i < targetSceneCount && i * scenesPerChunk < sentences.length; i++) {
+          const chunk = sentences.slice(i * scenesPerChunk, (i + 1) * scenesPerChunk).join(" ");
+          builtScenes.push({
+            number: i + 1,
+            voiceover: chunk,
+            visualPrompt: allVisual || chunk,
+            duration: 11,
+          });
+        }
+
+        if (builtScenes.length > 0) {
+          parsed.scenes = builtScenes;
+          console.log(`[GenerateVideo] Transform: ${builtScenes.length} scenes from ${sentences.length} sentences`);
+        } else {
+          throw new Error(`LLM returned no usable content for ${projectType} script`);
+        }
       }
     }
   }

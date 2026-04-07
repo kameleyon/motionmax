@@ -236,66 +236,54 @@ export async function callLLMWithFallback(
   prompt: { system: string; user: string },
   options: { maxTokens: number; forceJson?: boolean; temperature?: number },
 ): Promise<string> {
-  // Try Hypereal/Gemini first
-  if (process.env.HYPEREAL_API_KEY) {
-    try {
-      let text = await callHyperealLLM(prompt, options);
-
-      // Strip <think> tags (Gemini reasoning output)
-      if (text.includes("<think>")) {
-        text = text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
-      }
-
-      // Repair common Hypereal JSON malformations (runs AFTER <think> stripping)
-      if (options.forceJson) {
-        // Fix double braces from assistant pre-fill echo
-        text = text.replace(/^\s*\{\{/, "{");
-        text = text.replace(/\}\}\s*$/, "}");
-
-        // Strip stray non-JSON lines (e.g. "Menu", markdown fences, model artifacts)
-        text = text.split("\n").filter(line => {
-          const t = line.trim();
-          if (!t) return true; // keep blanks (harmless in JSON)
-          // Drop bare words/phrases with no JSON punctuation
-          if (/^[a-zA-Z_][a-zA-Z0-9_ ]*$/.test(t) && !/^(true|false|null)$/.test(t)) return false;
-          // Drop markdown code fences
-          if (t.startsWith("```")) return false;
-          return true;
-        }).join("\n");
-      }
-
-      // If forceJson requested, verify response actually contains parseable JSON
-      if (options.forceJson) {
-        const braceIdx = text.indexOf("{");
-        const lastBrace = text.lastIndexOf("}");
-        if (braceIdx === -1 || lastBrace <= braceIdx) {
-          console.warn(`[LLM] Hypereal returned non-JSON (${text.length} chars, starts with: "${text.substring(0, 80)}") — falling back to OpenRouter`);
-          throw new Error("Hypereal response is not JSON");
-        }
-
-        // Extract just the JSON object and strip trailing commas before closing brackets
-        const extracted = text.slice(braceIdx, lastBrace + 1).replace(/,\s*([\]}])/g, "$1");
-
-        // Quick sanity check: try to parse the JSON portion
-        try {
-          JSON.parse(extracted);
-        } catch {
-          console.warn(`[LLM] Hypereal returned malformed JSON (${text.length} chars, starts with: "${text.substring(0, 120)}") — falling back to OpenRouter`);
-          throw new Error("Hypereal response is malformed JSON");
-        }
-
-        // Use the clean extracted JSON as the return value
-        text = extracted;
-      }
-
-      return text;
-    } catch (err) {
-      console.warn(`[LLM] Hypereal failed: ${(err as Error).message} — falling back to OpenRouter`);
-    }
+  // Try OpenRouter/Claude first (reliable JSON, correct scene counts)
+  try {
+    return await callOpenRouterLLM(prompt, options);
+  } catch (err) {
+    console.warn(`[LLM] OpenRouter failed: ${(err as Error).message} — falling back to Hypereal/Gemini`);
   }
 
-  // Fallback to OpenRouter/Claude
-  return callOpenRouterLLM(prompt, options);
+  // Fallback to Hypereal/Gemini
+  if (process.env.HYPEREAL_API_KEY) {
+    let text = await callHyperealLLM(prompt, options);
+
+    // Strip <think> tags (Gemini reasoning output)
+    if (text.includes("<think>")) {
+      text = text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
+    }
+
+    // Repair common Hypereal JSON malformations
+    if (options.forceJson) {
+      text = text.replace(/^\s*\{\{/, "{");
+      text = text.replace(/\}\}\s*$/, "}");
+
+      text = text.split("\n").filter(line => {
+        const t = line.trim();
+        if (!t) return true;
+        if (/^[a-zA-Z_][a-zA-Z0-9_ ]*$/.test(t) && !/^(true|false|null)$/.test(t)) return false;
+        if (t.startsWith("```")) return false;
+        return true;
+      }).join("\n");
+
+      const braceIdx = text.indexOf("{");
+      const lastBrace = text.lastIndexOf("}");
+      if (braceIdx === -1 || lastBrace <= braceIdx) {
+        throw new Error("Hypereal fallback returned non-JSON");
+      }
+
+      const extracted = text.slice(braceIdx, lastBrace + 1).replace(/,\s*([\]}])/g, "$1");
+      try {
+        JSON.parse(extracted);
+      } catch {
+        throw new Error("Hypereal fallback returned malformed JSON");
+      }
+      text = extracted;
+    }
+
+    return text;
+  }
+
+  throw new Error("Both OpenRouter and Hypereal failed");
 }
 
 // ── Backward-compatible wrapper for legacy generateVideo handler ───

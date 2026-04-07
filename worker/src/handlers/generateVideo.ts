@@ -211,28 +211,14 @@ ${researchBrief}
     }
   }
 
-  // ── Step 2: Call LLM ──────────────────────────────────────────────
+  // ── Step 2: Call Gemini (same for ALL project types) ──────────────
   await updateJobProgress(jobId, 10);
   const temperature = 0.8;
-
-  // Gemini works for SmartFlow (1 scene) and cinematic (own builder) but fails
-  // for doc2video/storytelling (10+ scenes complex JSON). Route those to OpenRouter directly.
-  const useOpenRouterDirect = projectType === "doc2video" || projectType === "storytelling";
-  let rawText: string;
-  if (useOpenRouterDirect) {
-    const { callOpenRouterLLM } = await import("../services/openrouter.js");
-    rawText = await callOpenRouterLLM(promptResult, {
-      maxTokens: promptResult.maxTokens,
-      forceJson: true,
-      temperature,
-    });
-  } else {
-    rawText = await callLLMWithFallback(promptResult, {
-      maxTokens: promptResult.maxTokens,
-      forceJson: true,
-      temperature,
-    });
-  }
+  const rawText = await callLLMWithFallback(promptResult, {
+    maxTokens: promptResult.maxTokens,
+    forceJson: true,
+    temperature,
+  });
 
   // ── Step 3: Parse LLM response ───────────────────────────────────
   await updateJobProgress(jobId, 20);
@@ -241,135 +227,122 @@ ${researchBrief}
     `${projectType} script`,
   ) as ParsedScript;
 
-  // SmartFlow: Gemini often ignores the output format and returns arbitrary keys.
-  // Instead of falling back to another LLM, extract content from whatever structure we got.
-  if (projectType === "smartflow") {
-    const hasValidScenes = Array.isArray(parsed.scenes) && parsed.scenes.length > 0 &&
-      !!(parsed.scenes[0].voiceover || (parsed.scenes[0] as any).narration);
+  // ── UNIFIED TRANSFORM: works for ALL project types ──────────────
+  // Gemini sometimes returns valid JSON in wrong structure (no scenes array,
+  // flat { title, script }, or arbitrary keys). Instead of falling back to
+  // another LLM, extract content from whatever we got and build scenes.
 
-    if (!hasValidScenes) {
-      console.log(`[GenerateVideo] SmartFlow: transforming non-standard LLM response into expected format`);
-      const raw = parsed as Record<string, unknown>;
+  const hasValidScenes = Array.isArray(parsed.scenes) && parsed.scenes.length > 0 &&
+    parsed.scenes.some(s => !!(s.voiceover || (s as any).narration || s.visualPrompt || s.visual_prompt));
 
-      // Keys that contain spoken narration (for voiceover)
-      const NARRATION_KEYS = /voiceover|narration|script|narrative|explanation|overview|summary|presentation|educational|synthesis|insight/i;
-      // Keys that contain visual/design specs (NOT for voiceover)
-      const VISUAL_KEYS = /visual|design|image|layout|style|illustration|infographic|color|palette|typography|icon|graphic|border|format|aesthetic/i;
+  if (!hasValidScenes) {
+    console.log(`[GenerateVideo] ${projectType}: transforming non-standard LLM response (keys: ${Object.keys(parsed).join(", ")})`);
+    const raw = parsed as Record<string, unknown>;
 
-      // Extract text from objects, separating narration from visual content
-      const extractByCategory = (obj: unknown, depth = 0): { narration: string[]; visual: string[] } => {
-        const result = { narration: [] as string[], visual: [] as string[] };
-        if (depth > 5) return result;
-        if (typeof obj === "string" && obj.length > 30) {
-          // Classify standalone strings: if it mentions colors/layout/pixels, it's visual
-          if (VISUAL_KEYS.test(obj) && obj.length < 200) result.visual.push(obj);
-          else result.narration.push(obj);
-          return result;
-        }
-        if (Array.isArray(obj)) {
-          obj.forEach(item => {
-            const sub = extractByCategory(item, depth + 1);
+    // Keys that contain spoken narration
+    const NARRATION_KEYS = /voiceover|narration|script|narrative|explanation|overview|summary|presentation|educational|synthesis|insight|content|scene/i;
+    // Keys that contain visual/design specs
+    const VISUAL_KEYS = /visual|design|image|layout|style|illustration|infographic|color|palette|typography|icon|graphic|border|format|aesthetic/i;
+
+    const extractByCategory = (obj: unknown, depth = 0): { narration: string[]; visual: string[] } => {
+      const result = { narration: [] as string[], visual: [] as string[] };
+      if (depth > 5) return result;
+      if (typeof obj === "string" && obj.length > 30) {
+        if (VISUAL_KEYS.test(obj) && obj.length < 200) result.visual.push(obj);
+        else result.narration.push(obj);
+        return result;
+      }
+      if (Array.isArray(obj)) {
+        obj.forEach(item => {
+          const sub = extractByCategory(item, depth + 1);
+          result.narration.push(...sub.narration);
+          result.visual.push(...sub.visual);
+        });
+        return result;
+      }
+      if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+        for (const [key, val] of Object.entries(obj)) {
+          const sub = extractByCategory(val, depth + 1);
+          if (VISUAL_KEYS.test(key)) {
+            result.visual.push(...sub.narration, ...sub.visual);
+          } else if (NARRATION_KEYS.test(key)) {
             result.narration.push(...sub.narration);
             result.visual.push(...sub.visual);
-          });
-          return result;
-        }
-        if (obj && typeof obj === "object" && !Array.isArray(obj)) {
-          for (const [key, val] of Object.entries(obj)) {
-            const sub = extractByCategory(val, depth + 1);
-            if (VISUAL_KEYS.test(key)) {
-              // Everything under visual keys goes to visual
-              result.visual.push(...sub.narration, ...sub.visual);
-            } else if (NARRATION_KEYS.test(key)) {
-              // Everything under narration keys goes to narration
-              result.narration.push(...sub.narration);
-              result.visual.push(...sub.visual);
-            } else {
-              result.narration.push(...sub.narration);
-              result.visual.push(...sub.visual);
-            }
+          } else {
+            result.narration.push(...sub.narration);
+            result.visual.push(...sub.visual);
           }
         }
-        return result;
-      };
+      }
+      return result;
+    };
 
-      const { narration, visual } = extractByCategory(raw);
+    const { narration, visual } = extractByCategory(raw);
+    const dedup = (arr: string[]) => {
+      const seen = new Set<string>();
+      return arr.filter(t => { if (seen.has(t)) return false; seen.add(t); return true; });
+    };
+    const uniqueNarration = dedup(narration);
+    const uniqueVisual = dedup(visual);
+    const sortedNarration = [...uniqueNarration].sort((a, b) => b.length - a.length);
 
-      // Deduplicate
-      const dedup = (arr: string[]) => {
-        const seen = new Set<string>();
-        return arr.filter(t => { if (seen.has(t)) return false; seen.add(t); return true; });
-      };
-      const uniqueNarration = dedup(narration);
-      const uniqueVisual = dedup(visual);
+    // Extract title
+    const title = (raw.title as string) || (raw.topic as string) || (raw.headline as string) ||
+      (raw.main_title as string) || (raw.coverTitle as string) || "";
+    parsed.title = title || parsed.title;
 
-      // Voiceover: narration texts sorted by length (longest = most substantial)
-      const sortedNarration = [...uniqueNarration].sort((a, b) => b.length - a.length);
+    if (projectType === "smartflow") {
+      // SmartFlow: 1 scene with all content
       const voiceover = sortedNarration.slice(0, 5).join(" ").trim();
-
-      // Visual prompt: visual texts joined
       const visualPrompt = uniqueVisual.join(" ").trim();
-
-      // Extract title
-      const title = (raw.title as string) || (raw.topic as string) || (raw.headline as string) ||
-        (raw.main_title as string) || (raw.coverTitle as string) || "";
-
-      parsed.title = title || parsed.title;
       parsed.scenes = [{
         number: 1,
-        voiceover: voiceover || "Unable to extract narration from LLM response.",
+        voiceover: voiceover || "Unable to extract narration.",
         visualPrompt: visualPrompt || sortedNarration[0] || "",
         coverTitle: (raw.coverTitle as string) || (raw.cover_title as string) || title || "",
         duration: 60,
       }];
+      console.log(`[GenerateVideo] Transform: 1 scene, voiceover=${voiceover.length} chars, visual=${visualPrompt.length} chars`);
+    } else {
+      // Multi-scene: split narration into scene-sized chunks
+      const expectedCounts: Record<string, number> = { short: 10, brief: 28, presentation: 36 };
+      const targetSceneCount = expectedCounts[payload.length || "brief"] || 10;
+      const allNarration = sortedNarration.join(" ").trim();
+      const allVisual = uniqueVisual.join(" ").trim();
 
-      console.log(`[GenerateVideo] SmartFlow transform: voiceover=${voiceover.length} chars, visual=${visualPrompt.length} chars, title="${parsed.title}"`);
-    }
-  }
+      // Split narration into roughly equal chunks by sentences
+      const sentences = allNarration.split(/(?<=[.!?])\s+/).filter(s => s.length > 10);
+      const scenesPerChunk = Math.max(1, Math.ceil(sentences.length / targetSceneCount));
 
-  // Non-SmartFlow: if no scenes array, retry with OpenRouter (Gemini sometimes returns flat { title, script } instead of scenes)
-  if (!Array.isArray(parsed.scenes) || parsed.scenes.length === 0) {
-    if (projectType !== "smartflow") {
-      console.warn(`[GenerateVideo] ${projectType}: LLM returned no scenes array (keys: ${Object.keys(parsed).join(", ")}) — retrying with OpenRouter`);
-      const { callOpenRouterLLM } = await import("../services/openrouter.js");
-      const retryText = await callOpenRouterLLM(promptResult, {
-        maxTokens: promptResult.maxTokens,
-        forceJson: true,
-        temperature: 0.8,
-      });
-      const retryParsed = extractJsonFromLLMResponse(retryText, `${projectType} script (no-scenes retry)`) as ParsedScript;
-      if (Array.isArray(retryParsed.scenes) && retryParsed.scenes.length > 0) {
-        console.log(`[GenerateVideo] Retry succeeded: ${retryParsed.scenes.length} scenes`);
-        parsed.scenes = retryParsed.scenes;
-        parsed.title = retryParsed.title || parsed.title;
-        if (retryParsed.characters) parsed.characters = retryParsed.characters;
+      const builtScenes: any[] = [];
+      for (let i = 0; i < targetSceneCount && i * scenesPerChunk < sentences.length; i++) {
+        const chunk = sentences.slice(i * scenesPerChunk, (i + 1) * scenesPerChunk).join(" ");
+        builtScenes.push({
+          number: i + 1,
+          voiceover: chunk,
+          visualPrompt: allVisual || chunk,
+          duration: 11,
+        });
+      }
+
+      // If we got at least 1 scene, use them
+      if (builtScenes.length > 0) {
+        parsed.scenes = builtScenes;
+        console.log(`[GenerateVideo] Transform: ${builtScenes.length} scenes from ${sentences.length} sentences`);
       } else {
-        throw new Error(`LLM returned no scenes for ${projectType} script (retry also failed)`);
+        throw new Error(`LLM returned no usable content for ${projectType} script`);
       }
     }
   }
 
-  // Validate scene count for doc2video/storytelling — if LLM returned too few, retry with OpenRouter
-  if (projectType !== "smartflow" && projectType !== "cinematic" && Array.isArray(parsed.scenes)) {
-    const expectedCounts: Record<string, number> = { short: 10, brief: 28, presentation: 36 };
-    const expected = expectedCounts[payload.length || "brief"] || 10;
-    const minAcceptable = Math.floor(expected * 0.7); // 70% threshold
-
-    if (parsed.scenes.length < minAcceptable) {
-      console.warn(`[GenerateVideo] ${projectType}: LLM returned ${parsed.scenes.length} scenes, expected ${expected} (min ${minAcceptable}) — retrying with OpenRouter`);
-      const { callOpenRouterLLM } = await import("../services/openrouter.js");
-      const retryText = await callOpenRouterLLM(promptResult, {
-        maxTokens: promptResult.maxTokens,
-        forceJson: true,
-        temperature: 0.8,
-      });
-      const retryParsed = extractJsonFromLLMResponse(retryText, `${projectType} script (scene count retry)`) as ParsedScript;
-      if (Array.isArray(retryParsed.scenes) && retryParsed.scenes.length >= minAcceptable) {
-        console.log(`[GenerateVideo] Retry succeeded: ${retryParsed.scenes.length} scenes`);
-        parsed.scenes = retryParsed.scenes;
-        parsed.title = retryParsed.title || parsed.title;
-      } else {
-        console.warn(`[GenerateVideo] Retry also returned ${retryParsed.scenes?.length || 0} scenes — using original ${parsed.scenes.length}`);
+  // Fill in missing voiceover from alternative field names in existing scenes
+  if (Array.isArray(parsed.scenes)) {
+    for (const scene of parsed.scenes) {
+      if (!scene.voiceover) {
+        scene.voiceover = (scene as any).narration || (scene as any).script || (scene as any).text || "";
+      }
+      if (!scene.visualPrompt && !scene.visual_prompt) {
+        scene.visualPrompt = (scene as any).visual || (scene as any).image || (scene as any).description || "";
       }
     }
   }

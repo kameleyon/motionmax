@@ -432,6 +432,81 @@ export async function generateKlingV25Video(
   return pollHyperealJob(jobId, apiKey, model, pollUrl);
 }
 
+// ── Veo 3.1 Fast I2V (Google, primary for cinematic) ──────────────
+
+/**
+ * Generate video using Google Veo 3.1 Fast I2V via Hypereal.
+ *
+ * Model: veo-3-1-i2v (72 credits without audio, 72 credits with audio)
+ * Duration: 4, 6, 8s
+ * Supports native last_image for seamless transitions.
+ * Audio disabled to save cost ($0.48 vs $0.72).
+ */
+export async function generateVeo31Video(
+  imageUrl: string,
+  prompt: string,
+  apiKey: string,
+  duration: number = 8,
+  lastImageUrl?: string,
+  negativePrompt: string = "blurry, low quality, watermark, text, UI elements, slow motion, sluggish, nudity, naked, exposed body, extra limbs, body contortion, distorted anatomy",
+  aspectRatio: string = "9:16",
+): Promise<string> {
+  const model = "veo-3-1-i2v";
+  // Veo 3.1 valid durations: 4, 6, 8
+  const validDurations = [4, 6, 8];
+  const clampedDuration = validDurations.reduce((prev, curr) =>
+    Math.abs(curr - duration) < Math.abs(prev - duration) ? curr : prev
+  );
+
+  console.log(`[Hypereal] Starting Veo 3.1 Fast I2V — ${clampedDuration}s${lastImageUrl ? " (start→end)" : ""}`);
+  console.log(`[Hypereal] IMAGE: ${imageUrl.substring(0, 80)}...`);
+  if (lastImageUrl) console.log(`[Hypereal] LAST IMAGE: ${lastImageUrl.substring(0, 80)}...`);
+
+  const inputPayload: Record<string, unknown> = {
+    prompt,
+    image: imageUrl,
+    duration: clampedDuration,
+    resolution: "1080p",
+    aspect_ratio: aspectRatio,
+    generate_audio: false, // No audio — saves $0.24 per clip
+    negative_prompt: negativePrompt,
+  };
+
+  if (lastImageUrl) {
+    inputPayload.last_image = lastImageUrl;
+  }
+
+  const requestBody = { model, input: inputPayload };
+  const bodyJson = JSON.stringify(requestBody);
+  console.log(`[Hypereal] Veo 3.1 body (${bodyJson.length} chars): ${bodyJson.substring(0, 2000)}`);
+
+  const response = await fetch(HYPEREAL_VIDEO_URL, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: bodyJson,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Hypereal Veo 3.1 API Error: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json() as any;
+  const jobId = data.jobId;
+  const pollUrl = data.pollUrl || null;
+
+  console.log(`[Hypereal] Veo 3.1 job created: ${jobId} (credits: ${data.creditsUsed})`);
+
+  if (!jobId) {
+    throw new Error(`No jobId from Veo 3.1 — response: ${JSON.stringify(data)}`);
+  }
+
+  return pollHyperealJob(jobId, apiKey, model, pollUrl);
+}
+
 // ── Legacy Seedance export (kept for import compatibility) ─────────
 
 export async function generateVideoFromImage(

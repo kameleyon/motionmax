@@ -126,16 +126,20 @@ export async function downloadVideo(
   try {
     // ── Mobile (iOS + Android): native share sheet ──────────────────
     if (isIOS || isAndroid) {
-      // Step 1: Try blob fetch + file share (gives "Save Video" on iOS)
-      const fileShareResult = await attemptFileShare(url, filename, MOBILE_VIDEO_BLOB_TIMEOUT_MS);
+      // Step 1: Fetch blob, then try file share (gives "Save Video" on iOS)
+      const fileShareResult = await attemptFileShare(url, filename, MOBILE_VIDEO_BLOB_TIMEOUT_MS, "video/mp4");
       if (fileShareResult === "done" || fileShareResult === "cancelled") return;
 
-      // Step 2: Try URL-only share (gives Messages, Mail, social, Copy)
+      // Step 2: Try blob URL download (works on iOS 18+ where share may fail)
+      const blobDownloadResult = await attemptBlobDownload(url, filename);
+      if (blobDownloadResult === "done") return;
+
+      // Step 3: Try URL-only share (gives Messages, Mail, social, Copy)
       const urlShareResult = await attemptUrlShare(url, filename);
       if (urlShareResult === "done" || urlShareResult === "cancelled") return;
 
-      // Step 3: Open in new tab — user can long-press or use Safari share
-      log.debug("Mobile: all share attempts failed — opening in new tab");
+      // Step 4: Open in new tab — user can long-press or use Safari share
+      log.debug("Mobile: all save attempts failed — opening in new tab");
       window.open(url, "_blank");
       return;
     }
@@ -163,32 +167,36 @@ export async function downloadVideo(
 
 type ShareOutcome = "done" | "cancelled" | "failed";
 
+/** Cached blob from file share attempt — reused by blob download fallback. */
+let cachedBlob: Blob | null = null;
+
 /**
- * Fetch blob (with timeout) then open share sheet with the video file.
- * Returns quickly if blob fetch is too slow so user gesture stays valid.
+ * Fetch blob then open share sheet with the file.
+ * Skips the canShare guard (broken on iOS 18+) and just tries share() directly.
  */
 async function attemptFileShare(
   url: string,
   filename: string,
   timeoutMs = MOBILE_VIDEO_BLOB_TIMEOUT_MS,
+  mimeType = "video/mp4",
 ): Promise<ShareOutcome> {
+  if (!navigator.share) return "failed";
+
   try {
     log.debug("Mobile: fetching blob (timeout %dms)…", timeoutMs);
     const blob = await fetchBlobWithTimeout(url, timeoutMs);
+    cachedBlob = blob;
 
     if (!blob) {
       log.debug("Mobile: blob timed out or failed — skipping file share");
       return "failed";
     }
 
-    const file = new File([blob], filename, { type: "video/mp4" });
+    const file = new File([blob], filename, { type: mimeType });
 
-    if (!navigator.share || !navigator.canShare?.({ files: [file] })) {
-      log.debug("Mobile: navigator.share({ files }) not supported");
-      return "failed";
-    }
-
-    log.debug("Mobile: opening share sheet with video file");
+    // Skip canShare guard — iOS 18 may return false but share() still works.
+    // Just try it directly and catch failures.
+    log.debug("Mobile: opening share sheet with file (%s, %d bytes)", mimeType, blob.size);
     await navigator.share({ files: [file] });
     log.debug("Mobile: file share completed");
     return "done";
@@ -198,6 +206,47 @@ async function attemptFileShare(
       return "cancelled";
     }
     log.warn("Mobile: file share failed:", e);
+    return "failed";
+  }
+}
+
+/**
+ * Fallback: create a blob URL and trigger download via anchor tag.
+ * Works on iOS 18+ Safari where share({ files }) may not show Save option.
+ * Uses cached blob from attemptFileShare if available.
+ */
+async function attemptBlobDownload(
+  url: string,
+  filename: string,
+): Promise<ShareOutcome> {
+  try {
+    const blob = cachedBlob || await fetchBlobWithTimeout(url, MOBILE_VIDEO_BLOB_TIMEOUT_MS);
+    cachedBlob = null; // clear cache
+
+    if (!blob) {
+      log.debug("Mobile: no blob for download fallback");
+      return "failed";
+    }
+
+    log.debug("Mobile: trying blob URL download (%d bytes)", blob.size);
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = filename;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+
+    // Clean up after delay
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    }, 10000);
+
+    return "done";
+  } catch (e) {
+    log.warn("Mobile: blob download failed:", e);
+    cachedBlob = null;
     return "failed";
   }
 }
@@ -259,27 +308,19 @@ export async function downloadImage(
   try {
     // ── Mobile: native share sheet with image file ──────────────────
     if (isIOS || isAndroid) {
-      log.debug("Mobile: fetching image blob…");
-      const blob = await fetchBlobWithTimeout(url, MOBILE_IMAGE_BLOB_TIMEOUT_MS);
+      // Step 1: Try file share (gives "Save Image" on iOS)
+      const fileResult = await attemptFileShare(url, filename, MOBILE_IMAGE_BLOB_TIMEOUT_MS, mime);
+      if (fileResult === "done" || fileResult === "cancelled") return;
 
-      if (blob) {
-        const file = new File([blob], filename, { type: mime });
+      // Step 2: Try blob URL download (iOS 18+ fallback)
+      const blobResult = await attemptBlobDownload(url, filename);
+      if (blobResult === "done") return;
 
-        if (navigator.share && navigator.canShare?.({ files: [file] })) {
-          log.debug("Mobile: opening share sheet with image file");
-          await navigator.share({ files: [file] });
-          return;
-        }
-      }
+      // Step 3: Share URL (no "Save Image" but still useful)
+      const urlResult = await attemptUrlShare(url, filename);
+      if (urlResult === "done" || urlResult === "cancelled") return;
 
-      // Fallback: share URL (no "Save Image" but still useful)
-      if (navigator.share) {
-        log.debug("Mobile: fallback to URL share for image");
-        await navigator.share({ url, title: filename.replace(/\.\w+$/, "") });
-        return;
-      }
-
-      // Last resort: open in new tab
+      // Step 4: Open in new tab — user can long-press to save
       window.open(url, "_blank");
       return;
     }

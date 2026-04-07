@@ -516,6 +516,15 @@ export async function generateVeo31Video(
  * Purpose-built for smooth transitions between start and end frames.
  * No duration control — PixVerse determines optimal length.
  * No negative prompt support.
+ *
+ * API format (from Hypereal docs):
+ *   { "model": "pixverse-v6-transitions",
+ *     "prompt": "optional short guidance",
+ *     "start_image": "url", "end_image": "url" }
+ *
+ * The prompt field is OPTIONAL and should be kept SHORT.
+ * PixVerse V6 is a transition model, not a general I2V model.
+ * Long complex prompts cause E1001 generation failures.
  */
 export async function generatePixVerseTransition(
   startImageUrl: string,
@@ -529,16 +538,21 @@ export async function generatePixVerseTransition(
   console.log(`[Hypereal] START IMAGE: ${startImageUrl.substring(0, 80)}...`);
   console.log(`[Hypereal] END IMAGE: ${endImageUrl.substring(0, 80)}...`);
 
-  // PixVerse V6 uses FLAT format (confirmed by Hypereal support) — no { model, input } wrapper
+  // PixVerse V6 prompt must be SHORT. Long prompts cause E1001 failures.
+  // Keep it under 200 chars — this is a transition model, not a general video model.
+  const shortPrompt = prompt
+    ? prompt.substring(0, 200).replace(/\s+\S*$/, "")
+    : "Smooth cinematic transition between the two scenes.";
+
   const requestBody = {
     model,
-    prompt: prompt || "Smooth cinematic transition between the two scenes.",
+    prompt: shortPrompt,
     start_image: startImageUrl,
     end_image: endImageUrl,
   };
 
   const bodyJson = JSON.stringify(requestBody);
-  console.log(`[Hypereal] PixVerse V6 body (${bodyJson.length} chars): ${bodyJson.substring(0, 1500)}`);
+  console.log(`[Hypereal] PixVerse V6 body (${bodyJson.length} chars): ${bodyJson}`);
 
   const response = await fetch(HYPEREAL_VIDEO_URL, {
     method: "POST",

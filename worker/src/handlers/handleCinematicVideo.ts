@@ -230,27 +230,25 @@ export async function handleCinematicVideo(
   const negPrompt = "blurry, low quality, watermark, text, UI elements, slow motion, sluggish, nudity, naked, exposed body, extra limbs, body contortion, distorted anatomy, lip sync, talking, mouth movement, speaking";
 
   if (endImageUrl) {
-    // PixVerse V6 for scenes WITH transition — flat format confirmed by Hypereal
-    const cameraMotion = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("—")[0].trim();
-    const shortVoiceover = (scene.voiceover || "").substring(0, 200);
-    const pixVersePrompt = [
-      `Cinematic ${cameraMotion.toLowerCase()} camera movement.`,
-      shortVoiceover ? `Scene context: ${shortVoiceover}` : "",
-      `FAST-PACED dynamic motion throughout. No talking, no lip movement, no mouth movement.`,
-      `In the LAST 1 second: smoothly morph and transition into the end image using a natural camera movement.`,
-      `No body contortions, no faces melting. Think film cut — camera pans away from current scene toward next.`,
-    ].filter(Boolean).join(" ");
+    // PixVerse V6 for scenes WITH transition
+    // IMPORTANT: PixVerse V6 is a transition model, NOT a general I2V model.
+    // The prompt must be SHORT and simple. Long/complex prompts cause E1001 errors.
+    const cameraMotion = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("---")[0].trim();
+    const pixVersePrompt = `Smooth cinematic ${cameraMotion.toLowerCase()} transition between scenes.`;
 
-    try {
-      videoUrl = await generatePixVerseTransition(imageUrl, endImageUrl, pixVersePrompt, apiKey);
-      provider = "PixVerse V6 Transition";
-    } catch (pvError) {
-      console.warn(`[CinematicVideo] Scene ${sceneIndex}: PixVerse V6 failed (${(pvError as Error).message}), falling back to Kling V2.5`);
-      provider = "Kling V2.5 Turbo I2V";
-      videoUrl = await generateKlingV25Video(imageUrl, finalPrompt, apiKey, 10, endImageUrl, negPrompt, 0.8);
-    }
+    videoUrl = await generatePixVerseTransition(imageUrl, endImageUrl, pixVersePrompt, apiKey);
+    provider = "PixVerse V6 Transition";
+    // NOTE: Kling V2.5 fallback disabled to avoid unnecessary costs.
+    // If PixVerse fails, let the error propagate so the job fails loudly.
+    // catch (pvError) {
+    //   console.warn(`[CinematicVideo] Scene ${sceneIndex}: PixVerse V6 failed (${(pvError as Error).message}), falling back to Kling V2.5`);
+    //   provider = "Kling V2.5 Turbo I2V";
+    //   videoUrl = await generateKlingV25Video(imageUrl, finalPrompt, apiKey, 10, endImageUrl, negPrompt, 0.8);
+    // }
   } else {
-    // Last scene — no end_image
+    // Last scene — no end_image, use PixVerse without end_image not supported,
+    // so last scene still needs Kling
+    // TODO: re-evaluate once PixVerse supports single-image generation
     provider = "Kling V2.5 Turbo I2V";
     videoUrl = await generateKlingV25Video(imageUrl, finalPrompt, apiKey, 10, undefined, negPrompt, 0.8);
   }

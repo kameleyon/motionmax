@@ -233,8 +233,8 @@ export async function handleCinematicVideo(
     // PixVerse V6 for scenes WITH transition
     // IMPORTANT: PixVerse V6 is a transition model, NOT a general I2V model.
     // The prompt must be SHORT and simple. Long/complex prompts cause E1001 errors.
-    const cameraMotion = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("---")[0].trim();
-    const pixVersePrompt = `Smooth cinematic ${cameraMotion.toLowerCase()} transition between scenes.`;
+    const cameraMotion = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("\u2014")[0].trim();
+    const pixVersePrompt = `Smooth cinematic ${cameraMotion.toLowerCase()} transition.`;
 
     videoUrl = await generatePixVerseTransition(imageUrl, endImageUrl, pixVersePrompt, apiKey);
     provider = "PixVerse V6 Transition";

@@ -140,7 +140,7 @@ export async function callHyperealLLM(
   // Lower temperature for JSON output to reduce creative wandering
   const temperature = options.forceJson ? Math.min(options.temperature ?? 0.7, 0.4) : (options.temperature ?? 0.7);
   const startTime = Date.now();
-  console.log(`[Hypereal] Calling gemini-3.1-pro (maxTokens=${options.maxTokens}, temp=${temperature}, forceJson=${!!options.forceJson})`);
+  console.log(`[Hypereal] Calling gemini-3.1-fast (maxTokens=${options.maxTokens}, temp=${temperature}, forceJson=${!!options.forceJson})`);
 
   // Hypereal API does NOT support response_format -- enforce JSON via:
   // 1. System prompt prefix (seen first)
@@ -169,7 +169,7 @@ export async function callHyperealLLM(
   }
 
   const requestBody: Record<string, unknown> = {
-    model: "gemini-3.1-pro",
+    model: "gemini-3.1-fast",
     max_tokens: options.maxTokens,
     temperature,
     stream: false,
@@ -196,7 +196,7 @@ export async function callHyperealLLM(
   if (!res.ok) {
     const body = await res.text();
     const err = new Error(`Hypereal API error ${res.status}: ${body.substring(0, 300)}`);
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-pro", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch(() => {});
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-fast", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch(() => {});
     throw err;
   }
 
@@ -204,7 +204,7 @@ export async function callHyperealLLM(
   let text = data.choices?.[0]?.message?.content;
   if (!text) {
     const err = new Error("Hypereal returned empty content");
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-pro", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch(() => {});
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-fast", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch(() => {});
     throw err;
   }
 
@@ -223,7 +223,7 @@ export async function callHyperealLLM(
   }
 
   console.log(`[Hypereal] Response received (${text.length} chars, credits: ${data.creditsUsed ?? "?"})`);
-  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-pro", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch(() => {});
+  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-fast", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch(() => {});
   return text;
 }
 

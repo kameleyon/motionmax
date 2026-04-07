@@ -136,120 +136,120 @@ interface AssStyleDef {
   uppercase?: boolean;
 }
 
-// marginV=640 on 1920px tall canvas = 1/3 from bottom
-// Font sizes scaled up for social media readability (80-100px range)
-const MV = 640; // Default vertical margin (1/3 from bottom on 1080x1920)
+// marginV=480 on 1920px tall canvas = 1/4 from bottom
+// Font sizes scaled up 25% for social media readability
+const MV = 480; // Default vertical margin (1/4 from bottom on 1080x1920)
 
 const STYLE_DEFS: Record<Exclude<CaptionStyle, "none">, AssStyleDef> = {
   // ── From Reference Visuals ──
   orangeBox: {
-    fontName: "Comfortaa", fontSize: 82, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Comfortaa", fontSize: 103, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: ORANGE, backColor: ORANGE, bold: true,
     outline: 18, shadow: 0, alignment: 2, marginV: MV, borderStyle: 3, uppercase: true,
   },
   yellowSlanted: {
-    fontName: "Montserrat", fontSize: 90, primaryColor: assColor(0xFF, 0xEB, 0x3B), secondaryColor: YELLOW,
+    fontName: "Montserrat", fontSize: 113, primaryColor: assColor(0xFF, 0xEB, 0x3B), secondaryColor: YELLOW,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true, italic: true,
     outline: 7, shadow: 5, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   redSlantedBox: {
-    fontName: "Montserrat", fontSize: 82, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Montserrat", fontSize: 103, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: RED, backColor: RED, bold: true, italic: true,
     outline: 20, shadow: 0, alignment: 2, marginV: MV, borderStyle: 3, uppercase: true,
   },
   cyanOutline: {
-    fontName: "Montserrat", fontSize: 86, primaryColor: assColor(0x00, 0xBC, 0xD4), secondaryColor: WHITE,
+    fontName: "Montserrat", fontSize: 108, primaryColor: assColor(0x00, 0xBC, 0xD4), secondaryColor: WHITE,
     outlineColor: WHITE, backColor: assColor(0, 0, 0, 0), bold: true,
     outline: 5, shadow: 0, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   motionBlur: {
-    fontName: "Montserrat", fontSize: 86, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Montserrat", fontSize: 108, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
     outline: 4, shadow: 3, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   yellowSmall: {
-    fontName: "Montserrat", fontSize: 64, primaryColor: assColor(0xFF, 0xEB, 0x3B), secondaryColor: YELLOW,
+    fontName: "Montserrat", fontSize: 80, primaryColor: assColor(0xFF, 0xEB, 0x3B), secondaryColor: YELLOW,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
     outline: 3, shadow: 1, alignment: 2, marginV: MV - 40, borderStyle: 1, uppercase: true,
   },
   // ── Trending / Premium ──
   thickStroke: {
-    fontName: "Flavors", fontSize: 90, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Flavors", fontSize: 113, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
     outline: 8, shadow: 0, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   karaokePop: {
-    fontName: "Rubik Mono One", fontSize: 76, primaryColor: WHITE, secondaryColor: assColor(0xFF, 0xEB, 0x3B),
+    fontName: "Rubik Mono One", fontSize: 95, primaryColor: WHITE, secondaryColor: assColor(0xFF, 0xEB, 0x3B),
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0xA0), bold: false,
     outline: 4, shadow: 1, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   typewriter: {
-    fontName: "DejaVu Sans Mono", fontSize: 64, primaryColor: assColor(0x39, 0xFF, 0x14), secondaryColor: WHITE,
+    fontName: "DejaVu Sans Mono", fontSize: 80, primaryColor: assColor(0x39, 0xFF, 0x14), secondaryColor: WHITE,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0x80), bold: true,
     outline: 2, shadow: 0, alignment: 2, marginV: MV, borderStyle: 1,
   },
   neonTeal: {
-    fontName: "Poppins", fontSize: 84, primaryColor: assColor(0x00, 0xE5, 0xFF), secondaryColor: WHITE,
+    fontName: "Poppins", fontSize: 105, primaryColor: assColor(0x00, 0xE5, 0xFF), secondaryColor: WHITE,
     outlineColor: assColor(0x00, 0x80, 0x90), backColor: assColor(0, 0, 0, 0), bold: true,
     outline: 5, shadow: 8, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   goldLuxury: {
-    fontName: "Pangolin", fontSize: 92, primaryColor: assColor(0xE3, 0xC7, 0x74), secondaryColor: YELLOW,
+    fontName: "Pangolin", fontSize: 115, primaryColor: assColor(0xE3, 0xC7, 0x74), secondaryColor: YELLOW,
     outlineColor: assColor(0x8B, 0x65, 0x08), backColor: assColor(0, 0, 0, 0), bold: false,
     outline: 3, shadow: 3, alignment: 2, marginV: MV, borderStyle: 1,
   },
   bouncyPill: {
-    fontName: "Montserrat", fontSize: 72, primaryColor: assColor(0x1A, 0x1A, 0x1A), secondaryColor: BLACK,
+    fontName: "Montserrat", fontSize: 90, primaryColor: assColor(0x1A, 0x1A, 0x1A), secondaryColor: BLACK,
     outlineColor: WHITE, backColor: WHITE, bold: true,
     outline: 20, shadow: 0, alignment: 2, marginV: MV, borderStyle: 3,
   },
   glitch: {
-    fontName: "Montserrat", fontSize: 86, primaryColor: WHITE, secondaryColor: assColor(0xFF, 0x00, 0x00),
+    fontName: "Montserrat", fontSize: 108, primaryColor: WHITE, secondaryColor: assColor(0xFF, 0x00, 0x00),
     outlineColor: assColor(0x00, 0x00, 0xFF), backColor: assColor(0, 0, 0, 0), bold: true,
     outline: 4, shadow: 0, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   cinematicFade: {
-    fontName: "Vina Sans", fontSize: 68, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Vina Sans", fontSize: 85, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: assColor(0, 0, 0, 0x60), backColor: assColor(0, 0, 0, 0), bold: false,
     outline: 2, shadow: 0, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   redTag: {
-    fontName: "Poppins", fontSize: 72, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Poppins", fontSize: 90, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: RED, backColor: RED, bold: true,
     outline: 24, shadow: 0, alignment: 2, marginV: MV, borderStyle: 3,
   },
   blackBox: {
-    fontName: "Special Elite", fontSize: 68, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Special Elite", fontSize: 85, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: assColor(0, 0, 0, 0), backColor: assColor(0, 0, 0, 0xCC), bold: false,
     outline: 20, shadow: 0, alignment: 2, marginV: MV, borderStyle: 3,
   },
   comicBurst: {
-    fontName: "Bangers", fontSize: 94, primaryColor: assColor(0xFF, 0xEB, 0x3B), secondaryColor: RED,
+    fontName: "Bangers", fontSize: 118, primaryColor: assColor(0xFF, 0xEB, 0x3B), secondaryColor: RED,
     outlineColor: RED, backColor: assColor(0, 0, 0, 0), bold: false,
     outline: 5, shadow: 4, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   retroTerminal: {
-    fontName: "DejaVu Sans Mono", fontSize: 60, primaryColor: assColor(0x39, 0xFF, 0x14), secondaryColor: WHITE,
+    fontName: "DejaVu Sans Mono", fontSize: 75, primaryColor: assColor(0x39, 0xFF, 0x14), secondaryColor: WHITE,
     outlineColor: assColor(0, 0x40, 0), backColor: assColor(0, 0, 0, 0x90), bold: true,
     outline: 2, shadow: 0, alignment: 2, marginV: MV, borderStyle: 1,
   },
   heavyDropShadow: {
-    fontName: "Bebas Neue", fontSize: 96, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Bebas Neue", fontSize: 120, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: assColor(0, 0, 0, 0), backColor: assColor(0, 0, 0, 0), bold: false,
     outline: 0, shadow: 7, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   cleanPop: {
-    fontName: "Luckiest Guy", fontSize: 88, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Luckiest Guy", fontSize: 110, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: assColor(0, 0, 0, 0x40), backColor: assColor(0, 0, 0, 0), bold: false,
     outline: 2, shadow: 3, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   toxicBounce: {
-    fontName: "Bangers", fontSize: 94, primaryColor: assColor(0x39, 0xFF, 0x14), secondaryColor: WHITE,
+    fontName: "Bangers", fontSize: 118, primaryColor: assColor(0x39, 0xFF, 0x14), secondaryColor: WHITE,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: false,
     outline: 6, shadow: 5, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
   proShortForm: {
-    fontName: "Oswald", fontSize: 92, primaryColor: WHITE, secondaryColor: WHITE,
+    fontName: "Oswald", fontSize: 115, primaryColor: WHITE, secondaryColor: WHITE,
     outlineColor: BLACK, backColor: assColor(0, 0, 0, 0), bold: true,
     outline: 7, shadow: 3, alignment: 2, marginV: MV, borderStyle: 1, uppercase: true,
   },
@@ -294,7 +294,12 @@ const SINGLE_WORD_STYLES: Set<string> = new Set([
 
 /** Subtitle-like styles that show longer lines (documentary / cinematic) */
 const SUBTITLE_STYLES: Set<string> = new Set([
-  "blackBox", "cinematicFade", "retroTerminal", "typewriter",
+  "cinematicFade", "retroTerminal", "typewriter",
+]);
+
+/** Typewriter styles: words accumulate one by one, building up a line, then clear for next chunk */
+const TYPEWRITER_STYLES: Set<string> = new Set([
+  "blackBox",
 ]);
 
 /**
@@ -321,6 +326,26 @@ function buildDialogueLines(
       let text = w.text;
       if (styleDef.uppercase) text = text.toUpperCase();
       lines.push(`Dialogue: 0,${msToAssTime(w.startMs)},${msToAssTime(w.endMs)},Default,,0,0,0,,${text}`);
+    }
+  } else if (TYPEWRITER_STYLES.has(style)) {
+    // ── Mode 4: Typewriter — full line types in fast using \kf karaoke fill ──
+    // Shows the whole chunk at once but each word "types in" with a fast sweep
+    const WORDS_PER_LINE = 6;
+    for (let i = 0; i < words.length; i += WORDS_PER_LINE) {
+      const chunk = words.slice(i, i + WORDS_PER_LINE);
+      const startTime = msToAssTime(chunk[0].startMs);
+      const endTime = msToAssTime(chunk[chunk.length - 1].endMs);
+
+      // Each word gets a fast \kf tag — text reveals left-to-right like typing
+      const text = chunk.map(w => {
+        // Fast reveal: ~4cs (40ms) per word for snappy typewriter feel
+        const durCs = Math.max(4, Math.round((w.endMs - w.startMs) / 10 * 0.3));
+        let word = w.text;
+        if (styleDef.uppercase) word = word.toUpperCase();
+        return `{\\kf${durCs}}${word}`;
+      }).join(" ");
+
+      lines.push(`Dialogue: 0,${startTime},${endTime},Default,,0,0,0,,${text}`);
     }
   } else if (SUBTITLE_STYLES.has(style)) {
     // ── Mode 3: 5-word subtitle chunks (documentary) ──

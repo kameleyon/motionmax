@@ -22,8 +22,8 @@ let saveInProgress = false;
  * iOS Safari needs the share() call within the user gesture chain.
  * Videos need more time — iOS 15+ preserves the gesture through async fetch chains.
  */
-const MOBILE_VIDEO_BLOB_TIMEOUT_MS = 20_000;
-const MOBILE_IMAGE_BLOB_TIMEOUT_MS = 10_000;
+const MOBILE_VIDEO_BLOB_TIMEOUT_MS = 60_000;
+const MOBILE_IMAGE_BLOB_TIMEOUT_MS = 30_000;
 
 function detectPlatform() {
   const ua = navigator.userAgent;

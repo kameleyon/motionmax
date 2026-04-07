@@ -13,8 +13,8 @@ import { db } from "@/lib/databaseService";
 import { toast as sonnerToast } from "sonner";
 import { createScopedLogger } from "@/lib/logger";
 import { callPhase } from "./generation/callPhase";
-import { runCinematicPipeline, resumeCinematicPipeline } from "./generation/cinematicPipeline";
-import { runStandardPipeline } from "./generation/standardPipeline";
+import { resumeCinematicPipeline } from "./generation/cinematicPipeline";
+import { runUnifiedPipeline } from "./generation/unifiedPipeline";
 import {
   type GenerationState,
   type GenerationParams,
@@ -92,11 +92,7 @@ export function useGenerationPipeline() {
       if (!session) throw new Error("You must be logged in to generate videos");
 
       const ctx = createContext();
-      if (params.projectType === "cinematic") {
-        await runCinematicPipeline(params, ctx);
-      } else {
-        await runStandardPipeline(params, ctx, expectedSceneCount);
-      }
+      await runUnifiedPipeline(params, ctx, expectedSceneCount);
     } catch (error) {
       log.error("Generation error:", error);
       const errorMessage = error instanceof Error ? error.message : "Generation failed";

@@ -321,6 +321,31 @@ ${researchBrief}
     }
   }
 
+  // Validate scene count for doc2video/storytelling — if LLM returned too few, retry with OpenRouter
+  if (projectType !== "smartflow" && projectType !== "cinematic" && Array.isArray(parsed.scenes)) {
+    const expectedCounts: Record<string, number> = { short: 10, brief: 28, presentation: 36 };
+    const expected = expectedCounts[payload.length || "brief"] || 10;
+    const minAcceptable = Math.floor(expected * 0.7); // 70% threshold
+
+    if (parsed.scenes.length < minAcceptable) {
+      console.warn(`[GenerateVideo] ${projectType}: LLM returned ${parsed.scenes.length} scenes, expected ${expected} (min ${minAcceptable}) — retrying with OpenRouter`);
+      const { callOpenRouterLLM } = await import("../services/openrouter.js");
+      const retryText = await callOpenRouterLLM(promptResult, {
+        maxTokens: promptResult.maxTokens,
+        forceJson: true,
+        temperature: 0.8,
+      });
+      const retryParsed = extractJsonFromLLMResponse(retryText, `${projectType} script (scene count retry)`) as ParsedScript;
+      if (Array.isArray(retryParsed.scenes) && retryParsed.scenes.length >= minAcceptable) {
+        console.log(`[GenerateVideo] Retry succeeded: ${retryParsed.scenes.length} scenes`);
+        parsed.scenes = retryParsed.scenes;
+        parsed.title = retryParsed.title || parsed.title;
+      } else {
+        console.warn(`[GenerateVideo] Retry also returned ${retryParsed.scenes?.length || 0} scenes — using original ${parsed.scenes.length}`);
+      }
+    }
+  }
+
   // ── Step 4: Post-process scenes ──────────────────────────────────
   const stylePrompt = getStylePrompt(style, customStyle, projectType);
   const length: string = payload.length || "brief";

@@ -33,6 +33,34 @@ export async function updateSceneField(
 }
 
 /**
+ * Atomically update a JSON (non-text) field on a specific scene.
+ * Use this for array fields like imageUrls that must be stored as
+ * actual JSON arrays rather than stringified text.
+ */
+export async function updateSceneFieldJson(
+  generationId: string,
+  sceneIndex: number,
+  field: string,
+  value: unknown
+): Promise<void> {
+  const { error } = await (supabase as any).rpc("update_scene_field_json", {
+    p_generation_id: generationId,
+    p_scene_index: sceneIndex,
+    p_field: field,
+    p_value: value,
+  });
+
+  if (error) {
+    console.error(
+      `[SceneUpdate] RPC update_scene_field_json failed for gen=${generationId} scene=${sceneIndex} field=${field}:`,
+      error.message
+    );
+    // Fallback: read-modify-write
+    await fallbackUpdateSceneField(generationId, sceneIndex, field, value);
+  }
+}
+
+/**
  * Fallback for environments where the RPC is not yet deployed.
  * Reads the full array, modifies one element, writes back.
  */
@@ -40,7 +68,7 @@ async function fallbackUpdateSceneField(
   generationId: string,
   sceneIndex: number,
   field: string,
-  value: string
+  value: unknown
 ): Promise<void> {
   const { data: gen, error: readError } = await supabase
     .from("generations")

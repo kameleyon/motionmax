@@ -76,7 +76,7 @@ All image prompts must adhere to this style:
 
 === TIMING REQUIREMENTS (CRITICAL - STRICT ENFORCEMENT) ===
 - Target duration: ${cfg.targetDuration} seconds
-- Create exactly ${cfg.count} scenes
+- Create EXACTLY ${cfg.count} scenes. NOT ${cfg.count - 1}, NOT ${cfg.count + 1}. EXACTLY ${cfg.count}. If you return fewer or more scenes, the ENTIRE generation will be REJECTED and restarted from scratch
 ${p.length === "short" ? `
 ⚠️ YOUTUBE SHORTS FORMAT — HARD LIMITS:
 - The ENTIRE video MUST be between 2:30 and 2:50 (150–170 seconds). NEVER exceed 3 minutes.

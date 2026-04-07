@@ -70,6 +70,8 @@ const LEGACY_SPEAKER_MAP: Record<string, { gender: string; language: string }> =
   "Camille":  { gender: "female", language: "fr" },
   "Carlos":   { gender: "male",   language: "es" },
   "Isabella": { gender: "female", language: "es" },
+  "Adam":     { gender: "male",   language: "en" },
+  "River":    { gender: "female", language: "en" },
 };
 
 // ── Handler ────────────────────────────────────────────────────────

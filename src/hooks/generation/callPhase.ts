@@ -207,32 +207,22 @@ export async function callPhase(
     }
   }
 
-  // Cinematic video phase → worker queue
+  // Audio — always per-scene (unified)
+  if (body.phase === "audio") {
+    return workerCallPhase(body, "cinematic_audio", timeoutMs || 300000);
+  }
+
+  // Images — always per-scene (unified)
+  if (body.phase === "images") {
+    return workerCallPhase(body, "cinematic_image", timeoutMs || 300000);
+  }
+
+  // Video — cinematic only, per-scene
   if (body.phase === "video") {
     return workerCallPhase(body, "cinematic_video", 10 * 60 * 1000);
   }
 
-  // Cinematic per-scene audio (has sceneIndex, endpoint is cinematic) → worker
-  if (body.phase === "audio" && typeof body.sceneIndex === "number") {
-    return workerCallPhase(body, "cinematic_audio", 5 * 60 * 1000);
-  }
-
-  // Cinematic per-scene images (has sceneIndex, endpoint is cinematic) → worker
-  if (body.phase === "images" && typeof body.sceneIndex === "number") {
-    return workerCallPhase(body, "cinematic_image", 5 * 60 * 1000);
-  }
-
-  // Images phase → worker queue (edge function times out at ~150s per chunk)
-  if (body.phase === "images") {
-    return workerCallPhase(body, "process_images", timeoutMs);
-  }
-
-  // Audio phase → worker queue (many providers, HC key rotation can take minutes)
-  if (body.phase === "audio") {
-    return workerCallPhase(body, "process_audio", timeoutMs);
-  }
-
-  // Finalize phase → worker queue (cost recording + status marking)
+  // Finalize
   if (body.phase === "finalize") {
     return workerCallPhase(body, "finalize_generation", 2 * 60 * 1000);
   }

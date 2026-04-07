@@ -186,9 +186,11 @@ async function processJob(job: Job) {
         finalPayload = { ...finalPayload, ...scriptResult };
       }
     } else if (job.task_type === 'process_images' as any) {
+      console.warn("[Worker] DEPRECATED: process_images job type — should use cinematic_image");
       const imagesResult = await handleImagesPhase(job.id, job.payload as any, job.user_id);
       finalPayload = { ...finalPayload, ...imagesResult };
     } else if (job.task_type === 'process_audio' as any) {
+      console.warn("[Worker] DEPRECATED: process_audio job type — should use cinematic_audio");
       const audioResult = await handleAudioPhase(job.id, job.payload as any, job.user_id);
       finalPayload = { ...finalPayload, ...audioResult };
     } else if (job.task_type === 'finalize_generation' as any) {

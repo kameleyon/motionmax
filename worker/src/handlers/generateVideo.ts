@@ -173,10 +173,10 @@ export async function handleGenerateVideo(
     `[GenerateVideo] Built ${projectType} prompt (maxTokens=${promptResult.maxTokens})`,
   );
 
-  // ── Step 1.5: Research phase (cinematic + storytelling) ──────────
+  // ── Step 1.5: Research phase (ALL project types) ──────────────────
   // Process source attachments: fetch URLs, YouTube transcripts, GitHub READMEs
   // This enriches the content with actual data from linked sources.
-  if (projectType === "cinematic" || projectType === "storytelling") {
+  {
     await updateJobProgress(jobId, 5);
     const rawContent = payload.content || "";
     if (rawContent.includes("--- ATTACHED SOURCES ---")) {
@@ -189,7 +189,8 @@ export async function handleGenerateVideo(
   // AI researches the topic for factual accuracy before scriptwriting.
   // Research is injected into SYSTEM prompt (not user) so the LLM treats
   // it as authoritative ground truth, not a suggestion.
-  if (projectType === "cinematic" || projectType === "storytelling") {
+  // ALL project types get research — ensures accurate visuals and facts.
+  {
     await updateJobProgress(jobId, 7);
     const researchBrief = await researchTopic(payload.content || "");
     if (researchBrief) {

@@ -24,6 +24,7 @@ import {
   transformElevenLabsSTS,
   generateChatterboxTTS,
 } from "./audioProviders.js";
+import { generateQwen3TTS, SPEAKER_MAP } from "./qwen3TTS.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -41,6 +42,7 @@ export interface AudioConfig {
   fishAudioApiKey?: string;
   replicateApiKey: string;
   voiceGender?: string;           // "male" | "female"
+  speakerName?: string;           // "Nova" | "Atlas" | "Marcus" etc. — for Qwen3 speaker mapping
   customVoiceId?: string;         // set when voice_type === "custom"
   forceHaitianCreole?: boolean;   // from presenter_focus
   language?: string;              // "en" | "fr" | "ht" — explicit language selection
@@ -206,6 +208,21 @@ export async function generateSceneAudio(
   // Spanish with no Fish Audio API key
   if (isES) {
     return { url: null, error: "Spanish TTS requires Fish Audio API key (FISH_AUDIO_API_KEY)" };
+  }
+
+  // ========== CASE 3f: Named Speaker → Qwen3 TTS ==========
+  // When user selected a specific speaker (Nova, Atlas, Marcus, etc.), use Qwen3 which has per-speaker voices
+  if (config.speakerName && SPEAKER_MAP[config.speakerName] && replicateApiKey) {
+    console.log(`[TTS] Scene ${scene.number}: Named speaker "${config.speakerName}" → Qwen3 TTS`);
+    const result = await generateQwen3TTS(
+      { text: voiceoverText, sceneNumber: scene.number, projectId, speaker: config.speakerName, language: config.language || "en" },
+      replicateApiKey,
+    );
+    if (result.url) {
+      console.log(`✅ Scene ${scene.number}: Qwen3 TTS (${config.speakerName})`);
+      return { url: result.url, durationSeconds: result.durationSeconds, provider: `Qwen3 (${config.speakerName})` };
+    }
+    console.warn(`[TTS] Scene ${scene.number}: Qwen3 failed (${result.error}), falling back to provider chain`);
   }
 
   // ========== CASE 4: English Male ==========

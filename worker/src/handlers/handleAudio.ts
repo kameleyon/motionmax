@@ -1,12 +1,15 @@
 /**
  * Audio phase handler for the Node.js worker.
- * Mirrors handleAudioPhase() from supabase/functions/generate-video/index.ts.
- * No execution-time ceiling — runs until all scenes in the batch have audio.
+ * Uses the SAME Qwen3 TTS + speaker mapping as cinematic audio.
+ * Legacy router (LemonFox/FishAudio) only for Haitian Creole/French/Spanish
+ * or when Qwen3 fails.
  */
 
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
-import { generateSceneAudio, type AudioConfig, type AudioScene } from "../services/audioRouter.js";
+import { updateSceneField } from "../lib/sceneUpdate.js";
+import { generateQwen3TTS, SPEAKER_MAP } from "../services/qwen3TTS.js";
+import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
 import { isHaitianCreole } from "../services/audioWavUtils.js";
 import {
   initSceneProgress,
@@ -34,6 +37,41 @@ interface AudioResult {
   phaseTime: number;
 }
 
+/** Infer a style_instruction from voiceover text for Qwen3 TTS (same as cinematic). */
+function inferStyleInstruction(voiceover: string): string {
+  const lower = voiceover.toLowerCase();
+
+  if (lower.includes("shocking") || lower.includes("unbelievable") || lower.includes("mind-blowing"))
+    return "Speak with dramatic shock and disbelief, building intensity";
+  if (lower.includes("secret") || lower.includes("hidden") || lower.includes("nobody knew"))
+    return "Speak in a hushed, conspiratorial tone that draws the listener in";
+  if (lower.includes("war") || lower.includes("battle") || lower.includes("fought"))
+    return "Speak with gravity and intensity, like a war documentary narrator";
+  if (lower.includes("love") || lower.includes("heart") || lower.includes("beautiful"))
+    return "Speak with warmth and tenderness, gentle but compelling";
+  if (lower.includes("death") || lower.includes("died") || lower.includes("tragedy"))
+    return "Speak with somber reverence, slow and respectful";
+  if (lower.includes("victory") || lower.includes("won") || lower.includes("triumph"))
+    return "Speak with rising excitement and celebration";
+  if (lower.includes("danger") || lower.includes("escape") || lower.includes("run"))
+    return "Speak with urgency and breathless tension";
+  if (lower.includes("laugh") || lower.includes("funny") || lower.includes("joke"))
+    return "Speak with playful amusement and a hint of laughter";
+  if (lower.includes("question") || lower.includes("what if") || lower.includes("why"))
+    return "Speak with curiosity and intrigue, inviting the listener to think";
+
+  return "Speak with raw social media energy, punchy pacing, dramatic pauses for emphasis, hype moments that hit like a plot twist, enthusiast, energetic and mysterious, witty and fun, showing all kind of emotion matching the context";
+}
+
+// ── Legacy speakers that route to Fish Audio / LemonFox ──────────
+
+const LEGACY_SPEAKER_MAP: Record<string, { gender: string; language: string }> = {
+  "Jacques":  { gender: "male",   language: "fr" },
+  "Camille":  { gender: "female", language: "fr" },
+  "Carlos":   { gender: "male",   language: "es" },
+  "Isabella": { gender: "female", language: "es" },
+};
+
 // ── Handler ────────────────────────────────────────────────────────
 
 export async function handleAudioPhase(
@@ -45,27 +83,8 @@ export async function handleAudioPhase(
   const { generationId, projectId } = payload;
   const startIndex = typeof payload.audioStartIndex === "number" ? payload.audioStartIndex : 0;
 
-  // Collect API keys from env
-  const googleApiKeys = [
-    process.env.GOOGLE_TTS_API_KEY_3,
-    process.env.GOOGLE_TTS_API_KEY_2,
-    process.env.GOOGLE_TTS_API_KEY,
-  ].filter(Boolean) as string[];
-
-  const config: AudioConfig = {
-    projectId,
-    googleApiKeys,
-    elevenLabsApiKey: process.env.ELEVENLABS_API_KEY,
-    lemonfoxApiKey: process.env.LEMONFOX_API_KEY,
-    fishAudioApiKey: process.env.FISH_AUDIO_API_KEY,
-    replicateApiKey: process.env.REPLICATE_API_KEY || "",
-  };
-
   await writeSystemLog({
-    jobId,
-    projectId,
-    userId,
-    generationId,
+    jobId, projectId, userId, generationId,
     category: "system_info",
     eventType: "audio_phase_started",
     message: `Audio phase started at index ${startIndex}`,
@@ -80,54 +99,36 @@ export async function handleAudioPhase(
 
   if (genError || !generation) throw new Error(`Generation not found: ${genError?.message}`);
 
+  const voiceName = generation.projects?.voice_name || "Nova";
   const voiceType = generation.projects?.voice_type || "standard";
-  // Derive gender from speaker name — the DB stores the speaker name (e.g. "Marcus"), not "male"/"female"
-  const speakerName = (generation.projects?.voice_name || "").toLowerCase();
-  const MALE_SPEAKERS = ["atlas", "kai", "marcus", "leo", "sage", "jean", "omar", "mateo", "carlos", "hiroshi", "kenji", "min-jun", "dmitri", "hans"];
-  const voiceGender = MALE_SPEAKERS.includes(speakerName) ? "male" : "female";
-
-  // Custom voice: only assign if voice_type === "custom" AND voice_id exists
-  if (voiceType === "custom" && generation.projects?.voice_id) {
-    config.customVoiceId = generation.projects.voice_id;
-  }
-  config.voiceGender = voiceGender;
 
   // Language resolution: payload → project voice_inclination → scenes[0]._meta.language
   const resolvedLanguage =
     (payload as any).language ||
     generation.projects?.voice_inclination ||
     (Array.isArray(generation.scenes) && (generation.scenes as any[])[0]?._meta?.language) ||
-    undefined;
-  if (resolvedLanguage) {
-    config.language = resolvedLanguage;
-    console.log(`[Audio] Language resolved: ${resolvedLanguage}`);
-  }
+    "en";
 
-  // Haitian Creole detection from presenter_focus — matches edge function pattern
+  console.log(`[Audio] Language resolved: ${resolvedLanguage}`);
+
+  // Haitian Creole detection
   const presenterFocus: string = generation.projects?.presenter_focus || "";
   const pfLower = presenterFocus.toLowerCase();
-  const forceCreoleFromPresenter =
-    pfLower.includes("haitian") ||
-    pfLower.includes("kreyòl") ||
-    pfLower.includes("kreyol") ||
-    pfLower.includes("creole") ||
-    isHaitianCreole(presenterFocus);
-  if (forceCreoleFromPresenter) {
-    config.forceHaitianCreole = true;
-  }
+  const forceHaitianCreole =
+    resolvedLanguage === "ht" ||
+    pfLower.includes("haitian") || pfLower.includes("kreyòl") ||
+    pfLower.includes("kreyol") || pfLower.includes("creole");
 
   const scenes = (generation.scenes || []) as any[];
+  const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
 
-  // Track existing audio URLs
-  const audioUrls: (string | null)[] = scenes.map((s: any) => s.audioUrl ?? null);
   let totalAudioSeconds = 0;
   let audioGenerated = 0;
 
   // Initialize per-scene progress tracking
   initSceneProgress(jobId, scenes.length, "audio_generation");
-  // Mark scenes that already have audio as complete
   for (let i = 0; i < scenes.length; i++) {
-    if (audioUrls[i]) {
+    if (scenes[i].audioUrl) {
       await updateSceneProgress(jobId, i, "complete", {
         message: `Scene ${i + 1} audio already generated`,
         flush: false,
@@ -136,90 +137,153 @@ export async function handleAudioPhase(
   }
   await flushSceneProgress(jobId);
 
-  // Process all scenes in batches of 3-5
+  // Process scenes in batches of 3
   const BATCH_SIZE = 3;
 
   for (let batchStart = startIndex; batchStart < scenes.length; batchStart += BATCH_SIZE) {
     const batchEnd = Math.min(batchStart + BATCH_SIZE, scenes.length);
     console.log(`[Audio] Processing scenes ${batchStart + 1}-${batchEnd} of ${scenes.length}`);
 
-    const batchScenes: { scene: AudioScene; index: number }[] = [];
+    const batchPromises: Promise<void>[] = [];
+
     for (let i = batchStart; i < batchEnd; i++) {
-      if (audioUrls[i]) continue; // already done
-      batchScenes.push({
-        index: i,
-        scene: { number: i + 1, voiceover: scenes[i].voiceover || "", duration: scenes[i].duration || 8 },
-      });
-    }
+      if (scenes[i].audioUrl) continue; // already done
 
-    if (batchScenes.length > 0) {
-      // Mark scenes in this batch as generating
-      for (const { index } of batchScenes) {
-        await updateSceneProgress(jobId, index, "generating", {
-          message: `Generating audio for scene ${index + 1}`,
-          flush: false,
-        });
+      const voiceover = scenes[i].voiceover || "";
+      if (!voiceover || voiceover.trim().length < 2) {
+        console.warn(`[Audio] Scene ${i + 1}: No voiceover text, skipping`);
+        continue;
       }
-      await flushSceneProgress(jobId);
 
-      const promises = batchScenes.map(({ scene, index }) =>
-        generateSceneAudio(scene, config).then((result) => ({ result, index }))
-      );
+      await updateSceneProgress(jobId, i, "generating", {
+        message: `Generating audio for scene ${i + 1}`,
+        flush: false,
+      });
 
-      const results = await Promise.all(promises);
+      const sceneIndex = i;
+      batchPromises.push((async () => {
+        let result: { url: string | null; durationSeconds?: number; provider?: string; error?: string };
 
-      for (const { result, index } of results) {
+        // Haitian Creole or legacy speakers → legacy audio router
+        const legacyMapping = LEGACY_SPEAKER_MAP[voiceName];
+        const isHC = forceHaitianCreole || isHaitianCreole(voiceover);
+
+        if (isHC) {
+          // HC → legacy Gemini TTS path
+          console.log(`[Audio] Scene ${sceneIndex + 1}: Haitian Creole → legacy router`);
+          const googleApiKeys = [
+            process.env.GOOGLE_TTS_API_KEY_3,
+            process.env.GOOGLE_TTS_API_KEY_2,
+            process.env.GOOGLE_TTS_API_KEY,
+          ].filter(Boolean) as string[];
+
+          const config: AudioConfig = {
+            projectId, googleApiKeys,
+            elevenLabsApiKey: process.env.ELEVENLABS_API_KEY,
+            lemonfoxApiKey: process.env.LEMONFOX_API_KEY,
+            fishAudioApiKey: process.env.FISH_AUDIO_API_KEY,
+            replicateApiKey,
+            voiceGender: voiceName === "Pierre" ? "male" : voiceName === "Marie" ? "female" : "female",
+            forceHaitianCreole: true,
+            language: "ht",
+          };
+          if (voiceType === "custom" && generation.projects?.voice_id) {
+            config.customVoiceId = generation.projects.voice_id;
+          }
+          result = await generateSceneAudio(
+            { number: sceneIndex + 1, voiceover, duration: scenes[sceneIndex].duration || 8 },
+            config,
+          );
+        } else if (legacyMapping) {
+          // French/Spanish speakers → Fish Audio via legacy router
+          console.log(`[Audio] Scene ${sceneIndex + 1}: ${voiceName} → legacy router (${legacyMapping.language}/${legacyMapping.gender})`);
+          const googleApiKeys = [
+            process.env.GOOGLE_TTS_API_KEY_3,
+            process.env.GOOGLE_TTS_API_KEY_2,
+            process.env.GOOGLE_TTS_API_KEY,
+          ].filter(Boolean) as string[];
+
+          const config: AudioConfig = {
+            projectId, googleApiKeys,
+            elevenLabsApiKey: process.env.ELEVENLABS_API_KEY,
+            lemonfoxApiKey: process.env.LEMONFOX_API_KEY,
+            fishAudioApiKey: process.env.FISH_AUDIO_API_KEY,
+            replicateApiKey,
+            voiceGender: legacyMapping.gender,
+            language: legacyMapping.language,
+          };
+          result = await generateSceneAudio(
+            { number: sceneIndex + 1, voiceover, duration: scenes[sceneIndex].duration || 8 },
+            config,
+          );
+        } else if (voiceType === "custom" && generation.projects?.voice_id) {
+          // Custom cloned voice → ElevenLabs via legacy router
+          console.log(`[Audio] Scene ${sceneIndex + 1}: Custom voice → legacy router`);
+          const googleApiKeys = [
+            process.env.GOOGLE_TTS_API_KEY_3,
+            process.env.GOOGLE_TTS_API_KEY_2,
+            process.env.GOOGLE_TTS_API_KEY,
+          ].filter(Boolean) as string[];
+
+          const config: AudioConfig = {
+            projectId, googleApiKeys,
+            elevenLabsApiKey: process.env.ELEVENLABS_API_KEY,
+            lemonfoxApiKey: process.env.LEMONFOX_API_KEY,
+            fishAudioApiKey: process.env.FISH_AUDIO_API_KEY,
+            replicateApiKey,
+            customVoiceId: generation.projects.voice_id,
+            voiceGender: "female",
+            language: resolvedLanguage,
+          };
+          result = await generateSceneAudio(
+            { number: sceneIndex + 1, voiceover, duration: scenes[sceneIndex].duration || 8 },
+            config,
+          );
+        } else {
+          // ── Qwen3 TTS with named speaker (same as cinematic) ──
+          const styleInstruction = inferStyleInstruction(voiceover);
+          console.log(`[Audio] Scene ${sceneIndex + 1}: Qwen3 TTS speaker=${voiceName} lang=${resolvedLanguage}`);
+
+          result = await generateQwen3TTS(
+            {
+              text: voiceover,
+              sceneNumber: sceneIndex + 1,
+              projectId,
+              speaker: voiceName,
+              language: resolvedLanguage,
+              styleInstruction,
+            },
+            replicateApiKey,
+          );
+        }
+
         if (result.url) {
-          audioUrls[index] = result.url;
+          // Atomic update — no race condition with parallel image phase
+          await updateSceneField(generationId, sceneIndex, "audioUrl", result.url);
           totalAudioSeconds += result.durationSeconds || 0;
           audioGenerated++;
-          await updateSceneProgress(jobId, index, "complete", {
-            message: `Scene ${index + 1} audio complete (${(result.durationSeconds || 0).toFixed(1)}s)`,
+          console.log(`✅ Scene ${sceneIndex + 1}: ${result.provider || "Qwen3"} (${(result.durationSeconds || 0).toFixed(1)}s)`);
+          await updateSceneProgress(jobId, sceneIndex, "complete", {
+            message: `Scene ${sceneIndex + 1} audio complete`,
             flush: false,
           });
         } else {
-          console.warn(`[Audio] Scene ${index + 1} failed: ${result.error}`);
-          await updateSceneProgress(jobId, index, "failed", {
-            message: `Scene ${index + 1} audio failed`,
+          console.warn(`[Audio] Scene ${sceneIndex + 1} failed: ${result.error}`);
+          await updateSceneProgress(jobId, sceneIndex, "failed", {
+            message: `Scene ${sceneIndex + 1} audio failed`,
             error: result.error,
             flush: false,
           });
         }
-      }
-
-      await flushSceneProgress(jobId);
+      })());
     }
 
-    // Update progress — re-read scenes from DB to merge with parallel image phase updates
-    const progress = Math.min(39, 10 + Math.floor((batchEnd / scenes.length) * 30));
-
-    const { data: freshGen } = await supabase
-      .from("generations")
-      .select("scenes")
-      .eq("id", generationId)
-      .maybeSingle();
-    const freshScenes: any[] = freshGen?.scenes || [];
-
-    const mergedScenes = scenes.map((s: any, i: number) => ({
-      ...s,
-      // Preserve imageUrl/imageUrls from the fresh DB copy (written by parallel images phase)
-      imageUrl: freshScenes[i]?.imageUrl || s.imageUrl,
-      imageUrls: freshScenes[i]?.imageUrls || s.imageUrls,
-      audioUrl: audioUrls[i],
-      _meta: { ...(s._meta || {}), statusMessage: `Audio ${i < batchEnd ? "complete" : "pending"}` },
-    }));
-
-    await supabase
-      .from("generations")
-      .update({ progress, scenes: mergedScenes })
-      .eq("id", generationId);
+    await Promise.all(batchPromises);
+    await flushSceneProgress(jobId);
   }
 
   await writeSystemLog({
-    jobId,
-    projectId,
-    userId,
-    generationId,
+    jobId, projectId, userId, generationId,
     category: "system_info",
     eventType: "audio_phase_completed",
     message: `Audio phase done: ${audioGenerated} scenes`,

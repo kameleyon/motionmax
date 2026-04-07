@@ -238,41 +238,64 @@ ${researchBrief}
       console.log(`[GenerateVideo] SmartFlow: transforming non-standard LLM response into expected format`);
       const raw = parsed as Record<string, unknown>;
 
-      // Extract voiceover: walk the entire response and collect all substantial text
-      const extractText = (obj: unknown, depth = 0): string[] => {
-        if (depth > 5) return [];
-        const texts: string[] = [];
-        if (typeof obj === "string" && obj.length > 30) texts.push(obj);
-        if (Array.isArray(obj)) obj.forEach(item => texts.push(...extractText(item, depth + 1)));
+      // Keys that contain spoken narration (for voiceover)
+      const NARRATION_KEYS = /voiceover|narration|script|narrative|explanation|overview|summary|presentation|educational|synthesis|insight/i;
+      // Keys that contain visual/design specs (NOT for voiceover)
+      const VISUAL_KEYS = /visual|design|image|layout|style|illustration|infographic|color|palette|typography|icon|graphic|border|format|aesthetic/i;
+
+      // Extract text from objects, separating narration from visual content
+      const extractByCategory = (obj: unknown, depth = 0): { narration: string[]; visual: string[] } => {
+        const result = { narration: [] as string[], visual: [] as string[] };
+        if (depth > 5) return result;
+        if (typeof obj === "string" && obj.length > 30) {
+          // Classify standalone strings: if it mentions colors/layout/pixels, it's visual
+          if (VISUAL_KEYS.test(obj) && obj.length < 200) result.visual.push(obj);
+          else result.narration.push(obj);
+          return result;
+        }
+        if (Array.isArray(obj)) {
+          obj.forEach(item => {
+            const sub = extractByCategory(item, depth + 1);
+            result.narration.push(...sub.narration);
+            result.visual.push(...sub.visual);
+          });
+          return result;
+        }
         if (obj && typeof obj === "object" && !Array.isArray(obj)) {
           for (const [key, val] of Object.entries(obj)) {
-            // Prioritize keys that sound like narration content
-            if (/voiceover|narration|script|description|content|text|insight|explanation|overview/i.test(key)) {
-              texts.push(...extractText(val, depth + 1));
+            const sub = extractByCategory(val, depth + 1);
+            if (VISUAL_KEYS.test(key)) {
+              // Everything under visual keys goes to visual
+              result.visual.push(...sub.narration, ...sub.visual);
+            } else if (NARRATION_KEYS.test(key)) {
+              // Everything under narration keys goes to narration
+              result.narration.push(...sub.narration);
+              result.visual.push(...sub.visual);
+            } else {
+              result.narration.push(...sub.narration);
+              result.visual.push(...sub.visual);
             }
           }
-          // Second pass: get remaining string values for visual prompt
-          for (const val of Object.values(obj)) {
-            texts.push(...extractText(val, depth + 1));
-          }
         }
-        return texts;
+        return result;
       };
 
-      const allTexts = extractText(raw);
-      // Deduplicate while preserving order
-      const seen = new Set<string>();
-      const uniqueTexts = allTexts.filter(t => { if (seen.has(t)) return false; seen.add(t); return true; });
+      const { narration, visual } = extractByCategory(raw);
 
-      // Build voiceover from the longest text blocks (likely the narration)
-      const sortedByLength = [...uniqueTexts].sort((a, b) => b.length - a.length);
-      const voiceover = sortedByLength.slice(0, 5).join(" ").trim();
+      // Deduplicate
+      const dedup = (arr: string[]) => {
+        const seen = new Set<string>();
+        return arr.filter(t => { if (seen.has(t)) return false; seen.add(t); return true; });
+      };
+      const uniqueNarration = dedup(narration);
+      const uniqueVisual = dedup(visual);
 
-      // Extract visual prompt from visual-related keys
-      const visualKeys = Object.entries(raw)
-        .filter(([k]) => /visual|design|image|layout|style|illustration|infographic/i.test(k))
-        .map(([, v]) => typeof v === "string" ? v : JSON.stringify(v))
-        .join(" ");
+      // Voiceover: narration texts sorted by length (longest = most substantial)
+      const sortedNarration = [...uniqueNarration].sort((a, b) => b.length - a.length);
+      const voiceover = sortedNarration.slice(0, 5).join(" ").trim();
+
+      // Visual prompt: visual texts joined
+      const visualPrompt = uniqueVisual.join(" ").trim();
 
       // Extract title
       const title = (raw.title as string) || (raw.topic as string) || (raw.headline as string) ||
@@ -282,12 +305,12 @@ ${researchBrief}
       parsed.scenes = [{
         number: 1,
         voiceover: voiceover || "Unable to extract narration from LLM response.",
-        visualPrompt: visualKeys || sortedByLength[0] || "",
+        visualPrompt: visualPrompt || sortedNarration[0] || "",
         coverTitle: (raw.coverTitle as string) || (raw.cover_title as string) || title || "",
         duration: 60,
       }];
 
-      console.log(`[GenerateVideo] SmartFlow transform: voiceover=${voiceover.length} chars, visual=${visualKeys.length} chars, title="${parsed.title}"`);
+      console.log(`[GenerateVideo] SmartFlow transform: voiceover=${voiceover.length} chars, visual=${visualPrompt.length} chars, title="${parsed.title}"`);
     }
   }
 

@@ -32,7 +32,7 @@ export async function runUnifiedPipeline(
   log.debug("Starting unified pipeline", { projectType: params.projectType, format: params.format, length: params.length });
 
   // ============= PHASE 1: SCRIPT =============
-  ctx.setState((prev) => ({ ...prev, step: "scripting" as const, progress: 5, statusMessage: "Generating script with AI..." }));
+  ctx.setState((prev) => ({ ...prev, step: "scripting" as const, progress: 5, statusMessage: "Generating... this may take a moment" }));
 
   const scriptResult = await ctx.callPhase({
     phase: "script",
@@ -73,13 +73,13 @@ export async function runUnifiedPipeline(
     title,
     sceneCount,
     totalImages,
-    statusMessage: "Script complete. Starting audio & images...",
+    statusMessage: "Creating your content...",
     costTracking,
     phaseTimings: { script: scriptResult.phaseTime },
   }));
 
   // ============= PHASE 2: AUDIO + IMAGES (per-scene, parallel) =============
-  ctx.setState((prev) => ({ ...prev, step: "visuals" as const, progress: 15, statusMessage: "Generating audio & images..." }));
+  ctx.setState((prev) => ({ ...prev, step: "visuals" as const, progress: 15, statusMessage: "Creating your content..." }));
 
   // --- Audio: per-scene jobs, batched by AUDIO_CONCURRENCY ---
   const audioPromise = (async () => {
@@ -104,7 +104,7 @@ export async function runUnifiedPipeline(
       ctx.setState((prev) => ({
         ...prev,
         progress: 10 + Math.floor(((batchEnd) / sceneCount) * 25),
-        statusMessage: `Audio ${batchEnd}/${sceneCount}...`,
+        statusMessage: "Creating your content...",
       }));
     }
   })();
@@ -133,7 +133,7 @@ export async function runUnifiedPipeline(
         ...prev,
         completedImages: (prev.completedImages || 0) + 1,
         progress: Math.min(89, 35 + Math.floor(((prev.completedImages || 0) + 1) / sceneCount * 50)),
-        statusMessage: `Images ${(prev.completedImages || 0) + 1}/${sceneCount}...`,
+        statusMessage: "Creating your content...",
       }));
       return result;
     }).catch((err: unknown) => {
@@ -158,7 +158,7 @@ export async function runUnifiedPipeline(
         ).then((result: unknown) => {
           ctx.setState((prev) => ({
             ...prev,
-            statusMessage: `Video ${sceneIdx + 1}/${sceneCount}...`,
+            statusMessage: "Almost there...",
           }));
           return result;
         }).catch((err: unknown) => {
@@ -181,7 +181,7 @@ export async function runUnifiedPipeline(
 
   if (missingImages > 0) {
     log.debug(`Retrying ${missingImages} missing images`);
-    ctx.setState((prev) => ({ ...prev, statusMessage: `Retrying ${missingImages} missing images...` }));
+    ctx.setState((prev) => ({ ...prev, statusMessage: "Polishing up a few details..." }));
     const retryPromises = checkScenes
       .map((s, i) => (!s.imageUrl ? i : -1))
       .filter((i) => i >= 0)
@@ -201,7 +201,7 @@ export async function runUnifiedPipeline(
 
     if (missingVideos > 0) {
       log.debug(`Retrying ${missingVideos} missing videos`);
-      ctx.setState((prev) => ({ ...prev, statusMessage: `Retrying ${missingVideos} missing clips...` }));
+      ctx.setState((prev) => ({ ...prev, statusMessage: "Polishing up a few details..." }));
       const retryPromises = vidCheckScenes
         .map((s, i) => (!s.videoUrl ? i : -1))
         .filter((i) => i >= 0)
@@ -216,7 +216,7 @@ export async function runUnifiedPipeline(
   ctx.setState((prev) => ({
     ...prev,
     progress: 90,
-    statusMessage: "Finalizing...",
+    statusMessage: "Wrapping up...",
   }));
 
   // ============= PHASE 3: FINALIZE =============
@@ -240,7 +240,7 @@ export async function runUnifiedPipeline(
     title: finalResult.title,
     scenes: finalScenes,
     format: params.format as "landscape" | "portrait" | "square",
-    statusMessage: "Generation complete!",
+    statusMessage: "Done!",
     costTracking: finalResult.costTracking,
     phaseTimings: finalResult.phaseTimings,
     totalTimeMs: finalResult.totalTimeMs,

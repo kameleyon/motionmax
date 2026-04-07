@@ -267,10 +267,8 @@ async function imageAudioToClip(
   sceneIndex: number,
   config: ExportConfig
 ): Promise<number> {
-  const AUDIO_SPEED = 1.1;
-  const rawAudioDur = await probeDuration(audioPath);
-  const audioDur = rawAudioDur / AUDIO_SPEED; // effective duration after speed-up
-  console.log(`[SceneEncoder] Scene ${sceneIndex} imageAudio: ${rawAudioDur.toFixed(2)}s (${AUDIO_SPEED}x→${audioDur.toFixed(2)}s)`);
+  const audioDur = await probeDuration(audioPath);
+  console.log(`[SceneEncoder] Scene ${sceneIndex} imageAudio: ${audioDur.toFixed(2)}s`);
 
   // Try AI video first (returns local path to downloaded video, or null)
   const aiVidPath = await tryAiVideo(imageUrl, prompt, sceneIndex, tempDir, config);
@@ -293,7 +291,6 @@ async function imageAudioToClip(
     "-map", "0:v:0",
     "-map", "1:a:0",
     "-c:v", "copy",
-    "-af", "atempo=1.1",
     "-c:a", "aac",
     "-b:a", "128k",
     "-ar", "44100",
@@ -332,21 +329,13 @@ async function muxVideoAudio(
     probeDuration(audioPath),
   ]);
 
-  // Audio sped up 1.1x — video duration must match the sped-up audio.
-  const AUDIO_SPEED = 1.1;
-  const effectiveAudioDur = audioDur / AUDIO_SPEED;
-  const clipDuration = effectiveAudioDur;
-  const speedRatio = videoDur / effectiveAudioDur; // >1 = video longer, speed up. <1 = video shorter, slow down.
-  const ptsFactor = speedRatio; // setpts=N*PTS: N>1 slows down, N<1 speeds up — but we need inverse
-  // setpts: to make video SHORTER (speed up), use factor < 1
-  // to make video LONGER (slow down), use factor > 1
-  // We want video to last exactly audioDur seconds:
-  // newDur = videoDur / speedFactor → speedFactor = videoDur / effectiveAudioDur
-  // setpts = (1/speedFactor)*PTS = (effectiveAudioDur/videoDur)*PTS
-  const setptsFactor = (effectiveAudioDur / videoDur).toFixed(6);
+  // AUDIO IS KING — video duration must EXACTLY match audio duration.
+  const clipDuration = audioDur;
+  const speedRatio = videoDur / audioDur;
+  const setptsFactor = (audioDur / videoDur).toFixed(6);
 
   console.log(
-    `[SceneEncoder] Scene ${sceneIndex} mux: video=${videoDur.toFixed(1)}s audio=${audioDur.toFixed(1)}s (${AUDIO_SPEED}x→${effectiveAudioDur.toFixed(1)}s) ` +
+    `[SceneEncoder] Scene ${sceneIndex} mux: video=${videoDur.toFixed(1)}s audio=${audioDur.toFixed(1)}s ` +
     `speed=${speedRatio.toFixed(2)}x setpts=${setptsFactor}`
   );
 
@@ -354,7 +343,6 @@ async function muxVideoAudio(
     "-i", videoPath,
     "-i", audioPath,
     "-vf", `setpts=${setptsFactor}*PTS,${scaleAndPad(config.width, config.height)}`,
-    "-af", `atempo=${AUDIO_SPEED}`,
     "-map", "0:v:0",
     "-map", "1:a:0",
     "-c:v", "libx264",

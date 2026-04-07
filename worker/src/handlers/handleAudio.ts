@@ -60,7 +60,7 @@ function inferStyleInstruction(voiceover: string): string {
   if (lower.includes("question") || lower.includes("what if") || lower.includes("why"))
     return "Speak with curiosity and intrigue, inviting the listener to think";
 
-  return "Speak with raw social media energy, punchy pacing, dramatic pauses for emphasis, hype moments that hit like a plot twist, enthusiast, energetic and mysterious, witty and fun, showing all kind of emotion matching the context";
+  return "Speak fast-paced with raw social media energy, punchy rapid-fire delivery, dramatic pauses for emphasis, hype moments that hit like a plot twist, enthusiast, energetic and mysterious, witty and fun, showing all kind of emotion matching the context";
 }
 
 // ── Legacy speakers that route to Fish Audio / LemonFox ──────────

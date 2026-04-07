@@ -146,12 +146,14 @@ export async function handleCinematicAudio(
 
     // ── Fish Audio / LemonFox speakers → legacy audio router ──
     // These map specific speaker names to the standard TTS providers
-    // Only French/Spanish speakers use legacy Fish Audio — all English speakers use Qwen3
+    // Legacy speakers route to their original TTS providers (Fish Audio / LemonFox)
     const LEGACY_SPEAKER_MAP: Record<string, { gender: string; language: string }> = {
       "Jacques":  { gender: "male",   language: "fr" },
       "Camille":  { gender: "female", language: "fr" },
       "Carlos":   { gender: "male",   language: "es" },
       "Isabella": { gender: "female", language: "es" },
+      "Adam":     { gender: "male",   language: "en" },
+      "River":    { gender: "female", language: "en" },
     };
 
     const legacyMapping = LEGACY_SPEAKER_MAP[voiceName];

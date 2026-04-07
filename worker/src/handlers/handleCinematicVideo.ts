@@ -1,17 +1,17 @@
 /**
- * Cinematic video handler — Kling V3.0 Standard I2V via Hypereal.
+ * Cinematic video handler — Kling V2.5 Turbo I2V via Hypereal.
  *
  * Flow:
  *   - All images are generated FIRST (in parallel batches by the frontend)
- *   - Videos use Kling V3.0 Std I2V with seamless transitions:
+ *   - Videos use Kling V2.5 Turbo I2V with seamless transitions:
  *     image = Scene N's image (first frame)
- *     end_image = Scene N+1's image (last frame) — creates smooth transition
- *     Last scene has NO end_image (self-contained)
+ *     last_image = Scene N+1's image (last frame) — creates smooth transition
+ *     Last scene has NO last_image (self-contained)
  *   - Camera motion varies per scene (rotated from 7 movement types)
- *   - Duration: 10s, No sound
+ *   - Duration: 10s, No sound, cfg_scale: 0.8
  *
- * Primary: kling-3-0-std-i2v (42 credits / $0.84 per 10s)
- * Fallback: kling-2-5-i2v (35 credits / $0.70 per 10s)
+ * Primary: kling-2-5-i2v (35 credits / $0.70 per 10s)
+ * Upgrade path: kling-3-0-std-i2v (42 credits / $0.84 per 10s) — commented out, ready to enable
  *
  * Previous model (commented out): grok-video-i2v (12 credits)
  */
@@ -21,8 +21,8 @@ import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField } from "../lib/sceneUpdate.js";
 import { generateImage } from "../services/imageGenerator.js";
 import {
-  generateKlingV3Video,
   generateKlingV25Video,
+  // generateKlingV3Video,   // V3.0 — faster + cheaper but lip sync issues. Uncomment when ready.
   // generateVeo31Video,     // Veo 3.1 — doesn't follow prompts, generates unwanted audio/lip sync
   // generateKlingV26Video,  // Previous fallback — kept for rollback
   // generateGrokVideo,      // Previous model — kept for rollback
@@ -221,43 +221,34 @@ export async function handleCinematicVideo(
 
   const transitionInfo = endImageUrl ? `→ scene ${sceneIndex + 1}` : "(no end_image)";
   console.log(
-    `[CinematicVideo] Scene ${sceneIndex}: Kling V3.0 Std I2V 10s ${transitionInfo}, ` +
+    `[CinematicVideo] Scene ${sceneIndex}: Kling V2.5 Turbo I2V 10s ${transitionInfo}, ` +
     `camera=${CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("—")[0].trim()}, ` +
     `prompt=${finalPrompt.length} chars`
   );
 
-  // ── Generate video with Kling V3.0 Standard I2V (primary) ────────
+  // ── Generate video with Kling V2.5 Turbo I2V (primary) ───────────
   let videoUrl: string;
-  let provider = "Kling V3.0 Std I2V";
+  let provider = "Kling V2.5 Turbo I2V";
   const negPrompt = "blurry, low quality, watermark, text, UI elements, slow motion, sluggish, nudity, naked, exposed body, extra limbs, body contortion, distorted anatomy, lip sync, talking, mouth movement, speaking";
 
-  try {
-    videoUrl = await generateKlingV3Video(
-      imageUrl,
-      finalPrompt,
-      apiKey,
-      10,           // duration: 10s
-      endImageUrl,  // end_image: next scene's image for seamless transition
-      negPrompt,
-      0.5,          // cfg_scale
-    );
-  } catch (v3Error) {
-    // Fallback to Kling V2.5 Turbo
-    console.warn(
-      `[CinematicVideo] Scene ${sceneIndex}: Kling V3.0 failed (${(v3Error as Error).message}), falling back to Kling V2.5`
-    );
-    provider = "Kling V2.5 Turbo I2V";
+  // NOTE: To switch to V3.0 (faster, $0.84/10s), uncomment below and comment V2.5 block:
+  // try {
+  //   videoUrl = await generateKlingV3Video(imageUrl, finalPrompt, apiKey, 10, endImageUrl, negPrompt, 0.5);
+  //   provider = "Kling V3.0 Std I2V";
+  // } catch (v3Error) {
+  //   console.warn(`[CinematicVideo] Scene ${sceneIndex}: Kling V3.0 failed, falling back to V2.5`);
+  //   videoUrl = await generateKlingV25Video(imageUrl, finalPrompt, apiKey, 10, endImageUrl, negPrompt, 0.8);
+  // }
 
-    videoUrl = await generateKlingV25Video(
-      imageUrl,
-      finalPrompt,
-      apiKey,
-      10,           // duration: 10s
-      endImageUrl,
-      negPrompt,
-      0.8,
-    );
-  }
+  videoUrl = await generateKlingV25Video(
+    imageUrl,
+    finalPrompt,
+    apiKey,
+    10,           // duration: 10s
+    endImageUrl,  // last_image: next scene's image for seamless transition
+    negPrompt,
+    0.8,          // guidance_scale
+  );
 
   // ── Previous model (Grok Video I2V) — commented out for rollback ──
   // const grokVideoUrl = await generateGrokVideo(
@@ -290,7 +281,7 @@ export async function handleCinematicVideo(
     category: "system_info",
     eventType: "cinematic_video_completed",
     message: `Cinematic video completed for scene ${sceneIndex} (${provider}, 10s${endImageUrl ? ", with transition" : ""})`,
-    details: { provider, hasTransition: !!endImageUrl, cost: 0.84 },
+    details: { provider, hasTransition: !!endImageUrl, cost: 0.70 },
   });
 
   return {
@@ -300,7 +291,7 @@ export async function handleCinematicVideo(
     sceneIndex,
     provider,
     hasTransition: !!endImageUrl,
-    cost: 0.84,
+    cost: 0.70,
   };
 }
 

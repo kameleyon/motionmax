@@ -544,11 +544,16 @@ export async function generatePixVerseTransition(
     ? prompt.substring(0, 200).replace(/\s+\S*$/, "")
     : "Smooth cinematic transition between the two scenes.";
 
+  // Try nested input format (matching Hypereal general video endpoint structure)
+  // Their docs show flat format for PixVerse but the 500 E1001 errors suggest
+  // the general endpoint may require the input wrapper for all models.
   const requestBody = {
     model,
-    prompt: shortPrompt,
-    start_image: startImageUrl,
-    end_image: endImageUrl,
+    input: {
+      prompt: shortPrompt,
+      start_image: startImageUrl,
+      end_image: endImageUrl,
+    },
   };
 
   const bodyJson = JSON.stringify(requestBody);

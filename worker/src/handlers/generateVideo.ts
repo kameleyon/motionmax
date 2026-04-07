@@ -211,15 +211,28 @@ ${researchBrief}
     }
   }
 
-  // ── Step 2: Call OpenRouter LLM ───────────────────────────────────
+  // ── Step 2: Call LLM ──────────────────────────────────────────────
   await updateJobProgress(jobId, 10);
-  // All project types use 0.8 for creative output
   const temperature = 0.8;
-  const rawText = await callLLMWithFallback(promptResult, {
-    maxTokens: promptResult.maxTokens,
-    forceJson: true,
-    temperature,
-  });
+
+  // Gemini works for SmartFlow (1 scene) and cinematic (own builder) but fails
+  // for doc2video/storytelling (10+ scenes complex JSON). Route those to OpenRouter directly.
+  const useOpenRouterDirect = projectType === "doc2video" || projectType === "storytelling";
+  let rawText: string;
+  if (useOpenRouterDirect) {
+    const { callOpenRouterLLM } = await import("../services/openrouter.js");
+    rawText = await callOpenRouterLLM(promptResult, {
+      maxTokens: promptResult.maxTokens,
+      forceJson: true,
+      temperature,
+    });
+  } else {
+    rawText = await callLLMWithFallback(promptResult, {
+      maxTokens: promptResult.maxTokens,
+      forceJson: true,
+      temperature,
+    });
+  }
 
   // ── Step 3: Parse LLM response ───────────────────────────────────
   await updateJobProgress(jobId, 20);

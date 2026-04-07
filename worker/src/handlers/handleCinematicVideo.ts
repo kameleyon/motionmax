@@ -230,7 +230,7 @@ export async function handleCinematicVideo(
   const negPrompt = "blurry, low quality, watermark, text, UI elements, slow motion, sluggish, nudity, naked, exposed body, extra limbs, body contortion, distorted anatomy, lip sync, talking, mouth movement, speaking";
 
   if (endImageUrl) {
-    // PixVerse V6 for scenes WITH transition (start → end image)
+    // PixVerse V6 for scenes WITH transition — flat format confirmed by Hypereal
     const cameraMotion = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("—")[0].trim();
     const shortVoiceover = (scene.voiceover || "").substring(0, 200);
     const pixVersePrompt = [
@@ -250,7 +250,7 @@ export async function handleCinematicVideo(
       videoUrl = await generateKlingV25Video(imageUrl, finalPrompt, apiKey, 10, endImageUrl, negPrompt, 0.8);
     }
   } else {
-    // Last scene — no end_image, use Kling V2.5
+    // Last scene — no end_image
     provider = "Kling V2.5 Turbo I2V";
     videoUrl = await generateKlingV25Video(imageUrl, finalPrompt, apiKey, 10, undefined, negPrompt, 0.8);
   }

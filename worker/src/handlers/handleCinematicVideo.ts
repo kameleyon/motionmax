@@ -1,17 +1,14 @@
 /**
- * Cinematic video handler — Kling V2.5 Turbo I2V via Hypereal.
+ * Cinematic video handler — PixVerse V6 Transitions + Kling V2.5 fallback.
  *
  * Flow:
  *   - All images are generated FIRST (in parallel batches by the frontend)
- *   - Videos use Kling V2.5 Turbo I2V with seamless transitions:
- *     image = Scene N's image (first frame)
- *     last_image = Scene N+1's image (last frame) — creates smooth transition
- *     Last scene has NO last_image (self-contained)
+ *   - Scenes with transitions (has end_image): PixVerse V6 ($0.40/transition)
+ *   - Last scene (no end_image): Kling V2.5 Turbo I2V ($0.70/10s)
  *   - Camera motion varies per scene (rotated from 7 movement types)
- *   - Duration: 10s, No sound, cfg_scale: 0.8
  *
- * Primary: kling-2-5-i2v (35 credits / $0.70 per 10s)
- * Upgrade path: kling-3-0-std-i2v (42 credits / $0.84 per 10s) — commented out, ready to enable
+ * Primary: pixverse-v6-transitions (40 credits / $0.40 per transition)
+ * Fallback/Last scene: kling-2-5-i2v (35 credits / $0.70 per 10s)
  *
  * Previous model (commented out): grok-video-i2v (12 credits)
  */
@@ -21,6 +18,7 @@ import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField } from "../lib/sceneUpdate.js";
 import { generateImage } from "../services/imageGenerator.js";
 import {
+  generatePixVerseTransition,
   generateKlingV25Video,
   // generateKlingV3Video,   // V3.0 — faster + cheaper but lip sync issues. Uncomment when ready.
   // generateVeo31Video,     // Veo 3.1 — doesn't follow prompts, generates unwanted audio/lip sync
@@ -226,29 +224,53 @@ export async function handleCinematicVideo(
     `prompt=${finalPrompt.length} chars`
   );
 
-  // ── Generate video with Kling V2.5 Turbo I2V (primary) ───────────
+  // ── Generate video ────────────────────────────────────────────────
   let videoUrl: string;
-  let provider = "Kling V2.5 Turbo I2V";
+  let provider: string;
   const negPrompt = "blurry, low quality, watermark, text, UI elements, slow motion, sluggish, nudity, naked, exposed body, extra limbs, body contortion, distorted anatomy, lip sync, talking, mouth movement, speaking";
 
-  // NOTE: To switch to V3.0 (faster, $0.84/10s), uncomment below and comment V2.5 block:
-  // try {
-  //   videoUrl = await generateKlingV3Video(imageUrl, finalPrompt, apiKey, 10, endImageUrl, negPrompt, 0.5);
-  //   provider = "Kling V3.0 Std I2V";
-  // } catch (v3Error) {
-  //   console.warn(`[CinematicVideo] Scene ${sceneIndex}: Kling V3.0 failed, falling back to V2.5`);
-  //   videoUrl = await generateKlingV25Video(imageUrl, finalPrompt, apiKey, 10, endImageUrl, negPrompt, 0.8);
-  // }
+  // PixVerse V6 for scenes WITH end_image (transition between two frames)
+  // Kling V2.5 for last scene (no end_image) or as fallback
+  if (endImageUrl) {
+    // Build a concise PixVerse-specific prompt: scene action + morph transition
+    const cameraMotion = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("—")[0].trim();
+    const shortVoiceover = (scene.voiceover || "").substring(0, 200);
+    const pixVersePrompt = [
+      `Cinematic ${cameraMotion.toLowerCase()} camera movement.`,
+      shortVoiceover ? `Scene context: ${shortVoiceover}` : "",
+      `FAST-PACED dynamic motion throughout. No talking, no lip movement, no mouth movement.`,
+      `In the LAST 1 second: smoothly morph and transition into the end image using a natural camera movement.`,
+      `No body contortions, no faces melting. Think film cut — camera pans away from current scene toward next.`,
+    ].filter(Boolean).join(" ");
 
-  videoUrl = await generateKlingV25Video(
-    imageUrl,
-    finalPrompt,
-    apiKey,
-    10,           // duration: 10s
-    endImageUrl,  // last_image: next scene's image for seamless transition
-    negPrompt,
-    0.8,          // guidance_scale
-  );
+    try {
+      videoUrl = await generatePixVerseTransition(
+        imageUrl,
+        endImageUrl,
+        pixVersePrompt,
+        apiKey,
+      );
+      provider = "PixVerse V6 Transition";
+    } catch (pvError) {
+      console.warn(
+        `[CinematicVideo] Scene ${sceneIndex}: PixVerse V6 failed (${(pvError as Error).message}), falling back to Kling V2.5`
+      );
+      provider = "Kling V2.5 Turbo I2V";
+      videoUrl = await generateKlingV25Video(
+        imageUrl, finalPrompt, apiKey, 10, endImageUrl, negPrompt, 0.8,
+      );
+    }
+  } else {
+    // Last scene — no end_image, use Kling V2.5
+    provider = "Kling V2.5 Turbo I2V";
+    videoUrl = await generateKlingV25Video(
+      imageUrl, finalPrompt, apiKey, 10, undefined, negPrompt, 0.8,
+    );
+  }
+
+  // NOTE: To switch to Kling V2.5 for ALL scenes, comment PixVerse block above and uncomment:
+  // videoUrl = await generateKlingV25Video(imageUrl, finalPrompt, apiKey, 10, endImageUrl, negPrompt, 0.8);
+  // provider = "Kling V2.5 Turbo I2V";
 
   // ── Previous model (Grok Video I2V) — commented out for rollback ──
   // const grokVideoUrl = await generateGrokVideo(
@@ -281,7 +303,7 @@ export async function handleCinematicVideo(
     category: "system_info",
     eventType: "cinematic_video_completed",
     message: `Cinematic video completed for scene ${sceneIndex} (${provider}, 10s${endImageUrl ? ", with transition" : ""})`,
-    details: { provider, hasTransition: !!endImageUrl, cost: 0.70 },
+    details: { provider, hasTransition: !!endImageUrl, cost: 0.40 },
   });
 
   return {
@@ -291,7 +313,7 @@ export async function handleCinematicVideo(
     sceneIndex,
     provider,
     hasTransition: !!endImageUrl,
-    cost: 0.70,
+    cost: 0.40,
   };
 }
 

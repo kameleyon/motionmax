@@ -507,6 +507,67 @@ export async function generateVeo31Video(
   return pollHyperealJob(jobId, apiKey, model, pollUrl);
 }
 
+// ── PixVerse V6 Transitions ───────────────────────────────────────
+
+/**
+ * Generate video transition between two images using PixVerse V6.
+ *
+ * Model: pixverse-v6-transitions (40 credits / $0.40 per transition)
+ * Purpose-built for smooth transitions between start and end frames.
+ * No duration control — PixVerse determines optimal length.
+ * No negative prompt support.
+ */
+export async function generatePixVerseTransition(
+  startImageUrl: string,
+  endImageUrl: string,
+  prompt: string,
+  apiKey: string,
+): Promise<string> {
+  const model = "pixverse-v6-transitions";
+
+  console.log(`[Hypereal] Starting PixVerse V6 Transition`);
+  console.log(`[Hypereal] START IMAGE: ${startImageUrl.substring(0, 80)}...`);
+  console.log(`[Hypereal] END IMAGE: ${endImageUrl.substring(0, 80)}...`);
+
+  const requestBody = {
+    model,
+    input: {
+      prompt,
+      start_image: startImageUrl,
+      end_image: endImageUrl,
+    },
+  };
+
+  const bodyJson = JSON.stringify(requestBody);
+  console.log(`[Hypereal] PixVerse V6 body (${bodyJson.length} chars): ${bodyJson.substring(0, 1500)}`);
+
+  const response = await fetch(HYPEREAL_VIDEO_URL, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: bodyJson,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Hypereal PixVerse V6 API Error: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json() as any;
+  const jobId = data.jobId;
+  const pollUrl = data.pollUrl || null;
+
+  console.log(`[Hypereal] PixVerse V6 job created: ${jobId} (credits: ${data.creditsUsed})`);
+
+  if (!jobId) {
+    throw new Error(`No jobId from PixVerse V6 — response: ${JSON.stringify(data)}`);
+  }
+
+  return pollHyperealJob(jobId, apiKey, model, pollUrl);
+}
+
 // ── Legacy Seedance export (kept for import compatibility) ─────────
 
 export async function generateVideoFromImage(

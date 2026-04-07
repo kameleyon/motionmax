@@ -247,8 +247,22 @@ export function useVideoExport() {
   );
 
   const handleDownload = useCallback((url: string, filename: string, userGesture = false) => {
-    return downloadVideo(url, filename, userGesture);
-  }, []);
+    let downloadUrl = url;
+    try {
+      const urlObj = new URL(url);
+      const match = urlObj.pathname.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.*)/);
+      if (match) {
+        const bucket = match[1];
+        const path = match[2];
+        // Reconstruct the URL to point to our serve-media function
+        downloadUrl = `${urlObj.origin}/functions/v1/serve-media?bucket=${bucket}&path=${path}&download=true`;
+        log("Constructed download URL:", downloadUrl);
+      }
+    } catch (e) {
+      err("Failed to construct download URL, using original:", e);
+    }
+    return downloadVideo(downloadUrl, filename, userGesture);
+  }, [log, err]);
 
   const handleShare = useCallback((url: string, filename: string) => {
     return shareVideo(url, filename);

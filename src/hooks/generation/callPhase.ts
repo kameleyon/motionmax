@@ -171,12 +171,26 @@ async function pollWorkerJob(jobId: string, maxWaitMs: number = 8 * 60 * 1000, t
       if (timeoutTimer) clearTimeout(timeoutTimer);
     }
 
-    function handleResult(row: any) {
+    async function handleResult(row: any) {
       if (settled) return;
       if (row.status === "completed") {
         log.debug("Worker job completed", { jobId, elapsedMs: Date.now() - startTime });
         cleanup();
-        resolve(row.result ?? row.payload);
+        // Realtime may not include full result (payload size limit).
+        // If result is missing, fetch it from DB.
+        if (row.result) {
+          resolve(row.result);
+        } else {
+          try {
+            const { data } = await (supabase.from("video_generation_jobs") as any)
+              .select("result, payload")
+              .eq("id", jobId)
+              .single();
+            resolve(data?.result ?? data?.payload ?? row.payload);
+          } catch {
+            resolve(row.payload);
+          }
+        }
       } else if (row.status === "failed") {
         cleanup();
         reject(new Error(String(row.error_message || "Job failed")));

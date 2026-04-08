@@ -20,10 +20,11 @@ let saveInProgress = false;
 /**
  * Blob fetch timeouts for mobile share sheet.
  * iOS Safari needs the share() call within the user gesture chain.
- * Videos need more time — iOS 15+ preserves the gesture through async fetch chains.
+ * Videos are large and need a generous timeout on cellular connections.
+ * iOS 15+ preserves the gesture through async fetch chains.
  */
-const MOBILE_VIDEO_BLOB_TIMEOUT_MS = 3000;
-const MOBILE_IMAGE_BLOB_TIMEOUT_MS = 2000;
+const MOBILE_VIDEO_BLOB_TIMEOUT_MS = 10_000;
+const MOBILE_IMAGE_BLOB_TIMEOUT_MS = 3000;
 
 function detectPlatform() {
   const ua = navigator.userAgent;
@@ -97,14 +98,18 @@ function triggerDirectDownload(url: string, filename: string): void {
 /**
  * Save the video file to the user's device.
  *
- * iOS/Android strategy (preserves user gesture for share sheet):
- *   1. Race blob fetch vs 3 s timeout
- *      → If blob arrives: navigator.share({ files }) — full save sheet
- *        (Save Video · Save to Files · AirDrop · Messages · Mail …)
- *   2. If blob was too slow or CORS blocked:
- *      → navigator.share({ url }) — share-link sheet
- *        (Messages · Mail · Copy · social media)
- *   3. Last resort: open video in new tab
+ * iOS strategy:
+ *   1. Fetch blob (10s timeout) → navigator.share({ files }) — "Save Video" sheet
+ *   2. Trigger Safari Download Manager via hidden anchor (302 → signed URL
+ *      with Content-Disposition: attachment — downloads in background)
+ *   3. URL-only share → Messages, Mail, Copy
+ *   4. Direct navigation to download URL (last resort)
+ *
+ * Android strategy:
+ *   1. Fetch blob → navigator.share({ files })
+ *   2. Blob URL download via anchor
+ *   3. URL-only share
+ *   4. Direct navigation
  *
  * Desktop: standard anchor / blob download.
  */
@@ -130,17 +135,29 @@ export async function downloadVideo(
       const fileShareResult = await attemptFileShare(url, filename, MOBILE_VIDEO_BLOB_TIMEOUT_MS, "video/mp4");
       if (fileShareResult === "done" || fileShareResult === "cancelled") return;
 
-      // Step 2: Try blob URL download (works on iOS 18+ where share may fail)
-      const blobDownloadResult = await attemptBlobDownload(url, filename);
-      if (blobDownloadResult === "done") return;
+      // Step 2 (iOS): Trigger Safari's native Download Manager.
+      // Navigate to the serve-media URL which 302-redirects to a signed URL
+      // with Content-Disposition: attachment — Safari 15+ downloads the file
+      // in the background without leaving the page.
+      if (isIOS) {
+        log.debug("iOS: triggering native download manager");
+        const downloaded = attemptNativeDownload(url, filename);
+        if (downloaded) return;
+      }
+
+      // Step 2 (Android): Try blob URL download
+      if (isAndroid) {
+        const blobDownloadResult = await attemptBlobDownload(url, filename);
+        if (blobDownloadResult === "done") return;
+      }
 
       // Step 3: Try URL-only share (gives Messages, Mail, social, Copy)
       const urlShareResult = await attemptUrlShare(url, filename);
       if (urlShareResult === "done" || urlShareResult === "cancelled") return;
 
-      // Step 4: Open in new tab — user can long-press or use Safari share
-      log.debug("Mobile: all save attempts failed — opening in new tab");
-      window.open(url, "_blank");
+      // Step 4: Last resort — open URL directly (triggers download manager on iOS 15+)
+      log.debug("Mobile: all save attempts failed — navigating to download URL");
+      window.location.href = url;
       return;
     }
 
@@ -156,8 +173,15 @@ export async function downloadVideo(
     const blob = await fetchAsBlob(url);
     triggerBlobDownload(blob, filename);
   } catch (e) {
-    log.warn("Save failed, opening video URL:", e);
-    window.open(url, "_blank");
+    log.warn("Save failed, falling back to direct navigation:", e);
+    // On iOS, direct navigation triggers the download manager;
+    // on other platforms, it at least opens the video.
+    const { isIOS: iosRetry } = detectPlatform();
+    if (iosRetry) {
+      attemptNativeDownload(url, filename);
+    } else {
+      window.open(url, "_blank");
+    }
   } finally {
     saveInProgress = false;
   }
@@ -277,6 +301,32 @@ async function attemptUrlShare(
   }
 }
 
+/**
+ * Trigger iOS Safari's native Download Manager via a hidden anchor.
+ * Safari 15+ detects Content-Disposition: attachment on the final response
+ * and downloads the file in the background without leaving the page.
+ *
+ * Uses an anchor element instead of window.open to avoid a blank-tab flash,
+ * and instead of window.location.href to avoid disrupting SPA state.
+ */
+function attemptNativeDownload(url: string, filename: string): boolean {
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;  // hint for Safari — honoured on same-origin, ignored on cross-origin but harmless
+    a.rel = "noopener";
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => document.body.removeChild(a), 1000);
+    log.debug("iOS: native download triggered via anchor");
+    return true;
+  } catch (e) {
+    log.warn("iOS: native download attempt failed:", e);
+    return false;
+  }
+}
+
 // ── DOWNLOAD / SAVE IMAGE FILE ──────────────────────────────────────
 
 /**
@@ -312,16 +362,24 @@ export async function downloadImage(
       const fileResult = await attemptFileShare(url, filename, MOBILE_IMAGE_BLOB_TIMEOUT_MS, mime);
       if (fileResult === "done" || fileResult === "cancelled") return;
 
-      // Step 2: Try blob URL download (iOS 18+ fallback)
-      const blobResult = await attemptBlobDownload(url, filename);
-      if (blobResult === "done") return;
+      // Step 2 (iOS): Trigger native download manager
+      if (isIOS) {
+        const downloaded = attemptNativeDownload(url, filename);
+        if (downloaded) return;
+      }
+
+      // Step 2 (Android): Try blob URL download
+      if (isAndroid) {
+        const blobResult = await attemptBlobDownload(url, filename);
+        if (blobResult === "done") return;
+      }
 
       // Step 3: Share URL (no "Save Image" but still useful)
       const urlResult = await attemptUrlShare(url, filename);
       if (urlResult === "done" || urlResult === "cancelled") return;
 
-      // Step 4: Open in new tab — user can long-press to save
-      window.open(url, "_blank");
+      // Step 4: Last resort — navigate to download URL
+      window.location.href = url;
       return;
     }
 

@@ -11,7 +11,8 @@ const FALLBACK_URL = "https://ayjbvcikuwknqdrpsdmj.supabase.co";
 const FALLBACK_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF5amJ2Y2lrdXdrbnFkcnBzZG1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxMDE0MjMsImV4cCI6MjA4ODY3NzQyM30.KmOVtLzpzsZXjxyGEi6gxkd5U9Ir7omoCOxqnoN65YI";
 
 export const SUPABASE_URL = ENV_URL || FALLBACK_URL;
-const SUPABASE_PUBLISHABLE_KEY = ENV_KEY || FALLBACK_KEY;
+export const SUPABASE_ANON_KEY = ENV_KEY || FALLBACK_KEY;
+const SUPABASE_PUBLISHABLE_KEY = SUPABASE_ANON_KEY;
 
 if (!ENV_URL || !ENV_KEY) {
   console.warn("[Supabase] VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY not set — using fallback. Configure env vars in your build platform.");

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { type ExportState, type SceneProgressData } from "./export/types";
 import { downloadVideo, shareVideo } from "./export/downloadHelpers";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, SUPABASE_ANON_KEY } from "@/integrations/supabase/client";
 import { db } from "@/lib/databaseService";
 import type { Json } from "@/integrations/supabase/types";
 import type { Scene } from "./generation/types";
@@ -254,8 +254,10 @@ export function useVideoExport() {
       if (match) {
         const bucket = match[1];
         const path = match[2];
-        // Reconstruct the URL to point to our serve-media function
-        downloadUrl = `${urlObj.origin}/functions/v1/serve-media?bucket=${bucket}&path=${path}&download=true`;
+        // Reconstruct the URL to point to our serve-media function.
+        // Include the anon key so the request passes Supabase JWT verification
+        // (browser navigations and anchor downloads can't send Authorization headers).
+        downloadUrl = `${urlObj.origin}/functions/v1/serve-media?bucket=${bucket}&path=${path}&download=true&apikey=${SUPABASE_ANON_KEY}`;
         log("Constructed download URL:", downloadUrl);
       }
     } catch (e) {

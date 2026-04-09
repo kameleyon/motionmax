@@ -53,6 +53,12 @@ export function AdminOverview() {
     refetchOnWindowFocus: false,
   });
 
+  // Credit amount → dollar price mapping
+  const CREDIT_PACK_PRICE: Record<number, number> = {
+    300: 9.99, 900: 24.99, 2500: 59.99,
+    15: 4.99, 50: 14.99, 150: 34.99, 500: 99.99,
+  };
+
   // Fetch trend data: counts from last 7 days
   const { data: trends } = useQuery({
     queryKey: ["admin-trends"],
@@ -65,7 +71,11 @@ export function AdminOverview() {
         supabase.from("credit_transactions").select("amount").eq("transaction_type", "purchase").gte("created_at", weekAgo),
       ]);
 
-      const revenueThisWeek = (revenueRes.data || []).reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
+      // Convert credit amounts to actual dollar prices
+      const revenueThisWeek = (revenueRes.data || []).reduce((sum, t) => {
+        const credits = Math.abs(t.amount || 0);
+        return sum + (CREDIT_PACK_PRICE[credits] || 0);
+      }, 0);
 
       return {
         usersThisWeek: usersRes.count || 0,

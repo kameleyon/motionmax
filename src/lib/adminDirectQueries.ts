@@ -37,49 +37,44 @@ export async function fetchDashboardStats() {
     { data: flags },
     { data: costs },
     { data: purchaseTxns },
-    { data: allRevenueTxns },
   ] = await Promise.all([
     supabase.from("profiles").select("*", { count: "exact", head: true }),
     supabase.from("subscriptions").select("*"),
     supabase.from("generations").select("*", { count: "exact", head: true }),
     supabase.from("generation_archives").select("*", { count: "exact", head: true }),
     supabase.from("user_flags").select("*").is("resolved_at", null),
-    supabase.from("generation_costs").select("openrouter_cost, replicate_cost, hypereal_cost, google_tts_cost, total_cost"),
+    supabase.rpc("get_generation_costs_summary"),
     supabase.from("credit_transactions").select("amount, transaction_type").eq("transaction_type", "purchase"),
-    supabase.from("credit_transactions").select("amount, transaction_type").in("transaction_type", ["purchase", "monthly_renewal"]),
   ]);
 
   const activeSubs = subscriptions?.filter(s => s.status === "active") || [];
 
-  // ── Costs from generation_costs table ──
-  let totalOpenRouter = 0;
-  let totalReplicate = 0;
-  let totalHypereal = 0;
-  let totalGoogleTts = 0;
-  let totalSpent = 0;
+  // ── Costs from RPC (bypasses RLS via SECURITY DEFINER) ──
+  const costData = costs as any;
+  const totalOpenRouter = Number(costData?.openrouter) || 0;
+  const totalReplicate = Number(costData?.replicate) || 0;
+  const totalHypereal = Number(costData?.hypereal) || 0;
+  const totalGoogleTts = Number(costData?.google_tts) || 0;
+  const totalSpent = Number(costData?.total) || 0;
 
-  costs?.forEach(c => {
-    totalOpenRouter += Number(c.openrouter_cost) || 0;
-    totalReplicate += Number(c.replicate_cost) || 0;
-    totalHypereal += Number(c.hypereal_cost) || 0;
-    totalGoogleTts += Number(c.google_tts_cost) || 0;
-    totalSpent += Number(c.total_cost) || 0;
-  });
-
-  // ── Revenue computed from DB (no Stripe API dependency) ──
-  // Credit pack revenue: match credit amounts to known prices
+  // ── Revenue from verified credit pack purchases only ──
+  // Only count actual money: credit amount → known pack price
   let creditPackRevenue = 0;
   (purchaseTxns || []).forEach(t => {
-    const amount = Math.abs(t.amount || 0);
-    creditPackRevenue += CREDIT_PACK_PRICE[amount] || 0;
+    const credits = Math.abs(t.amount || 0);
+    creditPackRevenue += CREDIT_PACK_PRICE[credits] || 0;
   });
 
-  // Subscription revenue: estimate from active subs × monthly price
-  // This is an estimate since we don't track actual Stripe charges in DB
+  // Subscription revenue: only count Stripe subscriptions (not manual entries)
+  // Manual subs have stripe_subscription_id starting with "manual_"
+  const paidSubs = (subscriptions || []).filter(s =>
+    s.status === "active" &&
+    s.stripe_subscription_id &&
+    !s.stripe_subscription_id.startsWith("manual_")
+  );
   let subscriptionRevenue = 0;
-  activeSubs.forEach(s => {
+  paidSubs.forEach(s => {
     const planPrice = PLAN_MONTHLY_PRICE[s.plan_name] || 0;
-    // Estimate months active (from period start to now)
     const start = s.current_period_start ? new Date(s.current_period_start) : new Date(s.created_at);
     const monthsActive = Math.max(1, Math.ceil((Date.now() - start.getTime()) / (30 * 24 * 60 * 60 * 1000)));
     subscriptionRevenue += planPrice * monthsActive;
@@ -303,11 +298,11 @@ export async function fetchRevenueStats(params?: { startDate?: string; endDate?:
   let txnQuery = supabase
     .from("credit_transactions")
     .select("amount, transaction_type, created_at")
-    .in("transaction_type", ["purchase", "monthly_renewal"]);
+    .eq("transaction_type", "purchase");
 
   let subsQuery = supabase
     .from("subscriptions")
-    .select("plan_name, status, current_period_start, created_at")
+    .select("plan_name, status, stripe_subscription_id")
     .eq("status", "active");
 
   if (params?.startDate) {
@@ -319,42 +314,32 @@ export async function fetchRevenueStats(params?: { startDate?: string; endDate?:
 
   const [{ data: txns }, { data: subs }] = await Promise.all([txnQuery, subsQuery]);
 
-  // Revenue by day from credit transactions
+  // Revenue by day from verified credit pack purchases
   let totalRevenue = 0;
   const dayMap: Record<string, number> = {};
 
   (txns || []).forEach(t => {
-    const amount = Math.abs(t.amount || 0);
-    const price = CREDIT_PACK_PRICE[amount] || 0;
+    const credits = Math.abs(t.amount || 0);
+    const price = CREDIT_PACK_PRICE[credits] || 0;
     totalRevenue += price;
     const day = t.created_at?.slice(0, 10) || "unknown";
     dayMap[day] = (dayMap[day] || 0) + price;
   });
 
-  // Estimate MRR from active subs
+  // MRR only from real Stripe subscriptions (not manual entries)
+  const paidSubs = (subs || []).filter(s =>
+    s.stripe_subscription_id && !s.stripe_subscription_id.startsWith("manual_")
+  );
   let mrr = 0;
-  (subs || []).forEach(s => {
+  paidSubs.forEach(s => {
     mrr += PLAN_MONTHLY_PRICE[s.plan_name] || 0;
   });
-
-  const activeSubs = subs?.length || 0;
-  const chargeCount = (txns || []).length + activeSubs;
-
-  // Add subscription revenue estimate
-  let subRevenue = 0;
-  (subs || []).forEach(s => {
-    const planPrice = PLAN_MONTHLY_PRICE[s.plan_name] || 0;
-    const start = s.current_period_start ? new Date(s.current_period_start) : new Date(s.created_at);
-    const monthsActive = Math.max(1, Math.ceil((Date.now() - start.getTime()) / (30 * 24 * 60 * 60 * 1000)));
-    subRevenue += planPrice * monthsActive;
-  });
-  totalRevenue += subRevenue;
 
   return {
     totalRevenue,
     mrr,
-    chargeCount,
-    activeSubscriptions: activeSubs,
+    chargeCount: (txns || []).length,
+    activeSubscriptions: (subs || []).length,
     revenueByDay: Object.entries(dayMap)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, amount]) => ({ date, amount })),

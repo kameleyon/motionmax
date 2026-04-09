@@ -135,14 +135,14 @@ const styleAnimations: Record<CaptionStyle, Variants> = {
 
 /** Single-word pop styles (one word at a time, dead center) */
 const SINGLE_WORD_STYLES = new Set<string>([
-  "cleanPop", "toxicBounce", "proShortForm",
+  "toxicBounce", "proShortForm",
   "orangeBox", "yellowSlanted", "redSlantedBox", "motionBlur",
   "thickStroke", "comicBurst", "heavyDropShadow", "glitch", "bouncyPill",
 ]);
 
 /** Accumulative styles (words build into a sentence) */
 const ACCUMULATE_STYLES = new Set<string>([
-  "blackBox", "cinematicFade", "typewriter", "retroTerminal",
+  "blackBox", "cinematicFade", "typewriter", "retroTerminal", "cleanPop"
 ]);
 
 // ── Animated preview row for dropdown ──
@@ -197,7 +197,7 @@ const CaptionPreviewRow = memo(function CaptionPreviewRow({ styleId }: { styleId
               animate="visible"
               exit="hidden"
               className={cn(
-                "inline-block text-[11px] leading-tight",
+                "inline-block text-[11px] leading-tight", styleId === "cleanPop" && word.length <= 4 ? "text-[16px] -mt-1" : "", styleId === "cleanPop" && word.length > 4 ? "text-[10px]" : "",
                 css,
                 !isSingle && !isAccum && i === idx ? "opacity-100" : "",
                 !isSingle && !isAccum && i < idx ? "opacity-60" : "",

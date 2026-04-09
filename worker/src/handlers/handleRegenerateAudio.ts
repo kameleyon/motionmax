@@ -94,12 +94,14 @@ export async function handleRegenerateAudio(
   if (sceneIndex < 0 || sceneIndex >= scenes.length) throw new Error("Invalid scene index");
   const scene = scenes[sceneIndex];
 
-  // Language resolution
+  // Language resolution — project's voice_inclination stores the language chosen at creation
   const resolvedLanguage =
     payload.language ||
     project?.voice_inclination ||
     (Array.isArray(generation.scenes) && (generation.scenes as any[])[0]?._meta?.language) ||
     "en";
+
+  console.log(`[RegenerateAudio] Project voice settings → speaker=${voiceName}, language=${resolvedLanguage}, type=${projectType}, voice_inclination=${project?.voice_inclination || "none"}`);
 
   let audioResult: { url: string | null; durationSeconds?: number; provider?: string; error?: string };
 

@@ -179,7 +179,7 @@ export async function handleRegenerateAudio(
 
     if (voiceId) config.customVoiceId = voiceId;
     // For standard non-cinematic, voice_name is "male"/"female"
-    config.voiceGender = (voiceName === "male" || gender === "male") ? "male" : "female";
+    config.voiceGender = voiceName === "male" ? "male" : "female";
 
     if (resolvedLanguage) config.language = resolvedLanguage;
 

@@ -1,4 +1,4 @@
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 
 export const BUCKETS = [
   "scene-images",

@@ -4,6 +4,10 @@
  * via the Supabase Management API, one statement at a time.
  */
 
+import dotenv from "dotenv";
+dotenv.config({ path: ".env" });
+
+
 const TARGET_REF = "ayjbvcikuwknqdrpsdmj";
 const TOKEN = process.env.SUPABASE_MANAGEMENT_TOKEN;
 const API = `https://api.supabase.com/v1/projects/${TARGET_REF}/database/query`;

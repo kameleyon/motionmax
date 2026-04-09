@@ -105,64 +105,44 @@ export async function handleRegenerateAudio(
 
   let audioResult: { url: string | null; durationSeconds?: number; provider?: string; error?: string };
 
-  // ── CINEMATIC: use same routing as handleCinematicAudio ──
-  if (projectType === "cinematic") {
-    const isHC = resolvedLanguage === "ht" ||
-      isHaitianCreole(newVoiceover) ||
-      (project?.presenter_focus || "").toLowerCase().includes("creole");
+  // ── UNIFIED VOICE ROUTING — works for ALL project types ──
+  const legacyMapping = LEGACY_SPEAKER_MAP[voiceName];
+  const presenterFocus: string = project?.presenter_focus || "";
+  const isHC = resolvedLanguage === "ht" ||
+    isHaitianCreole(newVoiceover) ||
+    presenterFocus.toLowerCase().includes("creole") ||
+    presenterFocus.toLowerCase().includes("haitian");
 
-    const legacyMapping = LEGACY_SPEAKER_MAP[voiceName];
+  // Resolve gender & language from the speaker name (Jacques→male/fr) or fall back to defaults
+  const gender = legacyMapping?.gender || (voiceName === "male" ? "male" : voiceName === "female" ? "female" : "female");
+  const lang = legacyMapping?.language || (isHC ? "ht" : resolvedLanguage);
 
-    if (isHC || legacyMapping) {
-      // Route to Fish Audio / LemonFox / Gemini via legacy router
-      const gender = legacyMapping?.gender ||
-        (voiceName === "Pierre" ? "male" : voiceName === "Marie" ? "female" : "female");
-      const lang = legacyMapping?.language || (isHC ? "ht" : resolvedLanguage);
+  console.log(`[RegenerateAudio] Resolved voice → speaker=${voiceName}, gender=${gender}, language=${lang}, isHC=${isHC}`);
 
-      console.log(`[RegenerateAudio] Cinematic ${voiceName} → legacy router (${lang}/${gender})`);
+  // Qwen3 path: cinematic projects with non-legacy speakers (Nova, Atlas, etc.)
+  if (projectType === "cinematic" && !legacyMapping && !isHC) {
+    const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
+    if (!replicateApiKey) throw new Error("REPLICATE_API_KEY not configured");
 
-      const config: AudioConfig = {
+    const styleInstruction = inferStyleInstruction(newVoiceover);
+    console.log(`[RegenerateAudio] Qwen3 speaker=${voiceName} lang=${resolvedLanguage}`);
+
+    audioResult = await generateQwen3TTS(
+      {
+        text: newVoiceover,
+        sceneNumber: sceneIndex + 1,
         projectId,
-        googleApiKeys: [
-          process.env.GOOGLE_TTS_API_KEY_3,
-          process.env.GOOGLE_TTS_API_KEY_2,
-          process.env.GOOGLE_TTS_API_KEY,
-        ].filter(Boolean) as string[],
-        elevenLabsApiKey: process.env.ELEVENLABS_API_KEY,
-        lemonfoxApiKey: process.env.LEMONFOX_API_KEY,
-        fishAudioApiKey: process.env.FISH_AUDIO_API_KEY,
-        replicateApiKey: process.env.REPLICATE_API_KEY || "",
-        voiceGender: gender,
-        language: lang,
-        forceHaitianCreole: isHC,
-      };
-
-      audioResult = await generateSceneAudio(
-        { number: scene.number || sceneIndex + 1, voiceover: newVoiceover, duration: scene.duration || 10 },
-        config,
-      );
-    } else {
-      // Qwen3 TTS
-      const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
-      if (!replicateApiKey) throw new Error("REPLICATE_API_KEY not configured");
-
-      const styleInstruction = inferStyleInstruction(newVoiceover);
-      console.log(`[RegenerateAudio] Cinematic Qwen3 speaker=${voiceName} lang=${resolvedLanguage}`);
-
-      audioResult = await generateQwen3TTS(
-        {
-          text: newVoiceover,
-          sceneNumber: sceneIndex + 1,
-          projectId,
-          speaker: voiceName,
-          language: resolvedLanguage,
-          styleInstruction,
-        },
-        replicateApiKey,
-      );
-    }
+        speaker: voiceName,
+        language: resolvedLanguage,
+        styleInstruction,
+      },
+      replicateApiKey,
+    );
   } else {
-    // ── NON-CINEMATIC: standard audio router ──
+    // Standard audio router — handles all named speakers, all languages, all project types
+    const voiceType = project?.voice_type || "standard";
+    const voiceId = voiceType === "custom" ? project?.voice_id : undefined;
+
     const config: AudioConfig = {
       projectId,
       googleApiKeys: [
@@ -174,26 +154,12 @@ export async function handleRegenerateAudio(
       lemonfoxApiKey: process.env.LEMONFOX_API_KEY,
       fishAudioApiKey: process.env.FISH_AUDIO_API_KEY,
       replicateApiKey: process.env.REPLICATE_API_KEY || "",
+      voiceGender: gender,
+      language: lang,
+      forceHaitianCreole: isHC,
     };
 
-    const voiceType = project?.voice_type || "standard";
-    const voiceId = voiceType === "custom" ? project?.voice_id : undefined;
-
     if (voiceId) config.customVoiceId = voiceId;
-    // For standard non-cinematic, voice_name is "male"/"female"
-    config.voiceGender = voiceName === "male" ? "male" : "female";
-
-    if (resolvedLanguage) config.language = resolvedLanguage;
-
-    // Haitian Creole detection
-    const presenterFocus: string = project?.presenter_focus || "";
-    if (
-      presenterFocus.toLowerCase().includes("haitian") ||
-      presenterFocus.toLowerCase().includes("creole") ||
-      isHaitianCreole(newVoiceover)
-    ) {
-      config.forceHaitianCreole = true;
-    }
 
     audioResult = await generateSceneAudio(
       { number: scene.number || sceneIndex + 1, voiceover: newVoiceover, duration: scene.duration || 10 },

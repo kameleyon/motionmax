@@ -75,7 +75,7 @@ const captionStyles: { id: CaptionStyle; label: string }[] = [
 export const previewStyles: Record<CaptionStyle, string> = {
   none: "",
   // Pro styles
-  cleanPop: "[font-family:'Luckiest_Guy',cursive] font-black text-white uppercase tracking-wide [filter:drop-shadow(0px_2px_3px_rgba(0,0,0,0.6))]",
+  cleanPop: "[font-family:'Chango',cursive] font-normal font-black text-white uppercase tracking-wide [filter:drop-shadow(0px_2px_3px_rgba(0,0,0,0.6))]",
   toxicBounce: "[font-family:'Bangers',cursive] text-[#39FF14] uppercase tracking-wider [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill] [filter:drop-shadow(0px_3px_0px_#000)]",
   proShortForm: "[font-family:'Oswald',sans-serif] font-bold text-white uppercase tracking-wider [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill] [filter:drop-shadow(0px_2px_2px_rgba(0,0,0,0.5))]",
   // Reference visuals

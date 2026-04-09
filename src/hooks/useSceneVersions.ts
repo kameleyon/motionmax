@@ -5,7 +5,6 @@ export interface SceneVersion {
   id: string;
   generation_id: string;
   scene_index: number;
-  version_number: number;
   voiceover: string | null;
   visual_prompt: string | null;
   image_url: string | null;
@@ -28,7 +27,7 @@ export function useSceneVersions(generationId: string | undefined, sceneIndex: n
         .select("*")
         .eq("generation_id", generationId)
         .eq("scene_index", sceneIndex)
-        .order("version_number", { ascending: false });
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
 

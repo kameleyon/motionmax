@@ -33,22 +33,18 @@ export function SceneVersionHistory({
   const [restoringVersion, setRestoringVersion] = useState<string | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<SceneVersion | null>(null);
 
-  const handleRestoreVersion = async (version: SceneVersion) => {
+  const handleRestoreVersion = async (version: SceneVersion, versionIndex: number) => {
     setRestoringVersion(version.id);
 
     try {
-      // Call undo multiple times to reach the desired version
-      const currentVersionNumber = versions[0]?.version_number || 0;
-      const targetVersionNumber = version.version_number;
-      const undoCount = currentVersionNumber - targetVersionNumber;
-
-      if (undoCount <= 0) {
-        toast.error("Error", { description: "Cannot restore to a future version" });
+      // versions are sorted newest-first; index 0 is current.
+      // Undo `versionIndex` times to reach the target.
+      if (versionIndex <= 0) {
+        toast.error("Error", { description: "Cannot restore to the current version" });
         return;
       }
 
-      // Undo multiple times
-      for (let i = 0; i < undoCount; i++) {
+      for (let i = 0; i < versionIndex; i++) {
         await callPhase(
           {
             phase: "undo",
@@ -61,7 +57,7 @@ export function SceneVersionHistory({
       }
 
       toast.success("Version Restored", {
-        description: `Scene ${sceneName} restored to version ${version.version_number}`,
+        description: `Scene ${sceneName} restored to a previous version`,
       });
 
       await refetch();
@@ -140,6 +136,7 @@ export function SceneVersionHistory({
                       version.image_url ||
                       (version.image_urls && version.image_urls.length > 0 ? version.image_urls[0] : null);
                     const isLatest = index === 0;
+                    const displayNumber = versions.length - index;
 
                     return (
                       <motion.div
@@ -157,7 +154,7 @@ export function SceneVersionHistory({
                               <div className="flex-shrink-0 w-32 h-20 rounded-lg overflow-hidden bg-muted">
                                 <img
                                   src={imageUrl}
-                                  alt={`Version ${version.version_number}`}
+                                  alt={`Version ${displayNumber}`}
                                   className="w-full h-full object-cover"
                                 />
                               </div>
@@ -167,7 +164,7 @@ export function SceneVersionHistory({
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-2">
                                 <h3 className="text-sm font-medium">
-                                  Version {version.version_number}
+                                  Version {displayNumber}
                                 </h3>
                                 {isLatest && (
                                   <Badge variant="outline" className="text-xs">
@@ -206,7 +203,7 @@ export function SceneVersionHistory({
                                   size="sm"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleRestoreVersion(version);
+                                    handleRestoreVersion(version, index);
                                   }}
                                   disabled={restoringVersion !== null}
                                   className="gap-2"

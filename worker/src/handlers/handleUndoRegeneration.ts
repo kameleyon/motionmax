@@ -48,7 +48,7 @@ export async function handleUndoRegeneration(
     .select("*")
     .eq("generation_id", generationId)
     .eq("scene_index", sceneIndex)
-    .order("version_number", { ascending: false })
+    .order("created_at", { ascending: false })
     .limit(1);
 
   if (versionsError) {

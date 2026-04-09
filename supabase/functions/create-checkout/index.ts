@@ -14,13 +14,20 @@ const logStep = (step: string, details?: Record<string, unknown>) => {
  * Validation checks that the requested price belongs to one of these products.
  */
 const VALID_PRODUCT_IDS = new Set([
-  "prod_Tnyz2nMLqpHz3R", // Starter
-  "prod_Tnz0KUQX2J5VBH", // Creator
-  "prod_Tnz0BeRmJDdh0V", // Professional
-  "prod_Ts3r9EBXzzKKfU", // Credit 15
-  "prod_Tnz0B2aJPD895y", // Credit 50
-  "prod_Tnz1CygtJnMhUz", // Credit 150
-  "prod_Ts3rl1zDT9oLVt", // Credit 500
+  // Current products
+  "prod_UHakcDFbS7Vw7z", // Creator
+  "prod_UHakOYLBpnWBj8", // Studio / Professional
+  "prod_UHalTrTNeIhUNX", // Credits 300
+  "prod_UHalEgw5TyQdFM", // Credits 900
+  "prod_UHalwIOINit7zr", // Credits 2500
+  // Legacy products (kept for existing subscribers)
+  "prod_Tnyz2nMLqpHz3R", // Starter (legacy)
+  "prod_Tnz0KUQX2J5VBH", // Creator (legacy)
+  "prod_Tnz0BeRmJDdh0V", // Professional (legacy)
+  "prod_Ts3r9EBXzzKKfU", // Credit 15 (legacy)
+  "prod_Tnz0B2aJPD895y", // Credit 50 (legacy)
+  "prod_Tnz1CygtJnMhUz", // Credit 150 (legacy)
+  "prod_Ts3rl1zDT9oLVt", // Credit 500 (legacy)
 ]);
 
 serve(async (req) => {

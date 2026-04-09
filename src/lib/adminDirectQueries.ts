@@ -7,6 +7,27 @@ import { supabase } from "@/integrations/supabase/client";
 
 // ── Dashboard Stats ────────────────────────────────────────────────
 
+/** Known subscription prices (monthly) for revenue estimation */
+const PLAN_MONTHLY_PRICE: Record<string, number> = {
+  creator: 14.99,
+  starter: 14.99,
+  studio: 39.99,
+  professional: 39.99,
+  enterprise: 99.99,
+};
+
+/** Known credit pack prices */
+const CREDIT_PACK_PRICE: Record<number, number> = {
+  300: 9.99,
+  900: 24.99,
+  2500: 59.99,
+  // Legacy packs
+  15: 4.99,
+  50: 14.99,
+  150: 34.99,
+  500: 99.99,
+};
+
 export async function fetchDashboardStats() {
   const [
     { count: profileCount },
@@ -15,8 +36,8 @@ export async function fetchDashboardStats() {
     { count: archiveCount },
     { data: flags },
     { data: costs },
-    { data: transactions },
-    revenueResult,
+    { data: purchaseTxns },
+    { data: allRevenueTxns },
   ] = await Promise.all([
     supabase.from("profiles").select("*", { count: "exact", head: true }),
     supabase.from("subscriptions").select("*"),
@@ -24,15 +45,13 @@ export async function fetchDashboardStats() {
     supabase.from("generation_archives").select("*", { count: "exact", head: true }),
     supabase.from("user_flags").select("*").is("resolved_at", null),
     supabase.from("generation_costs").select("openrouter_cost, replicate_cost, hypereal_cost, google_tts_cost, total_cost"),
-    supabase.from("credit_transactions").select("*").eq("transaction_type", "purchase"),
-    // Revenue from Stripe via edge function — runs in parallel with DB queries
-    supabase.functions.invoke("admin-stats", {
-      body: { action: "dashboard_stats" },
-    }).catch(() => ({ data: null, error: true })),
+    supabase.from("credit_transactions").select("amount, transaction_type").eq("transaction_type", "purchase"),
+    supabase.from("credit_transactions").select("amount, transaction_type").in("transaction_type", ["purchase", "monthly_renewal"]),
   ]);
 
   const activeSubs = subscriptions?.filter(s => s.status === "active") || [];
 
+  // ── Costs from generation_costs table ──
   let totalOpenRouter = 0;
   let totalReplicate = 0;
   let totalHypereal = 0;
@@ -47,11 +66,26 @@ export async function fetchDashboardStats() {
     totalSpent += Number(c.total_cost) || 0;
   });
 
-  // Edge function unavailable — revenue stays at $0 default (admin-only, acceptable fallback)
-  const revenueData = (revenueResult as any)?.data?.revenue;
-  let revenue = revenueData
-    ? revenueData
-    : { total: 0, subscriptions: 0, creditPacks: 0 };
+  // ── Revenue computed from DB (no Stripe API dependency) ──
+  // Credit pack revenue: match credit amounts to known prices
+  let creditPackRevenue = 0;
+  (purchaseTxns || []).forEach(t => {
+    const amount = Math.abs(t.amount || 0);
+    creditPackRevenue += CREDIT_PACK_PRICE[amount] || 0;
+  });
+
+  // Subscription revenue: estimate from active subs × monthly price
+  // This is an estimate since we don't track actual Stripe charges in DB
+  let subscriptionRevenue = 0;
+  activeSubs.forEach(s => {
+    const planPrice = PLAN_MONTHLY_PRICE[s.plan_name] || 0;
+    // Estimate months active (from period start to now)
+    const start = s.current_period_start ? new Date(s.current_period_start) : new Date(s.created_at);
+    const monthsActive = Math.max(1, Math.ceil((Date.now() - start.getTime()) / (30 * 24 * 60 * 60 * 1000)));
+    subscriptionRevenue += planPrice * monthsActive;
+  });
+
+  const totalRevenue = creditPackRevenue + subscriptionRevenue;
 
   return {
     totalUsers: profileCount || 0,
@@ -61,7 +95,7 @@ export async function fetchDashboardStats() {
     activeGenerations: genCount || 0,
     archivedGenerations: archiveCount || 0,
     activeFlags: flags?.length || 0,
-    creditPurchases: transactions?.length || 0,
+    creditPurchases: (purchaseTxns || []).length,
     costs: {
       openrouter: totalOpenRouter,
       replicate: totalReplicate,
@@ -69,8 +103,12 @@ export async function fetchDashboardStats() {
       googleTts: totalGoogleTts,
       total: totalSpent,
     },
-    revenue,
-    profitMargin: revenue.total - totalSpent,
+    revenue: {
+      total: totalRevenue,
+      subscriptions: subscriptionRevenue,
+      creditPacks: creditPackRevenue,
+    },
+    profitMargin: totalRevenue - totalSpent,
   };
 }
 
@@ -261,24 +299,65 @@ export async function fetchApiCallDetail(params: { id: string }) {
 
 // ── Revenue (stub — needs Stripe secret key, not available client-side) ──
 
-export async function fetchRevenueStats() {
-  const { data: costs } = await supabase
-    .from("generation_costs")
-    .select("openrouter_cost, replicate_cost, hypereal_cost, google_tts_cost, total_cost, created_at");
+export async function fetchRevenueStats(params?: { startDate?: string; endDate?: string }) {
+  let txnQuery = supabase
+    .from("credit_transactions")
+    .select("amount, transaction_type, created_at")
+    .in("transaction_type", ["purchase", "monthly_renewal"]);
 
-  let totalSpent = 0;
+  let subsQuery = supabase
+    .from("subscriptions")
+    .select("plan_name, status, current_period_start, created_at")
+    .eq("status", "active");
+
+  if (params?.startDate) {
+    txnQuery = txnQuery.gte("created_at", params.startDate);
+  }
+  if (params?.endDate) {
+    txnQuery = txnQuery.lte("created_at", params.endDate);
+  }
+
+  const [{ data: txns }, { data: subs }] = await Promise.all([txnQuery, subsQuery]);
+
+  // Revenue by day from credit transactions
+  let totalRevenue = 0;
   const dayMap: Record<string, number> = {};
 
-  costs?.forEach(c => {
-    totalSpent += Number(c.total_cost) || 0;
-    const day = c.created_at?.slice(0, 10) || "unknown";
-    dayMap[day] = (dayMap[day] || 0) + (Number(c.total_cost) || 0);
+  (txns || []).forEach(t => {
+    const amount = Math.abs(t.amount || 0);
+    const price = CREDIT_PACK_PRICE[amount] || 0;
+    totalRevenue += price;
+    const day = t.created_at?.slice(0, 10) || "unknown";
+    dayMap[day] = (dayMap[day] || 0) + price;
   });
 
+  // Estimate MRR from active subs
+  let mrr = 0;
+  (subs || []).forEach(s => {
+    mrr += PLAN_MONTHLY_PRICE[s.plan_name] || 0;
+  });
+
+  const activeSubs = subs?.length || 0;
+  const chargeCount = (txns || []).length + activeSubs;
+
+  // Add subscription revenue estimate
+  let subRevenue = 0;
+  (subs || []).forEach(s => {
+    const planPrice = PLAN_MONTHLY_PRICE[s.plan_name] || 0;
+    const start = s.current_period_start ? new Date(s.current_period_start) : new Date(s.created_at);
+    const monthsActive = Math.max(1, Math.ceil((Date.now() - start.getTime()) / (30 * 24 * 60 * 60 * 1000)));
+    subRevenue += planPrice * monthsActive;
+  });
+  totalRevenue += subRevenue;
+
   return {
-    totalSpent,
-    costsByDay: Object.entries(dayMap).sort(([a], [b]) => a.localeCompare(b)).map(([date, cost]) => ({ date, cost })),
-    note: "Stripe revenue unavailable — deploy admin-stats edge function for revenue data",
+    totalRevenue,
+    mrr,
+    chargeCount,
+    activeSubscriptions: activeSubs,
+    revenueByDay: Object.entries(dayMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, amount]) => ({ date, amount })),
   };
 }
 

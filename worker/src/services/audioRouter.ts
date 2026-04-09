@@ -160,7 +160,7 @@ export async function generateSceneAudio(
 
   // ========== CASE 3c: French Female ==========
   // FishAudio with French female voice (config OR auto-detected)
-  if (isFR && fishAudioApiKey) {
+  if (isFR && voiceGender === "female" && fishAudioApiKey) {
     console.log(`[TTS] Scene ${scene.number}: French Female → Fish Audio (FR female voice)`);
     const result = await generateFishAudioTTS(
       voiceoverText, scene.number, fishAudioApiKey, projectId, "42fe8376b029438e81dd2929c0889ce1",

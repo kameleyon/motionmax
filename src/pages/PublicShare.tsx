@@ -524,7 +524,8 @@ export default function PublicShare() {
                 className="absolute inset-0 w-full h-full object-contain"
                 muted={isMuted}
                 playsInline
-                preload="metadata"
+                preload="auto"
+                poster={scenes[0]?.imageUrl || undefined}
               />
             ) : currentScene?.videoUrl ? (
               <video
@@ -532,7 +533,7 @@ export default function PublicShare() {
                 className="absolute inset-0 w-full h-full object-contain"
                 muted
                 playsInline
-                preload="metadata"
+                preload="auto"
                 poster={currentImageUrl || undefined}
               />
             ) : currentImageUrl ? (

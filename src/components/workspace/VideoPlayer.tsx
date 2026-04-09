@@ -298,6 +298,7 @@ export function VideoPlayer({
           className="w-full h-full object-contain"
           muted={isMuted}
           playsInline
+          preload="auto"
           onClick={togglePlay}
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}

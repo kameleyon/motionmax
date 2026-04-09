@@ -105,8 +105,8 @@ export function AppSidebar() {
 
   /** Navigate and close the mobile sidebar */
   const navTo = (path: string) => {
-    navigate(path);
     if (isMobile) setOpenMobile(false);
+    navigate(path);
   };
   const [createOpen, setCreateOpen] = useState(isCreateRoute);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -220,7 +220,7 @@ export function AppSidebar() {
       <SidebarHeader className="p-3 flex-shrink-0">
         {/* Mobile: Profile icon at top instead of collapse toggle */}
         {isMobile ? (
-          <div className="flex justify-between items-center mb-3">
+          <div className="flex justify-between items-center mb-3 pr-8">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button

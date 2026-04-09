@@ -12,8 +12,28 @@
  */
 
 import { createScopedLogger } from "@/lib/logger";
+import { SUPABASE_ANON_KEY } from "@/integrations/supabase/client";
 
 const log = createScopedLogger("Download");
+
+/**
+ * Rewrite a Supabase storage public URL to go through serve-media edge function.
+ * This gives proper Content-Disposition headers for downloads and avoids CORS issues on mobile.
+ */
+export function rewriteStorageUrl(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    const match = urlObj.pathname.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.*)/);
+    if (match) {
+      const bucket = match[1];
+      const path = match[2];
+      return `${urlObj.origin}/functions/v1/serve-media?bucket=${bucket}&path=${path}&download=true&apikey=${SUPABASE_ANON_KEY}`;
+    }
+  } catch {
+    // Fall through to return original
+  }
+  return url;
+}
 
 let saveInProgress = false;
 

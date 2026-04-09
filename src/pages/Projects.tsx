@@ -1,4 +1,4 @@
-﻿import { downloadVideo } from "@/hooks/export/downloadHelpers";
+﻿import { downloadVideo, rewriteStorageUrl } from "@/hooks/export/downloadHelpers";
 import { createScopedLogger } from "@/lib/logger";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -493,7 +493,7 @@ export default function Projects() {
       // (handles iOS Safari share sheet, Android share, desktop blob download)
       if (generation.video_url) {
         const safeName = `${project.title.replace(/[^a-z0-9]/gi, "_")}.mp4`;
-        await downloadVideo(generation.video_url, safeName, true);
+        await downloadVideo(rewriteStorageUrl(generation.video_url), safeName, true);
         return;
       }
 

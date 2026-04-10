@@ -27,7 +27,31 @@ export function CharacterConsistencyToggle({ enabled, onToggle }: CharacterConsi
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const canUseFeature = plan === "studio" || (plan as string) === "professional" || plan === "enterprise";
+  const isStudioPlus = plan === "studio" || (plan as string) === "professional" || plan === "enterprise";
+  const canUseFeature = isStudioPlus;
+
+  // Auto-enable for studio+ plans
+  useState(() => {
+    if (isStudioPlus && !enabled) onToggle(true);
+  });
+
+  // Studio+ plans: always on, no toggle needed
+  if (isStudioPlus) {
+    return (
+      <div className="flex items-center justify-between rounded-xl border border-primary/20 bg-primary/5 p-4 backdrop-blur-sm">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <Users className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <Label className="text-sm font-medium">Character Consistency</Label>
+            <p className="text-xs text-primary/70 mt-0.5">Included with your plan</p>
+          </div>
+        </div>
+        <span className="text-xs font-medium text-primary">Always On</span>
+      </div>
+    );
+  }
 
   const handleToggleClick = () => {
     if (canUseFeature) {

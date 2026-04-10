@@ -62,7 +62,7 @@ const GENRE_GUIDE: Record<string, string> = {
 
 export function buildStorytellingPrompt(p: StorytellingParams): PromptResult {
   const lengthCfg: Record<string, { count: number; targetDuration: number; avgSceneDuration: number; maxWords: number }> = {
-    short: { count: 10, targetDuration: 110, avgSceneDuration: 11, maxWords: 28 },
+    short: { count: 15, targetDuration: 165, avgSceneDuration: 11, maxWords: 28 },
     brief: { count: 28, targetDuration: 308, avgSceneDuration: 11, maxWords: 28 },
     extended: { count: 36, targetDuration: 396, avgSceneDuration: 11, maxWords: 28 },
     presentation: { count: 36, targetDuration: 396, avgSceneDuration: 11, maxWords: 28 },

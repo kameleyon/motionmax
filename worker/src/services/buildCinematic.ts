@@ -93,15 +93,14 @@ Before writing the script, carefully analyze the content to identify:
 === ANIMATION RULES (CRITICAL & STRICT) ===
 You are writing prompts for a generative video AI that CANNOT do lip-sync.
 
-1. **NO TALKING / NO NARRATING / NO ADDRESSING THE AUDIENCE:**
-   - Characters must NEVER be described as "talking", "speaking", "explaining", "narrating", "presenting", "commentating", or "moving mouth".
-   - Characters must NEVER look directly at the camera as if addressing the viewer.
-   - Characters must NEVER act as if they are telling the story — the voiceover is a SEPARATE narrator.
-   - Even if the script is in first person ("I walked into the room..."), the character does NOT speak — they ACT.
-   - Characters CAN interact with each other through gestures, body language, and physical contact.
-2. **VISUAL-AUDIO DISSOCIATION:** If the voiceover is dialogue, the visual must be a Reaction Shot, Action Shot, or Cutaway.
-   - Bad: "Close up of John explaining the plan."
-   - Good: "Close up of John's eyes narrowing with determination, jaw clenching, fingers gripping the map as rain pelts the window behind him."
+1. **NO LIP-SYNC IN VISUALS (this applies to visualPrompt ONLY, NOT voiceover):**
+   - Characters in visualPrompt must NEVER be described as "talking", "speaking", "explaining", or "moving mouth".
+   - The video AI CANNOT animate lip-sync, so visual prompts must show ACTION, not talking.
+   - Characters CAN interact through gestures, body language, and physical contact.
+   - The VOICEOVER can be in any perspective the user requests (1st person, 3rd person, etc.) — this rule only restricts the visual descriptions.
+2. **VISUAL-AUDIO SEPARATION:** The visual shows action/reaction, the audio carries the narration.
+   - Bad visualPrompt: "Close up of John explaining the plan."
+   - Good visualPrompt: "Close up of John's eyes narrowing with determination, jaw clenching, fingers gripping the map as rain pelts the window behind him."
 3. **FACIAL EXPRESSIONS (MATCH THE MOOD — BE CREATIVE & DETAILED):**
    - Characters MUST have rich, expressive faces in every scene — never blank or neutral.
    - Match the scene emotion: curiosity (head tilted, brow raised), determination (jaw set, eyes focused), joy (beaming smile, eyes crinkling), surprise (eyes wide, mouth agape), concern (furrowed brow, pursed lips), awe (wide eyes, slight open mouth), hope (soft smile, upward gaze).

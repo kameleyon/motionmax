@@ -132,6 +132,7 @@ function buildProjectInsert(
     // Store ALL shared params for every project type — enables reload/regenerate
     presenter_focus: payload.presenterFocus || null,
     character_description: payload.characterDescription || null,
+    character_image: payload.characterImage || null,
     character_consistency_enabled: payload.characterConsistencyEnabled || false,
     disable_expressions: payload.disableExpressions || false,
   };

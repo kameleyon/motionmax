@@ -60,6 +60,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
     const [speaker, setSpeaker] = useState<SpeakerVoice>("Nova");
     const [language, setLanguage] = useState<Language>("en");
     const [characterDescription, setCharacterDescription] = useState("");
+    const [characterImage, setCharacterImage] = useState<string | null>(null);
     const [characterDescOpen, setCharacterDescOpen] = useState(false);
     const [brandMarkEnabled, setBrandMarkEnabled] = useState(false);
     const [brandMarkText, setBrandMarkText] = useState("");
@@ -213,6 +214,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
         customStyleImage: style === "custom" ? customStyleImage : undefined,
         brandMark: brandMarkEnabled && brandMarkText.trim() ? brandMarkText.trim() : undefined,
         characterDescription: characterDescription.trim() || undefined,
+        characterImage: characterImage || undefined,
         projectType: "storytelling",
         inspirationStyle: inspiration !== "none" ? inspiration : undefined,
         storyTone: tone,
@@ -245,6 +247,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
       setSpeaker("Nova");
       setLanguage("en");
       setCharacterDescription("");
+      setCharacterImage(null);
       setCharacterDescOpen(false);
       setBrandMarkEnabled(false);
       setBrandMarkText("");
@@ -291,6 +294,11 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
         setStyle("custom");
         setCustomStyle(project.style);
       }
+
+      // Restore character description + image
+      setCharacterDescription(project.character_description ?? "");
+      setCharacterImage(project.character_image ?? null);
+      if (project.character_description || project.character_image) setCharacterDescOpen(true);
 
       // Restore language from voice_inclination
       const savedLang = project.voice_inclination as Language | null;
@@ -391,7 +399,7 @@ export const StorytellingWorkspace = forwardRef<WorkspaceHandle, StorytellingWor
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <div className="rounded-b-xl border border-t-0 border-border/50 bg-card/50 p-4 -mt-1">
-                        <CharacterDescriptionInput value={characterDescription} onChange={setCharacterDescription} />
+                        <CharacterDescriptionInput value={characterDescription} onChange={setCharacterDescription} imageUrl={characterImage} onImageChange={setCharacterImage} />
                       </div>
                     </CollapsibleContent>
                   </Collapsible>

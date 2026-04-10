@@ -78,6 +78,7 @@ export interface GenerationParams {
   brandMark?: string;
   presenterFocus?: string;
   characterDescription?: string;
+  characterImage?: string;
   disableExpressions?: boolean;
   characterConsistencyEnabled?: boolean;
   voiceType?: "standard" | "custom";
@@ -102,6 +103,7 @@ export type ProjectRow = {
   style: VisualStyle | string;
   presenter_focus?: string | null;
   character_description?: string | null;
+  character_image?: string | null;
   voice_type?: string | null;
   voice_id?: string | null;
   voice_name?: string | null;

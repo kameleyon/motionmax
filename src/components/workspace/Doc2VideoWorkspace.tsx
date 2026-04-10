@@ -49,6 +49,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
     const [speaker, setSpeaker] = useState<SpeakerVoice>("Nova");
     const [language, setLanguage] = useState<Language>("en");
     const [characterDescription, setCharacterDescription] = useState("");
+    const [characterImage, setCharacterImage] = useState<string | null>(null);
     const [characterDescOpen, setCharacterDescOpen] = useState(false);
     const [brandMarkEnabled, setBrandMarkEnabled] = useState(false);
     const [brandMarkText, setBrandMarkText] = useState("");
@@ -157,6 +158,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
         customStyleImage: style === "custom" ? customStyleImage : undefined,
         brandMark: brandMarkEnabled && brandMarkText.trim() ? brandMarkText.trim() : undefined,
         characterDescription: characterDescription.trim() || undefined,
+        characterImage: characterImage || undefined,
         disableExpressions: true,
         characterConsistencyEnabled: plan === "studio" || plan === "enterprise" || characterConsistencyEnabled,
         language,
@@ -202,6 +204,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
       setSpeaker("Nova");
       setLanguage("en");
       setCharacterDescription("");
+      setCharacterImage(null);
       setCharacterDescOpen(false);
       setBrandMarkEnabled(false);
       setBrandMarkText("");
@@ -243,9 +246,10 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
         setCustomStyle(project.style);
       }
 
-      // Restore character description
+      // Restore character description + image
       setCharacterDescription(project.character_description ?? "");
-      if (project.character_description) setCharacterDescOpen(true);
+      setCharacterImage(project.character_image ?? null);
+      if (project.character_description || project.character_image) setCharacterDescOpen(true);
 
       // Restore voice settings
       if (project.voice_name) {
@@ -353,7 +357,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <div className="rounded-b-xl border border-t-0 border-border/50 bg-card/50 p-4 -mt-1">
-                        <CharacterDescriptionInput value={characterDescription} onChange={setCharacterDescription} />
+                        <CharacterDescriptionInput value={characterDescription} onChange={setCharacterDescription} imageUrl={characterImage} onImageChange={setCharacterImage} />
                       </div>
                     </CollapsibleContent>
                   </Collapsible>

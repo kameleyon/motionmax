@@ -55,6 +55,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
     const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("none");
     const [language, setLanguage] = useState<Language>("en");
     const [characterDescription, setCharacterDescription] = useState("");
+    const [characterImage, setCharacterImage] = useState<string | null>(null);
     const [characterDescOpen, setCharacterDescOpen] = useState(false);
     const [brandMarkEnabled, setBrandMarkEnabled] = useState(false);
     const [brandMarkText, setBrandMarkText] = useState("");
@@ -213,6 +214,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
         customStyleImage: style === "custom" ? customStyleImage : undefined,
         brandMark: brandMarkEnabled && brandMarkText.trim() ? brandMarkText.trim() : undefined,
         characterDescription: characterDescription.trim() || undefined,
+        characterImage: characterImage || undefined,
         disableExpressions: false,
         characterConsistencyEnabled: true,
         voiceType: "standard",
@@ -237,6 +239,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
       setCaptionStyle("none");
       setLanguage("en");
       setCharacterDescription("");
+      setCharacterImage(null);
       setCharacterDescOpen(false);
       setBrandMarkEnabled(false);
       setBrandMarkText("");
@@ -267,6 +270,8 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
       setStyle(savedStyle);
 
       if (project.character_description) setCharacterDescription(project.character_description);
+      if (project.character_image) setCharacterImage(project.character_image);
+      if (project.character_description || project.character_image) setCharacterDescOpen(true);
       if (project.voice_name) {
         setSpeaker(project.voice_name as SpeakerVoice);
       }
@@ -373,7 +378,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <div className="rounded-b-xl border border-t-0 border-border/50 bg-card/50 p-4 -mt-1">
-                        <CharacterDescriptionInput value={characterDescription} onChange={setCharacterDescription} />
+                        <CharacterDescriptionInput value={characterDescription} onChange={setCharacterDescription} imageUrl={characterImage} onImageChange={setCharacterImage} />
                       </div>
                     </CollapsibleContent>
                   </Collapsible>

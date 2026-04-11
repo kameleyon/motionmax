@@ -96,8 +96,12 @@ export async function generateQwen3TTS(
     (styleInstruction ? ` style="${styleInstruction.substring(0, 60)}"` : "")
   );
 
+  // Prepend a language tag to anchor Qwen3 and prevent mid-generation language drift
+  const langTag = qwenLanguage !== "auto" ? `[${qwenLanguage}] ` : "";
+  const anchoredText = langTag + text;
+
   const input: Record<string, unknown> = {
-    text,
+    text: anchoredText,
     mode: "custom_voice",
     speaker: qwenSpeaker,
     language: qwenLanguage,

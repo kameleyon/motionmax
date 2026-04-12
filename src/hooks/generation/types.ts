@@ -78,7 +78,7 @@ export interface GenerationParams {
   brandMark?: string;
   presenterFocus?: string;
   characterDescription?: string;
-  characterImage?: string;
+  characterImages?: string[];
   disableExpressions?: boolean;
   characterConsistencyEnabled?: boolean;
   voiceType?: "standard" | "custom";
@@ -101,9 +101,11 @@ export type ProjectRow = {
   format: VideoFormat | string;
   length: VideoLength | string;
   style: VisualStyle | string;
+  custom_style?: string | null;
+  custom_style_image?: string | null;
   presenter_focus?: string | null;
   character_description?: string | null;
-  character_image?: string | null;
+  character_images?: string[] | null;
   voice_type?: string | null;
   voice_id?: string | null;
   voice_name?: string | null;

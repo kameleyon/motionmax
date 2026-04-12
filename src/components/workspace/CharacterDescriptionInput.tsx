@@ -7,30 +7,51 @@ import { toast } from "sonner";
 interface CharacterDescriptionInputProps {
   value: string;
   onChange: (value: string) => void;
-  imageUrl?: string | null;
-  onImageChange?: (base64: string | null) => void;
+  images?: string[];
+  onImagesChange?: (images: string[]) => void;
 }
 
 const MAX_IMAGE_SIZE = 4 * 1024 * 1024; // 4MB
+const MAX_IMAGES = 10;
 
-export function CharacterDescriptionInput({ value, onChange, imageUrl, onImageChange }: CharacterDescriptionInputProps) {
+export function CharacterDescriptionInput({ value, onChange, images = [], onImagesChange }: CharacterDescriptionInputProps) {
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = useCallback((file: File) => {
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please upload an image file");
+  const handleFiles = useCallback((files: FileList | File[]) => {
+    const remaining = MAX_IMAGES - images.length;
+    if (remaining <= 0) {
+      toast.error(`Maximum ${MAX_IMAGES} reference images`);
       return;
     }
-    if (file.size > MAX_IMAGE_SIZE) {
-      toast.error("Image must be under 4MB");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      onImageChange?.(reader.result as string);
-    };
-    reader.readAsDataURL(file);
-  }, [onImageChange]);
+
+    const toProcess = Array.from(files).slice(0, remaining);
+    let processed = 0;
+    const newImages: string[] = [];
+
+    toProcess.forEach(file => {
+      if (!file.type.startsWith("image/")) {
+        toast.error(`${file.name} is not an image`);
+        return;
+      }
+      if (file.size > MAX_IMAGE_SIZE) {
+        toast.error(`${file.name} exceeds 4MB`);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        newImages.push(reader.result as string);
+        processed++;
+        if (processed === toProcess.length) {
+          onImagesChange?.([...images, ...newImages]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  }, [images, onImagesChange]);
+
+  const removeImage = useCallback((index: number) => {
+    onImagesChange?.(images.filter((_, i) => i !== index));
+  }, [images, onImagesChange]);
 
   return (
     <div className="space-y-3">
@@ -38,42 +59,48 @@ export function CharacterDescriptionInput({ value, onChange, imageUrl, onImageCh
         Character Appearance
       </label>
       <Textarea
-        placeholder="Describe or upload an image of your characters — e.g., Main character is a Black woman with natural hair in her 30s, tall athletic build..."
+        placeholder="Describe or upload images of your characters — e.g., Main character is a Black woman with natural hair in her 30s, the villain is a tall older man with gray beard..."
         className="min-h-[80px] resize-none rounded-xl border-border/50 bg-transparent text-sm placeholder:text-muted-foreground/50 focus-visible:ring-1 focus-visible:ring-primary"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
 
       {/* Image upload */}
-      {onImageChange && (
+      {onImagesChange && (
         <>
           <input
             ref={fileRef}
             type="file"
             accept="image/*"
+            multiple
             className="hidden"
             onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleFile(file);
+              if (e.target.files?.length) handleFiles(e.target.files);
               e.target.value = "";
             }}
           />
 
-          {imageUrl ? (
-            <div className="relative inline-block">
-              <img
-                src={imageUrl}
-                alt="Character reference"
-                className="h-20 w-20 rounded-lg object-cover border border-border/50"
-              />
-              <button
-                onClick={() => onImageChange(null)}
-                className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-sm hover:bg-destructive/90"
-              >
-                <X className="h-3 w-3" />
-              </button>
+          {images.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {images.map((img, i) => (
+                <div key={i} className="relative">
+                  <img
+                    src={img}
+                    alt={`Character ref ${i + 1}`}
+                    className="h-20 w-20 rounded-lg object-cover border border-border/50"
+                  />
+                  <button
+                    onClick={() => removeImage(i)}
+                    className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-sm hover:bg-destructive/90"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
             </div>
-          ) : (
+          )}
+
+          {images.length < MAX_IMAGES && (
             <Button
               type="button"
               variant="outline"
@@ -82,7 +109,7 @@ export function CharacterDescriptionInput({ value, onChange, imageUrl, onImageCh
               className="gap-2 text-xs"
             >
               <ImagePlus className="h-3.5 w-3.5" />
-              Upload Reference Image
+              {images.length === 0 ? "Upload Reference Images" : "Add More"}
             </Button>
           )}
         </>
@@ -91,7 +118,7 @@ export function CharacterDescriptionInput({ value, onChange, imageUrl, onImageCh
       <div className="flex items-start gap-2 text-xs text-muted-foreground/70">
         <Users className="h-3.5 w-3.5 mt-0.5 shrink-0" />
         <span>
-          Describe or upload a reference image of your characters. The AI will match their appearance across all scenes.
+          Describe or upload reference images of your characters (up to {MAX_IMAGES}). The AI will match their appearance across all scenes.
         </span>
       </div>
     </div>

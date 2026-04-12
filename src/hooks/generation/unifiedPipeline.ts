@@ -43,7 +43,7 @@ export async function runUnifiedPipeline(
     brandMark: params.brandMark,
     presenterFocus: params.presenterFocus,
     characterDescription: params.characterDescription,
-    characterImage: params.characterImage,
+    characterImages: params.characterImages,
     disableExpressions: params.disableExpressions,
     characterConsistencyEnabled: params.characterConsistencyEnabled,
     voiceType: params.voiceType,

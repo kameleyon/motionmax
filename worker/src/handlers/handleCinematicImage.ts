@@ -2,6 +2,7 @@ import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField } from "../lib/sceneUpdate.js";
 import { generateImage } from "../services/imageGenerator.js";
+import { buildImagePrompt, type Scene as ImageScene } from "../services/imagePromptBuilder.js";
 import {
   initSceneProgress,
   updateSceneProgress,
@@ -34,7 +35,7 @@ export async function handleCinematicImage(
 
   const { data: generation, error: genError } = await supabase
     .from("generations")
-    .select("*, projects(format, style)")
+    .select("*, projects(format, style, character_description, character_consistency_enabled, project_type)")
     .eq("id", generationId)
     .maybeSingle();
 
@@ -50,6 +51,7 @@ export async function handleCinematicImage(
   }
 
   const format = generation.projects?.format || "landscape";
+  const style = generation.projects?.style || "realistic";
   const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
   const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
 
@@ -57,7 +59,25 @@ export async function handleCinematicImage(
     throw new Error("Neither HYPEREAL_API_KEY nor REPLICATE_API_KEY is configured");
   }
 
-  const prompt = scene.visualPrompt || scene.visual_prompt || "Cinematic scene";
+  // Build the full image prompt with character bible, style, and format — same as other pipelines
+  // Character bible is stored in scene _meta (set during script generation)
+  const characterBible: Record<string, string> = scene._meta?.characterBible || scenes[0]?._meta?.characterBible || {};
+  const characterDescription: string = generation.projects?.character_description || "";
+  const rawVisual = scene.visualPrompt || scene.visual_prompt || "Cinematic scene";
+
+  const prompt = buildImagePrompt(
+    rawVisual,
+    scene as ImageScene,
+    0, // subIndex
+    sceneIndex,
+    {
+      format,
+      style,
+      characterBible,
+      characterDescription,
+      isSmartFlow: generation.projects?.project_type === "smartflow",
+    },
+  );
 
   // Initialize per-scene progress (single scene for cinematic per-scene jobs)
   initSceneProgress(jobId, scenes.length, "cinematic_image");

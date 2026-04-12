@@ -122,6 +122,8 @@ function buildProjectInsert(
     format: payload.format || "landscape",
     length: payload.length || "brief",
     style: payload.style || "realistic",
+    custom_style: payload.customStyle || null,
+    custom_style_image: payload.customStyleImage || null,
     brand_mark: payload.brandMark || payload.brandName || null,
     status: "generating",
     project_type: projectType,
@@ -132,7 +134,7 @@ function buildProjectInsert(
     // Store ALL shared params for every project type — enables reload/regenerate
     presenter_focus: payload.presenterFocus || null,
     character_description: payload.characterDescription || null,
-    character_image: payload.characterImage || null,
+    character_images: payload.characterImages || null,
     character_consistency_enabled: payload.characterConsistencyEnabled || false,
     disable_expressions: payload.disableExpressions || false,
   };

@@ -49,7 +49,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
     const [speaker, setSpeaker] = useState<SpeakerVoice>("Nova");
     const [language, setLanguage] = useState<Language>("en");
     const [characterDescription, setCharacterDescription] = useState("");
-    const [characterImage, setCharacterImage] = useState<string | null>(null);
+    const [characterImages, setCharacterImages] = useState<string[]>([]);
     const [characterDescOpen, setCharacterDescOpen] = useState(false);
     const [brandMarkEnabled, setBrandMarkEnabled] = useState(false);
     const [brandMarkText, setBrandMarkText] = useState("");
@@ -158,7 +158,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
         customStyleImage: style === "custom" ? customStyleImage : undefined,
         brandMark: brandMarkEnabled && brandMarkText.trim() ? brandMarkText.trim() : undefined,
         characterDescription: characterDescription.trim() || undefined,
-        characterImage: characterImage || undefined,
+        characterImages: characterImages.length > 0 ? characterImages : undefined,
         disableExpressions: true,
         characterConsistencyEnabled: plan === "studio" || plan === "enterprise" || characterConsistencyEnabled,
         language,
@@ -204,7 +204,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
       setSpeaker("Nova");
       setLanguage("en");
       setCharacterDescription("");
-      setCharacterImage(null);
+      setCharacterImages([]);
       setCharacterDescOpen(false);
       setBrandMarkEnabled(false);
       setBrandMarkText("");
@@ -240,16 +240,18 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
         savedStyle === "custom"
       ) {
         setStyle(savedStyle);
-        if (savedStyle !== "custom") setCustomStyle("");
+        setCustomStyle(project.custom_style ?? "");
+        setCustomStyleImage(project.custom_style_image ?? null);
       } else {
         setStyle("custom");
-        setCustomStyle(project.style);
+        setCustomStyle(project.custom_style ?? project.style);
+        setCustomStyleImage(project.custom_style_image ?? null);
       }
 
       // Restore character description + image
       setCharacterDescription(project.character_description ?? "");
-      setCharacterImage(project.character_image ?? null);
-      if (project.character_description || project.character_image) setCharacterDescOpen(true);
+      setCharacterImages(project.character_images ?? []);
+      if (project.character_description || (project.character_images?.length)) setCharacterDescOpen(true);
 
       // Restore voice settings
       if (project.voice_name) {
@@ -357,7 +359,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <div className="rounded-b-xl border border-t-0 border-border/50 bg-card/50 p-4 -mt-1">
-                        <CharacterDescriptionInput value={characterDescription} onChange={setCharacterDescription} imageUrl={characterImage} onImageChange={setCharacterImage} />
+                        <CharacterDescriptionInput value={characterDescription} onChange={setCharacterDescription} images={characterImages} onImagesChange={setCharacterImages} />
                       </div>
                     </CollapsibleContent>
                   </Collapsible>

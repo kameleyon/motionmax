@@ -53,11 +53,23 @@ export function buildCinematicPrompt(p: CinematicParams): PromptResult {
   const presenterGuidance = p.presenterFocus
     ? `\n=== PRESENTER GUIDANCE ===\n${p.presenterFocus}\n` : "";
   const characterGuidance = p.characterDescription
-    ? `\n=== CHARACTER APPEARANCE ===\nAll human characters in visual prompts MUST match this description:\n${p.characterDescription}\nInclude these character details in EVERY visualPrompt that features people.\n`
+    ? `\n=== USER-SPECIFIED CHARACTER APPEARANCE (GROUND TRUTH — NON-NEGOTIABLE) ===\n${p.characterDescription}\n\n` +
+      `THIS IS THE CREATOR'S EXPLICIT INPUT AND IT OVERRIDES ANYTHING YOU INFER FROM THE CONTENT.\n` +
+      `MANDATORY RULES:\n` +
+      `1. Your "characters" object MUST be built FROM this description — copy the exact traits (species, skin tone, hair, clothing, build, age, distinguishing features) into every matching character entry.\n` +
+      `2. EVERY visualPrompt that features a character MUST include these appearance details verbatim — do NOT summarize, do NOT paraphrase, do NOT substitute.\n` +
+      `3. Do NOT invent a different look. Do NOT default to a generic protagonist. Do NOT change ethnicity, species, or key features.\n` +
+      `4. If the description conflicts with what "feels right" for the content, THIS description wins.\n`
     : "";
 
   const brandSec = buildBrandSection(p.brandMark);
-  const system = buildCinematicSystem(cfg, targetWords, styleDesc, dims, p, p.language);
+  let system = buildCinematicSystem(cfg, targetWords, styleDesc, dims, p, p.language);
+  // Inject the user's character description into the SYSTEM prompt too so the LLM
+  // treats it as authoritative ground truth before reading the content, not as a
+  // soft suggestion tacked onto the user message.
+  if (characterGuidance) {
+    system += `\n${characterGuidance}`;
+  }
   // Truncate content to 10,000 chars to prevent API timeouts on massive inputs
   const truncatedContent = p.content.length > 10000 ? p.content.substring(0, 10000) + "\n\n[Content truncated — focus on the key themes above]" : p.content;
   const user = `Create a cinematic video script based on this idea:\n\n${truncatedContent}\n${presenterGuidance}${characterGuidance}${brandSec}`;

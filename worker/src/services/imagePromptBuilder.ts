@@ -49,21 +49,43 @@ function formatDescription(format: string): string {
 }
 
 // ── Character instructions ─────────────────────────────────────────
+//
+// Order of authority (highest first):
+//   1. User-supplied characterDescription (typed by the creator in the UI) — GROUND TRUTH
+//   2. LLM-generated characterBible (derived from the script) — must NOT contradict #1
+//
+// Both are included when present so the user's explicit input is never dropped.
 
 function buildCharacterInstructions(
   characterBible: Record<string, string>,
   characterDescription: string,
 ): string {
+  const parts: string[] = [];
+
+  if (characterDescription && characterDescription.trim()) {
+    parts.push(
+      `USER CHARACTER APPEARANCE — HIGHEST PRIORITY (MUST MATCH EXACTLY):\n${characterDescription.trim()}\n\n` +
+      `This is the creator's explicit specification. Every character in this image MUST match these traits ` +
+      `(skin tone, hair color/style, clothing, body type, species, age, distinguishing features). ` +
+      `If anything below contradicts this, THIS description wins.`
+    );
+  }
+
   if (Object.keys(characterBible).length > 0) {
     const descriptions = Object.entries(characterBible)
       .map(([name, desc]) => `- ${name}: ${desc}`)
       .join("\n");
-    return `\n\nCHARACTER CONSISTENCY BIBLE (use EXACT descriptions for any characters that appear):\n${descriptions}\n\nCRITICAL CHARACTER RULES:\n1. If any of these characters appear in this scene, they MUST match their description EXACTLY\n2. PAY ATTENTION TO AGE: If the scene mentions childhood/youth/past, use the corresponding age-specific character\n3. TEMPORAL CONTEXT: Match the character's age to the TIME PERIOD being depicted in this specific scene\n4. VISUAL CONTINUITY: Characters at different ages must share key traits but reflect correct age\n5. ENVIRONMENTAL CONTEXT: Match clothing, hairstyles, and surroundings to the time period\n6. Do NOT show a 35-year-old adult when depicting someone's childhood`;
+    parts.push(
+      `CHARACTER CONSISTENCY BIBLE (per-character details — MUST match the USER CHARACTER APPEARANCE above):\n${descriptions}\n\n` +
+      `Rules: (1) Every character that appears MUST match their bible entry EXACTLY — same hair, clothing, ` +
+      `skin tone, build, and features. (2) Match age to the TIME PERIOD being depicted (childhood → child, ` +
+      `past → period-appropriate). (3) Do NOT swap outfits or hair between scenes unless the story explicitly ` +
+      `requires it. (4) NEVER whitewash or alter ethnicity.`
+    );
   }
-  if (characterDescription) {
-    return `\n\nCHARACTER APPEARANCE REQUIREMENTS (apply consistently across ALL scenes):\n${characterDescription}\n\nCONSISTENCY RULES:\n1. ALL characters in this scene MUST match the above description exactly\n2. Maintain consistent skin tone, hair color/style, clothing style, and body type\n3. Do not invent different appearances — the creator specified these traits for a reason`;
-  }
-  return "";
+
+  if (parts.length === 0) return "";
+  return `\n\n=== CHARACTER REQUIREMENTS (NON-NEGOTIABLE) ===\n${parts.join("\n\n")}`;
 }
 
 // ── Cover / text overlay instructions ─────────────────────────────
@@ -99,13 +121,18 @@ export function buildImagePrompt(
   const textInstructions = buildTextInstructions(scene, subIndex, sceneIndex, style);
   const characterInstructions = buildCharacterInstructions(characterBible, characterDescription);
 
+  // Character requirements go FIRST (after the create directive) so image models
+  // weight them heavily. Style description comes AFTER character so style can't
+  // override appearance (e.g. 3D-Pix style defaulting to generic Pixar characters).
   return `CREATE A HIGHLY DETAILED, PRECISE, AND ACCURATE ILLUSTRATION:
+${characterInstructions}
 
 SCENE DESCRIPTION: ${visualPrompt}
 
 FORMAT REQUIREMENT: ${fmtDesc}. The image MUST be composed for this exact aspect ratio.
 
 VISUAL STYLE: ${styleDescription}
+(Style defines the rendering technique ONLY. It MUST NOT override the character requirements above — if the style suggests a generic look, still match the specified character traits.)
 
 GENERATION REQUIREMENTS:
 - You have an in-depth knowledge about visual content and how to reach the target population
@@ -127,7 +154,8 @@ SUBJECT IDENTIFICATION:
 - Ensure all IMPORTANT ELEMENTS mentioned in the description are clearly visible
 - Maintain visual HIERARCHY - the main subject should be the focal point
 ${textInstructions}
-${characterInstructions}
+
+REMINDER: Re-read the CHARACTER REQUIREMENTS section at the top of this prompt before generating. Every character MUST match those traits exactly — this takes priority over style defaults.
 
 OUTPUT: Ultra high resolution, professional illustration with dynamic composition, clear visual hierarchy, cinematic quality, bold creativity, and meticulous attention to detail.`;
 }

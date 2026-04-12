@@ -81,7 +81,13 @@ export function buildStorytellingPrompt(p: StorytellingParams): PromptResult {
   const genreSec = p.genre && GENRE_GUIDE[p.genre]
     ? `\n=== GENRE: ${p.genre.toUpperCase().replace(/-/g, " ")} ===\n${GENRE_GUIDE[p.genre]}` : "";
   const charGuidance = p.characterDescription
-    ? `\n=== CHARACTER APPEARANCE ===\nAll human characters in visual prompts MUST match this description:\n${p.characterDescription}\nInclude these character details in EVERY visualPrompt that features people.` : "";
+    ? `\n=== USER-SPECIFIED CHARACTER APPEARANCE (GROUND TRUTH — NON-NEGOTIABLE) ===\n${p.characterDescription}\n\n` +
+      `THIS IS THE CREATOR'S EXPLICIT INPUT AND IT OVERRIDES ANYTHING YOU INFER FROM THE CONTENT.\n` +
+      `MANDATORY RULES:\n` +
+      `1. Your "characters" object MUST be built FROM this description — copy the exact traits (species, skin tone, hair, clothing, build, age, distinguishing features) into every matching character entry.\n` +
+      `2. EVERY visualPrompt that features a character MUST include these appearance details verbatim — do NOT summarize, paraphrase, or substitute.\n` +
+      `3. Do NOT invent a different look. Do NOT default to a generic protagonist. Do NOT change ethnicity, species, or key features.\n` +
+      `4. If the description conflicts with what "feels right" for the story, THIS description wins.\n` : "";
   const brandSec = p.brandMark
     ? `\n=== BRAND ATTRIBUTION ===\nSubtly weave "${p.brandMark}" into the narrative as the source or presenter of this story.` : "";
 
@@ -170,7 +176,10 @@ ${buildOutputFormat({
     textOverlayExample: includeText ? '"title": "Evocative Headline",\n      "subtitle": "Emotional subtext"' : undefined,
   })}`;
 
+  // Inject character guidance into SYSTEM prompt too so the LLM treats it as
+  // authoritative before reading the story idea.
+  const finalSystem = charGuidance ? `${system}\n${charGuidance}` : system;
   const user = `=== STORY IDEA ===\n${p.storyIdea}\n${inspirationSec}${toneSec}${genreSec}${charGuidance}${brandSec}`;
   const maxTokens = p.length === "presentation" ? 24000 : p.length === "brief" ? 16000 : 10000;
-  return { system, user, maxTokens };
+  return { system: finalSystem, user, maxTokens };
 }

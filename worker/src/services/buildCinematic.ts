@@ -200,19 +200,13 @@ GOOD: ✓ "Inside a cluttered home kitchen at 2AM, dirty dishes in the sink, dim
 - ASPECT RATIO: ${p.format} (${dims.width}x${dims.height})
 - QUALITY: Ultra-detailed, cinematic lighting, dramatic composition
 
-=== TIMING REQUIREMENTS (CRITICAL — STRICT — ZERO TOLERANCE) ===
-⚠️ MANDATORY SCENE COUNT RULE — NON-NEGOTIABLE:
-- You MUST generate MINIMUM ${cfg.min} scenes and MAXIMUM ${cfg.max} scenes.
+=== TIMING REQUIREMENTS (CRITICAL — STRICT) ===
+- You MUST generate EXACTLY ${cfg.min} scenes.
 - Target duration: ~${cfg.target} seconds total
-${p.length === "short" ? `
-⚠️ YOUTUBE SHORTS FORMAT — HARD LIMITS:
-- The ENTIRE video MUST be under 2 minutes. NEVER exceed 2 minutes.
-` : ``}
-⚠️ VOICEOVER LENGTH — EXACTLY 10 SECONDS PER SCENE — ZERO TOLERANCE:
-- EACH scene voiceover MUST be EXACTLY ${targetWords} words. NOT 26. NOT 30. EXACTLY ${targetWords}.
-- At 2.5 words/sec, ${targetWords} words = EXACTLY 10 seconds of audio.
-- COUNT YOUR WORDS FOR EVERY SCENE. If ANY voiceover exceeds ${targetWords} words, the ENTIRE generation FAILS.
-- Write TIGHT, punchy narration. Cut filler words ruthlessly. Every word must earn its place.
+- EACH scene voiceover MUST be EXACTLY ${targetWords} words. Not 18, not 22, not 25. EXACTLY ${targetWords} words.
+- At ~2.5 words/sec, ${targetWords} words = 11 seconds of audio per scene. This is the TARGET.
+- COUNT YOUR WORDS for every scene. If a voiceover has fewer than ${targetWords - 3} words or more than ${targetWords + 2} words, it is WRONG.
+- Do NOT write short, clipped scenes. Fill the full ${targetWords} words with meaningful, flowing content.
 - Set each scene "duration" to ${cfg.maxPerScene}
 
 === NARRATIVE ARC ===
@@ -223,14 +217,18 @@ ${p.length === "short" ? `
 5. FORMULA (Final): Summary visual
 
 === VOICEOVER STYLE ===
-- ENERGETIC, conversational tone
-- Start each scene with a hook
-- NO labels, NO stage directions, NO markdown
-- Just raw spoken text
+- Write CONTINUOUS, FLOWING narration — the voiceover across all scenes should read as ONE cohesive script, not independent fragments
+- Each scene's voiceover must CONNECT to the previous scene — use transitions, continuation, cause-and-effect, or narrative momentum
+- NEVER restart the narrative in each scene. Scene 5 should feel like the natural continuation of scene 4, not a new beginning
+- ENERGETIC, conversational tone — engaging but coherent
+- The FIRST scene hooks the audience. Every scene AFTER that BUILDS on what came before
+- Vary pacing: some scenes push forward, some pause to reflect, some escalate — like a real speaker
+- NO labels, NO stage directions, NO markdown — just raw spoken text
+- **PRESERVE THE USER'S EXACT TERMINOLOGY**: If the user uses specific names, titles, or terms, keep them throughout — do NOT replace with generic pronouns
 ${p.disableExpressions
   ? `- Write CLEAN, plain speech — NO paralinguistic tags like [chuckle], [sigh], etc.`
-  : `- Include paralinguistic tags where appropriate for natural expression: [clear throat], [sigh], [sush], [cough], [groan], [sniff], [gasp], [chuckle], [laugh]
-- Example: "Oh, that's interesting! [chuckle] Let me explain why..."`}
+  : `- Include paralinguistic tags sparingly for emotional emphasis: [sigh], [chuckle], [gasp], [laugh]
+- Use them only at key emotional moments, not every scene`}
 
 === TTS CONTENT FILTER SAFETY (CRITICAL) ===
 Voiceover text will be synthesized by TTS which has aggressive content filters.

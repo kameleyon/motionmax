@@ -110,17 +110,11 @@ All image prompts must adhere to this style:
 
 === TIMING REQUIREMENTS (CRITICAL - STRICT ENFORCEMENT) ===
 - Target duration: ${cfg.targetDuration} seconds
-- Create exactly ${sc} scenes
-${p.length === "short" ? `
-⚠️ YOUTUBE SHORTS FORMAT — HARD LIMITS:
-- The ENTIRE video MUST be between 2:30 and 2:50 (150–170 seconds). NEVER exceed 3 minutes.
-- EACH scene voiceover: 12–14 seconds MAX (${targetWords} words MAXIMUM at ~2.5 words/sec)
-- COUNT YOUR WORDS. If a voiceover exceeds ${targetWords} words, the generation WILL FAIL.
-- Write TIGHT, punchy narration. Cut filler words ruthlessly.
-` : `- EACH SCENE VOICEOVER MUST BE 12-15 SECONDS LONG. NO MORE THAN 15 SECONDS.
-- That means each voiceover must be approximately ${targetWords} words (at ~2.5 words per second)
-`}- MINIMUM 3 seconds per scene (to avoid glitchy flashes)
-- If you exceed ${cfg.avgSceneDuration} seconds of spoken text per scene, the generation WILL FAIL.
+- Create EXACTLY ${sc} scenes
+- EACH scene voiceover MUST be EXACTLY ${targetWords} words. Not 18, not 22, not 25. EXACTLY ${targetWords} words.
+- At ~2.5 words/sec, ${targetWords} words = 11 seconds of audio per scene. This is the TARGET.
+- COUNT YOUR WORDS for every scene. If a voiceover has fewer than ${targetWords - 3} words or more than ${targetWords + 2} words, it is WRONG.
+- Do NOT write short, clipped scenes. Fill the full ${targetWords} words with meaningful, flowing content.
 - Set each scene "duration" to ${cfg.avgSceneDuration}
 
 === NARRATIVE STRUCTURE ===

@@ -77,16 +77,10 @@ All image prompts must adhere to this style:
 === TIMING REQUIREMENTS (CRITICAL - STRICT ENFORCEMENT) ===
 - Target duration: ${cfg.targetDuration} seconds
 - Create EXACTLY ${cfg.count} scenes. NOT ${cfg.count - 1}, NOT ${cfg.count + 1}. EXACTLY ${cfg.count}. If you return fewer or more scenes, the ENTIRE generation will be REJECTED and restarted from scratch
-${p.length === "short" ? `
-⚠️ YOUTUBE SHORTS FORMAT — HARD LIMITS:
-- The ENTIRE video MUST be between 2:30 and 2:50 (150–170 seconds). NEVER exceed 3 minutes.
-- EACH scene voiceover: 12–14 seconds MAX (${targetWords} words MAXIMUM at ~2.5 words/sec)
-- COUNT YOUR WORDS. If a voiceover exceeds ${targetWords} words, the generation WILL FAIL.
-- Write TIGHT, punchy narration. Cut filler words ruthlessly.
-` : `- EACH SCENE VOICEOVER MUST BE 12-15 SECONDS LONG. NO MORE THAN 15 SECONDS.
-- That means each voiceover must be approximately ${targetWords} words (at ~2.5 words per second)
-`}- MINIMUM 3 seconds per scene (to avoid glitchy flashes)
-- If you exceed ${cfg.avgSceneDuration} seconds of spoken text per scene, the generation WILL FAIL.
+- EACH scene voiceover MUST be EXACTLY ${targetWords} words. Not 18, not 22, not 25. EXACTLY ${targetWords} words.
+- At ~2.5 words/sec, ${targetWords} words = 11 seconds of audio per scene. This is the TARGET.
+- COUNT YOUR WORDS for every scene. If a voiceover has fewer than ${targetWords - 3} words or more than ${targetWords + 2} words, it is WRONG.
+- Do NOT write short, clipped scenes. Fill the full ${targetWords} words with meaningful, flowing content.
 - Set each scene "duration" to ${cfg.avgSceneDuration}
 
 === NARRATIVE ARC ===
@@ -97,15 +91,18 @@ ${p.length === "short" ? `
 5. FORMULA (Final): Summary visual
 
 === VOICEOVER STYLE ===
-- ENERGETIC, conversational tone
-- Start each scene with a hook
-- NO labels, NO stage directions, NO markdown
-- Just raw spoken text
+- Write CONTINUOUS, FLOWING narration — the voiceover across all scenes should read as ONE cohesive script, not independent fragments
+- Each scene's voiceover must CONNECT to the previous scene — use transitions, continuation, cause-and-effect, or narrative momentum
+- NEVER restart the narrative in each scene. Scene 5 should feel like the natural continuation of scene 4, not a new beginning
+- ENERGETIC, conversational tone — engaging but coherent
+- The FIRST scene hooks the audience. Every scene AFTER that BUILDS on what came before
+- Vary pacing: some scenes push forward, some pause to reflect, some escalate — like a real speaker
+- NO labels, NO stage directions, NO markdown — just raw spoken text
+- **PRESERVE THE USER'S EXACT TERMINOLOGY**: If the user uses specific names, titles, or terms, keep them throughout — do NOT replace with generic pronouns
 ${p.disableExpressions
-  ? `- Write CLEAN, plain speech — NO paralinguistic tags, NO bracketed cues, NO expressions like [chuckle], [sigh], [laugh], [gasp], etc.
-- Every character speaks in natural, unadorned sentences only.`
-  : `- Include paralinguistic tags where appropriate for natural expression: [clear throat], [sigh], [sush], [cough], [groan], [sniff], [gasp], [chuckle], [laugh]
-- Example: "Oh, that's interesting! [chuckle] Let me explain why..."`}
+  ? `- Write CLEAN, plain speech — NO paralinguistic tags, NO bracketed cues, NO expressions like [chuckle], [sigh], [laugh], [gasp], etc.`
+  : `- Include paralinguistic tags sparingly for emotional emphasis: [sigh], [chuckle], [gasp], [laugh]
+- Use them only at key emotional moments, not every scene`}
 
 ${SUB_VISUALS_SECTION}
 

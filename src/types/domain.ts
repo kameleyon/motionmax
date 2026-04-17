@@ -12,7 +12,7 @@ export type ProductId = "doc2video" | "storytelling" | "smartflow" | "cinematic"
 export type VisualStyle =
   | "minimalist" | "doodle" | "stick" | "anime" | "realistic"
   | "3d-pixar" | "claymation" | "sketch" | "caricature" | "storybook"
-  | "crayon" | "moody" | "chalkboard" | "lego" | "cardboard" | "custom";
+  | "crayon" | "moody" | "chalkboard" | "lego" | "cardboard" | "babie" | "custom";
 
 export type Language = "en" | "fr" | "es" | "ht" | "pt" | "de" | "it" | "ru" | "zh" | "ja" | "ko";
 

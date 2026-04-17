@@ -1,16 +1,14 @@
 /**
- * Cinematic video handler — PixVerse V6 Transitions + Kling V2.5 fallback.
+ * Cinematic video handler — Grok Video I2V (active).
  *
  * Flow:
  *   - All images are generated FIRST (in parallel batches by the frontend)
- *   - Scenes with transitions (has end_image): PixVerse V6 ($0.40/transition)
- *   - Last scene (no end_image): Kling V2.5 Turbo I2V ($0.70/10s)
+ *   - ALL scenes use Grok Video I2V (no end_image — Grok doesn't support last_image)
  *   - Camera motion varies per scene (rotated from 7 movement types)
  *
- * Primary: pixverse-v6-transitions (40 credits / $0.40 per transition)
- * Fallback/Last scene: kling-2-5-i2v (35 credits / $0.70 per 10s)
+ * Active: grok-video-i2v via Hypereal (1080P, 10s)
  *
- * Previous model (commented out): grok-video-i2v (12 credits)
+ * Previous models (commented out): Kling V2.5 Turbo, PixVerse V6
  */
 
 import { supabase } from "../lib/supabase.js";
@@ -18,12 +16,12 @@ import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField } from "../lib/sceneUpdate.js";
 import { generateImage } from "../services/imageGenerator.js";
 import {
-  generatePixVerseTransition,
-  generateKlingV25Video,
-  // generateKlingV3Video,   // V3.0 — faster + cheaper but lip sync issues. Uncomment when ready.
-  // generateVeo31Video,     // Veo 3.1 — doesn't follow prompts, generates unwanted audio/lip sync
-  // generateKlingV26Video,  // Previous fallback — kept for rollback
-  // generateGrokVideo,      // Previous model — kept for rollback
+  // generatePixVerseTransition,  // PixVerse V6 — disabled, returns 500 E1001
+  // generateKlingV25Video,       // Kling V2.5 Turbo — commented out, switching to Grok
+  // generateKlingV3Video,        // V3.0 — faster + cheaper but lip sync issues
+  // generateVeo31Video,          // Veo 3.1 — doesn't follow prompts, generates unwanted audio/lip sync
+  // generateKlingV26Video,       // Previous fallback — kept for rollback
+  generateGrokVideo,              // Active model — Grok Video I2V (no end_image support)
 } from "../services/hypereal.js";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -218,10 +216,8 @@ export async function handleCinematicVideo(
   const finalPrompt = videoPrompt + sceneInstruction;
 
   const cameraName = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("\u2014")[0].trim();
-  const transitionInfo = endImageUrl ? `→ scene ${sceneIndex + 1}` : "(no end_image)";
-  const modelInfo = endImageUrl ? "PixVerse V6 Transition" : "Kling V2.5 (last scene)";
   console.log(
-    `[CinematicVideo] Scene ${sceneIndex}: ${modelInfo} ${transitionInfo}, ` +
+    `[CinematicVideo] Scene ${sceneIndex}: Grok Video I2V, ` +
     `camera=${cameraName}, prompt=${finalPrompt.length} chars`
   );
 
@@ -230,41 +226,19 @@ export async function handleCinematicVideo(
   let provider: string;
   const negPrompt = "blurry, low quality, watermark, text, UI elements, slow motion, sluggish, nudity, naked, exposed body, extra limbs, body contortion, distorted anatomy, lip sync, talking, mouth movement, speaking";
 
-  if (endImageUrl) {
-    // Use Kling V2.5 with last_image for transition scenes
-    // NOTE: PixVerse V6 is disabled -- returns 500 E1001 on every request
-    // regardless of prompt length or body format (flat/nested). The model
-    // appears to be broken or unavailable on Hypereal. Re-enable once
-    // Hypereal confirms PixVerse V6 is operational.
-    //
-    // To re-enable PixVerse V6, uncomment the try block below and comment out the Kling call:
-    // const cameraMotion = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("\u2014")[0].trim();
-    // const pixVersePrompt = `Smooth cinematic ${cameraMotion.toLowerCase()} transition.`;
-    // try {
-    //   videoUrl = await generatePixVerseTransition(imageUrl, endImageUrl, pixVersePrompt, apiKey);
-    //   provider = "PixVerse V6 Transition";
-    // } catch (pvError) {
-    //   console.warn(`[CinematicVideo] Scene ${sceneIndex}: PixVerse V6 failed, falling back to Kling V2.5`);
-    //   videoUrl = await generateKlingV25Video(imageUrl, finalPrompt, apiKey, 10, endImageUrl, negPrompt, 0.8);
-    //   provider = "Kling V2.5 Turbo I2V";
-    // }
-    provider = "Kling V2.5 Turbo I2V";
-    videoUrl = await generateKlingV25Video(imageUrl, finalPrompt, apiKey, 10, endImageUrl, negPrompt, 0.8);
-  } else {
-    // Last scene -- no end_image
-    provider = "Kling V2.5 Turbo I2V";
-    videoUrl = await generateKlingV25Video(imageUrl, finalPrompt, apiKey, 10, undefined, negPrompt, 0.8);
-  }
+  // ── Grok Video I2V (active) — no end_image support ──────────────
+  const aspectRatio = format === "portrait" ? "9:16" as const : "16:9" as const;
+  provider = "Grok Video I2V";
+  videoUrl = await generateGrokVideo(imageUrl, finalPrompt, apiKey, aspectRatio, 10, "1080P");
 
-  // ── Previous model (Grok Video I2V) — commented out for rollback ──
-  // const grokVideoUrl = await generateGrokVideo(
-  //   imageUrl,
-  //   videoPrompt,
-  //   apiKey,
-  //   aspectRatio,
-  //   10,       // duration: 10s
-  //   "1080P",  // resolution
-  // );
+  // ── Kling V2.5 Turbo (commented out — previous model) ─────────
+  // if (endImageUrl) {
+  //   provider = "Kling V2.5 Turbo I2V";
+  //   videoUrl = await generateKlingV25Video(imageUrl, finalPrompt, apiKey, 10, endImageUrl, negPrompt, 0.8);
+  // } else {
+  //   provider = "Kling V2.5 Turbo I2V";
+  //   videoUrl = await generateKlingV25Video(imageUrl, finalPrompt, apiKey, 10, undefined, negPrompt, 0.8);
+  // }
 
   // Upload to Supabase storage
   const finalVideoUrl = await uploadVideoToStorage(videoUrl, projectId, generationId, sceneIndex);

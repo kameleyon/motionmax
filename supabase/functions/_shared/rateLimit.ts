@@ -6,15 +6,24 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 
 // Routes where a DB error must deny access (fail-closed) rather than allow it.
-// These handle auth or admin operations where unlimited access on error is dangerous.
+// Covers all routes with financial impact, data destruction, or GDPR obligations.
+// Any new route that costs credits or touches user data should be added here.
 export const PRIVILEGED_ROUTES = [
   "create-checkout",
+  "customer-portal",
   "admin",
   "auth",
   "verify",
   "reset-password",
   "delete-account",
+  "delete-voice",
   "export-data",
+  "export-my-data",
+  "generate-video",
+  "generate-cinematic",
+  "clone-voice",
+  "manage-api-keys",
+  "migrate-storage",
 ];
 
 interface RateLimitConfig {

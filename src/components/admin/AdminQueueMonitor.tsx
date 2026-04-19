@@ -1,11 +1,10 @@
 import { createScopedLogger } from "@/lib/logger";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import {
-  Loader2,
   Clock,
   CheckCircle,
   XCircle,
@@ -13,11 +12,14 @@ import {
   Pause,
   Activity,
   TrendingUp,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { toast } from "sonner";
 
 const log = createScopedLogger("AdminQueue");
 
@@ -57,110 +59,94 @@ export function AdminQueueMonitor() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchQueueData = useCallback(async () => {
+    try {
+      setLoading(true);
+
+      const { data: activeJobs, error: jobsError } = await supabase
+        .from("video_generation_jobs")
+        .select("*")
+        .in("status", ["pending", "processing"])
+        .order("created_at", { ascending: true })
+        .limit(50);
+
+      if (jobsError) throw jobsError;
+
+      setJobs((activeJobs as any as QueueJob[]) || []);
+
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+      const { count: completedCount } = await supabase
+        .from("video_generation_jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "completed")
+        .gte("completed_at", yesterday.toISOString());
+
+      const { count: failedCount } = await supabase
+        .from("video_generation_jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "failed")
+        .gte("completed_at", yesterday.toISOString());
+
+      const { data: recentCompleted } = await supabase
+        .from("video_generation_jobs")
+        .select("created_at, completed_at")
+        .eq("status", "completed")
+        .not("completed_at", "is", null)
+        .gte("completed_at", yesterday.toISOString())
+        .limit(100);
+
+      let avgTime = 0;
+      if (recentCompleted && recentCompleted.length > 0) {
+        const times = recentCompleted.map((job: any) => {
+          const start = new Date(job.created_at).getTime();
+          const end = new Date(job.completed_at!).getTime();
+          return (end - start) / 1000;
+        });
+        avgTime = times.reduce((a, b) => a + b, 0) / times.length;
+      }
+
+      const pendingCount = activeJobs?.filter((j) => j.status === "pending").length || 0;
+      const processingCount = activeJobs?.filter((j) => j.status === "processing").length || 0;
+      const estimatedWait = avgTime > 0 ? avgTime * pendingCount : 0;
+
+      setStats({
+        pending: pendingCount,
+        processing: processingCount,
+        completed_24h: completedCount || 0,
+        failed_24h: failedCount || 0,
+        avgProcessingTime: avgTime,
+        estimatedWaitTime: estimatedWait,
+      });
+
+      setError(null);
+    } catch (err) {
+      log.error("Failed to fetch queue data:", err);
+      setError(err instanceof Error ? err.message : "Failed to load queue data");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!isAdmin) return;
 
-    const fetchQueueData = async () => {
-      try {
-        setLoading(true);
-
-        // Fetch active jobs (pending or processing)
-        const { data: activeJobs, error: jobsError } = await supabase
-          .from("video_generation_jobs")
-          .select("*")
-          .in("status", ["pending", "processing"])
-          .order("created_at", { ascending: true })
-          .limit(50);
-
-        if (jobsError) throw jobsError;
-
-        setJobs((activeJobs as any as QueueJob[]) || []);
-
-        // Calculate stats
-        const now = new Date();
-        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-
-        // Get completed jobs in last 24h
-        const { count: completedCount } = await supabase
-          .from("video_generation_jobs")
-          .select("*", { count: "exact", head: true })
-          .eq("status", "completed")
-          .gte("completed_at", yesterday.toISOString());
-
-        // Get failed jobs in last 24h
-        const { count: failedCount } = await supabase
-          .from("video_generation_jobs")
-          .select("*", { count: "exact", head: true })
-          .eq("status", "failed")
-          .gte("completed_at", yesterday.toISOString());
-
-        // Get recent completed jobs to calculate avg processing time
-        const { data: recentCompleted } = await supabase
-          .from("video_generation_jobs")
-          .select("created_at, completed_at")
-          .eq("status", "completed")
-          .not("completed_at", "is", null)
-          .gte("completed_at", yesterday.toISOString())
-          .limit(100);
-
-        let avgTime = 0;
-        if (recentCompleted && recentCompleted.length > 0) {
-          const times = recentCompleted.map((job: any) => {
-            const start = new Date(job.created_at).getTime();
-            const end = new Date(job.completed_at!).getTime();
-            return (end - start) / 1000; // seconds
-          });
-          avgTime = times.reduce((a, b) => a + b, 0) / times.length;
-        }
-
-        const pendingCount = activeJobs?.filter((j) => j.status === "pending").length || 0;
-        const processingCount = activeJobs?.filter((j) => j.status === "processing").length || 0;
-        const estimatedWait = avgTime > 0 ? avgTime * pendingCount : 0;
-
-        setStats({
-          pending: pendingCount,
-          processing: processingCount,
-          completed_24h: completedCount || 0,
-          failed_24h: failedCount || 0,
-          avgProcessingTime: avgTime,
-          estimatedWaitTime: estimatedWait,
-        });
-
-        setError(null);
-      } catch (err) {
-        log.error("Failed to fetch queue data:", err);
-        setError(err instanceof Error ? err.message : "Failed to load queue data");
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchQueueData();
 
-    // Set up real-time subscription
     let channel: RealtimeChannel;
 
     const setupSubscription = async () => {
       channel = supabase
         .channel("admin-queue-monitor")
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "video_generation_jobs",
-          },
-          () => {
-            // Refetch data when jobs table changes
-            fetchQueueData();
-          }
-        )
+        .on("postgres_changes", { event: "*", schema: "public", table: "video_generation_jobs" }, () => {
+          fetchQueueData();
+        })
         .subscribe();
     };
 
     setupSubscription();
 
-    // Refresh every 10 seconds as fallback
     const interval = setInterval(fetchQueueData, 10000);
 
     return () => {
@@ -169,7 +155,7 @@ export function AdminQueueMonitor() {
       }
       clearInterval(interval);
     };
-  }, [isAdmin]);
+  }, [isAdmin, fetchQueueData]);
 
   const formatDuration = (seconds: number) => {
     if (seconds < 60) return `${Math.round(seconds)}s`;
@@ -208,17 +194,17 @@ export function AdminQueueMonitor() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <LoadingSpinner className="py-12" />;
   }
 
   if (error) {
     return (
-      <div className="text-center py-12">
+      <div className="text-center py-12 space-y-4">
         <p className="text-destructive">{error}</p>
+        <Button onClick={fetchQueueData} variant="outline">
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Retry
+        </Button>
       </div>
     );
   }
@@ -381,9 +367,16 @@ export function AdminQueueMonitor() {
                       size="sm"
                       className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10"
                       onClick={async () => {
-                        await supabase.from("video_generation_jobs").update({ status: "failed", error_message: "Cancelled by admin" }).eq("id", job.id);
-                        // Refresh after cancel
-                        window.location.reload();
+                        const { error: cancelError } = await supabase
+                          .from("video_generation_jobs")
+                          .update({ status: "failed", error_message: "Cancelled by admin" })
+                          .eq("id", job.id);
+                        if (cancelError) {
+                          toast.error("Failed to cancel job");
+                        } else {
+                          toast.success("Job cancelled");
+                          fetchQueueData();
+                        }
                       }}
                       aria-label="Cancel job"
                     >

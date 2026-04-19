@@ -1,9 +1,11 @@
 import { createScopedLogger } from "@/lib/logger";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Server, Cpu, HardDrive, Clock, CheckCircle, AlertTriangle, XCircle } from "lucide-react";
+import { Server, Cpu, HardDrive, Clock, CheckCircle, AlertTriangle, XCircle, RefreshCw } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatDistanceToNow, subHours, format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,10 +32,9 @@ export function AdminWorkerHealth() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchWorkerHealth = async () => {
-      try {
-        setLoading(true);
+  const fetchWorkerHealth = useCallback(async () => {
+    try {
+      setLoading(true);
 
         const now = new Date();
         const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -125,22 +126,20 @@ export function AdminWorkerHealth() {
           errorRate: errorRate * 100, // convert to percentage
         });
 
-        setError(null);
-      } catch (err) {
-        log.error("Failed to fetch worker health:", err);
-        setError(err instanceof Error ? err.message : "Failed to load worker health");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchWorkerHealth();
-
-    // Refresh every 15 seconds
-    const interval = setInterval(fetchWorkerHealth, 15000);
-
-    return () => clearInterval(interval);
+      setError(null);
+    } catch (err) {
+      log.error("Failed to fetch worker health:", err);
+      setError(err instanceof Error ? err.message : "Failed to load worker health");
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchWorkerHealth();
+    const interval = setInterval(fetchWorkerHealth, 15000);
+    return () => clearInterval(interval);
+  }, [fetchWorkerHealth]);
 
   const formatDuration = (seconds: number) => {
     if (seconds < 60) return `${Math.round(seconds)}s`;
@@ -197,17 +196,17 @@ export function AdminWorkerHealth() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <LoadingSpinner className="py-12" />;
   }
 
   if (error) {
     return (
-      <div className="text-center py-12">
+      <div className="text-center py-12 space-y-4">
         <p className="text-destructive">{error}</p>
+        <Button onClick={fetchWorkerHealth} variant="outline">
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Retry
+        </Button>
       </div>
     );
   }

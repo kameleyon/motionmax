@@ -2,7 +2,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useQuery } from "@tanstack/react-query";
-import { Users, CreditCard, Activity, Flag, Coins, Archive, Loader2, TrendingUp, TrendingDown, DollarSign, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Users, CreditCard, Activity, Flag, Coins, Archive, TrendingUp, TrendingDown, DollarSign, ArrowUpRight, ArrowDownRight, RefreshCw } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { supabase } from "@/integrations/supabase/client";
 
 interface CostBreakdown {
@@ -42,7 +43,7 @@ interface TrendData {
 export function AdminOverview() {
   const { callAdminApi, isAdmin } = useAdminAuth();
 
-  const { data: stats, isLoading: loading, error: queryError } = useQuery({
+  const { data: stats, isLoading: loading, error: queryError, refetch } = useQuery({
     queryKey: ["admin-dashboard-stats"],
     queryFn: async () => {
       const data = await callAdminApi("dashboard_stats");
@@ -90,34 +91,16 @@ export function AdminOverview() {
   const error = queryError ? (queryError instanceof Error ? queryError.message : "Failed to load stats") : null;
 
   if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="space-y-2">
-          <div className="h-6 w-48 rounded bg-muted animate-pulse" />
-          <div className="h-4 w-64 rounded bg-muted animate-pulse" />
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[1,2,3,4,5,6].map(i => (
-            <div key={i} className="rounded-xl border border-border/50 p-6 space-y-3">
-              <div className="flex justify-between">
-                <div className="h-4 w-24 rounded bg-muted animate-pulse" />
-                <div className="h-8 w-8 rounded-lg bg-muted animate-pulse" />
-              </div>
-              <div className="h-7 w-16 rounded bg-muted animate-pulse" />
-              <div className="h-3 w-32 rounded bg-muted animate-pulse" />
-            </div>
-          ))}
-        </div>
-      </div>
-    );
+    return <LoadingSpinner className="py-12" />;
   }
 
   if (error) {
     return (
-      <div className="text-center py-12 space-y-3">
+      <div className="text-center py-12 space-y-4">
         <p className="text-destructive">{error}</p>
-        <Button variant="outline" size="sm" onClick={() => window.location.reload()} className="gap-1.5">
-          <ArrowUpRight className="h-3.5 w-3.5" /> Retry
+        <Button variant="outline" onClick={() => refetch()}>
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Retry
         </Button>
       </div>
     );

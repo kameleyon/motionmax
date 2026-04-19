@@ -10,8 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 
 interface ApiCallLog {
@@ -259,11 +259,7 @@ export function AdminApiCalls() {
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="p-4 space-y-2">
-              {[...Array(10)].map((_, i) => (
-                <Skeleton key={i} className="h-8 w-full" />
-              ))}
-            </div>
+            <LoadingSpinner className="py-12" />
           ) : !data?.logs?.length ? (
             <div className="p-8 text-center text-muted-foreground text-sm">
               {activeUserSearch

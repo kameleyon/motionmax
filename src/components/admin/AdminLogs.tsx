@@ -5,7 +5,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  Loader2,
   RefreshCw,
   Shield,
   Activity,
@@ -18,6 +17,7 @@ import {
   Play,
   Terminal,
 } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { format } from "date-fns";
 import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
@@ -209,17 +209,13 @@ export function AdminLogs() {
   };
 
   if (loading && logs.length === 0) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <LoadingSpinner className="py-12" />;
   }
 
   if (error) {
     return (
       <div className="text-center py-12 space-y-4">
-        <p className="text-muted-foreground">{error}</p>
+        <p className="text-destructive">{error}</p>
         <Button onClick={fetchLogs} variant="outline">
           <RefreshCw className="h-4 w-4 mr-2" />
           Retry

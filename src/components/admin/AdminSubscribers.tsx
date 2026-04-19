@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
-import { Loader2, Search, ChevronLeft, ChevronRight, Eye, AlertTriangle, DollarSign, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Eye, AlertTriangle, DollarSign, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AdminUserDetails } from "./AdminUserDetails";
@@ -198,22 +199,14 @@ export function AdminSubscribers() {
         </CardHeader>
         <CardContent className="p-0 sm:p-6">
           {loading ? (
-            <div className="p-4 space-y-3">
-              {[1,2,3,4,5,6,7,8].map(i => (
-                <div key={i} className="flex items-center gap-3 py-2">
-                  <div className="h-6 w-6 rounded-full bg-muted animate-pulse shrink-0" />
-                  <div className="flex-1 space-y-1.5">
-                    <div className="h-3 w-32 rounded bg-muted animate-pulse" />
-                    <div className="h-2.5 w-48 rounded bg-muted animate-pulse" />
-                  </div>
-                  <div className="h-5 w-14 rounded-full bg-muted animate-pulse" />
-                  <div className="h-3 w-10 rounded bg-muted animate-pulse" />
-                </div>
-              ))}
-            </div>
+            <LoadingSpinner className="py-12" />
           ) : error ? (
-            <div className="text-center py-12">
+            <div className="text-center py-12 space-y-4">
               <p className="text-destructive">{error}</p>
+              <Button onClick={fetchSubscribers} variant="outline">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Retry
+              </Button>
             </div>
           ) : (
             <>

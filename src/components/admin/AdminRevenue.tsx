@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, DollarSign, TrendingUp, CreditCard, RefreshCw } from "lucide-react";
+import { DollarSign, TrendingUp, CreditCard, RefreshCw } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import { subDays, format } from "date-fns";
 import { useState } from "react";
@@ -75,11 +76,7 @@ export function AdminRevenue() {
   ];
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <LoadingSpinner className="py-12" />;
   }
 
   if (error) {

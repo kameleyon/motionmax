@@ -2,7 +2,8 @@ import { createScopedLogger } from "@/lib/logger";
 import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, TrendingUp, TrendingDown, DollarSign, Zap, RefreshCw } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, Zap, RefreshCw } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { subDays, format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -241,11 +242,7 @@ export function AdminPerformanceMetrics() {
     : [];
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <LoadingSpinner className="py-12" />;
   }
 
   if (error) {

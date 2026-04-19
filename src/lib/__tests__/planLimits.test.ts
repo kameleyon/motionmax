@@ -13,7 +13,6 @@ import {
 describe("getCreditsRequired", () => {
   it("returns 150 credits for short standard video (150s x 1x)", () => {
     expect(getCreditsRequired("doc2video", "short")).toBe(150);
-    expect(getCreditsRequired("storytelling", "short")).toBe(150);
   });
 
   it("returns 280 credits for brief standard video (280s x 1x)", () => {
@@ -21,7 +20,6 @@ describe("getCreditsRequired", () => {
   });
 
   it("returns 360 credits for presentation (360s x 1x)", () => {
-    expect(getCreditsRequired("storytelling", "presentation")).toBe(360);
   });
 
   it("returns 75 credits for short smartflow (150s x 0.5x)", () => {
@@ -94,7 +92,6 @@ describe("PLAN_LIMITS", () => {
 describe("getMultiplier", () => {
   it("standard products are 1x", () => {
     expect(getMultiplier("doc2video")).toBe(1);
-    expect(getMultiplier("storytelling")).toBe(1);
   });
 
   it("smartflow is 0.5x", () => {

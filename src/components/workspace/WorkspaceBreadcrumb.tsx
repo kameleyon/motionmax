@@ -8,7 +8,6 @@ interface WorkspaceBreadcrumbProps {
 
 const MODE_LABELS: Record<string, string> = {
   doc2video: "Explainers",
-  storytelling: "Visual Stories",
   smartflow: "Smart Flow",
   cinematic: "Cinematic",
 };

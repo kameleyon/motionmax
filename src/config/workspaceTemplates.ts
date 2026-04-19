@@ -64,27 +64,6 @@ Try these for one week and watch your productivity transform. Follow for more ti
   },
 ];
 
-export const STORYTELLING_TEMPLATES: WorkspaceTemplate[] = [
-  {
-    id: "startup-journey",
-    label: "Startup Journey",
-    description: "Entrepreneurial story of building a company",
-    content: `A young software developer quits their stable corporate job to pursue an idea: a platform that connects local farmers directly with restaurants. The first year is brutal — no funding, no users, and mounting credit card debt. But one pivotal meeting with a Michelin-star chef changes everything. The chef becomes the first customer and advocate. Word spreads through the restaurant community. By year three, the platform serves 2,000 restaurants across 15 cities. The story explores the emotional highs and lows, the moment of near-bankruptcy, and the lesson that success often comes from solving one person's problem exceptionally well.`,
-  },
-  {
-    id: "documentary-style",
-    label: "Documentary",
-    description: "Informative narrative about a topic",
-    content: `The story of how a small island nation in the Pacific became the world's first fully renewable energy country. Starting from 2015, when 95% of their electricity came from diesel generators shipped across the ocean, community leaders made a bold decision. Solar panels were installed on every rooftop. Tidal energy generators were placed along the coast. Battery storage systems were built underground. By 2025, the island achieved 100% renewable energy — saving $4M annually in fuel costs and creating 500 new jobs. Now other island nations are following their blueprint.`,
-  },
-  {
-    id: "brand-story",
-    label: "Brand Story",
-    description: "Origin story for a brand or product",
-    content: `It started in a garage in Portland, Oregon, 2019. Two best friends who shared a love for specialty coffee and sustainable living decided the world didn't need another coffee brand — it needed a better one. They sourced beans directly from three family farms in Colombia, paying 3x the fair trade price. Every bag was packaged in fully compostable materials. Their first 100 bags sold out in 48 hours through word of mouth alone. Three years later, BeanBridge Coffee ships to 40 countries, plants a tree for every bag sold, and has helped their farming partners build a school and medical clinic.`,
-  },
-];
-
 export const SMARTFLOW_TEMPLATES: WorkspaceTemplate[] = [
   {
     id: "market-data",
@@ -156,9 +135,9 @@ export const CINEMATIC_TEMPLATES: WorkspaceTemplate[] = [
 export function getTemplatesForMode(mode: string): WorkspaceTemplate[] {
   switch (mode) {
     case "doc2video": return DOC2VIDEO_TEMPLATES;
-    case "storytelling": return STORYTELLING_TEMPLATES;
     case "smartflow": return SMARTFLOW_TEMPLATES;
     case "cinematic": return CINEMATIC_TEMPLATES;
     default: return [];
   }
 }
+

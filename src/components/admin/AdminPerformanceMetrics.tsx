@@ -14,13 +14,11 @@ interface PerformanceMetrics {
     doc2video: number;
     cinematic: number;
     smartflow: number;
-    storytelling: number;
   };
   successRateByType: {
     doc2video: number;
     cinematic: number;
     smartflow: number;
-    storytelling: number;
   };
   costPerOperation: {
     script: number;
@@ -69,7 +67,6 @@ export function AdminPerformanceMetrics() {
         doc2video: { total: 0, completed: 0, totalTime: 0 },
         cinematic: { total: 0, completed: 0, totalTime: 0 },
         smartflow: { total: 0, completed: 0, totalTime: 0 },
-        storytelling: { total: 0, completed: 0, totalTime: 0 },
       };
 
       generations?.forEach((gen: any) => {
@@ -150,10 +147,6 @@ export function AdminPerformanceMetrics() {
             byType.smartflow.completed > 0
               ? byType.smartflow.totalTime / byType.smartflow.completed
               : 0,
-          storytelling:
-            byType.storytelling.completed > 0
-              ? byType.storytelling.totalTime / byType.storytelling.completed
-              : 0,
         },
         successRateByType: {
           doc2video:
@@ -167,10 +160,6 @@ export function AdminPerformanceMetrics() {
           smartflow:
             byType.smartflow.total > 0
               ? (byType.smartflow.completed / byType.smartflow.total) * 100
-              : 0,
-          storytelling:
-            byType.storytelling.total > 0
-              ? (byType.storytelling.completed / byType.storytelling.total) * 100
               : 0,
         },
         costPerOperation: {
@@ -238,11 +227,6 @@ export function AdminPerformanceMetrics() {
           type: "SmartFlow",
           avgTime: metrics.avgTimeByType.smartflow,
           successRate: metrics.successRateByType.smartflow,
-        },
-        {
-          type: "Storytelling",
-          avgTime: metrics.avgTimeByType.storytelling,
-          successRate: metrics.successRateByType.storytelling,
         },
       ]
     : [];

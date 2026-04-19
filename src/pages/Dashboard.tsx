@@ -33,7 +33,6 @@ const ANIMATION_DURATION_MS = 300;
 
 const TIPS = [
   "Use 'Presenter Focus' to control which subjects appear in your visuals",
-  "Try the Anime style for dynamic, expressive storytelling",
   "Short videos (< 1 min) work great for social media content",
   "Add 'Character Appearance' descriptions for consistent visuals",
   "The 'Stick Figure' style is perfect for educational explainers",
@@ -51,7 +50,7 @@ const GREETINGS = [
 
 const getProjectIcon = (projectType?: string | null) => {
   switch (normalizeProjectType(projectType)) {
-    case "storytelling": return Clapperboard;
+    
     case "smartflow":    return Wallpaper;
     case "cinematic":   return Film;
     default:            return Video;
@@ -60,7 +59,7 @@ const getProjectIcon = (projectType?: string | null) => {
 
 const getCreateMode = (projectType?: string | null) => {
   switch (normalizeProjectType(projectType)) {
-    case "storytelling": return "storytelling";
+    
     case "smartflow":    return "smartflow";
     case "cinematic":   return "cinematic";
     default:            return "doc2video";

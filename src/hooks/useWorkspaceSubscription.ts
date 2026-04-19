@@ -17,7 +17,7 @@ interface SubscriptionModalState {
 }
 
 interface ValidateOptions {
-  projectType: "doc2video" | "storytelling" | "smartflow" | "cinematic";
+  projectType: "doc2video" | "smartflow" | "cinematic";
   length: string;
   format: string;
   hasBrandMark?: boolean;

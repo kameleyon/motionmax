@@ -361,8 +361,7 @@ export default function Projects() {
   // Action handlers
   const getCreateMode = (projectType?: string | null) => {
     switch (projectType) {
-      case "storytelling":
-        return "storytelling";
+      
       case "smartflow":
         return "smartflow";
       case "cinematic":
@@ -565,12 +564,6 @@ export default function Projects() {
                     Doc2Video
                   </div>
                 </SelectItem>
-                <SelectItem value="storytelling">
-                  <div className="flex items-center gap-2">
-                    <Clapperboard className="h-4 w-4" />
-                    Storytelling
-                  </div>
-                </SelectItem>
                 <SelectItem value="smartflow">
                   <div className="flex items-center gap-2">
                     <Wallpaper className="h-4 w-4" />
@@ -743,9 +736,7 @@ export default function Projects() {
                       <TableCell className="py-2 px-1 sm:px-3 max-w-0" onClick={() => handleView(project)}>
                         <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
                           <div className="p-1 sm:p-2 rounded-lg bg-[hsl(var(--thumbnail-surface))] border border-border/20 shrink-0">
-                            {project.project_type === "storytelling" ? (
-                              <Clapperboard className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
-                            ) : project.project_type === "smartflow" || project.project_type === "smart-flow" ? (
+                            {project.project_type === "smartflow" || project.project_type === "smart-flow" ? (
                               <Wallpaper className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
                             ) : (
                               <Video className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
@@ -849,11 +840,6 @@ export default function Projects() {
                 <Video className="h-3.5 w-3.5" />
                 <span className="text-xs sm:text-sm">{projectsWithThumbnails.filter(p => p.project_type === "doc2video" || !p.project_type).length}</span>
                 <span className="hidden sm:inline text-xs sm:text-sm">explainers</span>
-              </div>
-              <div className="flex items-center gap-1 sm:gap-1.5" title="Stories">
-                <Clapperboard className="h-3.5 w-3.5" />
-                <span className="text-xs sm:text-sm">{projectsWithThumbnails.filter(p => p.project_type === "storytelling").length}</span>
-                <span className="hidden sm:inline text-xs sm:text-sm">stories</span>
               </div>
               <div className="flex items-center gap-1 sm:gap-1.5" title="SmartFlow">
                 <Wallpaper className="h-3.5 w-3.5" />

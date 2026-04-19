@@ -1,7 +1,7 @@
 import { Video, Headphones, Wallpaper, Film, LucideIcon } from "lucide-react";
 
 export interface Product {
-  id: "doc2video" | "storytelling" | "smartflow" | "cinematic";
+  id: "doc2video" | "smartflow" | "cinematic";
   label: string;
   description: string;
   icon: LucideIcon;
@@ -16,14 +16,6 @@ export const PRODUCTS: Product[] = [
     description: "Transform text scripts into videos",
     icon: Video,
     route: "/app/create?mode=doc2video",
-    enabled: true,
-  },
-  {
-    id: "storytelling",
-    label: "Visual Stories",
-    description: "Turn story ideas into visual narratives",
-    icon: Headphones,
-    route: "/app/create?mode=storytelling",
     enabled: true,
   },
   {

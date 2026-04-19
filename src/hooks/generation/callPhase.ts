@@ -13,7 +13,7 @@ async function deductCreditsUpfront(projectType: string, length: string): Promis
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) throw new Error("Not authenticated");
 
-  const type = (projectType || "doc2video") as "doc2video" | "storytelling" | "smartflow" | "cinematic";
+  const type = (projectType || "doc2video") as "doc2video" | "smartflow" | "cinematic";
   const amount = getCreditsRequired(type, length || "short");
 
   log.debug(`Deducting ${amount} credits upfront (${projectType}/${length})`);

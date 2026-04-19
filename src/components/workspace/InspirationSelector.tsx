@@ -32,7 +32,6 @@ const INSPIRATIONS: { id: InspirationStyle; label: string; description: string }
   { id: "nora-ephron", label: "Nora Ephron", description: "Warm, romantic wit" },
   { id: "david-mamet", label: "David Mamet", description: "Terse, rhythmic dialogue" },
   { id: "agatha-christie", label: "Agatha Christie", description: "Mystery and suspense" },
-  { id: "neil-gaiman", label: "Neil Gaiman", description: "Mythical storytelling" },
   { id: "maya-angelou", label: "Maya Angelou", description: "Poetic, uplifting prose" },
   { id: "ernest-hemingway", label: "Ernest Hemingway", description: "Sparse, powerful minimalism" },
 ];

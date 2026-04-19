@@ -114,7 +114,6 @@ const LENGTH_SECONDS: Record<string, number> = {
 /** Compute multiplier per product type */
 const PRODUCT_MULTIPLIER: Record<string, number> = {
   doc2video: 1,
-  storytelling: 1,
   smartflow: 0.5,
   cinematic: 5,
 };
@@ -124,7 +123,7 @@ const PRODUCT_MULTIPLIER: Record<string, number> = {
  * Formula: estimated_seconds x product_multiplier
  */
 export function getCreditsRequired(
-  projectType: "doc2video" | "storytelling" | "smartflow" | "cinematic",
+  projectType: "doc2video" | "smartflow" | "cinematic",
   length: string,
 ): number {
   const seconds = LENGTH_SECONDS[length] || LENGTH_SECONDS.short;
@@ -154,7 +153,7 @@ export interface ValidationResult {
 export function validateGenerationAccess(
   plan: PlanTier,
   creditsBalance: number,
-  projectType: "doc2video" | "storytelling" | "smartflow" | "cinematic",
+  projectType: "doc2video" | "smartflow" | "cinematic",
   length: string,
   format: string,
   hasBrandMark?: boolean,

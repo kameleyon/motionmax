@@ -24,7 +24,6 @@ const RENDERING_MESSAGES = [
   "Polishing every pixel to perfection...",
   "Adding the secret sauce to your scenes...",
   "Wrangling pixels into cinematic formation...",
-  "Sprinkling storytelling dust on your video...",
   "Convincing scenes to play nicely together...",
   "Assembling your masterpiece frame by frame...",
   "Giving your video its final coat of awesome...",

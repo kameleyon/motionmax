@@ -3,7 +3,7 @@ import { getCreditsRequired } from "@/lib/planLimits";
 import { motion } from "framer-motion";
 
 interface CreditCostDisplayProps {
-  projectType: "doc2video" | "storytelling" | "smartflow" | "cinematic";
+  projectType: "doc2video" | "smartflow" | "cinematic";
   length: string;
   creditsBalance: number;
 }

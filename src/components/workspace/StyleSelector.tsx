@@ -30,7 +30,7 @@ import cardboardPreview from "@/assets/styles/cardboard-preview.png";
 import babiePreview from "@/assets/styles/barbie-preview.png";
 
 /**
- * Main StyleSelector used by Doc2Video, Storytelling, and Cinematic workspaces.
+ * Main StyleSelector used by Doc2Video, and Cinematic workspaces.
  * Offers 13 styles: minimalist, doodle, stick, anime, realistic, 3d-pixar,
  * claymation, sketch (Papercut 3D), caricature, storybook, crayon, moody, custom.
  * Note: SmartFlowStyleSelector has a different set (10 styles, includes chalkboard,

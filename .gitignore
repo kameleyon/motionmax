@@ -1,5 +1,6 @@
-# Audit reports (internal, not for public repo)
-AUDIT_REPORT*.md
+# Markdown docs (internal — keep only README.md)
+*.md
+!README.md
 
 # Migration scripts (contain DB exports with sensitive data)
 scripts/export/
@@ -8,7 +9,6 @@ scripts/export-large-tables.mjs
 scripts/fix-sql-strings.mjs
 scripts/import-to-target.mjs
 scripts/migrate-storage.mjs
-supabase/MIGRATION_GUIDE.md
 
 # Environment files (never commit secrets)
 .env

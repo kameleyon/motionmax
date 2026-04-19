@@ -76,7 +76,7 @@ export function GenerationQueueStatus() {
 
   const getModeLabel = (projectType: string | null) => {
     switch (normalizeProjectType(projectType)) {
-      case "storytelling": return "Story";
+      
       case "smartflow": return "Infographic";
       case "cinematic": return "Cinematic";
       default: return "Video";
@@ -85,7 +85,7 @@ export function GenerationQueueStatus() {
 
   const getCreateMode = (projectType: string | null) => {
     switch (normalizeProjectType(projectType)) {
-      case "storytelling": return "storytelling";
+      
       case "smartflow": return "smartflow";
       case "cinematic": return "cinematic";
       default: return "doc2video";

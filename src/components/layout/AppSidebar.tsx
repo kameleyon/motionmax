@@ -352,7 +352,6 @@ export function AppSidebar() {
                   <div className="ml-5 mt-1 space-y-0.5 border-l border-border/30 pl-2">
                     {[
                       { mode: "doc2video", label: "Explainers", icon: Video },
-                      { mode: "storytelling", label: "Visual Stories", icon: Clapperboard },
                       { mode: "smartflow", label: "Smart Flow", icon: Wallpaper },
                     ].map(({ mode, label, icon: Icon }) => (
                       <button
@@ -456,9 +455,7 @@ export function AppSidebar() {
                   <div className="px-3 py-2 text-xs sm:text-sm text-foreground/50 dark:text-white/50">No projects yet</div>
                 ) : (
                   recentProjects.map((project) => {
-                    const projectMode = project.project_type === "storytelling" 
-                      ? "storytelling" 
-                      : project.project_type === "smartflow" || project.project_type === "smart-flow"
+                    const projectMode = project.project_type === "smartflow" || project.project_type === "smart-flow"
                         ? "smartflow"
                         : project.project_type === "cinematic"
                           ? "cinematic"
@@ -467,9 +464,7 @@ export function AppSidebar() {
                     const isActiveProject = currentProjectId === project.id;
                     
                     // Get appropriate icon for project type
-                    const ProjectIcon = project.project_type === "storytelling" 
-                      ? Clapperboard 
-                      : project.project_type === "smartflow" || project.project_type === "smart-flow"
+                    const ProjectIcon = project.project_type === "smartflow" || project.project_type === "smart-flow"
                         ? Wallpaper
                         : project.project_type === "cinematic"
                           ? Film

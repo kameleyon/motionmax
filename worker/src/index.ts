@@ -320,32 +320,32 @@ async function pollQueue() {
     const claimedJobs: any[] = [];
 
     // Claim export jobs first (priority)
-    for (let i = 0; i < availableSlots && claimedJobs.length < availableSlots; i++) {
-      const { data, error } = await supabase.rpc('claim_pending_job', {
-        p_task_type: 'export_video',
-        p_exclude_task_type: null,
-      });
-      if (error) {
-        console.error("[Worker] Claim export job error:", error.code, error.message);
-        break;
-      }
-      if (!data || data.length === 0) break; // No more export jobs
-      claimedJobs.push(data[0]);
+    const { data: exportData, error: exportError } = await supabase.rpc('claim_pending_job', {
+      p_task_type: 'export_video',
+      p_exclude_task_type: null,
+      p_limit: availableSlots,
+    });
+
+    if (exportError) {
+      console.error("[Worker] Claim export job error:", exportError.code, exportError.message);
+    } else if (exportData && exportData.length > 0) {
+      claimedJobs.push(...exportData);
     }
 
     // Claim generation jobs with remaining slots
     const remainingSlots = availableSlots - claimedJobs.length;
-    for (let i = 0; i < remainingSlots; i++) {
-      const { data, error } = await supabase.rpc('claim_pending_job', {
+    if (remainingSlots > 0) {
+      const { data: genData, error: genError } = await supabase.rpc('claim_pending_job', {
         p_task_type: null,
         p_exclude_task_type: 'export_video',
+        p_limit: remainingSlots,
       });
-      if (error) {
-        console.error("[Worker] Claim gen job error:", error.code, error.message);
-        break;
+
+      if (genError) {
+        console.error("[Worker] Claim gen job error:", genError.code, genError.message);
+      } else if (genData && genData.length > 0) {
+        claimedJobs.push(...genData);
       }
-      if (!data || data.length === 0) break; // No more generation jobs
-      claimedJobs.push(data[0]);
     }
 
     lastPollAt = new Date().toISOString();

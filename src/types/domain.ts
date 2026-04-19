@@ -7,7 +7,7 @@ export type VideoFormat = "landscape" | "portrait" | "square";
 
 export type VideoLength = "short" | "brief" | "presentation";
 
-export type ProductId = "doc2video" | "storytelling" | "smartflow" | "cinematic";
+export type ProductId = "doc2video" | "smartflow" | "cinematic";
 
 export type VisualStyle =
   | "minimalist" | "doodle" | "stick" | "anime" | "realistic"

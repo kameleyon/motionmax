@@ -71,7 +71,6 @@ export function GenerationResult({
   projectId,
   onScenesUpdate,
   brandMark,
-  projectType = "storytelling",
   captionStyle: initialCaptionStyle = "none",
   onCaptionStyleChange,
 }: GenerationResultProps) {

@@ -65,7 +65,7 @@ export interface GenerationState {
   costTracking?: CostTracking;
   phaseTimings?: PhaseTimings;
   totalTimeMs?: number;
-  projectType?: "doc2video" | "storytelling" | "smartflow" | "cinematic";
+  projectType?: "doc2video" | "smartflow" | "cinematic";
 }
 
 export interface GenerationParams {

@@ -41,7 +41,7 @@ interface ProjectsGridViewProps {
 
 const getProjectIcon = (projectType?: string) => {
   switch (normalizeProjectType(projectType)) {
-    case "storytelling": return Clapperboard;
+    
     case "smartflow":    return Wallpaper;
     case "cinematic":   return Film;
     default:            return Video;

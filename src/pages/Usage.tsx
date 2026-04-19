@@ -67,7 +67,7 @@ const planLimits: Record<string, { credits: number; label: string; color: string
 
 /** Compute the credit cost for a generation based on project type + length */
 function getCreditCostForGeneration(projectType: string | undefined, length: string | undefined): number {
-  const type = (projectType === "smart-flow" ? "smartflow" : projectType || "doc2video") as "doc2video" | "storytelling" | "smartflow" | "cinematic";
+  const type = (projectType === "smart-flow" ? "smartflow" : projectType || "doc2video") as "doc2video" | "smartflow" | "cinematic";
   return getCreditsRequired(type, length || "short");
 }
 
@@ -572,9 +572,7 @@ export default function Usage() {
                           const proj = activity.project as any;
                           const projectType = proj?.project_type;
                           const projectLength = proj?.length;
-                          const IconComponent = projectType === "storytelling" 
-                            ? Clapperboard 
-                            : projectType === "smartflow" || projectType === "smart-flow"
+                          const IconComponent = projectType === "smartflow" || projectType === "smart-flow"
                               ? Wallpaper
                               : Video;
                           

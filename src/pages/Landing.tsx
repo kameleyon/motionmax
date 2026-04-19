@@ -373,12 +373,10 @@ export default function Landing() {
               },
               {
                 title: "Visual Stories",
-                tag: "Storytelling",
                 description: "AI writes the script from your story idea, generates scene images, and narrates with matched emotion. Full creative control over tone and style.",
                 example: "\"A bedtime story about a brave robot\" → animated visual story",
                 color: "from-[#0D99A8]/20 to-[#0D99A8]/5",
                 borderColor: "hover:border-[#0D99A8]/40",
-                mode: "storytelling",
               },
               {
                 title: "Smart Flow",

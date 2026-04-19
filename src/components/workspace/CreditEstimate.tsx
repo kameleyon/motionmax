@@ -4,14 +4,14 @@ import { getCreditsRequired } from "@/lib/planLimits";
 import { cn } from "@/lib/utils";
 
 interface CreditEstimateProps {
-  projectType: "doc2video" | "storytelling" | "smartflow" | "cinematic";
+  projectType: "doc2video" | "smartflow" | "cinematic";
   length: string;
   creditsBalance: number;
 }
 
 function CreditEstimateInner({ projectType, length, creditsBalance }: CreditEstimateProps) {
   // Guard: smartflow/cinematic return early in getCreditsRequired (length not checked).
-  // For doc2video/storytelling, an empty/invalid length would throw — default to 0 so
+  // For doc2video, an empty/invalid length would throw — default to 0 so
   // the component renders safely while the user is still selecting options.
   let cost = 0;
   try {

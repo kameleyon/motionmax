@@ -3,17 +3,14 @@ import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Doc2VideoWorkspace } from "./Doc2VideoWorkspace";
 import type { WorkspaceHandle } from "./types";
-import { StorytellingWorkspace } from "./StorytellingWorkspace";
 import { SmartFlowWorkspace } from "./SmartFlowWorkspace";
 import { CinematicWorkspace } from "./CinematicWorkspace";
 import { WorkspaceErrorBoundary } from "./WorkspaceErrorBoundary";
 
-type WorkspaceMode = "doc2video" | "storytelling" | "smartflow" | "cinematic";
+type WorkspaceMode = "doc2video" | "smartflow" | "cinematic";
 
 const modeForProjectType = (projectType?: string | null): WorkspaceMode => {
   switch (projectType) {
-    case "storytelling":
-      return "storytelling";
     case "smartflow":
       return "smartflow";
     case "cinematic":
@@ -30,7 +27,6 @@ export const WorkspaceRouter = forwardRef<WorkspaceHandle>(function WorkspaceRou
   const projectId = searchParams.get("project");
 
   const doc2videoRef = useRef<WorkspaceHandle>(null);
-  const storytellingRef = useRef<WorkspaceHandle>(null);
   const smartflowRef = useRef<WorkspaceHandle>(null);
   const cinematicRef = useRef<WorkspaceHandle>(null);
 
@@ -65,9 +61,7 @@ export const WorkspaceRouter = forwardRef<WorkspaceHandle>(function WorkspaceRou
 
   useImperativeHandle(ref, () => ({
     resetWorkspace: () => {
-      if (mode === "storytelling") {
-        storytellingRef.current?.resetWorkspace();
-      } else if (mode === "smartflow") {
+      if (mode === "smartflow") {
         smartflowRef.current?.resetWorkspace();
       } else if (mode === "cinematic") {
         cinematicRef.current?.resetWorkspace();
@@ -91,10 +85,6 @@ export const WorkspaceRouter = forwardRef<WorkspaceHandle>(function WorkspaceRou
       setSearchParams(next, { replace: false });
     },
   }));
-
-  if (mode === "storytelling") {
-    return <WorkspaceErrorBoundary><StorytellingWorkspace ref={storytellingRef} projectId={projectId} /></WorkspaceErrorBoundary>;
-  }
 
   if (mode === "smartflow") {
     return <WorkspaceErrorBoundary><SmartFlowWorkspace ref={smartflowRef} projectId={projectId} /></WorkspaceErrorBoundary>;

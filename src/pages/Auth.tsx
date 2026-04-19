@@ -47,6 +47,33 @@ function AuthPageFooter() {
   );
 }
 
+// ── Referral capture helpers ──────────────────────────────────────
+// Persist the ?ref= code in sessionStorage so it survives a page-mode switch
+// (e.g. user lands on signup link, gets redirected to login first).
+const REF_SESSION_KEY = "mm_referral_code";
+
+function captureReferralCode(search: string): void {
+  const params = new URLSearchParams(search);
+  const ref = params.get("ref");
+  if (ref && /^MM-[A-Z0-9]{6}$/.test(ref)) {
+    sessionStorage.setItem(REF_SESSION_KEY, ref);
+  }
+}
+
+async function applyStoredReferralCode(userId: string): Promise<void> {
+  const code = sessionStorage.getItem(REF_SESSION_KEY);
+  if (!code) return;
+  sessionStorage.removeItem(REF_SESSION_KEY);
+  try {
+    await supabase.rpc("apply_referral_code", {
+      p_code: code,
+      p_referred_user_id: userId,
+    });
+  } catch {
+    // Non-critical — never let referral errors surface to the user
+  }
+}
+
 export default function Auth() {
   // Force dark mode on Auth page — always dark
   useForceDarkMode();
@@ -55,6 +82,12 @@ export default function Auth() {
   const searchParams = new URLSearchParams(location.search);
   const modeParam = searchParams.get("mode");
   const initialMode: AuthMode = modeParam === "signin" ? "login" : modeParam === "signup" ? "signup" : "login";
+
+  // Capture referral code from URL on first render
+  useEffect(() => {
+    captureReferralCode(location.search);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState("");
@@ -148,12 +181,17 @@ export default function Auth() {
           toast.error("Terms required", { description: "You must accept the Terms of Service and Privacy Policy to create an account." });
           return;
         }
-        const { error } = await signUp(email, password);
+        const { data: signUpData, error } = await signUp(email, password);
         if (error) {
           const msg = getAuthErrorMessage(error.message);
           setErrors({ email: msg });
           toast.error("Sign up failed", { description: msg });
           return;
+        }
+        // Apply referral code if one is stored — fire-and-forget
+        const newUserId = (signUpData as { user?: { id?: string } } | null)?.user?.id;
+        if (newUserId) {
+          applyStoredReferralCode(newUserId);
         }
         // Show persistent confirmation screen instead of just a dismissible toast
         setShowEmailSent(true);

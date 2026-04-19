@@ -3,12 +3,13 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { Lightbulb, Video, Film, Wallpaper, AlertCircle, FolderOpen, Sparkles } from "lucide-react";
+import { Lightbulb, Video, Film, Wallpaper, AlertCircle, FolderOpen, Sparkles, Gift, Copy, Check } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
+import { useReferral } from "@/hooks/useReferral";
 import { Button } from "@/components/ui/button";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { DashboardQuickActions } from "@/components/workspace/DashboardQuickActions";
@@ -69,8 +70,29 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { plan } = useSubscription();
+  const { referralCode, referralLink, totalReferrals, totalCreditsEarned } = useReferral();
   const [currentTip, setCurrentTip] = useState(0);
   const [greetingIndex] = useState(() => Math.floor(Math.random() * GREETINGS.length));
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const copyReferralLink = () => {
+    navigator.clipboard.writeText(referralLink).then(() => {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    }).catch(() => {
+      // Fallback for browsers that block clipboard API
+      const el = document.createElement("textarea");
+      el.value = referralLink;
+      el.style.position = "fixed";
+      el.style.opacity = "0";
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    });
+  };
 
   // Rotate tips — pauses when tab is backgrounded to avoid wasted background work
   useEffect(() => {
@@ -258,6 +280,48 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+
+          {/* Referral Card — only shown once the code has been generated */}
+          {referralCode && (
+            <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm p-5 shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg bg-primary/10 shrink-0">
+                  <Gift className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0 space-y-3">
+                  <div>
+                    <h3 className="type-h4 text-foreground">Refer a friend</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Your friend gets 75 credits · You get 150 credits
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 min-w-0 truncate rounded-lg bg-muted/50 border border-border/50 px-3 py-2 text-xs text-foreground font-mono">
+                      {referralLink}
+                    </code>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 gap-1.5"
+                      onClick={copyReferralLink}
+                      aria-label="Copy referral link"
+                    >
+                      {linkCopied ? (
+                        <><Check className="h-3.5 w-3.5 text-green-500" /><span className="text-xs">Copied</span></>
+                      ) : (
+                        <><Copy className="h-3.5 w-3.5" /><span className="text-xs">Copy</span></>
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {totalReferrals === 0
+                      ? "No referrals yet — share your link to earn credits"
+                      : `${totalReferrals} ${totalReferrals === 1 ? "friend" : "friends"} referred · ${totalCreditsEarned} credits earned`}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Low Credit Warning */}
           <LowCreditWarning balance={creditsBalance} />

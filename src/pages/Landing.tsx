@@ -239,19 +239,22 @@ export default function Landing() {
                 Watch Demo
               </Button>
             </div>
-            <p className="mt-4 text-sm text-white/70">
-              Free to start · No credit card required
+
+            {/* Trust / urgency row */}
+            <p className="mt-4 text-sm text-white/60">
+              Free to start&nbsp;·&nbsp;No credit card required&nbsp;·&nbsp;Used by 2,400+ marketers
             </p>
 
-            {/* Social proof */}
+            {/* Social proof avatars */}
             <div className="mt-8 flex items-center justify-center gap-3">
               <div className="flex -space-x-2">
                 {[1,2,3,4,5].map(i => (
                   <div key={i} className="h-7 w-7 rounded-full border-2 border-background bg-gradient-to-br from-primary/60 to-primary/30" />
                 ))}
               </div>
+              {/* TODO: replace 2,400+ with a real figure from your analytics/DB */}
               <p className="text-sm text-white/70">
-                Join creators already making videos
+                Join <span className="font-semibold text-white/90">2,400+</span> creators already making videos
               </p>
             </div>
           </motion.div>

@@ -426,6 +426,18 @@ ${researchBrief}
     );
   }
 
+  // ── Fire-and-forget: award referral credits on first generation ───
+  // Idempotent on the DB side — safe to call on every generation.
+  // We deliberately do NOT await this; a referral failure must never
+  // block or fail the generation itself.
+  if (userId) {
+    void supabase
+      .rpc("award_referral_credits", { p_referred_user_id: userId })
+      .then(({ error }) => {
+        if (error) console.warn(`[GenerateVideo] award_referral_credits failed for ${userId}:`, error.message);
+      });
+  }
+
   // ── Step 7: Write result to job row ───────────────────────────────
   const result = {
     success: true,

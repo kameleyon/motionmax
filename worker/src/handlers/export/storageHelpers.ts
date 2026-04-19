@@ -59,12 +59,27 @@ async function refreshSignedUrl(url: string): Promise<string> {
 }
 
 /** Stream a URL directly to disk without buffering in Node.js heap.
- *  Automatically refreshes expired Supabase signed URLs before downloading. */
+ *  Refreshes expired signed URLs. Falls back to a signed URL when a
+ *  public-bucket URL returns 400/403 (bucket switched to private). */
 export async function streamToFile(url: string, destPath: string): Promise<void> {
-  // Refresh signed URLs to avoid expired token errors
   const freshUrl = await refreshSignedUrl(url);
 
-  const response = await fetch(freshUrl);
+  let response = await fetch(freshUrl);
+
+  // Public URL returned 400/403 — bucket may have been made private.
+  // Re-fetch using a signed URL so the worker never gets stuck.
+  if ((response.status === 400 || response.status === 403) && url.includes("/object/public/")) {
+    const publicMatch = url.match(/\/object\/public\/([^/]+)\/(.+)/);
+    if (publicMatch) {
+      const [, bucket, path] = publicMatch;
+      const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+      if (!error && data?.signedUrl) {
+        console.warn(`[StorageHelpers] Public URL returned ${response.status} for ${bucket}/${path} — retrying with signed URL`);
+        response = await fetch(data.signedUrl);
+      }
+    }
+  }
+
   if (!response.ok) throw new Error(`Download failed ${url}: ${response.statusText}`);
   if (!response.body) throw new Error(`No response body for ${url}`);
   const dest = fs.createWriteStream(destPath);

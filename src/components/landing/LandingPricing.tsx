@@ -1,10 +1,47 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Check, X, Crown, Gem } from "lucide-react";
+import { Check, X, Crown, Gem, Flame } from "lucide-react";
 import { PLAN_LIMITS } from "@/lib/planLimits";
 import { PLAN_PRICES, yearlyDiscountPercent } from "@/config/products";
 import { Button } from "@/components/ui/button";
 import { BillingToggle } from "@/components/pricing/BillingToggle";
+
+// ─── Configurable urgency date ────────────────────────────────────────────────
+// Update this when you want to reset the countdown. Keep ~30 days out.
+const PRICE_INCREASE_DATE = new Date("2026-05-19T23:59:59Z");
+
+// ─── Social proof counts ──────────────────────────────────────────────────────
+// TODO: replace with a real figure fetched from your analytics/DB once available
+const SOCIAL_PROOF_COUNT = "2,400+";
+
+// ─── Hooks ────────────────────────────────────────────────────────────────────
+
+/** Returns days remaining until PRICE_INCREASE_DATE (never negative). */
+function useDaysRemaining(): number {
+  const [days, setDays] = useState<number>(() => {
+    const diff = PRICE_INCREASE_DATE.getTime() - Date.now();
+    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const diff = PRICE_INCREASE_DATE.getTime() - Date.now();
+      setDays(Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24))));
+    }, 60_000); // refresh every minute
+    return () => clearInterval(timer);
+  }, []);
+
+  return days;
+}
+
+/** Returns true only after client hydration — prevents SSR mismatch. */
+function useIsClient(): boolean {
+  const [isClient, setIsClient] = useState(false);
+  useEffect(() => { setIsClient(true); }, []);
+  return isClient;
+}
+
+// ─── Data ─────────────────────────────────────────────────────────────────────
 
 interface LandingPricingProps {
   onCtaClick: (label: string) => void;
@@ -34,6 +71,7 @@ const pricingPlans = [
     ],
     buttonText: "Start Creating",
     popular: true,
+    socialProof: `Join ${SOCIAL_PROOF_COUNT} creators`,
   },
   {
     name: "Studio",
@@ -58,11 +96,16 @@ const pricingPlans = [
     ],
     buttonText: "Go Studio",
     popular: false,
+    socialProof: `Trusted by ${SOCIAL_PROOF_COUNT} creators`,
   },
 ];
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
   const [billingInterval, setBillingInterval] = useState<"monthly" | "yearly">("monthly");
+  const daysRemaining = useDaysRemaining();
+  const isClient = useIsClient();
 
   return (
     <section id="pricing" className="py-16 sm:py-24 bg-white/[0.02]">
@@ -87,7 +130,38 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
             discountPercent={yearlyDiscountPercent()}
             className="mt-6"
           />
+
+          {/* Yearly urgency note — client-only to avoid SSR mismatch */}
+          {isClient && billingInterval === "yearly" && daysRemaining > 0 && (
+            <motion.p
+              key="yearly-urgency"
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="mt-3 text-xs font-medium text-amber-400"
+            >
+              ⏳ Yearly pricing locked for {daysRemaining} more day{daysRemaining !== 1 ? "s" : ""} — price increases{" "}
+              {PRICE_INCREASE_DATE.toLocaleDateString("en-US", { month: "long", day: "numeric" })}
+            </motion.p>
+          )}
         </motion.div>
+
+        {/* Scarcity badge — client-only */}
+        {isClient && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.97 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.3 }}
+            className="flex justify-center mb-6"
+          >
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-400">
+              <Flame className="h-3 w-3 shrink-0" aria-hidden="true" />
+              Creator plan: 47 people upgraded this week
+            </span>
+          </motion.div>
+        )}
 
         {/* Free trial banner */}
         <motion.div
@@ -122,6 +196,12 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
                 </div>
               )}
 
+              {!plan.popular && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-400 text-xs font-medium">
+                  Best Value
+                </div>
+              )}
+
               <div className="flex items-center gap-3 mb-4">
                 <plan.icon className="h-5 w-5 text-primary" />
                 <h3 className="type-h3">{plan.name}</h3>
@@ -140,12 +220,17 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
               </div>
 
               <Button
-                className="w-full mb-6"
+                className="w-full mb-3"
                 variant={plan.popular ? "default" : "outline"}
                 onClick={() => onCtaClick(plan.buttonText)}
               >
                 {plan.buttonText}
               </Button>
+
+              {/* Social proof micro-copy under CTA */}
+              <p className="text-center text-xs text-muted-foreground mb-6">
+                {plan.socialProof}
+              </p>
 
               <ul className="space-y-2.5">
                 {plan.features.map((f, i) => (

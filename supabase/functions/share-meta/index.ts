@@ -81,6 +81,7 @@ export async function handler(req: Request): Promise<Response> {
     let appUrl = "https://motionmax.io";
 
     let scenes: unknown = undefined;
+    let videoUrl: string | null = null;
 
     if (token) {
       // Token-based share (matches /share/:token route)
@@ -98,6 +99,10 @@ export async function handler(req: Request): Promise<Response> {
       const projectTitle = sharedAny?.project?.title as string | undefined;
       title = projectTitle ? `${projectTitle}` : "MotionMax Video";
       scenes = sharedAny?.scenes;
+      // Prefer the stitched project-level video URL returned by get-shared-project
+      if (typeof sharedAny?.videoUrl === "string" && sharedAny.videoUrl.startsWith("http")) {
+        videoUrl = sharedAny.videoUrl;
+      }
       appUrl = `https://motionmax.io/share/${token}`;
     } else if (generationId) {
       // Fallback: generation-id based (kept for testing)
@@ -134,7 +139,7 @@ export async function handler(req: Request): Promise<Response> {
       }
     }
 
-    // --- EXTRACT THUMBNAIL & DESCRIPTION FROM SCENES ---
+    // --- EXTRACT THUMBNAIL, VIDEO URL & DESCRIPTION FROM SCENES ---
     if (Array.isArray(scenes) && scenes.length > 0) {
       console.log(`[Share-Meta] ${scenes.length} scenes, first keys: ${Object.keys((scenes[0] as any) ?? {}).join(", ")}`);
 
@@ -149,6 +154,16 @@ export async function handler(req: Request): Promise<Response> {
           const img = scene.imageUrls[0];
           if (typeof img === "string" && img.startsWith("http")) {
             rawUrl = img;
+            break;
+          }
+        }
+      }
+
+      // Fallback: if no project-level videoUrl was set above, use the first scene videoUrl
+      if (!videoUrl) {
+        for (const scene of scenes as any[]) {
+          if (typeof scene?.videoUrl === "string" && scene.videoUrl.startsWith("http")) {
+            videoUrl = scene.videoUrl;
             break;
           }
         }
@@ -186,6 +201,7 @@ export async function handler(req: Request): Promise<Response> {
     const safeImageUrl = escapeHtml(imageUrl);
     const safeAppUrl = escapeHtml(appUrl);
     const safeCacheBustedImageUrl = escapeHtml(cacheBustedImageUrl);
+    const safeVideoUrl = videoUrl ? escapeHtml(videoUrl) : null;
 
     console.log(`[Share-Meta] Resolved: Title="${title}" | Image="${imageUrl}" | AppUrl="${appUrl}" | isBot=${isBotRequest}`);
 
@@ -202,7 +218,7 @@ export async function handler(req: Request): Promise<Response> {
     <title>${escapeHtml(title)} | MotionMax</title>
     <meta name="description" content="${escapeHtml(description)}">
 
-    <meta property="og:type" content="video.other">
+    <meta property="og:type" content="${safeVideoUrl ? "video.other" : "website"}">
     <meta property="og:url" content="${safeAppUrl}">
     <meta property="og:title" content="${escapeHtml(title)} | MotionMax">
     <meta property="og:description" content="${escapeHtml(description)}">
@@ -211,11 +227,11 @@ export async function handler(req: Request): Promise<Response> {
     <meta property="og:image:height" content="630">
     <meta property="og:image:alt" content="${escapeHtml(title)} - Created with MotionMax.io">
     <meta property="og:site_name" content="MotionMax - AI Video Generator">
-    <meta property="og:video" content="${safeAppUrl}">
-    <meta property="og:video:secure_url" content="${safeAppUrl}">
-    <meta property="og:video:type" content="text/html">
-    <meta property="og:video:width" content="1280">
-    <meta property="og:video:height" content="720">
+    ${safeVideoUrl ? `<meta property="og:video:url" content="${safeVideoUrl}">
+    ${safeVideoUrl.startsWith("https") ? `<meta property="og:video:secure_url" content="${safeVideoUrl}">` : ""}
+    <meta property="og:video:type" content="video/mp4">
+    <meta property="og:video:width" content="1080">
+    <meta property="og:video:height" content="1920">` : ""}
 
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="${escapeHtml(title)}">
@@ -246,6 +262,7 @@ export async function handler(req: Request): Promise<Response> {
            <p><strong>Image URL:</strong> <code>${safeImageUrl}</code></p>
            <p><strong>Image URL (busted):</strong> <code>${safeCacheBustedImageUrl}</code></p>
            <p><strong>App URL:</strong> <code>${safeAppUrl}</code></p>
+           <p><strong>Video URL:</strong> <code>${safeVideoUrl ?? "(none)"}</code></p>
            <p><strong>Is Bot:</strong> <code>${isBotRequest}</code></p>
            <p><strong>User-Agent:</strong> <code>${escapeHtml(userAgent.substring(0, 200))}</code></p>
          </div>

@@ -23,7 +23,7 @@ const log = createScopedLogger("AdminQueue");
 
 interface QueueJob {
   id: string;
-  status: "pending" | "processing" | "complete" | "error";
+  status: "pending" | "processing" | "completed" | "failed";
   phase: string;
   progress: number;
   created_at: string;
@@ -84,21 +84,21 @@ export function AdminQueueMonitor() {
         const { count: completedCount } = await supabase
           .from("video_generation_jobs")
           .select("*", { count: "exact", head: true })
-          .eq("status", "complete")
+          .eq("status", "completed")
           .gte("completed_at", yesterday.toISOString());
 
         // Get failed jobs in last 24h
         const { count: failedCount } = await supabase
           .from("video_generation_jobs")
           .select("*", { count: "exact", head: true })
-          .eq("status", "error")
+          .eq("status", "failed")
           .gte("completed_at", yesterday.toISOString());
 
         // Get recent completed jobs to calculate avg processing time
         const { data: recentCompleted } = await supabase
           .from("video_generation_jobs")
           .select("created_at, completed_at")
-          .eq("status", "complete")
+          .eq("status", "completed")
           .not("completed_at", "is", null)
           .gte("completed_at", yesterday.toISOString())
           .limit(100);
@@ -183,9 +183,9 @@ export function AdminQueueMonitor() {
         return <Clock className="h-4 w-4" />;
       case "processing":
         return <Play className="h-4 w-4" />;
-      case "complete":
+      case "completed":
         return <CheckCircle className="h-4 w-4" />;
-      case "error":
+      case "failed":
         return <XCircle className="h-4 w-4" />;
       default:
         return <Pause className="h-4 w-4" />;
@@ -198,9 +198,9 @@ export function AdminQueueMonitor() {
         return "bg-muted text-muted-foreground";
       case "processing":
         return "bg-primary/10 text-primary";
-      case "complete":
+      case "completed":
         return "bg-primary/10 text-primary";
-      case "error":
+      case "failed":
         return "bg-destructive/10 text-destructive";
       default:
         return "bg-muted text-muted-foreground";

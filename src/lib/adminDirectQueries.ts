@@ -139,13 +139,20 @@ export async function fetchSubscribersList(params: { page?: number; limit?: numb
     { data: generations },
     { data: flags },
     { data: costsData },
+    { data: emailRows },
   ] = await Promise.all([
     supabase.from("subscriptions").select("*").in("user_id", userIds),
     supabase.from("user_credits").select("*").in("user_id", userIds),
     supabase.from("generations").select("user_id").in("user_id", userIds),
     supabase.from("user_flags").select("*").is("resolved_at", null).in("user_id", userIds),
     supabase.from("generation_costs").select("user_id, openrouter_cost, replicate_cost, hypereal_cost, google_tts_cost, total_cost").in("user_id", userIds),
+    supabase.rpc("admin_get_user_emails", { user_ids: userIds }),
   ]);
+
+  const emailMap: Record<string, string> = {};
+  (emailRows as { user_id: string; email: string }[] | null)?.forEach(r => {
+    emailMap[r.user_id] = r.email;
+  });
 
   const genCounts: Record<string, number> = {};
   generations?.forEach(g => { genCounts[g.user_id] = (genCounts[g.user_id] || 0) + 1; });
@@ -168,7 +175,7 @@ export async function fetchSubscribersList(params: { page?: number; limit?: numb
     const uc = credits?.find(c => c.user_id === p.user_id);
     return {
       id: p.user_id,
-      email: p.display_name || p.user_id.slice(0, 8),
+      email: emailMap[p.user_id] || p.user_id.slice(0, 8),
       displayName: p.display_name || p.user_id.slice(0, 8),
       avatarUrl: p.avatar_url,
       createdAt: p.created_at,
@@ -383,10 +390,13 @@ export async function fetchUserDetails(params: { userId?: string; targetUserId?:
   const isSuspended = activeFlags.some(f => f.flag_type === "suspended");
   const userStatus = isBanned ? "banned" : isSuspended ? "suspended" : "active";
 
+  const { data: emailRows2 } = await supabase.rpc("admin_get_user_emails", { user_ids: [uid] });
+  const userEmail = (emailRows2 as { user_id: string; email: string }[] | null)?.[0]?.email || uid.slice(0, 8);
+
   return {
     user: {
       id: uid,
-      email: profile?.display_name || uid.slice(0, 8),
+      email: userEmail,
       created_at: profile?.created_at || "",
       last_sign_in_at: null,
       email_confirmed_at: profile?.created_at || null,

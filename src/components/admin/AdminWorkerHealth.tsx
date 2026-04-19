@@ -48,21 +48,21 @@ export function AdminWorkerHealth() {
         const { count: completedCount } = await supabase
           .from("video_generation_jobs")
           .select("*", { count: "exact", head: true })
-          .eq("status", "complete")
+          .eq("status", "completed")
           .gte("completed_at", yesterday.toISOString());
 
         // Get failed jobs in last 24h
         const { count: failedCount } = await supabase
           .from("video_generation_jobs")
           .select("*", { count: "exact", head: true })
-          .eq("status", "error")
+          .eq("status", "failed")
           .gte("completed_at", yesterday.toISOString());
 
         // Get recent completed jobs for avg duration
         const { data: recentJobs } = await supabase
           .from("video_generation_jobs")
           .select("created_at, completed_at")
-          .eq("status", "complete")
+          .eq("status", "completed")
           .not("completed_at", "is", null)
           .gte("completed_at", yesterday.toISOString())
           .limit(100);

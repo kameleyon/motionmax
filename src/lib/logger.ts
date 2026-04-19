@@ -1,66 +1,37 @@
 /**
- * Frontend structured logger.
+ * Scoped frontend logger — thin adapter over structuredLogger.
  *
- * - Development: all levels printed to console
- * - Production: only warn + error (debug/info suppressed)
+ * Both APIs now flow through the same JSON pipeline and Sentry error sink.
+ * Prefer `slog` directly for new code; this module stays for backward compat.
  *
  * Usage:
- *   import { logger } from "@/lib/logger";
- *   logger.debug("Pipeline started", { projectType, length });
- *   logger.warn("Rate limited", { scene: 3 });
- *   logger.error("Generation failed", error);
+ *   import { createScopedLogger } from "@/lib/logger";
+ *   const log = createScopedLogger("Pipeline");
+ *   log.debug("Scene rendered", { sceneIndex: 2 });
+ *   log.error("Generation failed", err);
  */
 
-type LogLevel = "debug" | "info" | "warn" | "error";
+import { slog } from "@/lib/structuredLogger";
 
-const IS_DEV = import.meta.env.DEV;
-
-/** Minimum level printed in each environment */
-const MIN_LEVEL: Record<string, number> = {
-  debug: 0,
-  info: 1,
-  warn: 2,
-  error: 3,
-};
-
-const PROD_MIN_LEVEL = MIN_LEVEL.warn; // 2 → only warn + error in prod
-
-function shouldLog(level: LogLevel): boolean {
-  if (IS_DEV) return true;
-  return MIN_LEVEL[level] >= PROD_MIN_LEVEL;
-}
-
-function createLogger(prefix?: string) {
-  const tag = prefix ? `[${prefix}]` : "";
+function createLogger(scope?: string) {
+  const ctx = scope ? { scope } : undefined;
 
   return {
-    debug(...args: unknown[]): void {
-      if (!shouldLog("debug")) return;
-      console.log(tag, ...args);
+    debug(msg: string, ...args: unknown[]): void {
+      slog.debug(msg, args.length > 0 ? { ...ctx, args } : ctx);
     },
-
-    info(...args: unknown[]): void {
-      if (!shouldLog("info")) return;
-      console.log(tag, ...args);
+    info(msg: string, ...args: unknown[]): void {
+      slog.info(msg, args.length > 0 ? { ...ctx, args } : ctx);
     },
-
-    warn(...args: unknown[]): void {
-      if (!shouldLog("warn")) return;
-      console.warn(tag, ...args);
+    warn(msg: string, ...args: unknown[]): void {
+      const err = args.find((a): a is Error => a instanceof Error);
+      const rest = args.filter((a) => !(a instanceof Error));
+      slog.warn(msg, rest.length > 0 ? { ...ctx, args: rest } : ctx, err);
     },
-
-    error(...args: unknown[]): void {
-      if (!shouldLog("error")) return;
-      console.error(tag, ...args);
-      // Bridge to Sentry in production
-      if (!IS_DEV) {
-        import("@sentry/react").then((Sentry) => {
-          Sentry.captureException(
-            args[0] instanceof Error ? args[0] : new Error(String(args[0])),
-            { tags: { scope: prefix || "app" }, extra: { args: args.slice(1) } }
-          );
-        }).catch(() => {});
-      }
+    error(msg: string, ...args: unknown[]): void {
+      const err = args.find((a): a is Error => a instanceof Error);
+      const rest = args.filter((a) => !(a instanceof Error));
+      slog.error(msg, rest.length > 0 ? { ...ctx, args: rest } : ctx, err);
     },
   };
 }

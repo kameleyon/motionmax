@@ -47,6 +47,8 @@ serve(async (req) => {
     const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
     if (!webhookSecret) {
       logStep("ERROR", { message: "Webhook secret not configured" });
+      Sentry.captureException(new Error("STRIPE_WEBHOOK_SECRET is not configured"));
+      await Sentry.flush(2000);
       return new Response(JSON.stringify({ error: "Webhook secret not configured" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 500,
@@ -68,6 +70,8 @@ serve(async (req) => {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       logStep("ERROR", { message: `Signature verification failed: ${errorMessage}` });
+      Sentry.captureMessage(`Stripe signature verification failed: ${errorMessage}`, { level: "warning" });
+      await Sentry.flush(2000);
       return new Response(JSON.stringify({ error: "Signature verification failed" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 400,

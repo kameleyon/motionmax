@@ -75,7 +75,7 @@ function buildHealthResponse(vitals: WorkerVitals) {
   };
 }
 
-function buildMetricsResponse(vitals: WorkerVitals) {
+function buildMetricsJson(vitals: WorkerVitals) {
   const mem = process.memoryUsage();
   const cpu = process.cpuUsage();
   return {
@@ -102,6 +102,39 @@ function buildMetricsResponse(vitals: WorkerVitals) {
       systemMicroseconds: cpu.system,
     },
   };
+}
+
+/** Prometheus text exposition format (text/plain; version=0.0.4). */
+function buildMetricsPrometheus(vitals: WorkerVitals): string {
+  const mem = process.memoryUsage();
+  const cpu = process.cpuUsage();
+  const lines: string[] = [];
+
+  const gauge = (name: string, help: string, value: number) => {
+    lines.push(`# HELP ${name} ${help}`);
+    lines.push(`# TYPE ${name} gauge`);
+    lines.push(`${name} ${value}`);
+  };
+  const counter = (name: string, help: string, value: number) => {
+    lines.push(`# HELP ${name} ${help}`);
+    lines.push(`# TYPE ${name} counter`);
+    lines.push(`${name} ${value}`);
+  };
+
+  gauge("motionmax_worker_uptime_seconds", "Worker uptime in seconds", vitals.uptimeSeconds);
+  gauge("motionmax_worker_jobs_active", "Jobs currently being processed", vitals.activeJobs);
+  gauge("motionmax_worker_jobs_max_concurrent", "Maximum concurrent jobs", vitals.maxConcurrentJobs);
+  gauge("motionmax_worker_jobs_available_slots", "Available job slots", vitals.maxConcurrentJobs - vitals.activeJobs);
+  gauge("motionmax_worker_accepting", "Whether the worker is accepting jobs (1=yes, 0=no)", vitals.accepting ? 1 : 0);
+  counter("motionmax_worker_jobs_processed_total", "Total jobs processed since startup", vitals.totalJobsProcessed);
+  counter("motionmax_worker_jobs_failed_total", "Total jobs failed since startup", vitals.totalJobsFailed);
+  gauge("motionmax_worker_memory_rss_bytes", "Resident set size in bytes", mem.rss);
+  gauge("motionmax_worker_memory_heap_used_bytes", "V8 heap used in bytes", mem.heapUsed);
+  gauge("motionmax_worker_memory_heap_total_bytes", "V8 heap total in bytes", mem.heapTotal);
+  counter("motionmax_worker_cpu_user_microseconds_total", "CPU user time in microseconds", cpu.user);
+  counter("motionmax_worker_cpu_system_microseconds_total", "CPU system time in microseconds", cpu.system);
+
+  return lines.join("\n") + "\n";
 }
 
 async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
@@ -208,9 +241,19 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     }
 
     case "/metrics": {
-      const body = buildMetricsResponse(vitals);
-      res.writeHead(200);
-      res.end(JSON.stringify(body));
+      const accept = req.headers.accept ?? "";
+      const wantsPrometheus =
+        accept.includes("text/plain") ||
+        accept.includes("application/openmetrics-text") ||
+        req.url?.includes("format=prometheus");
+      if (wantsPrometheus) {
+        res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+        res.writeHead(200);
+        res.end(buildMetricsPrometheus(vitals));
+      } else {
+        res.writeHead(200);
+        res.end(JSON.stringify(buildMetricsJson(vitals)));
+      }
       break;
     }
 

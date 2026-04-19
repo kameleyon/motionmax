@@ -10,6 +10,7 @@ import { AdminRoute } from "@/components/AdminRoute";
 import { AppShell } from "@/components/layout/AppShell";
 import { lazy, Suspense } from "react";
 import { GlobalErrorBoundary } from "./components/GlobalErrorBoundary";
+import { RouteErrorBoundary } from "./components/RouteErrorBoundary";
 import { CookieConsent } from "./components/CookieConsent";
 
 // Route-level code splitting — each page loads only when visited
@@ -71,17 +72,17 @@ const App = () => (
 
             {/* Authenticated routes using shared AppShell (SidebarProvider + AppSidebar) */}
             <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
-              <Route path="/app" element={<Dashboard />} />
-              <Route path="/app/create" element={<CreateWorkspace />} />
+              <Route path="/app" element={<RouteErrorBoundary routeName="dashboard"><Dashboard /></RouteErrorBoundary>} />
+              <Route path="/app/create" element={<RouteErrorBoundary routeName="create"><CreateWorkspace /></RouteErrorBoundary>} />
               <Route path="/pricing" element={<Pricing />} />
             </Route>
 
             {/* Pages that manage their own SidebarProvider with sidebar state */}
             <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             <Route path="/usage" element={<ProtectedRoute><Usage /></ProtectedRoute>} />
-            <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
-            <Route path="/voice-lab" element={<ProtectedRoute><VoiceLab /></ProtectedRoute>} />
-            <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
+            <Route path="/projects" element={<ProtectedRoute><RouteErrorBoundary routeName="projects"><Projects /></RouteErrorBoundary></ProtectedRoute>} />
+            <Route path="/voice-lab" element={<ProtectedRoute><RouteErrorBoundary routeName="voice-lab"><VoiceLab /></RouteErrorBoundary></ProtectedRoute>} />
+            <Route path="/admin" element={<AdminRoute><RouteErrorBoundary routeName="admin"><Admin /></RouteErrorBoundary></AdminRoute>} />
 
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="/terms" element={<Terms />} />

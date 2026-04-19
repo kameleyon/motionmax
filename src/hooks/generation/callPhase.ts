@@ -25,8 +25,26 @@ async function deductCreditsUpfront(projectType: string, length: string): Promis
     p_description: `${projectType} video generation (${length})`,
   });
 
-  if (error || !success) {
-    throw new Error("Insufficient credits. Please purchase more credits to continue.");
+  // DB error (network, RLS, missing function) — surface the real reason
+  if (error) {
+    log.error("deduct_credits_securely RPC failed", { error, amount, userId: session.user.id });
+    throw new Error(`Credit deduction failed: ${error.message || "database error"}. Please try again or contact support.`);
+  }
+
+  // success === false means balance < amount. Fetch real balance so the user
+  // sees exactly how many credits they have vs need.
+  if (!success) {
+    const { data: creditRow } = await supabase
+      .from("user_credits")
+      .select("credits_balance")
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+    const balance = creditRow?.credits_balance ?? 0;
+    log.warn("Insufficient credits", { required: amount, balance, userId: session.user.id });
+    throw new Error(
+      `Insufficient credits: you have ${balance} but this ${projectType} (${length}) requires ${amount}. ` +
+      `Please purchase more credits or choose a shorter length.`,
+    );
   }
 
   log.debug(`Credits deducted: ${amount}`);

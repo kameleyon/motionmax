@@ -68,3 +68,6 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 
 /** Validated Supabase URL — always points to the correct project. */
 export const WORKER_SUPABASE_URL = supabaseUrl;
+
+/** Resolved service_role key — always belongs to the correct project. */
+export const WORKER_SUPABASE_KEY = supabaseKey;

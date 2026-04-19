@@ -511,6 +511,7 @@ export default function Projects() {
 
   return (
     <SidebarProvider defaultOpen={sidebarOpen} onOpenChange={setSidebarOpen}>
+      <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
       <div className="min-h-screen flex w-full bg-background">
         <AppSidebar />
 
@@ -793,7 +794,7 @@ export default function Projects() {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               onClick={() => handleDelete(project)}
-                              className="text-muted-foreground focus:text-foreground"
+                              className="text-destructive focus:text-destructive"
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
                               Delete
@@ -867,7 +868,7 @@ export default function Projects() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDelete}
-              className="bg-muted text-foreground hover:bg-muted/80"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Delete
             </AlertDialogAction>
@@ -888,7 +889,7 @@ export default function Projects() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmBulkDelete}
-              className="bg-muted text-foreground hover:bg-muted/80"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Delete All
             </AlertDialogAction>

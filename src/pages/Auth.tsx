@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { Helmet } from "react-helmet-async";
 import { motion } from "framer-motion";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Mail, Lock, ArrowRight, Eye, EyeOff, Loader2, CheckCircle2 } from "lucide-react";
@@ -211,9 +212,11 @@ export default function Auth() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
+      <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-2 focus:bg-background focus:text-foreground">Skip to content</a>
       <AuthPageHeader onLogoClick={() => navigate("/")} />
 
-      <main className="flex flex-1 items-center justify-center px-6 pt-16">
+      <main id="main-content" className="flex flex-1 items-center justify-center px-6 pt-16">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

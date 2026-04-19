@@ -1,3 +1,4 @@
+import { Helmet } from "react-helmet-async";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
@@ -122,6 +123,7 @@ export default function Admin() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
       {/* ── 1.3 Header with Back to App ── */}
       <header className="border-b bg-card sticky top-0 z-50">
         <div className="flex items-center justify-between px-4 py-3">

@@ -201,7 +201,7 @@ export function startHealthServer(
   vitalsProvider = getVitals;
 
   if (process.env.NODE_ENV === 'production' && !process.env.HEALTH_AUTH_TOKEN) {
-    throw new Error('[HealthServer] HEALTH_AUTH_TOKEN must be set in production to protect /metrics');
+    console.warn('[HealthServer] ⚠️  HEALTH_AUTH_TOKEN is not set — /metrics will return 401 in production until it is configured.');
   }
 
   server = http.createServer(handleRequest);

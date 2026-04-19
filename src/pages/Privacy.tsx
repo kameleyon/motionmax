@@ -32,7 +32,7 @@ export default function Privacy() {
 
       <main className="mx-auto max-w-3xl px-4 sm:px-6 py-12 sm:py-16">
         <h1 className="text-3xl font-bold tracking-tight text-foreground mb-2">Privacy Policy</h1>
-        <p className="text-sm text-muted-foreground mb-10">Last updated: February 2026</p>
+        <p className="text-sm text-muted-foreground mb-10">Last updated: April 2026</p>
 
         <div className="prose prose-sm max-w-none space-y-8 text-muted-foreground">
 
@@ -66,27 +66,44 @@ export default function Privacy() {
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold text-foreground">4. Third-Party Services</h2>
-            <p>We use the following third-party services to operate the platform. Your data is transmitted securely and only as necessary for service delivery:</p>
+            <h2 className="text-lg font-semibold text-foreground">4. Legal Basis for Processing (GDPR Art. 6)</h2>
+            <p>If you are located in the European Economic Area (EEA), we process your personal data under the following legal bases:</p>
             <ul className="list-disc pl-6 space-y-1">
-              <li><strong className="text-foreground">AI Generation:</strong> Hypereal (image, video, speech recognition), Google Gemini (research, text-to-speech), OpenRouter/Anthropic Claude (script generation fallback), Replicate (image generation fallback). We send your text prompts, uploaded content, and scene descriptions to these providers for processing.</li>
-              <li><strong className="text-foreground">Voice Synthesis:</strong> ElevenLabs (voice cloning, text-to-speech), Fish Audio, LemonFox, and Google Cloud TTS. Voice recordings are processed securely. Cloned voice models are stored on ElevenLabs and can be deleted from your Voice Lab at any time.</li>
-              <li><strong className="text-foreground">Payment Processing:</strong> Stripe handles all payment and subscription data. We never store credit card numbers. See Stripe's privacy policy at stripe.com/privacy.</li>
-              <li><strong className="text-foreground">Analytics:</strong> Google Analytics 4 (if you consent via our cookie banner) collects anonymized usage data including page views, feature usage, and session duration. You can opt out at any time by rejecting cookies.</li>
-              <li><strong className="text-foreground">Error Monitoring:</strong> Sentry collects error reports and performance data to help us identify and fix issues. This includes stack traces, browser information, and session replay data on errors. No personal content is included in error reports.</li>
-              <li><strong className="text-foreground">Cloud Infrastructure:</strong> Supabase (database, authentication, file storage), Vercel (frontend hosting), Render (background processing). Data is encrypted at rest and in transit.</li>
+              <li><strong className="text-foreground">Performance of a contract (Art. 6(1)(b)):</strong> Processing your account information, content, credits, and billing data to provide the Service you have subscribed to.</li>
+              <li><strong className="text-foreground">Legitimate interests (Art. 6(1)(f)):</strong> Security monitoring, fraud prevention, error logging, and aggregate analytics that do not override your fundamental rights.</li>
+              <li><strong className="text-foreground">Compliance with legal obligations (Art. 6(1)(c)):</strong> Retaining financial records, responding to lawful data requests, and complying with applicable law.</li>
+              <li><strong className="text-foreground">Consent (Art. 6(1)(a)):</strong> Analytics cookies (Google Analytics 4), session replay (Sentry), and AI training opt-in (if you explicitly enable it). You may withdraw consent at any time via the cookie banner or by contacting us.</li>
             </ul>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold text-foreground">5. Data Retention</h2>
+            <h2 className="text-lg font-semibold text-foreground">5. Third-Party Services &amp; Subprocessors</h2>
+            <p>We use the following third-party services to operate the platform. Your data is transmitted securely and only as necessary for service delivery:</p>
+            <ul className="list-disc pl-6 space-y-1">
+              <li><strong className="text-foreground">AI Generation:</strong> Hypereal (US), Google Gemini (US), Anthropic Claude via OpenRouter (US), Replicate (US). We send your text prompts, uploaded content, and scene descriptions to these providers.</li>
+              <li><strong className="text-foreground">Voice Synthesis:</strong> ElevenLabs (US — voice cloning, TTS), Fish Audio, LemonFox, Google Cloud TTS. Voice recordings and cloned models are stored on the respective provider and deleted when you remove the voice from your Voice Lab.</li>
+              <li><strong className="text-foreground">Payment Processing:</strong> Stripe (US) handles all payment and subscription data. We do not store credit card numbers. See stripe.com/privacy.</li>
+              <li><strong className="text-foreground">Analytics:</strong> Google Analytics 4 (US) — only if you consent via our cookie banner. Collects anonymized usage data. You may withdraw consent at any time.</li>
+              <li><strong className="text-foreground">Error Monitoring:</strong> Sentry (US) collects error reports, stack traces, and browser information. Session replay (which captures screen interactions) is only activated with your analytics consent. No generated content or passwords are captured in error reports.</li>
+              <li><strong className="text-foreground">Cloud Infrastructure:</strong> Supabase (US — database, authentication, file storage), Vercel (US — frontend hosting and edge network), Render (US — background video processing). Data is encrypted at rest and in transit.</li>
+            </ul>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold text-foreground">6. International Data Transfers</h2>
+            <p>MotionMax is operated from the United States. If you access the Service from the EEA, UK, or Switzerland, your personal data will be transferred to and processed in the United States, which may not provide the same level of data protection as your home jurisdiction.</p>
+            <p>Where required, we rely on the EU–US Data Privacy Framework, Standard Contractual Clauses (SCCs) approved by the European Commission, or other lawful transfer mechanisms. Our key subprocessors (Supabase, Vercel, Stripe, ElevenLabs) maintain SCCs or equivalent safeguards. You may request copies of applicable safeguards by contacting us at privacy@motionmax.io.</p>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold text-foreground">7. Data Retention</h2>
             <p>We retain your account data for as long as your account is active. Generated projects and content are retained for the duration of your account. If you delete a project, its content is removed from active storage; backups may persist for up to 30 days before permanent deletion.</p>
             <p>Voice clones are retained until you explicitly delete them from the Voice Lab. Deleted voice data is removed from our systems within 30 days.</p>
             <p>If you close your account, we will delete your personal data within 90 days, except where we are required to retain it for legal or financial compliance purposes.</p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold text-foreground">6. Your Rights</h2>
+            <h2 className="text-lg font-semibold text-foreground">8. Your Rights</h2>
             <p>Depending on your jurisdiction, you may have the following rights regarding your personal data:</p>
             <ul className="list-disc pl-6 space-y-1">
               <li><strong className="text-foreground">Access:</strong> Request a copy of the personal data we hold about you</li>
@@ -99,25 +116,26 @@ export default function Privacy() {
               <a href="mailto:support@motionmax.io" className="text-primary hover:underline">support@motionmax.io</a>.
               We will respond to verified requests within 30 days.
             </p>
+            <p>If you are in the EEA and believe your data has been processed unlawfully, you have the right to lodge a complaint with your national supervisory authority. For example, in Ireland: Data Protection Commission (dataprotection.ie); in Germany: your state's Datenschutzbehörde; in the UK: the Information Commissioner's Office (ico.org.uk).</p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold text-foreground">7. Security</h2>
+            <h2 className="text-lg font-semibold text-foreground">9. Security</h2>
             <p>We implement industry-standard security measures including encryption at rest and in transit (TLS/HTTPS), access controls, and regular security reviews. However, no method of transmission over the internet is 100% secure. We cannot guarantee absolute security of your data.</p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold text-foreground">8. Children's Privacy</h2>
+            <h2 className="text-lg font-semibold text-foreground">10. Children's Privacy</h2>
             <p>The Service is not directed to individuals under the age of 18. We do not knowingly collect personal information from children. If we become aware that a child has provided us with personal information, we will delete it promptly.</p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold text-foreground">9. Changes to This Policy</h2>
+            <h2 className="text-lg font-semibold text-foreground">11. Changes to This Policy</h2>
             <p>We may update this Privacy Policy periodically. We will notify you of significant changes via email or a prominent notice within the Service. The "Last updated" date at the top of this page indicates when this policy was last revised.</p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold text-foreground">10. California Privacy Rights (CCPA)</h2>
+            <h2 className="text-lg font-semibold text-foreground">12. California Privacy Rights (CCPA)</h2>
             <p>If you are a California resident, the California Consumer Privacy Act (CCPA) grants you specific rights regarding your personal information, in addition to the general rights described in Section 6 above:</p>
             <ul className="list-disc pl-6 space-y-1">
               <li><strong className="text-foreground">Right to Know:</strong> You may request that we disclose the categories and specific pieces of personal information we have collected about you, the categories of sources from which it was collected, the business purpose for collecting it, and the categories of third parties with whom we share it.</li>
@@ -132,7 +150,7 @@ export default function Privacy() {
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold text-foreground">11. Contact Us</h2>
+            <h2 className="text-lg font-semibold text-foreground">13. Contact Us</h2>
             <p>If you have questions, concerns, or requests regarding this Privacy Policy or our data practices, please contact us at:{" "}
               <a href="mailto:support@motionmax.io" className="text-primary hover:underline">support@motionmax.io</a>
             </p>

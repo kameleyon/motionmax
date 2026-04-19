@@ -1,6 +1,5 @@
-﻿// @ts-nocheck — Deno edge function; not compatible with VS Code's Node.js TypeScript checker
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+﻿import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { decode as base64Decode, encode as base64Encode } from "https://deno.land/std@0.190.0/encoding/base64.ts";
 import {
   generateSceneAudio as sharedGenerateSceneAudio,
@@ -1426,7 +1425,16 @@ serve(async (req) => {
       const style = requireString(body.style, "style");
 
       // ============= UPFRONT CREDIT DEDUCTION (Atomic via RPC) =============
-      const CINEMATIC_CREDIT_COST = 12;
+      // Mirror the frontend formula: seconds * 5 (cinematic multiplier), rounded up.
+      // Must stay in sync with src/lib/planLimits.ts getCreditsRequired("cinematic", length).
+      const LENGTH_SECONDS: Record<string, number> = {
+        short: 150,
+        brief: 280,
+        presentation: 360,
+      };
+      const CINEMATIC_MULTIPLIER = 5;
+      const lengthSeconds = LENGTH_SECONDS[length] ?? LENGTH_SECONDS.brief;
+      const CINEMATIC_CREDIT_COST = Math.ceil(lengthSeconds * CINEMATIC_MULTIPLIER);
 
       const { data: deductionSuccess, error: rpcError } = await supabase.rpc(
         "deduct_credits_securely",
@@ -1434,18 +1442,18 @@ serve(async (req) => {
           p_user_id: user.id,
           p_amount: CINEMATIC_CREDIT_COST,
           p_transaction_type: "usage",
-          p_description: `Cinematic generation started (${length})`,
+          p_description: `Cinematic generation started (${length}, ${CINEMATIC_CREDIT_COST} credits)`,
         },
       );
 
       if (rpcError || !deductionSuccess) {
         console.error(`[CINEMATIC] Atomic deduction failed for user ${user.id}:`, rpcError?.message);
         return jsonResponse({
-          error: `Insufficient credits. Cinematic generation requires ${CINEMATIC_CREDIT_COST} credits.`,
+          error: `Insufficient credits. Cinematic ${length} generation requires ${CINEMATIC_CREDIT_COST} credits.`,
           code: "INSUFFICIENT_CREDITS",
         }, { status: 402 });
       }
-      console.log(`[CINEMATIC] Securely deducted ${CINEMATIC_CREDIT_COST} credits for user ${user.id}`);
+      console.log(`[CINEMATIC] Securely deducted ${CINEMATIC_CREDIT_COST} credits for user ${user.id} (${length})`);
       // ============= END UPFRONT CREDIT DEDUCTION =============
 
       console.log("=== CINEMATIC SCRIPT START ===");

@@ -249,7 +249,7 @@ export default function Landing() {
                 ))}
               </div>
               <p className="text-sm text-white/70">
-                <span className="text-white/90 font-medium">1,000+</span> creators already making videos
+                Join creators already making videos
               </p>
             </div>
           </motion.div>
@@ -405,15 +405,15 @@ export default function Landing() {
               >
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <span className="text-xs font-medium uppercase tracking-wider text-white/60">{product.tag}</span>
+                    <span className="text-xs font-medium uppercase tracking-wider text-white/80">{product.tag}</span>
                     <h3 className="text-xl font-semibold text-white mt-1">{product.title}</h3>
                   </div>
                 </div>
-                <p className="text-sm leading-relaxed text-white/60 mb-4">
+                <p className="text-sm leading-relaxed text-white/80 mb-4">
                   {product.description}
                 </p>
                 <div className="rounded-lg bg-black/30 px-4 py-2.5 mb-5">
-                  <p className="text-xs text-white/60 italic">{product.example}</p>
+                  <p className="text-xs text-white/80 italic">{product.example}</p>
                 </div>
                 <Button
                   variant="outline"

@@ -14,12 +14,10 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Linting — incrementally tightening toward full strict */
-    "strict": false,
-    "strictNullChecks": true,
+    /* Strict mode — all strict flags enabled */
+    "strict": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noImplicitAny": true,
     "noFallthroughCasesInSwitch": true,
 
     "baseUrl": ".",

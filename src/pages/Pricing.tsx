@@ -81,7 +81,7 @@ export default function Pricing() {
     }
   };
 
-  const handleBuyCredits = async (credits: 15 | 50 | 150 | 500, priceId: string) => {
+  const handleBuyCredits = async (credits: number, priceId: string) => {
     if (!user) {
       toast.error("Sign in required", { description: "Please sign in to purchase credits" });
       navigate("/auth");

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
+import { grantAnalyticsConsent } from "@/lib/sentry";
 
 const CONSENT_KEY = "motionmax_cookie_consent";
 
@@ -30,9 +31,18 @@ export function CookieConsent() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    // Only show if no stored consent and GA is configured
+    // If consent was already granted in a previous session, re-enable analytics
+    // integrations immediately without showing the banner again.
+    if (getStoredConsent() === "accepted") {
+      loadGoogleAnalytics();
+      grantAnalyticsConsent();
+      return;
+    }
+    // Only show banner if GA is configured or Sentry DSN is present (either
+    // requires explicit consent for analytics-class features).
     const gaId = import.meta.env.VITE_GA_MEASUREMENT_ID;
-    if (!gaId) return; // No GA configured, no banner needed
+    const sentryDsn = import.meta.env.VITE_SENTRY_DSN;
+    if (!gaId && !sentryDsn) return; // Nothing analytics-related configured
     if (getStoredConsent() !== null) return; // Already answered
     // Small delay so it doesn't flash on page load
     const timer = setTimeout(() => setVisible(true), 1500);
@@ -44,8 +54,9 @@ export function CookieConsent() {
   const handleAccept = () => {
     storeConsent("accepted");
     setVisible(false);
-    // Load GA now
+    // Load GA and enable Sentry Session Replay now that consent is granted.
     loadGoogleAnalytics();
+    grantAnalyticsConsent();
   };
 
   const handleReject = () => {

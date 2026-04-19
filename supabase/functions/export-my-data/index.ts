@@ -93,7 +93,7 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // Fetch all tables in parallel
+    // Fetch all tables in parallel (GDPR Art. 20 — complete portability)
     const [
       profileRes,
       projectsRes,
@@ -104,6 +104,9 @@ serve(async (req) => {
       costsRes,
       jobsRes,
       sharesRes,
+      voicesRes,
+      flagsRes,
+      sceneVersionsRes,
     ] = await Promise.all([
       supabaseAdmin.from("profiles").select("*").eq("user_id", userId).maybeSingle(),
       supabaseAdmin.from("projects").select("*").eq("user_id", userId),
@@ -130,6 +133,17 @@ serve(async (req) => {
         .eq("user_id", userId)
         .order("created_at", { ascending: false }),
       supabaseAdmin.from("project_shares").select("*").eq("user_id", userId),
+      // Voice data (biometric-adjacent — must be included per GDPR)
+      supabaseAdmin.from("user_voices").select("id, name, provider, created_at, consent_given, consent_timestamp").eq("user_id", userId),
+      // User flags (affect account standing)
+      supabaseAdmin.from("user_flags").select("id, flag_type, reason, created_at, resolved_at").eq("user_id", userId),
+      // Scene version history (user-created content)
+      supabaseAdmin
+        .from("scene_versions")
+        .select("id, generation_id, scene_index, field_name, old_value, new_value, created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(500),
     ]);
 
     const exportData = {
@@ -145,6 +159,9 @@ serve(async (req) => {
       generation_costs: costsRes.data ?? [],
       video_generation_jobs: jobsRes.data ?? [],
       project_shares: sharesRes.data ?? [],
+      user_voices: voicesRes.data ?? [],
+      user_flags: flagsRes.data ?? [],
+      scene_versions: sceneVersionsRes.data ?? [],
     };
 
     // Check export size to prevent memory exhaustion

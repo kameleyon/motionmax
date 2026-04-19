@@ -176,7 +176,10 @@ serve(async (req) => {
         
         if (stripeKey) {
           try {
-            const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+            const stripe = new Stripe(stripeKey, { apiVersion: "2024-12-18.acacia" });
+
+            // Limit charges to the last 90 days to avoid unbounded full-history scans
+            const ninetyDaysAgo = Math.floor((Date.now() - 90 * 24 * 60 * 60 * 1000) / 1000);
 
             // Paginate through charges using cursor-based pagination (for await may fail in Deno)
             const allCharges: Stripe.Charge[] = [];
@@ -184,7 +187,10 @@ serve(async (req) => {
             let startingAfter: string | undefined;
 
             while (hasMore) {
-              const params: Record<string, unknown> = { limit: 100 };
+              const params: Record<string, unknown> = {
+                limit: 100,
+                created: { gte: ninetyDaysAgo },
+              };
               if (startingAfter) params.starting_after = startingAfter;
 
               const page = await stripe.charges.list(params as any);
@@ -250,54 +256,87 @@ serve(async (req) => {
       case "subscribers_list": {
         const { page = 1, limit = 20, search = "" } = params || {};
 
-        // Get all users (cached)
+        // Get all users (cached). Auth users cannot be queried via SQL so we
+        // must fetch them from the Auth API; the 60-second module-level cache
+        // keeps this from hitting the API on every request.
         const { users: authUsersArr2 } = await getCachedUsers(supabaseAdmin);
-        const authUsers = { users: authUsersArr2 };
-        
-        // Get all subscriptions
-        const { data: subscriptions } = await supabaseAdmin
-          .from("subscriptions")
-          .select("*");
 
-        // Get all profiles
-        const { data: profiles } = await supabaseAdmin
-          .from("profiles")
-          .select("*");
+        // Apply search filter against the in-memory auth list so we know which
+        // user IDs we actually need before hitting the database.
+        let filteredUsers = authUsersArr2;
+        if (search) {
+          const searchLower = search.toLowerCase();
+          filteredUsers = authUsersArr2.filter(u =>
+            u.email?.toLowerCase().includes(searchLower)
+          );
+        }
 
-        // Get all credits
-        const { data: credits } = await supabaseAdmin
-          .from("user_credits")
-          .select("*");
+        const total = filteredUsers.length;
+        const start = (page - 1) * limit;
+        // Slice to the requested page before any DB work so we only look up the
+        // rows we actually need to return (avoids N+1 per-user fetches entirely).
+        const pageUsers = filteredUsers.slice(start, start + limit);
+        const pageUserIds = pageUsers.map(u => u.id);
 
-        // Get generation counts per user
-        const { data: generations } = await supabaseAdmin
-          .from("generations")
-          .select("user_id");
+        if (pageUserIds.length === 0) {
+          result = { users: [], total, page, limit, totalPages: Math.ceil(total / limit) };
+          break;
+        }
 
+        // Fetch all per-user data in parallel, scoped to only the IDs on this page.
+        const [
+          { data: subscriptions },
+          { data: profiles },
+          { data: credits },
+          // generation counts — only the user_id column, grouped server-side
+          { data: generationRows },
+          // active flag counts — only the user_id column
+          { data: flagRows },
+          // cost aggregates — summed server-side per user
+          { data: costsRows },
+        ] = await Promise.all([
+          supabaseAdmin
+            .from("subscriptions")
+            .select("user_id, plan_name, status")
+            .in("user_id", pageUserIds)
+            .eq("status", "active"),
+          supabaseAdmin
+            .from("profiles")
+            .select("user_id, display_name, avatar_url")
+            .in("user_id", pageUserIds),
+          supabaseAdmin
+            .from("user_credits")
+            .select("user_id, credits_balance, total_purchased, total_used")
+            .in("user_id", pageUserIds),
+          supabaseAdmin
+            .from("generations")
+            .select("user_id")
+            .in("user_id", pageUserIds),
+          supabaseAdmin
+            .from("user_flags")
+            .select("user_id")
+            .in("user_id", pageUserIds)
+            .is("resolved_at", null),
+          supabaseAdmin
+            .from("generation_costs")
+            .select("user_id, openrouter_cost, replicate_cost, hypereal_cost, google_tts_cost, total_cost")
+            .in("user_id", pageUserIds),
+        ]);
+
+        // Build lookup maps from the batch results (all scoped to pageUserIds so
+        // these maps are small).
         const generationCounts: Record<string, number> = {};
-        generations?.forEach(g => {
+        generationRows?.forEach(g => {
           generationCounts[g.user_id] = (generationCounts[g.user_id] || 0) + 1;
         });
 
-        // Get flags per user
-        const { data: flags } = await supabaseAdmin
-          .from("user_flags")
-          .select("*")
-          .is("resolved_at", null);
-
         const flagCounts: Record<string, number> = {};
-        flags?.forEach(f => {
+        flagRows?.forEach(f => {
           flagCounts[f.user_id] = (flagCounts[f.user_id] || 0) + 1;
         });
 
-        // Get costs per user from generation_costs table
-        const { data: costsData } = await supabaseAdmin
-          .from("generation_costs")
-          .select("user_id, openrouter_cost, replicate_cost, hypereal_cost, google_tts_cost, total_cost");
-
-        // Aggregate costs per user
         const userCosts: Record<string, { openrouter: number; replicate: number; hypereal: number; googleTts: number; total: number }> = {};
-        costsData?.forEach(c => {
+        costsRows?.forEach(c => {
           if (!userCosts[c.user_id]) {
             userCosts[c.user_id] = { openrouter: 0, replicate: 0, hypereal: 0, googleTts: 0, total: 0 };
           }
@@ -308,10 +347,10 @@ serve(async (req) => {
           userCosts[c.user_id].total += Number(c.total_cost) || 0;
         });
 
-        // Combine data
-        let users = authUsers?.users.map(user => {
+        // Combine data for the current page only.
+        const paginatedUsers = pageUsers.map(user => {
           const profile = profiles?.find(p => p.user_id === user.id);
-          const subscription = subscriptions?.find(s => s.user_id === user.id && s.status === "active");
+          const subscription = subscriptions?.find(s => s.user_id === user.id);
           const userCredits = credits?.find(c => c.user_id === user.id);
 
           return {
@@ -330,21 +369,7 @@ serve(async (req) => {
             flagCount: flagCounts[user.id] || 0,
             costs: userCosts[user.id] || { openrouter: 0, replicate: 0, hypereal: 0, googleTts: 0, total: 0 },
           };
-        }) || [];
-
-        // Filter by search
-        if (search) {
-          const searchLower = search.toLowerCase();
-          users = users.filter(u => 
-            u.email?.toLowerCase().includes(searchLower) ||
-            u.displayName?.toLowerCase().includes(searchLower)
-          );
-        }
-
-        // Paginate
-        const total = users.length;
-        const start = (page - 1) * limit;
-        const paginatedUsers = users.slice(start, start + limit);
+        });
 
         result = {
           users: paginatedUsers,
@@ -353,6 +378,18 @@ serve(async (req) => {
           limit,
           totalPages: Math.ceil(total / limit),
         };
+
+        // Audit log: admin listed users (fire-and-forget)
+        supabaseAdmin.from("admin_logs").insert({
+          admin_id: userId,
+          action: "admin_list_users",
+          target_type: "user_list",
+          target_id: null,
+          details: { page, limit, search: search || null, result_count: paginatedUsers.length, total_matched: total },
+          ip_address: req.headers.get("x-forwarded-for") || null,
+          user_agent: req.headers.get("user-agent") || null,
+        }).catch(() => {});
+
         break;
       }
 
@@ -365,7 +402,7 @@ serve(async (req) => {
           break;
         }
 
-        const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+        const stripe = new Stripe(stripeKey, { apiVersion: "2024-12-18.acacia" });
 
         // Paginate through ALL matching charges
         const chargeListParams: Stripe.ChargeListParams = { limit: 100 };
@@ -522,6 +559,18 @@ serve(async (req) => {
           page,
           limit,
         };
+
+        // Audit log: admin listed flags (fire-and-forget)
+        supabaseAdmin.from("admin_logs").insert({
+          admin_id: userId,
+          action: "admin_list_flags",
+          target_type: "user_flag_list",
+          target_id: null,
+          details: { page, limit, includeResolved, result_count: flags?.length ?? 0 },
+          ip_address: req.headers.get("x-forwarded-for") || null,
+          user_agent: req.headers.get("user-agent") || null,
+        }).catch(() => {});
+
         break;
       }
 
@@ -542,14 +591,16 @@ serve(async (req) => {
 
         if (flagError) throw flagError;
 
-        // Log the action
-        await supabaseAdmin.from("admin_logs").insert({
+        // Log the action (fire-and-forget to keep consistent with other audit logs)
+        supabaseAdmin.from("admin_logs").insert({
           admin_id: userId,
-          action: "create_flag",
+          action: "admin_create_flag",
           target_type: "user",
           target_id: targetUserId,
           details: { flagType, reason },
-        });
+          ip_address: req.headers.get("x-forwarded-for") || null,
+          user_agent: req.headers.get("user-agent") || null,
+        }).catch(() => {});
 
         result = { flag };
         break;
@@ -570,6 +621,17 @@ serve(async (req) => {
           .single();
 
         if (flagError) throw flagError;
+
+        // Audit log: admin resolved a flag (fire-and-forget)
+        supabaseAdmin.from("admin_logs").insert({
+          admin_id: userId,
+          action: "admin_resolve_flag",
+          target_type: "user_flag",
+          target_id: flagId,
+          details: { resolutionNotes: resolutionNotes || null, flagged_user_id: flag?.user_id || null },
+          ip_address: req.headers.get("x-forwarded-for") || null,
+          user_agent: req.headers.get("user-agent") || null,
+        }).catch(() => {});
 
         result = { flag };
         break;
@@ -759,6 +821,23 @@ serve(async (req) => {
           recentTransactions: transactions,
           recentUserLogs: userLogs,
         };
+
+        // Audit log: admin read full user detail (fire-and-forget)
+        supabaseAdmin.from("admin_logs").insert({
+          admin_id: userId,
+          action: "admin_read_user_detail",
+          target_type: "user",
+          target_id: targetUserId,
+          details: {
+            accessed_sections: [
+              "profile", "subscription", "credits", "projects",
+              "generations", "flags", "transactions", "system_logs",
+            ],
+          },
+          ip_address: req.headers.get("x-forwarded-for") || null,
+          user_agent: req.headers.get("user-agent") || null,
+        }).catch(() => {});
+
         break;
       }
 
@@ -888,6 +967,22 @@ serve(async (req) => {
           })),
           system_logs: systemLogs,
         };
+
+        // Audit log: admin read a specific API call record (fire-and-forget)
+        supabaseAdmin.from("admin_logs").insert({
+          admin_id: userId,
+          action: "admin_read_api_call_detail",
+          target_type: "api_call_log",
+          target_id: callId,
+          details: {
+            call_user_id: call.user_id || null,
+            generation_id: call.generation_id || null,
+            provider: call.provider || null,
+          },
+          ip_address: req.headers.get("x-forwarded-for") || null,
+          user_agent: req.headers.get("user-agent") || null,
+        }).catch(() => {});
+
         break;
       }
 

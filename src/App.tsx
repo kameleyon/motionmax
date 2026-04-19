@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
+import { AuthProvider } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
 import { AppShell } from "@/components/layout/AppShell";
@@ -54,6 +55,7 @@ const queryClient = new QueryClient({
 
 const App = () => (
   <GlobalErrorBoundary>
+  <AuthProvider>
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="light" disableTransitionOnChange>
       <TooltipProvider>
@@ -92,6 +94,7 @@ const App = () => (
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>
+  </AuthProvider>
   </GlobalErrorBoundary>
 );
 

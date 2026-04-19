@@ -1,4 +1,4 @@
-﻿import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
@@ -27,17 +27,14 @@ serve(async (req) => {
   try {
     logStep("Function started");
 
-    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
-
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       throw new Error("No authorization header provided");
     }
 
     const token = authHeader.replace("Bearer ", "");
-    
-    // Verify the JWT using the admin client (standard Edge Function pattern)
+
+    // Verify the JWT using the admin client
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError || !user) {
       const msg = userError?.message?.toLowerCase() ?? "";
@@ -59,7 +56,7 @@ serve(async (req) => {
     }
     logStep("User authenticated", { userId, email: userEmail });
 
-    // Rate limit
+    // Rate limit (non-privileged — failure falls through to allow)
     const rateLimitResult = await checkRateLimit(supabaseAdmin, {
       key: "check-subscription",
       maxRequests: 30,
@@ -73,7 +70,16 @@ serve(async (req) => {
       });
     }
 
-    // First check for manual/enterprise subscriptions in the database
+    // Get credits balance (always needed)
+    const { data: creditData } = await supabaseAdmin
+      .from("user_credits")
+      .select("credits_balance")
+      .eq("user_id", userId)
+      .single();
+
+    const creditsBalance = creditData?.credits_balance || 0;
+
+    // Check for manual/enterprise subscriptions first
     const { data: dbSubscription } = await supabaseAdmin
       .from("subscriptions")
       .select("plan_name, status, current_period_end, cancel_at_period_end, stripe_subscription_id")
@@ -81,114 +87,107 @@ serve(async (req) => {
       .eq("status", "active")
       .single();
 
-    // Get credits balance
-    const { data: creditData } = await supabaseAdmin
-      .from("user_credits")
-      .select("credits_balance")
-      .eq("user_id", userId)
-      .single();
-
-    // If there's a manual enterprise subscription (not a real Stripe subscription), use it
-    if (dbSubscription && dbSubscription.stripe_subscription_id?.startsWith("manual_")) {
-      logStep("Found manual enterprise subscription", { 
-        plan: dbSubscription.plan_name, 
-        subscriptionEnd: dbSubscription.current_period_end 
+    if (dbSubscription?.stripe_subscription_id?.startsWith("manual_")) {
+      logStep("Found manual enterprise subscription", {
+        plan: dbSubscription.plan_name,
+        subscriptionEnd: dbSubscription.current_period_end,
       });
-      
       return new Response(JSON.stringify({
         subscribed: true,
         plan: dbSubscription.plan_name,
         subscription_status: "active",
         subscription_end: dbSubscription.current_period_end,
         cancel_at_period_end: dbSubscription.cancel_at_period_end || false,
-        credits_balance: creditData?.credits_balance || 0,
+        credits_balance: creditsBalance,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
       });
     }
 
-    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-    const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
-
-    if (customers.data.length === 0) {
-      logStep("No Stripe customer found, returning free tier");
-      
-      return new Response(JSON.stringify({
-        subscribed: false,
-        plan: "free",
-        credits_balance: creditData?.credits_balance || 0,
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      });
+    // Attempt Stripe lookup — if key is absent or Stripe fails, fall back to DB data
+    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+    if (!stripeKey) {
+      logStep("STRIPE_SECRET_KEY not configured, returning DB subscription data");
+      return buildDbFallbackResponse(corsHeaders, dbSubscription, creditsBalance);
     }
-
-    const customerId = customers.data[0].id;
-    logStep("Found Stripe customer", { customerId });
-
-    const subscriptions = await stripe.subscriptions.list({
-      customer: customerId,
-      status: "active",
-      limit: 1,
-    });
 
     let plan = "free";
     let subscriptionEnd: string | null = null;
     let cancelAtPeriodEnd = false;
 
-    if (subscriptions.data.length > 0) {
-      const subscription = subscriptions.data[0];
-      
-      // Handle current_period_end - Stripe usually returns seconds, but be defensive
-      // because some nested shapes can surface millisecond-like values.
-      const periodEndRaw =
-        subscription.current_period_end ?? subscription.items?.data?.[0]?.current_period_end;
+    try {
+      const stripe = new Stripe(stripeKey, { apiVersion: "2024-12-18.acacia" });
+      const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
 
-      const parseStripePeriodEndToIso = (value: unknown): string | null => {
-        const n =
-          typeof value === "number"
-            ? value
-            : typeof value === "string" && value.trim() !== "" && !Number.isNaN(Number(value))
-              ? Number(value)
-              : null;
+      if (customers.data.length === 0) {
+        logStep("No Stripe customer found, returning free tier");
+        return new Response(JSON.stringify({
+          subscribed: false,
+          plan: "free",
+          credits_balance: creditsBalance,
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
 
-        if (n === null) return null;
+      const customerId = customers.data[0].id;
+      logStep("Found Stripe customer", { customerId });
 
-        // Heuristic: seconds are ~1e9, milliseconds are ~1e12
-        const ms = n > 100_000_000_000 ? n : n * 1000;
-        const d = new Date(ms);
-        if (Number.isNaN(d.getTime())) return null;
-        return d.toISOString();
-      };
+      const subscriptions = await stripe.subscriptions.list({
+        customer: customerId,
+        status: "active",
+        limit: 1,
+      });
 
-      subscriptionEnd = parseStripePeriodEndToIso(periodEndRaw);
-      
-      cancelAtPeriodEnd = subscription.cancel_at_period_end || false;
-      
-      const productRaw = subscription.items.data[0].price.product;
-      const productId = typeof productRaw === "string" ? productRaw : (productRaw as any)?.id ?? "";
-      logStep("Active subscription found", { subscriptionId: subscription.id, productId, periodEnd: periodEndRaw });
+      if (subscriptions.data.length > 0) {
+        const subscription = subscriptions.data[0];
 
-      // Map product IDs to plans — includes all legacy IDs to prevent false "free" downgrades
-      const productToPlan: Record<string, string> = {
-        // Current products
-        "prod_Tnyz2nMLqpHz3R": "starter",
-        "prod_Tnz0KUQX2J5VBH": "creator",
-        "prod_Tnz0BeRmJDdh0V": "professional",
-        // Legacy gen-2 products
-        "prod_TqznNZmUhevHh4": "starter",
-        "prod_TqznlgT1Jl6Re7": "creator",
-        "prod_TqznqQYYG4UUY8": "professional",
-        // Legacy gen-1 products
-        "prod_TnzLdHWPkqAiqr": "starter",
-        "prod_TnzLCasreSakEb": "creator",
-        "prod_TnzLP4tQINtak9": "professional",
-      };
-      plan = productToPlan[productId] || "free";
+        const periodEndRaw =
+          subscription.current_period_end ?? subscription.items?.data?.[0]?.current_period_end;
+
+        const parseStripePeriodEndToIso = (value: unknown): string | null => {
+          const n =
+            typeof value === "number"
+              ? value
+              : typeof value === "string" && value.trim() !== "" && !Number.isNaN(Number(value))
+                ? Number(value)
+                : null;
+          if (n === null) return null;
+          const ms = n > 100_000_000_000 ? n : n * 1000;
+          const d = new Date(ms);
+          if (Number.isNaN(d.getTime())) return null;
+          return d.toISOString();
+        };
+
+        subscriptionEnd = parseStripePeriodEndToIso(periodEndRaw);
+        cancelAtPeriodEnd = subscription.cancel_at_period_end || false;
+
+        const productRaw = subscription.items.data[0].price.product;
+        const productId = typeof productRaw === "string" ? productRaw : (productRaw as any)?.id ?? "";
+        logStep("Active subscription found", { subscriptionId: subscription.id, productId });
+
+        const productToPlan: Record<string, string> = {
+          "prod_Tnyz2nMLqpHz3R": "starter",
+          "prod_Tnz0KUQX2J5VBH": "creator",
+          "prod_Tnz0BeRmJDdh0V": "professional",
+          "prod_TqznNZmUhevHh4": "starter",
+          "prod_TqznlgT1Jl6Re7": "creator",
+          "prod_TqznqQYYG4UUY8": "professional",
+          "prod_TnzLdHWPkqAiqr": "starter",
+          "prod_TnzLCasreSakEb": "creator",
+          "prod_TnzLP4tQINtak9": "professional",
+        };
+        plan = productToPlan[productId] || "free";
+      }
+    } catch (stripeErr) {
+      // Stripe is unavailable or erroring — return DB subscription data rather than 503
+      logStep("Stripe lookup failed, falling back to DB data", {
+        error: stripeErr instanceof Error ? stripeErr.message : String(stripeErr),
+      });
+      return buildDbFallbackResponse(corsHeaders, dbSubscription, creditsBalance);
     }
-
-    // creditData already fetched above
 
     logStep("Returning subscription status", { plan, subscriptionEnd });
 
@@ -198,17 +197,15 @@ serve(async (req) => {
       subscription_status: plan !== "free" ? (cancelAtPeriodEnd ? "canceling" : "active") : null,
       subscription_end: subscriptionEnd,
       cancel_at_period_end: cancelAtPeriodEnd,
-      credits_balance: creditData?.credits_balance || 0,
+      credits_balance: creditsBalance,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorStack = error instanceof Error ? error.stack : undefined;
-    logStep("ERROR", { message: errorMessage, stack: errorStack?.substring(0, 500) });
+    logStep("ERROR", { message: errorMessage });
 
-    // If the error is a JWT expiration, return 401 so the client can refresh
     const lowerMsg = errorMessage.toLowerCase();
     if (lowerMsg.includes("jwt") || lowerMsg.includes("expired") || lowerMsg.includes("token")) {
       return new Response(JSON.stringify({ error: "Token expired", code: "TOKEN_EXPIRED" }), {
@@ -217,8 +214,6 @@ serve(async (req) => {
       });
     }
 
-    // For Stripe or other transient errors, return a 503 with details
-    // so the client can distinguish "server broken" from "auth issue"
     return new Response(JSON.stringify({
       error: errorMessage,
       code: "EDGE_FUNCTION_ERROR",
@@ -228,3 +223,34 @@ serve(async (req) => {
     });
   }
 });
+
+function buildDbFallbackResponse(
+  corsHeaders: Record<string, string>,
+  dbSubscription: { plan_name: string; status: string; current_period_end: string | null; cancel_at_period_end: boolean } | null,
+  creditsBalance: number,
+): Response {
+  if (!dbSubscription) {
+    return new Response(JSON.stringify({
+      subscribed: false,
+      plan: "free",
+      subscription_status: null,
+      subscription_end: null,
+      cancel_at_period_end: false,
+      credits_balance: creditsBalance,
+    }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200,
+    });
+  }
+  return new Response(JSON.stringify({
+    subscribed: true,
+    plan: dbSubscription.plan_name,
+    subscription_status: dbSubscription.cancel_at_period_end ? "canceling" : "active",
+    subscription_end: dbSubscription.current_period_end,
+    cancel_at_period_end: dbSubscription.cancel_at_period_end || false,
+    credits_balance: creditsBalance,
+  }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    status: 200,
+  });
+}

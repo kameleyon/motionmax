@@ -3,6 +3,12 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rateLimit.ts";
+import * as Sentry from "https://deno.land/x/sentry/index.mjs";
+
+Sentry.init({
+  dsn: Deno.env.get("SENTRY_DSN") || "",
+  environment: Deno.env.get("DENO_DEPLOYMENT_ID") ? "production" : "development",
+});
 
 const logStep = (step: string, details?: any) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -72,7 +78,7 @@ serve(async (req) => {
       });
     }
 
-    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+    const stripe = new Stripe(stripeKey, { apiVersion: "2024-12-18.acacia" });
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
     
     if (customers.data.length === 0) {
@@ -97,6 +103,8 @@ serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR", { message: errorMessage });
+    Sentry.captureException(error);
+    await Sentry.flush(2000);
     return new Response(JSON.stringify({ error: errorMessage }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,

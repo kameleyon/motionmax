@@ -43,7 +43,8 @@ export async function fetchDashboardStats() {
     supabase.from("generations").select("*", { count: "exact", head: true }),
     supabase.from("generation_archives").select("*", { count: "exact", head: true }),
     supabase.from("user_flags").select("*").is("resolved_at", null),
-    supabase.rpc("get_generation_costs_summary"),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase.rpc as any)("get_generation_costs_summary"),
     supabase.from("credit_transactions").select("amount, transaction_type").eq("transaction_type", "purchase"),
   ]);
 
@@ -146,7 +147,8 @@ export async function fetchSubscribersList(params: { page?: number; limit?: numb
     supabase.from("generations").select("user_id").in("user_id", userIds),
     supabase.from("user_flags").select("*").is("resolved_at", null).in("user_id", userIds),
     supabase.from("generation_costs").select("user_id, openrouter_cost, replicate_cost, hypereal_cost, google_tts_cost, total_cost").in("user_id", userIds),
-    supabase.rpc("admin_get_user_emails", { user_ids: userIds }),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase.rpc as any)("admin_get_user_emails", { user_ids: userIds }),
   ]);
 
   const emailMap: Record<string, string> = {};
@@ -390,7 +392,8 @@ export async function fetchUserDetails(params: { userId?: string; targetUserId?:
   const isSuspended = activeFlags.some(f => f.flag_type === "suspended");
   const userStatus = isBanned ? "banned" : isSuspended ? "suspended" : "active";
 
-  const { data: emailRows2 } = await supabase.rpc("admin_get_user_emails", { user_ids: [uid] });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: emailRows2 } = await (supabase.rpc as any)("admin_get_user_emails", { user_ids: [uid] });
   const userEmail = (emailRows2 as { user_id: string; email: string }[] | null)?.[0]?.email || uid.slice(0, 8);
 
   return {

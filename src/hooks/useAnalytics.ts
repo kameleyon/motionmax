@@ -1,5 +1,33 @@
 import { useCallback, useEffect, useRef } from "react";
 
+// ── UTM persistence ──────────────────────────────────────────────────────────
+// Capture UTM params on landing and persist in sessionStorage so they survive
+// SPA navigation. Passed through to checkout and signup events.
+
+const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"] as const;
+const UTM_STORAGE_KEY = "mm_utm";
+
+export function captureUtmParams(): void {
+  const params = new URLSearchParams(window.location.search);
+  const utm: Record<string, string> = {};
+  for (const key of UTM_KEYS) {
+    const val = params.get(key);
+    if (val) utm[key] = val;
+  }
+  if (Object.keys(utm).length > 0) {
+    sessionStorage.setItem(UTM_STORAGE_KEY, JSON.stringify(utm));
+  }
+}
+
+export function getStoredUtm(): Record<string, string> {
+  try {
+    const raw = sessionStorage.getItem(UTM_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
 /* ──────────────────────────────────────────────
  * Lightweight analytics helper.
  *

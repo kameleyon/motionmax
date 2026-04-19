@@ -18,6 +18,7 @@ import { startHealthServer, stopHealthServer } from "./healthServer.js";
 /* ---- Auto-tune concurrency based on system resources ---- */
 import os from "os";
 import fs from "fs";
+import { randomUUID } from "crypto";
 
 /**
  * Get the actual memory available to this process.
@@ -73,6 +74,12 @@ function detectOptimalConcurrency(): number {
 
 const activeJobs = new Set<string>();
 const MAX_CONCURRENT_JOBS = detectOptimalConcurrency();
+
+/* ---- Worker identity ---- */
+// Unique per-process ID stamped onto every claimed job.
+// Allows the startup diagnostic to scope resets to THIS worker's own rows
+// rather than blindly touching rows owned by sibling replicas.
+const WORKER_ID: string = `${os.hostname()}-${process.pid}-${randomUUID()}`;
 
 /* ---- Queue depth monitoring ---- */
 let queueDepthAlertThreshold = MAX_CONCURRENT_JOBS * 2; // alert when queue > 2x capacity
@@ -349,6 +356,7 @@ async function pollQueue() {
       p_task_type: 'export_video',
       p_exclude_task_type: null,
       p_limit: availableSlots,
+      p_worker_id: WORKER_ID,
     });
 
     if (exportError) {
@@ -364,6 +372,7 @@ async function pollQueue() {
         p_task_type: null,
         p_exclude_task_type: 'export_video',
         p_limit: remainingSlots,
+        p_worker_id: WORKER_ID,
       });
 
       if (genError) {
@@ -483,11 +492,16 @@ async function startupDiagnostic(): Promise<boolean> {
     }
     console.log(`[Worker] ✅ Startup diagnostic OK — video_generation_jobs has ${count ?? 0} total row(s)`);
 
-    // Find all processing jobs (orphans from previous worker instance)
+    // Find processing jobs that are safe to reclaim:
+    //   (a) rows this exact worker_id previously claimed — same process restarting, or
+    //   (b) rows with no worker_id stamp that are >10 min old (genuinely stale / pre-migration rows)
+    // This avoids touching rows actively held by sibling replicas.
+    const staleThreshold = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     const { data: processingRows } = await supabase
       .from("video_generation_jobs")
       .select("id, task_type, payload, created_at, updated_at")
       .eq("status", "processing")
+      .or(`worker_id.eq.${WORKER_ID},and(worker_id.is.null,updated_at.lt.${staleThreshold})`)
       .order("created_at", { ascending: true });
 
     if (processingRows && processingRows.length > 0) {
@@ -654,23 +668,26 @@ process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 process.on("uncaughtException", (err: Error) => {
   console.error("[Worker] 💥 Uncaught exception — marking jobs failed and exiting:", err.message);
   Sentry.captureException(err);
-  // Mark any still-processing jobs as failed so they are not orphaned.
+  // Mark this worker's in-flight jobs as failed so they are not orphaned.
+  // Scope to WORKER_ID so sibling replicas' rows are not touched.
   // Fire-and-forget: do not await — we must exit promptly so the orchestrator can restart.
   supabase
     .from("video_generation_jobs")
     .update({ status: "failed", error_message: "Worker process crashed" })
     .eq("status", "processing")
+    .eq("worker_id", WORKER_ID)
     .then(() => process.exit(1), () => process.exit(1));
 });
 process.on("unhandledRejection", (reason: unknown) => {
   console.error("[Worker] 💥 Unhandled rejection — marking jobs failed and exiting:", reason);
   const err = reason instanceof Error ? reason : new Error(String(reason));
   Sentry.captureException(err);
-  // Mark any still-processing jobs as failed so they are not orphaned.
+  // Mark this worker's in-flight jobs as failed so they are not orphaned.
   supabase
     .from("video_generation_jobs")
     .update({ status: "failed", error_message: "Worker process crashed" })
     .eq("status", "processing")
+    .eq("worker_id", WORKER_ID)
     .then(() => process.exit(1), () => process.exit(1));
 });
 

@@ -1,5 +1,7 @@
-﻿import { downloadVideo, rewriteStorageUrl } from "@/hooks/export/downloadHelpers";
+﻿import { Helmet } from "react-helmet-async";
+import { downloadVideo, rewriteStorageUrl } from "@/hooks/export/downloadHelpers";
 import { createScopedLogger } from "@/lib/logger";
+import { trackEvent } from "@/hooks/useAnalytics";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -443,22 +445,37 @@ export default function Projects() {
       if (existingShare?.share_token) {
         setShareUrl(`${window.location.origin}/share/${existingShare.share_token}`);
       } else {
-        // Create new share token
+        // Create new share token with 30-day expiry
         const shareToken = crypto.randomUUID().replace(/-/g, "");
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
         const { error } = await supabase.from("project_shares").insert({
           project_id: project.id,
           user_id: user.id,
           share_token: shareToken,
+          expires_at: expiresAt,
         });
 
         if (error) throw error;
         setShareUrl(`${window.location.origin}/share/${shareToken}`);
+        try { trackEvent("share_created", { project_type: project.project_type || "unknown" }); } catch {}
       }
     } catch (err: any) {
       toast.error("Failed to create share link");
       log.error(err);
     } finally {
       setShareLoading(false);
+    }
+  };
+
+  const revokeShareLink = async () => {
+    if (!projectToShare) return;
+    try {
+      await supabase.from("project_shares").delete().eq("project_id", projectToShare.id);
+      setShareUrl("");
+      setShareDialogOpen(false);
+      toast.success("Share link revoked");
+    } catch {
+      toast.error("Failed to revoke share link");
     }
   };
 
@@ -946,9 +963,14 @@ export default function Projects() {
             </div>
           )}
           <p className="text-xs text-muted-foreground">
-            Viewers cannot download, edit, or save the project.
+            Viewers cannot download, edit, or save the project. Link expires in 30 days.
           </p>
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            {shareUrl && (
+              <Button variant="destructive" size="sm" onClick={revokeShareLink} className="sm:mr-auto">
+                Revoke Link
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setShareDialogOpen(false)}>
               Close
             </Button>

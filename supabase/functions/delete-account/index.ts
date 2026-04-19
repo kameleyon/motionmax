@@ -46,7 +46,7 @@ serve(async (req) => {
     if (sub?.stripe_subscription_id && sub.status === "active") {
       const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
       if (stripeKey) {
-        const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+        const stripe = new Stripe(stripeKey, { apiVersion: "2024-12-18.acacia" });
         try {
           await stripe.subscriptions.cancel(sub.stripe_subscription_id);
           console.log(`Cancelled Stripe subscription ${sub.stripe_subscription_id} for user ${user.id}`);

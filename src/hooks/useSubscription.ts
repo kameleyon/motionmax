@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { trackEvent, getStoredUtm } from "@/hooks/useAnalytics";
 import {
   PLAN_LIMITS,
   getCreditsRequired,
@@ -168,7 +169,7 @@ async function fetchSubscription(accessToken: string | undefined): Promise<Subsc
 
   // Any edge function error → DB fallback (not a security issue: RLS protects the data)
   if (error) {
-    log.warn("check-subscription edge fn error, using DB fallback", { code: responseCode, detail: responseError || errMsg });
+    log.debug("check-subscription edge fn unavailable, using DB fallback", { code: responseCode, detail: responseError || errMsg });
     return fetchSubscriptionFromDB();
   }
 
@@ -210,6 +211,7 @@ export function useSubscription() {
     if (error) throw error;
     if (!data?.url) throw new Error("Failed to create checkout session");
 
+    try { trackEvent("begin_checkout", { price_id: priceId, mode, ...getStoredUtm() }); } catch {}
     window.open(data.url, "_blank");
     return data.url;
   }, [session?.access_token]);

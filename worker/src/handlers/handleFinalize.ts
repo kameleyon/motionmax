@@ -47,27 +47,6 @@ interface FinalizeResult {
   phaseTime: number;
 }
 
-// ── Cleanup ────────────────────────────────────────────────────────
-
-async function cleanupIntermediateAssets(projectId: string, generationId: string): Promise<void> {
-  const [imageResult, videoResult] = await Promise.allSettled([
-    supabase.storage.from("scene-images").list(projectId, { limit: 200 }).then(({ data }) => {
-      if (!data?.length) return;
-      const paths = data.map((f) => `${projectId}/${f.name}`);
-      return supabase.storage.from("scene-images").remove(paths);
-    }),
-    supabase.storage.from("scene-videos").list(`${projectId}/${generationId}`, { limit: 200 }).then(({ data }) => {
-      if (!data?.length) return;
-      const paths = data.map((f) => `${projectId}/${generationId}/${f.name}`);
-      return supabase.storage.from("scene-videos").remove(paths);
-    }),
-  ]);
-
-  const imageCount = imageResult.status === "fulfilled" ? "ok" : imageResult.reason;
-  const videoCount = videoResult.status === "fulfilled" ? "ok" : videoResult.reason;
-  console.log(`[Finalize] Asset cleanup: scene-images=${imageCount} scene-videos=${videoCount}`);
-}
-
 // ── Handler ────────────────────────────────────────────────────────
 
 export async function handleFinalizePhase(
@@ -209,10 +188,9 @@ export async function handleFinalizePhase(
     console.log(`[Finalize] Thumbnail set for project ${projectId}: ${thumbnailUrl.substring(0, 80)}...`);
   }
 
-  // Clean up intermediate storage objects — fire-and-forget (non-fatal)
-  cleanupIntermediateAssets(projectId, generationId).catch((err) => {
-    console.warn("[Finalize] Intermediate asset cleanup failed (non-fatal):", (err as Error).message);
-  });
+  // NOTE: Do NOT clean up scene-images / scene-videos here. Users still need
+  // them to (1) preview the generation in the UI and (2) export the MP4 later.
+  // Cleanup belongs in the export handler, and only after export succeeds.
 
   const phaseTime = Date.now() - phaseStart;
 

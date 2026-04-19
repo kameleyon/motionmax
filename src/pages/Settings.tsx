@@ -1,4 +1,5 @@
-﻿import { useState, useEffect, useMemo } from "react";
+﻿import { Helmet } from "react-helmet-async";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -161,6 +162,7 @@ export default function Settings() {
 
   return (
     <SidebarProvider defaultOpen={sidebarOpen} onOpenChange={setSidebarOpen}>
+      <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
       <div className="min-h-screen flex w-full bg-background">
         <AppSidebar />
 

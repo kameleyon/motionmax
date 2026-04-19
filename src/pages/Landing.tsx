@@ -88,6 +88,7 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-background">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-2 focus:bg-background focus:text-foreground">Skip to content</a>
       <SeoHead />
 
       {/* Navigation with frosted glass effect */}
@@ -184,6 +185,7 @@ export default function Landing() {
 
       {/* Hero Section — herobackground.webp as full background (PNG fallback kept in /public) */}
       <section
+        id="main-content"
         className="relative min-h-[85vh] sm:min-h-screen flex items-center pt-16 sm:pt-20 md:pt-32 xl:pt-16"
         style={{
           backgroundImage: "url(/herobackground.webp)",
@@ -197,6 +199,7 @@ export default function Landing() {
         <span className="sr-only">Background showing code and data visualizations being transformed into video content</span>
 
         <div className="relative z-10 mx-auto max-w-7xl px-6 sm:px-8 w-full pb-8 md:pb-24">
+          <h1 className="sr-only">MotionMax &#x2013; AI Video Generation</h1>
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -230,7 +233,7 @@ export default function Landing() {
                 Watch Demo
               </Button>
             </div>
-            <p className="mt-4 text-sm text-white/50">
+            <p className="mt-4 text-sm text-white/70">
               Free to start · No credit card required
             </p>
 
@@ -241,7 +244,7 @@ export default function Landing() {
                   <div key={i} className="h-7 w-7 rounded-full border-2 border-background bg-gradient-to-br from-primary/60 to-primary/30" />
                 ))}
               </div>
-              <p className="text-sm text-white/60">
+              <p className="text-sm text-white/70">
                 <span className="text-white/90 font-medium">1,000+</span> creators already making videos
               </p>
             </div>
@@ -318,7 +321,7 @@ export default function Landing() {
             <h2 className="type-h1 tracking-tight text-white">
               Everything you need. Nothing you don't.
             </h2>
-            <p className="mt-4 text-base max-w-xl mx-auto text-white/50">
+            <p className="mt-4 text-base max-w-xl mx-auto text-white/70">
               AI handles research, scriptwriting, visuals, voiceover, and editing. You bring the idea.
             </p>
           </motion.div>
@@ -346,7 +349,7 @@ export default function Landing() {
             <h2 className="type-h1 tracking-tight text-white">
               One platform. Four creative modes.
             </h2>
-            <p className="mt-4 text-base max-w-xl mx-auto text-white/50">
+            <p className="mt-4 text-base max-w-xl mx-auto text-white/70">
               Pick the format that fits your content. Each mode is purpose-built.
             </p>
           </motion.div>
@@ -398,7 +401,7 @@ export default function Landing() {
               >
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <span className="text-xs font-medium uppercase tracking-wider text-white/40">{product.tag}</span>
+                    <span className="text-xs font-medium uppercase tracking-wider text-white/60">{product.tag}</span>
                     <h3 className="text-xl font-semibold text-white mt-1">{product.title}</h3>
                   </div>
                 </div>
@@ -406,7 +409,7 @@ export default function Landing() {
                   {product.description}
                 </p>
                 <div className="rounded-lg bg-black/30 px-4 py-2.5 mb-5">
-                  <p className="text-xs text-white/40 italic">{product.example}</p>
+                  <p className="text-xs text-white/60 italic">{product.example}</p>
                 </div>
                 <Button
                   variant="outline"

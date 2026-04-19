@@ -23,20 +23,37 @@ export function initSentry(): void {
     return;
   }
 
+  const SENSITIVE_KEY_RE = /password|token|email|jwt|key|secret/i;
+
+  function scrubSensitive(obj: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+    if (!obj) return obj;
+    return Object.fromEntries(
+      Object.entries(obj).map(([k, v]) => [k, SENSITIVE_KEY_RE.test(k) ? "[Redacted]" : v])
+    );
+  }
+
   Sentry.init({
     dsn: DSN,
     environment: IS_PROD ? "production" : "development",
+    release: import.meta.env.VITE_SENTRY_RELEASE || undefined,
     integrations: [
       Sentry.browserTracingIntegration(),
       Sentry.replayIntegration(),
     ],
     // Performance: sample 10 % of transactions in production
     tracesSampleRate: IS_PROD ? 0.1 : 1.0,
-    // Session replay: 10 % normal, 100 % on error
-    replaysSessionSampleRate: 0.1,
-    replaysOnErrorSampleRate: 1.0,
+    // No session replay; capture replay only on errors (10 % of error sessions)
+    replaysSessionSampleRate: 0,
+    replaysOnErrorSampleRate: 0.1,
     // Only send errors from our own code
     allowUrls: [/motionmax\.io/, /localhost/],
+    beforeSend(event) {
+      if (event.extra) event.extra = scrubSensitive(event.extra as Record<string, unknown>);
+      if (event.request?.data && typeof event.request.data === "object") {
+        event.request.data = scrubSensitive(event.request.data as Record<string, unknown>);
+      }
+      return event;
+    },
   });
 
   // Bridge: forward structured logger warn/error → Sentry

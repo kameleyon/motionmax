@@ -150,6 +150,7 @@ serve(async (req) => {
                 });
             } else {
               logStep("WARNING: Unknown credit pack product ID", { productId });
+              console.error(`[stripe-webhook] Unknown credit pack product ID: ${productId} for customer: ${session.customer}`);
             }
           }
         } else if (session.mode === "subscription") {

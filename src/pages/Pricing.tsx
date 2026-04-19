@@ -99,6 +99,7 @@ export default function Pricing() {
 
   return (
     <div className="min-h-screen bg-background">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-2 focus:bg-background focus:text-foreground">Skip to content</a>
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-border/30 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
@@ -112,7 +113,7 @@ export default function Pricing() {
       </header>
 
       {/* Main Content */}
-      <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8 sm:py-12">
+      <main id="main-content" className="mx-auto max-w-7xl px-4 sm:px-6 py-8 sm:py-12">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -181,6 +182,48 @@ export default function Pricing() {
             loadingCredits={loadingCredits}
             onBuyCredits={handleBuyCredits}
           />
+
+          {/* FAQ Section */}
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+            className="mt-16 sm:mt-20"
+          >
+            <h2 className="text-xl sm:text-2xl font-bold text-center text-foreground mb-8">Frequently Asked Questions</h2>
+            <div className="max-w-2xl mx-auto divide-y divide-border/50">
+              {[
+                {
+                  q: "What are credits?",
+                  a: "Credits are the currency used to generate videos on MotionMax. Each video generation costs a set number of credits depending on the length and features used. Free accounts get 10 credits/month to get started.",
+                },
+                {
+                  q: "Can I cancel anytime?",
+                  a: "Yes — you can cancel your subscription at any time from the billing portal. You'll keep your plan benefits until the end of your current billing period. No cancellation fees.",
+                },
+                {
+                  q: "Do unused credits roll over?",
+                  a: "Monthly subscription credits reset each billing cycle and do not roll over. However, credits purchased as top-up packs never expire and remain in your account until used.",
+                },
+                {
+                  q: "Is there a free trial?",
+                  a: "Yes — every new account starts with 10 free credits, no credit card required. You can upgrade to a paid plan at any time to get more credits and unlock premium features.",
+                },
+                {
+                  q: "What happens if I run out of credits?",
+                  a: "Video generation will be paused until you purchase additional credits or your plan renews. You can top up anytime with credit packs from the Pricing page.",
+                },
+              ].map(({ q, a }) => (
+                <details key={q} className="group py-4">
+                  <summary className="flex cursor-pointer items-center justify-between gap-4 text-sm font-medium text-foreground list-none">
+                    {q}
+                    <span className="text-muted-foreground transition-transform group-open:rotate-180">▾</span>
+                  </summary>
+                  <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{a}</p>
+                </details>
+              ))}
+            </div>
+          </motion.section>
 
           {/* Support Link */}
           <motion.div

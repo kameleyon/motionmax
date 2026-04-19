@@ -18,6 +18,13 @@ User-agent: *
 Allow: /
 Disallow: /app/
 Disallow: /auth
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /settings
+Disallow: /projects
+Disallow: /usage
+Disallow: /voice-lab
+Disallow: /workspace
 Crawl-delay: 10
 
 Sitemap: https://motionmax.io/sitemap.xml

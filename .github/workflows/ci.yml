@@ -28,10 +28,13 @@ jobs:
         run: npm ci
 
       - name: Security audit
-        run: npm audit --audit-level=high || echo "::warning::npm audit found high-severity vulnerabilities"
+        run: npm audit --audit-level=high
 
       - name: Lint
         run: npm run lint
+
+      - name: Type check
+        run: npx tsc --noEmit
 
       - name: Run tests
         run: npm run test

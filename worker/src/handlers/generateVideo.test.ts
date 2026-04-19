@@ -66,9 +66,9 @@ vi.mock("../services/prompts.js", () => ({
   extractJsonFromLLMResponse: vi.fn().mockImplementation((text: string) => JSON.parse(text)),
 }));
 
-// Research topic: no-op (returns null to skip injection)
+// Research topic: returns empty string (no extra context injected)
 vi.mock("../services/researchTopic.js", () => ({
-  researchTopic: vi.fn().mockResolvedValue(null),
+  researchTopic: vi.fn().mockResolvedValue(""),
 }));
 
 // Attachment processing: pass-through
@@ -179,7 +179,7 @@ describe("handleGenerateVideo", () => {
     vi.mocked(writeSystemLog).mockResolvedValue(undefined);
 
     const { researchTopic } = await import("../services/researchTopic.js");
-    vi.mocked(researchTopic).mockResolvedValue(null);
+    vi.mocked(researchTopic).mockResolvedValue("");
   });
 
   // ── 1. LLM failure → handler throws ──────────────────────────────────────────

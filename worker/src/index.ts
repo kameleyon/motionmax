@@ -660,8 +660,7 @@ process.on("uncaughtException", (err: Error) => {
     .from("video_generation_jobs")
     .update({ status: "failed", error_message: "Worker process crashed" })
     .eq("status", "processing")
-    .then(() => process.exit(1))
-    .catch(() => process.exit(1));
+    .then(() => process.exit(1), () => process.exit(1));
 });
 process.on("unhandledRejection", (reason: unknown) => {
   console.error("[Worker] 💥 Unhandled rejection — marking jobs failed and exiting:", reason);
@@ -672,8 +671,7 @@ process.on("unhandledRejection", (reason: unknown) => {
     .from("video_generation_jobs")
     .update({ status: "failed", error_message: "Worker process crashed" })
     .eq("status", "processing")
-    .then(() => process.exit(1))
-    .catch(() => process.exit(1));
+    .then(() => process.exit(1), () => process.exit(1));
 });
 
 /** Mask an API key for safe logging: first 6 + last 4 chars visible. */

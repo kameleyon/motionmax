@@ -125,7 +125,7 @@ function makeChain(data: unknown = null, error: unknown = null) {
 /** Attach default supabase.from() behavior for the three common tables.
  *  Must be called with the already-imported supabase mock object. */
 function applyDefaultSupabaseMock(
-  supabase: { from: ReturnType<typeof vi.fn> },
+  supabase: any,
   genData: unknown = null,
   genError: unknown = null,
   subData: unknown = null,
@@ -177,7 +177,7 @@ describe("handleExportVideo", () => {
     const { compressIfNeeded } = await import("./export/compressVideo.js");
     vi.mocked(compressIfNeeded).mockImplementation((p: string) => Promise.resolve(p));
     const { initSceneProgress, flushSceneProgress, updateSceneProgress } = await import("../lib/sceneProgress.js");
-    vi.mocked(initSceneProgress).mockReturnValue({ overallPhase: "encoding", overallMessage: "" });
+    vi.mocked(initSceneProgress).mockReturnValue({ overallPhase: "encoding", overallMessage: "" } as any);
     vi.mocked(flushSceneProgress).mockResolvedValue(undefined);
     vi.mocked(updateSceneProgress).mockResolvedValue(undefined);
     // Restore probeDuration so the concat path never calls real ffprobe.
@@ -288,7 +288,7 @@ describe("handleExportVideo", () => {
         vi.mocked(compressIfNeeded).mockImplementation((p: string) => Promise.resolve(p));
         const { flushSceneProgress, initSceneProgress } = await import("../lib/sceneProgress.js");
         vi.mocked(flushSceneProgress).mockResolvedValue(undefined);
-        vi.mocked(initSceneProgress).mockReturnValue({ overallPhase: "encoding", overallMessage: "" });
+        vi.mocked(initSceneProgress).mockReturnValue({ overallPhase: "encoding", overallMessage: "" } as any);
 
         const subscriptionChain = makeChain({ plan_name: plan });
         const generationsChain = makeChain({ scenes: [makeDbScene()] });
@@ -366,7 +366,7 @@ describe("handleExportVideo", () => {
       // Ensure probeDuration returns immediately without touching real ffprobe.
       const ffmpegMod = await import("./export/ffmpegCmd.js");
       vi.mocked(ffmpegMod.probeDuration).mockResolvedValue(10);
-      vi.mocked(ffmpegMod.runFfmpeg).mockResolvedValue(undefined);
+      vi.mocked(ffmpegMod.runFfmpeg).mockResolvedValue(undefined as any);
 
       const { handleExportVideo } = await import("./exportVideo.js");
 

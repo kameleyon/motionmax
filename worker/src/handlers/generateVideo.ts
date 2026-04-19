@@ -411,7 +411,7 @@ ${researchBrief}
     .insert({
       project_id: project.id,
       user_id: userId,
-      status: "generating",
+      status: "processing",
       progress: 10,
       script: rawText,
       scenes: scenesWithMeta,

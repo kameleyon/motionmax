@@ -260,15 +260,16 @@ export async function callPhase(
       if (deductedAmount > 0) {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          try {
-            await (supabase.rpc as unknown as (fn: string, args: Record<string, unknown>) => Promise<unknown>)("refund_credits", {
-              p_user_id: session.user.id,
-              p_amount: deductedAmount,
-            });
-          } catch (refundErr) {
-            log.error("CRITICAL: Refund failed after generation error", refundErr);
+          const { error: refundError } = await supabase.rpc("refund_credits_securely", {
+            p_user_id: session.user.id,
+            p_amount: deductedAmount,
+            p_description: `Refund for failed ${projectType} generation`,
+          });
+          if (refundError) {
+            log.error("CRITICAL: Refund failed after generation error", refundError);
+          } else {
+            log.debug(`Refunded ${deductedAmount} credits after generation failure`);
           }
-          log.debug(`Refunded ${deductedAmount} credits after generation failure`);
         }
       }
       throw err;

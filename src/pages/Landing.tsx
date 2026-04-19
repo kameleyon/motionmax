@@ -1,7 +1,6 @@
 ﻿import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Menu, Play } from "lucide-react";
-import { PLAN_PRICES } from "@/config/products";
 import { LANDING_FEATURES } from "@/config/landingContent";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
@@ -13,7 +12,6 @@ import TrustIndicators from "@/components/landing/TrustIndicators";
 import { Testimonials } from "@/components/landing/Testimonials";
 import FaqSection from "@/components/landing/FaqSection";
 import motionmaxLogo from "@/assets/motionmax-logo.png";
-import motionMaxHeroLogo from "@/assets/motionmax-hero-logo.png";
 import LandingPricing from "@/components/landing/LandingPricing";
 import LandingCta from "@/components/landing/LandingCta";
 import LandingAbout from "@/components/landing/LandingAbout";
@@ -91,12 +89,13 @@ export default function Landing() {
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-2 focus:bg-background focus:text-foreground">Skip to content</a>
       <SeoHead />
 
+      <main id="main-content">
       {/* Navigation with frosted glass effect */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/70 backdrop-blur-md border-b border-border/30">
         <div className="mx-auto flex h-16 sm:h-20 max-w-6xl items-center justify-between px-6 sm:px-8">
           <img src={motionmaxLogo} alt="MotionMax" className="h-8 sm:h-10 w-auto" />
           
-          <nav className="hidden items-center gap-8 md:flex">
+          <nav aria-label="Main navigation" className="hidden items-center gap-8 md:flex">
             <a href="#features" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
               Features
             </a>
@@ -116,7 +115,7 @@ export default function Landing() {
               ref={menuToggleRef}
               variant="ghost"
               size="icon"
-              className="md:hidden rounded-full h-9 w-9"
+              className="md:hidden rounded-full h-11 w-11"
               onClick={() => setMobileMenuOpen((prev) => !prev)}
               aria-label="Toggle menu"
               aria-expanded={mobileMenuOpen}
@@ -143,12 +142,16 @@ export default function Landing() {
           {mobileMenuOpen && (
             <motion.nav
               ref={mobileMenuRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="mobile-menu-heading"
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.2 }}
               className="md:hidden overflow-hidden border-t border-border/30 bg-background/95 backdrop-blur-md"
             >
+              <span id="mobile-menu-heading" className="sr-only">Navigation menu</span>
               <div className="flex flex-col gap-1 px-6 py-4">
                 {[
                   { href: "#features", label: "Features" },
@@ -185,7 +188,6 @@ export default function Landing() {
 
       {/* Hero Section — herobackground.webp as full background (PNG fallback kept in /public) */}
       <section
-        id="main-content"
         className="relative min-h-[85vh] sm:min-h-screen flex items-center pt-16 sm:pt-20 md:pt-32 xl:pt-16"
         style={{
           backgroundImage: "url(/herobackground.webp)",
@@ -450,6 +452,8 @@ export default function Landing() {
 
       {/* About Section */}
       <LandingAbout />
+
+      </main>
 
       {/* Footer */}
       <LandingFooter />

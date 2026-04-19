@@ -23,7 +23,7 @@ const log = createScopedLogger("Pipeline:Unified");
 export async function runUnifiedPipeline(
   params: GenerationParams,
   ctx: PipelineContext,
-  expectedSceneCount: number
+  _expectedSceneCount: number
 ): Promise<void> {
   const isCinematic = params.projectType === "cinematic";
 
@@ -138,19 +138,18 @@ export async function runUnifiedPipeline(
 
   const totalJobs = audioJobIds.length + imageJobIds.length + videoJobIds.length;
   const allJobIds = [...audioJobIds, ...imageJobIds, ...videoJobIds];
+  const allJobSet = new Set(allJobIds);
 
-  // Progress monitor: poll completed job count every 5s
-  const progressInterval = setInterval(async () => {
+  async function refreshProgress() {
     try {
-      const { count } = await (supabase
-        .from("video_generation_jobs") as any)
+      const { count } = await supabase
+        .from("video_generation_jobs")
         .select("id", { count: "exact", head: true })
         .in("id", allJobIds)
         .eq("status", "completed");
 
       const completed = count || 0;
       const pct = Math.min(90, 15 + Math.floor((completed / totalJobs) * 75));
-
       const statusMessages = [
         "Creating your content...",
         "Creating your content...",
@@ -166,13 +165,29 @@ export async function runUnifiedPipeline(
         statusMessage: statusMessages[msgIdx],
       }));
     } catch { /* ignore progress poll errors */ }
-  }, 5000);
+  }
 
-  let finalResult: any;
+  // Realtime: instant update on any intermediate job status change
+  const progressChannel = supabase
+    .channel(`pipeline-progress-${generationId}`)
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "video_generation_jobs" },
+      (payload: { new: Record<string, unknown> }) => {
+        if (allJobSet.has(payload.new?.id as string)) refreshProgress();
+      },
+    )
+    .subscribe();
+
+  // Fallback poll every 5s in case Realtime misses an update
+  const progressInterval = setInterval(refreshProgress, 5000);
+
+  let finalResult: Record<string, unknown>;
   try {
     finalResult = await waitForJob(finalizeJobId, 30 * 60 * 1000, "finalize_generation");
   } finally {
     clearInterval(progressInterval);
+    supabase.removeChannel(progressChannel);
   }
 
   if (!finalResult.success) throw new Error(finalResult.error || "Generation failed");

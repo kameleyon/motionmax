@@ -29,7 +29,7 @@ const CONTENT_TYPES: Record<string, string> = {
   wav: "audio/wav",
 };
 
-Deno.serve(async (req) => {
+export async function handler(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") {
     return new Response(null, {
       headers: {
@@ -116,4 +116,5 @@ Deno.serve(async (req) => {
 
   // 302 redirect to the signed URL — browser follows it transparently
   return new Response(null, { status: 302, headers });
-});
+}
+Deno.serve(handler);

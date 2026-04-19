@@ -166,7 +166,7 @@ export function CinematicResult({
     applyImageEdit,
     regenerateImage,
     undoRegeneration,
-  } = useCinematicRegeneration(generationId, projectId, localScenes as any, handleScenesUpdate as any);
+  } = useCinematicRegeneration(generationId, projectId, localScenes, handleScenesUpdate);
 
   // Keep scenes synced
   useEffect(() => { setLocalScenes(scenes); }, [scenes]);

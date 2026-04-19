@@ -3,8 +3,9 @@ import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Mail, Calendar, CreditCard, Activity, Flag, Coins, DollarSign, Trash2, ShieldAlert, ShieldX, ShieldCheck, ChevronDown, RefreshCw } from "lucide-react";
+import { Loader2, Mail, CreditCard, Activity, Flag, Coins, DollarSign, ShieldAlert, ShieldX, ShieldCheck, RefreshCw } from "lucide-react";
 import { AdminLoadingState } from "@/components/ui/admin-loading-state";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { format } from "date-fns";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -54,7 +55,7 @@ interface UserDetails {
     created_at: string;
     resolved_at: string | null;
   }>;
-  recentUserLogs: Array<{id: string; category: string; event_type: string; message: string; details: any; created_at: string;}>;
+  recentUserLogs: Array<{id: string; category: string; event_type: string; message: string; details: Record<string, unknown> | null; created_at: string;}>;
   recentTransactions: Array<{
     id: string;
     amount: number;
@@ -70,7 +71,7 @@ interface AdminUserDetailsProps {
 }
 
 export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProps) {
-  const { callAdminApi, user: adminUser } = useAdminAuth();
+  const { callAdminApi } = useAdminAuth();
   const [data, setData] = useState<UserDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +94,8 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
 
   useEffect(() => {
     fetchDetails();
+    // fetchDetails is redefined each render; stable deps are callAdminApi and userId
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [callAdminApi, userId]);
 
   const handleAction = async () => {
@@ -127,7 +130,7 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
       setActionReason("");
       fetchDetails();
       onFlagCreated?.();
-    } catch (err) {
+    } catch {
       toast.error("Action failed, please try again");
     } finally {
       setActionLoading(false);
@@ -330,15 +333,18 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
         </Card>
       </div>
 
-      {/* Worker System Logs — collapsed by default */}
+      {/* Collapsible sections: Logs, Transactions, Flags */}
+      <Accordion type="multiple" defaultValue={data.flags && data.flags.length > 0 ? ["flags"] : []}>
+
+      {/* Worker System Logs */}
       {data.recentUserLogs && data.recentUserLogs.length > 0 && (
         <Card>
-          <details>
-          <summary className="px-6 py-4 cursor-pointer text-sm font-medium flex items-center justify-between list-none">
-            <span>Worker System Logs ({data.recentUserLogs.length})</span>
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          </summary>
-          <CardContent>
+          <AccordionItem value="logs" className="border-0">
+          <AccordionTrigger className="px-6 py-4 text-sm font-medium hover:no-underline">
+            Worker System Logs ({data.recentUserLogs.length})
+          </AccordionTrigger>
+          <AccordionContent>
+          <CardContent className="pt-0">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -366,19 +372,20 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
               </TableBody>
             </Table>
           </CardContent>
-          </details>
+          </AccordionContent>
+          </AccordionItem>
         </Card>
       )}
 
-      {/* Recent Transactions — collapsed by default */}
+      {/* Recent Transactions */}
       {data.recentTransactions && data.recentTransactions.length > 0 && (
         <Card>
-          <details>
-          <summary className="px-6 py-4 cursor-pointer text-sm font-medium flex items-center justify-between list-none">
-            <span>Recent Transactions ({data.recentTransactions.length})</span>
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          </summary>
-          <CardContent>
+          <AccordionItem value="transactions" className="border-0">
+          <AccordionTrigger className="px-6 py-4 text-sm font-medium hover:no-underline">
+            Recent Transactions ({data.recentTransactions.length})
+          </AccordionTrigger>
+          <AccordionContent>
+          <CardContent className="pt-0">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -408,19 +415,20 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
               </TableBody>
             </Table>
           </CardContent>
-          </details>
+          </AccordionContent>
+          </AccordionItem>
         </Card>
       )}
 
-      {/* Flags — expanded by default (most actionable) */}
+      {/* User Flags — expanded by default (most actionable) */}
       {data.flags && data.flags.length > 0 && (
         <Card>
-          <details open>
-          <summary className="px-6 py-4 cursor-pointer text-sm font-medium flex items-center justify-between list-none">
-            <span>User Flags ({data.flags.length})</span>
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          </summary>
-          <CardContent>
+          <AccordionItem value="flags" className="border-0">
+          <AccordionTrigger className="px-6 py-4 text-sm font-medium hover:no-underline">
+            User Flags ({data.flags.length})
+          </AccordionTrigger>
+          <AccordionContent>
+          <CardContent className="pt-0">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -452,9 +460,12 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
               </TableBody>
             </Table>
           </CardContent>
-          </details>
+          </AccordionContent>
+          </AccordionItem>
         </Card>
       )}
+
+      </Accordion>
 
       {/* Action Dialog */}
       <Dialog open={actionDialog.open} onOpenChange={(open) => setActionDialog(prev => ({ ...prev, open }))}>

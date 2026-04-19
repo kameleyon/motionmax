@@ -16,7 +16,45 @@ const logStep = (step: string, details?: any) => {
   console.log(`[STRIPE-WEBHOOK] ${step}${detailsStr}`);
 };
 
-serve(async (req) => {
+async function trackConversion(params: {
+  eventName: string;
+  userId: string;
+  value: number;
+  currency: string;
+  transactionId: string;
+  itemName: string;
+}): Promise<void> {
+  const measurementId = Deno.env.get("GA_MEASUREMENT_ID");
+  const apiSecret = Deno.env.get("GA_API_SECRET");
+  if (!measurementId || !apiSecret) return;
+
+  try {
+    await fetch(
+      `https://www.google-analytics.com/mp/collect?measurement_id=${measurementId}&api_secret=${apiSecret}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client_id: params.userId,
+          user_id: params.userId,
+          events: [{
+            name: params.eventName,
+            params: {
+              currency: params.currency,
+              value: params.value,
+              transaction_id: params.transactionId,
+              items: [{ item_name: params.itemName, price: params.value }],
+            },
+          }],
+        }),
+      }
+    );
+  } catch (e) {
+    logStep("GA4 tracking error (non-critical)", { error: String(e) });
+  }
+}
+
+export async function handler(req: Request): Promise<Response> {
   const corsHeaders = {
     ...getCorsHeaders(req.headers.get("origin")),
     // Stripe webhook signature header must be allowed
@@ -157,6 +195,16 @@ serve(async (req) => {
                   description: `Purchased ${credits} credits`,
                   stripe_payment_intent_id: paymentIntentId,
                 });
+
+              // Server-side conversion tracking (fire-and-forget)
+              trackConversion({
+                eventName: "purchase",
+                userId,
+                value: (session.amount_total ?? 0) / 100,
+                currency: (session.currency ?? "usd").toUpperCase(),
+                transactionId: paymentIntentId ?? session.id,
+                itemName: `${credits} credits`,
+              });
             } else {
               const priceId = item.price?.id ?? null;
               console.error(JSON.stringify({
@@ -216,6 +264,18 @@ serve(async (req) => {
             await sendWelcomeEmail(userData.user.email, planName);
             logStep("Welcome email sent", { userId });
           }
+
+          // Server-side conversion tracking
+          trackConversion({
+            eventName: "purchase",
+            userId,
+            value: (event.data.object as any).amount_total != null
+              ? (event.data.object as any).amount_total / 100
+              : 0,
+            currency: "USD",
+            transactionId: (event.data.object as Stripe.Checkout.Session).id,
+            itemName: `${planName} plan`,
+          });
         }
         break;
       }
@@ -439,4 +499,5 @@ serve(async (req) => {
       status: 500,
     });
   }
-});
+}
+serve(handler);

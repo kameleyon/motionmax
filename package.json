@@ -11,7 +11,14 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --no-warn-ignored"
+    ]
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.2.7",
@@ -77,8 +84,11 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
+    "husky": "^9.1.7",
     "jsdom": "^29.0.1",
+    "lint-staged": "^16.4.0",
     "lovable-tagger": "^1.1.13",
+    "msw": "^2.13.4",
     "postcss": "^8.5.6",
     "supabase": "^2.77.1",
     "tailwindcss": "^3.4.17",

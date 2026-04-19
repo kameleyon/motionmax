@@ -20,9 +20,9 @@ function loadPersisted(): VideoExportLogEntry[] | null {
       .filter(
         (e) =>
           e &&
-          typeof (e as any).ts === "number" &&
-          (e as any).level &&
-          typeof (e as any).message === "string"
+          typeof (e as Record<string, unknown>).ts === "number" &&
+          (e as Record<string, unknown>).level &&
+          typeof (e as Record<string, unknown>).message === "string"
       )
       .slice(-300);
   } catch {
@@ -40,7 +40,7 @@ function persist(store: VideoExportLogEntry[]) {
 }
 
 function getStore(): VideoExportLogEntry[] {
-  const g = globalThis as any;
+  const g = globalThis as Record<string, unknown>;
   if (!g[GLOBAL_KEY]) {
     g[GLOBAL_KEY] = (loadPersisted() ?? []) as VideoExportLogEntry[];
   }

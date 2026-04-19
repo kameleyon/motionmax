@@ -83,6 +83,10 @@
     --sidebar-border: 184 10% 90%;
     --sidebar-ring: 184 85% 44%;
 
+    /* Explicit text hierarchy tokens */
+    --text-secondary: 200 7% 40%;    /* ~5:1 contrast vs light background */
+    --text-tertiary: 200 7% 52%;     /* ~3.5:1 contrast vs light background — AA large text */
+
     /* Chart colors - Aqua and Gold palette */
     --chart-1: 184 85% 44%; /* Aqua */
     --chart-2: 45 67% 68%; /* Gold */

@@ -10,11 +10,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useRefreshThumbnails } from "@/hooks/useRefreshThumbnails";
-import { gridThumbnailUrl } from "@/lib/thumbnailUrl";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import {
-  ArrowLeft,
   Search,
   SortAsc,
   SortDesc,
@@ -28,21 +26,16 @@ import {
   Loader2,
   FolderOpen,
   Video,
-  Clapperboard,
   Wallpaper,
   Wand2,
-  Clock,
   LayoutList,
   LayoutGrid,
 } from "lucide-react";
 import { ProjectsGridView } from "@/components/projects/ProjectsGridView";
-import defaultThumbnail from "@/assets/dashboard/default-thumbnail.png";
 import { EmptyState } from "@/components/ui/empty-state";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -83,12 +76,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ThemedLogo } from "@/components/ThemedLogo";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { cn } from "@/lib/utils";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/layout/AppSidebar";
-import { useSidebarState } from "@/hooks/useSidebarState";
+import { AppHeader } from "@/components/layout/AppHeader";
 
 type SortField = "title" | "created_at" | "updated_at";
 type SortOrder = "asc" | "desc";
@@ -123,8 +112,6 @@ export default function Projects() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { refreshThumbnails } = useRefreshThumbnails();
-  const { isOpen: sidebarOpen, setIsOpen: setSidebarOpen } = useSidebarState();
-
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sortField, setSortField] = useState<SortField>("updated_at");
@@ -208,7 +195,7 @@ export default function Projects() {
         if (generations) {
           for (const gen of generations) {
             if (thumbnailMap[gen.project_id] !== undefined) continue;
-            const scenes = gen.scenes as any[];
+            const scenes = gen.scenes as unknown[];
             if (!Array.isArray(scenes) || scenes.length === 0) continue;
 
             for (const scene of scenes) {
@@ -519,9 +506,9 @@ export default function Projects() {
 
         if (error) throw error;
         setShareUrl(`${window.location.origin}/share/${shareToken}`);
-        try { trackEvent("share_created", { project_type: project.project_type || "unknown" }); } catch {}
+        try { trackEvent("share_created", { project_type: project.project_type || "unknown" }); } catch { /* analytics non-critical */ }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error("Failed to create share link");
       log.error(err);
     } finally {
@@ -579,8 +566,8 @@ export default function Projects() {
       toast.info("Redirecting to workspace to export video...");
       const mode = getCreateMode(project.project_type);
       navigate(`/app/create?mode=${mode}&project=${project.id}`);
-    } catch (err: any) {
-      toast.error("Download failed: " + err.message);
+    } catch (err: unknown) {
+      toast.error("Download failed: " + (err instanceof Error ? err.message : String(err)));
     } finally {
       setDownloadingProjectId(null);
     }
@@ -589,25 +576,9 @@ export default function Projects() {
   const SortIcon = sortOrder === "asc" ? SortAsc : SortDesc;
 
   return (
-    <SidebarProvider defaultOpen={sidebarOpen} onOpenChange={setSidebarOpen}>
+    <div className="min-h-screen flex flex-col w-full bg-background">
       <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
-      <div className="min-h-screen flex w-full bg-background">
-        <AppSidebar />
-
-        <main className="flex-1 flex flex-col">
-          {/* Header */}
-          <header className="sticky top-0 z-40 grid h-14 sm:h-16 grid-cols-3 items-center border-b border-border/30 bg-background/80 px-4 sm:px-6 backdrop-blur-sm">
-            <div className="flex items-center justify-start gap-2">
-              <SidebarTrigger />
-              <ThemedLogo className="hidden lg:block h-10 w-auto" />
-            </div>
-            <div className="flex justify-center lg:hidden">
-              <ThemedLogo className="h-10 w-auto" />
-            </div>
-            <div className="flex items-center justify-end">
-              <ThemeToggle />
-            </div>
-          </header>
+      <AppHeader />
 
           <div className="flex-1 overflow-auto">
           <div className="mx-auto max-w-4xl px-4 sm:px-6 py-6 sm:py-10">
@@ -616,7 +587,7 @@ export default function Projects() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">All Projects</h1>
+            <h1 className="type-h2 tracking-tight text-foreground">All Projects</h1>
             <p className="mt-1 text-sm text-muted-foreground">Manage, organize, and access all your video creations</p>
           </motion.div>
 
@@ -931,8 +902,7 @@ export default function Projects() {
         </div>
         </div>
         </div>
-        </main>
-        {/* Dialogs live outside scrollable content but inside sidebar wrapper */}
+      {/* Dialogs */}
 
       {/* Delete Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
@@ -1039,7 +1009,6 @@ export default function Projects() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      </div>
-    </SidebarProvider>
+    </div>
   );
 }

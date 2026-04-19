@@ -37,7 +37,7 @@ export function GenerationQueueStatus() {
 
       // Fetch project titles for context
       const projectIds = data.filter(g => g.project_id).map(g => g.project_id!);
-      let projectMap: Record<string, { title: string; project_type: string | null }> = {};
+      const projectMap: Record<string, { title: string; project_type: string | null }> = {};
 
       if (projectIds.length > 0) {
         const { data: projects } = await supabase

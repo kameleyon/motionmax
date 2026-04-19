@@ -22,7 +22,7 @@ class UserFacingError extends Error {
   }
 }
 
-serve(async (req) => {
+export async function handler(req: Request): Promise<Response> {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   if (req.method === "OPTIONS") {
@@ -120,4 +120,5 @@ serve(async (req) => {
       status: 500,
     });
   }
-});
+}
+serve(handler);

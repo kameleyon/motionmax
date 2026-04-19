@@ -125,7 +125,7 @@ export type SetGenerationState = (updater: GenerationState | ((prev: GenerationS
 /** Context passed to pipeline functions for state management and API calls */
 export interface PipelineContext {
   setState: SetGenerationState;
-  callPhase: (body: Record<string, unknown>, timeoutMs?: number, endpoint?: string) => Promise<any>;
+  callPhase: (body: Record<string, unknown>, timeoutMs?: number, endpoint?: string) => Promise<Record<string, unknown>>;
   toast: (opts: { title?: string; description?: string; variant?: "default" | "destructive" }) => void;  // Legacy signature — adapter wraps Sonner
 }
 
@@ -189,7 +189,7 @@ export const normalizeScenes = (raw: unknown): Scene[] | undefined => {
 };
 
 /** Extract metadata from the first scene's _meta field */
-export const extractMeta = (scenes: any[]): {
+export const extractMeta = (scenes: Scene[]): {
   totalImages: number;
   completedImages: number;
   statusMessage?: string;

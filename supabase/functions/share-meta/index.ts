@@ -25,13 +25,13 @@ const BOT_PATTERNS = [
   'Snapchat',
 ];
 
-function isBot(userAgent: string): boolean {
+export function isBot(userAgent: string): boolean {
   if (!userAgent) return false;
   const ua = userAgent.toLowerCase();
   return BOT_PATTERNS.some(pattern => ua.includes(pattern.toLowerCase()));
 }
 
-Deno.serve(async (req) => {
+export async function handler(req: Request): Promise<Response> {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   // 1. Handle CORS
@@ -207,10 +207,15 @@ Deno.serve(async (req) => {
     <meta property="og:title" content="${escapeHtml(title)} | MotionMax">
     <meta property="og:description" content="${escapeHtml(description)}">
     <meta property="og:image" content="${safeImageUrl}">
-    <meta property="og:image:width" content="1920">
-    <meta property="og:image:height" content="1080">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
     <meta property="og:image:alt" content="${escapeHtml(title)} - Created with MotionMax.io">
     <meta property="og:site_name" content="MotionMax - AI Video Generator">
+    <meta property="og:video" content="${safeAppUrl}">
+    <meta property="og:video:secure_url" content="${safeAppUrl}">
+    <meta property="og:video:type" content="text/html">
+    <meta property="og:video:width" content="1280">
+    <meta property="og:video:height" content="720">
 
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="${escapeHtml(title)}">
@@ -268,9 +273,10 @@ Deno.serve(async (req) => {
     console.error("[Share-Meta] Fatal error:", e);
     return Response.redirect("https://motionmax.io", 302);
   }
-});
+}
+Deno.serve(handler);
 
-function escapeHtml(text: string): string {
+export function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -279,7 +285,7 @@ function escapeHtml(text: string): string {
     .replace(/'/g, "&#039;");
 }
 
-function withCacheBust(url: string, v: string): string {
+export function withCacheBust(url: string, v: string): string {
   try {
     const parsed = new URL(url);
     parsed.searchParams.set("v", v);

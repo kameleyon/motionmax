@@ -20,6 +20,7 @@ import {
   type GenerationParams,
   type PipelineContext,
   type ProjectRow,
+  type Scene,
   SCENE_COUNTS,
   INITIAL_GENERATION_STATE,
   normalizeScenes,
@@ -102,7 +103,7 @@ export function useGenerationPipeline() {
   }, [createContext]);
 
   const resumeCinematic = useCallback(
-    async (project: ProjectRow, generationId: string, existingScenes: any[], resumeFrom: "audio" | "images" | "video" | "finalize") => {
+    async (project: ProjectRow, generationId: string, existingScenes: Scene[], resumeFrom: "audio" | "images" | "video" | "finalize") => {
       log.debug("resumeCinematic", { projectId: project.id, resumeFrom });
       await resumeCinematicPipeline(project, generationId, existingScenes, resumeFrom, createContext());
     },

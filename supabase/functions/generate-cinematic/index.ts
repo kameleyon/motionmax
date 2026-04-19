@@ -11,6 +11,7 @@ import {
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rateLimit.ts";
 import { STYLE_PROMPTS } from "../_shared/stylePrompts.ts";
+import { deductCredits, refundCredits } from "../_shared/credits.ts";
 
 type Phase = "script" | "audio" | "images" | "video" | "finalize" | "image-edit" | "image-regen";
 
@@ -64,7 +65,6 @@ const REPLICATE_PREDICTIONS_URL = "https://api.replicate.com/v1/predictions";
 // Use chatterbox-turbo with voice parameter (Marisol/Ethan) like the main pipeline
 const CHATTERBOX_TURBO_URL = "https://api.replicate.com/v1/models/resemble-ai/chatterbox-turbo/predictions";
 const SEEDANCE_VIDEO_MODEL = "bytedance/seedance-1-pro-fast";
-const GROK_VIDEO_MODEL = "xai/grok-imagine-video";
 
 // Nano Banana models for image generation (Replicate)
 const NANO_BANANA_MODEL = "google/nano-banana-2";
@@ -74,7 +74,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 
 // isHaitianCreole and pcmToWav are imported from ../_shared/audioEngine.ts above
 
-function jsonResponse(body: unknown, init?: ResponseInit) {
+function jsonResponse(corsHeaders: Record<string, string>, body: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(body), {
     ...init,
     headers: { ...corsHeaders, "Content-Type": "application/json", ...(init?.headers || {}) },
@@ -588,87 +588,6 @@ async function resolveHyperealVideo(
   return null;
 }
 
-// Hypereal Seedance 1.5 Pro T2V — used for INITIAL generation (text-to-video, no image)
-async function startSeedanceT2V(scene: Scene, format: "landscape" | "portrait" | "square") {
-  const hyperealApiKey = Deno.env.get("HYPEREAL_API_KEY");
-  if (!hyperealApiKey) throw new Error("HYPEREAL_API_KEY not configured");
-
-  const aspectRatio = format === "portrait" ? "9:16" : format === "square" ? "1:1" : "16:9";
-
-  const visualPrompt =
-    scene.visualPrompt || scene.visual_prompt || scene.voiceover || "Cinematic scene with dramatic lighting";
-
-  const videoPrompt = `${visualPrompt}
-
-ANIMATION RULES (CRITICAL):
-- NO lip-sync talking animation - characters should NOT move their mouths as if speaking
-- Facial expressions ARE allowed: surprised, shocked, screaming, laughing, crying, angry
-- Body movement IS allowed: walking, running, gesturing, pointing, reacting
-- Environment animation IS allowed: wind, particles, camera movement, lighting changes
-- Static poses with subtle breathing/idle movement are preferred for dialogue scenes
-- Focus on CAMERA MOTION and SCENE DYNAMICS rather than character lip movement`;
-
-  console.log(
-    `[Seedance-T2V] Starting scene ${scene.number} | model: seedance-1-5-t2v | prompt: ${videoPrompt.substring(0, 100)}...`,
-  );
-
-  const MAX_RETRIES = 4;
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const response = await fetch(HYPEREAL_VIDEO_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${hyperealApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "seedance-1-5-t2v",
-          input: {
-            prompt: videoPrompt,
-            duration: 5,
-            resolution: "720p",
-            aspect_ratio: aspectRatio,
-          },
-          generate_audio: false,
-        }),
-      });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        console.error(`[Seedance-T2V] Start failed (attempt ${attempt}): ${response.status} - ${errText}`);
-        // FIX 2: Only retry on 429, not 5xx
-        if (response.status === 429 && attempt < MAX_RETRIES) {
-          const delayMs = 2000 * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 1000);
-          console.warn(`[Seedance-T2V] Rate limited on attempt ${attempt}, retrying in ${delayMs}ms`);
-          await sleep(delayMs);
-          continue;
-        }
-        throw new Error(`Hypereal Seedance 1.5 T2V failed: ${response.status} - ${errText}`);
-      }
-
-      const data = await response.json();
-      const jobId = data.jobId || data.id || data.task_id || data.prediction_id;
-      if (!jobId) {
-        console.error(`[Seedance-T2V] No jobId in response:`, JSON.stringify(data).substring(0, 300));
-        throw new Error("Hypereal Seedance 1.5 T2V returned no jobId");
-      }
-      console.log(`[Seedance-T2V] Job started: ${jobId}, credits: ${data.creditsUsed}`);
-      return jobId as string;
-    } catch (err: any) {
-      const errMsg = err?.message || "";
-      // FIX 2: Only retry on 429, not 5xx
-      if (errMsg.includes("429") && attempt < MAX_RETRIES) {
-        const delayMs = 2000 * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 1000);
-        console.warn(`[Seedance-T2V] Rate limited on attempt ${attempt}, retrying in ${delayMs}ms`);
-        await sleep(delayMs);
-        continue;
-      }
-      throw err;
-    }
-  }
-  throw new Error("Hypereal Seedance 1.5 T2V prediction failed after retries");
-}
-
 // Replicate bytedance/seedance-1-pro-fast — I2V fallback for initial generation
 async function startSeedanceReplicateI2V(
   scene: Scene,
@@ -745,75 +664,6 @@ ANIMATION RULES (CRITICAL):
     }
   }
   throw new Error("Replicate seedance-1-pro-fast I2V prediction failed after retries");
-}
-
-async function startGrokVideo(
-  scene: Scene,
-  imageUrl: string,
-  format: "landscape" | "portrait" | "square",
-  replicateToken: string,
-) {
-  const aspectRatio = format === "portrait" ? "9:16" : format === "square" ? "1:1" : "16:9";
-
-  const videoPrompt = `${scene.visualPrompt}
-
-ANIMATION RULES (CRITICAL):
-- NO lip-sync talking animation - characters should NOT move their mouths as if speaking
-- Facial expressions ARE allowed: surprised, shocked, screaming, laughing, crying, angry
-- Body movement IS allowed: walking, running, gesturing, pointing, reacting
-- Environment animation IS allowed: wind, particles, camera movement, lighting changes
-- Static poses with subtle breathing/idle movement are preferred for dialogue scenes
-- Focus on CAMERA MOTION and SCENE DYNAMICS rather than character lip movement`;
-
-  const MAX_RETRIES = 4;
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const response = await fetch(`https://api.replicate.com/v1/models/${GROK_VIDEO_MODEL}/predictions`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${replicateToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          input: {
-            prompt: videoPrompt,
-            image: imageUrl,
-            duration: 10,
-            resolution: "720p",
-            aspect_ratio: aspectRatio,
-          },
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[GrokVideo] Create prediction error (attempt ${attempt}): ${response.status} - ${errorText}`);
-        // FIX 2: Only retry on 429, not 5xx
-        if (response.status === 429 && attempt < MAX_RETRIES) {
-          const delayMs = 2000 * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 1000);
-          console.warn(`[GrokVideo] Rate limited on attempt ${attempt}, retrying in ${delayMs}ms`);
-          await sleep(delayMs);
-          continue;
-        }
-        throw new Error(`Grok video prediction start failed (${response.status}): ${errorText}`);
-      }
-
-      const prediction = await response.json();
-      console.log(`[GrokVideo] Prediction started: ${prediction.id}`);
-      return prediction.id as string;
-    } catch (err: any) {
-      const errMsg = err?.message || "";
-      // FIX 2: Only retry on 429, not 5xx
-      if (errMsg.includes("429") && attempt < MAX_RETRIES) {
-        const delayMs = 2000 * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 1000);
-        console.warn(`[GrokVideo] Error on attempt ${attempt}, retrying in ${delayMs}ms`);
-        await sleep(delayMs);
-        continue;
-      }
-      throw err;
-    }
-  }
-  throw new Error("Grok video prediction failed after retries");
 }
 
 const SEEDANCE_TIMEOUT_RETRY = "__TIMEOUT_RETRY__";
@@ -930,7 +780,7 @@ async function updateSceneAtIndex(
   });
 }
 
-serve(async (req) => {
+export async function handler(req: Request): Promise<Response> {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
   if (req.method === "OPTIONS") {
     return handleCorsPreflightRequest(req.headers.get("origin"));
@@ -940,7 +790,7 @@ serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("authorization");
-    if (!authHeader) return jsonResponse({ error: "Not authenticated" }, { status: 401 });
+    if (!authHeader) return jsonResponse(corsHeaders,{ error: "Not authenticated" }, { status: 401 });
 
     // Propagate trace ID sent by the frontend for end-to-end Sentry correlation.
     const traceId: string = req.headers.get("X-Trace-Id") || crypto.randomUUID();
@@ -964,11 +814,11 @@ serve(async (req) => {
     });
     const { data: claimsData, error: claimsError } = await supabaseAuth.auth.getClaims(token);
     if (claimsError || !claimsData?.claims) {
-      return jsonResponse({ error: "Invalid authentication" }, { status: 401 });
+      return jsonResponse(corsHeaders,{ error: "Invalid authentication" }, { status: 401 });
     }
     const userId = claimsData.claims.sub as string;
     const userEmail = claimsData.claims.email as string;
-    if (!userId) return jsonResponse({ error: "Invalid authentication" }, { status: 401 });
+    if (!userId) return jsonResponse(corsHeaders,{ error: "Invalid authentication" }, { status: 401 });
     const user = { id: userId, email: userEmail };
 
     // Rate limit
@@ -999,7 +849,7 @@ serve(async (req) => {
 
       const userPlan = subData?.plan_name || "free";
       if (userPlan !== "professional" && userPlan !== "enterprise") {
-        return jsonResponse(
+        return jsonResponse(corsHeaders,
           { error: "Cinematic generation requires a Professional or Enterprise plan." },
           { status: 403 },
         );
@@ -1010,7 +860,7 @@ serve(async (req) => {
     try {
       body = await req.json();
     } catch {
-      return jsonResponse({ error: "Invalid JSON request body" }, { status: 400 });
+      return jsonResponse(corsHeaders,{ error: "Invalid JSON request body" }, { status: 400 });
     }
     parsedGenerationId = body.generationId; // Cache for error handler
     const phase: Phase = body.phase || "script";
@@ -1035,19 +885,15 @@ serve(async (req) => {
       const lengthSeconds = LENGTH_SECONDS[length] ?? LENGTH_SECONDS.brief;
       const CINEMATIC_CREDIT_COST = Math.ceil(lengthSeconds * 5);
 
-      const { data: deductionSuccess, error: rpcError } = await supabase.rpc(
-        "deduct_credits_securely",
-        {
-          p_user_id: user.id,
-          p_amount: CINEMATIC_CREDIT_COST,
-          p_transaction_type: "usage",
-          p_description: `Cinematic generation started (${length}, ${CINEMATIC_CREDIT_COST} credits)`,
-        },
+      const creditResult = await deductCredits(
+        supabase,
+        user.id,
+        CINEMATIC_CREDIT_COST,
+        `Cinematic generation started (${length}, ${CINEMATIC_CREDIT_COST} credits)`,
       );
-
-      if (rpcError || !deductionSuccess) {
-        console.error(`[CINEMATIC] Credit deduction failed for user ${user.id}:`, rpcError?.message);
-        return jsonResponse({
+      if (!creditResult.success) {
+        console.error(`[CINEMATIC] Credit deduction failed for user ${user.id}:`, creditResult.error);
+        return jsonResponse(corsHeaders,{
           error: `Insufficient credits. Cinematic ${length} generation requires ${CINEMATIC_CREDIT_COST} credits.`,
           code: "INSUFFICIENT_CREDITS",
         }, { status: 402 });
@@ -1063,13 +909,8 @@ serve(async (req) => {
         .in("status", ["pending", "processing"]);
       if ((queueDepth ?? 0) >= QUEUE_DEPTH_LIMIT) {
         console.warn(`[CINEMATIC] Queue depth ${queueDepth} ≥ ${QUEUE_DEPTH_LIMIT} — rejecting new job`);
-        // Refund credits before returning 429
-        await supabase.rpc("refund_credits_securely", {
-          p_user_id: user.id,
-          p_amount: CINEMATIC_CREDIT_COST,
-          p_description: "Refund: queue full",
-        }).catch(() => {});
-        return jsonResponse(
+        await refundCredits(supabase, user.id, CINEMATIC_CREDIT_COST, "Refund: queue full");
+        return jsonResponse(corsHeaders,
           { error: "Service is temporarily at capacity. Please try again in a few minutes.", code: "QUEUE_FULL" },
           { status: 429 }
         );
@@ -1111,18 +952,12 @@ serve(async (req) => {
 
       if (jobError || !job) {
         // Refund credits since we could not queue the job
-        await supabase.rpc("refund_credits_securely", {
-          p_user_id: user.id,
-          p_amount: CINEMATIC_CREDIT_COST,
-          p_description: "Refund: job queue insert failed",
-        }).catch((e: unknown) =>
-          console.error("[CINEMATIC] Refund failed after job insert error:", e)
-        );
+        await refundCredits(supabase, user.id, CINEMATIC_CREDIT_COST, "Refund: job queue insert failed");
         throw new Error(`Failed to queue cinematic script job: ${jobError?.message}`);
       }
 
       console.log(`[CINEMATIC] Script job queued: ${job.id}`);
-      return jsonResponse({ success: true, pending: true, jobId: job.id });
+      return jsonResponse(corsHeaders,{ success: true, pending: true, jobId: job.id });
     }
 
     // All remaining phases require generationId
@@ -1167,7 +1002,7 @@ serve(async (req) => {
       }
 
       if (scene.audioUrl) {
-        return jsonResponse({ success: true, status: "complete", scene });
+        return jsonResponse(corsHeaders,{ success: true, status: "complete", scene });
       }
 
       // Get voice settings and presenter_focus from project
@@ -1228,12 +1063,12 @@ serve(async (req) => {
       if (result.url) {
         scenes[idx] = { ...scene, audioUrl: result.url, audioPredictionId: undefined };
         await updateSceneAtIndex(supabase, generationId, idx, scenes[idx]);
-        return jsonResponse({ success: true, status: "complete", scene: scenes[idx] });
+        return jsonResponse(corsHeaders,{ success: true, status: "complete", scene: scenes[idx] });
       }
 
       // Audio generation failed
       console.error(`[AUDIO] Scene ${scene.number}: TTS failed: ${result.error}`);
-      return jsonResponse(
+      return jsonResponse(corsHeaders,
         { success: false, error: result.error || "Audio generation failed. Please try again later." },
         { status: 500 },
       );
@@ -1245,7 +1080,7 @@ serve(async (req) => {
       const scene = scenes[idx];
       if (!scene) throw new Error("Scene not found");
 
-      if (scene.imageUrl) return jsonResponse({ success: true, status: "complete", scene });
+      if (scene.imageUrl) return jsonResponse(corsHeaders,{ success: true, status: "complete", scene });
 
       // We need style + format + character data from the project record
       const { data: project, error: projectError } = await supabase
@@ -1272,7 +1107,7 @@ serve(async (req) => {
       scenes[idx] = { ...scene, imageUrl };
       await updateSceneAtIndex(supabase, generationId, idx, scenes[idx]);
 
-      return jsonResponse({ success: true, status: "complete", scene: scenes[idx] });
+      return jsonResponse(corsHeaders,{ success: true, status: "complete", scene: scenes[idx] });
     }
 
     // =============== PHASE 4: VIDEO ===============
@@ -1295,7 +1130,7 @@ serve(async (req) => {
         await updateSceneAtIndex(supabase, generationId, idx, scenes[idx]);
       }
 
-      if (scene.videoUrl) return jsonResponse({ success: true, status: "complete", scene });
+      if (scene.videoUrl) return jsonResponse(corsHeaders,{ success: true, status: "complete", scene });
 
       // Read format from project
       const { data: project, error: projectError } = await supabase
@@ -1320,7 +1155,7 @@ serve(async (req) => {
             videoModel: "seedance-1-5-i2v",
           };
           await updateSceneAtIndex(supabase, generationId, idx, scenes[idx]);
-          return jsonResponse({ success: true, status: "processing", scene: scenes[idx] });
+          return jsonResponse(corsHeaders,{ success: true, status: "processing", scene: scenes[idx] });
         }
 
         // Initial generation: Hypereal Seedance 1.5 I2V (animate the generated image)
@@ -1338,7 +1173,7 @@ serve(async (req) => {
             videoModel: "seedance-1-5-i2v",
           };
           await updateSceneAtIndex(supabase, generationId, idx, scenes[idx]);
-          return jsonResponse({ success: true, status: "processing", scene: scenes[idx] });
+          return jsonResponse(corsHeaders,{ success: true, status: "processing", scene: scenes[idx] });
         } catch (i2vErr) {
           console.warn(
             `[VIDEO] Scene ${scene.number}: Hypereal I2V failed, falling back to Replicate seedance-1-pro-fast: ${i2vErr}`,
@@ -1352,7 +1187,7 @@ serve(async (req) => {
             videoModel: "seedance-1-pro-fast",
           };
           await updateSceneAtIndex(supabase, generationId, idx, scenes[idx]);
-          return jsonResponse({ success: true, status: "processing", scene: scenes[idx] });
+          return jsonResponse(corsHeaders,{ success: true, status: "processing", scene: scenes[idx] });
         }
       }
 
@@ -1375,7 +1210,7 @@ serve(async (req) => {
         );
         scenes[idx] = { ...scene, videoPredictionId: undefined, videoRetryCount: 0 };
         await updateSceneAtIndex(supabase, generationId, idx, scenes[idx]);
-        return jsonResponse(
+        return jsonResponse(corsHeaders,
           { success: false, error: `Video generation failed for scene ${scene.number}. Please regenerate this scene manually.` },
           { status: 500 },
         );
@@ -1383,17 +1218,17 @@ serve(async (req) => {
 
       if (videoUrl === "RATE_LIMITED") {
         console.log(`[VIDEO] Scene ${scene.number}: Hypereal rate limited, telling client to back off 30s`);
-        return jsonResponse({ success: true, status: "processing", retryAfterMs: 30000, scene });
+        return jsonResponse(corsHeaders,{ success: true, status: "processing", retryAfterMs: 30000, scene });
       }
 
       if (!videoUrl) {
-        return jsonResponse({ success: true, status: "processing", retryAfterMs: 5000, scene });
+        return jsonResponse(corsHeaders,{ success: true, status: "processing", retryAfterMs: 5000, scene });
       }
 
       scenes[idx] = { ...scene, videoUrl };
       await updateSceneAtIndex(supabase, generationId, idx, scenes[idx]);
 
-      return jsonResponse({ success: true, status: "complete", scene: scenes[idx] });
+      return jsonResponse(corsHeaders,{ success: true, status: "complete", scene: scenes[idx] });
     }
 
     // =============== IMAGE-EDIT PHASE (Apply modification then regenerate video) ===============
@@ -1445,7 +1280,7 @@ serve(async (req) => {
 
       // Return processing status immediately to avoid Edge Function timeout
       console.log(`[IMG-EDIT] Scene ${scene.number}: Returning processing status, frontend will poll video phase`);
-      return jsonResponse({ success: true, status: "processing", scene: scenes[idx] });
+      return jsonResponse(corsHeaders,{ success: true, status: "processing", scene: scenes[idx] });
     }
 
     // =============== IMAGE-REGEN PHASE (Full regenerate image then video) ===============
@@ -1489,7 +1324,7 @@ serve(async (req) => {
 
       // Return processing status immediately to avoid Edge Function timeout
       console.log(`[IMG-REGEN] Scene ${scene.number}: Returning processing status, frontend will poll video phase`);
-      return jsonResponse({ success: true, status: "processing", scene: scenes[idx] });
+      return jsonResponse(corsHeaders,{ success: true, status: "processing", scene: scenes[idx] });
     }
 
     // =============== PHASE 5: FINALIZE ===============
@@ -1553,7 +1388,7 @@ serve(async (req) => {
         .eq("id", generation.project_id)
         .maybeSingle();
 
-      return jsonResponse({
+      return jsonResponse(corsHeaders,{
         success: true,
         projectId: generation.project_id,
         generationId,
@@ -1564,7 +1399,7 @@ serve(async (req) => {
       });
     }
 
-    return jsonResponse({ error: "Invalid phase" }, { status: 400 });
+    return jsonResponse(corsHeaders,{ error: "Invalid phase" }, { status: 400 });
   } catch (error) {
     console.error("Cinematic generation error:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -1597,7 +1432,7 @@ serve(async (req) => {
       console.error("[ERROR-HANDLER] Failed to update error status:", cleanupErr);
     }
 
-    return jsonResponse(
+    return jsonResponse(corsHeaders,
       {
         success: false,
         error: errorMessage,
@@ -1605,4 +1440,5 @@ serve(async (req) => {
       { status: 500 },
     );
   }
-});
+}
+serve(handler);

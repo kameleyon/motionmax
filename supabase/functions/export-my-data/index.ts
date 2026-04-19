@@ -17,7 +17,7 @@ import { checkRateLimit, getRateLimitHeaders } from "../_shared/rateLimit.ts";
 const MAX_EXPORT_SIZE_MB = 10;
 const MAX_EXPORT_SIZE_BYTES = MAX_EXPORT_SIZE_MB * 1024 * 1024;
 
-serve(async (req) => {
+export async function handler(req: Request): Promise<Response> {
   const origin = req.headers.get("origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -203,4 +203,5 @@ serve(async (req) => {
       status: 500,
     });
   }
-});
+}
+serve(handler);

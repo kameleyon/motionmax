@@ -30,6 +30,7 @@ export interface SubscriptionState {
   subscriptionEnd: string | null;
   cancelAtPeriodEnd: boolean;
   creditsBalance: number;
+  _fetchFailed?: true;
 }
 
 const SUBSCRIPTION_QUERY_KEY = ["subscription"] as const;
@@ -87,7 +88,7 @@ async function fetchSubscriptionFromDB(): Promise<SubscriptionState> {
     };
   } catch (err) {
     log.error("DB fallback also failed, using free defaults", err);
-    return { ...FREE_STATE, _fetchFailed: true } as SubscriptionState & { _fetchFailed: true };
+    return { ...FREE_STATE, _fetchFailed: true };
   }
 }
 
@@ -211,7 +212,7 @@ export function useSubscription() {
     if (error) throw error;
     if (!data?.url) throw new Error("Failed to create checkout session");
 
-    try { trackEvent("begin_checkout", { price_id: priceId, mode, ...getStoredUtm() }); } catch {}
+    try { trackEvent("begin_checkout", { price_id: priceId, mode, ...getStoredUtm() }); } catch { /* analytics non-critical */ }
     window.open(data.url, "_blank");
     return data.url;
   }, [session?.access_token]);
@@ -244,7 +245,7 @@ export function useSubscription() {
     queryClient.invalidateQueries({ queryKey: SUBSCRIPTION_QUERY_KEY });
   }, [queryClient]);
 
-  const fetchError = (data as any)?._fetchFailed
+  const fetchError = data?._fetchFailed
     ? "Unable to verify subscription. Some features may be limited."
     : null;
 

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useQuery } from "@tanstack/react-query";
 import { DollarSign, TrendingUp, CreditCard, RefreshCw } from "lucide-react";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { AdminLoadingState } from "@/components/ui/admin-loading-state";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import { subDays, format } from "date-fns";
 import { useState } from "react";
@@ -76,7 +76,7 @@ export function AdminRevenue() {
   ];
 
   if (loading) {
-    return <LoadingSpinner className="py-12" />;
+    return <AdminLoadingState />;
   }
 
   if (error) {

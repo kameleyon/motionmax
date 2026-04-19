@@ -6,7 +6,7 @@ const logStep = (step: string, details?: unknown) => {
   console.log(`[DRAIN-DELETION-TASKS] ${step}${detailsStr}`);
 };
 
-serve(async (req) => {
+export async function handler(req: Request): Promise<Response> {
   // Only accept POST (pg_cron / internal cron callers use POST)
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
@@ -69,7 +69,8 @@ serve(async (req) => {
   }
 
   return await processTasks(supabase, tasks ?? [], ELEVENLABS_API_KEY, STRIPE_SECRET_KEY);
-});
+}
+serve(handler);
 
 // ---------------------------------------------------------------------------
 // Process a batch of claimed deletion tasks

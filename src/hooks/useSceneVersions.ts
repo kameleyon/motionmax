@@ -16,14 +16,17 @@ export interface SceneVersion {
   created_at: string;
 }
 
+// scene_versions is not in the Supabase generated types — cast through unknown
+type AnyTable = ReturnType<typeof supabase.from>;
+const sceneVersionsTable = () => (supabase as unknown as { from: (t: string) => AnyTable }).from("scene_versions");
+
 export function useSceneVersions(generationId: string | undefined, sceneIndex: number) {
   return useQuery({
     queryKey: ["scene-versions", generationId, sceneIndex],
     queryFn: async () => {
       if (!generationId) return [];
 
-      const { data, error } = await supabase
-        .from("scene_versions" as any)
+      const { data, error } = await sceneVersionsTable()
         .select("*")
         .eq("generation_id", generationId)
         .eq("scene_index", sceneIndex)
@@ -31,14 +34,13 @@ export function useSceneVersions(generationId: string | undefined, sceneIndex: n
 
       if (error) throw error;
 
-      // Parse image_urls JSON if present
-      return (data || []).map((v: any) => ({
+      return ((data || []) as Array<SceneVersion & { image_urls: string | string[] | null }>).map((v) => ({
         ...v,
-        image_urls: v.image_urls ? JSON.parse(v.image_urls) : null,
+        image_urls: typeof v.image_urls === "string" ? JSON.parse(v.image_urls) : v.image_urls,
       })) as SceneVersion[];
     },
     enabled: !!generationId,
-    staleTime: 10000, // Cache for 10 seconds
+    staleTime: 10000,
   });
 }
 
@@ -48,8 +50,7 @@ export function useSceneVersionCount(generationId: string | undefined, sceneInde
     queryFn: async () => {
       if (!generationId) return 0;
 
-      const { count, error } = await supabase
-        .from("scene_versions" as any)
+      const { count, error } = await sceneVersionsTable()
         .select("id", { count: "exact", head: true })
         .eq("generation_id", generationId)
         .eq("scene_index", sceneIndex);

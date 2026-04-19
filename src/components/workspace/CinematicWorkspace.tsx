@@ -156,7 +156,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
 
         if (data?.status === "complete" && generationState.step !== "complete") {
           const scenes = Array.isArray(data.scenes) ? data.scenes : [];
-          const allVideos = scenes.every((s: any) => !!s?.videoUrl);
+          const allVideos = scenes.every((s: unknown) => !!(s as Record<string, unknown>)?.videoUrl);
           if (allVideos) {
             log.debug("All videos done in DB, reloading project");
             isResumeInFlightRef.current = true;
@@ -456,7 +456,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                 >
                   <CinematicResult
                     title={generationState.title || "Untitled Cinematic"}
-                    scenes={generationState.scenes as any}
+                    scenes={generationState.scenes}
                     projectId={generationState.projectId}
                     generationId={generationState.generationId}
                     finalVideoUrl={generationState.finalVideoUrl}

@@ -2,9 +2,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useQuery } from "@tanstack/react-query";
-import { Users, CreditCard, Activity, Flag, Coins, Archive, TrendingUp, TrendingDown, DollarSign, ArrowUpRight, ArrowDownRight, RefreshCw } from "lucide-react";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { Users, CreditCard, Activity, Flag, Coins, Archive, TrendingUp, TrendingDown, DollarSign, ArrowUpRight, RefreshCw } from "lucide-react";
+import { AdminLoadingState } from "@/components/ui/admin-loading-state";
 import { supabase } from "@/integrations/supabase/client";
+import { CREDIT_PACK_PRICES } from "@/config/products";
 
 interface CostBreakdown {
   openrouter: number;
@@ -54,11 +55,10 @@ export function AdminOverview() {
     refetchOnWindowFocus: false,
   });
 
-  // Credit amount → dollar price mapping
-  const CREDIT_PACK_PRICE: Record<number, number> = {
-    300: 9.99, 900: 24.99, 2500: 59.99,
-    15: 4.99, 50: 14.99, 150: 34.99, 500: 99.99,
-  };
+  // Credit amount → dollar price mapping (sourced from products.ts)
+  const CREDIT_PACK_PRICE: Record<number, number> = Object.fromEntries(
+    Object.entries(CREDIT_PACK_PRICES).map(([k, v]) => [Number(k), parseFloat(v.price.replace("$", ""))])
+  );
 
   // Fetch trend data: counts from last 7 days
   const { data: trends } = useQuery({
@@ -91,7 +91,7 @@ export function AdminOverview() {
   const error = queryError ? (queryError instanceof Error ? queryError.message : "Failed to load stats") : null;
 
   if (loading) {
-    return <LoadingSpinner className="py-12" />;
+    return <AdminLoadingState />;
   }
 
   if (error) {

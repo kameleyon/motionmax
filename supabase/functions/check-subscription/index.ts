@@ -9,7 +9,7 @@ const logStep = (step: string, details?: any) => {
   console.log(`[CHECK-SUBSCRIPTION] ${step}${detailsStr}`);
 };
 
-serve(async (req) => {
+export async function handler(req: Request): Promise<Response> {
   const origin = req.headers.get("origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -222,9 +222,10 @@ serve(async (req) => {
       status: 503,
     });
   }
-});
+}
+serve(handler);
 
-function buildDbFallbackResponse(
+export function buildDbFallbackResponse(
   corsHeaders: Record<string, string>,
   dbSubscription: { plan_name: string; status: string; current_period_end: string | null; cancel_at_period_end: boolean } | null,
   creditsBalance: number,

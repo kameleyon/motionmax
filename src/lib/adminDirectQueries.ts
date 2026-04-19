@@ -43,15 +43,14 @@ export async function fetchDashboardStats() {
     supabase.from("generations").select("*", { count: "exact", head: true }),
     supabase.from("generation_archives").select("*", { count: "exact", head: true }),
     supabase.from("user_flags").select("*").is("resolved_at", null),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (supabase.rpc as any)("get_generation_costs_summary"),
+    (supabase.rpc as unknown as (fn: string) => Promise<{ data: Record<string, unknown> | null; error: unknown }>)("get_generation_costs_summary"),
     supabase.from("credit_transactions").select("amount, transaction_type").eq("transaction_type", "purchase"),
   ]);
 
   const activeSubs = subscriptions?.filter(s => s.status === "active") || [];
 
   // ── Costs from RPC (bypasses RLS via SECURITY DEFINER) ──
-  const costData = costs as any;
+  const costData = costs as Record<string, unknown> | null;
   const totalOpenRouter = Number(costData?.openrouter) || 0;
   const totalReplicate = Number(costData?.replicate) || 0;
   const totalHypereal = Number(costData?.hypereal) || 0;
@@ -234,7 +233,7 @@ export async function fetchGenerationStats(params: { startDate?: string; endDate
 
   (gens || []).forEach(g => {
     const st = g.status || "pending";
-    if (st in byStatus) (byStatus as any)[st]++;
+    if (st in byStatus) (byStatus as Record<string, number>)[st]++;
     const day = g.created_at?.slice(0, 10) || "unknown";
     if (!dayMap[day]) dayMap[day] = { total: 0, completed: 0, failed: 0, deleted: 0 };
     dayMap[day].total++;
@@ -344,7 +343,7 @@ export async function fetchRevenueStats(params?: { startDate?: string; endDate?:
     .select("amount, transaction_type, created_at")
     .eq("transaction_type", "purchase");
 
-  let subsQuery = supabase
+  const subsQuery = supabase
     .from("subscriptions")
     .select("plan_name, status, stripe_subscription_id")
     .eq("status", "active");

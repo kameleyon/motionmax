@@ -1,5 +1,5 @@
 import { createScopedLogger } from "@/lib/logger";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Copy,
@@ -8,7 +8,6 @@ import {
   Pencil,
   RefreshCw,
   Trash2,
-  Volume2,
   X,
   Clock,
   Eye,
@@ -23,7 +22,7 @@ import { useAdminLogs } from "@/hooks/useAdminLogs";
 import { AdminLogsPanel } from "./AdminLogsPanel";
 import { useGenerationLogs } from "@/hooks/useGenerationLogs";
 import { GenerationLogsPanel } from "./GenerationLogsPanel";
-import type { Scene, CostTracking, PhaseTimings } from "@/hooks/useGenerationPipeline";
+import type { Scene, CostTracking } from "@/hooks/useGenerationPipeline";
 import { useVideoExport } from "@/hooks/useVideoExport";
 import { supabase } from "@/integrations/supabase/client";
 import { useSceneRegeneration } from "@/hooks/useSceneRegeneration";
@@ -38,7 +37,6 @@ import { SceneEditModal } from "./SceneEditModal";
 import { SceneVersionHistory } from "./SceneVersionHistory";
 import { VideoPlayer } from "./VideoPlayer";
 import { toast } from "sonner";
-import { useAdminAuth } from "@/hooks/useAdminAuth";
 
 const log = createScopedLogger("GenerationResult");
 
@@ -63,7 +61,6 @@ export function GenerationResult({
   title,
   scenes: initialScenes,
   format,
-  onNewProject,
   onRegenerateAll,
   totalTimeMs,
   costTracking,
@@ -84,12 +81,11 @@ export function GenerationResult({
   const [versionHistorySceneIndex, setVersionHistorySceneIndex] = useState<number | null>(null);
   const [showExportLogs, setShowExportLogs] = useState(false);
   const [exportLogsVersion, setExportLogsVersion] = useState(0);
-  const [isReRendering, setIsReRendering] = useState(false);
+  const [isReRendering] = useState(false);
 
-  const { state: exportState, exportVideo, downloadVideo, shareVideo, reset: resetExport, loadExistingVideo } = useVideoExport();
+  const { state: exportState, exportVideo, downloadVideo, reset: resetExport, loadExistingVideo } = useVideoExport();
   // isAdmin comes from useAdminLogs above
   const { state: zipState, downloadImagesAsZip } = useImagesZipDownload();
-  const reRenderTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasAutoExportedRef = useRef(false);
 
   const exportLogText = (() => {
@@ -324,47 +320,15 @@ export function GenerationResult({
               </h3>
 
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                {scenes.map((scene, idx) => {
-                  const sceneImageCount = scene.imageUrls?.length || (scene.imageUrl ? 1 : 0);
-                  return (
-                    <div key={scene.number || idx} className="space-y-2">
-                      {/* Thumbnail */}
-                      <div
-                        className={cn(
-                          "relative rounded-lg overflow-hidden border cursor-pointer transition-all",
-                          format === "portrait" ? "aspect-[9/16]" : format === "square" ? "aspect-square" : "aspect-video",
-                        )}
-                        onClick={() => setEditingSceneIndex(idx)}
-                      >
-                        {scene.imageUrl ? (
-                          <img
-                            src={scene.imageUrl}
-                            alt={`Scene ${scene.number}`}
-                            loading="lazy"
-                            decoding="async"
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-muted/50 flex items-center justify-center">
-                            <span className="text-xs text-muted-foreground">Scene {scene.number}</span>
-                          </div>
-                        )}
-                        <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/60 text-xs text-white">
-                          {scene.duration}s
-                          {sceneImageCount > 1 && ` • ${sceneImageCount}`}
-                        </div>
-                        <div className="absolute inset-0 bg-black/0 hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
-                          <Pencil className="h-5 w-5 text-white" />
-                        </div>
-                      </div>
-
-                      {/* Scene info */}
-                      <p className="text-xs text-muted-foreground line-clamp-2 px-0.5">
-                        {scene.voiceover?.substring(0, 80)}...
-                      </p>
-                    </div>
-                  );
-                })}
+                {scenes.map((scene, idx) => (
+                  <SceneCard
+                    key={scene.number || idx}
+                    scene={scene}
+                    idx={idx}
+                    format={format}
+                    onEdit={setEditingSceneIndex}
+                  />
+                ))}
               </div>
             </Card>
           </motion.div>
@@ -448,3 +412,49 @@ export function GenerationResult({
     </div>
   );
 }
+
+interface SceneCardProps {
+  scene: { number?: number; imageUrl?: string; imageUrls?: string[]; duration?: number; voiceover?: string };
+  idx: number;
+  format: string;
+  onEdit: (idx: number) => void;
+}
+
+const SceneCard = memo(function SceneCard({ scene, idx, format, onEdit }: SceneCardProps) {
+  const sceneImageCount = scene.imageUrls?.length || (scene.imageUrl ? 1 : 0);
+  return (
+    <div className="space-y-2">
+      <div
+        className={cn(
+          "relative rounded-lg overflow-hidden border cursor-pointer transition-all",
+          format === "portrait" ? "aspect-[9/16]" : format === "square" ? "aspect-square" : "aspect-video",
+        )}
+        onClick={() => onEdit(idx)}
+      >
+        {scene.imageUrl ? (
+          <img
+            src={scene.imageUrl}
+            alt={`Scene ${scene.number}`}
+            loading="lazy"
+            decoding="async"
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full bg-muted/50 flex items-center justify-center">
+            <span className="text-xs text-muted-foreground">Scene {scene.number}</span>
+          </div>
+        )}
+        <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/60 text-xs text-white">
+          {scene.duration}s
+          {sceneImageCount > 1 && ` • ${sceneImageCount}`}
+        </div>
+        <div className="absolute inset-0 bg-black/0 hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
+          <Pencil className="h-5 w-5 text-white" />
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground line-clamp-2 px-0.5">
+        {scene.voiceover?.substring(0, 80)}...
+      </p>
+    </div>
+  );
+});

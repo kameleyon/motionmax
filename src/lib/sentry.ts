@@ -119,8 +119,8 @@ export function grantAnalyticsConsent(): void {
   replayEnabled = true;
   Sentry.addIntegration(Sentry.replayIntegration());
   // Activate on-error replay (10 % of error sessions) now that consent is given.
-  Sentry.getClient()?.getOptions && Object.assign(
-    Sentry.getClient()!.getOptions(),
-    { replaysOnErrorSampleRate: 0.1 },
-  );
+  const sentryClient = Sentry.getClient();
+  if (sentryClient?.getOptions) {
+    Object.assign(sentryClient.getOptions(), { replaysOnErrorSampleRate: 0.1 });
+  }
 }

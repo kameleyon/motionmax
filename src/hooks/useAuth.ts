@@ -76,15 +76,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (_event === "SIGNED_IN" && session?.user) {
           const metaVersion = session.user.user_metadata?.accepted_policy_version as string | undefined;
           if (metaVersion) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             supabase
               .from("profiles")
               .update({
                 accepted_policy_version: metaVersion,
                 accepted_policy_at: session.user.user_metadata?.accepted_policy_at ?? new Date().toISOString(),
-              } as any)
+              } as unknown as Record<string, unknown>)
               .eq("user_id", session.user.id)
-              .is("accepted_policy_version" as any, null)
+              .is("accepted_policy_version", null)
               .then(() => {});
           }
         }
@@ -100,18 +99,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const { data, error } = await supabase.auth.signUp({
       options: {
         emailRedirectTo: `${redirectUrl}/app`,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         data: {
           accepted_policy_version: CURRENT_POLICY_VERSION,
           accepted_policy_at: new Date().toISOString(),
           ...utmParams,
-        } as any,
+        },
       },
       email,
       password,
     });
     if (!error) {
-      try { trackEvent("signup", { method: "email", ...utmParams }); } catch {}
+      try { trackEvent("signup", { method: "email", ...utmParams }); } catch { /* analytics non-critical */ }
     }
     return { data, error };
   }, []);
@@ -122,7 +120,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       password,
     });
     if (!error) {
-      try { trackEvent("login", { method: "email" }); } catch {}
+      try { trackEvent("login", { method: "email" }); } catch { /* analytics non-critical */ }
     }
     return { data, error };
   }, []);

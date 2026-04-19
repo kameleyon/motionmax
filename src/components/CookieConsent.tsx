@@ -23,6 +23,7 @@ function storeConsent(state: "accepted" | "rejected") {
 }
 
 /** Returns true if user has accepted analytics cookies */
+// eslint-disable-next-line react-refresh/only-export-components
 export function hasAnalyticsConsent(): boolean {
   return getStoredConsent() === "accepted";
 }
@@ -65,7 +66,12 @@ export function CookieConsent() {
   };
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:max-w-sm z-50 animate-in slide-in-from-bottom-4 fade-in duration-300">
+    <div
+      role="region"
+      aria-label="Cookie preferences"
+      aria-live="polite"
+      className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:max-w-sm z-50 animate-in slide-in-from-bottom-4 fade-in duration-300"
+    >
       <div className="rounded-xl border border-border/50 bg-background/95 backdrop-blur-sm p-4 shadow-lg">
         <div className="flex items-start gap-3">
           <div className="flex-1 space-y-2">
@@ -75,15 +81,19 @@ export function CookieConsent() {
               <a href="/privacy" className="text-primary hover:underline">Privacy policy</a>
             </p>
             <div className="flex items-center gap-2 pt-1">
-              <Button size="sm" onClick={handleAccept} className="h-7 text-xs px-3">
+              <Button size="sm" onClick={handleAccept} className="h-10 text-xs px-3">
                 Accept
               </Button>
-              <Button size="sm" variant="ghost" onClick={handleReject} className="h-7 text-xs px-3 text-muted-foreground">
+              <Button size="sm" variant="ghost" onClick={handleReject} className="h-10 text-xs px-3 text-muted-foreground">
                 Reject
               </Button>
             </div>
           </div>
-          <button onClick={handleReject} className="text-muted-foreground hover:text-foreground p-0.5">
+          <button
+            onClick={handleReject}
+            aria-label="Close cookie banner"
+            className="text-muted-foreground hover:text-foreground p-1.5 min-h-[44px] min-w-[44px] flex items-center justify-center"
+          >
             <X className="h-3.5 w-3.5" />
           </button>
         </div>

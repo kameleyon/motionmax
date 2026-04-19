@@ -4,6 +4,7 @@ import { Check, X, Crown, Gem } from "lucide-react";
 import { PLAN_LIMITS } from "@/lib/planLimits";
 import { PLAN_PRICES, yearlyDiscountPercent } from "@/config/products";
 import { Button } from "@/components/ui/button";
+import { BillingToggle } from "@/components/pricing/BillingToggle";
 
 interface LandingPricingProps {
   onCtaClick: (label: string) => void;
@@ -80,27 +81,12 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
           </p>
 
           {/* Billing toggle */}
-          <div className="mt-6 inline-flex items-center gap-3 rounded-full bg-muted/50 p-1 border border-border/30">
-            <button
-              onClick={() => setBillingInterval("monthly")}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                billingInterval === "monthly" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Monthly
-            </button>
-            <button
-              onClick={() => setBillingInterval("yearly")}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                billingInterval === "yearly" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Yearly
-              <span className="ml-1.5 text-[10px] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">
-                Save {yearlyDiscountPercent()}%
-              </span>
-            </button>
-          </div>
+          <BillingToggle
+            value={billingInterval}
+            onChange={setBillingInterval}
+            discountPercent={yearlyDiscountPercent()}
+            className="mt-6"
+          />
         </motion.div>
 
         {/* Free trial banner */}

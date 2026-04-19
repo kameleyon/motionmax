@@ -1,5 +1,4 @@
 import { useState, useCallback } from "react";
-import JSZip from "jszip";
 import { toast } from "sonner";
 import { createScopedLogger } from "@/lib/logger";
 
@@ -48,6 +47,7 @@ export function useImagesZipDownload() {
         return;
       }
 
+      const { default: JSZip } = await import("jszip");
       const zip = new JSZip();
       const folder = zip.folder("images");
       

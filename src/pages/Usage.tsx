@@ -3,10 +3,9 @@ import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { 
-  Zap, 
+import {
+  Zap,
   Video,
-  Clapperboard,
   Wallpaper,
   TrendingUp,
   Calendar,
@@ -18,6 +17,8 @@ import {
   Sparkles,
   ExternalLink,
   Plus,
+  CheckCircle2,
+  X,
   RefreshCw,
   Loader2,
   Clock,
@@ -29,18 +30,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import { ThemedLogo } from "@/components/ThemedLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
 import { getCreditsRequired } from "@/lib/planLimits";
 import { supabase } from "@/integrations/supabase/client";
-import { normalizeProjectType } from "@/lib/projectUtils";
-import { formatDistanceToNow, format, startOfMonth, endOfMonth, subMonths, isSameMonth } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths, isSameMonth } from "date-fns";
 import { toast } from "sonner";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/layout/AppSidebar";
-import { useSidebarState } from "@/hooks/useSidebarState";
+import { AppHeader } from "@/components/layout/AppHeader";
 import {
   Table,
   TableBody,
@@ -76,8 +72,7 @@ export default function Usage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
-  const { isOpen: sidebarOpen, setIsOpen: setSidebarOpen } = useSidebarState();
-  const { 
+  const {
     plan, 
     subscribed, 
     subscriptionEnd, 
@@ -89,11 +84,12 @@ export default function Usage() {
   } = useSubscription();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isOpeningPortal, setIsOpeningPortal] = useState(false);
+  const [showSuccessBanner, setShowSuccessBanner] = useState(false);
 
-  // Show success toast if redirected from checkout
+  // Show success state if redirected from checkout
   useEffect(() => {
     if (searchParams.get("success") === "true") {
-      toast.success("Payment successful! Your subscription has been activated. It may take a moment to reflect.");
+      setShowSuccessBanner(true);
       checkSubscription();
     }
   }, [searchParams, checkSubscription]);
@@ -163,7 +159,7 @@ export default function Usage() {
       if (error) throw error;
       
       return (data || []).map(item => {
-        const scenes = item.scenes as any[];
+        const scenes = item.scenes as unknown[];
         const costTracking = scenes?.[0]?._meta?.costTracking;
         const startedAt = item.started_at ? new Date(item.started_at).getTime() : null;
         const completedAt = item.completed_at ? new Date(item.completed_at).getTime() : null;
@@ -229,34 +225,21 @@ export default function Usage() {
   };
 
   return (
-    <SidebarProvider defaultOpen={sidebarOpen} onOpenChange={setSidebarOpen}>
+    <div className="min-h-screen flex flex-col w-full bg-background">
       <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
-      <div className="min-h-screen flex w-full bg-background">
-        <AppSidebar />
-
-        <main className="flex-1 flex flex-col">
-          {/* Header */}
-          <header className="sticky top-0 z-40 grid h-14 sm:h-16 grid-cols-3 items-center border-b border-border/30 bg-background/80 px-4 sm:px-6 backdrop-blur-sm">
-            <div className="flex items-center justify-start gap-2">
-              <SidebarTrigger />
-              <ThemedLogo className="hidden lg:block h-10 w-auto" />
-            </div>
-            <div className="flex justify-center lg:hidden">
-              <ThemedLogo className="h-10 w-auto" />
-            </div>
-            <div className="flex items-center justify-end gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleRefresh}
-                disabled={isRefreshing}
-                className="rounded-full h-8 w-8 sm:h-9 sm:w-9"
-              >
-                <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-              </Button>
-              <ThemeToggle />
-            </div>
-          </header>
+      <AppHeader
+        actions={
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="rounded-full h-8 w-8 sm:h-9 sm:w-9"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+          </Button>
+        }
+      />
 
           {/* Main Content */}
           <div className="flex-1 overflow-auto">
@@ -268,6 +251,32 @@ export default function Usage() {
         >
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">Usage & Billing</h1>
           <p className="mt-1 text-sm text-muted-foreground">Monitor your usage and manage your subscription</p>
+
+          {/* Post-payment success banner */}
+          {showSuccessBanner && (
+            <div className="mt-6 flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/10 px-4 py-4 shadow-sm">
+              <CheckCircle2 className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-foreground">Payment successful — you're all set!</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Your plan is now active. Ready to start creating?</p>
+                <div className="flex gap-2 mt-3">
+                  <Button size="sm" className="h-8 rounded-full text-xs" onClick={() => navigate("/app/create")}>
+                    Start creating
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-8 rounded-full text-xs" onClick={() => navigate("/projects")}>
+                    View projects
+                  </Button>
+                </div>
+              </div>
+              <button
+                className="shrink-0 text-muted-foreground hover:text-foreground"
+                onClick={() => setShowSuccessBanner(false)}
+                aria-label="Dismiss"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
 
           {/* Current Plan */}
           <Card className="mt-6 sm:mt-8 border-border/50 bg-gradient-to-br from-primary/10 to-transparent shadow-sm">
@@ -387,7 +396,7 @@ export default function Usage() {
             </CardHeader>
             <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
               {subscribed ? (
-                <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 sm:p-6">
+                <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 sm:p-6">
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20">
                       <PlanIcon className="h-5 w-5 text-primary" />
@@ -414,7 +423,7 @@ export default function Usage() {
                   </Button>
                 </div>
               ) : (
-                <div className="rounded-lg border border-dashed border-border/50 bg-muted/20 p-4 sm:p-6 text-center">
+                <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 p-4 sm:p-6 text-center">
                   <CreditCard className="h-8 w-8 sm:h-10 sm:w-10 mx-auto text-muted-foreground/50 mb-3" />
                   <p className="text-sm font-medium text-foreground">No active subscription</p>
                   <p className="text-xs sm:text-sm text-muted-foreground mt-1">
@@ -487,7 +496,7 @@ export default function Usage() {
                       {allActivity
                         .filter(a => a.status === "complete" || a.status === "completed")
                         .reduce((sum, a) => {
-                          const proj = a.project as any;
+                          const proj = a.project as Record<string, unknown>;
                           return sum + getCreditCostForGeneration(proj?.project_type, proj?.length);
                         }, 0)}
                     </p>
@@ -571,7 +580,7 @@ export default function Usage() {
                           const isComplete = activity.status === "complete" || activity.status === "completed";
                           const isFailed = activity.status === "failed" || activity.status === "error";
                           const isGenerating = !isComplete && !isFailed;
-                          const proj = activity.project as any;
+                          const proj = activity.project as Record<string, unknown>;
                           const projectType = proj?.project_type;
                           const projectLength = proj?.length;
                           const IconComponent = projectType === "smartflow" || projectType === "smart-flow"
@@ -665,8 +674,6 @@ export default function Usage() {
         </motion.div>
           </div>
           </div>
-        </main>
-      </div>
-    </SidebarProvider>
+    </div>
   );
 }

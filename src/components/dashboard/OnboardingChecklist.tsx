@@ -15,7 +15,6 @@ interface OnboardingChecklistProps {
 }
 
 const STORAGE_KEY = "motionmax_onboarding";
-const TUTORIAL_URL = "https://www.youtube.com/@motionmax";
 
 interface OnboardingState {
   tutorialWatched: boolean;
@@ -66,13 +65,13 @@ export function OnboardingChecklist({ hasProjects, hasSharedProject = false }: O
     },
     {
       id: "tutorial",
-      label: "Watch tutorial video",
+      label: "Try a sample video",
       done: state.tutorialWatched,
       action: () => {
-        window.open(TUTORIAL_URL, "_blank");
+        navigate("/app/create?sample=true");
         persist({ tutorialWatched: true });
       },
-      actionLabel: "Watch",
+      actionLabel: "Try it",
       icon: PlayCircle,
     },
     {

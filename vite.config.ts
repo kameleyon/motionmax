@@ -56,6 +56,7 @@ export default defineConfig(({ mode }) => ({
           "react-vendor": ["react", "react-dom", "react-router-dom"],
           "ui-vendor": ["framer-motion", "@tanstack/react-query"],
           "supabase": ["@supabase/supabase-js"],
+          "recharts": ["recharts"],
         },
       },
     },

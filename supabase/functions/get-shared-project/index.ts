@@ -96,7 +96,7 @@ async function refreshSceneUrls(
   return refreshedScene;
 }
 
-Deno.serve(async (req) => {
+export async function handler(req: Request): Promise<Response> {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
   if (req.method === "OPTIONS") {
     return handleCorsPreflightRequest(req.headers.get("origin"));
@@ -203,4 +203,5 @@ Deno.serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}
+Deno.serve(handler);

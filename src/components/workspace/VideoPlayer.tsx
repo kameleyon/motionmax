@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Play,
   Pause,
-  Download,
   Maximize,
   Volume2,
   VolumeX,
@@ -199,11 +198,6 @@ export function VideoPlayer({
     }
   }, []);
 
-  const handleDownload = useCallback(() => {
-    if (!videoUrl) return;
-    const safeName = title.replace(/[^a-z0-9]/gi, "_").slice(0, 50) || "video";
-    onDownload(videoUrl, `${safeName}.mp4`, true);
-  }, [videoUrl, title, onDownload]);
 
   // Should we show the progress overlay?
   const showProgress = isRendering || (isGenerating && !isComplete);
@@ -320,7 +314,7 @@ export function VideoPlayer({
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="text-white hover:bg-white/20 h-8 w-8"
+                  className="text-white hover:bg-white/20 h-11 w-11"
                   onClick={togglePlay}
                   aria-label={isPlaying ? "Pause video" : "Play video"}
                 >
@@ -329,7 +323,7 @@ export function VideoPlayer({
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="text-white hover:bg-white/20 h-8 w-8"
+                  className="text-white hover:bg-white/20 h-11 w-11"
                   aria-label={isMuted ? "Unmute" : "Mute"} onClick={toggleMute}
                 >
                   {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
@@ -339,7 +333,7 @@ export function VideoPlayer({
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="text-white hover:bg-white/20 h-8 w-8"
+                  className="text-white hover:bg-white/20 h-11 w-11"
                   aria-label="Fullscreen" onClick={toggleFullscreen}
                 >
                   <Maximize className="h-4 w-4" />

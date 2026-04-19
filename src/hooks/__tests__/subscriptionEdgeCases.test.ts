@@ -1,7 +1,9 @@
 /// <reference types="vitest/globals" />
 import { validateGenerationAccess } from "@/lib/planLimits";
 
-describe("validateGenerationAccess - edge cases", () => {
+// These tests belong here to document the credit/access rules that
+// useWorkspaceSubscription.guardGeneration delegates to.
+describe("validateGenerationAccess - planLimits rules", () => {
   it("blocks generation with 0 credits", () => {
     const r = validateGenerationAccess("creator", 0, "doc2video", "short", "landscape");
     expect(r.canGenerate).toBe(false);

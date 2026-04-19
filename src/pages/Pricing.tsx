@@ -1,15 +1,13 @@
 ﻿import { useState } from "react";
+import { Helmet } from "react-helmet-async";
 import { motion } from "framer-motion";
 import PageSeo from "@/components/PageSeo";
 import { useNavigate } from "react-router-dom";
-import { Menu, ShieldCheck } from "lucide-react";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import { Badge } from "@/components/ui/badge";
-import { ThemedLogo } from "@/components/ThemedLogo";
-import { SidebarTrigger } from "@/components/ui/sidebar";
-import { cn } from "@/lib/utils";
+import { ShieldCheck, Lock, CreditCard, RefreshCcw } from "lucide-react";
+import { AppHeader } from "@/components/layout/AppHeader";
 import { useSubscription } from "@/hooks/useSubscription";
 import { yearlyDiscountPercent } from "@/config/products";
+import { BillingToggle } from "@/components/pricing/BillingToggle";
 import { PLANS, CREDIT_PACKAGES } from "@/config/pricingPlans";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -106,19 +104,48 @@ export default function Pricing() {
         description="Choose the right MotionMax plan. Free tier available. Credit-based pricing for AI cinematic videos, explainers, and more."
         canonical="https://motionmax.io/pricing"
       />
+      <Helmet>
+        <script type="application/ld+json">{JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "Product",
+          "name": "MotionMax AI Video Creator",
+          "description": "AI-powered video creation platform with voice cloning, cinematic generation, and professional export.",
+          "url": "https://motionmax.io/pricing",
+          "brand": { "@type": "Brand", "name": "MotionMax" },
+          "offers": [
+            {
+              "@type": "Offer",
+              "name": "Creator Plan",
+              "price": "29",
+              "priceCurrency": "USD",
+              "priceSpecification": {
+                "@type": "UnitPriceSpecification",
+                "price": "29",
+                "priceCurrency": "USD",
+                "billingDuration": "P1M"
+              },
+              "availability": "https://schema.org/InStock",
+              "url": "https://motionmax.io/pricing"
+            },
+            {
+              "@type": "Offer",
+              "name": "Studio Plan",
+              "price": "99",
+              "priceCurrency": "USD",
+              "priceSpecification": {
+                "@type": "UnitPriceSpecification",
+                "price": "99",
+                "priceCurrency": "USD",
+                "billingDuration": "P1M"
+              },
+              "availability": "https://schema.org/InStock",
+              "url": "https://motionmax.io/pricing"
+            }
+          ]
+        })}</script>
+      </Helmet>
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-2 focus:bg-background focus:text-foreground">Skip to content</a>
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-border/30 bg-background/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
-          <div className="flex items-center gap-3 sm:gap-4">
-            <SidebarTrigger className="lg:hidden">
-              <Menu className="h-5 w-5 text-muted-foreground" />
-            </SidebarTrigger>
-            <ThemedLogo className="h-7 sm:h-8 w-auto" />
-          </div>
-          <ThemeToggle />
-        </div>
-      </header>
+      <AppHeader className="z-50 backdrop-blur-md" />
 
       {/* Main Content */}
       <main id="main-content" className="mx-auto max-w-7xl px-4 sm:px-6 py-8 sm:py-12">
@@ -137,24 +164,12 @@ export default function Pricing() {
             </p>
 
             {/* Billing Toggle */}
-            <div className="flex items-center justify-center gap-3 mt-6">
-              <span className={cn("text-sm font-medium", billingInterval === "monthly" ? "text-foreground" : "text-muted-foreground")}>Monthly</span>
-              <button
-                onClick={() => setBillingInterval(billingInterval === "monthly" ? "yearly" : "monthly")}
-                className={cn(
-                  "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
-                  billingInterval === "yearly" ? "bg-primary" : "bg-muted"
-                )}
-              >
-                <span className={cn(
-                  "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
-                  billingInterval === "yearly" ? "translate-x-6" : "translate-x-1"
-                )} />
-              </button>
-              <span className={cn("text-sm font-medium", billingInterval === "yearly" ? "text-foreground" : "text-muted-foreground")}>
-                Yearly
-              </span>
-              <Badge variant="secondary" className="bg-primary/10 text-primary text-xs">{`Save ${yearlyDiscountPercent()}%`}</Badge>
+            <div className="flex justify-center mt-6">
+              <BillingToggle
+                value={billingInterval}
+                onChange={setBillingInterval}
+                discountPercent={yearlyDiscountPercent()}
+              />
             </div>
 
             {/* Money-Back Guarantee */}
@@ -177,6 +192,26 @@ export default function Pricing() {
             onEnterprise={() => setShowEnterpriseModal(true)}
           />
 
+          {/* Trust badges */}
+          <div className="flex flex-wrap items-center justify-center gap-6 mt-6 mb-2">
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <ShieldCheck className="h-4 w-4 text-green-500" />
+              7-Day Money-Back Guarantee
+            </span>
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Lock className="h-4 w-4 text-green-500" />
+              SSL / TLS encrypted
+            </span>
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <CreditCard className="h-4 w-4 text-green-500" />
+              Powered by Stripe
+            </span>
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <RefreshCcw className="h-4 w-4 text-green-500" />
+              Cancel anytime
+            </span>
+          </div>
+
           {/* Credit Breakdown Table */}
           <CreditBreakdownTable />
 
@@ -198,7 +233,7 @@ export default function Pricing() {
             transition={{ delay: 0.6 }}
             className="mt-16 sm:mt-20"
           >
-            <h2 className="text-xl sm:text-2xl font-bold text-center text-foreground mb-8">Frequently Asked Questions</h2>
+            <h2 className="type-h2 text-center text-foreground mb-8">Frequently Asked Questions</h2>
             <div className="max-w-2xl mx-auto divide-y divide-border/50">
               {[
                 {

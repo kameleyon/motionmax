@@ -1,5 +1,6 @@
 import { Progress } from "@/components/ui/progress";
 
+// eslint-disable-next-line react-refresh/only-export-components
 /** Calculate a 0–100 password strength score */
 export function getPasswordStrength(password: string): { score: number; label: string; color: string } {
   if (!password) return { score: 0, label: "", color: "bg-muted" };
@@ -42,10 +43,10 @@ export function PasswordStrengthMeter({ password, showRequirements = true }: Pas
       <Progress value={strength.score} className="h-1.5" />
       {showRequirements && (
         <ul className="text-xs text-muted-foreground space-y-0.5 mt-1">
-          <li className={password.length >= 8 ? "text-primary" : ""}>• At least 8 characters</li>
-          <li className={/[a-z]/.test(password) && /[A-Z]/.test(password) ? "text-primary" : ""}>• Uppercase and lowercase letters</li>
-          <li className={/\d/.test(password) ? "text-primary" : ""}>• At least one number</li>
-          <li className={/[^a-zA-Z0-9]/.test(password) ? "text-primary" : ""}>• At least one special character</li>
+          <li className={password.length >= 8 ? "text-primary" : ""}>{password.length >= 8 ? "✓" : "✗"} At least 8 characters</li>
+          <li className={/[a-z]/.test(password) && /[A-Z]/.test(password) ? "text-primary" : ""}>{/[a-z]/.test(password) && /[A-Z]/.test(password) ? "✓" : "✗"} Uppercase and lowercase letters</li>
+          <li className={/\d/.test(password) ? "text-primary" : ""}>{/\d/.test(password) ? "✓" : "✗"} At least one number</li>
+          <li className={/[^a-zA-Z0-9]/.test(password) ? "text-primary" : ""}>{/[^a-zA-Z0-9]/.test(password) ? "✓" : "✗"} At least one special character</li>
         </ul>
       )}
     </div>

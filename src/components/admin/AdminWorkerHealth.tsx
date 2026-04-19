@@ -110,7 +110,7 @@ export function AdminWorkerHealth() {
 
       let avgDuration = 0;
       if (recentJobs && recentJobs.length > 0) {
-        const durations = recentJobs.map((job: any) => {
+        const durations = recentJobs.map((job: { created_at: string; completed_at: string | null }) => {
           const start = new Date(job.created_at).getTime();
           const end = new Date(job.completed_at!).getTime();
           return (end - start) / 1000;
@@ -118,12 +118,13 @@ export function AdminWorkerHealth() {
         avgDuration = durations.reduce((a: number, b: number) => a + b, 0) / durations.length;
       }
 
-      const recentActivityAny = recentActivity as any[] | null;
-      const isActive = (recentActivityAny && recentActivityAny.length > 0) || (liveVitals?.accepting ?? false);
+      type ActivityRow = { completed_at: string | null };
+      const recentActivityRows = recentActivity as ActivityRow[] | null;
+      const isActive = (recentActivityRows && recentActivityRows.length > 0) || (liveVitals?.accepting ?? false);
       const lastActivity = liveVitals?.lastPollAt
         ? new Date(liveVitals.lastPollAt)
-        : recentActivityAny?.[0]?.completed_at
-          ? new Date(recentActivityAny[0].completed_at)
+        : recentActivityRows?.[0]?.completed_at
+          ? new Date(recentActivityRows[0].completed_at)
           : new Date();
 
       const totalJobs = (completedCount || 0) + (failedCount || 0);

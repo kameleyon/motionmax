@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { callPhase } from "@/hooks/generation/callPhase";
 import { createScopedLogger } from "@/lib/logger";
 import type { Scene } from "@/hooks/generation/types";
+import type { Json } from "@/integrations/supabase/types";
 
 const log = createScopedLogger("CinematicRegeneration");
 
@@ -37,7 +38,7 @@ export function useCinematicRegeneration(
       if (!generationId) return;
       const { error } = await supabase
         .from("generations")
-        .update({ scenes: nextScenes as any })
+        .update({ scenes: nextScenes as unknown as Json })
         .eq("id", generationId);
       if (error) throw error;
     },
@@ -185,7 +186,7 @@ export function useCinematicRegeneration(
         if (!result?.success) throw new Error(result?.error || "Image edit failed");
 
         // Update image + clear affected videos
-        let nextScenes = scenes.map((s, i) => {
+        const nextScenes = scenes.map((s, i) => {
           if (i === idx) return { ...s, imageUrl: result.imageUrl, videoUrl: undefined };
           if (i === idx - 1) return { ...s, videoUrl: undefined };
           return s;
@@ -231,7 +232,7 @@ export function useCinematicRegeneration(
         if (!result?.success) throw new Error(result?.error || "Image regeneration failed");
 
         // Update image + clear stale videos (current + previous scene)
-        let nextScenes = scenes.map((s, i) => {
+        const nextScenes = scenes.map((s, i) => {
           if (i === idx) return { ...s, imageUrl: result.imageUrl, videoUrl: undefined };
           if (i === idx - 1) return { ...s, videoUrl: undefined };
           return s;

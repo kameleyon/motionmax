@@ -96,7 +96,7 @@ export async function submitJob(
   if (!session?.user) throw new Error("Not authenticated");
 
   const { data: job, error: insertError } = await (supabase
-    .from("video_generation_jobs") as any)
+    .from("video_generation_jobs") as ReturnType<typeof supabase.from>)
     .insert({
       user_id: session.user.id,
       project_id: (body.projectId as string) ?? null,
@@ -119,7 +119,7 @@ export async function submitJob(
 /**
  * Wait for a previously submitted job to complete.
  */
-export async function waitForJob(jobId: string, timeoutMs: number, taskType?: string): Promise<any> {
+export async function waitForJob(jobId: string, timeoutMs: number, taskType?: string): Promise<Record<string, unknown>> {
   return pollWorkerJob(jobId, timeoutMs, taskType);
 }
 
@@ -131,7 +131,7 @@ async function workerCallPhase(
   body: Record<string, unknown>,
   taskType: string = "generate_video",
   pollTimeoutMs: number = 5 * 60 * 1000
-): Promise<any> {
+): Promise<Record<string, unknown>> {
   const jobId = await submitJob(body, taskType);
   return pollWorkerJob(jobId, pollTimeoutMs, taskType);
 }
@@ -153,11 +153,11 @@ const POLL_INTERVALS: Record<string, number> = {
  * Wait for a worker job using Supabase Realtime (instant notification)
  * with adaptive polling as fallback (in case Realtime misses an update).
  */
-async function pollWorkerJob(jobId: string, maxWaitMs: number = 8 * 60 * 1000, taskType?: string): Promise<any> {
+async function pollWorkerJob(jobId: string, maxWaitMs: number = 8 * 60 * 1000, taskType?: string): Promise<Record<string, unknown>> {
   const FALLBACK_POLL = POLL_INTERVALS[taskType || ""] || 5000;
   const startTime = Date.now();
 
-  return new Promise<any>((resolve, reject) => {
+  return new Promise<Record<string, unknown>>((resolve, reject) => {
     let settled = false;
     let fallbackTimer: ReturnType<typeof setInterval> | null = null;
     let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
@@ -171,7 +171,7 @@ async function pollWorkerJob(jobId: string, maxWaitMs: number = 8 * 60 * 1000, t
       if (timeoutTimer) clearTimeout(timeoutTimer);
     }
 
-    async function handleResult(row: any) {
+    async function handleResult(row: Record<string, unknown>) {
       if (settled) return;
       if (row.status === "completed") {
         log.debug("Worker job completed", { jobId, elapsedMs: Date.now() - startTime });
@@ -182,7 +182,7 @@ async function pollWorkerJob(jobId: string, maxWaitMs: number = 8 * 60 * 1000, t
           resolve(row.result);
         } else {
           try {
-            const { data } = await (supabase.from("video_generation_jobs") as any)
+            const { data } = await (supabase.from("video_generation_jobs") as ReturnType<typeof supabase.from>)
               .select("result, payload")
               .eq("id", jobId)
               .single();
@@ -215,7 +215,7 @@ async function pollWorkerJob(jobId: string, maxWaitMs: number = 8 * 60 * 1000, t
       if (settled) return;
       try {
         const { data: row, error } = await (supabase
-          .from("video_generation_jobs") as any)
+          .from("video_generation_jobs") as ReturnType<typeof supabase.from>)
           .select("status, error_message, payload, result")
           .eq("id", jobId)
           .single();
@@ -236,9 +236,9 @@ export async function callPhase(
   body: Record<string, unknown>,
   timeoutMs: number = 300000, // 5 minutes max wait for video to render
   endpoint: string = DEFAULT_ENDPOINT
-): Promise<any> {
+): Promise<Record<string, unknown>> {
   const VALID_PHASES = ["script", "audio", "images", "video", "finalize", "regenerate-image", "regenerate-audio", "undo"] as const;
-  if (!VALID_PHASES.includes(body.phase as any)) {
+  if (!VALID_PHASES.includes(body.phase as (typeof VALID_PHASES)[number])) {
     throw new Error(`Unknown generation phase: ${body.phase}`);
   }
 
@@ -261,7 +261,7 @@ export async function callPhase(
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           try {
-            await (supabase.rpc as any)("refund_credits", {
+            await (supabase.rpc as unknown as (fn: string, args: Record<string, unknown>) => Promise<unknown>)("refund_credits", {
               p_user_id: session.user.id,
               p_amount: deductedAmount,
             });
@@ -312,7 +312,7 @@ export async function callPhase(
   return legacyCallPhase(body, timeoutMs, endpoint);
 }
 
-async function legacyCallPhase(body: Record<string, unknown>, timeoutMs: number, endpoint: string): Promise<any> {
+async function legacyCallPhase(body: Record<string, unknown>, timeoutMs: number, endpoint: string): Promise<Record<string, unknown>> {
   const MAX_ATTEMPTS = 3;
   const phase = body.phase || "unknown";
 

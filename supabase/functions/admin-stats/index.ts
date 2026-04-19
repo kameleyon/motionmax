@@ -23,7 +23,7 @@ async function getCachedUsers(supabaseAdmin: ReturnType<typeof createClient>): P
   return { users: _usersCache.users };
 }
 
-serve(async (req) => {
+export async function handler(req: Request): Promise<Response> {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   if (req.method === "OPTIONS") {
@@ -1016,4 +1016,5 @@ serve(async (req) => {
       status: 500,
     });
   }
-});
+}
+serve(handler);

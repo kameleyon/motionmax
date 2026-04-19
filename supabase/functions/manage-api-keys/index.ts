@@ -8,7 +8,7 @@ const PBKDF2_ITERATIONS = 100_000;
  * Generate a unique salt per user to prevent rainbow table attacks
  * Uses user ID to ensure each user's keys have unique encryption even if plaintext is same
  */
-function generateUserSalt(userId: string): Uint8Array {
+export function generateUserSalt(userId: string): Uint8Array {
   const encoder = new TextEncoder();
   // Combine fixed prefix with user ID for uniqueness
   return encoder.encode(`motionmax-apikey-salt-v3-${userId}`);
@@ -163,7 +163,7 @@ async function decrypt(ciphertext: string, userId: string): Promise<{ value: str
   }
 }
 
-Deno.serve(async (req) => {
+export async function handler(req: Request): Promise<Response> {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   // Handle CORS preflight
@@ -369,4 +369,5 @@ Deno.serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}
+Deno.serve(handler);

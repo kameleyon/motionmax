@@ -11,13 +11,11 @@ import {
   AlertCircle,
   AlertTriangle,
   Info,
-  Zap,
-  CheckCircle,
   Pause,
   Play,
   Terminal,
 } from "lucide-react";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { AdminLoadingState } from "@/components/ui/admin-loading-state";
 import { format } from "date-fns";
 import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
@@ -209,7 +207,7 @@ export function AdminLogs() {
   };
 
   if (loading && logs.length === 0) {
-    return <LoadingSpinner className="py-12" />;
+    return <AdminLoadingState />;
   }
 
   if (error) {

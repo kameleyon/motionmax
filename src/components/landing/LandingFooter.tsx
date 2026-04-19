@@ -49,7 +49,7 @@ export default function LandingFooter() {
             <ul className="space-y-2.5">
               {footerLinks.product.map(link => (
                 <li key={link.label}>
-                  <a href={link.href} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  <a href={link.href} className="text-sm text-muted-foreground hover:text-foreground hover:underline transition-colors">
                     {link.label}
                   </a>
                 </li>
@@ -63,7 +63,7 @@ export default function LandingFooter() {
             <ul className="space-y-2.5">
               {footerLinks.company.map(link => (
                 <li key={link.label}>
-                  <a href={link.href} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  <a href={link.href} className="text-sm text-muted-foreground hover:text-foreground hover:underline transition-colors">
                     {link.label}
                   </a>
                 </li>
@@ -77,7 +77,7 @@ export default function LandingFooter() {
             <ul className="space-y-2.5">
               {footerLinks.legal.map(link => (
                 <li key={link.label}>
-                  <a href={link.href} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  <a href={link.href} className="text-sm text-muted-foreground hover:text-foreground hover:underline transition-colors">
                     {link.label}
                   </a>
                 </li>

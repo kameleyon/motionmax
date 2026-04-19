@@ -3,14 +3,13 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AnimatedOutlet } from "@/components/layout/AnimatedOutlet";
 import { WorkspaceErrorBoundary } from "@/components/workspace/WorkspaceErrorBoundary";
 import { SubscriptionRenewalModal } from "@/components/workspace/SubscriptionRenewalModal";
+import { useSidebarState } from "@/hooks/useSidebarState";
 
-/**
- * Shared authenticated app shell used by simple sidebar routes (/app, /app/create, /pricing).
- * Provides SidebarProvider + AppSidebar + WorkspaceErrorBoundary via React Router's AnimatedOutlet.
- */
 export function AppShell() {
+  const { isOpen, setIsOpen } = useSidebarState();
+
   return (
-    <SidebarProvider defaultOpen={true}>
+    <SidebarProvider defaultOpen={isOpen} onOpenChange={setIsOpen}>
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground focus:text-sm">
         Skip to content
       </a>

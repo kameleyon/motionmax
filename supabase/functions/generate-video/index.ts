@@ -5,6 +5,7 @@ import DOMPurify from "https://esm.sh/dompurify@3.2.4";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rateLimit.ts";
 import { STYLE_PROMPTS } from "../_shared/stylePrompts.ts";
+import { deductCredits } from "../_shared/credits.ts";
 
 // ============= INPUT VALIDATION =============
 const INPUT_LIMITS = {
@@ -4881,7 +4882,7 @@ Professional illustration with dynamic composition and clear visual hierarchy. A
 }
 
 // ============= MAIN HANDLER =============
-serve(async (req) => {
+export async function handler(req: Request): Promise<Response> {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
   const requestStartedAt = Date.now();
   console.log("[generate-video] Incoming request", {
@@ -5397,18 +5398,14 @@ serve(async (req) => {
 
       // ============= UPFRONT CREDIT DEDUCTION (Atomic via RPC) =============
       if (creditsRequired > 0) {
-        const { data: deductionSuccess, error: rpcError } = await supabase.rpc(
-          "deduct_credits_securely",
-          {
-            p_user_id: user.id,
-            p_amount: creditsRequired,
-            p_transaction_type: "usage",
-            p_description: `Video generation started: ${body.projectType || "doc2video"} / ${length}`,
-          },
+        const creditResult = await deductCredits(
+          supabase,
+          user.id,
+          creditsRequired,
+          `Video generation started: ${body.projectType || "doc2video"} / ${length}`,
         );
-
-        if (rpcError || !deductionSuccess) {
-          console.error(`[CREDITS] Atomic deduction failed for user ${user.id}:`, rpcError?.message);
+        if (!creditResult.success) {
+          console.error(`[CREDITS] Atomic deduction failed for user ${user.id}:`, creditResult.error);
           return new Response(
             JSON.stringify({
               error: "Failed to deduct credits. Please ensure you have enough balance.",
@@ -5446,25 +5443,6 @@ serve(async (req) => {
     }
 
     switch (phase) {
-      // ── DEPRECATED: script / audio / images / finalize all moved to Render worker ──
-      // These phases are now processed by the Node.js worker (worker/src/handlers/).
-      // callPhase.ts routes them through the video_generation_jobs queue.
-      // Returning 503 here prevents any accidental fallback to the edge function.
-      case "audio":
-        return new Response(
-          JSON.stringify({ error: "Audio phase is now handled by the Render worker (process_audio task). Check callPhase.ts routing.", code: "AUDIO_PHASE_DEPRECATED" }),
-          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      case "images":
-        return new Response(
-          JSON.stringify({ error: "Images phase is now handled by the Render worker (process_images task). Check callPhase.ts routing.", code: "IMAGES_PHASE_DEPRECATED" }),
-          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      case "finalize":
-        return new Response(
-          JSON.stringify({ error: "Finalize phase is now handled by the Render worker (finalize_generation task). Check callPhase.ts routing.", code: "FINALIZE_PHASE_DEPRECATED" }),
-          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
       case "regenerate-audio":
         if (typeof sceneIndex !== "number" || !newVoiceover) {
           return new Response(JSON.stringify({ error: "Missing sceneIndex or newVoiceover" }), {
@@ -5539,4 +5517,5 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-});
+}
+serve(handler);

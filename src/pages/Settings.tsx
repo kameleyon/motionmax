@@ -18,15 +18,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import { ThemedLogo } from "@/components/ThemedLogo";
 import { supabase } from "@/integrations/supabase/client";
 import { getPasswordStrength, PasswordStrengthMeter } from "@/components/ui/password-strength";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/layout/AppSidebar";
-import { useSidebarState } from "@/hooks/useSidebarState";
+import { AppHeader } from "@/components/layout/AppHeader";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,8 +37,6 @@ import {
 export default function Settings() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const { isOpen: sidebarOpen, setIsOpen: setSidebarOpen } = useSidebarState();
-
   const [displayName, setDisplayName] = useState("");
   const [isSavingName, setIsSavingName] = useState(false);
   const [newEmail, setNewEmail] = useState("");
@@ -221,29 +215,12 @@ export default function Settings() {
   };
 
   return (
-    <SidebarProvider defaultOpen={sidebarOpen} onOpenChange={setSidebarOpen}>
+    <div className="min-h-screen flex flex-col w-full bg-background">
       <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
-      <div className="min-h-screen flex w-full bg-background">
-        <AppSidebar />
+      <AppHeader />
 
-        <main className="flex-1 flex flex-col">
-          {/* Header */}
-          <header className="sticky top-0 z-40 grid h-14 sm:h-16 grid-cols-3 items-center border-b border-border/30 bg-background/80 px-4 sm:px-6 backdrop-blur-sm">
-            <div className="flex items-center justify-start gap-2">
-              <SidebarTrigger />
-              <ThemedLogo className="hidden lg:block h-10 w-auto" />
-            </div>
-            <div className="flex justify-center lg:hidden">
-              <ThemedLogo className="h-10 w-auto" />
-            </div>
-            <div className="flex items-center justify-end">
-              <ThemeToggle />
-            </div>
-          </header>
-
-          {/* Content */}
-          <div className="flex-1 overflow-auto">
-            <div className="mx-auto max-w-4xl px-4 sm:px-6 py-6 sm:py-10">
+      <div className="flex-1 overflow-auto">
+        <div className="mx-auto max-w-4xl px-4 sm:px-6 py-6 sm:py-10">
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -304,7 +281,7 @@ export default function Settings() {
                           />
                         </div>
                         {emailChangePending && (
-                          <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700/50 px-3 py-2 text-xs text-amber-800 dark:text-amber-300 mb-3">
+                          <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700/50 px-3 py-2 text-xs text-amber-800 dark:text-amber-300 mb-3">
                             <Mail className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                             <span>Confirmation email sent to <strong>{pendingEmail}</strong>. Check your inbox to complete the change.</span>
                           </div>
@@ -330,7 +307,7 @@ export default function Settings() {
                       <CardContent>
                         {pendingDeletion ? (
                           <div className="space-y-4">
-                            <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3">
+                            <div className="flex items-start gap-3 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3">
                               <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
                               <div className="min-w-0">
                                 <p className="text-sm font-medium text-destructive">Account deletion scheduled</p>
@@ -488,9 +465,7 @@ export default function Settings() {
                   </TabsContent>
                 </Tabs>
               </motion.div>
-            </div>
-          </div>
-        </main>
+        </div>
       </div>
 
       {/* Delete Account Confirmation */}
@@ -540,6 +515,6 @@ export default function Settings() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </SidebarProvider>
+    </div>
   );
 }

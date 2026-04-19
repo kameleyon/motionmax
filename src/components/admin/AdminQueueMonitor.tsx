@@ -15,7 +15,7 @@ import {
   AlertTriangle,
   RefreshCw,
 } from "lucide-react";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { AdminLoadingState } from "@/components/ui/admin-loading-state";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import type { RealtimeChannel } from "@supabase/supabase-js";
@@ -72,7 +72,7 @@ export function AdminQueueMonitor() {
 
       if (jobsError) throw jobsError;
 
-      setJobs((activeJobs as any as QueueJob[]) || []);
+      setJobs((activeJobs as unknown as QueueJob[]) || []);
 
       const now = new Date();
       const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -99,7 +99,7 @@ export function AdminQueueMonitor() {
 
       let avgTime = 0;
       if (recentCompleted && recentCompleted.length > 0) {
-        const times = recentCompleted.map((job: any) => {
+        const times = recentCompleted.map((job: { created_at: string; completed_at: string | null }) => {
           const start = new Date(job.created_at).getTime();
           const end = new Date(job.completed_at!).getTime();
           return (end - start) / 1000;
@@ -194,7 +194,7 @@ export function AdminQueueMonitor() {
   };
 
   if (loading) {
-    return <LoadingSpinner className="py-12" />;
+    return <AdminLoadingState />;
   }
 
   if (error) {
@@ -336,7 +336,7 @@ export function AdminQueueMonitor() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium truncate">
-                        {(job as any).task_type?.replace(/_/g, " ") || job.phase || "Initializing"}
+                        {job.phase?.replace(/_/g, " ") || "Initializing"}
                       </span>
                       {job.status === "processing" && (
                         <span className="text-xs text-muted-foreground">

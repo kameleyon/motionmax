@@ -2,9 +2,10 @@ import { Button } from "@/components/ui/button";
 import { Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import type { SystemLogEntry } from "@/types/domain";
 
 interface AdminLogsPanelProps {
-  logs: any[];
+  logs: SystemLogEntry[];
   show: boolean;
   onToggle: () => void;
 }

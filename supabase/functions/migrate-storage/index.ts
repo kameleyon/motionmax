@@ -14,7 +14,7 @@ const log = (step: string, details?: unknown) => {
   console.log(`[MIGRATE-STORAGE] ${step}${d}`);
 };
 
-serve(async (req) => {
+export async function handler(req: Request): Promise<Response> {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   function jsonResponse(body: unknown, status = 200) {
@@ -154,4 +154,5 @@ serve(async (req) => {
     log("Error", { message: (err as Error).message });
     return jsonResponse({ error: (err as Error).message }, 500);
   }
-});
+}
+serve(handler);

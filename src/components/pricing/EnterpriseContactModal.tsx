@@ -24,12 +24,19 @@ export default function EnterpriseContactModal({ open, onOpenChange }: Enterpris
   const [teamSize, setTeamSize] = useState("");
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const handleSubmit = () => {
-    if (!name.trim() || !email.trim() || !company.trim()) {
+    const newErrors: Record<string, string> = {};
+    if (!name.trim()) newErrors.name = "Full name is required.";
+    if (!email.trim()) newErrors.email = "Work email is required.";
+    if (!company.trim()) newErrors.company = "Company name is required.";
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
       toast.error("Required fields missing", { description: "Please fill in your name, email, and company." });
       return;
     }
+    setErrors({});
 
     setSending(true);
 
@@ -73,10 +80,14 @@ export default function EnterpriseContactModal({ open, onOpenChange }: Enterpris
               id="ent-name"
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => { setName(e.target.value); if (errors.name) setErrors(prev => ({ ...prev, name: undefined })); }}
               placeholder="Jane Smith"
+              aria-invalid={!!errors.name}
+              aria-describedby={errors.name ? "ent-name-error" : undefined}
+              autoComplete="name"
               className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
+            {errors.name && <p id="ent-name-error" role="alert" className="mt-1 text-xs text-destructive">{errors.name}</p>}
           </div>
           <div>
             <label htmlFor="ent-email" className="text-xs font-medium text-foreground">
@@ -86,10 +97,14 @@ export default function EnterpriseContactModal({ open, onOpenChange }: Enterpris
               id="ent-email"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => { setEmail(e.target.value); if (errors.email) setErrors(prev => ({ ...prev, email: undefined })); }}
               placeholder="jane@company.com"
+              aria-invalid={!!errors.email}
+              aria-describedby={errors.email ? "ent-email-error" : undefined}
+              autoComplete="email"
               className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
+            {errors.email && <p id="ent-email-error" role="alert" className="mt-1 text-xs text-destructive">{errors.email}</p>}
           </div>
           <div>
             <label htmlFor="ent-company" className="text-xs font-medium text-foreground">
@@ -99,10 +114,14 @@ export default function EnterpriseContactModal({ open, onOpenChange }: Enterpris
               id="ent-company"
               type="text"
               value={company}
-              onChange={(e) => setCompany(e.target.value)}
+              onChange={(e) => { setCompany(e.target.value); if (errors.company) setErrors(prev => ({ ...prev, company: undefined })); }}
               placeholder="Acme Corp"
+              aria-invalid={!!errors.company}
+              aria-describedby={errors.company ? "ent-company-error" : undefined}
+              autoComplete="organization"
               className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
+            {errors.company && <p id="ent-company-error" role="alert" className="mt-1 text-xs text-destructive">{errors.company}</p>}
           </div>
           <div>
             <label htmlFor="ent-size" className="text-xs font-medium text-foreground">

@@ -3,16 +3,14 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { Lightbulb, Menu, Video, Film, Clapperboard, Wallpaper, AlertCircle, FolderOpen, Sparkles } from "lucide-react";
+import { Lightbulb, Video, Film, Wallpaper, AlertCircle, FolderOpen, Sparkles } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
 import { Button } from "@/components/ui/button";
-import { SidebarTrigger } from "@/components/ui/sidebar";
-import { ThemedLogo } from "@/components/ThemedLogo";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { AppHeader } from "@/components/layout/AppHeader";
 import { DashboardQuickActions } from "@/components/workspace/DashboardQuickActions";
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
 import { LowCreditWarning } from "@/components/dashboard/LowCreditWarning";
@@ -157,7 +155,7 @@ export default function Dashboard() {
         if (generations) {
           for (const gen of generations) {
             if (thumbnailMap[gen.project_id] !== undefined) continue;
-            const scenes = gen.scenes as any[];
+            const scenes = gen.scenes as unknown[];
             if (!Array.isArray(scenes) || scenes.length === 0) continue;
 
             // Search all scenes for a usable image (not just the first)
@@ -195,15 +193,7 @@ export default function Dashboard() {
     <div className="flex h-screen flex-col bg-background overflow-hidden relative">
       <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
       {/* Header */}
-      <header className="relative z-10 flex h-14 sm:h-16 items-center justify-between border-b border-primary/20 bg-background/80 px-4 sm:px-6 backdrop-blur-sm">
-        <div className="flex items-center gap-3 sm:gap-4">
-          <SidebarTrigger className="lg:hidden">
-            <Menu className="h-5 w-5 text-muted-foreground" />
-          </SidebarTrigger>
-          <ThemedLogo className="h-8 lg:h-10 w-auto" />
-        </div>
-        <ThemeToggle />
-      </header>
+      <AppHeader className="relative border-primary/20" />
 
       <main className="relative z-10 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 py-6 sm:py-10 space-y-8">

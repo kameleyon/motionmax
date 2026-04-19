@@ -46,6 +46,13 @@ function PageLoader() {
 const log = createScopedLogger("QueryClient");
 
 const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60_000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
   queryCache: new QueryCache({
     onError: (error) => log.error('[Query]', error),
   }),
@@ -70,18 +77,16 @@ const App = () => (
             {/* Public share page - no auth required */}
             <Route path="/share/:token" element={<PublicShare />} />
 
-            {/* Authenticated routes using shared AppShell (SidebarProvider + AppSidebar) */}
+            {/* All authenticated app routes share AppShell (SidebarProvider + AppSidebar) */}
             <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
               <Route path="/app" element={<RouteErrorBoundary routeName="dashboard"><Dashboard /></RouteErrorBoundary>} />
               <Route path="/app/create" element={<RouteErrorBoundary routeName="create"><CreateWorkspace /></RouteErrorBoundary>} />
               <Route path="/pricing" element={<Pricing />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/usage" element={<Usage />} />
+              <Route path="/projects" element={<RouteErrorBoundary routeName="projects"><Projects /></RouteErrorBoundary>} />
+              <Route path="/voice-lab" element={<RouteErrorBoundary routeName="voice-lab"><VoiceLab /></RouteErrorBoundary>} />
             </Route>
-
-            {/* Pages that manage their own SidebarProvider with sidebar state */}
-            <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-            <Route path="/usage" element={<ProtectedRoute><Usage /></ProtectedRoute>} />
-            <Route path="/projects" element={<ProtectedRoute><RouteErrorBoundary routeName="projects"><Projects /></RouteErrorBoundary></ProtectedRoute>} />
-            <Route path="/voice-lab" element={<ProtectedRoute><RouteErrorBoundary routeName="voice-lab"><VoiceLab /></RouteErrorBoundary></ProtectedRoute>} />
             <Route path="/admin" element={<AdminRoute><RouteErrorBoundary routeName="admin"><Admin /></RouteErrorBoundary></AdminRoute>} />
 
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

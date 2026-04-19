@@ -43,7 +43,7 @@ const VALID_PRODUCT_IDS = new Set([
   "prod_Ts3rl1zDT9oLVt", // Credit 500 (legacy)
 ]);
 
-serve(async (req) => {
+export async function handler(req: Request): Promise<Response> {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   if (req.method === "OPTIONS") {
@@ -146,4 +146,5 @@ serve(async (req) => {
       status: 500,
     });
   }
-});
+}
+serve(handler);

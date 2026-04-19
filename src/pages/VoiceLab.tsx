@@ -2,26 +2,21 @@
 import { createScopedLogger } from "@/lib/logger";
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Mic, 
-  Upload, 
-  Play, 
-  Square, 
-  Trash2, 
-  Loader2, 
+import {
+  Mic,
+  Upload,
+  Play,
+  Square,
+  Trash2,
+  Loader2,
   Check,
-  Volume2,
-  AudioWaveform,
   VolumeX,
   ThumbsUp,
   Headphones,
   Pause,
   AlertCircle
 } from "lucide-react";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/layout/AppSidebar";
-import { ThemedLogo } from "@/components/ThemedLogo";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { AppHeader } from "@/components/layout/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,8 +28,6 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { PLAN_LIMITS } from "@/lib/planLimits";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
-import { useSidebarState } from "@/hooks/useSidebarState";
-import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -46,8 +39,6 @@ import {
 const log = createScopedLogger("VoiceLab");
 
 export default function VoiceLab() {
-  const navigate = useNavigate();
-  const { isOpen: sidebarOpen, setIsOpen: setSidebarOpen } = useSidebarState();
   const { voices, voicesLoading, isCloning, cloneVoice, deleteVoice } = useVoiceCloning();
   
   // Recording state
@@ -76,7 +67,7 @@ export default function VoiceLab() {
 
   // Audio preview
   const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [, setIsPlaying] = useState(false);
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
 
   // Modal state for existing voice warning
@@ -310,26 +301,9 @@ export default function VoiceLab() {
   };
 
   return (
-    <SidebarProvider defaultOpen={sidebarOpen} onOpenChange={setSidebarOpen}>
+    <div className="min-h-screen flex flex-col w-full bg-background">
       <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
-      <div className="min-h-screen flex w-full bg-background">
-        <AppSidebar />
-        
-        
-        <main className="flex-1 flex flex-col">
-          {/* Header */}
-          <header className="sticky top-0 z-40 grid h-14 sm:h-16 grid-cols-3 items-center border-b border-border/30 bg-background/80 px-4 sm:px-6 backdrop-blur-sm">
-            <div className="flex items-center justify-start gap-2">
-              <SidebarTrigger />
-              <ThemedLogo className="hidden lg:block h-10 w-auto" />
-            </div>
-            <div className="flex justify-center lg:hidden">
-              <ThemedLogo className="h-10 w-auto" />
-            </div>
-            <div className="flex items-center justify-end">
-              <ThemeToggle />
-            </div>
-          </header>
+      <AppHeader />
 
           {/* Content */}
           <div className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
@@ -340,7 +314,7 @@ export default function VoiceLab() {
                   <Mic className="h-3.5 w-3.5" />
                   Voice Lab
                 </span>
-                <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
+                <h1 className="type-h2 tracking-tight text-foreground">
                   Clone Your Voice
                 </h1>
                 <p className="text-sm text-muted-foreground/70">
@@ -408,7 +382,7 @@ export default function VoiceLab() {
                       onClick={(e) => {
                         e.stopPropagation();
                         e.preventDefault();
-                        isRecording ? stopRecording() : startRecording();
+                        if (isRecording) { stopRecording(); } else { startRecording(); }
                       }}
                       className={cn(
                         "gap-2",
@@ -557,7 +531,7 @@ export default function VoiceLab() {
                     </div>
 
                     {/* Consent Disclaimer */}
-                    <div className="flex items-start gap-3 p-4 bg-muted/30 rounded-lg border border-border/50">
+                    <div className="flex items-start gap-3 p-4 bg-muted/30 rounded-xl border border-border/50">
                       <Checkbox
                         id="voice-consent"
                         checked={consentAccepted}
@@ -602,6 +576,21 @@ export default function VoiceLab() {
               </div>
 
               {/* My Voices Section */}
+              {!voicesLoading && voices.length === 0 && (
+                <Card className="border-border/50">
+                  <CardContent className="flex flex-col items-center justify-center py-12 text-center space-y-3">
+                    <div className="h-12 w-12 rounded-full bg-muted/50 flex items-center justify-center">
+                      <Mic className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">No cloned voices yet</p>
+                      <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+                        Upload a voice sample above to create your first custom voice clone. It only takes a minute.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
               {voices.length > 0 && (
                 <Card id="my-voices-section" className="border-border/50">
                   <CardHeader>
@@ -632,7 +621,6 @@ export default function VoiceLab() {
               )}
             </div>
           </div>
-        </main>
 
         {/* Existing Voice Warning Modal */}
         <Dialog open={showExistingVoiceModal} onOpenChange={setShowExistingVoiceModal}>
@@ -659,8 +647,7 @@ export default function VoiceLab() {
             </div>
           </DialogContent>
         </Dialog>
-      </div>
-    </SidebarProvider>
+    </div>
   );
 }
 

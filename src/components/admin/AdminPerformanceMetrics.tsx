@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { TrendingUp, TrendingDown, DollarSign, Zap, RefreshCw } from "lucide-react";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { AdminLoadingState } from "@/components/ui/admin-loading-state";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { subDays, format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -70,19 +70,19 @@ export function AdminPerformanceMetrics() {
         smartflow: { total: 0, completed: 0, totalTime: 0 },
       };
 
-      generations?.forEach((gen: any) => {
-        const projectType = (gen.projects as any)?.project_type || "doc2video";
+      type GenRow = { status: string; created_at: string; completed_at: string | null; projects: { project_type: string } | null };
+      generations?.forEach((gen: GenRow) => {
+        const projectType = gen.projects?.project_type || "doc2video";
         if (!byType[projectType]) return;
 
         byType[projectType].total++;
         if (gen.status === "complete") {
           byType[projectType].completed++;
 
-          // Calculate processing time if available
           if (gen.created_at && gen.completed_at) {
             const start = new Date(gen.created_at).getTime();
             const end = new Date(gen.completed_at).getTime();
-            byType[projectType].totalTime += (end - start) / 1000; // seconds
+            byType[projectType].totalTime += (end - start) / 1000;
           }
         }
       });
@@ -100,7 +100,8 @@ export function AdminPerformanceMetrics() {
       let totalGoogleTts = 0;
       let totalCost = 0;
 
-      costsData?.forEach((cost: any) => {
+      type CostRow = { openrouter_cost: number | null; hypereal_cost: number | null; replicate_cost: number | null; google_tts_cost: number | null; total_cost: number | null };
+      costsData?.forEach((cost: CostRow) => {
         totalOpenRouter += Number(cost.openrouter_cost) || 0;
         totalHypereal += Number(cost.hypereal_cost) || 0;
         totalReplicate += Number(cost.replicate_cost) || 0;
@@ -110,7 +111,7 @@ export function AdminPerformanceMetrics() {
 
       // Calculate error trends by day
       const errorTrendsByDay: Record<string, { errors: number; total: number }> = {};
-      generations?.forEach((gen: any) => {
+      generations?.forEach((gen: GenRow) => {
         const day = format(new Date(gen.created_at), "yyyy-MM-dd");
         if (!errorTrendsByDay[day]) {
           errorTrendsByDay[day] = { errors: 0, total: 0 };
@@ -242,7 +243,7 @@ export function AdminPerformanceMetrics() {
     : [];
 
   if (loading) {
-    return <LoadingSpinner className="py-12" />;
+    return <AdminLoadingState />;
   }
 
   if (error) {

@@ -32,10 +32,17 @@ MotionMax takes any text input (articles, topics, ideas, documents) and generate
 
 ## Pricing
 
-- Free: 10 credits/month
-- Starter: 30 credits/month ($9.99/mo)
-- Creator: 100 credits/month ($29.99/mo)
-- Professional: 300 credits/month ($79.99/mo)
+- **Free Trial**: 150 one-time credits — $0 (no credit card required)
+- **Creator**: 500 credits/month + 60 daily bonus — $29/mo (or $19/mo billed annually)
+- **Studio**: 2,500 credits/month + 150 daily bonus — $99/mo (or $66/mo billed annually)
+- **Enterprise**: Unlimited credits (fair use), custom pricing — contact sales@motionmax.io
+
+### Credit Economy
+
+- 1 credit = 1 second of standard video output
+- Cinematic videos use 5× credits (heavier AI compute: Kling I2V + ASR + research)
+- Re-edits (image, video, audio regen) are free — no extra credit cost
+- Credit top-up packs available: 300 credits ($9.99), 900 credits ($24.99), 2,500 credits ($59.99)
 
 ## AI Training Policy
 

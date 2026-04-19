@@ -66,6 +66,7 @@ export default function Auth() {
   const [showEmailSent, setShowEmailSent] = useState(false);
   const [showRateLimitHint, setShowRateLimitHint] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [ageVerified, setAgeVerified] = useState(false);
   const failedAttemptsRef = useRef(0);
   const [lockedUntil, setLockedUntil] = useState<number>(0);
   const navigate = useNavigate();
@@ -341,30 +342,43 @@ export default function Auth() {
               )}
 
               {mode === "signup" && (
-                <div className="flex items-start gap-2">
-                  <Checkbox
-                    id="terms"
-                    checked={acceptedTerms}
-                    onCheckedChange={(checked) => setAcceptedTerms(checked === true)}
-                    className="mt-0.5"
-                  />
-                  <label htmlFor="terms" className="text-xs text-muted-foreground leading-relaxed cursor-pointer">
-                    I agree to the{" "}
-                    <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                      Terms of Service
-                    </a>
-                    {" "}and{" "}
-                    <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                      Privacy Policy
-                    </a>
-                  </label>
-                </div>
+                <>
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id="terms"
+                      checked={acceptedTerms}
+                      onCheckedChange={(checked) => setAcceptedTerms(checked === true)}
+                      className="mt-0.5"
+                    />
+                    <label htmlFor="terms" className="text-xs text-muted-foreground leading-relaxed cursor-pointer">
+                      I agree to the{" "}
+                      <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                        Terms of Service
+                      </a>
+                      {" "}and{" "}
+                      <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                        Privacy Policy
+                      </a>
+                    </label>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id="age-verify"
+                      checked={ageVerified}
+                      onCheckedChange={(checked) => setAgeVerified(checked === true)}
+                      className="mt-0.5"
+                    />
+                    <label htmlFor="age-verify" className="text-xs text-muted-foreground leading-relaxed cursor-pointer">
+                      I confirm that I am 18 years of age or older
+                    </label>
+                  </div>
+                </>
               )}
 
               <Button
                 type="submit"
                 className="w-full gap-2 rounded-lg bg-primary py-5 font-medium text-primary-foreground"
-                disabled={isLoading || Date.now() < lockedUntil}
+                disabled={isLoading || Date.now() < lockedUntil || (mode === "signup" && (!acceptedTerms || !ageVerified))}
               >
                 {isLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

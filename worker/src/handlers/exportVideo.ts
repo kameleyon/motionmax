@@ -32,6 +32,18 @@ import {
 } from "../lib/sceneProgress.js";
 import { runFfmpeg } from "./export/ffmpegCmd.js";
 
+// ── Export concurrency guard ─────────────────────────────────────────
+// Each ffmpeg export job can consume ~200 MB. On a 2 GB container that
+// means at most ~8 jobs fit in theory, but cinematic exports are heavier.
+// Cap simultaneous exports at 2 to prevent OOM; additional export jobs
+// wait until a slot opens before entering the hot ffmpeg path.
+
+/** Maximum number of export jobs allowed to run ffmpeg simultaneously. */
+const MAX_EXPORT_JOBS = parseInt(process.env.MAX_EXPORT_JOBS || "2", 10);
+
+/** How many export jobs are currently inside _runExport (i.e. running ffmpeg). */
+let activeExportJobs = 0;
+
 // ── Configuration ────────────────────────────────────────────────────
 
 /** Scenes per batch — sequential (1) is safest for memory. */
@@ -169,15 +181,40 @@ export async function handleExportVideo(
   payload: any,
   userId?: string
 ) {
-  return Promise.race([
-    _runExport(jobId, payload, userId),
-    new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error(`Export job ${jobId} timed out after ${JOB_TIMEOUT_MS / 60000} minutes`)),
-        JOB_TIMEOUT_MS
-      )
-    ),
-  ]);
+  // ── Concurrency gate: queue the job until a slot is free ──────────
+  // Poll every 5 s. The outer JOB_TIMEOUT_MS race still applies so
+  // a job stuck in the queue too long is correctly failed by the worker.
+  while (activeExportJobs >= MAX_EXPORT_JOBS) {
+    console.log(
+      `[ExportVideo] Job ${jobId} waiting for export slot ` +
+      `(${activeExportJobs}/${MAX_EXPORT_JOBS} active)`
+    );
+    await new Promise<void>((resolve) => setTimeout(resolve, 5000));
+  }
+
+  activeExportJobs++;
+  console.log(
+    `[ExportVideo] Job ${jobId} acquired export slot ` +
+    `(${activeExportJobs}/${MAX_EXPORT_JOBS} active)`
+  );
+
+  try {
+    return await Promise.race([
+      _runExport(jobId, payload, userId),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`Export job ${jobId} timed out after ${JOB_TIMEOUT_MS / 60000} minutes`)),
+          JOB_TIMEOUT_MS
+        )
+      ),
+    ]);
+  } finally {
+    activeExportJobs--;
+    console.log(
+      `[ExportVideo] Job ${jobId} released export slot ` +
+      `(${activeExportJobs}/${MAX_EXPORT_JOBS} active)`
+    );
+  }
 }
 
 async function _runExport(

@@ -9,6 +9,20 @@ const logStep = (step: string, details?: unknown) => {
   console.log(`[ADMIN-STATS] ${step}${detailsStr}`);
 };
 
+/* ---- Module-level users cache (60s TTL) ---- */
+let _usersCache: { users: { id: string; email?: string; [key: string]: unknown }[]; fetchedAt: number } | null = null;
+
+async function getCachedUsers(supabaseAdmin: ReturnType<typeof createClient>): Promise<{ users: { id: string; email?: string; [key: string]: unknown }[] }> {
+  const now = Date.now();
+  if (_usersCache && now - _usersCache.fetchedAt < 60_000) {
+    return { users: _usersCache.users };
+  }
+  const { data, error } = await supabaseAdmin.auth.admin.listUsers();
+  if (error) throw error;
+  _usersCache = { users: data.users, fetchedAt: Date.now() };
+  return { users: _usersCache.users };
+}
+
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
@@ -96,9 +110,9 @@ serve(async (req) => {
 
     switch (action) {
       case "dashboard_stats": {
-        // Get all users with auth.users via service role
-        const { data: authUsers, error: usersError } = await supabaseAdmin.auth.admin.listUsers();
-        if (usersError) throw usersError;
+        // Get all users with auth.users via service role (cached)
+        const { users: authUsersArr } = await getCachedUsers(supabaseAdmin);
+        const authUsers = { users: authUsersArr };
 
         const totalUsers = authUsers.users.length;
 
@@ -235,9 +249,10 @@ serve(async (req) => {
 
       case "subscribers_list": {
         const { page = 1, limit = 20, search = "" } = params || {};
-        
-        // Get all users
-        const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers();
+
+        // Get all users (cached)
+        const { users: authUsersArr2 } = await getCachedUsers(supabaseAdmin);
+        const authUsers = { users: authUsersArr2 };
         
         // Get all subscriptions
         const { data: subscriptions } = await supabaseAdmin
@@ -754,7 +769,8 @@ serve(async (req) => {
         let resolvedUserIds: string[] = [];
         if (user_search && typeof user_search === "string" && user_search.trim()) {
           const searchLower = user_search.trim().toLowerCase();
-          const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers();
+          const { users: _searchUsers } = await getCachedUsers(supabaseAdmin);
+          const authUsers = { users: _searchUsers };
           const { data: profiles } = await supabaseAdmin.from("profiles").select("user_id, display_name");
           
           resolvedUserIds = (authUsers?.users || [])
@@ -801,7 +817,8 @@ serve(async (req) => {
         const logUserIds = [...new Set<string>((logs || []).map((l: any) => String(l.user_id)))];
         let userEmailMap: Record<string, string> = {};
         if (logUserIds.length > 0) {
-          const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers();
+          const { users: _enrichUsers } = await getCachedUsers(supabaseAdmin);
+          const authUsers = { users: _enrichUsers };
           const { data: profiles } = await supabaseAdmin.from("profiles").select("user_id, display_name");
           for (const uid of logUserIds) {
             const au = authUsers?.users.find(u => u.id === uid);
@@ -856,10 +873,10 @@ serve(async (req) => {
           systemLogs = sysLogs || [];
         }
 
-        // Enrich call with user display
-        const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers();
+        // Enrich call with user display (cached)
+        const { users: _detailUsers } = await getCachedUsers(supabaseAdmin);
         const { data: profiles } = await supabaseAdmin.from("profiles").select("user_id, display_name");
-        const au = authUsers?.users.find(u => u.id === call.user_id);
+        const au = _detailUsers.find(u => u.id === call.user_id);
         const profile = profiles?.find(p => p.user_id === call.user_id);
         const userDisplay = profile?.display_name || au?.email?.split("@")[0] || call.user_id.slice(0, 8);
 

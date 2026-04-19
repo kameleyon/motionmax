@@ -149,8 +149,18 @@ serve(async (req) => {
                   stripe_payment_intent_id: paymentIntentId,
                 });
             } else {
-              logStep("WARNING: Unknown credit pack product ID", { productId });
-              console.error(`[stripe-webhook] Unknown credit pack product ID: ${productId} for customer: ${session.customer}`);
+              const priceId = item.price?.id ?? null;
+              console.error(JSON.stringify({
+                level: "ERROR",
+                event: "unknown_credit_pack_product",
+                message: "Unknown Stripe product — customer paid but NO credits were granted",
+                productId,
+                priceId,
+                sessionId: session.id,
+                customerId: session.customer,
+                userId,
+              }));
+              logStep("ERROR: Unknown credit pack product — credits NOT granted", { productId, priceId, sessionId: session.id });
             }
           }
         } else if (session.mode === "subscription") {

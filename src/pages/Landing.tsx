@@ -211,8 +211,12 @@ export default function Landing() {
               alt="MotionMax"
               className="w-full max-w-[200px] sm:max-w-[300px] md:max-w-[400px] xl:max-w-[480px] mx-auto"
             />
-            
-            <p className="mt-6 text-xl sm:text-2xl md:text-4xl font-medium leading-snug text-white/90">
+
+            <p className="mt-4 text-base sm:text-lg font-semibold uppercase tracking-widest text-primary">
+              AI Video Generator
+            </p>
+
+            <p className="mt-3 text-xl sm:text-2xl md:text-4xl font-medium leading-snug text-white/90">
               Cinematic visuals. Natural voiceover.<br className="hidden sm:block" />Seamless transitions. <span className="text-primary">From one idea.</span>
             </p>
             

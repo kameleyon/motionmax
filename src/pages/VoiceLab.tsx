@@ -1,4 +1,5 @@
-﻿import { createScopedLogger } from "@/lib/logger";
+﻿import { Helmet } from "react-helmet-async";
+import { createScopedLogger } from "@/lib/logger";
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
@@ -197,8 +198,8 @@ export default function VoiceLab() {
       return;
     }
 
-    if (file.size > 50 * 1024 * 1024) {
-      toast.error("File too large", { description: "Maximum audio file size is 50 MB." });
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("File too large", { description: "Maximum audio file size is 20 MB." });
       return;
     }
 
@@ -310,6 +311,7 @@ export default function VoiceLab() {
 
   return (
     <SidebarProvider defaultOpen={sidebarOpen} onOpenChange={setSidebarOpen}>
+      <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
       <div className="min-h-screen flex w-full bg-background">
         <AppSidebar />
         

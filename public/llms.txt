@@ -37,6 +37,10 @@ MotionMax takes any text input (articles, topics, ideas, documents) and generate
 - Creator: 100 credits/month ($29.99/mo)
 - Professional: 300 credits/month ($79.99/mo)
 
+## AI Training Policy
+
+MotionMax does not use user-generated content (scripts, prompts, uploaded documents, generated images, audio, or video) for AI model training without explicit written consent. To exercise your right to confirm or restrict use of your content, contact privacy@motionmax.io.
+
 ## Links
 
 - Website: https://motionmax.io

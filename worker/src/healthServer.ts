@@ -108,14 +108,21 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
   const url = req.url?.split("?")[0] || "/";
 
-  // Bearer token auth for /metrics (if HEALTH_AUTH_TOKEN is set)
+  // Bearer token auth for /metrics
   const authToken = process.env.HEALTH_AUTH_TOKEN;
-  if (url === "/metrics" && authToken) {
-    const auth = req.headers.authorization;
-    if (!auth || auth !== `Bearer ${authToken}`) {
+  if (url === "/metrics") {
+    if (!authToken && process.env.NODE_ENV === "production") {
       res.writeHead(401);
-      res.end(JSON.stringify({ error: "Unauthorized" }));
+      res.end(JSON.stringify({ error: "Metrics endpoint requires HEALTH_AUTH_TOKEN in production" }));
       return;
+    }
+    if (authToken) {
+      const auth = req.headers.authorization;
+      if (!auth || auth !== `Bearer ${authToken}`) {
+        res.writeHead(401);
+        res.end(JSON.stringify({ error: "Unauthorized" }));
+        return;
+      }
     }
   }
 

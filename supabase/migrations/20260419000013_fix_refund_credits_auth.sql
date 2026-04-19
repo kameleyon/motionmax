@@ -14,7 +14,7 @@ DECLARE
   current_balance INT;
 BEGIN
   IF auth.uid() IS NULL THEN
-    RAISE EXCEPTION 'Unauthorized';
+    RAISE EXCEPTION 'Not authenticated';
   END IF;
 
   -- Lock the row to prevent race conditions

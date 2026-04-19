@@ -106,19 +106,6 @@ async function refundCreditsOnFailure(job: Job) {
     return;
   }
 
-  // Guard against double-refund: if job is already 'failed', a refund was likely
-  // already issued by a prior attempt. Skip to avoid double-crediting the user.
-  const { data: currentJob } = await supabase
-    .from('video_generation_jobs')
-    .select('status')
-    .eq('id', job.id)
-    .single();
-
-  if (currentJob?.status === 'failed') {
-    console.warn(`[Refund] Job ${job.id} already marked 'failed' in DB — skipping duplicate refund`);
-    return;
-  }
-
   try {
     const payload = job.payload || {};
     const projectType = payload.projectType || "doc2video";
@@ -127,14 +114,24 @@ async function refundCreditsOnFailure(job: Job) {
     // Calculate credits to refund (same formula as deduction)
     const creditsToRefund = getCreditCost(projectType, length);
 
-    // Idempotency check: if job is already marked 'failed', refund was already issued
-    const { data: jobStatus } = await supabase
-      .from('video_generation_jobs')
-      .select('status')
-      .eq('id', job.id)
-      .single();
-    if (jobStatus?.status === 'failed') {
-      console.log(`[Refund] Job ${job.id} already marked failed — skipping duplicate refund`);
+    // Idempotency check: query credit_transactions for an existing refund row for
+    // this job. Retried jobs transition back to 'processing' before failing again,
+    // so a job-status check is unreliable — only a committed transaction record is.
+    const refundDescription = `Refund for failed generation (job ${job.id})`;
+    const { data: existingRefund, error: refundCheckError } = await supabase
+      .from('credit_transactions')
+      .select('id')
+      .eq('user_id', job.user_id)
+      .eq('transaction_type', 'refund')
+      .eq('description', refundDescription)
+      .limit(1)
+      .maybeSingle();
+
+    if (refundCheckError) {
+      console.warn(`[Refund] Could not verify idempotency for job ${job.id}:`, refundCheckError.message);
+      // Fall through and attempt the refund; the RPC handles balance safely.
+    } else if (existingRefund) {
+      console.warn(`[Refund] Refund already issued for job ${job.id} (tx ${existingRefund.id}) — skipping duplicate`);
       return;
     }
 
@@ -145,7 +142,7 @@ async function refundCreditsOnFailure(job: Job) {
       {
         p_user_id: job.user_id,
         p_amount: creditsToRefund,
-        p_description: `Refund for failed generation (job ${job.id})`,
+        p_description: refundDescription,
       }
     );
 
@@ -393,6 +390,22 @@ async function pollQueue() {
           `[Worker] ⚠️ QUEUE DEPTH ALERT: ${totalPending} pending jobs (threshold: ${queueDepthAlertThreshold}), ` +
           `active: ${activeJobs.size}/${MAX_CONCURRENT_JOBS}, RSS: ${Math.round(mem.rss / 1048576)}MB`
         );
+
+        // Fire webhook notification if configured (Slack, PagerDuty, etc.)
+        const alertWebhookUrl = process.env.ALERT_WEBHOOK_URL;
+        if (alertWebhookUrl) {
+          fetch(alertWebhookUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: `MotionMax queue depth alert: ${totalPending} jobs pending`,
+              queue_depth: totalPending,
+            }),
+          }).catch(() => {
+            // Silently ignore webhook failures — never let an alert break the worker
+          });
+        }
+
         writeSystemLog({
           category: "system_warning",
           eventType: "queue_depth_alert",
@@ -639,15 +652,28 @@ process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 // Intentional crash: capture to Sentry then exit so Render restarts the process.
 // Keeping the process alive after uncaught errors risks processing jobs in a corrupt state.
 process.on("uncaughtException", (err: Error) => {
-  console.error("[Worker] 💥 Uncaught exception — exiting after drain:", err.message);
+  console.error("[Worker] 💥 Uncaught exception — marking jobs failed and exiting:", err.message);
   Sentry.captureException(err);
-  setTimeout(() => process.exit(1), 100);
+  // Mark any still-processing jobs as failed so they are not orphaned.
+  // Fire-and-forget: do not await — we must exit promptly so the orchestrator can restart.
+  supabase
+    .from("video_generation_jobs")
+    .update({ status: "failed", error_message: "Worker process crashed" })
+    .eq("status", "processing")
+    .then(() => process.exit(1))
+    .catch(() => process.exit(1));
 });
 process.on("unhandledRejection", (reason: unknown) => {
-  console.error("[Worker] 💥 Unhandled rejection — exiting after drain:", reason);
+  console.error("[Worker] 💥 Unhandled rejection — marking jobs failed and exiting:", reason);
   const err = reason instanceof Error ? reason : new Error(String(reason));
   Sentry.captureException(err);
-  setTimeout(() => process.exit(1), 100);
+  // Mark any still-processing jobs as failed so they are not orphaned.
+  supabase
+    .from("video_generation_jobs")
+    .update({ status: "failed", error_message: "Worker process crashed" })
+    .eq("status", "processing")
+    .then(() => process.exit(1))
+    .catch(() => process.exit(1));
 });
 
 /** Mask an API key for safe logging: first 6 + last 4 chars visible. */

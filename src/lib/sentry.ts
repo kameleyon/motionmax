@@ -45,8 +45,8 @@ export function initSentry(): void {
     // No session replay; capture replay only on errors (10 % of error sessions)
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: 0.1,
-    // Only send errors from our own code
-    allowUrls: [/motionmax\.io/, /localhost/],
+    // Only send errors from our own code (including Vercel preview deployments)
+    allowUrls: [/motionmax\.io/, /\.vercel\.app/, /localhost/],
     beforeSend(event) {
       if (event.extra) event.extra = scrubSensitive(event.extra as Record<string, unknown>);
       if (event.request?.data && typeof event.request.data === "object") {

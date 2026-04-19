@@ -16,14 +16,17 @@ const EXPECTED_URL = `https://${EXPECTED_PROJECT_REF}.supabase.co`;
 // ── URL ────────────────────────────────────────────────────────────
 const envUrl = process.env.SUPABASE_URL ?? "";
 const urlMatchesProject = envUrl.includes(EXPECTED_PROJECT_REF);
-const supabaseUrl = urlMatchesProject ? envUrl : EXPECTED_URL;
 
 if (envUrl && !urlMatchesProject) {
-  console.warn(
-    `[Worker] ⚠️  SUPABASE_URL env var ("${envUrl}") does NOT match the expected project ref "${EXPECTED_PROJECT_REF}".`
+  console.error(
+    `[Worker] 🔴 SUPABASE_URL env var ("${envUrl}") does NOT match the expected project ref "${EXPECTED_PROJECT_REF}".`
   );
-  console.warn(`[Worker] ⚠️  Overriding to ${EXPECTED_URL} — update your Render env vars!`);
+  console.error(`[Worker] 🔴 Connecting to the wrong Supabase project will cause all job queries to fail. Exiting.`);
+  process.exit(1);
 }
+
+// If SUPABASE_URL is unset/empty, fall back to the hardcoded canonical URL.
+const supabaseUrl = envUrl || EXPECTED_URL;
 
 // ── API Key ────────────────────────────────────────────────────────
 // service_role is REQUIRED — worker must bypass RLS. Missing or wrong-project key → exit(1).

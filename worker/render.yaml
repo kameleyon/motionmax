@@ -4,9 +4,10 @@ services:
     env: node
     region: oregon
     plan: standard
-    buildCommand: npm install && npm run build
-    startCommand: node dist/index.js
+    buildCommand: npm ci
+    startCommand: npm start
     autoDeploy: true
+    healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
@@ -39,4 +40,20 @@ services:
       - key: JOB_TIMEOUT_MS
         sync: false
       - key: SHUTDOWN_DRAIN_TIMEOUT
+        sync: false
+      - key: ALERT_WEBHOOK_URL
+        sync: false
+      - key: EXPORT_BATCH_SIZE
+        sync: false
+      - key: EXPORT_SCENE_TIMEOUT_MS
+        sync: false
+      - key: EXPORT_KEN_BURNS
+        sync: false
+      - key: EXPORT_CROSSFADE_DURATION
+        sync: false
+      - key: EXPORT_CROSSFADE_TIMEOUT
+        sync: false
+      - key: EXPORT_AI_VIDEO
+        sync: false
+      - key: EXPORT_AI_VIDEO_TIMEOUT
         sync: false

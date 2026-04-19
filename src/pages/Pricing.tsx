@@ -1,4 +1,5 @@
 ﻿import { useState } from "react";
+import { Helmet } from "react-helmet-async";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Menu, ShieldCheck } from "lucide-react";
@@ -99,6 +100,11 @@ export default function Pricing() {
 
   return (
     <div className="min-h-screen bg-background">
+      <Helmet>
+        <title>MotionMax Pricing — AI Video Plans &amp; Credits</title>
+        <meta name="description" content="Choose the right MotionMax plan. Free tier available. Credit-based pricing for AI cinematic videos, explainers, and more." />
+        <link rel="canonical" href="https://motionmax.io/pricing" />
+      </Helmet>
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-2 focus:bg-background focus:text-foreground">Skip to content</a>
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-border/30 bg-background/80 backdrop-blur-md">

@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { ThemedLogo } from "@/components/ThemedLogo";
@@ -9,6 +10,12 @@ export default function Privacy() {
 
   return (
     <div className="min-h-screen bg-background">
+      <Helmet>
+        <title>Privacy Policy — MotionMax</title>
+        <meta name="description" content="MotionMax privacy policy. Learn how we collect, use, and protect your personal data." />
+        <link rel="canonical" href="https://motionmax.io/privacy" />
+        <meta name="robots" content="index, follow" />
+      </Helmet>
       <header className="sticky top-0 z-50 border-b border-border/30 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
@@ -110,7 +117,22 @@ export default function Privacy() {
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold text-foreground">10. Contact Us</h2>
+            <h2 className="text-lg font-semibold text-foreground">10. California Privacy Rights (CCPA)</h2>
+            <p>If you are a California resident, the California Consumer Privacy Act (CCPA) grants you specific rights regarding your personal information, in addition to the general rights described in Section 6 above:</p>
+            <ul className="list-disc pl-6 space-y-1">
+              <li><strong className="text-foreground">Right to Know:</strong> You may request that we disclose the categories and specific pieces of personal information we have collected about you, the categories of sources from which it was collected, the business purpose for collecting it, and the categories of third parties with whom we share it.</li>
+              <li><strong className="text-foreground">Right to Delete:</strong> You may request deletion of personal information we have collected about you, subject to certain exceptions.</li>
+              <li><strong className="text-foreground">Right to Opt Out of Sale or Sharing:</strong> MotionMax does not sell or share your personal information with third parties for cross-context behavioral advertising. Because we do not engage in such activities, no opt-out action is required. If our practices change, we will update this policy and provide a mechanism to opt out.</li>
+              <li><strong className="text-foreground">Right to Non-Discrimination:</strong> We will not discriminate against you for exercising any of your CCPA rights.</li>
+            </ul>
+            <p>To exercise your California privacy rights, please contact us at{" "}
+              <a href="mailto:privacy@motionmax.io" className="text-primary hover:underline">privacy@motionmax.io</a>.
+              We will respond to verified requests within 45 days as required by the CCPA.
+            </p>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold text-foreground">11. Contact Us</h2>
             <p>If you have questions, concerns, or requests regarding this Privacy Policy or our data practices, please contact us at:{" "}
               <a href="mailto:support@motionmax.io" className="text-primary hover:underline">support@motionmax.io</a>
             </p>

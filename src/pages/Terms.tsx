@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { ThemedLogo } from "@/components/ThemedLogo";
@@ -9,6 +10,12 @@ export default function Terms() {
 
   return (
     <div className="min-h-screen bg-background">
+      <Helmet>
+        <title>Terms of Service — MotionMax</title>
+        <meta name="description" content="MotionMax terms of service. Review our usage policies, subscription terms, and user agreement." />
+        <link rel="canonical" href="https://motionmax.io/terms" />
+        <meta name="robots" content="index, follow" />
+      </Helmet>
       <header className="sticky top-0 z-50 border-b border-border/30 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
@@ -98,7 +105,33 @@ export default function Terms() {
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold text-foreground">12. Contact</h2>
+            <h2 className="text-lg font-semibold text-foreground">12. Auto-Renewal Disclosure</h2>
+            <p>Paid subscriptions automatically renew at the end of each billing period (monthly or annual) at the then-current rate unless you cancel before the renewal date. You will receive an email reminder before your renewal date. To cancel, visit your account settings or contact us at support@motionmax.io. Cancellation takes effect at the end of the current billing period; you retain access to the Service until that date.</p>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold text-foreground">13. EU Consumer Right of Withdrawal</h2>
+            <p>If you are a consumer located in the European Union or European Economic Area, you have the right to withdraw from a purchase of a digital service within 14 days of the transaction date (the "cooling-off period") without giving any reason, in accordance with the EU Consumer Rights Directive.</p>
+            <p><strong className="text-foreground">Waiver of withdrawal right:</strong> By accessing or using the Service (including initiating any content generation) before the 14-day cooling-off period has expired, you expressly request immediate performance of the contract and acknowledge that you lose your right of withdrawal once the service has been fully performed. If you have not yet accessed the Service, you may exercise your right of withdrawal by contacting us at support@motionmax.io within 14 days of purchase.</p>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold text-foreground">14. Dispute Resolution</h2>
+            <p>Before initiating any formal legal proceeding, you agree to provide MotionMax with written notice of your dispute at support@motionmax.io, describing the nature of the claim and the relief sought. MotionMax will have 30 days from receipt of this notice to attempt to resolve the dispute through good-faith negotiation. If the dispute is not resolved within that period, either party may pursue the remedies described in Section 15.</p>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold text-foreground">15. Governing Law</h2>
+            <p>These Terms of Service are governed by and construed in accordance with the laws of the State of Delaware, United States, without regard to its conflict of law principles. Any dispute that cannot be resolved through the process described in Section 14 shall be subject to the exclusive jurisdiction of the state and federal courts located in Delaware, and you consent to personal jurisdiction in such courts. Nothing in this section limits the rights of EU/EEA consumers under mandatory local consumer protection laws.</p>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold text-foreground">16. Severability</h2>
+            <p>If any provision of these Terms of Service is found to be unlawful, void, or unenforceable for any reason, that provision shall be deemed severable from these Terms and shall not affect the validity and enforceability of the remaining provisions, which shall continue in full force and effect.</p>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold text-foreground">17. Contact</h2>
             <p>If you have questions about these Terms of Service, please contact us at{" "}
               <a href="mailto:support@motionmax.io" className="text-primary hover:underline">support@motionmax.io</a>.
             </p>

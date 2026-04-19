@@ -3,7 +3,8 @@ import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Mail, Calendar, CreditCard, Activity, Flag, Coins, DollarSign, Trash2, ShieldAlert, ShieldX, ShieldCheck, ChevronDown } from "lucide-react";
+import { Loader2, Mail, Calendar, CreditCard, Activity, Flag, Coins, DollarSign, Trash2, ShieldAlert, ShieldX, ShieldCheck, ChevronDown, RefreshCw } from "lucide-react";
+import { AdminLoadingState } from "@/components/ui/admin-loading-state";
 import { format } from "date-fns";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -127,24 +128,26 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
       fetchDetails();
       onFlagCreated?.();
     } catch (err) {
-      toast.error("Action failed. Please try again.");
+      toast.error("Action failed, please try again");
     } finally {
       setActionLoading(false);
     }
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <AdminLoadingState />;
   }
 
   if (error || !data) {
     return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground">{error || "No data available"}</p>
+      <div className="text-center py-12 space-y-4">
+        <p className="text-destructive">{error || "No data available"}</p>
+        {error && (
+          <Button variant="outline" onClick={fetchDetails}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Retry
+          </Button>
+        )}
       </div>
     );
   }

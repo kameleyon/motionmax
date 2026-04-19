@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
-import { Loader2, Activity, CheckCircle, XCircle, Trash2, Clock, RefreshCw } from "lucide-react";
+import { Activity, CheckCircle, XCircle, Trash2, Clock, RefreshCw } from "lucide-react";
+import { AdminLoadingState } from "@/components/ui/admin-loading-state";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
 import { subDays, format } from "date-fns";
 
@@ -102,11 +103,7 @@ export function AdminGenerations() {
   ].filter(item => item.value > 0) : [];
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <AdminLoadingState />;
   }
 
   if (error) {

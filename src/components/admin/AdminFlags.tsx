@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
-import { Loader2, Flag, CheckCircle, AlertTriangle, Ban, RefreshCw, ChevronLeft, ChevronRight, Eye } from "lucide-react";
+import { Flag, CheckCircle, AlertTriangle, Ban, RefreshCw, ChevronLeft, ChevronRight, Eye, Loader2 } from "lucide-react";
+import { AdminLoadingState } from "@/components/ui/admin-loading-state";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -78,11 +79,11 @@ export function AdminFlags() {
     try {
       setResolvingId(flagId);
       await callAdminApi("resolve_flag", { flagId, resolutionNotes });
-      toast.success("Flag resolved", { description: "The flag has been marked as resolved" });
+      toast.success("Flag resolved");
       setResolutionNotes("");
       fetchFlags();
     } catch (err) {
-      toast.error("Failed to resolve flag", { description: "Please try again." });
+      toast.error("Failed to resolve flag");
     } finally {
       setResolvingId(null);
     }
@@ -125,11 +126,7 @@ export function AdminFlags() {
   };
 
   if (loading && !data) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <AdminLoadingState />;
   }
 
   if (error) {

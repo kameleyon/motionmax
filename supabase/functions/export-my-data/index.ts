@@ -105,7 +105,7 @@ serve(async (req) => {
       jobsRes,
       sharesRes,
     ] = await Promise.all([
-      supabaseAdmin.from("profiles").select("*").eq("id", userId).maybeSingle(),
+      supabaseAdmin.from("profiles").select("*").eq("user_id", userId).maybeSingle(),
       supabaseAdmin.from("projects").select("*").eq("user_id", userId),
       supabaseAdmin.from("generations").select("*").eq("user_id", userId),
       supabaseAdmin.from("subscriptions").select("*").eq("user_id", userId),

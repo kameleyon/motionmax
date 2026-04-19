@@ -339,15 +339,15 @@ serve(async (req) => {
           .single();
 
         if (refundSubData) {
-          // Check if this was a credit pack purchase — look up by payment intent
+          // Match the exact purchase transaction by payment intent ID
+          const paymentIntentId = charge.payment_intent as string;
           const { data: txData } = await supabaseAdmin
             .from("credit_transactions")
             .select("amount")
             .eq("user_id", refundSubData.user_id)
             .eq("transaction_type", "purchase")
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .single();
+            .eq("stripe_payment_intent_id", paymentIntentId)
+            .maybeSingle();
 
           if (txData && txData.amount > 0) {
             // Deduct the refunded credits

@@ -428,8 +428,10 @@ export async function processScene(
       const vidPath = path.join(tempDir, `scene_${i}_vid.mp4`);
       const audPath = path.join(tempDir, `scene_${i}_aud.mp3`);
       console.log(`[SceneEncoder] Scene ${i}: video+audio → mux`);
-      await streamToFile(scene.videoUrl, vidPath);
-      await streamToFile(scene.audioUrl, audPath);
+      await Promise.all([
+        streamToFile(scene.videoUrl, vidPath),
+        streamToFile(scene.audioUrl, audPath),
+      ]);
       await muxVideoAudio(vidPath, audPath, localPath, tempDir, i, config);
       removeFiles(vidPath, audPath);
       return { index: i, path: localPath };
@@ -484,8 +486,10 @@ export async function processScene(
       const scenePrompt = scene.visualPrompt || scene.visual_prompt || scene.voiceover || "";
       const mode = config.aiVideo ? "AI video → Ken Burns fallback" : "Ken Burns";
       console.log(`[SceneEncoder] Scene ${i}: image+audio → ${mode}`);
-      await streamToFile(scene.imageUrl, imgPath);
-      await streamToFile(scene.audioUrl, audPath);
+      await Promise.all([
+        streamToFile(scene.imageUrl, imgPath),
+        streamToFile(scene.audioUrl, audPath),
+      ]);
       const dur = await imageAudioToClip(imgPath, scene.imageUrl, scenePrompt, audPath, localPath, tempDir, i, config);
       console.log(`[SceneEncoder] Scene ${i}: done (${dur.toFixed(1)}s)`);
       removeFiles(imgPath, audPath);

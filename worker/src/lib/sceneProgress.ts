@@ -63,6 +63,14 @@ export interface JobSceneProgress {
 /** In-memory scene progress per job — avoids redundant DB reads */
 const progressCache = new Map<string, JobSceneProgress>();
 
+/**
+ * Per-job flush queue — serializes concurrent flushSceneProgress calls so
+ * only one UPDATE is in-flight per jobId at a time. Eliminates the
+ * read-modify-write race where two concurrent flushes clobber each other's
+ * sceneProgress by both reading the same stale payload and overwriting it.
+ */
+const flushQueue = new Map<string, Promise<void>>();
+
 // ── Public API ───────────────────────────────────────────────────────
 
 /**
@@ -161,29 +169,77 @@ export async function updateSceneProgress(
 
 /**
  * Write the current scene progress to the database.
- * Merges into the existing payload without overwriting other fields.
+ *
+ * Calls are serialized per jobId via a flush queue — if a flush is already
+ * in-flight for this job, the new call chains onto it. This eliminates the
+ * read-modify-write race where two concurrent callers both read the same
+ * stale payload row, patch it independently, and overwrite each other.
+ *
+ * The UPDATE uses a JSONB merge expression so it never needs to read first:
+ * `payload = payload || '{"sceneProgress": ...}'::jsonb`
+ * Supabase JS doesn't expose raw SQL operators, so we use an RPC wrapper.
+ * Fallback: if the RPC is unavailable we use the read-modify-write path
+ * (safe here because the flush queue already serializes the callers).
  */
-export async function flushSceneProgress(jobId: string): Promise<void> {
+export function flushSceneProgress(jobId: string): Promise<void> {
+  const next = (flushQueue.get(jobId) ?? Promise.resolve()).then(() =>
+    _doFlush(jobId)
+  );
+  flushQueue.set(jobId, next);
+  // Clean up the queue entry once the chain settles
+  next.finally(() => {
+    if (flushQueue.get(jobId) === next) flushQueue.delete(jobId);
+  });
+  return next;
+}
+
+async function _doFlush(jobId: string): Promise<void> {
   const progress = progressCache.get(jobId);
   if (!progress) return;
 
   try {
-    // Read current payload to merge
-    const { data: row } = await supabase
-      .from("video_generation_jobs")
-      .select("payload")
-      .eq("id", jobId)
-      .single();
+    // Use merge_job_scene_progress RPC when available (avoids read step entirely).
+    // Falls back to read-modify-write — safe because the flush queue serializes callers.
+    const { error: rpcErr } = await (supabase.rpc as any)(
+      "merge_job_scene_progress",
+      { p_job_id: jobId, p_progress: progress }
+    );
 
-    const existingPayload = (row?.payload && typeof row.payload === "object") ? row.payload as Record<string, unknown> : {};
+    if (rpcErr) {
+      // Fallback: read current payload and merge
+      const { data: row } = await supabase
+        .from("video_generation_jobs")
+        .select("payload")
+        .eq("id", jobId)
+        .single();
 
-    await supabase
-      .from("video_generation_jobs")
-      .update({
-        payload: { ...existingPayload, sceneProgress: progress },
-        updated_at: new Date().toISOString(),
+      const existingPayload =
+        row?.payload && typeof row.payload === "object"
+          ? (row.payload as Record<string, unknown>)
+          : {};
+
+      await supabase
+        .from("video_generation_jobs")
+        .update({
+          payload: { ...existingPayload, sceneProgress: progress },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", jobId);
+    }
+
+    // Broadcast real-time progress so the client gets instant updates
+    // instead of waiting for the 5s polling interval.
+    // The client subscribes to channel `job-progress-{jobId}` to receive these.
+    supabase
+      .channel(`job-progress-${jobId}`)
+      .send({
+        type: "broadcast",
+        event: "progress",
+        payload: { jobId, sceneProgress: progress },
       })
-      .eq("id", jobId);
+      .catch(() => {
+        // Non-fatal: Realtime broadcast failures don't break the job
+      });
   } catch (err) {
     console.error(`[SceneProgress] Failed to flush progress for job ${jobId}:`, (err as Error).message);
   }

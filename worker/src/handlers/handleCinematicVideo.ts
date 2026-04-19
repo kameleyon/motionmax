@@ -130,42 +130,29 @@ export async function handleCinematicVideo(
     endImageUrl = scenes[sceneIndex + 1]?.imageUrl;
 
     if (!endImageUrl) {
-      // Next scene's image is missing — wait for it with gentle polling
-      console.log(`[CinematicVideo] Scene ${sceneIndex}: waiting for scene ${sceneIndex + 1} image...`);
-      const MAX_WAIT_MS = 5 * 60 * 1000; // 5 min max wait
-      const POLL_INTERVAL_MS = 30_000;     // 30s between polls to avoid rate limits
-      const waitStart = Date.now();
-
-      while (!endImageUrl && Date.now() - waitStart < MAX_WAIT_MS) {
-        await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
-
-        const { data: freshGen } = await supabase
-          .from("generations")
-          .select("scenes")
-          .eq("id", generationId)
-          .maybeSingle();
-
-        const freshScenes = (freshGen?.scenes as any[]) ?? [];
-        endImageUrl = freshScenes[sceneIndex + 1]?.imageUrl;
-
-        if (endImageUrl) {
-          console.log(`[CinematicVideo] Scene ${sceneIndex}: next scene image now available`);
-        }
-      }
+      // The dependency system guarantees image[i+1] is complete before this job starts.
+      // Do a quick re-fetch in case the cached scenes row is stale (e.g. DB write race).
+      console.log(`[CinematicVideo] Scene ${sceneIndex}: next image not in cached scenes — re-fetching DB`);
+      const { data: freshGen } = await supabase
+        .from("generations")
+        .select("scenes")
+        .eq("id", generationId)
+        .maybeSingle();
+      const freshScenes = (freshGen?.scenes as any[]) ?? [];
+      endImageUrl = freshScenes[sceneIndex + 1]?.imageUrl;
 
       if (!endImageUrl) {
-        // Still missing after max wait — try generating it ourselves
-        console.warn(`[CinematicVideo] Scene ${sceneIndex}: next scene image still missing after ${MAX_WAIT_MS / 1000}s, generating it`);
+        // Dep guarantee failed (should not happen) — generate the missing image as fallback
+        console.warn(`[CinematicVideo] Scene ${sceneIndex}: next scene image missing after dep gate — generating fallback`);
         const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
         const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
-        const nextScene = scenes[sceneIndex + 1];
+        const nextScene = freshScenes[sceneIndex + 1];
         const nextPrompt = nextScene?.visualPrompt || nextScene?.visual_prompt || "Cinematic scene";
         try {
           endImageUrl = await generateImage(nextPrompt, hyperealApiKey, replicateApiKey, format, projectId);
           await updateSceneField(generationId, sceneIndex + 1, "imageUrl", endImageUrl);
-          console.log(`[CinematicVideo] Scene ${sceneIndex}: generated next scene image as fallback`);
-        } catch (imgErr) {
-          console.error(`[CinematicVideo] Scene ${sceneIndex}: failed to generate next scene image, proceeding without end_image`);
+        } catch {
+          console.error(`[CinematicVideo] Scene ${sceneIndex}: fallback image gen failed, proceeding without end_image`);
           endImageUrl = undefined;
         }
       }

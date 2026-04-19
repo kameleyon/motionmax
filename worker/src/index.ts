@@ -14,6 +14,7 @@ import { handleCinematicImage } from "./handlers/handleCinematicImage.js";
 import { handleUndoRegeneration } from "./handlers/handleUndoRegeneration.js";
 import { writeSystemLog } from "./lib/logger.js";
 import { wlog } from "./lib/workerLogger.js";
+import { isTransientError, retryDelayMs } from "./lib/retryClassifier.js";
 import { startHealthServer, stopHealthServer } from "./healthServer.js";
 
 /* ---- Auto-tune concurrency based on system resources ---- */
@@ -132,21 +133,9 @@ let totalJobsFailed = 0;
 const SHUTDOWN_DRAIN_TIMEOUT_MS = parseInt(process.env.SHUTDOWN_DRAIN_TIMEOUT || "300000", 10); // 5 minutes
 
 /* ---- Transient-error retry helpers ---- */
-const TRANSIENT_PATTERNS = [
-  /ECONNRESET/i, /ETIMEDOUT/i, /ECONNREFUSED/i, /ENOTFOUND/i, /EHOSTUNREACH/i,
-  /socket hang up/i, /fetch failed/i, /network socket/i, /connection reset/i,
-  /\b429\b/, /rate.?limit/i, /too many requests/i,
-  /\b502\b/, /\b503\b/, /\b504\b/, /bad gateway/i, /service unavailable/i, /gateway timeout/i,
-  /request timeout/i, /upstream timeout/i,
-];
-
-function isTransientError(err: unknown): boolean {
-  const msg = err instanceof Error ? (err.message + (err.cause ? ` ${err.cause}` : "")) : String(err);
-  return TRANSIENT_PATTERNS.some(p => p.test(msg));
-}
+// isTransientError and retryDelayMs imported from ./lib/retryClassifier.js
 
 const MAX_JOB_RETRIES = 3;
-const RETRY_BASE_DELAY_MS = 2_000;
 
 async function withTransientRetry<T>(
   fn: (attempt: number) => Promise<T>,
@@ -160,7 +149,7 @@ async function withTransientRetry<T>(
     } catch (err) {
       attempt++;
       if (attempt >= max || !isTransientError(err)) throw err;
-      const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1); // 2s, 4s, 8s
+      const delay = retryDelayMs(attempt - 1); // 2s, 4s, 8s with jitter
       wlog.warn("Transient error — retrying", {
         jobId: opts.jobId, attempt, maxAttempts: max, delayMs: delay,
         error: err instanceof Error ? err.message : String(err),
@@ -192,8 +181,13 @@ async function refundCreditsOnFailure(job: Job) {
     const projectType = payload.projectType || "doc2video";
     const length = payload.length || "brief";
 
-    // Calculate credits to refund (same formula as deduction)
-    const creditsToRefund = getCreditCost(projectType, length);
+    // Use the exact amount deducted upfront when available (stored in payload
+    // by the edge function). Falls back to the formula estimate for legacy jobs
+    // where the payload doesn't carry creditsDeducted.
+    const creditsToRefund: number =
+      typeof payload.creditsDeducted === "number" && payload.creditsDeducted > 0
+        ? payload.creditsDeducted
+        : getCreditCost(projectType, length);
 
     // Idempotency check: query credit_transactions for an existing refund row for
     // this job. Retried jobs transition back to 'processing' before failing again,
@@ -258,6 +252,15 @@ async function refundCreditsOnFailure(job: Job) {
 async function processJob(job: Job) {
   const pool = getActivePool(job.task_type);
   pool.add(job.id);
+
+  // Tag Sentry scope with job context so all events within this job are correlated.
+  const traceId: string | undefined = job.payload?.traceId;
+  Sentry.withScope((scope) => {
+    scope.setTag("jobId", job.id);
+    scope.setTag("taskType", job.task_type);
+    if (job.user_id) scope.setUser({ id: job.user_id });
+    if (traceId) scope.setTag("traceId", traceId);
+  });
 
   await writeSystemLog({
     jobId: job.id,
@@ -416,8 +419,32 @@ async function processJob(job: Job) {
         .from('video_generation_jobs')
         .update({ status: 'failed', error_message: errorMsg, updated_at: new Date().toISOString() })
         .eq('id', job.id)
-        .then(() => {}, () => {});
+        .then(
+          () => {},
+          (retryErr: unknown) => {
+            wlog.error("CRITICAL: Last-resort mark-failed also failed", { jobId: job.id, error: retryErr instanceof Error ? retryErr.message : String(retryErr) });
+            Sentry.captureException(retryErr, { tags: { jobId: job.id, phase: "mark-failed-retry" } });
+          },
+        );
     }
+
+    // Move to dead-letter queue so permanently-failed jobs can be triaged
+    // separately without clogging the active job table.
+    supabase
+      .from("dead_letter_jobs")
+      .insert({
+        source_job_id: job.id,
+        task_type: job.task_type,
+        payload: job.payload,
+        error_message: errorMsg,
+        attempts: (job.payload?._restartCount ?? 0) + 1,
+        user_id: job.user_id ?? null,
+        project_id: job.project_id ?? null,
+        worker_id: WORKER_ID,
+      })
+      .then(() => {}, (dlqErr: unknown) => {
+        wlog.warn("Dead-letter insert failed", { jobId: job.id, error: dlqErr instanceof Error ? dlqErr.message : String(dlqErr) });
+      });
 
     totalJobsFailed++;
   } finally {

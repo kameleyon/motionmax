@@ -47,6 +47,27 @@ interface FinalizeResult {
   phaseTime: number;
 }
 
+// ── Cleanup ────────────────────────────────────────────────────────
+
+async function cleanupIntermediateAssets(projectId: string, generationId: string): Promise<void> {
+  const [imageResult, videoResult] = await Promise.allSettled([
+    supabase.storage.from("scene-images").list(projectId, { limit: 200 }).then(({ data }) => {
+      if (!data?.length) return;
+      const paths = data.map((f) => `${projectId}/${f.name}`);
+      return supabase.storage.from("scene-images").remove(paths);
+    }),
+    supabase.storage.from("scene-videos").list(`${projectId}/${generationId}`, { limit: 200 }).then(({ data }) => {
+      if (!data?.length) return;
+      const paths = data.map((f) => `${projectId}/${generationId}/${f.name}`);
+      return supabase.storage.from("scene-videos").remove(paths);
+    }),
+  ]);
+
+  const imageCount = imageResult.status === "fulfilled" ? "ok" : imageResult.reason;
+  const videoCount = videoResult.status === "fulfilled" ? "ok" : videoResult.reason;
+  console.log(`[Finalize] Asset cleanup: scene-images=${imageCount} scene-videos=${videoCount}`);
+}
+
 // ── Handler ────────────────────────────────────────────────────────
 
 export async function handleFinalizePhase(
@@ -70,7 +91,7 @@ export async function handleFinalizePhase(
   // Fetch generation + project
   const { data: generation, error: genError } = await supabase
     .from("generations")
-    .select("*, projects(title, length, project_type)")
+    .select("*, projects(title, length, project_type, voice_inclination)")
     .eq("id", generationId)
     .maybeSingle();
 
@@ -106,9 +127,11 @@ export async function handleFinalizePhase(
   // We default to Hypereal since that's the primary now
   const scriptCost = costTracking.scriptTokens * PRICING.hyperealLlmPerToken;
 
-  // Audio: depends on provider used (tracked in scene metadata or estimated)
+  // Audio: pricing differs by provider. Haitian Creole uses Google TTS; all others use Qwen3.
   const audioSeconds = costTracking.audioSeconds || (sceneCount * 8); // ~8s per scene avg
-  const audioCost = audioSeconds * PRICING.qwen3PerSecond; // Most scenes use Qwen3
+  const language = (generation.projects as any)?.voice_inclination || "en";
+  const audioRatePerSec = language === "ht" ? PRICING.googleTtsPerSecond : PRICING.qwen3PerSecond;
+  const audioCost = audioSeconds * audioRatePerSec;
 
   // Images: Hypereal for cinematic, mix for others
   const imageCount = costTracking.imagesGenerated || sceneCount;
@@ -125,9 +148,9 @@ export async function handleFinalizePhase(
 
   // Attribution: most costs go to Hypereal now (images, video, LLM, ASR)
   const hyperealTotal = scriptCost + imageCost + videoCost + researchCost + asrCost;
-  const replicateTotal = audioCost; // Qwen3 TTS runs on Replicate
+  const replicateTotal = language !== "ht" ? audioCost : 0; // Qwen3 TTS on Replicate (non-HC)
   const openrouterTotal = 0; // Only used as fallback now
-  const googleTtsTotal = 0; // Only used for Haitian Creole
+  const googleTtsTotal = language === "ht" ? audioCost : 0; // Google TTS for Haitian Creole
 
   try {
     await supabase.from("generation_costs").insert({
@@ -185,6 +208,11 @@ export async function handleFinalizePhase(
   if (thumbnailUrl) {
     console.log(`[Finalize] Thumbnail set for project ${projectId}: ${thumbnailUrl.substring(0, 80)}...`);
   }
+
+  // Clean up intermediate storage objects — fire-and-forget (non-fatal)
+  cleanupIntermediateAssets(projectId, generationId).catch((err) => {
+    console.warn("[Finalize] Intermediate asset cleanup failed (non-fatal):", (err as Error).message);
+  });
 
   const phaseTime = Date.now() - phaseStart;
 

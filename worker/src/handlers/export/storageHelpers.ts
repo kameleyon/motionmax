@@ -58,23 +58,52 @@ async function refreshSignedUrl(url: string): Promise<string> {
   return data.signedUrl;
 }
 
+/**
+ * Extract bucket name and object path from a Supabase public-object URL.
+ * Returns null when the URL is not in the expected format.
+ */
+function extractPublicUrlParts(url: string): { bucket: string; path: string } | null {
+  const m = url.match(/\/object\/public\/([^/]+)\/(.+)/);
+  return m ? { bucket: m[1], path: m[2] } : null;
+}
+
 /** Stream a URL directly to disk without buffering in Node.js heap.
- *  Refreshes expired signed URLs. Falls back to a signed URL when a
- *  public-bucket URL returns 400/403 (bucket switched to private). */
+ *  For scene-images public URLs: always converts to a fresh signed URL first
+ *  because the Supabase Storage service caches the bucket's public flag and
+ *  may return 400 even after the bucket is marked public.
+ *  For other public URLs: falls back to a signed URL on 400/403. */
 export async function streamToFile(url: string, destPath: string): Promise<void> {
-  const freshUrl = await refreshSignedUrl(url);
+  let fetchUrl = url;
 
-  let response = await fetch(freshUrl);
-
-  // Public URL returned 400/403 — bucket may have been made private.
-  // Re-fetch using a signed URL so the worker never gets stuck.
-  if ((response.status === 400 || response.status === 403) && url.includes("/object/public/")) {
-    const publicMatch = url.match(/\/object\/public\/([^/]+)\/(.+)/);
-    if (publicMatch) {
-      const [, bucket, path] = publicMatch;
-      const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+  // scene-images public URLs → skip public-URL attempt entirely; use signed URL.
+  // The Storage metadata cache can lag behind DB changes, causing spurious 400s.
+  if (url.includes("/object/public/scene-images/")) {
+    const parts = extractPublicUrlParts(url);
+    if (parts) {
+      const { data, error } = await supabase.storage
+        .from(parts.bucket)
+        .createSignedUrl(parts.path, 3600);
       if (!error && data?.signedUrl) {
-        console.warn(`[StorageHelpers] Public URL returned ${response.status} for ${bucket}/${path} — retrying with signed URL`);
+        fetchUrl = data.signedUrl;
+        console.log(`[StorageHelpers] Using signed URL for scene-images/${parts.path}`);
+      }
+    }
+  } else {
+    // Refresh expired signed URLs for non-public paths.
+    fetchUrl = await refreshSignedUrl(url);
+  }
+
+  let response = await fetch(fetchUrl);
+
+  // Fallback: any public URL that still returns 400/403 → create signed URL.
+  if ((response.status === 400 || response.status === 403) && url.includes("/object/public/")) {
+    const parts = extractPublicUrlParts(url);
+    if (parts) {
+      const { data, error } = await supabase.storage
+        .from(parts.bucket)
+        .createSignedUrl(parts.path, 3600);
+      if (!error && data?.signedUrl) {
+        console.warn(`[StorageHelpers] Public URL returned ${response.status} for ${parts.bucket}/${parts.path} — retrying with signed URL`);
         response = await fetch(data.signedUrl);
       }
     }

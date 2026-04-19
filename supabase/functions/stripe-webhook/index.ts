@@ -3,6 +3,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { creditPackProducts, subscriptionProducts, monthlyCredits } from "../_shared/stripeProducts.ts";
+import { sendWelcomeEmail, sendPaymentFailedEmail, sendCancellationEmail } from "../_shared/resend.ts";
 import * as Sentry from "https://deno.land/x/sentry/index.mjs";
 
 Sentry.init({
@@ -206,6 +207,13 @@ serve(async (req) => {
               .from("subscriptions")
               .insert(subscriptionData);
           }
+
+          // Send welcome email for new subscriptions
+          const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId);
+          if (userData?.user?.email) {
+            await sendWelcomeEmail(userData.user.email, planName);
+            logStep("Welcome email sent", { userId });
+          }
         }
         break;
       }
@@ -272,10 +280,16 @@ serve(async (req) => {
             .from("subscriptions")
             .update({ status: "past_due" })
             .eq("stripe_customer_id", customerId);
-          
-          logStep("Subscription marked as past_due due to payment failure", { 
-            userId: subData.user_id 
+
+          logStep("Subscription marked as past_due due to payment failure", {
+            userId: subData.user_id
           });
+
+          const { data: failedUserData } = await supabaseAdmin.auth.admin.getUserById(subData.user_id);
+          if (failedUserData?.user?.email) {
+            await sendPaymentFailedEmail(failedUserData.user.email);
+            logStep("Payment-failed email sent", { userId: subData.user_id });
+          }
         }
         break;
       }
@@ -286,6 +300,12 @@ serve(async (req) => {
 
         logStep("Subscription deleted", { subscriptionId: subscription.id });
 
+        const { data: cancelSubData } = await supabaseAdmin
+          .from("subscriptions")
+          .select("user_id")
+          .eq("stripe_customer_id", customerId)
+          .single();
+
         await supabaseAdmin
           .from("subscriptions")
           .update({
@@ -293,6 +313,14 @@ serve(async (req) => {
             plan_name: "free",
           })
           .eq("stripe_customer_id", customerId);
+
+        if (cancelSubData) {
+          const { data: cancelUserData } = await supabaseAdmin.auth.admin.getUserById(cancelSubData.user_id);
+          if (cancelUserData?.user?.email) {
+            await sendCancellationEmail(cancelUserData.user.email);
+            logStep("Cancellation email sent", { userId: cancelSubData.user_id });
+          }
+        }
         break;
       }
 

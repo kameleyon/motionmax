@@ -1,24 +1,20 @@
 import { motion } from "framer-motion";
-import { Star } from "lucide-react";
 
-const testimonials = [
+const useCases = [
   {
-    quote: "I used to spend 8 hours editing a single explainer video. With MotionMax, I paste the script and get a polished video in 10 minutes. It's changed my entire workflow.",
-    name: "Sarah K.",
-    role: "Content Creator",
-    avatar: null, // Replace with real photo URL
+    quote: "Paste a script and get a polished explainer video in minutes — no editing timeline, no stock footage hunting, no render queue.",
+    role: "Content Creators",
+    icon: "✦",
   },
   {
-    quote: "The cinematic mode is incredible. I create TikTok and YouTube Shorts that look like they were made by a production team. My audience thinks I hired someone.",
-    name: "Marcus J.",
-    role: "Social Media Manager",
-    avatar: null,
+    quote: "Cinematic mode produces TikTok and YouTube Shorts that look like they were made by a production team — without the production budget.",
+    role: "Social Media Managers",
+    icon: "✦",
   },
   {
-    quote: "We use MotionMax for our internal training videos. What took our L&D team a week now takes an afternoon. The multi-language support is a game changer for our global team.",
-    name: "Priya M.",
-    role: "Head of Learning & Development",
-    avatar: null,
+    quote: "Internal training videos that used to take a week now take an afternoon. Multi-language support makes global rollouts straightforward.",
+    role: "Learning & Development Teams",
+    icon: "✦",
   },
 ];
 
@@ -33,44 +29,34 @@ export function Testimonials() {
           className="text-center mb-12"
         >
           <span className="inline-block mb-3 text-xs font-medium uppercase tracking-widest text-primary">
-            What Creators Say
+            Built for your workflow
           </span>
           <h2 className="type-h1 tracking-tight text-foreground">
-            Real results from real creators
+            What you can do with MotionMax
           </h2>
         </motion.div>
 
         <div className="grid gap-6 md:grid-cols-3">
-          {testimonials.map((t, index) => (
+          {useCases.map((item, index) => (
             <motion.div
-              key={t.name}
+              key={item.role}
               initial={{ opacity: 0, y: 24 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: index * 0.1, duration: 0.5 }}
               className="rounded-xl border border-border/50 bg-card/50 p-6 flex flex-col"
             >
-              {/* Stars */}
-              <div className="flex gap-0.5 mb-4">
-                {[1,2,3,4,5].map(i => (
-                  <Star key={i} className="h-4 w-4 fill-[hsl(var(--gold))] text-[hsl(var(--gold))]" />
-                ))}
-              </div>
+              {/* Icon */}
+              <div className="mb-4 text-primary text-lg">{item.icon}</div>
 
-              {/* Quote */}
+              {/* Description */}
               <p className="text-sm leading-relaxed text-foreground/80 flex-1">
-                "{t.quote}"
+                {item.quote}
               </p>
 
-              {/* Author */}
-              <div className="flex items-center gap-3 mt-5 pt-4 border-t border-border/30">
-                <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/40 to-primary/20 flex items-center justify-center text-sm font-medium text-primary">
-                  {t.name.charAt(0)}
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">{t.name}</p>
-                  <p className="text-xs text-muted-foreground">{t.role}</p>
-                </div>
+              {/* Role label */}
+              <div className="mt-5 pt-4 border-t border-border/30">
+                <p className="text-xs font-medium text-primary uppercase tracking-wide">{item.role}</p>
               </div>
             </motion.div>
           ))}

@@ -182,384 +182,10 @@ async function getReplicatePrediction(predictionId: string, replicateToken: stri
   return response.json();
 }
 
-// ============================================
-// STEP 1: Script Generation with Gemini 3 Preview
-// ============================================
-// Content compliance instruction (from generate-video)
-const CONTENT_COMPLIANCE_INSTRUCTION = `
-CONTENT POLICY (MANDATORY):
-- Generate only family-friendly, appropriate content
-- No explicit violence, gore, or disturbing imagery
-- No sexual or adult content
-- No hate speech, discrimination, or offensive stereotypes
-- No content promoting illegal activities
-- Keep all content suitable for general audiences
-`;
-
-// Get style prompt from STYLE_PROMPTS dictionary
-function getStylePrompt(style: string, customStyle?: string): string {
-  const key = style.toLowerCase();
-  return STYLE_PROMPTS[key] || customStyle || style;
-}
-
-async function generateScriptWithGemini(
-  content: string,
-  params: Required<Pick<CinematicRequest, "format" | "length" | "style">> &
-    Partial<
-      Pick<
-        CinematicRequest,
-        | "customStyle"
-        | "brandMark"
-        | "presenterFocus"
-        | "characterDescription"
-        | "disableExpressions"
-        | "characterConsistencyEnabled"
-        | "voiceType"
-        | "voiceId"
-        | "voiceName"
-      >
-    >,
-  openrouterApiKey: string,
-): Promise<{ title: string; scenes: Scene[]; characters?: Record<string, string> }> {
-  console.log("Step 1: Generating script with Gemini 3 Preview...");
-
-  // Get dimensions based on format
-  const dimensions =
-    params.format === "portrait"
-      ? { width: 1080, height: 1920 }
-      : params.format === "square"
-        ? { width: 1080, height: 1080 }
-        : { width: 1920, height: 1080 };
-
-  // Length configuration - dynamic scene count ranges
-  const lengthConfig: Record<
-    string,
-    { minScenes: number; maxScenes: number; targetDuration: number; maxSceneDuration: number }
-  > = {
-    short: { minScenes: 10, maxScenes: 10, targetDuration: 150, maxSceneDuration: 15 },
-    brief: { minScenes: 28, maxScenes: 28, targetDuration: 420, maxSceneDuration: 15 },
-    presentation: { minScenes: 36, maxScenes: 36, targetDuration: 540, maxSceneDuration: 15 },
-  };
-  const config = lengthConfig[params.length] || lengthConfig.brief;
-
-  const styleDescription = getStylePrompt(params.style, params.customStyle);
-
-  // Build optional guidance sections
-  const presenterGuidance = params.presenterFocus ? `\n**Presenter/Focus Guidance:** ${params.presenterFocus}` : "";
-
-  const characterGuidance = params.characterDescription
-    ? `\n**Character Appearance:** All human characters MUST match: ${params.characterDescription}`
-    : "";
-
-  // Detect Haitian Creole from input content OR presenter_focus language setting
-  const inputIsCreole = isHaitianCreole(content);
-  const presenterFocusLower = (params.presenterFocus || "").toLowerCase();
-  const forceCreoleFromPresenter =
-    presenterFocusLower.includes("haitian") ||
-    presenterFocusLower.includes("kreyòl") ||
-    presenterFocusLower.includes("kreyol") ||
-    presenterFocusLower.includes("creole");
-  const isCreoleProject = inputIsCreole || forceCreoleFromPresenter;
-  console.log(
-    `[Script] Haitian Creole detection: content=${inputIsCreole}, presenterFocus=${forceCreoleFromPresenter}, final=${isCreoleProject}`,
-  );
-
-  const languageInstruction = isCreoleProject
-    ? `### LANGUAGE REQUIREMENT
-IMPORTANT: The user's input is in Haitian Creole (Kreyòl Ayisyen). You MUST:
-- Write ALL voiceover/narration text in Haitian Creole
-- Keep ALL proper nouns, brand names, and slogans in their ORIGINAL language (do NOT translate them)
-- Write visualPrompt descriptions in ENGLISH (these are for image AI, not shown to users)
-- Write the "title" in Haitian Creole
-- The voiceover must sound natural in Haitian Creole, not like a word-for-word translation`
-    : `### LANGUAGE REQUIREMENT
-ALWAYS generate in ENGLISH unless the user EXPLICITLY requests Haitian Creole (Kreyòl Ayisyen).
-If input is in another language, TRANSLATE to English.`;
-
-  const systemPrompt = `You are a world-class Cinematic Director and Screenwriter.
-
-Your goal is to turn a user's request into a compelling, production-ready video script and visual plan.
-
-${CONTENT_COMPLIANCE_INSTRUCTION}
-
-### PHASE 1: ASSESS & STRATEGIZE
-
-First, analyze the User's Request to determine the best approach:
-
-1. **Core Message:** What is the single most important idea to convey?
-2. **Audience:** Who is watching? (e.g., investors, social media, students).
-3. **Narrative Arc:** Choose the best structure (Explainer, Cinematic Journey, or Montage).
-
-=== CONTENT ANALYSIS (CRITICAL - DO THIS FIRST) ===
-Before writing the script, carefully analyze the content to identify:
-1. **KEY CHARACTERS:** Who are the people/entities mentioned?
-2. **GENDER:** Determine gender from context (names, pronouns, roles, topics)
-3. **ROLES & RELATIONSHIPS:** Who does what?
-4. **VISUAL CONSISTENCY:** The SAME character must look IDENTICAL across ALL scenes
-5. **TEMPORAL CONTEXT:** Childhood → show AS A CHILD, Adult → show AS ADULT
-6. **HISTORICAL/CULTURAL CONTEXT:** Match clothing, hairstyles, technology to time period
-
-### PHASE 2: ANIMATION RULES (CRITICAL & STRICT)
-
-You are writing prompts for a generative video AI that CANNOT do lip-sync. You must follow these rules strictly:
-
-1. **NO TALKING FACES:** Characters must **NEVER** be described as "talking", "speaking", "saying", or "moving mouth".
-
-2. **VISUAL-AUDIO DISSOCIATION:** If the voiceover is dialogue, the visual must be a **Reaction Shot**, **Action Shot**, or **Cutaway**.
-   - *Bad:* "Close up of John explaining the plan."
-   - *Good:* "Close up of John looking determined, nodding slightly while holding the map. Subtle wind blows his hair."
-
-3. **ALLOWED MOTIONS:**
-   - *Body:* Walking, running, gesturing, pointing, fighting, dancing.
-   - *Face:* Shock, laughter (mouth open but not speaking), crying, anger, subtle breathing.
-   - *Camera (use the full vocabulary below — vary across scenes, never repeat the same move twice in a row):*
-     - **Pan left / Pan right** — camera pivots horizontally on fixed axis; great for sweeping reveals or following lateral subjects
-     - **Tilt up / Tilt down** — camera pivots vertically; ideal for revealing tall subjects from ground to top
-     - **Dolly in / Dolly out** — full camera moves toward/away from subject; creates parallax effect between fore/background (NOT a zoom)
-     - **Truck left / Truck right** (Tracking shot) — entire camera slides sideways; follows a walking character or moving vehicle
-     - **Pedestal up / Pedestal down** — entire camera rises or lowers vertically; creates elevation reveal effect
-     - **Orbit / Arc** — camera circles around a fixed subject; ideal for hero reveals, product showcases, dramatic moments
-     - **Crane up / Crane down** — sweeping vertical rise or descent of camera; cinematic scale-building
-     - **Handheld / Steadicam** — slight organic sway for documentary realism vs. buttery-smooth glide for elegance
-     - **Dutch angle / Roll** — camera rolls on Z-axis, tilting the horizon line; creates kinetic tension for action or music
-     - **Rack focus** — shifts focus between foreground and background subjects within the same shot
-  - ⛔ **BANNED: Zoom in / Zoom out** — do NOT use any zoom effect. No "zoom in", no "zoom out", no "dolly zoom", no "Vertigo effect". Use Dolly in/out for depth movement instead.
-
-4. **STATIC POSES:** For dialogue-heavy moments, use "Static pose with subtle breathing and idle movement" or "Cinematic portrait, staring intensely."
-
-### PHASE 3: SCENE CREATION
-
-⚠️ MANDATORY SCENE COUNT RULE — THIS IS NON-NEGOTIABLE:
-You MUST generate a MINIMUM of ${config.minScenes} scenes and a MAXIMUM of ${config.maxScenes} scenes.
-- Generating fewer than ${config.minScenes} scenes is a CRITICAL FAILURE. Do NOT do it.
-- Generating more than ${config.maxScenes} scenes is also a failure.
-- Count your scenes before finalizing. If you have fewer than ${config.minScenes}, ADD MORE scenes.
-- The acceptable range is EXACTLY ${config.minScenes} to ${config.maxScenes} scenes. No exceptions.
-
-**TARGET DURATION:** ~${config.targetDuration} seconds total (under 3 minutes)
-**MAX PER SCENE:** ${config.maxSceneDuration} seconds each
-
-### INPUT CONTEXT
-
-- **Visual Style:** ${styleDescription}
-- **Aspect Ratio:** ${params.format} (${dimensions.width}x${dimensions.height})
-- **Tone:** cinematic${presenterGuidance}${characterGuidance}
-
-**User's Content:**
-${content}
-
-${languageInstruction}
-
-### VIDEO-FIRST VISUAL PROMPTS (CRITICAL)
-Your visualPrompt must be optimized for AI VIDEO generation, NOT static images. Focus on:
-
-1. **MOTION & DYNAMICS:** Describe movement, action, flow
-   - ✓ "Camera slowly pushes in as the protagonist walks forward through fog"
-   - ✗ "A person standing in fog"
-
-2. **CAMERA MOVEMENT:** ALWAYS specify the exact camera movement for every scene. Choose from the full vocabulary — vary them to avoid repetition:
-   - **Rotational (fixed axis):** Pan left, Pan right, Tilt up, Tilt down
-   - **Translational (full camera travel):** Dolly in, Dolly out, Truck left, Truck right, Pedestal up/down, Crane up/down
-   - **Orbital:** Orbit/Arc around subject (clockwise/counter-clockwise), Drone arc
-   - **Advanced:** Handheld jitter, Steadicam glide, Dutch angle roll, Rack focus shift
-   - **Examples:**
-     - "Camera pans right slowly, revealing the full scale of the battlefield"
-     - "Dolly in close on her face as she reads the letter — background blurs with parallax"
-     - "Smooth orbit clockwise around the hero, 180° arc, golden hour backlight"
-     - "Pedestal rising from ground level to rooftop, city expanding below"
-     - "Low-angle truck right tracking the character striding down the neon-lit alley"
-     - "Handheld close-up with slight sway — raw, intimate, documentary feel"
-     - "Dutch angle roll as the villain steps into frame — horizon tilts 15°"
-     - "Rack focus: sharp close-up of the key in the foreground, blurred figure in background snaps into focus"
-
-3. **CINEMATIC LIGHTING:** Be specific about light quality
-   - "Cyberpunk neon reflections on wet pavement", "Soft rim light separating subject from background"
-   - "Dramatic Rembrandt lighting with deep shadows"
-
-4. **COMPOSITION:** Describe framing and depth
-   - "Subject in left third of frame, shallow depth of field blurring city lights behind"
-   - "Extreme close-up on eyes, rack focus to hands in foreground"
-
-5. **ATMOSPHERE & MOOD:** Set the emotional tone visually
-   - "Tense, claustrophobic framing", "Expansive, hopeful wide shot"
-
-=== ENVIRONMENT & SETTING (MANDATORY) ===
-**EVERY scene MUST include a detailed environment/setting that matches the story context.**
-Do NOT create empty or minimal backgrounds. The environment tells the story!
-
-For each visualPrompt, specify:
-- **WHERE:** Location (kitchen, office, street, forest, etc.)
-- **WHAT'S AROUND:** Props, furniture, objects that add context
-- **ATMOSPHERE:** Time of day, weather, lighting conditions
-- **STORY RELEVANCE:** Environment should reinforce the narrative
-
-BAD EXAMPLES (TOO MINIMAL):
-- ✗ "A stick figure next to a cake" (no setting!)
-- ✗ "Person standing on white background" (empty!)
-- ✗ "Character with angry expression" (no context!)
-
-GOOD EXAMPLES (RICH CONTEXT):
-- ✓ "Inside a cluttered home kitchen at 2AM, dirty dishes piled in the sink, dim overhead light casting harsh shadows. A stick figure stands at the counter, surrounded by open flour bags and mixing bowls, staring angrily at a lopsided two-layer cake on a vintage pedestal."
-- ✓ "A cramped office cubicle with sticky notes everywhere, coffee cups stacked, computer screen glowing. Through the window, city lights twinkle. The character slumps in an ergonomic chair, papers scattered across the desk."
-
-=== CHARACTER BIBLE (REQUIRED) ===
-You MUST create a "characters" object defining EVERY person/entity in the video for VISUAL CONSISTENCY across all scenes.
-
-For each character specify:
-- **GENDER** (male/female/other)
-- **AGE** (specific age or age range)
-- **Ethnicity/skin tone** (be specific)
-- **Hair** (color, style, length)
-- **Body type** (build, height)
-- **Clothing** (period/age-appropriate, consistent across scenes)
-- **Distinguishing features** that remain CONSTANT
-
-When writing visualPrompt, COPY the full character description from your bible—don't just reference the name.
-Example: Instead of "John enters the room", write "A 45-year-old Caucasian man with salt-and-pepper hair, square jaw, wearing a charcoal business suit (from character bible) enters the room..."
-
-### SCENE 1 TITLE REQUIREMENT (MANDATORY)
-The FIRST scene (Scene 1) MUST include a bold, prominent title overlay in the visualPrompt.
-- Create a 3-6 word catchy title that captures the video's essence
-- The title should be rendered as social-media-style headline text
-- Example: "visualPrompt: 'UNLOCK YOUR POTENTIAL' in bold, modern sans-serif typography centered on screen..."
-
-### VOICEOVER STYLE
-- ENERGETIC, conversational, cinematic tone
-- Start each scene with a hook that grabs attention
-- NO labels, NO stage directions, NO markdown—just raw spoken text
-${params.disableExpressions ? "- Do NOT include paralinguistic tags like [chuckle], [sigh], etc." : "- Include natural expressions where appropriate: [sigh], [chuckle], [gasp], [laugh]"}
-
-### TTS CONTENT FILTER SAFETY (CRITICAL)
-The voiceover text will be synthesized by Google Gemini TTS, which has aggressive content filters.
-You MUST avoid ANY words or phrases that could trigger safety filters, including:
-- **Onomatopoeia for violence/explosions:** NEVER use "BOUM", "BOOM", "BANG", "POW", "CRASH", "BLAST", "SMASH", "KABOOM", "SLASH", "STAB", "SHOOT", "KILL", "MURDER", "SLAUGHTER"
-- **Weapons & combat:** Avoid "gun", "rifle", "bomb", "grenade", "bullet", "sword", "knife" in narration
-- **Graphic body language:** Avoid "blood", "bleeding", "guts", "gore", "wound"
-- **Profanity or slurs:** Absolutely none, even mild ones
-- **Drug references:** Avoid explicit drug names or usage descriptions
-- **Sexual content:** No suggestive or explicit language whatsoever
-- **Self-harm references:** No mentions of suicide, self-harm, or related topics
-
-INSTEAD, use safe alternatives:
-- "BOUM/BOOM" → "Suddenly..." or "In a flash..." or "Like lightning..."
-- "BANG" → "A loud sound..." or "Toudenkou..." (in Creole)
-- "CRASH" → "A sudden impact..." or "Everything collided..."
-- For dramatic moments, use emotional language instead of sound effects
-- Express intensity through pacing, pauses, and vocal energy—NOT violent words
-
-This applies to ALL languages including Haitian Creole. Even translated versions of these words will be flagged.
-
-### HISTORICAL, CULTURAL & VISUAL ACCURACY (CRITICAL)
-You are generating visual prompts that will be used to create illustrations. You MUST ensure absolute accuracy:
-- **Historical accuracy**: If the content is about a specific time period (e.g. England 1400s), ALL visual elements must match that era — architecture, clothing, weapons, tools, furniture, hairstyles, and technology. Do NOT mix elements from different centuries or regions (e.g. no French châteaux in an English medieval scene, no Victorian clothing in a Renaissance scene).
-- **Geographic accuracy**: Landscapes, vegetation, weather, and urban design must match the real-world location being depicted. A scene set in West Africa should NOT look like Northern Europe.
-- **Ethnic & facial accuracy**: Characters must reflect the correct ethnicity, skin tone, facial features, hair texture, and body type for the culture and region being depicted. If the topic is about the Zulu Kingdom, characters must look Southern African — not European or East Asian.
-- **Cultural accuracy**: Clothing, jewelry, rituals, food, musical instruments, religious symbols, and social customs must be culturally authentic and specific to the people and era described.
-- **Name & spelling accuracy**: Proper nouns, place names, historical figure names, and brand names must be spelled correctly in both voiceover text and visual prompts.
-- **Color & material accuracy**: When the chosen style allows realistic colors, use historically/culturally accurate colors for flags, uniforms, traditional garments, heraldry, and national symbols.
-- **Context coherence**: Every object, person, and setting in the visual prompt must belong to the same time, place, and cultural context. No anachronisms (e.g. no smartphones in ancient Rome, no electric lights in 1200s Japan).
-- When unsure about specifics, err on the side of the MOST COMMONLY DOCUMENTED historical/cultural representation.
-
-### OUTPUT FORMAT
-Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
-{
-  "title": "A Creative, Compelling Title",
-  "characters": {
-    "Protagonist": "A 32-year-old woman with shoulder-length black hair, warm brown skin, athletic build, wearing a tailored navy blazer and white blouse. Distinguishing features: bright smile, small gold hoop earrings.",
-    "Mentor": "A 55-year-old East Asian man with graying temples, kind eyes, slim build, wearing a gray cardigan over a button-down shirt. Distinguishing features: reading glasses, gentle demeanor."
-  },
-  "scenes": [
-    {
-      "number": 1,
-      "voiceover": "Engaging narration that hooks the viewer immediately...",
-      "visualPrompt": "'THE JOURNEY BEGINS' in bold, modern typography fading in over: Slow dolly push through morning mist. A 32-year-old woman with shoulder-length black hair, warm brown skin, athletic build, wearing a tailored navy blazer (from character bible) steps into frame from the right. Camera tracks her movement. She walks purposefully but does NOT speak—static determined expression with subtle breathing. Shallow depth of field, lens flare kissing the edge of frame.",
-      "visualStyle": "Cinematic establishing shot with atmospheric depth",
-      "duration": 8
-    }
-  ]
-}`;
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${openrouterApiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-3.1-pro-preview",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `Create a cinematic video script based on this idea:\n\n${content}` },
-      ],
-      tools: [
-        {
-          type: "function",
-          function: {
-            name: "create_script",
-            description: "Create a cinematic video script with title, characters, and scenes",
-            parameters: {
-              type: "object",
-              properties: {
-                title: { type: "string", description: "The video title" },
-                characters: {
-                  type: "object",
-                  description: "Character bible with visual descriptions for consistency",
-                  additionalProperties: { type: "string" },
-                },
-                scenes: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      number: { type: "number" },
-                      voiceover: { type: "string", description: "The narration text" },
-                      visualPrompt: { type: "string", description: "Detailed visual description for image generation" },
-                      visualStyle: { type: "string", description: "Camera/shot style descriptor" },
-                      duration: { type: "number", description: "Duration in seconds (5-20)" },
-                    },
-                    required: ["number", "voiceover", "visualPrompt", "visualStyle", "duration"],
-                  },
-                },
-              },
-              required: ["title", "scenes"],
-            },
-          },
-        },
-      ],
-      tool_choice: { type: "function", function: { name: "create_script" } },
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    console.error("Gemini 3 error:", error);
-    throw new Error("Failed to generate script with Gemini 3 Preview");
-  }
-
-  const data = await response.json();
-  const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-  if (toolCall?.function?.arguments) {
-    const parsed = JSON.parse(toolCall.function.arguments);
-    if (!parsed.title || !Array.isArray(parsed.scenes) || parsed.scenes.length === 0) {
-      throw new Error("Invalid script structure from Gemini");
-    }
-
-    const styleDescription = getStylePrompt(params.style, params.customStyle);
-
-    return {
-      title: parsed.title,
-      characters: parsed.characters || {},
-      scenes: parsed.scenes.map((s: any, idx: number) => ({
-        number: s?.number ?? idx + 1,
-        voiceover: s?.voiceover ?? "",
-        visualPrompt: `${s?.visualPrompt ?? ""}\n\nSTYLE: ${styleDescription}`,
-        visualStyle: s?.visualStyle ?? "cinematic",
-        duration: typeof s?.duration === "number" ? s.duration : 8,
-      })),
-    };
-  }
-
-  throw new Error("No tool call response from Gemini 3");
-}
+// Script generation is offloaded to the generate_video worker job
+// (worker/src/handlers/generateVideo.ts) to avoid edge-function timeouts on
+// the 4-6 minute cold path. The inline generateScriptWithGemini function has
+// been removed; the phase === "script" handler now queues a worker job.
 
 // ============================================
 // STEP 2: Audio Generation — delegates to Universal Audio Engine
@@ -1347,11 +973,9 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const openrouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
     const replicateToken = Deno.env.get("REPLICATE_API_TOKEN");
 
     if (!supabaseUrl || !supabaseKey) throw new Error("Backend configuration missing");
-    if (!openrouterApiKey) throw new Error("OPENROUTER_API_KEY not configured");
     if (!replicateToken) throw new Error("REPLICATE_API_TOKEN not configured");
 
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
@@ -1417,24 +1041,25 @@ serve(async (req) => {
     parsedGenerationId = body.generationId; // Cache for error handler
     const phase: Phase = body.phase || "script";
 
-    // =============== PHASE 1: SCRIPT ===============
+    // =============== PHASE 1: SCRIPT (offloaded to worker) ===============
+    // Script generation calls a large LLM that can take 4-6 minutes for a full
+    // 28-36 scene cinematic. Running inline would timeout the edge function.
+    // Instead we deduct credits upfront, enqueue a generate_video worker job,
+    // and return the jobId so the caller can poll video_generation_jobs.
     if (phase === "script") {
       const content = requireString(body.content, "content");
       const format = (body.format || "portrait") as "landscape" | "portrait" | "square";
       const length = requireString(body.length, "length");
       const style = requireString(body.style, "style");
 
-      // ============= UPFRONT CREDIT DEDUCTION (Atomic via RPC) =============
-      // Mirror the frontend formula: seconds * 5 (cinematic multiplier), rounded up.
-      // Must stay in sync with src/lib/planLimits.ts getCreditsRequired("cinematic", length).
+      // Upfront credit deduction — mirror src/lib/planLimits.ts getCreditsRequired("cinematic").
       const LENGTH_SECONDS: Record<string, number> = {
         short: 150,
         brief: 280,
         presentation: 360,
       };
-      const CINEMATIC_MULTIPLIER = 5;
       const lengthSeconds = LENGTH_SECONDS[length] ?? LENGTH_SECONDS.brief;
-      const CINEMATIC_CREDIT_COST = Math.ceil(lengthSeconds * CINEMATIC_MULTIPLIER);
+      const CINEMATIC_CREDIT_COST = Math.ceil(lengthSeconds * 5);
 
       const { data: deductionSuccess, error: rpcError } = await supabase.rpc(
         "deduct_credits_securely",
@@ -1447,87 +1072,57 @@ serve(async (req) => {
       );
 
       if (rpcError || !deductionSuccess) {
-        console.error(`[CINEMATIC] Atomic deduction failed for user ${user.id}:`, rpcError?.message);
+        console.error(`[CINEMATIC] Credit deduction failed for user ${user.id}:`, rpcError?.message);
         return jsonResponse({
           error: `Insufficient credits. Cinematic ${length} generation requires ${CINEMATIC_CREDIT_COST} credits.`,
           code: "INSUFFICIENT_CREDITS",
         }, { status: 402 });
       }
-      console.log(`[CINEMATIC] Securely deducted ${CINEMATIC_CREDIT_COST} credits for user ${user.id} (${length})`);
-      // ============= END UPFRONT CREDIT DEDUCTION =============
+      console.log(`[CINEMATIC] Deducted ${CINEMATIC_CREDIT_COST} credits for user ${user.id} (${length})`);
 
-      console.log("=== CINEMATIC SCRIPT START ===");
-
-      const script = await generateScriptWithGemini(
+      // Enqueue script generation as a worker job — worker has no timeout limit.
+      const jobPayload = {
+        phase: "script",
+        projectType: "cinematic",
         content,
-        {
-          format,
-          length,
-          style,
-          customStyle: body.customStyle,
-          brandMark: body.brandMark,
-          presenterFocus: body.presenterFocus,
-          characterDescription: body.characterDescription,
-          disableExpressions: body.disableExpressions,
-          characterConsistencyEnabled: body.characterConsistencyEnabled,
-          voiceType: body.voiceType,
-          voiceId: body.voiceId,
-          voiceName: body.voiceName,
-        },
-        openrouterApiKey,
-      );
+        format,
+        length,
+        style,
+        customStyle: body.customStyle,
+        brandMark: body.brandMark,
+        presenterFocus: body.presenterFocus,
+        characterDescription: body.characterDescription,
+        disableExpressions: body.disableExpressions,
+        characterConsistencyEnabled: body.characterConsistencyEnabled,
+        voiceType: body.voiceType,
+        voiceId: body.voiceId,
+        voiceName: body.voiceName,
+      };
 
-      // Create project
-      const { data: project, error: projectError } = await supabase
-        .from("projects")
+      const { data: job, error: jobError } = await supabase
+        .from("video_generation_jobs")
         .insert({
           user_id: user.id,
-          title: script.title,
-          content,
-          format,
-          length,
-          style,
-          project_type: "cinematic",
-          status: "generating",
-          presenter_focus: body.presenterFocus || null,
-          character_description: body.characterDescription || null,
-          brand_mark: body.brandMark || null,
-          voice_type: body.voiceType || "standard",
-          voice_id: body.voiceId || null,
-          voice_name: body.voiceName || null,
-          character_consistency_enabled: body.characterConsistencyEnabled || false,
+          task_type: "generate_video",
+          status: "pending",
+          payload: jobPayload,
         })
         .select("id")
         .single();
 
-      if (projectError || !project) throw new Error("Failed to create project");
+      if (jobError || !job) {
+        // Refund credits since we could not queue the job
+        await supabase.rpc("refund_credits", {
+          p_user_id: user.id,
+          p_amount: CINEMATIC_CREDIT_COST,
+        }).catch((e: unknown) =>
+          console.error("[CINEMATIC] Refund failed after job insert error:", e)
+        );
+        throw new Error(`Failed to queue cinematic script job: ${jobError?.message}`);
+      }
 
-      // Create generation — store character bible in scenes[0]._characterBible for image phase
-      const scenesWithCharBible = script.scenes.map((s: any, idx: number) =>
-        idx === 0 ? { ...s, _characterBible: script.characters || {} } : s
-      );
-      const { data: generation, error: genError } = await supabase
-        .from("generations")
-        .insert({
-          user_id: user.id,
-          project_id: project.id,
-          status: "generating",
-          progress: 10,
-          scenes: scenesWithCharBible,
-        })
-        .select("id")
-        .single();
-
-      if (genError || !generation) throw new Error("Failed to create generation record");
-
-      return jsonResponse({
-        success: true,
-        projectId: project.id,
-        generationId: generation.id,
-        title: script.title,
-        scenes: script.scenes,
-        sceneCount: script.scenes.length,
-      });
+      console.log(`[CINEMATIC] Script job queued: ${job.id}`);
+      return jsonResponse({ success: true, pending: true, jobId: job.id });
     }
 
     // All remaining phases require generationId

@@ -206,7 +206,7 @@ async function processJob(job: Job) {
         .eq('id', job.id);
     }
 
-    if (job.task_type === 'generate_video') {
+    if (job.task_type === 'generate_video' || (job.task_type as string) === 'generate_cinematic') {
       const scriptResult = await handleGenerateVideo(job.id, job.payload, job.user_id);
       // Merge result into finalPayload so both `payload` and `result` columns
       // carry the output — the frontend polls `payload` (old builds) or

@@ -511,16 +511,16 @@ serve(async (req) => {
       }
 
       case "create_flag": {
-        const { userId, flagType, reason, details } = params;
+        const { userId: targetUserId, flagType, reason, details } = params;
 
         const { data: flag, error: flagError } = await supabaseAdmin
           .from("user_flags")
           .insert({
-            user_id: userId,
+            user_id: targetUserId,
             flag_type: flagType,
             reason,
             details,
-            flagged_by: userId, // Admin's ID from token
+            flagged_by: userId, // Admin's ID from JWT token
           })
           .select()
           .single();
@@ -532,7 +532,7 @@ serve(async (req) => {
           admin_id: userId,
           action: "create_flag",
           target_type: "user",
-          target_id: userId,
+          target_id: targetUserId,
           details: { flagType, reason },
         });
 

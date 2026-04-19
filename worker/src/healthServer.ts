@@ -10,6 +10,7 @@
  * Bind port via HEALTH_PORT env (default 10000 — Render's expected port).
  */
 import http from "http";
+import { supabase } from "./lib/supabase.js";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -99,7 +100,7 @@ function buildMetricsResponse(vitals: WorkerVitals) {
   };
 }
 
-function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
+async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
   // CORS headers for monitoring dashboards
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Content-Type", "application/json");
@@ -130,6 +131,23 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
     case "/health":
     case "/healthz":
     case "/": {
+      try {
+        const { error: dbError } = await supabase
+          .from('video_generation_jobs')
+          .select('id')
+          .limit(1);
+        if (dbError) {
+          const body = { status: 'unhealthy', reason: 'db unreachable', detail: dbError.message };
+          res.writeHead(503);
+          res.end(JSON.stringify(body));
+          break;
+        }
+      } catch (pingErr) {
+        const body = { status: 'unhealthy', reason: 'db unreachable', detail: String(pingErr) };
+        res.writeHead(503);
+        res.end(JSON.stringify(body));
+        break;
+      }
       const body = buildHealthResponse(vitals);
       res.writeHead(200);
       res.end(JSON.stringify(body));
@@ -174,6 +192,10 @@ export function startHealthServer(
   port: number = parseInt(process.env.HEALTH_PORT || process.env.PORT || "10000", 10)
 ): http.Server {
   vitalsProvider = getVitals;
+
+  if (process.env.NODE_ENV === 'production' && !process.env.HEALTH_AUTH_TOKEN) {
+    throw new Error('[HealthServer] HEALTH_AUTH_TOKEN must be set in production to protect /metrics');
+  }
 
   server = http.createServer(handleRequest);
 

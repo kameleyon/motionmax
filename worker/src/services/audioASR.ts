@@ -107,17 +107,17 @@ export async function transcribeAudio(
 
     if (res.ok) {
       const result = await handleASRResponse(res, apiKey);
-      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "audio-asr", status: result ? "success" : "error", totalDurationMs: Date.now() - startTime, cost: 0, error: result ? undefined : "ASR returned no usable result" }).catch(() => {});
+      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "audio-asr", status: result ? "success" : "error", totalDurationMs: Date.now() - startTime, cost: 0, error: result ? undefined : "ASR returned no usable result" }).catch((err) => { console.warn('[AudioASR] background log failed:', (err as Error).message); });
       return result;
     }
 
     const errText = await res.text();
     console.warn(`[ASR] Failed (${res.status}): ${errText.substring(0, 300)}`);
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "audio-asr", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: `ASR failed ${res.status}` }).catch(() => {});
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "audio-asr", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: `ASR failed ${res.status}` }).catch((err) => { console.warn('[AudioASR] background log failed:', (err as Error).message); });
     return null;
   } catch (err) {
     console.warn(`[ASR] Error: ${(err as Error).message}`);
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "audio-asr", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: (err as Error).message }).catch(() => {});
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "audio-asr", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: (err as Error).message }).catch((err) => { console.warn('[AudioASR] background log failed:', (err as Error).message); });
     return null;
   }
 }

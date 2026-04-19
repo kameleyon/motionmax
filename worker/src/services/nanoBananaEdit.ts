@@ -37,7 +37,7 @@ export async function editImageWithNanoBanana(
   if (!response.ok) {
     const errorText = await response.text();
     const err = new Error(`Nano Banana Edit API Error: ${response.status} - ${errorText}`);
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "nano-banana-edit", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch(() => {});
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "nano-banana-edit", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[NanoBananaEdit] background log failed:', (err as Error).message); });
     throw err;
   }
 
@@ -51,16 +51,16 @@ export async function editImageWithNanoBanana(
     const jobId = data?.jobId;
     if (jobId) {
       const result = await pollNanoBananaJob(jobId, apiKey);
-      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "nano-banana-edit", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch(() => {});
+      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "nano-banana-edit", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[NanoBananaEdit] background log failed:', (err as Error).message); });
       return result;
     }
     const err = new Error(`No image URL returned from Nano Banana Edit: ${JSON.stringify(data).substring(0, 200)}`);
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "nano-banana-edit", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch(() => {});
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "nano-banana-edit", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[NanoBananaEdit] background log failed:', (err as Error).message); });
     throw err;
   }
 
   console.log(`[NanoBananaEdit] Edit complete: ${editedUrl.substring(0, 80)}...`);
-  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "nano-banana-edit", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch(() => {});
+  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "nano-banana-edit", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[NanoBananaEdit] background log failed:', (err as Error).message); });
   return editedUrl;
 }
 

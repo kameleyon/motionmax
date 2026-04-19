@@ -553,7 +553,7 @@ async function callLLMWithFallback(
     maxTokens,
     gatewayBudgetMs: GATEWAY_BUDGET_MS,
     promptLength: prompt.length,
-    promptPreview: prompt.substring(0, 240),
+    promptPreview: prompt.length > 100 ? prompt.substring(0, 100) + '...[truncated]' : prompt,
   });
 
   for (let index = 0; index < modelsToTry.length; index++) {
@@ -585,7 +585,7 @@ async function callLLMWithFallback(
       if (options.jsonLabel) {
         console.log(`[LLM] Validating JSON response from ${model} for ${options.jsonLabel}`, {
           contentLength: result.content.length,
-          contentPreview: result.content.substring(0, 240),
+          contentPreview: result.content.length > 100 ? result.content.substring(0, 100) + '...[truncated]' : result.content,
         });
 
         const parsedContent = extractJsonFromLLMResponse(result.content, options.jsonLabel);
@@ -630,7 +630,7 @@ async function callOpenRouter(
     maxTokens,
     timeoutMs,
     promptLength: prompt.length,
-    promptPreview: prompt.substring(0, 240),
+    promptPreview: prompt.length > 100 ? prompt.substring(0, 100) + '...[truncated]' : prompt,
   });
 
   try {
@@ -683,7 +683,7 @@ async function callOpenRouter(
 
     console.log(`[LLM] OpenRouter ${model} success: ${data.usage?.total_tokens || 0} tokens, ${durationMs}ms`, {
       contentLength: typeof content === "string" ? content.length : 0,
-      contentPreview: typeof content === "string" ? content.substring(0, 240) : null,
+      contentPreview: typeof content === "string" ? (content.length > 100 ? content.substring(0, 100) + '...[truncated]' : content) : null,
     });
     return {
       content,
@@ -2749,7 +2749,8 @@ async function editImageWithReplicatePro(
   try {
     console.log(`[editImage] Starting image edit with Replicate ${editModelLabel}...`);
     console.log(`[editImage] Source URL: ${sourceImageUrl.substring(0, 80)}...`);
-    console.log(`[editImage] Edit prompt: ${editPrompt}`);
+    const _truncEdit = (s: string) => s.length > 100 ? s.substring(0, 100) + '...[truncated]' : s;
+    console.log(`[editImage] Edit prompt: ${_truncEdit(editPrompt)}`);
 
     // Map format to nano-banana-2 supported aspect ratios
     const aspectRatio = format === "portrait" ? "9:16" : format === "square" ? "1:1" : "16:9";

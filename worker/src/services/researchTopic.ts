@@ -126,7 +126,7 @@ export async function researchTopic(content: string): Promise<string> {
     if (!res.ok) {
       const body = await res.text();
       console.warn(`[Research] Hypereal error ${res.status}: ${body.substring(0, 200)}`);
-      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-fast", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: `Hypereal error ${res.status}` }).catch(() => {});
+      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-fast", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: `Hypereal error ${res.status}` }).catch((err) => { console.warn('[Research] background log failed:', (err as Error).message); });
       return "";
     }
 
@@ -135,11 +135,11 @@ export async function researchTopic(content: string): Promise<string> {
     const elapsed = Date.now() - startTime;
 
     console.log(`[Research] Complete (${brief.length} chars, ${(elapsed / 1000).toFixed(1)}s, credits: ${data.creditsUsed ?? "?"})`);
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-fast", status: "success", totalDurationMs: elapsed, cost: 0, error: undefined }).catch(() => {});
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-fast", status: "success", totalDurationMs: elapsed, cost: 0, error: undefined }).catch((err) => { console.warn('[Research] background log failed:', (err as Error).message); });
     return brief;
   } catch (err) {
     console.warn(`[Research] Failed: ${(err as Error).message} — continuing without research`);
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-fast", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: (err as Error).message }).catch(() => {});
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-fast", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: (err as Error).message }).catch((err) => { console.warn('[Research] background log failed:', (err as Error).message); });
     return "";
   }
 }

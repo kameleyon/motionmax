@@ -1,3 +1,6 @@
+import * as Sentry from '@sentry/node';
+Sentry.init({ dsn: process.env.SENTRY_DSN, environment: process.env.NODE_ENV || 'production', tracesSampleRate: 0.1 });
+
 import { supabase } from "./lib/supabase.js";
 import { Job } from "./types/job.js";
 import { handleGenerateVideo } from "./handlers/generateVideo.js";
@@ -103,6 +106,19 @@ async function refundCreditsOnFailure(job: Job) {
     return;
   }
 
+  // Guard against double-refund: if job is already 'failed', a refund was likely
+  // already issued by a prior attempt. Skip to avoid double-crediting the user.
+  const { data: currentJob } = await supabase
+    .from('video_generation_jobs')
+    .select('status')
+    .eq('id', job.id)
+    .single();
+
+  if (currentJob?.status === 'failed') {
+    console.warn(`[Refund] Job ${job.id} already marked 'failed' in DB — skipping duplicate refund`);
+    return;
+  }
+
   try {
     const payload = job.payload || {};
     const projectType = payload.projectType || "doc2video";
@@ -110,6 +126,17 @@ async function refundCreditsOnFailure(job: Job) {
 
     // Calculate credits to refund (same formula as deduction)
     const creditsToRefund = getCreditCost(projectType, length);
+
+    // Idempotency check: if job is already marked 'failed', refund was already issued
+    const { data: jobStatus } = await supabase
+      .from('video_generation_jobs')
+      .select('status')
+      .eq('id', job.id)
+      .single();
+    if (jobStatus?.status === 'failed') {
+      console.log(`[Refund] Job ${job.id} already marked failed — skipping duplicate refund`);
+      return;
+    }
 
     console.log(`[Refund] Attempting to refund ${creditsToRefund} credits for user ${job.user_id} (job ${job.id}, type ${projectType}/${length})`);
 
@@ -319,6 +346,7 @@ async function pollQueue() {
 
     const claimedJobs: any[] = [];
 
+    // Batch claim: p_limit requests up to availableSlots jobs in one atomic RPC call
     // Claim export jobs first (priority)
     const { data: exportData, error: exportError } = await supabase.rpc('claim_pending_job', {
       p_task_type: 'export_video',
@@ -377,7 +405,7 @@ async function pollQueue() {
             cpuCount: os.cpus().length,
             totalMemMb: Math.round(os.totalmem() / 1048576),
           },
-        }).catch(() => {});
+        }).catch((err) => { console.warn('[Worker] background log failed:', (err as Error).message); });
       }
     }
 
@@ -390,16 +418,35 @@ async function pollQueue() {
       if (activeJobs.has(job.id)) continue;
       console.log(`[Worker] Claimed job ${job.id} (type: ${job.task_type})`);
       // Fire and forget — job is already marked 'processing' by the RPC
-      processJob(job as Job).catch(err => {
-        console.error(`[Worker] Unhandled error in processJob for ${job.id}:`, err);
+      Promise.race([
+        processJob(job as Job),
+        new Promise<void>((_, reject) => setTimeout(
+          () => reject(new Error(`Job ${job.id} exceeded wall-clock timeout of ${JOB_TIMEOUT_MS / 60000} minutes`)),
+          JOB_TIMEOUT_MS
+        )),
+      ]).catch(async (err) => {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[Worker] Job ${job.id} failed or timed out: ${errMsg}`);
+        Sentry.captureException(err instanceof Error ? err : new Error(errMsg));
+        // Ensure DB is updated and slot freed — processJob may still be running
+        if (activeJobs.has(job.id)) {
+          activeJobs.delete(job.id);
+          await supabase.from('video_generation_jobs').update({
+            status: 'failed',
+            error_message: errMsg,
+            updated_at: new Date().toISOString(),
+          }).eq('id', job.id);
+        }
       });
     }
   } catch (err) {
     console.error("[Worker] Polling exception:", err);
+    Sentry.captureException(err instanceof Error ? err : new Error(String(err)));
   }
 }
 
 const POLL_INTERVAL_MS = 2000;
+const JOB_TIMEOUT_MS = parseInt(process.env.JOB_TIMEOUT_MS || "5400000", 10); // 90 min default
 
 const MAX_RESTART_RETRIES = 3;
 
@@ -589,12 +636,18 @@ async function gracefulShutdown(signal: string) {
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
-/* ---- Crash guard: prevent Node.js from dying on uncaught errors ---- */
-process.on("uncaughtException", (err) => {
-  console.error("[Worker] 💥 Uncaught exception (kept alive):", err.message);
+// Intentional crash: capture to Sentry then exit so Render restarts the process.
+// Keeping the process alive after uncaught errors risks processing jobs in a corrupt state.
+process.on("uncaughtException", (err: Error) => {
+  console.error("[Worker] 💥 Uncaught exception — exiting after drain:", err.message);
+  Sentry.captureException(err);
+  setTimeout(() => process.exit(1), 100);
 });
-process.on("unhandledRejection", (reason) => {
-  console.error("[Worker] 💥 Unhandled rejection (kept alive):", reason);
+process.on("unhandledRejection", (reason: unknown) => {
+  console.error("[Worker] 💥 Unhandled rejection — exiting after drain:", reason);
+  const err = reason instanceof Error ? reason : new Error(String(reason));
+  Sentry.captureException(err);
+  setTimeout(() => process.exit(1), 100);
 });
 
 /** Mask an API key for safe logging: first 6 + last 4 chars visible. */

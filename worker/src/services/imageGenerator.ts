@@ -75,6 +75,11 @@ async function tryHypereal(
       if (!res.ok) {
         const err = await res.text();
         console.warn(`[ImageGen] Hypereal attempt ${attempt} failed (${res.status}): ${err.substring(0, 200)}`);
+        // Do not retry on 4xx client errors — they won't succeed on retry
+        if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+          console.warn(`[ImageGen] Hypereal giving up on ${res.status} (client error, non-retriable)`);
+          return null;
+        }
         if (attempt < HYPEREAL_RETRIES) await sleep(1500 * attempt);
         continue;
       }
@@ -91,6 +96,10 @@ async function tryHypereal(
       const imgRes = await fetch(hyperealUrl);
       if (!imgRes.ok) {
         console.warn(`[ImageGen] Hypereal download failed (${imgRes.status}) on attempt ${attempt}`);
+        if (imgRes.status >= 400 && imgRes.status < 500 && imgRes.status !== 429) {
+          console.warn(`[ImageGen] Hypereal download giving up on ${imgRes.status} (non-retriable)`);
+          return null;
+        }
         if (attempt < HYPEREAL_RETRIES) await sleep(1500 * attempt);
         continue;
       }
@@ -140,6 +149,10 @@ async function tryReplicate(
       if (!createRes.ok) {
         const errBody = await createRes.text().catch(() => "");
         console.warn(`[ImageGen] Replicate attempt ${attempt} failed (${createRes.status}): ${errBody.substring(0, 300)}`);
+        if (createRes.status >= 400 && createRes.status < 500 && createRes.status !== 429) {
+          console.warn(`[ImageGen] Replicate giving up on ${createRes.status} (client error, non-retriable)`);
+          return null;
+        }
         if (attempt < REPLICATE_RETRIES) await sleep(2000 * attempt);
         continue;
       }
@@ -222,7 +235,7 @@ export async function generateImage(
     const bytes = await tryHypereal(prompt, hyperealApiKey, format);
     if (bytes) {
       const url = await uploadToStorage(bytes, projectId);
-      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3-1-flash-t2i", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch(() => {});
+      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3-1-flash-t2i", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
       return url;
     }
     console.warn("[ImageGen] Hypereal exhausted — falling back to Replicate");
@@ -232,13 +245,13 @@ export async function generateImage(
   if (replicateApiKey) {
     const url = await tryReplicate(prompt, replicateApiKey, format, projectId);
     if (url) {
-      writeApiLog({ userId: undefined, generationId: undefined, provider: "replicate", model: "nano-banana-2", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch(() => {});
+      writeApiLog({ userId: undefined, generationId: undefined, provider: "replicate", model: "nano-banana-2", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
       return url;
     }
   }
 
   const err = new Error("Image generation failed: both Hypereal and Replicate exhausted");
-  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3-1-flash-t2i", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch(() => {});
+  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3-1-flash-t2i", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
   throw err;
 }
 
@@ -288,6 +301,10 @@ export async function editImage(
         if (!res.ok) {
           const errBody = await res.text().catch(() => "");
           console.warn(`[ImageGen] Replicate edit attempt ${attempt} failed (${res.status}): ${errBody.substring(0, 300)}`);
+          if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+            console.warn(`[ImageGen] Replicate edit giving up on ${res.status} (client error, non-retriable)`);
+            break;
+          }
           if (attempt < 3) { await sleep(2000 * attempt); continue; }
           break;
         }

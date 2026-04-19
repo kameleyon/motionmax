@@ -3,6 +3,8 @@ import { writeApiLog } from "../lib/logger.js";
 const HYPEREAL_IMAGE_URL = "https://api.hypereal.cloud/v1/images/generate";
 const HYPEREAL_VIDEO_URL = "https://api.hypereal.cloud/v1/videos/generate";
 
+const truncate = (s: string, n = 100) => s.length > n ? s.substring(0, n) + '...[truncated]' : s;
+
 // ── Module-level rate state ────────────────────────────────────────
 let lastRequestTime = 0;
 const completedJobs = new Map<string, string>(); // jobId → videoUrl cache
@@ -95,7 +97,7 @@ export async function generateGrokVideo(
   };
 
   const bodyJson = JSON.stringify(requestBody);
-  console.log(`[Hypereal] FULL BODY (${bodyJson.length} chars): ${bodyJson.substring(0, 2000)}`);
+  console.log(`[Hypereal] FULL BODY (${bodyJson.length} chars): ${truncate(bodyJson)}`);
 
   const response = await hyperealFetch(HYPEREAL_VIDEO_URL, {
     method: "POST",
@@ -170,7 +172,7 @@ export async function generateKlingV3Video(
 
   const requestBody = { model, input: inputPayload };
   const bodyJson = JSON.stringify(requestBody);
-  console.log(`[Hypereal] Kling V3 body (${bodyJson.length} chars): ${bodyJson.substring(0, 2000)}`);
+  console.log(`[Hypereal] Kling V3 body (${bodyJson.length} chars): ${truncate(bodyJson)}`);
 
   const response = await hyperealFetch(HYPEREAL_VIDEO_URL, {
     method: "POST",
@@ -246,7 +248,7 @@ export async function generateKlingV26Video(
 
   const requestBody = { model, input: inputPayload };
   const bodyJson = JSON.stringify(requestBody);
-  console.log(`[Hypereal] Kling V2.6 body (${bodyJson.length} chars): ${bodyJson.substring(0, 2000)}`);
+  console.log(`[Hypereal] Kling V2.6 body (${bodyJson.length} chars): ${truncate(bodyJson)}`);
 
   const response = await hyperealFetch(HYPEREAL_VIDEO_URL, {
     method: "POST",
@@ -325,7 +327,7 @@ async function pollHyperealJob(
       if (consecutive429 >= max429Streak) {
         console.warn(`[Hypereal] ${model} ${jobId} — ${max429Streak} consecutive 429s, bailing`);
         const rlErr = new Error(`Hypereal rate-limited: ${max429Streak} consecutive 429 responses`);
-        writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: rlErr.message }).catch(() => {});
+        writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: rlErr.message }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
         throw rlErr;
       }
       continue;
@@ -346,17 +348,17 @@ async function pollHyperealJob(
       if (!videoUrl) {
         console.log(`[Hypereal] Full response: ${JSON.stringify(data)}`);
         const err = new Error(`${model} job ${data.status} but no URL found in response`);
-        writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: err.message }).catch(() => {});
+        writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: err.message }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
         throw err;
       }
-      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model, status: "success", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: undefined }).catch(() => {});
+      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model, status: "success", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: undefined }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
       completedJobs.set(jobId, videoUrl);
       return videoUrl;
     }
 
     if (data.status === "failed" || data.status === "error") {
       const err = new Error(`${model} job failed: ${data.error || JSON.stringify(data)}`);
-      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: err.message }).catch(() => {});
+      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: err.message }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
       throw err;
     }
 
@@ -366,7 +368,7 @@ async function pollHyperealJob(
   }
 
   const timeoutErr = new Error(`${model} timed out after ${maxAttempts} polls (~${Math.round(maxAttempts * 30_000 / 60_000)} min).`);
-  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: timeoutErr.message }).catch(() => {});
+  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: timeoutErr.message }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
   throw timeoutErr;
 }
 
@@ -417,7 +419,7 @@ export async function generateKlingV25Video(
 
   const requestBody = { model, input: inputPayload };
   const bodyJson = JSON.stringify(requestBody);
-  console.log(`[Hypereal] Kling V2.5 body (${bodyJson.length} chars): ${bodyJson.substring(0, 2000)}`);
+  console.log(`[Hypereal] Kling V2.5 body (${bodyJson.length} chars): ${truncate(bodyJson)}`);
 
   const response = await hyperealFetch(HYPEREAL_VIDEO_URL, {
     method: "POST",
@@ -492,7 +494,7 @@ export async function generateVeo31Video(
 
   const requestBody = { model, input: inputPayload };
   const bodyJson = JSON.stringify(requestBody);
-  console.log(`[Hypereal] Veo 3.1 body (${bodyJson.length} chars): ${bodyJson.substring(0, 2000)}`);
+  console.log(`[Hypereal] Veo 3.1 body (${bodyJson.length} chars): ${truncate(bodyJson)}`);
 
   const response = await hyperealFetch(HYPEREAL_VIDEO_URL, {
     method: "POST",
@@ -571,7 +573,7 @@ export async function generatePixVerseTransition(
   };
 
   const bodyJson = JSON.stringify(requestBody);
-  console.log(`[Hypereal] PixVerse V6 body (${bodyJson.length} chars): ${bodyJson}`);
+  console.log(`[Hypereal] PixVerse V6 body (${bodyJson.length} chars): ${truncate(bodyJson)}`);
 
   const response = await hyperealFetch(HYPEREAL_VIDEO_URL, {
     method: "POST",

@@ -183,7 +183,7 @@ export async function generateQwen3TTS(
       const durationSeconds = Math.max(1, bytes.length / (44100 * 2)); // rough estimate for 16-bit mono WAV
 
       console.log(`[Qwen3TTS] Scene ${sceneNumber}: success (${bytes.length} bytes, ~${durationSeconds.toFixed(1)}s)`);
-      writeApiLog({ userId: undefined, generationId: undefined, provider: "qwen3", model: "qwen3-tts", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch(() => {});
+      writeApiLog({ userId: undefined, generationId: undefined, provider: "qwen3", model: "qwen3-tts", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[Qwen3TTS] background log failed:', (err as Error).message); });
       return { url, durationSeconds, provider: `Qwen3 TTS (${speaker})` };
 
     } catch (err) {
@@ -192,6 +192,6 @@ export async function generateQwen3TTS(
     }
   }
 
-  writeApiLog({ userId: undefined, generationId: undefined, provider: "qwen3", model: "qwen3-tts", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: "Qwen3 TTS failed after 3 attempts" }).catch(() => {});
+  writeApiLog({ userId: undefined, generationId: undefined, provider: "qwen3", model: "qwen3-tts", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: "Qwen3 TTS failed after 3 attempts" }).catch((err) => { console.warn('[Qwen3TTS] background log failed:', (err as Error).message); });
   return { url: null, error: "Qwen3 TTS failed after 3 attempts" };
 }

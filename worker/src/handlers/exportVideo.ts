@@ -55,6 +55,9 @@ const AI_VIDEO_ENABLED = (process.env.EXPORT_AI_VIDEO || "false").toLowerCase() 
 /** Per-scene AI video timeout (ms). Default: 5 minutes. */
 const AI_VIDEO_TIMEOUT_MS = parseInt(process.env.EXPORT_AI_VIDEO_TIMEOUT || "300000", 10);
 
+/** Maximum wall-clock time for a single export job. Default: 90 minutes. */
+const JOB_TIMEOUT_MS = parseInt(process.env.JOB_TIMEOUT_MS || "5400000", 10);
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 /** Fetch scenes from the generations table as a fallback. */
@@ -162,6 +165,22 @@ function buildExportConfig(payload: any): ExportConfig {
 // ── Main Export Handler ──────────────────────────────────────────────
 
 export async function handleExportVideo(
+  jobId: string,
+  payload: any,
+  userId?: string
+) {
+  return Promise.race([
+    _runExport(jobId, payload, userId),
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`Export job ${jobId} timed out after ${JOB_TIMEOUT_MS / 60000} minutes`)),
+        JOB_TIMEOUT_MS
+      )
+    ),
+  ]);
+}
+
+async function _runExport(
   jobId: string,
   payload: any,
   userId?: string

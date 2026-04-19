@@ -10,6 +10,7 @@
     "build": "tsc"
   },
   "dependencies": {
+    "@sentry/node": "^8.0.0",
     "@supabase/supabase-js": "^2.45.6",
     "dotenv": "^16.4.7",
     "openai": "^4.77.0",

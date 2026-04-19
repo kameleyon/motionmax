@@ -9,6 +9,11 @@
       "destination": "https://ayjbvcikuwknqdrpsdmj.supabase.co/functions/v1/serve-media?bucket=:bucket&path=:path*"
     },
     {
+      "source": "/share/:id",
+      "has": [{ "type": "header", "key": "user-agent", "value": "(?i).*(bot|crawler|spider|googlebot|bingbot|twitterbot|facebookexternalhit|linkedinbot|slackbot|discordbot|whatsapp|telegram).*" }],
+      "destination": "https://ayjbvcikuwknqdrpsdmj.supabase.co/functions/v1/share-meta?id=:id"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

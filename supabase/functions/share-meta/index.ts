@@ -183,6 +183,10 @@ Deno.serve(async (req) => {
 
     const cacheBustedImageUrl = withCacheBust(imageUrl, v);
 
+    const safeImageUrl = escapeHtml(imageUrl);
+    const safeAppUrl = escapeHtml(appUrl);
+    const safeCacheBustedImageUrl = escapeHtml(cacheBustedImageUrl);
+
     console.log(`[Share-Meta] Resolved: Title="${title}" | Image="${imageUrl}" | AppUrl="${appUrl}" | isBot=${isBotRequest}`);
 
     // 5. Return HTML (Bot vs Human handling)
@@ -199,10 +203,10 @@ Deno.serve(async (req) => {
     <meta name="description" content="${escapeHtml(description)}">
 
     <meta property="og:type" content="video.other">
-    <meta property="og:url" content="${appUrl}">
+    <meta property="og:url" content="${safeAppUrl}">
     <meta property="og:title" content="${escapeHtml(title)} | MotionMax">
     <meta property="og:description" content="${escapeHtml(description)}">
-    <meta property="og:image" content="${imageUrl}">
+    <meta property="og:image" content="${safeImageUrl}">
     <meta property="og:image:width" content="1920">
     <meta property="og:image:height" content="1080">
     <meta property="og:image:alt" content="${escapeHtml(title)} - Created with MotionMax.io">
@@ -211,11 +215,11 @@ Deno.serve(async (req) => {
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="${escapeHtml(title)}">
     <meta name="twitter:description" content="${escapeHtml(description)}">
-    <meta name="twitter:image" content="${imageUrl}">
+    <meta name="twitter:image" content="${safeImageUrl}">
     <meta name="twitter:site" content="@motionmaxio">
 
-    ${shouldRedirect ? `<meta http-equiv="refresh" content="0;url=${appUrl}">` : ''}
-    <link rel="canonical" href="${appUrl}">
+    ${shouldRedirect ? `<meta http-equiv="refresh" content="0;url=${safeAppUrl}">` : ''}
+    <link rel="canonical" href="${safeAppUrl}">
     
     <style>
       body { font-family: system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #0F1112; color: #fff; text-align: center; padding: 1rem; }
@@ -228,25 +232,25 @@ Deno.serve(async (req) => {
     </style>
   </head>
   <body>
-    ${debug 
+    ${debug
       ? `<h1>🔍 Debug Mode</h1>
-          <img src="${cacheBustedImageUrl}" alt="Thumbnail" onerror="this.style.display='none'">
+          <img src="${safeCacheBustedImageUrl}" alt="Thumbnail" onerror="this.style.display='none'">
          <div class="debug-info">
            <p><strong>Title:</strong> <code>${escapeHtml(title)}</code></p>
            <p><strong>Description:</strong> <code>${escapeHtml(description)}</code></p>
-           <p><strong>Image URL:</strong> <code>${imageUrl}</code></p>
-           <p><strong>Image URL (busted):</strong> <code>${cacheBustedImageUrl}</code></p>
-           <p><strong>App URL:</strong> <code>${appUrl}</code></p>
+           <p><strong>Image URL:</strong> <code>${safeImageUrl}</code></p>
+           <p><strong>Image URL (busted):</strong> <code>${safeCacheBustedImageUrl}</code></p>
+           <p><strong>App URL:</strong> <code>${safeAppUrl}</code></p>
            <p><strong>Is Bot:</strong> <code>${isBotRequest}</code></p>
            <p><strong>User-Agent:</strong> <code>${escapeHtml(userAgent.substring(0, 200))}</code></p>
          </div>
-         <p style="margin-top: 1rem;"><a href="${appUrl}">→ Go to App</a></p>`
-      : isBotRequest 
+         <p style="margin-top: 1rem;"><a href="${safeAppUrl}">→ Go to App</a></p>`
+      : isBotRequest
         ? `<h1>${escapeHtml(title)}</h1>
            <p>${escapeHtml(description)}</p>
-           <a href="${appUrl}">View on MotionMax</a>`
+           <a href="${safeAppUrl}">View on MotionMax</a>`
         : `<p>Redirecting to MotionMax...</p>
-           <a href="${appUrl}">Click here if not redirected</a>`
+           <a href="${safeAppUrl}">Click here if not redirected</a>`
     }
   </body>
 </html>`;

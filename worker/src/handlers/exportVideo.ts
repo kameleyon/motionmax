@@ -132,7 +132,7 @@ async function applyWatermarkOverlay(filePath: string, text: string, tempDir: st
   const tmpOut = path.join(tempDir, `wm_${Date.now()}.mp4`);
   await runFfmpeg([
     "-i", filePath,
-    "-vf", `drawtext=text='${escaped}':fontsize=28:fontcolor=white@0.65:x=(w-text_w-16):y=16:font=Sans:box=1:boxcolor=black@0.35:boxborderw=6`,
+    "-vf", `drawtext=text='${escaped}':fontsize=24:fontcolor=white@0.5:x=(w-text_w)/2:y=h-50`,
     "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22",
     "-c:a", "copy",
     "-movflags", "+faststart",
@@ -191,7 +191,7 @@ async function _runExport(
   exportConfig.userId = userId;
 
   const needsWatermark = await fetchNeedsWatermark(userId);
-  const watermarkText = needsWatermark ? "MotionMax Free" : undefined;
+  const watermarkText = needsWatermark ? "AI-Generated" : undefined;
   if (needsWatermark) {
     console.log(`[ExportVideo] Free-tier user — watermark will be applied`);
   }

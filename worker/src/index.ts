@@ -92,7 +92,7 @@ const SHUTDOWN_DRAIN_TIMEOUT_MS = parseInt(process.env.SHUTDOWN_DRAIN_TIMEOUT ||
 /* ---- Credit refund helper ---- */
 // 1 credit = 1 second. Multipliers: standard 1x, cinematic 5x, smartflow 0.5x
 const LENGTH_SECONDS: Record<string, number> = { short: 150, brief: 280, presentation: 360 };
-const PRODUCT_MULT: Record<string, number> = { doc2video: 1, storytelling: 1, smartflow: 0.5, cinematic: 5 };
+const PRODUCT_MULT: Record<string, number> = { doc2video: 1, smartflow: 0.5, cinematic: 5 };
 
 function getCreditCost(projectType: string, length: string): number {
   const secs = LENGTH_SECONDS[length] || 150;

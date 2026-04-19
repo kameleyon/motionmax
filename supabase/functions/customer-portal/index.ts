@@ -15,6 +15,13 @@ const logStep = (step: string, details?: any) => {
   console.log(`[CUSTOMER-PORTAL] ${step}${detailsStr}`);
 };
 
+class UserFacingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UserFacingError";
+  }
+}
+
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
@@ -26,7 +33,7 @@ serve(async (req) => {
     logStep("Function started");
 
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
+    if (!stripeKey) throw new Error("Stripe configuration missing");
 
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -39,11 +46,11 @@ serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "");
     const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
-    if (userError) throw new Error(`Authentication error: ${userError.message}`);
-    
+    if (userError) throw new UserFacingError("Authentication failed. Please sign in again.");
+
     const user = userData.user;
-    if (!user?.email) throw new Error("User not authenticated or email not available");
-    logStep("User authenticated", { userId: user.id, email: user.email });
+    if (!user?.email) throw new UserFacingError("User not authenticated or email not available");
+    logStep("User authenticated", { userId: user.id });
 
     // Rate limit
     const rateLimitResult = await checkRateLimit(supabaseClient, {
@@ -62,12 +69,12 @@ serve(async (req) => {
     // Check if this is a manual enterprise subscription (no Stripe customer)
     const { data: dbSubscription } = await supabaseClient
       .from("subscriptions")
-      .select("stripe_subscription_id, plan_name")
+      .select("is_manual_subscription, plan_name")
       .eq("user_id", user.id)
       .eq("status", "active")
       .single();
 
-    if (dbSubscription?.stripe_subscription_id?.startsWith("manual_")) {
+    if (dbSubscription?.is_manual_subscription) {
       logStep("Manual enterprise user - no Stripe portal available");
       return new Response(JSON.stringify({ 
         error: "MANUAL_SUBSCRIPTION",
@@ -82,11 +89,11 @@ serve(async (req) => {
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
     
     if (customers.data.length === 0) {
-      throw new Error("No Stripe customer found for this user");
+      throw new UserFacingError("No billing account found. Please contact support.");
     }
-    
+
     const customerId = customers.data[0].id;
-    logStep("Found Stripe customer", { customerId });
+    logStep("Found Stripe customer");
 
     const origin = req.headers.get("origin") || "https://motionmax.io";
     const portalSession = await stripe.billingPortal.sessions.create({
@@ -105,7 +112,10 @@ serve(async (req) => {
     logStep("ERROR", { message: errorMessage });
     Sentry.captureException(error);
     await Sentry.flush(2000);
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    const clientMessage = error instanceof UserFacingError
+      ? errorMessage
+      : "An unexpected error occurred. Please try again.";
+    return new Response(JSON.stringify({ error: clientMessage }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });

@@ -117,6 +117,10 @@ serve(async (req) => {
             400
           );
         }
+        const normalizedPath = filePath.replace(/\\/g, "/");
+        if (normalizedPath.split("/").some((seg) => seg === ".." || seg === ".")) {
+          return jsonResponse({ error: "Invalid path: traversal segments not allowed" }, 400);
+        }
         const result = await actionDownload(supabaseAdmin, bucket, filePath);
         if (result && typeof result === "object" && "error" in result) {
           return jsonResponse(result, 404);

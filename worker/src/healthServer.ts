@@ -25,6 +25,10 @@ export interface WorkerVitals {
   uptimeSeconds: number;
   /** Timestamp of last successful poll cycle */
   lastPollAt: string | null;
+  /** Current Supabase Realtime channel status */
+  realtimeStatus: string;
+  /** How stale lastPollAt can be before /ready fails (ms) */
+  pollStaleThresholdMs: number;
   /** Total jobs processed since startup */
   totalJobsProcessed: number;
   /** Total jobs that failed since startup */
@@ -163,13 +167,43 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
     case "/ready":
     case "/readyz": {
-      if (vitals.accepting) {
-        res.writeHead(200);
-        res.end(JSON.stringify({ status: "ready", activeJobs: vitals.activeJobs }));
-      } else {
+      if (!vitals.accepting) {
         res.writeHead(503);
         res.end(JSON.stringify({ status: "not_ready", reason: "shutting_down" }));
+        break;
       }
+      const realtimeDead = vitals.realtimeStatus === 'CHANNEL_ERROR' || vitals.realtimeStatus === 'TIMED_OUT';
+      const pollStaleMs = vitals.lastPollAt
+        ? Date.now() - new Date(vitals.lastPollAt).getTime()
+        : vitals.uptimeSeconds * 1000;
+      const pollLoopDead = pollStaleMs > vitals.pollStaleThresholdMs;
+      if (realtimeDead && pollLoopDead) {
+        res.writeHead(503);
+        res.end(JSON.stringify({
+          status: "not_ready",
+          reason: "all_delivery_paths_dead",
+          realtimeStatus: vitals.realtimeStatus,
+          pollStaleSec: Math.round(pollStaleMs / 1000),
+        }));
+        break;
+      }
+      if (pollLoopDead) {
+        res.writeHead(503);
+        res.end(JSON.stringify({
+          status: "not_ready",
+          reason: "poll_loop_dead",
+          pollStaleSec: Math.round(pollStaleMs / 1000),
+          realtimeStatus: vitals.realtimeStatus,
+        }));
+        break;
+      }
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        status: "ready",
+        activeJobs: vitals.activeJobs,
+        realtimeStatus: vitals.realtimeStatus,
+        pollStaleSec: Math.round(pollStaleMs / 1000),
+      }));
       break;
     }
 

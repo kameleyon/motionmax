@@ -355,9 +355,13 @@ export default function Auth() {
                       <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
                         Terms of Service
                       </a>
-                      {" "}and{" "}
+                      {", "}
                       <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
                         Privacy Policy
+                      </a>
+                      {", and "}
+                      <a href="/acceptable-use" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                        Acceptable Use Policy
                       </a>
                     </label>
                   </div>

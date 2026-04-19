@@ -58,8 +58,15 @@ export async function checkRateLimit(
   const { key, maxRequests, windowSeconds, ip, userId, privileged } = config;
   const isPrivileged = privileged ?? PRIVILEGED_ROUTES.some((r) => key.startsWith(r));
 
-  // Create composite key: function_name:identifier
-  const identifier = userId || ip || "anonymous";
+  // Build composite key that includes both user and IP dimensions.
+  // Using userId-only let a single attacker exhaust the anonymous bucket;
+  // combining both prevents cross-user quota sharing.
+  const userPart = userId ? `user:${userId}` : null;
+  const ipPart = ip ? `ip:${ip}` : null;
+  const identifier =
+    userPart && ipPart
+      ? `${userPart}:${ipPart}`
+      : userPart ?? ipPart ?? "anonymous";
   const rateLimitKey = `${key}:${identifier}`;
   const now = new Date();
   const windowStart = new Date(now.getTime() - windowSeconds * 1000);

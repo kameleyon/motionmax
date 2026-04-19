@@ -196,6 +196,29 @@ export async function fetchSubscribersList(params: { page?: number; limit?: numb
   return { users, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
+// ── Generation List ────────────────────────────────────────────────
+
+export async function fetchGenerationList(params: { page?: number; limit?: number; status?: string; search?: string }) {
+  const page = params.page ?? 0;
+  const limit = Math.min(params.limit ?? 20, 100);
+
+  let query = supabase
+    .from("generations")
+    .select("id, user_id, project_id, status, progress, created_at, completed_at, started_at, error_message", { count: "exact" })
+    .order("created_at", { ascending: false })
+    .range(page * limit, page * limit + limit - 1);
+
+  if (params.status && params.status !== "all") query = query.eq("status", params.status);
+  if (params.search) {
+    const s = params.search.trim();
+    query = query.or(`id.ilike.%${s}%,user_id.ilike.%${s}%,project_id.ilike.%${s}%`);
+  }
+
+  const { data, error, count } = await query;
+  if (error) throw error;
+  return { rows: data ?? [], total: count ?? 0, page, limit };
+}
+
 // ── Generation Stats ───────────────────────────────────────────────
 
 export async function fetchGenerationStats(params: { startDate?: string; endDate?: string }) {
@@ -257,8 +280,20 @@ export async function fetchFlagsList() {
 
 export async function createFlag(params: { user_id: string; reason: string; flag_type?: string }) {
   const { data: { user } } = await supabase.auth.getUser();
+
+  let targetUserId = params.user_id;
+  if (targetUserId.includes("@")) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: resolvedId, error: rpcError } = await (supabase.rpc as any)(
+      "admin_get_user_id_by_email",
+      { email_param: targetUserId },
+    );
+    if (rpcError || !resolvedId) throw new Error(`No user found with email: ${targetUserId}`);
+    targetUserId = resolvedId as string;
+  }
+
   const { error } = await supabase.from("user_flags").insert({
-    user_id: params.user_id,
+    user_id: targetUserId,
     reason: params.reason,
     flag_type: params.flag_type || "warning",
     flagged_by: user?.id || "admin",
@@ -371,6 +406,9 @@ export async function fetchUserDetails(params: { userId?: string; targetUserId?:
     { data: costs },
     { data: logs },
     { data: transactions },
+    { count: projectsCount },
+    { data: archivedProjectIds },
+    { data: activeProjectIds },
   ] = await Promise.all([
     supabase.from("profiles").select("*").eq("user_id", uid).single(),
     supabase.from("subscriptions").select("*").eq("user_id", uid).order("created_at", { ascending: false }).limit(1).maybeSingle(),
@@ -381,6 +419,9 @@ export async function fetchUserDetails(params: { userId?: string; targetUserId?:
     supabase.from("generation_costs").select("*").eq("user_id", uid),
     supabase.from("system_logs").select("*").eq("user_id", uid).order("created_at", { ascending: false }).limit(15),
     supabase.from("credit_transactions").select("*").eq("user_id", uid).order("created_at", { ascending: false }).limit(10),
+    supabase.from("projects").select("*", { count: "exact", head: true }).eq("user_id", uid),
+    supabase.from("generation_archives").select("project_id").eq("user_id", uid).not("project_id", "is", null),
+    supabase.from("projects").select("id").eq("user_id", uid),
   ]);
 
   let totalCost = 0;
@@ -419,8 +460,12 @@ export async function fetchUserDetails(params: { userId?: string; targetUserId?:
       total_purchased: creds.total_purchased || 0,
       total_used: creds.total_used || 0,
     } : null,
-    projectsCount: 0,
-    deletedProjectsCount: 0,
+    projectsCount: projectsCount || 0,
+    deletedProjectsCount: (() => {
+      const activeIds = new Set((activeProjectIds || []).map(p => p.id));
+      const archived = new Set((archivedProjectIds || []).map(a => a.project_id).filter(Boolean));
+      return [...archived].filter(id => !activeIds.has(id)).length;
+    })(),
     totalGenerationCost: totalCost,
     totalGenerations: (gens?.length || 0) + (archiveCount || 0),
     activeGenerations: gens?.length || 0,
@@ -464,13 +509,18 @@ export async function adminDirectQuery(action: string, params?: Record<string, u
     case "dashboard_stats": return fetchDashboardStats();
     case "subscribers_list": return fetchSubscribersList(params as { page?: number; limit?: number; search?: string });
     case "generation_stats": return fetchGenerationStats(params as { startDate?: string; endDate?: string });
+    case "generation_list": return fetchGenerationList(params as { page?: number; limit?: number; status?: string; search?: string });
     case "admin_logs": return fetchAdminLogs(params as { page?: number; limit?: number });
     case "flags_list": return fetchFlagsList();
-    case "create_flag": return createFlag(params as { user_id: string; reason: string; flag_type?: string });
+    case "create_flag": return createFlag({
+      user_id: (params?.userId ?? params?.user_id) as string,
+      reason: params?.reason as string,
+      flag_type: (params?.flagType ?? params?.flag_type) as string | undefined,
+    });
     case "resolve_flag": return resolveFlag(params as { flagId: string });
     case "api_calls_list": return fetchApiCallsList(params as { page?: number; limit?: number });
     case "api_call_detail": return fetchApiCallDetail(params as { id: string });
-    case "revenue_stats": return fetchRevenueStats();
+    case "revenue_stats": return fetchRevenueStats(params as { startDate?: string; endDate?: string });
     case "user_details": return fetchUserDetails(params as { userId?: string; targetUserId?: string });
     default: throw new Error(`Unknown admin action: ${action}`);
   }

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, createContext, useContext, ReactNode,
 import { User, Session, AuthError } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { trackEvent, getStoredUtm } from "@/hooks/useAnalytics";
+import { CURRENT_POLICY_VERSION } from "@/lib/policyVersion";
 
 // ---------------------------------------------------------------------------
 // Auth context shape — mirrors the original useAuth() return value exactly so
@@ -69,6 +70,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
+
+        // Persist accepted_policy_version to profiles on first sign-in after sign-up.
+        // The column is NULL for legacy accounts — only write if metadata carries the version.
+        if (_event === "SIGNED_IN" && session?.user) {
+          const metaVersion = session.user.user_metadata?.accepted_policy_version as string | undefined;
+          if (metaVersion) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            supabase
+              .from("profiles")
+              .update({
+                accepted_policy_version: metaVersion,
+                accepted_policy_at: session.user.user_metadata?.accepted_policy_at ?? new Date().toISOString(),
+              } as any)
+              .eq("user_id", session.user.id)
+              .is("accepted_policy_version" as any, null)
+              .then(() => {});
+          }
+        }
       }
     );
 
@@ -77,13 +96,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const signUp = useCallback(async (email: string, password: string) => {
     const redirectUrl = import.meta.env.VITE_APP_URL || window.location.origin;
+    const utmParams = getStoredUtm();
     const { data, error } = await supabase.auth.signUp({
-      options: { emailRedirectTo: `${redirectUrl}/app` },
+      options: {
+        emailRedirectTo: `${redirectUrl}/app`,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data: {
+          accepted_policy_version: CURRENT_POLICY_VERSION,
+          accepted_policy_at: new Date().toISOString(),
+          ...utmParams,
+        } as any,
+      },
       email,
       password,
     });
     if (!error) {
-      try { trackEvent("signup", { method: "email", ...getStoredUtm() }); } catch {}
+      try { trackEvent("signup", { method: "email", ...utmParams }); } catch {}
     }
     return { data, error };
   }, []);

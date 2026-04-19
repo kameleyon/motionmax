@@ -13,6 +13,7 @@ import { handleCinematicAudio } from "./handlers/handleCinematicAudio.js";
 import { handleCinematicImage } from "./handlers/handleCinematicImage.js";
 import { handleUndoRegeneration } from "./handlers/handleUndoRegeneration.js";
 import { writeSystemLog } from "./lib/logger.js";
+import { wlog } from "./lib/workerLogger.js";
 import { startHealthServer, stopHealthServer } from "./healthServer.js";
 
 /* ---- Auto-tune concurrency based on system resources ---- */
@@ -64,16 +65,48 @@ function detectOptimalConcurrency(): number {
   const byCpu = cpuCount * 3;                           // conservative CPU multiplier
   const optimal = Math.max(4, Math.min(byCpu, byMemory, 20)); // floor 4, cap 20
 
-  console.log(
-    `[Worker] Auto-tuned concurrency: ${optimal} ` +
-    `(CPUs=${cpuCount}, hostRAM=${hostMemMb}MB, containerRAM=${containerMemMb}MB, ` +
-    `availableForJobs=${availableMemMb}MB, byCPU=${byCpu}, byMem=${byMemory})`
-  );
+  wlog.info("Auto-tuned concurrency", {
+    optimal, cpus: cpuCount, hostRamMb: hostMemMb,
+    containerRamMb: containerMemMb, availableMb: availableMemMb,
+    byCpu, byMemory,
+  });
   return optimal;
 }
 
-const activeJobs = new Set<string>();
-const MAX_CONCURRENT_JOBS = detectOptimalConcurrency();
+/* ---- Per-task-type worker pools ----
+ * FFmpeg exports (export_video) are CPU+memory-bound and compete with AI API calls
+ * if they share the same slot pool. Separate pools let each type scale independently.
+ */
+const activeExportJobs = new Set<string>(); // export_video — FFmpeg, CPU/memory-heavy
+const activeLlmJobs    = new Set<string>(); // all other task types — AI APIs, network-bound
+
+function isExportTask(taskType: string): boolean {
+  return taskType === 'export_video';
+}
+
+function getActivePool(taskType: string): Set<string> {
+  return isExportTask(taskType) ? activeExportJobs : activeLlmJobs;
+}
+
+function allActiveJobIds(): string[] {
+  return [...activeExportJobs, ...activeLlmJobs];
+}
+
+function totalActiveJobs(): number {
+  return activeExportJobs.size + activeLlmJobs.size;
+}
+
+const _totalSlots = detectOptimalConcurrency();
+
+// FFmpeg is memory-heavy: allocate 25% of total slots, min 1.
+// Remaining slots go to LLM/AI tasks (network-bound, can be more concurrent).
+const MAX_EXPORT_SLOTS = process.env.WORKER_EXPORT_CONCURRENCY
+  ? parseInt(process.env.WORKER_EXPORT_CONCURRENCY, 10)
+  : Math.max(1, Math.floor(_totalSlots * 0.25));
+const MAX_LLM_SLOTS = process.env.WORKER_LLM_CONCURRENCY
+  ? parseInt(process.env.WORKER_LLM_CONCURRENCY, 10)
+  : Math.max(2, _totalSlots - MAX_EXPORT_SLOTS);
+const MAX_CONCURRENT_JOBS = MAX_EXPORT_SLOTS + MAX_LLM_SLOTS;
 
 /* ---- Worker identity ---- */
 // Unique per-process ID stamped onto every claimed job.
@@ -88,13 +121,54 @@ const QUEUE_ALERT_COOLDOWN_MS = 5 * 60 * 1000; // don't spam alerts more than ev
 
 /* ---- Graceful shutdown state ---- */
 let isShuttingDown = false;
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+let fallbackPollTimer: ReturnType<typeof setInterval> | null = null;
+let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
 let lastPollAt: string | null = null;
+let realtimeStatus: string = 'unknown';
 let totalJobsProcessed = 0;
 let totalJobsFailed = 0;
 
 /** Maximum time (ms) to wait for active jobs to drain during shutdown. */
 const SHUTDOWN_DRAIN_TIMEOUT_MS = parseInt(process.env.SHUTDOWN_DRAIN_TIMEOUT || "300000", 10); // 5 minutes
+
+/* ---- Transient-error retry helpers ---- */
+const TRANSIENT_PATTERNS = [
+  /ECONNRESET/i, /ETIMEDOUT/i, /ECONNREFUSED/i, /ENOTFOUND/i, /EHOSTUNREACH/i,
+  /socket hang up/i, /fetch failed/i, /network socket/i, /connection reset/i,
+  /\b429\b/, /rate.?limit/i, /too many requests/i,
+  /\b502\b/, /\b503\b/, /\b504\b/, /bad gateway/i, /service unavailable/i, /gateway timeout/i,
+  /request timeout/i, /upstream timeout/i,
+];
+
+function isTransientError(err: unknown): boolean {
+  const msg = err instanceof Error ? (err.message + (err.cause ? ` ${err.cause}` : "")) : String(err);
+  return TRANSIENT_PATTERNS.some(p => p.test(msg));
+}
+
+const MAX_JOB_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 2_000;
+
+async function withTransientRetry<T>(
+  fn: (attempt: number) => Promise<T>,
+  opts: { jobId: string; maxAttempts?: number }
+): Promise<T> {
+  const max = opts.maxAttempts ?? MAX_JOB_RETRIES;
+  let attempt = 0;
+  while (true) {
+    try {
+      return await fn(attempt);
+    } catch (err) {
+      attempt++;
+      if (attempt >= max || !isTransientError(err)) throw err;
+      const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1); // 2s, 4s, 8s
+      wlog.warn("Transient error — retrying", {
+        jobId: opts.jobId, attempt, maxAttempts: max, delayMs: delay,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
 
 /* ---- Credit refund helper ---- */
 // 1 credit = 1 second. Multipliers: standard 1x, cinematic 5x, smartflow 0.5x
@@ -182,7 +256,8 @@ async function refundCreditsOnFailure(job: Job) {
 }
 
 async function processJob(job: Job) {
-  activeJobs.add(job.id);
+  const pool = getActivePool(job.task_type);
+  pool.add(job.id);
 
   await writeSystemLog({
     jobId: job.id,
@@ -206,51 +281,64 @@ async function processJob(job: Job) {
         .eq('id', job.id);
     }
 
-    if (job.task_type === 'generate_video' || (job.task_type as string) === 'generate_cinematic') {
-      const scriptResult = await handleGenerateVideo(job.id, job.payload, job.user_id);
-      // Merge result into finalPayload so both `payload` and `result` columns
-      // carry the output — the frontend polls `payload` (old builds) or
-      // `result` (new builds).
-      if (scriptResult && typeof scriptResult === "object") {
-        finalPayload = { ...finalPayload, ...scriptResult };
+    await withTransientRetry(async (attempt) => {
+      if (attempt > 0) {
+        await writeSystemLog({
+          jobId: job.id,
+          projectId: job.project_id ?? undefined,
+          userId: job.user_id,
+          category: "system_info",
+          eventType: "job_retry",
+          message: `Retrying job ${job.id} (attempt ${attempt + 1}/${MAX_JOB_RETRIES}) after transient error`,
+        });
       }
-    } else if (job.task_type === 'finalize_generation' as any) {
-      const finalizeResult = await handleFinalizePhase(job.id, job.payload as any, job.user_id);
-      finalPayload = { ...finalPayload, ...finalizeResult };
-    } else if (job.task_type === 'export_video' as any) {
-      const exportResult = await handleExportVideo(job.id, job.payload, job.user_id);
-      finalPayload.finalUrl = exportResult.url;
-    } else if (job.task_type === 'regenerate_image' as any) {
-      const regenResult = await handleRegenerateImage(job.id, job.payload as any, job.user_id);
-      finalPayload = { ...finalPayload, ...regenResult };
-    } else if (job.task_type === 'regenerate_audio' as any) {
-      const audioRegenResult = await handleRegenerateAudio(job.id, job.payload as any, job.user_id);
-      finalPayload = { ...finalPayload, ...audioRegenResult };
-    } else if (job.task_type === 'voice_preview' as any) {
-      const { handleVoicePreview } = await import("./handlers/handleVoicePreview.js");
-      const previewResult = await handleVoicePreview(job.id, job.payload as any, job.user_id);
-      finalPayload = { ...finalPayload, ...previewResult };
-    } else if (job.task_type === 'cinematic_video' as any) {
-      const result = await handleCinematicVideo(job.id, job.payload as any, job.user_id);
-      finalPayload = { ...finalPayload, ...result };
-    } else if (job.task_type === 'cinematic_audio' as any) {
-      const result = await handleCinematicAudio(job.id, job.payload as any, job.user_id);
-      finalPayload = { ...finalPayload, ...result };
-    } else if (job.task_type === 'cinematic_image' as any) {
-      const result = await handleCinematicImage(job.id, job.payload as any, job.user_id);
-      finalPayload = { ...finalPayload, ...result };
-    } else if (job.task_type === 'undo_regeneration' as any) {
-      const result = await handleUndoRegeneration(job.id, job.payload as any, job.user_id);
-      finalPayload = { ...finalPayload, ...result };
-    } else {
-      await writeSystemLog({
-        jobId: job.id,
-        userId: job.user_id,
-        category: "system_warning",
-        eventType: "unknown_task",
-        message: `No handler for task type: ${job.task_type}`
-      });
-    }
+
+      if (job.task_type === 'generate_video' || (job.task_type as string) === 'generate_cinematic') {
+        const scriptResult = await handleGenerateVideo(job.id, job.payload, job.user_id);
+        // Merge result into finalPayload so both `payload` and `result` columns
+        // carry the output — the frontend polls `payload` (old builds) or
+        // `result` (new builds).
+        if (scriptResult && typeof scriptResult === "object") {
+          finalPayload = { ...finalPayload, ...scriptResult };
+        }
+      } else if (job.task_type === 'finalize_generation' as any) {
+        const finalizeResult = await handleFinalizePhase(job.id, job.payload as any, job.user_id);
+        finalPayload = { ...finalPayload, ...finalizeResult };
+      } else if (job.task_type === 'export_video' as any) {
+        const exportResult = await handleExportVideo(job.id, job.payload, job.user_id);
+        finalPayload.finalUrl = exportResult.url;
+      } else if (job.task_type === 'regenerate_image' as any) {
+        const regenResult = await handleRegenerateImage(job.id, job.payload as any, job.user_id);
+        finalPayload = { ...finalPayload, ...regenResult };
+      } else if (job.task_type === 'regenerate_audio' as any) {
+        const audioRegenResult = await handleRegenerateAudio(job.id, job.payload as any, job.user_id);
+        finalPayload = { ...finalPayload, ...audioRegenResult };
+      } else if (job.task_type === 'voice_preview' as any) {
+        const { handleVoicePreview } = await import("./handlers/handleVoicePreview.js");
+        const previewResult = await handleVoicePreview(job.id, job.payload as any, job.user_id);
+        finalPayload = { ...finalPayload, ...previewResult };
+      } else if (job.task_type === 'cinematic_video' as any) {
+        const result = await handleCinematicVideo(job.id, job.payload as any, job.user_id);
+        finalPayload = { ...finalPayload, ...result };
+      } else if (job.task_type === 'cinematic_audio' as any) {
+        const result = await handleCinematicAudio(job.id, job.payload as any, job.user_id);
+        finalPayload = { ...finalPayload, ...result };
+      } else if (job.task_type === 'cinematic_image' as any) {
+        const result = await handleCinematicImage(job.id, job.payload as any, job.user_id);
+        finalPayload = { ...finalPayload, ...result };
+      } else if (job.task_type === 'undo_regeneration' as any) {
+        const result = await handleUndoRegeneration(job.id, job.payload as any, job.user_id);
+        finalPayload = { ...finalPayload, ...result };
+      } else {
+        await writeSystemLog({
+          jobId: job.id,
+          userId: job.user_id,
+          category: "system_warning",
+          eventType: "unknown_task",
+          message: `No handler for task type: ${job.task_type}`
+        });
+      }
+    }, { jobId: job.id });
 
     await writeSystemLog({
       jobId: job.id,
@@ -333,7 +421,7 @@ async function processJob(job: Job) {
 
     totalJobsFailed++;
   } finally {
-    activeJobs.delete(job.id);
+    pool.delete(job.id);
   }
 }
 
@@ -345,33 +433,35 @@ async function pollQueue() {
 
   pollCount++;
   try {
-    const availableSlots = MAX_CONCURRENT_JOBS - activeJobs.size;
-    if (availableSlots <= 0) return;
+    const exportAvailable = MAX_EXPORT_SLOTS - activeExportJobs.size;
+    const llmAvailable    = MAX_LLM_SLOTS    - activeLlmJobs.size;
+
+    if (exportAvailable <= 0 && llmAvailable <= 0) return;
 
     const claimedJobs: any[] = [];
 
-    // Batch claim: p_limit requests up to availableSlots jobs in one atomic RPC call
-    // Claim export jobs first (priority)
-    const { data: exportData, error: exportError } = await supabase.rpc('claim_pending_job', {
-      p_task_type: 'export_video',
-      p_exclude_task_type: null,
-      p_limit: availableSlots,
-      p_worker_id: WORKER_ID,
-    });
+    // Claim export jobs first into their dedicated slots
+    if (exportAvailable > 0) {
+      const { data: exportData, error: exportError } = await supabase.rpc('claim_pending_job', {
+        p_task_type: 'export_video',
+        p_exclude_task_type: null,
+        p_limit: exportAvailable,
+        p_worker_id: WORKER_ID,
+      });
 
-    if (exportError) {
-      console.error("[Worker] Claim export job error:", exportError.code, exportError.message);
-    } else if (exportData && exportData.length > 0) {
-      claimedJobs.push(...exportData);
+      if (exportError) {
+        console.error("[Worker] Claim export job error:", exportError.code, exportError.message);
+      } else if (exportData && exportData.length > 0) {
+        claimedJobs.push(...exportData);
+      }
     }
 
-    // Claim generation jobs with remaining slots
-    const remainingSlots = availableSlots - claimedJobs.length;
-    if (remainingSlots > 0) {
+    // Claim LLM/AI jobs into their separate slots
+    if (llmAvailable > 0) {
       const { data: genData, error: genError } = await supabase.rpc('claim_pending_job', {
         p_task_type: null,
         p_exclude_task_type: 'export_video',
-        p_limit: remainingSlots,
+        p_limit: llmAvailable,
         p_worker_id: WORKER_ID,
       });
 
@@ -384,9 +474,8 @@ async function pollQueue() {
 
     lastPollAt = new Date().toISOString();
 
-    // Queue depth monitoring (keep existing logic but use claimed count)
+    // Queue depth monitoring
     if (claimedJobs.length > 0) {
-      // Check pending count for alerting
       const { count: totalPending } = await supabase
         .from('video_generation_jobs')
         .select('id', { count: 'exact', head: true })
@@ -397,10 +486,10 @@ async function pollQueue() {
         const mem = process.memoryUsage();
         console.warn(
           `[Worker] ⚠️ QUEUE DEPTH ALERT: ${totalPending} pending jobs (threshold: ${queueDepthAlertThreshold}), ` +
-          `active: ${activeJobs.size}/${MAX_CONCURRENT_JOBS}, RSS: ${Math.round(mem.rss / 1048576)}MB`
+          `active: export=${activeExportJobs.size}/${MAX_EXPORT_SLOTS} llm=${activeLlmJobs.size}/${MAX_LLM_SLOTS}, ` +
+          `RSS: ${Math.round(mem.rss / 1048576)}MB`
         );
 
-        // Fire webhook notification if configured (Slack, PagerDuty, etc.)
         const alertWebhookUrl = process.env.ALERT_WEBHOOK_URL;
         if (alertWebhookUrl) {
           fetch(alertWebhookUrl, {
@@ -421,8 +510,10 @@ async function pollQueue() {
           message: `Queue depth ${totalPending} exceeds threshold ${queueDepthAlertThreshold} — consider scaling workers`,
           details: {
             pendingJobs: totalPending,
-            activeJobs: activeJobs.size,
-            maxConcurrent: MAX_CONCURRENT_JOBS,
+            activeExportJobs: activeExportJobs.size,
+            activeLlmJobs: activeLlmJobs.size,
+            maxExportSlots: MAX_EXPORT_SLOTS,
+            maxLlmSlots: MAX_LLM_SLOTS,
             rssMb: Math.round(mem.rss / 1048576),
             cpuCount: os.cpus().length,
             totalMemMb: Math.round(os.totalmem() / 1048576),
@@ -433,26 +524,33 @@ async function pollQueue() {
 
     const shouldLog = pollCount % 12 === 1 || claimedJobs.length > 0;
     if (shouldLog) {
-      console.log(`[Worker] Poll #${pollCount}: claimed: ${claimedJobs.length}, active: ${activeJobs.size}/${MAX_CONCURRENT_JOBS}`);
+      console.log(
+        `[Worker] Poll #${pollCount}: claimed: ${claimedJobs.length}, ` +
+        `active: export=${activeExportJobs.size}/${MAX_EXPORT_SLOTS} llm=${activeLlmJobs.size}/${MAX_LLM_SLOTS}`
+      );
     }
 
     for (const job of claimedJobs) {
-      if (activeJobs.has(job.id)) continue;
+      if (activeExportJobs.has(job.id) || activeLlmJobs.has(job.id)) continue;
       console.log(`[Worker] Claimed job ${job.id} (type: ${job.task_type})`);
       // Fire and forget — job is already marked 'processing' by the RPC
       Promise.race([
         processJob(job as Job),
-        new Promise<void>((_, reject) => setTimeout(
-          () => reject(new Error(`Job ${job.id} exceeded wall-clock timeout of ${JOB_TIMEOUT_MS / 60000} minutes`)),
-          JOB_TIMEOUT_MS
-        )),
+        new Promise<void>((_, reject) => {
+          const timeoutMs = getJobTimeoutMs(job.task_type);
+          setTimeout(
+            () => reject(new Error(`Job ${job.id} (${job.task_type}) exceeded hard timeout of ${timeoutMs / 60000} min`)),
+            timeoutMs
+          );
+        }),
       ]).catch(async (err) => {
         const errMsg = err instanceof Error ? err.message : String(err);
         console.error(`[Worker] Job ${job.id} failed or timed out: ${errMsg}`);
         Sentry.captureException(err instanceof Error ? err : new Error(errMsg));
         // Ensure DB is updated and slot freed — processJob may still be running
-        if (activeJobs.has(job.id)) {
-          activeJobs.delete(job.id);
+        const pool = getActivePool(job.task_type);
+        if (pool.has(job.id)) {
+          pool.delete(job.id);
           await supabase.from('video_generation_jobs').update({
             status: 'failed',
             error_message: errMsg,
@@ -467,8 +565,19 @@ async function pollQueue() {
   }
 }
 
-const POLL_INTERVAL_MS = 2000;
-const JOB_TIMEOUT_MS = parseInt(process.env.JOB_TIMEOUT_MS || "5400000", 10); // 90 min default
+// Fallback poll every 30s — handles missed realtime events and reconnection gaps.
+const FALLBACK_POLL_INTERVAL_MS = 30_000;
+
+// Per-task-type hard timeouts. Export jobs run ffmpeg (CPU-bound, can be long);
+// LLM/API jobs should fail fast if a provider hangs.
+const EXPORT_JOB_TIMEOUT_MS  = parseInt(process.env.EXPORT_JOB_TIMEOUT_MS  || "5400000", 10); // 90 min
+const LLM_JOB_TIMEOUT_MS     = parseInt(process.env.LLM_JOB_TIMEOUT_MS     || "900000",  10); // 15 min
+const JOB_TIMEOUT_MS         = parseInt(process.env.JOB_TIMEOUT_MS          || "5400000", 10); // legacy override
+
+function getJobTimeoutMs(taskType: string): number {
+  if (process.env.JOB_TIMEOUT_MS) return JOB_TIMEOUT_MS; // honour explicit override
+  return isExportTask(taskType) ? EXPORT_JOB_TIMEOUT_MS : LLM_JOB_TIMEOUT_MS;
+}
 
 const MAX_RESTART_RETRIES = 3;
 
@@ -559,12 +668,40 @@ async function startupDiagnostic(): Promise<boolean> {
   return recoveredOrphans;
 }
 
+/** Subscribe to Supabase Realtime so new pending jobs trigger an immediate poll
+ *  rather than waiting for the 30s fallback interval. */
+function subscribeToQueue() {
+  realtimeChannel = supabase
+    .channel('worker-job-queue')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'video_generation_jobs', filter: 'status=eq.pending' },
+      () => { pollQueue(); }
+    )
+    .on(
+      'postgres_changes',
+      // Catches orphan resets (processing → pending) and manual re-queues
+      { event: 'UPDATE', schema: 'public', table: 'video_generation_jobs', filter: 'status=eq.pending' },
+      () => { pollQueue(); }
+    )
+    .subscribe((status, err) => {
+      realtimeStatus = status;
+      if (status === 'SUBSCRIBED') {
+        console.log('[Worker] ✅ Realtime channel subscribed — instant job pickup active');
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        console.warn(`[Worker] ⚠️  Realtime channel ${status}${err ? ': ' + err : ''} — fallback poll covers gap`);
+      } else if (status === 'CLOSED') {
+        console.log('[Worker] Realtime channel closed');
+      }
+    });
+}
+
 /* ---- Graceful shutdown ---- */
 
 /**
  * Initiate graceful shutdown.
  * 1. Stop accepting new jobs (isShuttingDown = true)
- * 2. Stop the polling interval
+ * 2. Unsubscribe realtime channel and stop fallback poll
  * 3. Wait for all active jobs to finish (with timeout)
  * 4. Close health server
  * 5. Exit
@@ -576,24 +713,29 @@ async function gracefulShutdown(signal: string) {
   }
 
   isShuttingDown = true;
+  const activeCount = totalActiveJobs();
   console.log(`[Worker] 🛑 Received ${signal} — initiating graceful shutdown`);
-  console.log(`[Worker] Active jobs: ${activeJobs.size} — will wait up to ${SHUTDOWN_DRAIN_TIMEOUT_MS / 1000}s for them to finish`);
+  console.log(`[Worker] Active jobs: ${activeCount} — will wait up to ${SHUTDOWN_DRAIN_TIMEOUT_MS / 1000}s for them to finish`);
 
-  // Stop polling for new jobs
-  if (pollTimer) {
-    clearInterval(pollTimer);
-    pollTimer = null;
+  // Stop all job intake
+  if (realtimeChannel) {
+    await supabase.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+  }
+  if (fallbackPollTimer) {
+    clearInterval(fallbackPollTimer);
+    fallbackPollTimer = null;
   }
 
   await writeSystemLog({
     category: "system_info",
     eventType: "worker_shutdown_started",
-    message: `Graceful shutdown initiated by ${signal} — ${activeJobs.size} active job(s)`,
-    details: { signal, activeJobCount: activeJobs.size, activeJobIds: [...activeJobs] },
+    message: `Graceful shutdown initiated by ${signal} — ${activeCount} active job(s)`,
+    details: { signal, activeJobCount: activeCount, activeJobIds: allActiveJobIds() },
   });
 
   // Wait for active jobs to drain
-  if (activeJobs.size > 0) {
+  if (totalActiveJobs() > 0) {
     const drainStart = Date.now();
     const DRAIN_CHECK_INTERVAL = 2000;
 
@@ -601,41 +743,29 @@ async function gracefulShutdown(signal: string) {
       const checkDrained = () => {
         const elapsed = Date.now() - drainStart;
 
-        if (activeJobs.size === 0) {
+        if (totalActiveJobs() === 0) {
           console.log(`[Worker] ✅ All active jobs drained in ${Math.round(elapsed / 1000)}s`);
           resolve();
           return;
         }
 
         if (elapsed >= SHUTDOWN_DRAIN_TIMEOUT_MS) {
+          const stillActive = allActiveJobIds();
           console.error(
             `[Worker] ⚠️  Shutdown drain timeout after ${SHUTDOWN_DRAIN_TIMEOUT_MS / 1000}s — ` +
-            `${activeJobs.size} job(s) still active: ${[...activeJobs].join(", ")}`
+            `${stillActive.length} job(s) still active: ${stillActive.join(", ")}. ` +
+            `Leaving as 'processing' — startup diagnostic will re-queue on next start.`
           );
-          // Mark remaining active jobs as pending so they get picked up after restart
-          const orphanPromises = [...activeJobs].map(async (jobId) => {
-            try {
-              await supabase
-                .from("video_generation_jobs")
-                .update({
-                  status: "pending",
-                  progress: 0,
-                  error_message: null,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq("id", jobId)
-                .eq("status", "processing");
-              console.log(`[Worker] Reset orphaned job ${jobId} to pending`);
-            } catch (err) {
-              console.error(`[Worker] Failed to reset job ${jobId}:`, err);
-            }
-          });
-          Promise.allSettled(orphanPromises).then(() => resolve());
+          // Jobs are idempotent: the startup diagnostic in startupDiagnostic() already
+          // rescues orphaned 'processing' rows and resets them to 'pending' on the next
+          // startup. Resetting here would cause duplicate work if the job handler is
+          // mid-execution and the new worker picks it up immediately.
+          resolve();
           return;
         }
 
         console.log(
-          `[Worker] Waiting for ${activeJobs.size} active job(s) to finish... ` +
+          `[Worker] Waiting for ${totalActiveJobs()} active job(s) to finish... ` +
           `(${Math.round(elapsed / 1000)}s / ${SHUTDOWN_DRAIN_TIMEOUT_MS / 1000}s)`
         );
         setTimeout(checkDrained, DRAIN_CHECK_INTERVAL);
@@ -705,28 +835,41 @@ function maskKey(key: string | undefined): string {
 const workerStartedAt = Date.now();
 
 startHealthServer(() => ({
-  activeJobs: activeJobs.size,
+  activeJobs: totalActiveJobs(),
+  activeExportJobs: activeExportJobs.size,
+  activeLlmJobs: activeLlmJobs.size,
+  maxExportSlots: MAX_EXPORT_SLOTS,
+  maxLlmSlots: MAX_LLM_SLOTS,
   maxConcurrentJobs: MAX_CONCURRENT_JOBS,
   accepting: !isShuttingDown,
   uptimeSeconds: Math.round((Date.now() - workerStartedAt) / 1000),
   lastPollAt,
+  realtimeStatus,
+  pollStaleThresholdMs: FALLBACK_POLL_INTERVAL_MS * 3,
   totalJobsProcessed,
   totalJobsFailed,
 }));
 
-console.log(`[Worker] MotionMax Render Worker started. Concurrency=${MAX_CONCURRENT_JOBS}, polling every ${POLL_INTERVAL_MS}ms.`);
+console.log(
+  `[Worker] MotionMax Render Worker started. ` +
+  `Slots: export=${MAX_EXPORT_SLOTS} llm=${MAX_LLM_SLOTS} total=${MAX_CONCURRENT_JOBS}. ` +
+  `Realtime + ${FALLBACK_POLL_INTERVAL_MS / 1000}s fallback poll.`
+);
 console.log(`[Worker] 🔑 HYPEREAL_API_KEY: ${maskKey(process.env.HYPEREAL_API_KEY)}`);
 console.log(`[Worker] 🔑 REPLICATE_API_KEY: ${maskKey(process.env.REPLICATE_API_KEY)}`);
 console.log(`[Worker] 🔑 OPENROUTER_API_KEY: ${maskKey(process.env.OPENROUTER_API_KEY)}`);
+
 startupDiagnostic().then((hadOrphans) => {
+  const startPolling = () => {
+    subscribeToQueue();
+    pollQueue();
+    fallbackPollTimer = setInterval(pollQueue, FALLBACK_POLL_INTERVAL_MS);
+  };
+
   if (hadOrphans) {
     console.log(`[Worker] ⏳ Cooldown ${STARTUP_COOLDOWN_MS / 1000}s before first poll (orphans recovered)`);
-    setTimeout(() => {
-      pollQueue();
-      pollTimer = setInterval(pollQueue, POLL_INTERVAL_MS);
-    }, STARTUP_COOLDOWN_MS);
+    setTimeout(startPolling, STARTUP_COOLDOWN_MS);
   } else {
-    pollQueue();
-    pollTimer = setInterval(pollQueue, POLL_INTERVAL_MS);
+    startPolling();
   }
 });

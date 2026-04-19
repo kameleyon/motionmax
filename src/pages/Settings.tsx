@@ -8,7 +8,11 @@ import {
   Loader2,
   AlertTriangle,
   Mail,
+  Clock,
+  Activity,
+  FileText,
 } from "lucide-react";
+import { CURRENT_POLICY_VERSION } from "@/lib/policyVersion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,25 +55,80 @@ export default function Settings() {
   const [emailChangePending, setEmailChangePending] = useState(false);
   const [pendingEmail, setPendingEmail] = useState("");
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [activityLogs, setActivityLogs] = useState<Array<{ id: string; event_type: string; message: string; created_at: string }>>([]);
+  const [isLoadingActivity, setIsLoadingActivity] = useState(false);
+  const [pendingDeletion, setPendingDeletion] = useState<{ id: string; scheduled_at: string } | null>(null);
+  const [isCancellingDeletion, setIsCancellingDeletion] = useState(false);
+  const [acceptedPolicyVersion, setAcceptedPolicyVersion] = useState<string | null>(null);
+  const [acceptedPolicyAt, setAcceptedPolicyAt] = useState<string | null>(null);
 
   const passwordStrength = useMemo(() => getPasswordStrength(newPassword), [newPassword]);
+
+  const fetchActivityLogs = async () => {
+    if (!user?.id) return;
+    setIsLoadingActivity(true);
+    try {
+      const { data } = await supabase
+        .from("system_logs" as never)
+        .select("id, event_type, message, created_at")
+        .eq("user_id" as never, user.id)
+        .eq("category" as never, "user_activity")
+        .order("created_at" as never, { ascending: false })
+        .limit(50) as { data: Array<{ id: string; event_type: string; message: string; created_at: string }> | null };
+      setActivityLogs(data ?? []);
+    } finally {
+      setIsLoadingActivity(false);
+    }
+  };
 
   useEffect(() => {
     const fetchProfile = async () => {
       if (!user?.id) return;
-      const { data } = await supabase
+      // Cast to any: accepted_policy_version/at are new columns not yet in generated types.
+      const { data } = await (supabase
         .from("profiles")
-        .select("display_name")
+        .select("display_name, accepted_policy_version, accepted_policy_at")
         .eq("user_id", user.id)
-        .single();
+        .single() as unknown as Promise<{ data: { display_name: string | null; accepted_policy_version: string | null; accepted_policy_at: string | null } | null }>);
       if (data?.display_name) {
         setDisplayName(data.display_name);
       } else {
         setDisplayName(user.email?.split("@")[0] || "");
       }
+      setAcceptedPolicyVersion(data?.accepted_policy_version ?? null);
+      setAcceptedPolicyAt(data?.accepted_policy_at ?? null);
+    };
+    const fetchPendingDeletion = async () => {
+      if (!user?.id) return;
+      const { data } = await supabase
+        .from("deletion_requests" as never)
+        .select("id, scheduled_at")
+        .eq("user_id" as never, user.id)
+        .eq("status" as never, "pending")
+        .maybeSingle() as { data: { id: string; scheduled_at: string } | null };
+      setPendingDeletion(data ?? null);
     };
     fetchProfile();
+    fetchPendingDeletion();
   }, [user]);
+
+  const handleCancelDeletion = async () => {
+    if (!pendingDeletion) return;
+    setIsCancellingDeletion(true);
+    try {
+      const { error } = await supabase
+        .from("deletion_requests" as never)
+        .update({ status: "cancelled" } as never)
+        .eq("id" as never, pendingDeletion.id);
+      if (error) throw error;
+      setPendingDeletion(null);
+      toast.success("Account deletion cancelled. Your account will remain active.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to cancel deletion. Please contact support@motionmax.io.");
+    } finally {
+      setIsCancellingDeletion(false);
+    }
+  };
 
   const DISPLAY_NAME_REGEX = /^[a-zA-Z0-9\s\-_]{1,50}$/;
 
@@ -151,6 +210,7 @@ export default function Settings() {
       toast.success("Deletion request submitted. Your account will be permanently deleted in 7 days. You have been signed out.");
       setShowDeleteDialog(false);
       setDeleteConfirmText("");
+      setPendingDeletion(null);
       // Sign out immediately so the session can't be used after the request
       await supabase.auth.signOut();
     } catch (error) {
@@ -193,7 +253,7 @@ export default function Settings() {
                 <p className="mt-1 text-sm text-muted-foreground">Manage your account and preferences</p>
 
                 <Tabs defaultValue="account" className="mt-6 sm:mt-8">
-                  <TabsList className="grid w-full grid-cols-2 rounded-xl bg-muted/50 p-1">
+                  <TabsList className="grid w-full grid-cols-3 rounded-xl bg-muted/50 p-1">
                     <TabsTrigger value="account" className="gap-2 rounded-lg data-[state=active]:bg-background">
                       <User className="h-4 w-4" />
                       <span className="hidden sm:inline">Account</span>
@@ -201,6 +261,10 @@ export default function Settings() {
                     <TabsTrigger value="security" className="gap-2 rounded-lg data-[state=active]:bg-background">
                       <Shield className="h-4 w-4" />
                       <span className="hidden sm:inline">Security</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="activity" className="gap-2 rounded-lg data-[state=active]:bg-background" onClick={fetchActivityLogs}>
+                      <Activity className="h-4 w-4" />
+                      <span className="hidden sm:inline">Activity</span>
                     </TabsTrigger>
                   </TabsList>
 
@@ -264,26 +328,90 @@ export default function Settings() {
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                          <div>
-                            <p className="text-sm font-medium text-foreground">Delete Account</p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Permanently delete your account and all associated data including projects, generations, and voice clones.
-                            </p>
+                        {pendingDeletion ? (
+                          <div className="space-y-4">
+                            <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3">
+                              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-destructive">Account deletion scheduled</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Your account and all data will be permanently deleted on{" "}
+                                  <strong>{new Date(pendingDeletion.scheduled_at).toLocaleDateString(undefined, { dateStyle: "long" })}</strong>.
+                                  You can cancel this request before that date.
+                                </p>
+                              </div>
+                            </div>
+                            <Button
+                              variant="outline"
+                              className="rounded-full border-destructive/50 text-destructive hover:bg-destructive/10"
+                              onClick={handleCancelDeletion}
+                              disabled={isCancellingDeletion}
+                            >
+                              {isCancellingDeletion && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                              Cancel Deletion Request
+                            </Button>
                           </div>
-                          <Button
-                            variant="destructive"
-                            className="rounded-full shrink-0"
-                            onClick={() => setShowDeleteDialog(true)}
-                          >
-                            Delete Account
-                          </Button>
-                        </div>
+                        ) : (
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                            <div>
+                              <p className="text-sm font-medium text-foreground">Delete Account</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Permanently delete your account and all associated data including projects, generations, and voice clones.
+                              </p>
+                            </div>
+                            <Button
+                              variant="destructive"
+                              className="rounded-full shrink-0"
+                              onClick={() => setShowDeleteDialog(true)}
+                            >
+                              Delete Account
+                            </Button>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   </TabsContent>
 
                   <TabsContent value="security" className="mt-6">
+                    <Card className="border-border/50 bg-card/50 mb-4">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <FileText className="h-5 w-5" />
+                          Policy Consent
+                        </CardTitle>
+                        <CardDescription>Privacy Policy and Terms of Service acceptance on record</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3 text-sm">
+                        {acceptedPolicyVersion ? (
+                          <>
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground">Version accepted</span>
+                              <span className="font-mono text-foreground">{acceptedPolicyVersion}</span>
+                            </div>
+                            {acceptedPolicyAt && (
+                              <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">Accepted on</span>
+                                <span className="text-foreground">{new Date(acceptedPolicyAt).toLocaleDateString()}</span>
+                              </div>
+                            )}
+                            {acceptedPolicyVersion !== CURRENT_POLICY_VERSION && (
+                              <p className="text-amber-600 dark:text-amber-400 text-xs pt-1">
+                                A newer policy version ({CURRENT_POLICY_VERSION}) is in effect. You will be asked to re-accept on next sign-in.
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-muted-foreground text-xs">
+                            No consent record found — this may be a legacy account created before version tracking was introduced (current policy: {CURRENT_POLICY_VERSION}).
+                          </p>
+                        )}
+                        <div className="flex gap-3 pt-1">
+                          <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs">Privacy Policy</a>
+                          <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs">Terms of Service</a>
+                        </div>
+                      </CardContent>
+                    </Card>
+
                     <Card className="border-border/50 bg-card/50">
                       <CardHeader>
                         <CardTitle>Security Settings</CardTitle>
@@ -301,6 +429,58 @@ export default function Settings() {
                           <Button onClick={handleChangePassword} disabled={isChangingPassword} className="gap-2 rounded-lg">
                             {isChangingPassword && <Loader2 className="h-4 w-4 animate-spin" />}
                             Update Password
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+
+                  <TabsContent value="activity" className="mt-6">
+                    <Card className="border-border/50 bg-card/50">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Activity className="h-5 w-5" />
+                          Account Activity
+                        </CardTitle>
+                        <CardDescription>
+                          Recent security events for your account. Logs are retained for 90 days.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {isLoadingActivity ? (
+                          <div className="flex items-center justify-center py-10">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : activityLogs.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-10 text-center gap-2">
+                            <Clock className="h-8 w-8 text-muted-foreground/50" />
+                            <p className="text-sm text-muted-foreground">No activity recorded yet.</p>
+                          </div>
+                        ) : (
+                          <ul className="divide-y divide-border/40">
+                            {activityLogs.map((log) => (
+                              <li key={log.id} className="flex items-start justify-between gap-4 py-3 text-sm">
+                                <div className="flex items-start gap-3 min-w-0">
+                                  <Shield className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+                                  <div className="min-w-0">
+                                    <p className="font-medium text-foreground truncate">{log.event_type.replace(/_/g, " ")}</p>
+                                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{log.message}</p>
+                                  </div>
+                                </div>
+                                <time
+                                  dateTime={log.created_at}
+                                  className="shrink-0 text-xs text-muted-foreground whitespace-nowrap"
+                                >
+                                  {new Date(log.created_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+                                </time>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <div className="mt-4 pt-4 border-t border-border/40">
+                          <Button variant="outline" size="sm" className="gap-2 rounded-lg" onClick={fetchActivityLogs} disabled={isLoadingActivity}>
+                            {isLoadingActivity ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Clock className="h-3.5 w-3.5" />}
+                            Refresh
                           </Button>
                         </div>
                       </CardContent>

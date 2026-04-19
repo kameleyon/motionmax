@@ -141,7 +141,7 @@ export function AdminRevenue() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold">${data?.mrr?.toFixed(2) || "0.00"}</div>
-            <p className="text-xs text-muted-foreground" title="Estimated from active subscriptions in database. Connect Stripe API for exact MRR.">Est. MRR *</p>
+            <p className="text-xs text-muted-foreground">Active Stripe subs</p>
           </CardContent>
         </Card>
 

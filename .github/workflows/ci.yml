@@ -41,6 +41,16 @@ jobs:
 
       - name: Build production bundle
         run: npm run build
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+
+      - name: Strip source maps (safety net — no Sentry upload)
+        # Belt-and-suspenders: vite.config.ts skips map generation when
+        # SENTRY_AUTH_TOKEN is absent, but this catches any edge cases.
+        if: ${{ !secrets.SENTRY_AUTH_TOKEN }}
+        run: find dist -name "*.map" -delete 2>/dev/null || true
 
       - name: Check bundle size
         run: |
@@ -60,9 +70,9 @@ jobs:
           retention-days: 7
 
   worker-build:
-    name: Worker Type Check
+    name: Worker Build + Test + Audit
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -72,7 +82,13 @@ jobs:
           cache-dependency-path: worker/package-lock.json
       - name: Install worker dependencies
         run: cd worker && npm ci
-      - name: Type check worker
+      - name: Security audit (worker)
+        run: cd worker && npm audit --audit-level=high
+      - name: Lint / type check worker
+        run: cd worker && npx tsc --noEmit
+      - name: Run worker tests
+        run: cd worker && npm run test
+      - name: Build worker
         run: cd worker && npm run build
 
   edge-functions-check:
@@ -92,3 +108,48 @@ jobs:
               deno check --no-lock "$dir/index.ts"
             fi
           done
+
+  deploy:
+    name: Deploy (Edge Functions + Worker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Only deploy on pushes to main after all checks pass.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [lint-test-build, worker-build, edge-functions-check]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Supabase Migrations + Edge Functions ────────────────────────
+      # Requires secrets: SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_ID, SUPABASE_DB_PASSWORD
+      - name: Deploy edge functions
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Run database migrations
+        run: |
+          supabase db push \
+            --project-ref "$SUPABASE_PROJECT_ID" \
+            --password "$SUPABASE_DB_PASSWORD"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      - name: Push edge functions to Supabase
+        run: |
+          supabase functions deploy \
+            --project-ref "$SUPABASE_PROJECT_ID" \
+            --no-verify-jwt
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+
+      # ── Worker (Render) ──────────────────────────────────────────────
+      # Requires secret: RENDER_DEPLOY_HOOK_URL
+      # Create at: Render dashboard → service → Settings → Deploy Hook
+      - name: Trigger Render worker deploy
+        run: |
+          curl --silent --show-error --fail \
+            -X POST "$RENDER_DEPLOY_HOOK_URL"
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}

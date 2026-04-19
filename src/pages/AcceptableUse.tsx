@@ -2,11 +2,17 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemedLogo } from "@/components/ThemedLogo";
+import PageSeo from "@/components/PageSeo";
 
 export default function AcceptableUse() {
   const navigate = useNavigate();
   return (
     <div className="min-h-screen bg-background">
+      <PageSeo
+        title="Acceptable Use Policy — MotionMax"
+        description="MotionMax acceptable use policy. Understand the permitted and prohibited uses of our AI video generation platform."
+        canonical="https://motionmax.io/acceptable-use"
+      />
       <header className="sticky top-0 z-50 border-b border-border/30 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-3xl items-center gap-4 px-4 sm:px-6">
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="rounded-lg">

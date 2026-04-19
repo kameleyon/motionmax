@@ -82,7 +82,7 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
     try {
       setLoading(true);
       const result = await callAdminApi("user_details", { targetUserId: userId });
-      setData(result);
+      setData(result as typeof data);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load user details");

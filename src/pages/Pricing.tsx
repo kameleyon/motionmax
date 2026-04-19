@@ -1,8 +1,9 @@
 ﻿import { useState } from "react";
-import { Helmet } from "react-helmet-async";
 import { motion } from "framer-motion";
+import PageSeo from "@/components/PageSeo";
 import { useNavigate } from "react-router-dom";
 import { Menu, ShieldCheck } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Badge } from "@/components/ui/badge";
 import { ThemedLogo } from "@/components/ThemedLogo";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -100,11 +101,11 @@ export default function Pricing() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Helmet>
-        <title>MotionMax Pricing — AI Video Plans &amp; Credits</title>
-        <meta name="description" content="Choose the right MotionMax plan. Free tier available. Credit-based pricing for AI cinematic videos, explainers, and more." />
-        <link rel="canonical" href="https://motionmax.io/pricing" />
-      </Helmet>
+      <PageSeo
+        title="MotionMax Pricing — AI Video Plans & Credits"
+        description="Choose the right MotionMax plan. Free tier available. Credit-based pricing for AI cinematic videos, explainers, and more."
+        canonical="https://motionmax.io/pricing"
+      />
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-2 focus:bg-background focus:text-foreground">Skip to content</a>
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-border/30 bg-background/80 backdrop-blur-md">
@@ -115,6 +116,7 @@ export default function Pricing() {
             </SidebarTrigger>
             <ThemedLogo className="h-7 sm:h-8 w-auto" />
           </div>
+          <ThemeToggle />
         </div>
       </header>
 
@@ -201,7 +203,7 @@ export default function Pricing() {
               {[
                 {
                   q: "What are credits?",
-                  a: "Credits are the currency used to generate videos on MotionMax. Each video generation costs a set number of credits depending on the length and features used. Free accounts get 10 credits/month to get started.",
+                  a: `Credits are the currency used to generate videos on MotionMax. Each video generation costs a set number of credits depending on the length and type — for example, a short explainer costs 150 credits and a short cinematic costs 750. New accounts receive 150 one-time credits to get started with no credit card required.`,
                 },
                 {
                   q: "Can I cancel anytime?",

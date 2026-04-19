@@ -46,7 +46,10 @@ export default defineConfig(({ mode }) => ({
     dedupe: ["react", "react-dom"],
   },
   build: {
-    sourcemap: mode === "production", // Source maps for Sentry (deleted after upload)
+    // Only generate source maps when SENTRY_AUTH_TOKEN is present so they can be
+    // uploaded and deleted. Without the token the Sentry plugin is skipped and
+    // .map files would otherwise land in dist/ and ship to prod.
+    sourcemap: mode === "production" && !!process.env.SENTRY_AUTH_TOKEN,
     rollupOptions: {
       output: {
         manualChunks: {

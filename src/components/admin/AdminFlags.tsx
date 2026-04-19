@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -57,12 +58,29 @@ export function AdminFlags() {
   const [newFlagType, setNewFlagType] = useState("warning");
   const [newFlagReason, setNewFlagReason] = useState("");
   const [creating, setCreating] = useState(false);
+  const [globalCounts, setGlobalCounts] = useState<Record<string, number>>({});
+
+  const fetchGlobalCounts = useCallback(async () => {
+    const types = ["warning", "flagged", "suspended", "banned"] as const;
+    const results = await Promise.all(
+      types.map(type =>
+        supabase
+          .from("user_flags")
+          .select("*", { count: "exact", head: true })
+          .eq("flag_type", type)
+          .is("resolved_at", null)
+      )
+    );
+    const counts: Record<string, number> = {};
+    types.forEach((type, i) => { counts[type] = results[i].count || 0; });
+    setGlobalCounts(counts);
+  }, []);
 
   const fetchFlags = useCallback(async () => {
     try {
       setLoading(true);
       const result = await callAdminApi("flags_list", { page, limit: 20, includeResolved });
-      setData(result);
+      setData(result as typeof data);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load flags");
@@ -73,7 +91,8 @@ export function AdminFlags() {
 
   useEffect(() => {
     fetchFlags();
-  }, [fetchFlags]);
+    fetchGlobalCounts();
+  }, [fetchFlags, fetchGlobalCounts]);
 
   const handleResolve = async (flagId: string) => {
     try {
@@ -82,6 +101,7 @@ export function AdminFlags() {
       toast.success("Flag resolved");
       setResolutionNotes("");
       fetchFlags();
+      fetchGlobalCounts();
     } catch (err) {
       toast.error("Failed to resolve flag");
     } finally {
@@ -118,6 +138,7 @@ export function AdminFlags() {
       setNewFlagUserId("");
       setNewFlagReason("");
       fetchFlags();
+      fetchGlobalCounts();
     } catch (err) {
       toast.error("Failed to create flag");
     } finally {
@@ -208,7 +229,7 @@ export function AdminFlags() {
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         {Object.entries(FLAG_TYPE_CONFIG).map(([type, config]) => {
           const Icon = config.icon;
-          const count = data?.flags?.filter(f => f.flag_type === type && !f.resolved_at).length || 0;
+          const count = globalCounts[type] ?? 0;
           return (
             <Card key={type} className="shadow-sm">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

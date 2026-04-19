@@ -2,7 +2,8 @@
 import { downloadVideo, rewriteStorageUrl } from "@/hooks/export/downloadHelpers";
 import { createScopedLogger } from "@/lib/logger";
 import { trackEvent } from "@/hooks/useAnalytics";
-import { useState, useMemo, useEffect, useRef } from "react";
+import { toSafeMessage } from "@/lib/appErrors";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
@@ -145,6 +146,10 @@ export default function Projects() {
   const [refreshedThumbnails, setRefreshedThumbnails] = useState<Map<string, string | null>>(new Map());
   const refreshInProgressRef = useRef(false);
 
+  // Pending-delete: IDs hidden from UI immediately; actual DB delete fires after 5 s
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
+  const pendingDeleteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
   // Debounce search input
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300);
@@ -275,12 +280,13 @@ export default function Projects() {
 
   // Merge refreshed thumbnails with projects
   const projectsWithThumbnails = useMemo(() => {
-    if (refreshedThumbnails.size === 0) return allProjects;
-    return allProjects.map(p => ({
+    const base = refreshedThumbnails.size === 0 ? allProjects : allProjects.map(p => ({
       ...p,
       thumbnailUrl: refreshedThumbnails.get(p.id) ?? p.thumbnailUrl,
     }));
-  }, [allProjects, refreshedThumbnails]);
+    // Hide projects that are pending delete (awaiting the undo timeout)
+    return pendingDeleteIds.size === 0 ? base : base.filter(p => !pendingDeleteIds.has(p.id));
+  }, [allProjects, refreshedThumbnails, pendingDeleteIds]);
 
   // Mutations – delete child records first to satisfy foreign key constraints
   const deleteProjectMutation = useMutation({
@@ -291,13 +297,41 @@ export default function Projects() {
       const { error } = await supabase.from("projects").delete().eq("id", projectId);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_, projectId) => {
+      setPendingDeleteIds(prev => { const s = new Set(prev); s.delete(projectId); return s; });
       queryClient.invalidateQueries({ queryKey: ["all-projects"] });
       queryClient.invalidateQueries({ queryKey: ["recent-projects"] });
-      toast.success("Project deleted");
     },
-    onError: (error) => toast.error("Failed to delete: " + error.message),
+    onError: (error, projectId) => {
+      setPendingDeleteIds(prev => { const s = new Set(prev); s.delete(projectId); return s; });
+      toast.error("Failed to delete", { description: toSafeMessage(error) });
+    },
   });
+
+  // Schedule a delete with 5-second undo window
+  const scheduleDelete = useCallback((projectId: string, title: string) => {
+    setPendingDeleteIds(prev => new Set(prev).add(projectId));
+    const toastId = `undo-delete-${projectId}`;
+    const timer = setTimeout(() => {
+      pendingDeleteTimers.current.delete(projectId);
+      deleteProjectMutation.mutate(projectId);
+    }, 5000);
+    pendingDeleteTimers.current.set(projectId, timer);
+    toast("Project deleted", {
+      id: toastId,
+      description: title,
+      duration: 5000,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          clearTimeout(pendingDeleteTimers.current.get(projectId));
+          pendingDeleteTimers.current.delete(projectId);
+          setPendingDeleteIds(prev => { const s = new Set(prev); s.delete(projectId); return s; });
+          toast.dismiss(toastId);
+        },
+      },
+    });
+  }, [deleteProjectMutation]);
 
   const bulkDeleteMutation = useMutation({
     mutationFn: async (ids: string[]) => {
@@ -307,14 +341,41 @@ export default function Projects() {
       const { error } = await supabase.from("projects").delete().in("id", ids);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_, ids) => {
+      setPendingDeleteIds(prev => { const s = new Set(prev); ids.forEach(id => s.delete(id)); return s; });
       queryClient.invalidateQueries({ queryKey: ["all-projects"] });
       queryClient.invalidateQueries({ queryKey: ["recent-projects"] });
       setSelectedIds(new Set());
-      toast.success("Projects deleted");
     },
-    onError: (error) => toast.error("Failed to delete: " + error.message),
+    onError: (error, ids) => {
+      setPendingDeleteIds(prev => { const s = new Set(prev); ids.forEach(id => s.delete(id)); return s; });
+      toast.error("Failed to delete", { description: toSafeMessage(error) });
+    },
   });
+
+  // Schedule bulk delete with undo window
+  const scheduleBulkDelete = useCallback((ids: string[]) => {
+    setPendingDeleteIds(prev => { const s = new Set(prev); ids.forEach(id => s.add(id)); return s; });
+    const toastId = `undo-bulk-delete`;
+    const timer = setTimeout(() => {
+      ids.forEach(id => pendingDeleteTimers.current.delete(id));
+      bulkDeleteMutation.mutate(ids);
+    }, 5000);
+    ids.forEach(id => pendingDeleteTimers.current.set(id, timer));
+    toast(`${ids.length} project${ids.length === 1 ? "" : "s"} deleted`, {
+      id: toastId,
+      duration: 5000,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          clearTimeout(timer);
+          ids.forEach(id => pendingDeleteTimers.current.delete(id));
+          setPendingDeleteIds(prev => { const s = new Set(prev); ids.forEach(id => s.delete(id)); return s; });
+          toast.dismiss(toastId);
+        },
+      },
+    });
+  }, [bulkDeleteMutation]);
 
   const renameMutation = useMutation({
     mutationFn: async ({ id, title }: { id: string; title: string }) => {
@@ -326,7 +387,7 @@ export default function Projects() {
       queryClient.invalidateQueries({ queryKey: ["recent-projects"] });
       toast.success("Project renamed");
     },
-    onError: (error) => toast.error("Failed to rename: " + error.message),
+    onError: (error) => toast.error("Failed to rename", { description: toSafeMessage(error) }),
   });
 
   const toggleFavoriteMutation = useMutation({
@@ -338,7 +399,7 @@ export default function Projects() {
       queryClient.invalidateQueries({ queryKey: ["all-projects"] });
       queryClient.invalidateQueries({ queryKey: ["recent-projects"] });
     },
-    onError: (error) => toast.error("Failed to update: " + error.message),
+    onError: (error) => toast.error("Failed to update", { description: toSafeMessage(error) }),
   });
 
   // Selection handlers
@@ -399,7 +460,7 @@ export default function Projects() {
 
   const confirmDelete = () => {
     if (projectToDelete) {
-      deleteProjectMutation.mutate(projectToDelete.id);
+      scheduleDelete(projectToDelete.id, projectToDelete.title);
       setDeleteDialogOpen(false);
       setProjectToDelete(null);
     }
@@ -412,8 +473,9 @@ export default function Projects() {
   };
 
   const confirmBulkDelete = () => {
-    bulkDeleteMutation.mutate(Array.from(selectedIds));
+    scheduleBulkDelete(Array.from(selectedIds));
     setBulkDeleteDialogOpen(false);
+    setSelectedIds(new Set());
   };
 
   const handleToggleFavorite = (project: Project, e?: React.MouseEvent) => {
@@ -779,7 +841,7 @@ export default function Projects() {
                       <TableCell className="py-2.5 px-2 sm:px-3" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                            <Button variant="ghost" size="icon" className="h-10 w-10 sm:h-8 sm:w-8 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                               <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>

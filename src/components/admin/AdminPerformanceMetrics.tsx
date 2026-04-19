@@ -166,8 +166,8 @@ export function AdminPerformanceMetrics() {
         costPerOperation: {
           script: totalOpenRouter / Math.max((generations?.length || 1), 1),
           audio: totalGoogleTts / Math.max((generations?.length || 1), 1),
-          image: (totalHypereal + totalReplicate * 0.3) / Math.max((generations?.length || 1), 1),
-          video: (totalReplicate * 0.7) / Math.max((generations?.length || 1), 1),
+          image: totalHypereal / Math.max((generations?.length || 1), 1),
+          video: totalReplicate / Math.max((generations?.length || 1), 1),
           total: totalCost / Math.max((generations?.length || 1), 1),
         },
         errorTrends: Object.entries(errorTrendsByDay)

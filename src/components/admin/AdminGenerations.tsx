@@ -1,12 +1,32 @@
 import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
-import { Activity, CheckCircle, XCircle, Trash2, Clock, RefreshCw } from "lucide-react";
+import { Activity, CheckCircle, XCircle, Trash2, Clock, RefreshCw, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { AdminLoadingState } from "@/components/ui/admin-loading-state";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
-import { subDays, format } from "date-fns";
+import { subDays, format, formatDistanceToNow } from "date-fns";
+
+interface GenerationRow {
+  id: string;
+  user_id: string;
+  project_id: string | null;
+  status: string;
+  progress: number;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  error_message: string | null;
+}
+
+interface GenerationListResult {
+  rows: GenerationRow[];
+  total: number;
+  page: number;
+  limit: number;
+}
 
 interface GenerationStats {
   total: number;
@@ -37,12 +57,28 @@ const STATUS_COLORS = {
   deleted: "hsl(var(--muted-foreground))", // Neutral gray
 };
 
+const LIST_PAGE_SIZE = 20;
+
+const STATUS_BADGE: Record<string, string> = {
+  complete: "bg-primary/15 text-primary",
+  processing: "bg-secondary/20 text-secondary-foreground",
+  pending: "bg-muted text-muted-foreground",
+  error: "bg-destructive/15 text-destructive",
+};
+
 export function AdminGenerations() {
   const { callAdminApi } = useAdminAuth();
   const [data, setData] = useState<GenerationStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<TimePeriod>("30d");
+
+  const [listData, setListData] = useState<GenerationListResult | null>(null);
+  const [listPage, setListPage] = useState(0);
+  const [listStatus, setListStatus] = useState("all");
+  const [listSearch, setListSearch] = useState("");
+  const [listSearchInput, setListSearchInput] = useState("");
+  const [listLoading, setListLoading] = useState(false);
 
   const getDateRange = useCallback((p: TimePeriod) => {
     const now = new Date();
@@ -74,7 +110,7 @@ export function AdminGenerations() {
       setLoading(true);
       const { startDate, endDate } = getDateRange(period);
       const result = await callAdminApi("generation_stats", { startDate, endDate });
-      setData(result);
+      setData(result as typeof data);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load generation stats");
@@ -83,9 +119,30 @@ export function AdminGenerations() {
     }
   }, [callAdminApi, period, getDateRange]);
 
+  const fetchGenerationList = useCallback(async () => {
+    try {
+      setListLoading(true);
+      const result = await callAdminApi("generation_list", {
+        page: listPage,
+        limit: LIST_PAGE_SIZE,
+        status: listStatus,
+        search: listSearch || undefined,
+      }) as GenerationListResult;
+      setListData(result);
+    } catch {
+      // list errors are non-critical; charts are still shown
+    } finally {
+      setListLoading(false);
+    }
+  }, [callAdminApi, listPage, listStatus, listSearch]);
+
   useEffect(() => {
     fetchGenerations();
   }, [fetchGenerations]);
+
+  useEffect(() => {
+    fetchGenerationList();
+  }, [fetchGenerationList]);
 
   const periodOptions: { value: TimePeriod; label: string }[] = [
     { value: "7d", label: "7 Days" },
@@ -329,7 +386,7 @@ export function AdminGenerations() {
           <div className="grid gap-4 grid-cols-3">
             <div className="text-center p-4 rounded-lg bg-card border border-primary/20 shadow-sm">
               <div className="text-2xl sm:text-3xl font-bold text-primary">
-                {data?.total 
+                {data?.total
                   ? (((data.byStatus?.complete || 0) / (data.total - (data.byStatus?.deleted || 0))) * 100).toFixed(1)
                   : 0
                 }%
@@ -338,7 +395,7 @@ export function AdminGenerations() {
             </div>
             <div className="text-center p-4 rounded-lg bg-card border shadow-sm">
               <div className="text-2xl sm:text-3xl font-bold text-muted-foreground">
-                {data?.total 
+                {data?.total
                   ? (((data.byStatus?.error || 0) / (data.total - (data.byStatus?.deleted || 0))) * 100).toFixed(1)
                   : 0
                 }%
@@ -347,7 +404,7 @@ export function AdminGenerations() {
             </div>
             <div className="text-center p-4 rounded-lg bg-card border border-border shadow-sm">
               <div className="text-2xl sm:text-3xl font-bold text-muted-foreground">
-                {data?.total 
+                {data?.total
                   ? (((data.byStatus?.deleted || 0) / data.total) * 100).toFixed(1)
                   : 0
                 }%
@@ -355,6 +412,107 @@ export function AdminGenerations() {
               <p className="text-xs sm:text-sm text-muted-foreground mt-1">Deletion Rate</p>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Individual Generations List */}
+      <Card className="shadow-sm">
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
+            <CardTitle>Individual Jobs</CardTitle>
+            <div className="flex gap-2 flex-wrap">
+              {["all", "complete", "processing", "pending", "error"].map(s => (
+                <button
+                  key={s}
+                  onClick={() => { setListStatus(s); setListPage(0); }}
+                  className={cn(
+                    "px-2.5 py-1 text-xs font-medium rounded-md border transition-colors",
+                    listStatus === s ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {s === "all" ? "All" : s.charAt(0).toUpperCase() + s.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-2 mt-2">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search by job ID or user ID…"
+                value={listSearchInput}
+                onChange={e => setListSearchInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") { setListSearch(listSearchInput); setListPage(0); } }}
+                className="pl-8 h-8 text-xs"
+              />
+            </div>
+            <Button size="sm" variant="outline" className="h-8" onClick={() => { setListSearch(listSearchInput); setListPage(0); }}>
+              Search
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {listLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+          ) : !listData?.rows.length ? (
+            <p className="text-center text-sm text-muted-foreground py-10">No jobs found</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border bg-muted/30">
+                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Job ID</th>
+                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">User</th>
+                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Status</th>
+                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Progress</th>
+                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Created</th>
+                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Completed</th>
+                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {listData.rows.map(row => (
+                    <tr key={row.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                      <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground">{row.id.slice(0, 8)}…</td>
+                      <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground">{row.user_id.slice(0, 8)}…</td>
+                      <td className="px-4 py-2.5">
+                        <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium", STATUS_BADGE[row.status] ?? "bg-muted text-muted-foreground")}>
+                          {row.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{row.progress}%</td>
+                      <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                        {formatDistanceToNow(new Date(row.created_at), { addSuffix: true })}
+                      </td>
+                      <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                        {row.completed_at ? formatDistanceToNow(new Date(row.completed_at), { addSuffix: true }) : "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-destructive max-w-[200px] truncate" title={row.error_message ?? ""}>
+                        {row.error_message ?? "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {listData && listData.total > LIST_PAGE_SIZE && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+              <span className="text-xs text-muted-foreground">
+                {listPage * LIST_PAGE_SIZE + 1}–{Math.min((listPage + 1) * LIST_PAGE_SIZE, listData.total)} of {listData.total}
+              </span>
+              <div className="flex gap-1">
+                <Button size="icon" variant="outline" className="h-7 w-7" disabled={listPage === 0} onClick={() => setListPage(p => p - 1)}>
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                <Button size="icon" variant="outline" className="h-7 w-7" disabled={(listPage + 1) * LIST_PAGE_SIZE >= listData.total} onClick={() => setListPage(p => p + 1)}>
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

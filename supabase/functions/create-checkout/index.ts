@@ -15,6 +15,13 @@ const logStep = (step: string, details?: Record<string, unknown>) => {
   console.log(`[CREATE-CHECKOUT] ${step}${detailsStr}`);
 };
 
+class UserFacingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UserFacingError";
+  }
+}
+
 /**
  * Stable product IDs — these rarely change in Stripe unlike price IDs.
  * Validation checks that the requested price belongs to one of these products.
@@ -56,11 +63,11 @@ serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "");
     const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
-    if (userError) throw new Error(`Authentication error: ${userError.message}`);
+    if (userError) throw new UserFacingError("Authentication failed. Please sign in again.");
 
     const user = userData.user;
-    if (!user?.email) throw new Error("User not authenticated or email not available");
-    logStep("User authenticated", { userId: user.id, email: user.email });
+    if (!user?.email) throw new UserFacingError("User not authenticated or email not available");
+    logStep("User authenticated", { userId: user.id });
 
     // Rate limit
     const rateLimitResult = await checkRateLimit(supabaseClient, {
@@ -77,7 +84,7 @@ serve(async (req) => {
     }
 
     const { priceId, mode } = await req.json();
-    if (!priceId) throw new Error("Price ID is required");
+    if (!priceId) throw new UserFacingError("Price ID is required");
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
       apiVersion: "2024-12-18.acacia",
@@ -87,12 +94,12 @@ serve(async (req) => {
     // and belongs to one of our known products (product IDs are stable).
     const price = await stripe.prices.retrieve(priceId);
     if (!price || !price.active) {
-      throw new Error("Price is no longer active. Please refresh and try again.");
+      throw new UserFacingError("Price is no longer active. Please refresh and try again.");
     }
 
     const productId = typeof price.product === "string" ? price.product : price.product?.id;
     if (!productId || !VALID_PRODUCT_IDS.has(productId)) {
-      throw new Error("Invalid product for this price");
+      throw new UserFacingError("Invalid product for this price");
     }
 
     logStep("Price validated", { priceId, productId, active: price.active });
@@ -102,7 +109,7 @@ serve(async (req) => {
     let customerId: string | undefined;
     if (customers.data.length > 0) {
       customerId = customers.data[0].id;
-      logStep("Found existing customer", { customerId });
+      logStep("Found existing customer");
     }
 
     const origin = req.headers.get("origin") || "https://motionmax.io";
@@ -131,7 +138,10 @@ serve(async (req) => {
     logStep("ERROR", { message: errorMessage });
     Sentry.captureException(error);
     await Sentry.flush(2000);
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    const clientMessage = error instanceof UserFacingError
+      ? errorMessage
+      : "An unexpected error occurred. Please try again.";
+    return new Response(JSON.stringify({ error: clientMessage }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });

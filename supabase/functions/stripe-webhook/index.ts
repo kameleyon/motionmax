@@ -76,28 +76,26 @@ serve(async (req) => {
 
     logStep("Event verified and parsed", { type: event.type });
 
-    // === IDEMPOTENCY: Insert-first to avoid TOCTOU race condition ===
-    // If two identical events arrive simultaneously, the UNIQUE constraint
-    // on event_id guarantees only one insert succeeds; the other gets 23505.
-    const { error: idempotencyError } = await supabaseAdmin
+    // === IDEMPOTENCY: Check-first, insert-after ===
+    // We SELECT before running handlers and INSERT after they succeed.
+    // This prevents the insert-before-run bug where a handler 500 causes
+    // Stripe to retry, the retry hits the existing row (23505), and the
+    // event is silently dropped — losing financial data with no error.
+    const { data: existingEvent } = await supabaseAdmin
       .from("webhook_events")
-      .insert({ event_id: event.id, event_type: event.type });
+      .select("event_id")
+      .eq("event_id", event.id)
+      .maybeSingle();
 
-    if (idempotencyError) {
-      // 23505 = unique_violation → duplicate event, safe to skip
-      if (idempotencyError.code === "23505") {
-        logStep("Duplicate event, skipping", { eventId: event.id });
-        return new Response(JSON.stringify({ received: true, duplicate: true }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 200,
-        });
-      }
-      // Any other insert error is unexpected — log and re-throw
-      logStep("ERROR", { message: `Idempotency insert failed: ${idempotencyError.message}` });
-      throw new Error(`Idempotency check failed: ${idempotencyError.message}`);
+    if (existingEvent) {
+      logStep("Duplicate event, skipping", { eventId: event.id });
+      return new Response(JSON.stringify({ received: true, duplicate: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
     }
 
-    logStep("Event recorded for idempotency", { eventId: event.id });
+    logStep("Event not yet processed, proceeding", { eventId: event.id });
 
     switch (event.type) {
       case "checkout.session.completed": {
@@ -105,7 +103,7 @@ serve(async (req) => {
         const userId = session.metadata?.user_id || session.client_reference_id;
         const customerId = session.customer as string;
         
-        logStep("Checkout completed", { userId, customerId, mode: session.mode });
+        logStep("Checkout completed", { userId, mode: session.mode });
 
         if (!userId) {
           logStep("No user ID found in session");
@@ -178,7 +176,7 @@ serve(async (req) => {
           const productId = typeof productRaw === "string" ? productRaw : (productRaw as any)?.id ?? "";
           const planName = subscriptionProducts[productId] || "starter";
 
-          logStep("Creating subscription record", { userId, planName, subscriptionId, productId });
+          logStep("Creating subscription record", { userId, planName, productId });
 
           // Upsert subscription
           const { data: existingSub } = await supabaseAdmin
@@ -222,7 +220,7 @@ serve(async (req) => {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = subscription.customer as string;
         
-        logStep("Subscription updated", { subscriptionId: subscription.id, status: subscription.status });
+        logStep("Subscription updated", { status: subscription.status });
 
         // Find user by customer ID
         const { data: subData } = await supabaseAdmin
@@ -266,7 +264,7 @@ serve(async (req) => {
         const invoice = event.data.object as Stripe.Invoice;
         const customerId = invoice.customer as string;
         
-        logStep("Invoice payment failed", { invoiceId: invoice.id, customerId });
+        logStep("Invoice payment failed", { invoiceId: invoice.id });
 
         // Update subscription status to past_due if not already
         const { data: subData } = await supabaseAdmin
@@ -331,7 +329,7 @@ serve(async (req) => {
 
         // Only process subscription invoices (not one-time purchases)
         if (invoice.subscription) {
-          logStep("Invoice paid (subscription renewal)", { invoiceId: invoice.id, customerId });
+          logStep("Invoice paid (subscription renewal)", { invoiceId: invoice.id });
 
           // Find the user's subscription to get their plan
           const { data: subData } = await supabaseAdmin
@@ -374,7 +372,7 @@ serve(async (req) => {
         const charge = event.data.object as Stripe.Charge;
         const customerId = charge.customer as string;
 
-        logStep("Charge refunded", { chargeId: charge.id, customerId, amount: charge.amount_refunded });
+        logStep("Charge refunded", { chargeId: charge.id, amount: charge.amount_refunded });
 
         // Find the user
         const { data: refundSubData } = await supabaseAdmin
@@ -409,6 +407,20 @@ serve(async (req) => {
       }
     }
 
+    // === IDEMPOTENCY: Insert row only after handlers succeed ===
+    // A 23505 here means two concurrent identical events both passed the
+    // SELECT check and both ran handlers — that's acceptable since all
+    // handlers are idempotent. We still return 200 so Stripe won't retry.
+    const { error: idempotencyError } = await supabaseAdmin
+      .from("webhook_events")
+      .insert({ event_id: event.id, event_type: event.type });
+
+    if (idempotencyError && idempotencyError.code !== "23505") {
+      logStep("WARNING: Idempotency insert failed (non-duplicate)", { message: idempotencyError.message });
+    } else {
+      logStep("Event recorded for idempotency", { eventId: event.id });
+    }
+
     return new Response(JSON.stringify({ received: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
@@ -418,7 +430,7 @@ serve(async (req) => {
     logStep("ERROR", { message: errorMessage });
     Sentry.captureException(error);
     await Sentry.flush(2000);
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ error: "Webhook processing failed" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });

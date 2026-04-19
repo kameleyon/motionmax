@@ -46,6 +46,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# Archive directory — historical one-off scripts, not for production use
+archive/
+
 scripts/check-queue.mjs
 scripts/clear-stuck-job.mjs
 scripts/fetch-project-script.mjs

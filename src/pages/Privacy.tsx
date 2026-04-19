@@ -1,21 +1,21 @@
 import { useNavigate } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
+import PageSeo from "@/components/PageSeo";
 import { ArrowLeft } from "lucide-react";
 import { ThemedLogo } from "@/components/ThemedLogo";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { CURRENT_POLICY_VERSION } from "@/lib/policyVersion";
 
 export default function Privacy() {
   const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-background">
-      <Helmet>
-        <title>Privacy Policy — MotionMax</title>
-        <meta name="description" content="MotionMax privacy policy. Learn how we collect, use, and protect your personal data." />
-        <link rel="canonical" href="https://motionmax.io/privacy" />
-        <meta name="robots" content="index, follow" />
-      </Helmet>
+      <PageSeo
+        title="Privacy Policy — MotionMax"
+        description="MotionMax privacy policy. Learn how we collect, use, and protect your personal data."
+        canonical="https://motionmax.io/privacy"
+      />
       <header className="sticky top-0 z-50 border-b border-border/30 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
@@ -32,7 +32,9 @@ export default function Privacy() {
 
       <main className="mx-auto max-w-3xl px-4 sm:px-6 py-12 sm:py-16">
         <h1 className="text-3xl font-bold tracking-tight text-foreground mb-2">Privacy Policy</h1>
-        <p className="text-sm text-muted-foreground mb-10">Last updated: April 2026</p>
+        <p className="text-sm text-muted-foreground mb-10">
+          Last updated: April 2026 &nbsp;·&nbsp; Version <span className="font-mono">{CURRENT_POLICY_VERSION}</span>
+        </p>
 
         <div className="prose prose-sm max-w-none space-y-8 text-muted-foreground">
 
@@ -100,6 +102,13 @@ export default function Privacy() {
             <p>We retain your account data for as long as your account is active. Generated projects and content are retained for the duration of your account. If you delete a project, its content is removed from active storage; backups may persist for up to 30 days before permanent deletion.</p>
             <p>Voice clones are retained until you explicitly delete them from the Voice Lab. Deleted voice data is removed from our systems within 30 days.</p>
             <p>If you close your account, we will delete your personal data within 90 days, except where we are required to retain it for legal or financial compliance purposes.</p>
+            <p>The following specific data categories are automatically purged on a nightly schedule:</p>
+            <ul className="list-disc pl-6 space-y-1">
+              <li><strong className="text-foreground">Activity &amp; security logs:</strong> automatically deleted after <strong className="text-foreground">90 days</strong>.</li>
+              <li><strong className="text-foreground">Video generation job records</strong> (completed and failed jobs): automatically deleted after <strong className="text-foreground">30 days</strong>.</li>
+              <li><strong className="text-foreground">Generation archives:</strong> automatically deleted after <strong className="text-foreground">1 year</strong>.</li>
+              <li><strong className="text-foreground">Payment webhook records</strong> (idempotency keys): automatically deleted after <strong className="text-foreground">7 days</strong>.</li>
+            </ul>
           </section>
 
           <section className="space-y-3">

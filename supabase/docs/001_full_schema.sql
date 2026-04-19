@@ -70,9 +70,10 @@ CREATE TABLE public.credit_transactions (
   id                       UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id                  UUID NOT NULL,
   amount                   INTEGER NOT NULL,
-  transaction_type         TEXT NOT NULL CHECK (transaction_type IN ('purchase','usage','subscription_grant','refund','adjustment')),
+  transaction_type         TEXT NOT NULL CHECK (transaction_type IN ('purchase','usage','subscription_grant','refund','adjustment','signup_bonus','daily_bonus')),
   description              TEXT,
   stripe_payment_intent_id TEXT,
+  idempotency_key          TEXT,
   created_at               TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -270,6 +271,7 @@ CREATE INDEX idx_subscriptions_user_id            ON public.subscriptions(user_i
 CREATE INDEX idx_subscriptions_stripe_customer_id ON public.subscriptions(stripe_customer_id);
 CREATE INDEX idx_user_credits_user_id             ON public.user_credits(user_id);
 CREATE INDEX idx_credit_transactions_user_id      ON public.credit_transactions(user_id);
+CREATE UNIQUE INDEX idx_credit_transactions_idempotency_key ON public.credit_transactions(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
 CREATE INDEX idx_projects_user_type               ON public.projects(user_id, project_type);
 CREATE INDEX idx_project_shares_token             ON public.project_shares(share_token);
 CREATE INDEX idx_generation_costs_user_id         ON public.generation_costs(user_id);
@@ -343,19 +345,63 @@ BEGIN
 END;
 $$;
 
--- Atomic credit deduction (race-condition safe)
+-- Atomic credit deduction (race-condition safe, idempotency-key aware)
 CREATE OR REPLACE FUNCTION public.deduct_credits_securely(
-  p_user_id UUID, p_amount INT, p_transaction_type TEXT, p_description TEXT
+  p_user_id         UUID,
+  p_amount          INT,
+  p_transaction_type TEXT,
+  p_description     TEXT,
+  p_idempotency_key TEXT DEFAULT NULL
 ) RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
 DECLARE bal INT;
 BEGIN
+  IF auth.uid() IS NOT NULL AND auth.uid() <> p_user_id THEN
+    RAISE EXCEPTION 'unauthorized';
+  END IF;
+  IF p_idempotency_key IS NOT NULL THEN
+    PERFORM 1 FROM credit_transactions
+    WHERE user_id = p_user_id AND idempotency_key = p_idempotency_key;
+    IF FOUND THEN RETURN TRUE; END IF;
+  END IF;
   SELECT credits_balance INTO bal FROM user_credits WHERE user_id = p_user_id FOR UPDATE;
   IF bal IS NULL OR bal < p_amount THEN RETURN FALSE; END IF;
   UPDATE user_credits
   SET credits_balance = credits_balance - p_amount, total_used = total_used + p_amount, updated_at = NOW()
   WHERE user_id = p_user_id;
+  INSERT INTO credit_transactions (user_id, amount, transaction_type, description, idempotency_key)
+  VALUES (p_user_id, -p_amount, p_transaction_type, p_description, p_idempotency_key);
+  RETURN TRUE;
+END;
+$$;
+
+-- Grant daily credits based on plan tier (amount is determined server-side, not caller-supplied)
+CREATE OR REPLACE FUNCTION public.grant_daily_credits(
+  p_user_id UUID
+) RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
+DECLARE
+  last_grant  DATE;
+  plan        TEXT;
+  daily_limit INT;
+BEGIN
+  SELECT plan_name INTO plan
+  FROM subscriptions
+  WHERE user_id = p_user_id AND status = 'active'
+  ORDER BY created_at DESC LIMIT 1;
+  daily_limit := CASE COALESCE(plan, 'free')
+    WHEN 'free'         THEN 10
+    WHEN 'starter'      THEN 25
+    WHEN 'creator'      THEN 50
+    WHEN 'professional' THEN 100
+    WHEN 'enterprise'   THEN 200
+    ELSE 10
+  END;
+  SELECT daily_credits_granted_at INTO last_grant FROM user_credits WHERE user_id = p_user_id FOR UPDATE;
+  IF last_grant IS NOT NULL AND last_grant = CURRENT_DATE THEN RETURN FALSE; END IF;
+  UPDATE user_credits
+  SET credits_balance = credits_balance + daily_limit, daily_credits_granted_at = CURRENT_DATE, updated_at = NOW()
+  WHERE user_id = p_user_id;
   INSERT INTO credit_transactions (user_id, amount, transaction_type, description)
-  VALUES (p_user_id, -p_amount, p_transaction_type, p_description);
+  VALUES (p_user_id, daily_limit, 'daily_bonus', 'Daily bonus credits: ' || daily_limit || ' (' || COALESCE(plan, 'free') || ' plan)');
   RETURN TRUE;
 END;
 $$;
@@ -370,6 +416,24 @@ BEGIN
   SET credits_balance  = user_credits.credits_balance + p_credits,
       total_purchased  = user_credits.total_purchased + p_credits,
       updated_at       = NOW();
+END;
+$$;
+
+-- Enforce credits invariant: credits_balance = total_purchased - total_used
+CREATE OR REPLACE FUNCTION public.enforce_credits_balance_invariant()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  NEW.credits_balance := NEW.total_purchased - NEW.total_used;
+  IF NEW.credits_balance < 0 THEN
+    RAISE EXCEPTION
+      'credits invariant violation: total_used (%) exceeds total_purchased (%) for user %',
+      NEW.total_used, NEW.total_purchased, NEW.user_id;
+  END IF;
+  RETURN NEW;
 END;
 $$;
 
@@ -418,6 +482,8 @@ CREATE TRIGGER update_subscriptions_updated_at
   BEFORE UPDATE ON public.subscriptions FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 CREATE TRIGGER update_user_credits_updated_at
   BEFORE UPDATE ON public.user_credits FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+CREATE TRIGGER trg_credits_balance_invariant
+  BEFORE INSERT OR UPDATE ON public.user_credits FOR EACH ROW EXECUTE FUNCTION public.enforce_credits_balance_invariant();
 CREATE TRIGGER update_user_api_keys_updated_at
   BEFORE UPDATE ON public.user_api_keys FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 CREATE TRIGGER update_user_roles_updated_at
@@ -607,8 +673,8 @@ INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 
 -- ── 10. STORAGE POLICIES ──────────────────────────────────
 -- audio (private — owner + service_role only)
-CREATE POLICY "Users can upload their own audio"  ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'audio' AND auth.uid()::text = (storage.foldername(name))[1]);
-CREATE POLICY "Users can view their own audio"    ON storage.objects FOR SELECT USING (bucket_id = 'audio' AND auth.uid()::text = (storage.foldername(name))[1]);
+CREATE POLICY "Users can upload their own audio"  ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'audio' AND auth.uid()::text = (storage.foldername(name))[1]);
+CREATE POLICY "Users can view their own audio"    ON storage.objects FOR SELECT TO authenticated USING (bucket_id = 'audio' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can update their own audio"  ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'audio' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can delete their own audio"  ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'audio' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Service role can manage all audio" ON storage.objects FOR ALL TO service_role USING (bucket_id = 'audio') WITH CHECK (bucket_id = 'audio');
@@ -623,10 +689,11 @@ CREATE POLICY "Authenticated users can upload voice samples"           ON storag
 CREATE POLICY "Users can read their own voice samples"                 ON storage.objects FOR SELECT TO authenticated USING (bucket_id = 'voice_samples' AND (storage.foldername(name))[1] = auth.uid()::text);
 CREATE POLICY "Authenticated users can delete their own voice samples" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'voice_samples' AND auth.uid()::text = (storage.foldername(name))[1]);
 
--- scene-videos (public bucket — authenticated write)
-CREATE POLICY "Users can upload to scene-videos"   ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'scene-videos');
-CREATE POLICY "Users can update scene-videos"      ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'scene-videos');
-CREATE POLICY "Users can delete from scene-videos" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'scene-videos');
+-- scene-videos (public bucket — authenticated write, user's own folder only)
+CREATE POLICY "Users can upload to scene-videos"   ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'scene-videos' AND (storage.foldername(name))[1] = auth.uid()::text);
+CREATE POLICY "Users can update scene-videos"      ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'scene-videos' AND (storage.foldername(name))[1] = auth.uid()::text);
+CREATE POLICY "Users can delete from scene-videos" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'scene-videos' AND (storage.foldername(name))[1] = auth.uid()::text);
+CREATE POLICY "Service role can manage all scene-videos" ON storage.objects FOR ALL TO service_role USING (bucket_id = 'scene-videos') WITH CHECK (bucket_id = 'scene-videos');
 
 -- project-thumbnails (public read, service_role write)
 CREATE POLICY "Public read access for project thumbnails"  ON storage.objects FOR SELECT USING (bucket_id = 'project-thumbnails');

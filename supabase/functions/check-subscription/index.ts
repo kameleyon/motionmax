@@ -82,12 +82,12 @@ serve(async (req) => {
     // Check for manual/enterprise subscriptions first
     const { data: dbSubscription } = await supabaseAdmin
       .from("subscriptions")
-      .select("plan_name, status, current_period_end, cancel_at_period_end, stripe_subscription_id")
+      .select("plan_name, status, current_period_end, cancel_at_period_end, is_manual_subscription")
       .eq("user_id", userId)
       .eq("status", "active")
       .single();
 
-    if (dbSubscription?.stripe_subscription_id?.startsWith("manual_")) {
+    if (dbSubscription?.is_manual_subscription) {
       logStep("Found manual enterprise subscription", {
         plan: dbSubscription.plan_name,
         subscriptionEnd: dbSubscription.current_period_end,

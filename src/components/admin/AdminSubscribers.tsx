@@ -62,7 +62,7 @@ export function AdminSubscribers() {
     try {
       setLoading(true);
       const result = await callAdminApi("subscribers_list", { page, search, limit: 50 });
-      setData(result);
+      setData(result as typeof data);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load subscribers");

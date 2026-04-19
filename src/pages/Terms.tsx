@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
+import PageSeo from "@/components/PageSeo";
 import { ArrowLeft } from "lucide-react";
 import { ThemedLogo } from "@/components/ThemedLogo";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -10,12 +10,11 @@ export default function Terms() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Helmet>
-        <title>Terms of Service — MotionMax</title>
-        <meta name="description" content="MotionMax terms of service. Review our usage policies, subscription terms, and user agreement." />
-        <link rel="canonical" href="https://motionmax.io/terms" />
-        <meta name="robots" content="index, follow" />
-      </Helmet>
+      <PageSeo
+        title="Terms of Service — MotionMax"
+        description="MotionMax terms of service. Review our usage policies, subscription terms, and user agreement."
+        canonical="https://motionmax.io/terms"
+      />
       <header className="sticky top-0 z-50 border-b border-border/30 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
@@ -76,6 +75,7 @@ export default function Terms() {
           <section className="space-y-3">
             <h2 className="text-lg font-semibold text-foreground">6. Credits and Billing</h2>
             <p>The Service operates on a credit-based system. Credits are consumed when generating content. Monthly subscription credits expire at the end of each billing period. Purchased credit packs do not expire but are non-refundable once consumed.</p>
+            <p>Current plan limits — including credits per month, maximum resolution, voice clone slots, and Smart Flow generation caps — are published on the <a href="/pricing" className="text-primary hover:underline">Pricing page</a> and incorporated into these Terms by reference. Specifically: the Free tier includes 150 one-time credits with 720p output, no voice cloning, and a 3-video Smart Flow cap; the Creator plan includes 500 credits/month at 1080p with 1 voice clone; and the Studio plan includes 2,500 credits/month at 4K with 5 voice clones. MotionMax reserves the right to adjust plan limits with 30 days' prior notice.</p>
             <p>Subscription fees are billed in advance on a monthly or annual basis. You may cancel your subscription at any time; cancellation takes effect at the end of the current billing period. No partial refunds are issued for unused subscription periods.</p>
           </section>
 

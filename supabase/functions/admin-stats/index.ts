@@ -575,7 +575,19 @@ serve(async (req) => {
       }
 
       case "create_flag": {
-        const { userId: targetUserId, flagType, reason, details } = params;
+        let { userId: targetUserId, flagType, reason, details } = params;
+
+        if (typeof targetUserId === "string" && targetUserId.includes("@")) {
+          const { data: authUser, error: lookupError } =
+            await supabaseAdmin.auth.admin.getUserByEmail(targetUserId);
+          if (lookupError || !authUser?.user) {
+            return new Response(JSON.stringify({ error: `No user found with email: ${targetUserId}` }), {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+          targetUserId = authUser.user.id;
+        }
 
         const { data: flag, error: flagError } = await supabaseAdmin
           .from("user_flags")

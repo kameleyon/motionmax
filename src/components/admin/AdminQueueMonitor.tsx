@@ -46,7 +46,7 @@ interface QueueStats {
 }
 
 export function AdminQueueMonitor() {
-  const { isAdmin } = useAdminAuth();
+  const { isAdmin, user } = useAdminAuth();
   const [jobs, setJobs] = useState<QueueJob[]>([]);
   const [stats, setStats] = useState<QueueStats>({
     pending: 0,
@@ -367,16 +367,36 @@ export function AdminQueueMonitor() {
                       size="sm"
                       className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10"
                       onClick={async () => {
+                        const adminId = user?.id;
+                        if (!adminId) { toast.error("Admin session missing"); return; }
+
                         const { error: cancelError } = await supabase
                           .from("video_generation_jobs")
                           .update({ status: "failed", error_message: "Cancelled by admin" })
                           .eq("id", job.id);
+
                         if (cancelError) {
                           toast.error("Failed to cancel job");
-                        } else {
-                          toast.success("Job cancelled");
-                          fetchQueueData();
+                          return;
                         }
+
+                        // Refund 1 credit to the job owner (best-effort; deducted at dispatch)
+                        await supabase.rpc("increment_user_credits", {
+                          p_user_id: job.user_id,
+                          p_credits: 1,
+                        });
+
+                        // Audit trail
+                        await supabase.from("admin_logs").insert({
+                          admin_id: adminId,
+                          action: "cancel_job",
+                          target_type: "video_generation_job",
+                          target_id: job.id,
+                          details: { user_id: job.user_id, previous_status: job.status },
+                        });
+
+                        toast.success("Job cancelled and credit refunded");
+                        fetchQueueData();
                       }}
                       aria-label="Cancel job"
                     >

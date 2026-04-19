@@ -36,95 +36,127 @@ export function AdminWorkerHealth() {
     try {
       setLoading(true);
 
-        const now = new Date();
-        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-        // Get active jobs count
-        const { count: activeCount } = await supabase
+      // Attempt to fetch real vitals from worker /health endpoint
+      const workerUrl = import.meta.env.VITE_WORKER_URL as string | undefined;
+      let liveVitals: {
+        uptime: number;
+        activeJobs: number;
+        maxConcurrentJobs: number;
+        lastPollAt: string | null;
+        memoryUsage: number; // heap % (0-100)
+        accepting: boolean;
+      } | null = null;
+
+      if (workerUrl) {
+        try {
+          const res = await fetch(`${workerUrl}/health`, { signal: AbortSignal.timeout(5000) });
+          if (res.ok) {
+            const body = await res.json();
+            const heapPct = body.memory?.heapTotalMb > 0
+              ? (body.memory.heapUsedMb / body.memory.heapTotalMb) * 100
+              : 0;
+            liveVitals = {
+              uptime: body.uptime ?? 0,
+              activeJobs: body.worker?.activeJobs ?? 0,
+              maxConcurrentJobs: body.worker?.maxConcurrentJobs ?? 6,
+              lastPollAt: body.worker?.lastPollAt ?? null,
+              memoryUsage: heapPct,
+              accepting: body.worker?.accepting ?? true,
+            };
+          }
+        } catch {
+          log.warn("Worker /health unreachable — falling back to DB inference");
+        }
+      }
+
+      // DB queries for 24h stats (always run — worker endpoint only has since-startup totals)
+      const [
+        { count: activeCount },
+        { count: completedCount },
+        { count: failedCount },
+        { data: recentJobs },
+        { data: recentActivity },
+      ] = await Promise.all([
+        supabase
           .from("video_generation_jobs")
           .select("*", { count: "exact", head: true })
-          .eq("status", "processing");
-
-        // Get completed jobs in last 24h
-        const { count: completedCount } = await supabase
+          .eq("status", "processing"),
+        supabase
           .from("video_generation_jobs")
           .select("*", { count: "exact", head: true })
           .eq("status", "completed")
-          .gte("completed_at", yesterday.toISOString());
-
-        // Get failed jobs in last 24h
-        const { count: failedCount } = await supabase
+          .gte("completed_at", yesterday.toISOString()),
+        supabase
           .from("video_generation_jobs")
           .select("*", { count: "exact", head: true })
           .eq("status", "failed")
-          .gte("completed_at", yesterday.toISOString());
-
-        // Get recent completed jobs for avg duration
-        const { data: recentJobs } = await supabase
+          .gte("completed_at", yesterday.toISOString()),
+        supabase
           .from("video_generation_jobs")
           .select("created_at, completed_at")
           .eq("status", "completed")
           .not("completed_at", "is", null)
           .gte("completed_at", yesterday.toISOString())
-          .limit(100);
-
-        let avgDuration = 0;
-        if (recentJobs && recentJobs.length > 0) {
-          const durations = recentJobs.map((job: any) => {
-            const start = new Date(job.created_at).getTime();
-            const end = new Date(job.completed_at!).getTime();
-            return (end - start) / 1000; // seconds
-          });
-          avgDuration = durations.reduce((a, b) => a + b, 0) / durations.length;
-        }
-
-        // Check for recent activity (last 5 minutes)
-        const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
-        const { data: recentActivity } = await supabase
+          .limit(100),
+        supabase
           .from("video_generation_jobs")
           .select("completed_at, status")
-          .or(`completed_at.gte.${fiveMinutesAgo.toISOString()},status.eq.processing`)
-          .limit(1);
+          .or(`completed_at.gte.${new Date(now.getTime() - 5 * 60 * 1000).toISOString()},status.eq.processing`)
+          .limit(1),
+      ]);
 
-        const recentActivityAny = recentActivity as any[] | null;
-        const isActive = recentActivityAny && recentActivityAny.length > 0;
-        const lastActivity = recentActivityAny?.[0]?.completed_at
+      let avgDuration = 0;
+      if (recentJobs && recentJobs.length > 0) {
+        const durations = recentJobs.map((job: any) => {
+          const start = new Date(job.created_at).getTime();
+          const end = new Date(job.completed_at!).getTime();
+          return (end - start) / 1000;
+        });
+        avgDuration = durations.reduce((a: number, b: number) => a + b, 0) / durations.length;
+      }
+
+      const recentActivityAny = recentActivity as any[] | null;
+      const isActive = (recentActivityAny && recentActivityAny.length > 0) || (liveVitals?.accepting ?? false);
+      const lastActivity = liveVitals?.lastPollAt
+        ? new Date(liveVitals.lastPollAt)
+        : recentActivityAny?.[0]?.completed_at
           ? new Date(recentActivityAny[0].completed_at)
           : new Date();
 
-        // Calculate error rate
-        const totalJobs = (completedCount || 0) + (failedCount || 0);
-        const errorRate = totalJobs > 0 ? (failedCount || 0) / totalJobs : 0;
+      const totalJobs = (completedCount || 0) + (failedCount || 0);
+      const errorRate = totalJobs > 0 ? (failedCount || 0) / totalJobs : 0;
 
-        // Determine health status
-        let status: WorkerHealth["status"] = "healthy";
-        if (!isActive) {
-          status = "offline";
-        } else if (errorRate > 0.2) {
-          status = "error";
-        } else if (errorRate > 0.1 || (activeCount || 0) > 5) {
-          status = "warning";
-        }
+      let status: WorkerHealth["status"] = "healthy";
+      if (!isActive) {
+        status = "offline";
+      } else if (errorRate > 0.2) {
+        status = "error";
+      } else if (errorRate > 0.1 || (liveVitals?.activeJobs ?? activeCount ?? 0) > 5) {
+        status = "warning";
+      }
 
-        // Calculate uptime from the oldest recent job
-        const oldestJob = recentActivityAny?.[0];
-        let uptimeSeconds = 0;
-        if (oldestJob?.created_at) {
-          uptimeSeconds = (now.getTime() - new Date(oldestJob.created_at).getTime()) / 1000;
-        }
+      const uptimeSeconds = liveVitals?.uptime ?? (() => {
+        const oldest = recentActivityAny?.[0];
+        return oldest?.created_at
+          ? (now.getTime() - new Date(oldest.created_at).getTime()) / 1000
+          : 0;
+      })();
 
-        setHealth({
-          status,
-          uptime: uptimeSeconds,
-          lastHeartbeat: lastActivity.toISOString(),
-          activeJobs: activeCount || 0,
-          maxConcurrency: 6, // from worker MAX_CONCURRENT_JOBS
-          memoryUsage: 0, // Not available without worker instrumentation
-          cpuUsage: 0, // Not available without worker instrumentation
-          jobsProcessed24h: completedCount || 0,
-          avgJobDuration: avgDuration,
-          errorRate: errorRate * 100, // convert to percentage
-        });
+      setHealth({
+        status,
+        uptime: uptimeSeconds,
+        lastHeartbeat: lastActivity.toISOString(),
+        activeJobs: liveVitals?.activeJobs ?? activeCount ?? 0,
+        maxConcurrency: liveVitals?.maxConcurrentJobs ?? 6,
+        memoryUsage: liveVitals?.memoryUsage ?? 0,
+        cpuUsage: 0,
+        jobsProcessed24h: completedCount || 0,
+        avgJobDuration: avgDuration,
+        errorRate: errorRate * 100,
+      });
 
       setError(null);
     } catch (err) {

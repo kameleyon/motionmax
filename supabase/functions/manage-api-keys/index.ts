@@ -15,12 +15,7 @@ function generateUserSalt(userId: string): Uint8Array {
 }
 
 // Derive AES-256-GCM key using PBKDF2 (strong KDF) with per-user salt
-async function getEncryptionKey(userId: string): Promise<CryptoKey> {
-  const keyString = Deno.env.get("ENCRYPTION_KEY");
-  if (!keyString) {
-    throw new Error("ENCRYPTION_KEY not configured");
-  }
-
+async function deriveEncryptionKey(keyString: string, userId: string): Promise<CryptoKey> {
   const encoder = new TextEncoder();
   const baseKey = await crypto.subtle.importKey(
     "raw",
@@ -29,7 +24,6 @@ async function getEncryptionKey(userId: string): Promise<CryptoKey> {
     false,
     ["deriveKey"]
   );
-
   return crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
@@ -42,6 +36,12 @@ async function getEncryptionKey(userId: string): Promise<CryptoKey> {
     false,
     ["encrypt", "decrypt"]
   );
+}
+
+async function getEncryptionKey(userId: string): Promise<CryptoKey> {
+  const keyString = Deno.env.get("ENCRYPTION_KEY");
+  if (!keyString) throw new Error("ENCRYPTION_KEY not configured");
+  return deriveEncryptionKey(keyString, userId);
 }
 
 // Legacy SHA-256 key derivation (for decrypting old data)
@@ -88,6 +88,14 @@ async function encrypt(plaintext: string, userId: string): Promise<string> {
   return V3_PREFIX + btoa(String.fromCharCode(...combined));
 }
 
+async function decryptRaw(raw: string, key: CryptoKey): Promise<string> {
+  const combined = Uint8Array.from(atob(raw), (c) => c.charCodeAt(0));
+  const iv = combined.slice(0, 12);
+  const encrypted = combined.slice(12);
+  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encrypted);
+  return new TextDecoder().decode(decrypted);
+}
+
 async function decrypt(ciphertext: string, userId: string): Promise<{ value: string; needsReEncrypt: boolean }> {
   if (!ciphertext) return { value: "", needsReEncrypt: false };
 
@@ -95,11 +103,30 @@ async function decrypt(ciphertext: string, userId: string): Promise<{ value: str
   const isV2 = !isV3 && ciphertext.startsWith(V2_PREFIX);
   const raw = isV3 ? ciphertext.slice(V3_PREFIX.length) : isV2 ? ciphertext.slice(V2_PREFIX.length) : ciphertext;
 
+  if (isV3) {
+    const currentKey = await getEncryptionKey(userId);
+    try {
+      return { value: await decryptRaw(raw, currentKey), needsReEncrypt: false };
+    } catch {
+      // Current key failed — try ENCRYPTION_KEY_PREV to support zero-downtime key rotation
+      const prevKeyString = Deno.env.get("ENCRYPTION_KEY_PREV");
+      if (prevKeyString) {
+        try {
+          const prevKey = await deriveEncryptionKey(prevKeyString, userId);
+          const value = await decryptRaw(raw, prevKey);
+          // Succeeded with old key — mark for re-encryption with the current key
+          return { value, needsReEncrypt: true };
+        } catch {
+          // prev key also failed — fall through to error
+        }
+      }
+      throw new Error("Failed to decrypt API key. The encryption key may have changed.");
+    }
+  }
+
   try {
     let key: CryptoKey;
-    if (isV3) {
-      key = await getEncryptionKey(userId);
-    } else if (isV2) {
+    if (isV2) {
       // Legacy v2 used fixed salt - need to migrate
       const encoder = new TextEncoder();
       const baseKey = await crypto.subtle.importKey(
@@ -124,26 +151,13 @@ async function decrypt(ciphertext: string, userId: string): Promise<{ value: str
     } else {
       key = await getLegacyEncryptionKey();
     }
-
-    const combined = Uint8Array.from(atob(raw), (c) => c.charCodeAt(0));
-    const iv = combined.slice(0, 12);
-    const encrypted = combined.slice(12);
-
-    const decrypted = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv },
-      key,
-      encrypted
-    );
-
-    return { value: new TextDecoder().decode(decrypted), needsReEncrypt: !isV3 };
+    return { value: await decryptRaw(raw, key), needsReEncrypt: true };
   } catch (error) {
-    // If v3 or v2 decryption failed, this is a real error
-    if (isV3 || isV2) {
+    if (isV2) {
       console.error("Decryption failed — possible key mismatch or corrupt data:", error);
       throw new Error("Failed to decrypt API key. The encryption key may have changed.");
     }
-
-    // Legacy fallback also failed — try treating as plaintext (very old data)
+    // Legacy fallback also failed — treat as unencrypted plaintext (very old data)
     console.warn("Legacy decryption failed, treating as unencrypted plaintext");
     return { value: ciphertext, needsReEncrypt: true };
   }
@@ -266,6 +280,20 @@ Deno.serve(async (req) => {
       // Save encrypted API keys
       const body = await req.json();
       const { gemini_api_key, replicate_api_token } = body;
+
+      const MAX_KEY_LENGTH = 512;
+      if (gemini_api_key && typeof gemini_api_key === "string" && gemini_api_key.length > MAX_KEY_LENGTH) {
+        return new Response(JSON.stringify({ error: "gemini_api_key exceeds maximum length" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (replicate_api_token && typeof replicate_api_token === "string" && replicate_api_token.length > MAX_KEY_LENGTH) {
+        return new Response(JSON.stringify({ error: "replicate_api_token exceeds maximum length" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
 
       console.log("Encrypting and saving API keys for user:", userId);
 

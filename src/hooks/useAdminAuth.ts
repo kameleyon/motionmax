@@ -43,31 +43,11 @@ export function useAdminAuth() {
     checkAdminStatus();
   }, [user, authLoading]);
 
-  // Primary: direct DB queries (no edge function dependency).
-  // Fallback: edge function if direct queries fail (e.g., missing RLS policies).
   const callAdminApi = useCallback(async (action: string, params?: Record<string, unknown>) => {
     const { data: { session: freshSession } } = await supabase.auth.getSession();
     if (!freshSession) throw new Error("Not authenticated");
 
-    // Try direct DB queries first — faster and no edge function dependency
-    try {
-      const result = await adminDirectQuery(action, params);
-      return result;
-    } catch (dbErr) {
-      log.warn(`Direct query failed for "${action}":`, (dbErr as Error).message);
-    }
-
-    // Fallback: edge function (if deployed)
-    try {
-      const { data, error } = await supabase.functions.invoke("admin-stats", {
-        body: { action, params },
-      });
-      if (error) throw new Error(error.message || "Admin API error");
-      return data;
-    } catch (edgeErr) {
-      log.error(`Edge function also failed for "${action}":`, (edgeErr as Error).message);
-      throw new Error(`Admin query failed: ${(edgeErr as Error).message}`);
-    }
+    return adminDirectQuery(action, params);
   }, []);
 
   return {

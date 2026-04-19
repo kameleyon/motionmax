@@ -209,13 +209,13 @@ export function VideoPlayer({
   const showProgress = isRendering || (isGenerating && !isComplete);
 
   return (
-    <div className={cn("flex justify-center", className)}>
+    <div className={cn("flex flex-col items-center gap-1.5", className)}>
       <div
         className={cn(
-          "relative rounded-xl overflow-hidden bg-black",
+          "relative rounded-xl overflow-hidden bg-black w-full",
           format === "portrait"  && "h-[700px] aspect-[9/16]",
           format === "square"    && "h-[700px] aspect-square",
-          format === "landscape" && "w-full aspect-video",
+          format === "landscape" && "aspect-video",
         )}
         onMouseMove={resetControlsTimer}
         onMouseEnter={() => setShowControls(true)}
@@ -350,6 +350,12 @@ export function VideoPlayer({
         )}
       </AnimatePresence>
       </div>
+      {/* EU AI Act Art. 52 — AI-generated content disclosure */}
+      {isComplete && (
+        <p className="text-xs text-muted-foreground/60 text-center">
+          ⚠ AI-generated content — may not reflect real people, places, or events
+        </p>
+      )}
     </div>
   );
 }

@@ -15,7 +15,9 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { supabase } from "../lib/supabase.js";
+import { isEnabled } from "../lib/featureFlags.js";
 import { writeSystemLog } from "../lib/logger.js";
+import { wlog } from "../lib/workerLogger.js";
 import { processScene, type ExportConfig } from "./export/sceneEncoder.js";
 import { concatFiles, concatWithCaptions, concatWithBrandMark } from "./export/concatScenes.js";
 import { concatWithCrossfade } from "./export/transitions.js";
@@ -61,8 +63,8 @@ const CROSSFADE_DURATION = parseFloat(process.env.EXPORT_CROSSFADE_DURATION || "
 /** Crossfade transition timeout (ms). Default: 30 minutes. */
 const CROSSFADE_TIMEOUT_MS = parseInt(process.env.EXPORT_CROSSFADE_TIMEOUT || "1800000", 10);
 
-/** Enable AI video generation per scene during export. Default: false. */
-const AI_VIDEO_ENABLED = (process.env.EXPORT_AI_VIDEO || "false").toLowerCase() === "true";
+// AI_VIDEO_ENABLED is now resolved dynamically via isEnabled() at job time
+// so it can be toggled via the feature_flags DB table without a worker redeploy.
 
 /** Per-scene AI video timeout (ms). Default: 5 minutes. */
 const AI_VIDEO_TIMEOUT_MS = parseInt(process.env.EXPORT_AI_VIDEO_TIMEOUT || "300000", 10);
@@ -101,13 +103,16 @@ function hasUsableUrls(scenes: any[]): boolean {
 
 /** Log scene URLs for diagnostics. */
 function logScenes(prefix: string, scenes: any[]): void {
-  console.log(`[ExportVideo] ${prefix}: ${scenes.length} scenes`);
-  scenes.forEach((s: any, i: number) => {
-    console.log(
-      `[ExportVideo]   ${i}: videoUrl=${!!s.videoUrl} imageUrl=${!!s.imageUrl}` +
-        ` imageUrls=${Array.isArray(s.imageUrls) ? s.imageUrls.filter(Boolean).length : 0}` +
-        ` audioUrl=${!!s.audioUrl}`
-    );
+  wlog.debug(`${prefix}: ${scenes.length} scenes`, {
+    component: "ExportVideo",
+    sceneCount: scenes.length,
+    scenes: scenes.map((s: any, i: number) => ({
+      i,
+      videoUrl: !!s.videoUrl,
+      imageUrl: !!s.imageUrl,
+      imageUrls: Array.isArray(s.imageUrls) ? s.imageUrls.filter(Boolean).length : 0,
+      audioUrl: !!s.audioUrl,
+    })),
   });
 }
 
@@ -123,6 +128,43 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): 
       (err) => { clearTimeout(timer); reject(err); }
     );
   });
+}
+
+// ── Scene checkpoint (crash-restart resilience) ──────────────────────
+// Written after every batch so a Render restart can skip already-encoded scenes.
+
+const CHECKPOINT_FILE = "checkpoint.json";
+
+interface SceneCheckpoint {
+  version: 1;
+  jobId: string;
+  /** Index → absolute path of encoded clip, or null if not yet encoded. */
+  sceneResults: (string | null)[];
+}
+
+function readCheckpoint(tempDir: string, jobId: string): (string | null)[] | null {
+  const p = path.join(tempDir, CHECKPOINT_FILE);
+  try {
+    if (!fs.existsSync(p)) return null;
+    const raw: SceneCheckpoint = JSON.parse(fs.readFileSync(p, "utf-8"));
+    if (raw.version !== 1 || raw.jobId !== jobId) return null;
+    // Validate that each recorded path still exists on disk
+    return raw.sceneResults.map((fp) =>
+      fp && fs.existsSync(fp) ? fp : null
+    );
+  } catch {
+    return null;
+  }
+}
+
+function writeCheckpoint(tempDir: string, jobId: string, sceneResults: (string | null)[]): void {
+  const p = path.join(tempDir, CHECKPOINT_FILE);
+  try {
+    const data: SceneCheckpoint = { version: 1, jobId, sceneResults };
+    fs.writeFileSync(p, JSON.stringify(data));
+  } catch {
+    // Non-fatal: next batch will overwrite anyway
+  }
 }
 
 /** Fetch user plan and determine if watermark overlay is required. */
@@ -153,10 +195,17 @@ async function applyWatermarkOverlay(filePath: string, text: string, tempDir: st
   fs.renameSync(tmpOut, filePath);
 }
 
-/** Build ExportConfig from environment and payload. */
-function buildExportConfig(payload: any): ExportConfig {
+/** Build ExportConfig from environment, feature flags, and payload. */
+async function buildExportConfig(payload: any): Promise<ExportConfig> {
   const format = payload.format || "landscape";
   const { width, height } = getTargetResolution(format);
+
+  // Env var EXPORT_AI_VIDEO still works as the legacy override; the DB flag is
+  // also checked so operators can toggle without a redeploy.
+  const envAiVideo = process.env.EXPORT_AI_VIDEO;
+  const aiVideo = envAiVideo !== undefined
+    ? envAiVideo.toLowerCase() === "true"
+    : await isEnabled("ai_video_generation", false);
 
   return {
     width,
@@ -164,7 +213,7 @@ function buildExportConfig(payload: any): ExportConfig {
     fps: 24,
     kenBurns: KEN_BURNS_ENABLED,
     crossfadeDuration: CROSSFADE_DURATION,
-    aiVideo: AI_VIDEO_ENABLED,
+    aiVideo,
     aiVideoTimeoutMs: AI_VIDEO_TIMEOUT_MS,
     aiTransitions: false,
     aiTransitionTimeoutMs: 0,
@@ -185,18 +234,12 @@ export async function handleExportVideo(
   // Poll every 5 s. The outer JOB_TIMEOUT_MS race still applies so
   // a job stuck in the queue too long is correctly failed by the worker.
   while (activeExportJobs >= MAX_EXPORT_JOBS) {
-    console.log(
-      `[ExportVideo] Job ${jobId} waiting for export slot ` +
-      `(${activeExportJobs}/${MAX_EXPORT_JOBS} active)`
-    );
+    wlog.debug("Waiting for export slot", { jobId, active: activeExportJobs, max: MAX_EXPORT_JOBS });
     await new Promise<void>((resolve) => setTimeout(resolve, 5000));
   }
 
   activeExportJobs++;
-  console.log(
-    `[ExportVideo] Job ${jobId} acquired export slot ` +
-    `(${activeExportJobs}/${MAX_EXPORT_JOBS} active)`
-  );
+  wlog.info("Acquired export slot", { jobId, active: activeExportJobs, max: MAX_EXPORT_JOBS });
 
   try {
     return await Promise.race([
@@ -210,10 +253,7 @@ export async function handleExportVideo(
     ]);
   } finally {
     activeExportJobs--;
-    console.log(
-      `[ExportVideo] Job ${jobId} released export slot ` +
-      `(${activeExportJobs}/${MAX_EXPORT_JOBS} active)`
-    );
+    wlog.info("Released export slot", { jobId, active: activeExportJobs, max: MAX_EXPORT_JOBS });
   }
 }
 
@@ -222,23 +262,22 @@ async function _runExport(
   payload: any,
   userId?: string
 ) {
+  const log = wlog.child({ jobId, userId, component: "ExportVideo" });
   const { project_id } = payload;
   const restartCount = typeof payload._restartCount === "number" ? payload._restartCount : 0;
-  const exportConfig = buildExportConfig(payload);
+  const exportConfig = await buildExportConfig(payload);
   exportConfig.userId = userId;
 
   const needsWatermark = await fetchNeedsWatermark(userId);
   const watermarkText = needsWatermark ? "AI-Generated" : undefined;
   if (needsWatermark) {
-    console.log(`[ExportVideo] Free-tier user — watermark will be applied`);
+    log.info("Free-tier user — watermark will be applied");
   }
 
   // If this job has been restarted after a crash, disable crossfade and Ken Burns
   // to prevent the same crash loop. Use the safest possible export path.
   if (restartCount > 0) {
-    console.warn(
-      `[ExportVideo] Job restarted ${restartCount} time(s) — disabling crossfade and Ken Burns for stability`
-    );
+    log.warn("Job restarted — disabling crossfade and Ken Burns for stability", { restartCount });
     exportConfig.crossfadeDuration = 0;
     exportConfig.kenBurns = false;
     exportConfig.aiVideo = false;
@@ -253,7 +292,7 @@ async function _runExport(
   if (scenes.length === 0 || !hasUsableUrls(scenes)) {
     const payloadScenes: any[] = Array.isArray(payload.scenes) ? payload.scenes : [];
     if (payloadScenes.length > 0 && hasUsableUrls(payloadScenes)) {
-      console.warn(`[ExportVideo] DB scenes unusable — using payload scenes for ${project_id}`);
+      log.warn("DB scenes unusable — using payload scenes", { projectId: project_id });
       scenes = payloadScenes;
       logScenes("Payload (fallback)", scenes);
     }
@@ -269,21 +308,17 @@ async function _runExport(
   const isSmartFlow = projectType === "smartflow";
 
   if (isCinematic) {
-    // Cinematic clips are self-contained — just concat directly, no transitions
     exportConfig.crossfadeDuration = 0;
     exportConfig.kenBurns = false;
-    console.log(`[ExportVideo] Cinematic detected — direct concat, no Ken Burns`);
+    log.info("Cinematic detected — direct concat, no Ken Burns");
   } else if (isSmartFlow) {
-    // SmartFlow = static image + voice, no animation at all
     exportConfig.crossfadeDuration = 0;
     exportConfig.kenBurns = false;
-    console.log(`[ExportVideo] SmartFlow detected — static images, no animation`);
+    log.info("SmartFlow detected — static images, no animation");
   } else {
-    // Standard (storytelling/explainer): direct concat, no Ken Burns, no crossfade.
-    // Crossfade uses pairwise re-encoding (N-1 passes) which destroys audio quality.
     exportConfig.kenBurns = false;
     exportConfig.crossfadeDuration = 0;
-    console.log(`[ExportVideo] Standard project — direct concat, no Ken Burns, no crossfade`);
+    log.info("Standard project — direct concat, no Ken Burns, no crossfade");
   }
 
   // ── Initialize per-scene progress tracking ──────────────────────
@@ -304,12 +339,14 @@ async function _runExport(
     message: `Started video export: ${scenes.length} scenes, ${exportConfig.width}x${exportConfig.height}, ${features}`,
   });
 
-  console.log(
-    `[ExportVideo] Export config: ${exportConfig.width}x${exportConfig.height} | ` +
-    `KenBurns=${exportConfig.kenBurns} | AI Video=${exportConfig.aiVideo} | ` +
-    `Crossfade=${exportConfig.crossfadeDuration}s | ` +
-    `Batch=${SCENE_BATCH_SIZE} | SceneTimeout=${SCENE_TIMEOUT_MS / 1000}s`
-  );
+  log.info("Export config", {
+    resolution: `${exportConfig.width}x${exportConfig.height}`,
+    kenBurns: exportConfig.kenBurns,
+    aiVideo: exportConfig.aiVideo,
+    crossfade: exportConfig.crossfadeDuration,
+    batchSize: SCENE_BATCH_SIZE,
+    sceneTimeoutSec: SCENE_TIMEOUT_MS / 1000,
+  });
 
   const tempDir = path.join(os.tmpdir(), `motionmax_export_${jobId}`);
   const finalOutputPath = path.join(tempDir, "final_export.mp4");
@@ -335,7 +372,7 @@ async function _runExport(
         const signUrl = async (bucket: string, filePath: string): Promise<string | null> => {
           const { data, error } = await supabase.storage.from(bucket).createSignedUrl(filePath, 3600);
           if (error || !data?.signedUrl) {
-            console.warn(`[ExportVideo] Failed to sign URL for ${bucket}/${filePath}: ${error?.message}`);
+            log.warn("Failed to sign URL", { bucket, filePath, error: error?.message });
             return null;
           }
           return data.signedUrl;
@@ -344,22 +381,36 @@ async function _runExport(
         // Fire ASR for all scenes in parallel — runs while scenes encode
         const scenesWithAudio = scenes.map((s: any) => ({ audioUrl: s.audioUrl, voiceover: s.voiceover }));
         asrPromise = transcribeAllScenes(scenesWithAudio, hyperealApiKey, "en", signUrl).catch(err => {
-          console.warn(`[ExportVideo] ASR failed, will use estimation: ${(err as Error).message}`);
+          log.warn("ASR failed, will use estimation", { error: (err as Error).message });
           return scenes.map(() => null);
         });
-        console.log(`[ExportVideo] ASR transcription started in background for ${scenes.length} scenes`);
+        log.info("ASR transcription started in background", { sceneCount: scenes.length });
       }
     }
 
     // ── 1. Encode scenes in sequential batches ──────────────────────
-    const sceneResults: (string | null)[] = new Array(scenes.length).fill(null);
+    // Restore from checkpoint if this is a Render restart — skip already-encoded scenes.
+    const checkpointed = readCheckpoint(tempDir, jobId);
+    const sceneResults: (string | null)[] = checkpointed ?? new Array(scenes.length).fill(null);
     const sceneErrors: string[] = [];
+    if (checkpointed) {
+      const resumedCount = checkpointed.filter(Boolean).length;
+      log.info("Restored scene checkpoint — skipping already-encoded scenes", {
+        resumedCount, totalScenes: scenes.length,
+      });
+    }
 
     for (let start = 0; start < scenes.length; start += SCENE_BATCH_SIZE) {
       const end = Math.min(start + SCENE_BATCH_SIZE, scenes.length);
       const batch = [];
 
       for (let i = start; i < end; i++) {
+        // Skip scenes already encoded in a previous run
+        if (sceneResults[i] !== null) {
+          log.debug("Skipping already-encoded scene", { sceneIdx: i });
+          continue;
+        }
+
         await updateSceneProgress(jobId, i, "encoding", {
           message: `Encoding scene ${i + 1}/${scenes.length}`,
           flush: false,
@@ -394,7 +445,7 @@ async function _runExport(
         } else if (r.status === "rejected") {
           const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
           const isTimeout = msg.includes("timed out");
-          console.error(`[ExportVideo] Scene ${sceneIdx} error:`, msg);
+          log.error("Scene encoding failed", { sceneIdx, error: msg, isTimeout });
           sceneErrors.push(msg);
 
           await updateSceneProgress(jobId, sceneIdx, isTimeout ? "timeout" : "failed", {
@@ -410,7 +461,9 @@ async function _runExport(
       await flushSceneProgress(jobId);
       await supabase.from("video_generation_jobs").update({ progress: pct, updated_at: new Date().toISOString() }).eq("id", jobId);
 
-      console.log(`[ExportVideo] Batch ${start}-${end - 1} done (${pct}%)`);
+      // Persist checkpoint so a Render restart can resume from this point
+      writeCheckpoint(tempDir, jobId, sceneResults);
+      log.info("Batch done", { batchStart: start, batchEnd: end - 1, progressPct: pct });
     }
 
     const clipPaths = sceneResults.filter((p): p is string => p !== null);
@@ -482,8 +535,7 @@ async function _runExport(
           message: "Crossfade failed — fell back to concat demuxer",
         });
       } else if (effectiveBrandMark) {
-        // Crossfade wrote finalOutputPath without filter support — apply watermark now
-        console.log(`[ExportVideo] Applying watermark to crossfade output`);
+        log.info("Applying watermark to crossfade output");
         await applyWatermarkOverlay(finalOutputPath, effectiveBrandMark, tempDir);
       }
     } else {
@@ -513,7 +565,7 @@ async function _runExport(
         const asrResults = asrPromise ? await asrPromise : null;
 
         const totalVideoDur = actualDurations.reduce((a, b) => a + b, 0);
-        console.log(`[ExportVideo] Caption timing: total=${totalVideoDur.toFixed(1)}s, scenes=${actualDurations.map((d: number) => d.toFixed(1)).join(",")}`);
+        log.debug("Caption timing", { totalSec: totalVideoDur.toFixed(1), sceneDurations: actualDurations.map((d: number) => d.toFixed(1)) });
 
         const assContent = generateAssSubtitles(scenes, captionStyle, exportConfig.width, exportConfig.height, actualDurations, asrResults || undefined);
 
@@ -534,11 +586,10 @@ async function _runExport(
 
           await concatWithCaptions(clipPaths, assPath, fontsDir, finalOutputPath, undefined, effectiveBrandMark);
           removeFiles(assPath);
-          console.log(`[ExportVideo] Concat + captions done in single pass (style: ${captionStyle})`);
+          log.info("Concat + captions done in single pass", { captionStyle });
         } else if (effectiveBrandMark) {
-          // ASS generation returned null but brand/watermark present — burn it only
           await concatWithBrandMark(clipPaths, effectiveBrandMark, finalOutputPath);
-          console.log(`[ExportVideo] Concat + brand mark (no captions)`);
+          log.info("Concat + brand mark (no captions)");
         } else {
           // ASS generation returned null, no brand — just stream-copy concat
           await writeSystemLog({
@@ -550,9 +601,8 @@ async function _runExport(
           await concatFiles(clipPaths, finalOutputPath, true);
         }
       } else if (effectiveBrandMark) {
-        // ── NO CAPTIONS BUT BRAND MARK / WATERMARK: burn text ──
         await concatWithBrandMark(clipPaths, effectiveBrandMark, finalOutputPath);
-        console.log(`[ExportVideo] Concat + brand mark "${effectiveBrandMark}" (no captions)`);
+        log.info("Concat + brand mark (no captions)", { brandMark: effectiveBrandMark });
       } else {
         // ── NO CAPTIONS, NO BRAND: stream-copy concat (instant) ──
         await writeSystemLog({
@@ -608,9 +658,16 @@ async function _runExport(
       message: `Video exported: ${clipPaths.length} scenes, ${features}, crossfade=${usedCrossfade}`,
     });
 
+    // Success: clean up temp dir now that output is safely uploaded
+    try {
+      if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch (cleanupErr) {
+      log.warn("Temp cleanup skipped", { error: (cleanupErr as Error).message });
+    }
+
     return { success: true, url: finalVideoUrl };
   } catch (error) {
-    console.error(`[ExportVideo] Job ${jobId} failed:`, error);
+    log.error("Export job failed", { error: error instanceof Error ? error.message : String(error) });
 
     sceneProgress.overallPhase = "failed";
     sceneProgress.overallMessage = `Export failed: ${error instanceof Error ? error.message : "Unknown error"}`;
@@ -625,13 +682,9 @@ async function _runExport(
       message: "Video export failed",
       details: { error: error instanceof Error ? error.message : "Unknown" },
     });
+    log.warn("Temp dir preserved for restart", { tempDir });
     throw error;
   } finally {
     clearSceneProgress(jobId);
-    try {
-      if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
-    } catch (cleanupErr) {
-      console.warn(`[ExportVideo] Temp cleanup skipped:`, (cleanupErr as Error).message);
-    }
   }
 }

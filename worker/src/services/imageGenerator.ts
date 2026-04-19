@@ -11,6 +11,7 @@
 
 import { supabase } from "../lib/supabase.js";
 import { writeApiLog } from "../lib/logger.js";
+import { isEnabled } from "../lib/featureFlags.js";
 import { v4 as uuidv4 } from "uuid";
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -24,6 +25,57 @@ const REPLICATE_POLL_URL = "https://api.replicate.com/v1/predictions";
 const REPLICATE_RETRIES = 2;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+// ── Prompt/result cache ────────────────────────────────────────────
+// In-memory cache so identical (prompt, format) pairs skip the provider
+// API and return the already-uploaded Supabase URL. Also deduplicates
+// concurrent in-flight requests for the same key.
+
+const CACHE_MAX_SIZE = 500;
+const _promptCache = new Map<string, string>();         // key → Supabase URL
+const _inFlight = new Map<string, Promise<string>>();   // key → pending Promise
+
+function _cacheKey(prompt: string, format: string): string {
+  return `${format}|${prompt}`;
+}
+
+function _cacheGet(key: string): string | undefined {
+  return _promptCache.get(key);
+}
+
+function _cacheSet(key: string, url: string): void {
+  if (_promptCache.size >= CACHE_MAX_SIZE) {
+    // Evict oldest entry — Map preserves insertion order
+    const firstKey = _promptCache.keys().next().value!;
+    _promptCache.delete(firstKey);
+  }
+  _promptCache.set(key, url);
+}
+
+// ── Global Hypereal concurrency limiter ───────────────────────────
+// Caps simultaneous outbound Hypereal API calls process-wide.
+// Without this: 20 concurrent jobs × 5 scenes = 100 parallel requests,
+// which triggers provider rate-limit 429s and wastes retry budget.
+
+const HYPEREAL_MAX_CONCURRENT = 10;
+let _hyperealActive = 0;
+const _hyperealQueue: Array<() => void> = [];
+
+function acquireHypereal(): Promise<void> {
+  if (_hyperealActive < HYPEREAL_MAX_CONCURRENT) {
+    _hyperealActive++;
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    _hyperealQueue.push(() => { _hyperealActive++; resolve(); });
+  });
+}
+
+function releaseHypereal(): void {
+  _hyperealActive--;
+  const next = _hyperealQueue.shift();
+  if (next) next();
+}
 
 // ── Aspect ratio ──────────────────────────────────────────────────
 
@@ -220,6 +272,8 @@ async function pollReplicate(
 /**
  * Generate one image: Hypereal first, Replicate fallback.
  * Always re-uploads to Supabase Storage and returns a public Supabase URL.
+ * Results are cached in-memory by (prompt, format) to skip redundant API
+ * calls for identical prompts within the same worker process lifetime.
  */
 export async function generateImage(
   prompt: string,
@@ -228,26 +282,74 @@ export async function generateImage(
   format: string,
   projectId: string,
 ): Promise<string> {
+  const key = _cacheKey(prompt, format);
+
+  // Cache hit — return immediately without any API call
+  const cached = _cacheGet(key);
+  if (cached) {
+    console.log(`[ImageGen] Cache hit for prompt (${prompt.length} chars, format=${format})`);
+    return cached;
+  }
+
+  // In-flight deduplication — coalesce concurrent requests for the same key
+  const existing = _inFlight.get(key);
+  if (existing) {
+    console.log(`[ImageGen] Coalescing in-flight request for same prompt (${prompt.length} chars)`);
+    return existing;
+  }
+
+  const work = _generateImageUncached(prompt, hyperealApiKey, replicateApiKey, format, projectId);
+  _inFlight.set(key, work);
+
+  try {
+    const url = await work;
+    _cacheSet(key, url);
+    return url;
+  } finally {
+    _inFlight.delete(key);
+  }
+}
+
+async function _generateImageUncached(
+  prompt: string,
+  hyperealApiKey: string,
+  replicateApiKey: string,
+  format: string,
+  projectId: string,
+): Promise<string> {
   const startTime = Date.now();
 
+  // Kill-switch: disable all image generation without redeploying the worker.
+  // Toggle via DB feature_flags row or FLAG_IMAGE_GENERATION=false env var.
+  if (!(await isEnabled("image_generation"))) {
+    throw new Error("Image generation is disabled via feature flag (image_generation=false)");
+  }
+
   // Primary: Hypereal → download bytes → upload to Supabase
-  if (hyperealApiKey) {
-    const bytes = await tryHypereal(prompt, hyperealApiKey, format);
+  const hyperealEnabled = await isEnabled("image_provider_hypereal");
+  if (hyperealApiKey && hyperealEnabled) {
+    await acquireHypereal();
+    const bytes = await tryHypereal(prompt, hyperealApiKey, format).finally(releaseHypereal);
     if (bytes) {
       const url = await uploadToStorage(bytes, projectId);
       writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3-1-flash-t2i", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
       return url;
     }
     console.warn("[ImageGen] Hypereal exhausted — falling back to Replicate");
+  } else if (!hyperealEnabled) {
+    console.warn("[ImageGen] Hypereal disabled via feature flag — skipping to Replicate");
   }
 
   // Fallback: Replicate (already uploads to Supabase internally)
-  if (replicateApiKey) {
+  const replicateEnabled = await isEnabled("image_provider_replicate");
+  if (replicateApiKey && replicateEnabled) {
     const url = await tryReplicate(prompt, replicateApiKey, format, projectId);
     if (url) {
       writeApiLog({ userId: undefined, generationId: undefined, provider: "replicate", model: "nano-banana-2", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
       return url;
     }
+  } else if (!replicateEnabled) {
+    console.warn("[ImageGen] Replicate disabled via feature flag");
   }
 
   const err = new Error("Image generation failed: both Hypereal and Replicate exhausted");
@@ -346,7 +448,8 @@ export async function editImage(
   if (hyperealApiKey && originalPrompt) {
     const fullPrompt = `${originalPrompt}\n\nMODIFICATION: ${editInstruction}\n\nSTYLE: ${styleDesc || ""}`;
     console.log(`[ImageGen] Hypereal edit fallback: prompt length=${fullPrompt.length}`);
-    const bytes = await tryHypereal(fullPrompt, hyperealApiKey, format || "landscape");
+    await acquireHypereal();
+    const bytes = await tryHypereal(fullPrompt, hyperealApiKey, format || "landscape").finally(releaseHypereal);
     if (bytes) {
       console.log(`[ImageGen] ✅ Hypereal edit fallback success`);
       return await uploadToStorage(bytes, projectId);

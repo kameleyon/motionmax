@@ -105,7 +105,14 @@ serve(async (req) => {
       );
     }
 
-    const { storagePath, voiceName, description, removeNoise } = await req.json();
+    const { storagePath, voiceName, description, removeNoise, consent_given } = await req.json();
+
+    if (!consent_given) {
+      return new Response(
+        JSON.stringify({ error: "Voice cloning requires explicit consent. Please accept the consent agreement." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     if (!storagePath || !voiceName) {
       return new Response(
@@ -334,11 +341,21 @@ serve(async (req) => {
 
     console.log("Voice saved to database:", insertData.id);
 
+    // Persist consent audit record (non-fatal — log but don't fail the request)
+    const ipAddress = req.headers.get("x-forwarded-for") ?? req.headers.get("cf-connecting-ip") ?? null;
+    const userAgent = req.headers.get("user-agent") ?? null;
+    const { error: consentError } = await supabaseAdmin
+      .from("voice_consents")
+      .insert({ user_id: user.id, voice_id: voiceId, ip_address: ipAddress, user_agent: userAgent });
+    if (consentError) {
+      console.error("Failed to persist voice consent record:", consentError);
+    }
+
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        voiceId, 
-        voice: insertData 
+      JSON.stringify({
+        success: true,
+        voiceId,
+        voice: insertData
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

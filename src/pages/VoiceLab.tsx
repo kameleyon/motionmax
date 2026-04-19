@@ -244,11 +244,12 @@ export default function VoiceLab() {
       log.warn("Could not determine audio duration, proceeding");
     }
 
-    await cloneVoice({ 
-      file: audioBlob, 
+    await cloneVoice({
+      file: audioBlob,
       name: voiceName.trim(),
       description: `Created via ${recordedBlob ? "recording" : "file upload"}`,
       removeNoise,
+      consentGiven: consentAccepted,
     });
 
     // Reset form

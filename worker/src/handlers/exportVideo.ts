@@ -30,6 +30,7 @@ import {
   flushSceneProgress,
   clearSceneProgress,
 } from "../lib/sceneProgress.js";
+import { runFfmpeg } from "./export/ffmpegCmd.js";
 
 // ── Configuration ────────────────────────────────────────────────────
 
@@ -109,6 +110,34 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): 
   });
 }
 
+/** Fetch user plan and determine if watermark overlay is required. */
+async function fetchNeedsWatermark(userId: string | undefined): Promise<boolean> {
+  if (!userId) return true; // No user = treat as free
+  const { data } = await supabase
+    .from("subscriptions")
+    .select("plan_name")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .maybeSingle();
+  const paidPlans = ["creator", "starter", "professional", "studio", "enterprise"];
+  return !paidPlans.includes(data?.plan_name ?? "");
+}
+
+/** Burn a drawtext watermark onto an existing video file (overwrites in-place). */
+async function applyWatermarkOverlay(filePath: string, text: string, tempDir: string): Promise<void> {
+  const escaped = text.replace(/'/g, "\u2019").replace(/:/g, "\\:").replace(/\\/g, "\\\\");
+  const tmpOut = path.join(tempDir, `wm_${Date.now()}.mp4`);
+  await runFfmpeg([
+    "-i", filePath,
+    "-vf", `drawtext=text='${escaped}':fontsize=28:fontcolor=white@0.65:x=(w-text_w-16):y=16:font=Sans:box=1:boxcolor=black@0.35:boxborderw=6`,
+    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22",
+    "-c:a", "copy",
+    "-movflags", "+faststart",
+    tmpOut,
+  ]);
+  fs.renameSync(tmpOut, filePath);
+}
+
 /** Build ExportConfig from environment and payload. */
 function buildExportConfig(payload: any): ExportConfig {
   const format = payload.format || "landscape";
@@ -141,6 +170,12 @@ export async function handleExportVideo(
   const restartCount = typeof payload._restartCount === "number" ? payload._restartCount : 0;
   const exportConfig = buildExportConfig(payload);
   exportConfig.userId = userId;
+
+  const needsWatermark = await fetchNeedsWatermark(userId);
+  const watermarkText = needsWatermark ? "MotionMax Free" : undefined;
+  if (needsWatermark) {
+    console.log(`[ExportVideo] Free-tier user — watermark will be applied`);
+  }
 
   // If this job has been restarted after a crash, disable crossfade and Ken Burns
   // to prevent the same crash loop. Use the safest possible export path.
@@ -233,6 +268,8 @@ export async function handleExportVideo(
     // ── 0.5. Start ASR transcription in parallel (for caption sync) ──
     const captionStyle = (payload.caption_style || "none") as CaptionStyle;
     const brandMark: string | undefined = payload.brandMark || payload.brand_mark || undefined;
+    // Free-tier watermark takes precedence over user-supplied brand mark
+    const effectiveBrandMark: string | undefined = watermarkText ?? brandMark;
     let asrPromise: Promise<(ASRSceneResult | null)[]> | null = null;
 
     if (captionStyle !== "none") {
@@ -388,6 +425,10 @@ export async function handleExportVideo(
           eventType: "crossfade_fallback",
           message: "Crossfade failed — fell back to concat demuxer",
         });
+      } else if (effectiveBrandMark) {
+        // Crossfade wrote finalOutputPath without filter support — apply watermark now
+        console.log(`[ExportVideo] Applying watermark to crossfade output`);
+        await applyWatermarkOverlay(finalOutputPath, effectiveBrandMark, tempDir);
       }
     } else {
       // No crossfade — probe clips, then concat (with or without captions in ONE pass)
@@ -435,12 +476,12 @@ export async function handleExportVideo(
             message: `Concat + caption burn (single pass): ${clipPaths.length} clips, style=${captionStyle}`,
           });
 
-          await concatWithCaptions(clipPaths, assPath, fontsDir, finalOutputPath, undefined, brandMark);
+          await concatWithCaptions(clipPaths, assPath, fontsDir, finalOutputPath, undefined, effectiveBrandMark);
           removeFiles(assPath);
           console.log(`[ExportVideo] Concat + captions done in single pass (style: ${captionStyle})`);
-        } else if (brandMark) {
-          // ASS generation returned null but brand mark present — burn brand only
-          await concatWithBrandMark(clipPaths, brandMark, finalOutputPath);
+        } else if (effectiveBrandMark) {
+          // ASS generation returned null but brand/watermark present — burn it only
+          await concatWithBrandMark(clipPaths, effectiveBrandMark, finalOutputPath);
           console.log(`[ExportVideo] Concat + brand mark (no captions)`);
         } else {
           // ASS generation returned null, no brand — just stream-copy concat
@@ -452,10 +493,10 @@ export async function handleExportVideo(
           });
           await concatFiles(clipPaths, finalOutputPath, true);
         }
-      } else if (brandMark) {
-        // ── NO CAPTIONS BUT BRAND MARK: burn brand text ──
-        await concatWithBrandMark(clipPaths, brandMark, finalOutputPath);
-        console.log(`[ExportVideo] Concat + brand mark "${brandMark}" (no captions)`);
+      } else if (effectiveBrandMark) {
+        // ── NO CAPTIONS BUT BRAND MARK / WATERMARK: burn text ──
+        await concatWithBrandMark(clipPaths, effectiveBrandMark, finalOutputPath);
+        console.log(`[ExportVideo] Concat + brand mark "${effectiveBrandMark}" (no captions)`);
       } else {
         // ── NO CAPTIONS, NO BRAND: stream-copy concat (instant) ──
         await writeSystemLog({

@@ -18,7 +18,6 @@ import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import {
   buildDoc2VideoPrompt,
-  buildStorytellingPrompt,
   buildSmartFlowPrompt,
   buildCinematicPrompt,
   callOpenRouterLLM,
@@ -51,23 +50,6 @@ function buildPrompt(projectType: string, p: Record<string, any>): PromptResult 
         voiceType: p.voiceType,
         disableExpressions: p.disableExpressions === true,
         characterConsistencyEnabled: p.characterConsistencyEnabled === true,
-        language: p.language,
-      });
-
-    case "storytelling":
-      return buildStorytellingPrompt({
-        storyIdea: p.storyIdea || p.content || "",
-        format: p.format || "landscape",
-        length: p.length || "brief",
-        style: p.style || "realistic",
-        customStyle: p.customStyle,
-        brandMark: p.brandMark,
-        inspiration: p.inspiration,
-        tone: p.tone,
-        genre: p.genre,
-        characterDescription: p.characterDescription,
-        voiceType: p.voiceType,
-        disableExpressions: p.disableExpressions === true,
         language: p.language,
       });
 
@@ -138,13 +120,6 @@ function buildProjectInsert(
     character_consistency_enabled: payload.characterConsistencyEnabled || false,
     disable_expressions: payload.disableExpressions || false,
   };
-
-  // Type-specific columns
-  if (projectType === "storytelling") {
-    row.inspiration_style = payload.inspiration || null;
-    row.story_tone = payload.tone || null;
-    row.story_genre = payload.genre || null;
-  }
 
   return row;
 }

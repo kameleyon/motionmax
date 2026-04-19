@@ -13,9 +13,6 @@ import { writeApiLog } from "../lib/logger.js";
 export { buildDoc2VideoPrompt } from "./buildDoc2Video.js";
 export type { Doc2VideoParams, PromptResult } from "./buildDoc2Video.js";
 
-export { buildStorytellingPrompt } from "./buildStorytelling.js";
-export type { StorytellingParams } from "./buildStorytelling.js";
-
 export { buildSmartFlowPrompt } from "./buildSmartFlow.js";
 export type { SmartFlowParams } from "./buildSmartFlow.js";
 

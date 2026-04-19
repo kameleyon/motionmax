@@ -1,5 +1,6 @@
 ﻿import { createClient } from "npm:@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rateLimit.ts";
 
 // Bot User-Agent patterns to detect social media crawlers
 const BOT_PATTERNS = [
@@ -61,6 +62,17 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const rateLimitResult = await checkRateLimit(supabase, {
+      key: "share-meta",
+      maxRequests: 30,
+      windowSeconds: 60,
+      ip,
+    });
+    if (!rateLimitResult.allowed) {
+      return Response.redirect("https://motionmax.io", 302);
+    }
 
     // 3. Fetch share data
     let title = "MotionMax Video";

@@ -13,7 +13,8 @@
  *   → supabase.co/functions/v1/serve-media?bucket=videos&path=exports/video.mp4
  */
 
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
+import { checkRateLimit } from "../_shared/rateLimit.ts";
 
 const ALLOWED_BUCKETS = ["videos", "scene-images", "scene-videos", "audio"];
 
@@ -33,10 +34,40 @@ Deno.serve(async (req) => {
     return new Response(null, {
       headers: {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "range",
+        "Access-Control-Allow-Headers": "range, authorization",
         "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
       },
     });
+  }
+
+  // Require authentication
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+  const supabaseAuth = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: { user }, error: authError } = await supabaseAuth.auth.getUser();
+  if (authError || !user) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  // Rate limiting
+  const rateLimitResult = await checkRateLimit(supabase, {
+    key: "serve-media",
+    maxRequests: 60,
+    windowSeconds: 60,
+    userId: user.id,
+  });
+  if (!rateLimitResult.allowed) {
+    return new Response("Rate limit exceeded. Try again later.", { status: 429 });
   }
 
   const url = new URL(req.url);
@@ -52,9 +83,10 @@ Deno.serve(async (req) => {
     return new Response("Invalid bucket", { status: 400 });
   }
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  // Validate the requested path belongs to the authenticated user
+  if (!filePath.includes(user.id)) {
+    return new Response("Forbidden", { status: 403 });
+  }
 
   // Generate a short-lived signed URL (5 min)
   const { data, error } = await supabase.storage

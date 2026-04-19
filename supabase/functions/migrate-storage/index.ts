@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
+import { checkRateLimit } from "../_shared/rateLimit.ts";
 import {
   actionListAll,
   actionListBucket,
@@ -72,6 +73,16 @@ serve(async (req) => {
     }
 
     log("Admin verified");
+
+    const rateLimitResult = await checkRateLimit(supabaseAdmin, {
+      key: "migrate-storage",
+      maxRequests: 10,
+      windowSeconds: 60,
+      userId,
+    });
+    if (!rateLimitResult.allowed) {
+      return jsonResponse({ error: "Rate limit exceeded. Try again later." }, 429);
+    }
 
     // ── Route by ?action= query param ──
     const url = new URL(req.url);

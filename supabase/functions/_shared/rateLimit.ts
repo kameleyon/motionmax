@@ -5,6 +5,18 @@
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 
+// Routes where a DB error must deny access (fail-closed) rather than allow it.
+// These handle auth or admin operations where unlimited access on error is dangerous.
+export const PRIVILEGED_ROUTES = [
+  "create-checkout",
+  "admin",
+  "auth",
+  "verify",
+  "reset-password",
+  "delete-account",
+  "export-data",
+];
+
 interface RateLimitConfig {
   /** Unique identifier for this rate limit (e.g., "create-checkout", "export-data") */
   key: string;
@@ -16,6 +28,8 @@ interface RateLimitConfig {
   ip?: string;
   /** Optional: User ID for user-based limiting */
   userId?: string;
+  /** When true, DB errors return allowed:false instead of allowed:true */
+  privileged?: boolean;
 }
 
 interface RateLimitResult {
@@ -32,7 +46,8 @@ export async function checkRateLimit(
   supabase: SupabaseClient,
   config: RateLimitConfig
 ): Promise<RateLimitResult> {
-  const { key, maxRequests, windowSeconds, ip, userId } = config;
+  const { key, maxRequests, windowSeconds, ip, userId, privileged } = config;
+  const isPrivileged = privileged ?? PRIVILEGED_ROUTES.some((r) => key.startsWith(r));
 
   // Create composite key: function_name:identifier
   const identifier = userId || ip || "anonymous";
@@ -50,8 +65,10 @@ export async function checkRateLimit(
       .order("created_at", { ascending: false });
 
     if (queryError) {
-      // If table doesn't exist, log and allow (fail open)
       console.error("[RateLimit] Query error:", queryError);
+      if (isPrivileged) {
+        return { allowed: false, remaining: 0, resetAt: new Date(now.getTime() + windowSeconds * 1000), error: "Service unavailable" };
+      }
       return {
         allowed: true,
         remaining: maxRequests,
@@ -89,8 +106,10 @@ export async function checkRateLimit(
       resetAt: new Date(now.getTime() + windowSeconds * 1000),
     };
   } catch (err) {
-    // Fail open on errors to prevent blocking legitimate requests
     console.error("[RateLimit] Unexpected error:", err);
+    if (isPrivileged) {
+      return { allowed: false, remaining: 0, resetAt: new Date(now.getTime() + windowSeconds * 1000), error: "Service unavailable" };
+    }
     return {
       allowed: true,
       remaining: maxRequests,

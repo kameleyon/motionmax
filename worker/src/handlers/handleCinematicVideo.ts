@@ -133,7 +133,7 @@ export async function handleCinematicVideo(
       // Next scene's image is missing — wait for it with gentle polling
       console.log(`[CinematicVideo] Scene ${sceneIndex}: waiting for scene ${sceneIndex + 1} image...`);
       const MAX_WAIT_MS = 5 * 60 * 1000; // 5 min max wait
-      const POLL_INTERVAL_MS = 15_000;     // 15s between polls to avoid rate limits
+      const POLL_INTERVAL_MS = 30_000;     // 30s between polls to avoid rate limits
       const waitStart = Date.now();
 
       while (!endImageUrl && Date.now() - waitStart < MAX_WAIT_MS) {

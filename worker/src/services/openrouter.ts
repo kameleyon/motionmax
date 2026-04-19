@@ -104,7 +104,7 @@ export async function callOpenRouterLLM(
   if (!res.ok) {
     const body = await res.text();
     const err = new Error(`OpenRouter API error ${res.status}: ${body}`);
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "openrouter", model, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch(() => {});
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "openrouter", model, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
     throw err;
   }
 
@@ -112,12 +112,12 @@ export async function callOpenRouterLLM(
   const text = data.choices?.[0]?.message?.content;
   if (!text) {
     const err = new Error("OpenRouter returned empty content");
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "openrouter", model, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch(() => {});
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "openrouter", model, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
     throw err;
   }
 
   console.log(`[OpenRouter] Response received (${text.length} chars)`);
-  writeApiLog({ userId: undefined, generationId: undefined, provider: "openrouter", model, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch(() => {});
+  writeApiLog({ userId: undefined, generationId: undefined, provider: "openrouter", model, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
   return text;
 }
 
@@ -193,7 +193,7 @@ export async function callHyperealLLM(
   if (!res.ok) {
     const body = await res.text();
     const err = new Error(`Hypereal API error ${res.status}: ${body.substring(0, 300)}`);
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-fast", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch(() => {});
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-fast", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
     throw err;
   }
 
@@ -201,7 +201,7 @@ export async function callHyperealLLM(
   let text = data.choices?.[0]?.message?.content;
   if (!text) {
     const err = new Error("Hypereal returned empty content");
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-fast", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch(() => {});
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-fast", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
     throw err;
   }
 
@@ -220,7 +220,7 @@ export async function callHyperealLLM(
   }
 
   console.log(`[Hypereal] Response received (${text.length} chars, credits: ${data.creditsUsed ?? "?"})`);
-  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-fast", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch(() => {});
+  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-fast", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
   return text;
 }
 

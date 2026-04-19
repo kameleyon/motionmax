@@ -1,0 +1,42 @@
+services:
+  - type: worker
+    name: motionmax-worker
+    env: node
+    region: oregon
+    plan: standard
+    buildCommand: npm install && npm run build
+    startCommand: node dist/index.js
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: HYPEREAL_API_KEY
+        sync: false
+      - key: REPLICATE_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: FISH_AUDIO_API_KEY
+        sync: false
+      - key: GOOGLE_TTS_API_KEY
+        sync: false
+      - key: LEMONFOX_API_KEY
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: HEALTH_AUTH_TOKEN
+        sync: false
+      - key: HEALTH_PORT
+        value: "10000"
+      - key: WORKER_CONCURRENCY
+        sync: false
+      - key: JOB_TIMEOUT_MS
+        sync: false
+      - key: SHUTDOWN_DRAIN_TIMEOUT
+        sync: false

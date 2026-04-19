@@ -135,7 +135,7 @@ export async function generateSceneVideo(
         status: "success",
         totalDurationMs: elapsed,
         cost: 0.05,
-      }).catch(() => {});
+      }).catch((err) => { console.warn('[SceneVideoGen] background log failed:', (err as Error).message); });
 
       return {
         url: result.url,
@@ -171,7 +171,7 @@ export async function generateSceneVideo(
       totalDurationMs: elapsed,
       cost: 0,
       error: errorMsg,
-    }).catch(() => {});
+    }).catch((err) => { console.warn('[SceneVideoGen] background log failed:', (err as Error).message); });
 
     return {
       url: null,

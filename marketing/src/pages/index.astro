@@ -156,43 +156,64 @@ const faqJsonLd = {
   <main>
     <!-- ── Hero ─────────────────────────────────────────────── -->
     <section class="relative min-h-screen flex items-center justify-center overflow-hidden pt-16">
-      <!-- Background -->
+      <!-- Cinematic background -->
       <div class="absolute inset-0 -z-10">
-        <div class="absolute inset-0 bg-gradient-to-b from-background/50 via-transparent to-background"></div>
+        <img src="/herobackground.webp" alt="" aria-hidden="true" class="w-full h-full object-cover opacity-40" />
+        <div class="absolute inset-0 bg-gradient-to-b from-background/60 via-background/30 to-background"></div>
       </div>
 
-      <div class="mx-auto max-w-4xl px-4 sm:px-6 text-center">
-        <div class="mb-8 flex justify-center">
-          <img src="/motion.png" alt="MotionMax" class="h-16 sm:h-20 md:h-24 w-auto" />
+      <div class="mx-auto max-w-3xl px-4 sm:px-6 text-center">
+        <!-- Logo icon -->
+        <div class="mb-5 flex justify-center">
+          <img src="/momaxlogo.webp" alt="MotionMax" class="h-12 sm:h-14 w-auto" />
         </div>
 
-        <p class="mb-4 text-xs font-semibold uppercase tracking-widest text-primary">
+        <!-- Brand name -->
+        <p class="mb-1 text-lg sm:text-xl font-bold tracking-widest uppercase text-primary">
+          Motion Max
+        </p>
+
+        <!-- Descriptor -->
+        <p class="mb-7 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/70">
           AI Video Generator
         </p>
 
-        <h1 class="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-semibold tracking-tight text-foreground leading-tight">
+        <h1 class="text-2xl sm:text-3xl md:text-4xl font-semibold tracking-tight text-white leading-[1.2]">
           Cinematic visuals. Natural voiceover.<br />
           Seamless transitions. <span class="text-primary">From one idea.</span>
         </h1>
 
-        <div class="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+        <div class="mt-10 flex flex-row items-center justify-center gap-4">
           <a
             href="/auth"
-            class="w-auto max-w-[220px] rounded-xl bg-primary px-6 py-3 text-base font-semibold text-primary-foreground hover:opacity-90 transition-opacity shadow-lg shadow-primary/25"
+            class="rounded-xl bg-primary px-7 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity shadow-lg shadow-primary/30"
           >
             Try for Free
           </a>
           <a
             href="#demo"
-            class="w-auto max-w-[160px] rounded-xl border border-border/50 bg-card/50 px-6 py-3 text-base font-semibold text-foreground hover:bg-card/80 transition-colors"
+            class="flex items-center gap-2 rounded-xl border border-white/20 px-7 py-3 text-sm font-semibold text-white/80 hover:bg-white/10 hover:text-white transition-colors"
           >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
             Watch Demo
           </a>
         </div>
 
-        <p class="mt-4 text-sm text-muted-foreground">
-          Free to start · No credit card required · Used by 2,400+ marketers
+        <p class="mt-5 text-xs text-white/50">
+          Free to start &nbsp;&middot;&nbsp; No credit card required &nbsp;&middot;&nbsp; Used by 2,400+ marketers
         </p>
+
+        <!-- Social proof avatars -->
+        <div class="mt-8 flex items-center justify-center gap-3">
+          <div class="flex -space-x-2">
+            {[1,2,3,4,5].map(i => (
+              <div class="h-7 w-7 rounded-full border-2 border-background bg-gradient-to-br from-primary/60 to-primary/20" />
+            ))}
+          </div>
+          <p class="text-xs text-white/60">
+            Join <span class="font-semibold text-white/80">2,400+</span> creators already making videos
+          </p>
+        </div>
       </div>
     </section>
 

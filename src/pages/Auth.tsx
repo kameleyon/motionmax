@@ -538,15 +538,15 @@ export default function Auth() {
               {/* Security/compliance trust indicators */}
               <div className="flex items-center justify-center gap-4 mt-4 flex-wrap">
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <ShieldCheck className="h-3.5 w-3.5 text-green-500" />
+                  <ShieldCheck className="h-3.5 w-3.5 text-brand-aqua" />
                   SSL secured
                 </span>
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <LockIcon className="h-3.5 w-3.5 text-green-500" />
+                  <LockIcon className="h-3.5 w-3.5 text-brand-aqua" />
                   GDPR compliant
                 </span>
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <ShieldCheck className="h-3.5 w-3.5 text-green-500" />
+                  <ShieldCheck className="h-3.5 w-3.5 text-brand-aqua" />
                   No credit card required
                 </span>
               </div>

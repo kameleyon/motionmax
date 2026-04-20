@@ -448,30 +448,53 @@ const faqJsonLd = {
     </div>
   </footer>
 
-  <!-- Mobile menu toggle — minimal vanilla JS -->
-  <script>
-    const btn = document.getElementById("menu-btn");
-    const menu = document.getElementById("mobile-menu");
+  <!-- Mobile menu + demo modal -->
+  <script is:inline>
+    // Mobile menu
+    const menuBtn = document.getElementById("menu-btn");
+    const mobileMenu = document.getElementById("mobile-menu");
     const iconMenu = document.getElementById("icon-menu");
     const iconX = document.getElementById("icon-x");
-
-    btn?.addEventListener("click", () => {
-      const open = menu?.classList.toggle("hidden") === false;
-      btn.setAttribute("aria-expanded", String(open));
+    menuBtn?.addEventListener("click", () => {
+      const open = mobileMenu?.classList.toggle("hidden") === false;
+      menuBtn.setAttribute("aria-expanded", String(open));
       iconMenu?.classList.toggle("hidden", open);
       iconX?.classList.toggle("hidden", !open);
     });
-
-    // Close menu when clicking a link
-    menu?.querySelectorAll("a").forEach((a) => {
+    mobileMenu?.querySelectorAll("a").forEach((a) => {
       a.addEventListener("click", () => {
-        menu.classList.add("hidden");
-        btn?.setAttribute("aria-expanded", "false");
+        mobileMenu.classList.add("hidden");
+        menuBtn?.setAttribute("aria-expanded", "false");
         iconMenu?.classList.remove("hidden");
         iconX?.classList.add("hidden");
       });
     });
+
+    // Demo modal
+    const demoBtn = document.getElementById("demo-btn");
+    const demoModal = document.getElementById("demo-modal");
+    const demoBackdrop = document.getElementById("demo-backdrop");
+    const demoClose = document.getElementById("demo-close");
+    const demoIframe = document.getElementById("demo-iframe");
+
+    function openDemo() {
+      demoIframe.src = demoIframe.dataset.src;
+      demoModal.classList.remove("hidden");
+      demoModal.classList.add("flex");
+      document.body.style.overflow = "hidden";
+    }
+    function closeDemo() {
+      demoModal.classList.add("hidden");
+      demoModal.classList.remove("flex");
+      demoIframe.src = "";
+      document.body.style.overflow = "";
+    }
+    demoBtn?.addEventListener("click", openDemo);
+    demoClose?.addEventListener("click", closeDemo);
+    demoBackdrop?.addEventListener("click", closeDemo);
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDemo(); });
   </script>
+
 <!-- Demo modal -->
 <div id="demo-modal" class="fixed inset-0 z-[100] hidden items-center justify-center p-4">
   <div id="demo-backdrop" class="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
@@ -495,32 +518,6 @@ const faqJsonLd = {
     ></iframe>
   </div>
 </div>
-
-<script>
-  const btn = document.getElementById("demo-btn");
-  const modal = document.getElementById("demo-modal");
-  const backdrop = document.getElementById("demo-backdrop");
-  const closeBtn = document.getElementById("demo-close");
-  const iframe = document.getElementById("demo-iframe") as HTMLIFrameElement;
-
-  function openModal() {
-    iframe.src = iframe.dataset.src!;
-    modal!.classList.remove("hidden");
-    modal!.classList.add("flex");
-    document.body.style.overflow = "hidden";
-  }
-  function closeModal() {
-    modal!.classList.add("hidden");
-    modal!.classList.remove("flex");
-    iframe.src = "";
-    document.body.style.overflow = "";
-  }
-
-  btn?.addEventListener("click", openModal);
-  closeBtn?.addEventListener("click", closeModal);
-  backdrop?.addEventListener("click", closeModal);
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
-</script>
 
 <style>
   .hero {

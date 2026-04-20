@@ -114,7 +114,7 @@ export default function Projects() {
   const { refreshThumbnails } = useRefreshThumbnails();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [sortField, setSortField] = useState<SortField>("updated_at");
+  const [sortField, setSortField] = useState<SortField>("created_at");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [projectTypeFilter, setProjectTypeFilter] = useState<string>("all");

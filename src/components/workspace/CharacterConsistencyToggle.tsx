@@ -38,17 +38,13 @@ export function CharacterConsistencyToggle({ enabled, onToggle }: CharacterConsi
   // Studio+ plans: always on, no toggle needed
   if (isStudioPlus) {
     return (
-      <div className="flex items-center justify-between rounded-xl border border-primary/20 bg-primary/5 p-4 backdrop-blur-sm">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <Users className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <Label className="text-sm font-medium">Character Consistency</Label>
-            <p className="text-xs text-primary/70 mt-0.5">Included with your plan</p>
-          </div>
+      <div className="flex items-center justify-between rounded-lg border border-primary/15 bg-primary/5 px-3 py-2">
+        <div className="flex items-center gap-2">
+          <Users className="h-3.5 w-3.5 text-primary/70 shrink-0" />
+          <span className="text-xs font-medium text-foreground/80">Character Consistency</span>
+          <span className="text-xs text-primary/60">&middot; Included</span>
         </div>
-        <span className="text-xs font-medium text-primary">Always On</span>
+        <span className="text-[11px] font-medium text-primary/70 bg-primary/10 px-2 py-0.5 rounded-full">Always On</span>
       </div>
     );
   }

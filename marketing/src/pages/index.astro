@@ -153,25 +153,19 @@ const faqJsonLd = {
     </div>
   </nav>
 
+  <!-- Full-page SVG background (nav to footer) -->
+  <div class="fixed inset-0 -z-20 pointer-events-none">
+    <img src="/mm.svg" alt="" aria-hidden="true" class="w-full h-full object-cover" />
+  </div>
+
   <main>
     <!-- ── Hero ─────────────────────────────────────────────── -->
     <section class="relative min-h-screen flex items-center justify-center overflow-hidden pt-16">
-      <!-- Cinematic background -->
-      <div class="absolute inset-0 -z-10">
-        <img src="/herobackground.webp" alt="" aria-hidden="true" class="w-full h-full object-cover opacity-40" />
-        <div class="absolute inset-0 bg-gradient-to-b from-background/60 via-background/30 to-background"></div>
-      </div>
-
       <div class="mx-auto max-w-3xl px-4 sm:px-6 text-center">
-        <!-- Logo icon -->
-        <div class="mb-5 flex justify-center">
-          <img src="/momaxlogo.webp" alt="MotionMax" class="h-12 sm:h-14 w-auto" />
+        <!-- Hero image (replaces logo + brand name) -->
+        <div class="mb-7 flex justify-center">
+          <img src="/motion.png" alt="MotionMax" class="h-32 sm:h-40 md:h-48 w-auto" />
         </div>
-
-        <!-- Brand name -->
-        <p class="mb-1 text-lg sm:text-xl font-bold tracking-widest uppercase text-primary">
-          Motion Max
-        </p>
 
         <!-- Descriptor -->
         <p class="mb-7 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/70">
@@ -416,7 +410,7 @@ const faqJsonLd = {
   </main>
 
   <!-- ── Footer ───────────────────────────────────────────── -->
-  <footer class="border-t border-white/10 py-12">
+  <footer class="relative z-10 border-t border-white/10 py-12 bg-background">
     <div class="mx-auto max-w-6xl px-4 sm:px-6">
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-8 mb-10">
         <div class="col-span-2 sm:col-span-1">

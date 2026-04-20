@@ -71,6 +71,15 @@ export async function handler(req: Request): Promise<Response> {
       );
     }
 
+    // Validate UUID format to prevent injection / unexpected DB behaviour
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (typeof voiceId !== "string" || !UUID_RE.test(voiceId)) {
+      return new Response(
+        JSON.stringify({ error: "voiceId must be a valid UUID" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     console.log(`Deleting voice for user ${user.id}: ${voiceId}`);
 
     // First, get the voice record to verify ownership and get ElevenLabs voice_id

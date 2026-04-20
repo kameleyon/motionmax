@@ -1,67 +1,10 @@
 ﻿import { createClient } from "npm:@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rateLimit.ts";
+import { refreshSignedUrl } from "../_shared/signedUrlHelper.ts";
 
-// Extract storage path from a signed URL
-function extractStoragePath(signedUrl: string): string | null {
-  try {
-    const url = new URL(signedUrl);
-    // Path format: /storage/v1/object/sign/bucket/path/to/file
-    const pathMatch = url.pathname.match(/\/storage\/v1\/object\/sign\/(.+)/);
-    if (pathMatch) {
-      return pathMatch[1]; // Returns "bucket/path/to/file"
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-// Check if a URL is a signed URL that might need refreshing
-function isSignedUrl(url: string): boolean {
-  return url?.includes("/storage/v1/object/sign/");
-}
-
-// Generate a fresh signed URL from an old one
-async function refreshSignedUrl(
-  supabase: any,
-  oldUrl: string,
-  expiresIn: number = 604800 // 7 days
-): Promise<string> {
-  if (!oldUrl || !isSignedUrl(oldUrl)) {
-    return oldUrl; // Return as-is if not a signed URL
-  }
-
-  const fullPath = extractStoragePath(oldUrl);
-  if (!fullPath) {
-    return oldUrl;
-  }
-
-  // Split bucket from path
-  const slashIndex = fullPath.indexOf("/");
-  if (slashIndex === -1) {
-    return oldUrl;
-  }
-
-  const bucket = fullPath.substring(0, slashIndex);
-  const path = fullPath.substring(slashIndex + 1);
-
-  try {
-    const { data, error } = await supabase.storage
-      .from(bucket)
-      .createSignedUrl(path, expiresIn);
-
-    if (error || !data?.signedUrl) {
-      console.error(`[refresh-thumbnails] Failed to refresh URL: ${path}`, error);
-      return oldUrl; // Fallback to original
-    }
-
-    return data.signedUrl;
-  } catch (err) {
-    console.error(`[refresh-thumbnails] Error refreshing URL:`, err);
-    return oldUrl;
-  }
-}
+// refreshSignedUrl, extractStoragePath, and isSignedUrl are imported from
+// ../_shared/signedUrlHelper.ts (consolidated from the former local copies).
 
 interface ThumbnailRequest {
   projectId: string;

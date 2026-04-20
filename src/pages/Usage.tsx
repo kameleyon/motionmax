@@ -115,6 +115,7 @@ export default function Usage() {
       return (data || []).reduce((sum, t) => sum + Math.abs(t.amount), 0);
     },
     enabled: !!user?.id,
+    staleTime: 2 * 60 * 1000, // 2 min — credit cycle refreshes slowly
   });
 
   // Month filter state
@@ -173,6 +174,7 @@ export default function Usage() {
       });
     },
     enabled: !!user?.id,
+    staleTime: 2 * 60 * 1000, // 2 min — generation history changes infrequently mid-session
   });
 
   // Filter activity by selected month

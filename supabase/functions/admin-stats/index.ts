@@ -55,10 +55,10 @@ export async function handler(req: Request): Promise<Response> {
     const userId = user.id;
     logStep("User authenticated", { userId });
 
-    // Rate limit
+    // Rate limit: 120 req/min — admin dashboard fires up to 9 requests per page load
     const rateLimitResult = await checkRateLimit(supabaseAdmin, {
       key: "admin-stats",
-      maxRequests: 30,
+      maxRequests: 120,
       windowSeconds: 60,
       userId,
     });
@@ -219,7 +219,10 @@ export async function handler(req: Request): Promise<Response> {
 
             logStep("Stripe revenue fetched", { charges: allCharges.length, totalRevenue });
           } catch (stripeErr) {
+            // Re-throw so the error surfaces in the response rather than silently
+            // returning $0 revenue and misleading the dashboard.
             logStep("ERROR: Stripe revenue fetch failed", { error: String(stripeErr) });
+            throw new Error(`Stripe revenue fetch failed: ${String(stripeErr)}`);
           }
         } else {
           logStep("WARNING: STRIPE_SECRET_KEY not set, revenue will show $0");
@@ -575,6 +578,20 @@ export async function handler(req: Request): Promise<Response> {
       }
 
       case "create_flag": {
+        // Validate required params
+        if (!params.userId || typeof params.userId !== "string" || params.userId.trim() === "") {
+          return new Response(JSON.stringify({ error: "create_flag requires a non-empty userId string" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        if (!params.flagType || typeof params.flagType !== "string" || params.flagType.trim() === "") {
+          return new Response(JSON.stringify({ error: "create_flag requires a non-empty flagType string" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
         let { userId: targetUserId, flagType, reason, details } = params;
 
         if (typeof targetUserId === "string" && targetUserId.includes("@")) {
@@ -619,6 +636,14 @@ export async function handler(req: Request): Promise<Response> {
       }
 
       case "resolve_flag": {
+        // Validate required params
+        if (!params.flagId || typeof params.flagId !== "string" || params.flagId.trim() === "") {
+          return new Response(JSON.stringify({ error: "resolve_flag requires a non-empty flagId string" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
         const { flagId, resolutionNotes } = params;
 
         const { data: flag, error: flagError } = await supabaseAdmin

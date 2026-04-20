@@ -64,35 +64,29 @@ Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
 
 ### Vercel (vercel.json)
 
+> **Note:** The live `vercel.json` in the repository root is the authoritative source.
+> The snippet below reflects the current configuration as of 2026-04-19.
+> The full CSP includes all trusted origins for Supabase, Stripe, Google Analytics, Sentry, etc.
+> Do not use the minimal snippet below in production — it will break legitimate app functionality.
+
 ```json
 {
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "installCommand": "npm ci",
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(self), geolocation=()" },
+        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" },
         {
           "key": "Content-Security-Policy",
-          "value": "frame-ancestors 'none'; object-src 'none'; base-uri 'self'; upgrade-insecure-requests;"
-        },
-        {
-          "key": "X-Frame-Options",
-          "value": "DENY"
-        },
-        {
-          "key": "X-Content-Type-Options",
-          "value": "nosniff"
-        },
-        {
-          "key": "Referrer-Policy",
-          "value": "strict-origin-when-cross-origin"
-        },
-        {
-          "key": "Permissions-Policy",
-          "value": "camera=(), microphone=(), geolocation=(), payment=()"
-        },
-        {
-          "key": "Strict-Transport-Security",
-          "value": "max-age=31536000; includeSubDomains; preload"
+          "value": "<see vercel.json for the full production CSP>"
         }
       ]
     }

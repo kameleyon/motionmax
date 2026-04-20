@@ -1,4 +1,8 @@
 {
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "installCommand": "npm ci",
   "rewrites": [
     {
       "source": "/api/video/:path*",

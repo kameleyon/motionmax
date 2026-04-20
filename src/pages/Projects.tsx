@@ -690,10 +690,10 @@ export default function Projects() {
         ) : projectsWithThumbnails.length === 0 ? (
           <EmptyState
             icon={FolderOpen}
-            title="No projects found"
-            description={searchQuery ? "Try a different search term" : "Create your first project to get started"}
-            actionLabel={searchQuery ? undefined : "Create Project"}
-            onAction={searchQuery ? undefined : () => navigate("/app/create?mode=doc2video")}
+            title={searchQuery ? "No results found" : "No projects yet"}
+            description={searchQuery ? `No projects match "${searchQuery}"` : "Create your first project to get started"}
+            actionLabel={searchQuery ? "Clear search" : "Create Your First Video"}
+            onAction={searchQuery ? () => { setSearchQuery(""); } : () => navigate("/app/create?mode=doc2video")}
             className="py-20"
           />
         ) : viewMode === "grid" ? (
@@ -730,7 +730,7 @@ export default function Projects() {
         ) : (
           /* List View */
           <div className="rounded-xl border border-border/60 overflow-hidden bg-card/50">
-            <div className="overflow-x-hidden">
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-border/60 bg-muted/20">

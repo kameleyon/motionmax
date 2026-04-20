@@ -6,6 +6,7 @@ import { db } from "@/lib/databaseService";
 import type { Json } from "@/integrations/supabase/types";
 import type { Scene } from "./generation/types";
 import { createScopedLogger } from "@/lib/logger";
+import { breadcrumbExport } from "@/lib/sentryBreadcrumbs";
 
 export type { ExportStatus } from "./export/types";
 
@@ -170,6 +171,7 @@ export function useVideoExport() {
       isExportingRef.current = true;
       abortRef.current = false;
       settledRef.current = false;
+      breadcrumbExport({ projectId: projectId ?? "unknown", format, resolution: undefined });
       generationIdRef.current = generationId || null;
       log("Starting Render Server export", { scenes: scenes.length, format });
 

@@ -89,10 +89,12 @@ export function AdminLogs() {
   // Subscribe to realtime updates
   useEffect(() => {
     if (isPaused) return;
+    if (!isAdmin) return; // Per-event admin guard: skip subscription if admin status revoked
 
     const channel = supabase
       .channel("admin-logs-realtime")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "system_logs" }, (payload) => {
+        if (!isAdmin) return; // re-check on every push in case session was downgraded
         const newLog = payload.new as {
           id: string;
           created_at: string;
@@ -124,6 +126,7 @@ export function AdminLogs() {
         }
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "admin_logs" }, (payload) => {
+        if (!isAdmin) return; // re-check on every push
         const newLog = payload.new as {
           id: string;
           created_at: string;
@@ -155,7 +158,7 @@ export function AdminLogs() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [isPaused, categoryFilter]);
+  }, [isPaused, categoryFilter, isAdmin]);
 
   // Auto-scroll to bottom when new logs arrive
   useEffect(() => {

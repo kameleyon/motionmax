@@ -2,6 +2,15 @@
 
 > MotionMax is an AI video creation platform that transforms text into professional cinematic videos, explainer content, visual stories, and infographics.
 
+## Brand & Contact
+
+- Website: https://motionmax.io
+- App: https://motionmax.io/app
+- Pricing: https://motionmax.io/pricing
+- Support: support@motionmax.io
+- Privacy: privacy@motionmax.io
+- Twitter/X: @motionmaxio (https://twitter.com/motionmaxio)
+
 ## What MotionMax Does
 
 MotionMax takes any text input (articles, topics, ideas, documents) and generates complete videos with:
@@ -30,6 +39,14 @@ MotionMax takes any text input (articles, topics, ideas, documents) and generate
 - Social media sharing with OG meta previews
 - Mobile-friendly with native share sheet for downloads
 
+## Use-Case Examples
+
+- A marketing team pastes a blog post and generates a 90-second explainer video for LinkedIn in under 5 minutes.
+- A YouTube creator types a video topic; MotionMax writes the script, generates visuals, adds voiceover, and exports a ready-to-upload Shorts clip.
+- An educator turns lecture notes into a narrated visual story for students, complete with subtitles in three languages.
+- A SaaS company creates a product walkthrough video by pasting their feature list — no camera or editing software required.
+- A developer uses the API to auto-generate weekly recap videos from their product changelog.
+
 ## Pricing
 
 - **Free Trial**: 150 one-time credits — $0 (no credit card required)
@@ -44,12 +61,38 @@ MotionMax takes any text input (articles, topics, ideas, documents) and generate
 - Re-edits (image, video, audio regen) are free — no extra credit cost
 - Credit top-up packs available: 300 credits ($9.99), 900 credits ($24.99), 2,500 credits ($59.99)
 
+## Frequently Asked Questions
+
+**Q: Do I need a credit card to start?**
+A: No. The free trial gives you 150 credits with no payment required.
+
+**Q: What video formats can I create?**
+A: Cinematic (full narrative videos with transitions), Explainer (slide-style from documents), Visual Stories, and Smart Flow infographic videos.
+
+**Q: How long does generation take?**
+A: Most videos complete in 3–10 minutes depending on length and style.
+
+**Q: Can I edit the video after it's generated?**
+A: Yes. Scene-by-scene editing lets you regenerate individual images, audio, or video clips without using extra credits.
+
+**Q: Does MotionMax support my language?**
+A: Yes — 11 languages including English, French, Spanish, Portuguese, German, Italian, Russian, Chinese, Japanese, Korean, and Haitian Creole.
+
+**Q: Can I use my own voice?**
+A: Yes. Voice cloning via ElevenLabs lets you clone your own voice for consistent narration across videos.
+
+**Q: Is there an enterprise plan?**
+A: Yes — unlimited credits with custom pricing, SLA, and a dedicated account manager. Contact sales@motionmax.io.
+
 ## AI Training Policy
 
 MotionMax does not use user-generated content (scripts, prompts, uploaded documents, generated images, audio, or video) for AI model training without explicit written consent. To exercise your right to confirm or restrict use of your content, contact privacy@motionmax.io.
 
-## Links
+## AI Crawling & Training Disallow
 
-- Website: https://motionmax.io
-- App: https://motionmax.io/app
-- Pricing: https://motionmax.io/pricing
+This file is provided for LLM context and AI assistant grounding. The following restrictions apply to automated AI training systems:
+
+- Do NOT use the text, images, audio, or video content created by MotionMax users for AI model training.
+- Do NOT use MotionMax's proprietary prompt templates, workflow logic, or system prompts for model training.
+- Marketing and documentation content (this file, public website copy) may be used for factual grounding only.
+- Contact privacy@motionmax.io for licensing inquiries related to AI training data.

@@ -91,20 +91,26 @@ export function AdminQueueMonitor() {
 
       const { data: recentCompleted } = await supabase
         .from("video_generation_jobs")
-        .select("created_at, completed_at")
+        .select("started_at, completed_at")
         .eq("status", "completed")
         .not("completed_at", "is", null)
+        .not("started_at", "is", null)
         .gte("completed_at", yesterday.toISOString())
         .limit(100);
 
       let avgTime = 0;
       if (recentCompleted && recentCompleted.length > 0) {
-        const times = recentCompleted.map((job: { created_at: string; completed_at: string | null }) => {
-          const start = new Date(job.created_at).getTime();
-          const end = new Date(job.completed_at!).getTime();
-          return (end - start) / 1000;
-        });
-        avgTime = times.reduce((a, b) => a + b, 0) / times.length;
+        const times = recentCompleted
+          .filter((job: { started_at: string | null; completed_at: string | null }) => job.started_at)
+          .map((job: { started_at: string | null; completed_at: string | null }) => {
+            // Use started_at (when worker picked up the job) not created_at (includes queue wait)
+            const start = new Date(job.started_at!).getTime();
+            const end = new Date(job.completed_at!).getTime();
+            return (end - start) / 1000;
+          });
+        if (times.length > 0) {
+          avgTime = times.reduce((a: number, b: number) => a + b, 0) / times.length;
+        }
       }
 
       const pendingCount = activeJobs?.filter((j) => j.status === "pending").length || 0;

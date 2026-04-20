@@ -1,5 +1,6 @@
 import { supabase } from "../lib/supabase.js";
 import { v4 as uuidv4 } from "uuid";
+import * as Sentry from "@sentry/node";
 
 type LogCategory = "user_activity" | "system_error" | "system_warning" | "system_info";
 
@@ -87,6 +88,19 @@ export async function writeSystemLog(payload: LogPayload) {
 }
 
 export async function writeApiLog(payload: ApiCallPayload) {
+  // Emit Sentry measurement so API durations show up as live SLO
+  // (Sentry Performance → Custom Measurements dashboard)
+  if (payload.totalDurationMs > 0) {
+    Sentry.getCurrentScope().setMeasurement(
+      `api.${payload.provider}.total_ms`,
+      payload.totalDurationMs,
+      "millisecond",
+    );
+    if (payload.status === "error") {
+      Sentry.getCurrentScope().setTag("api.provider", payload.provider);
+    }
+  }
+
   try {
     await supabase.from("api_call_logs").insert({
       id: uuidv4(),

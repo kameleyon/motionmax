@@ -1,3 +1,14 @@
+/**
+ * DEPRECATED — one-time storage migration tooling.
+ *
+ * This function was used to migrate objects between Supabase storage buckets
+ * during the initial data migration. The migration is complete; this function
+ * should NOT be deployed to production. It is retained in source control for
+ * audit purposes only.
+ *
+ * To prevent accidental re-deployment, do NOT include this function in the
+ * `supabase functions deploy` command or CI pipeline.
+ */
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { checkRateLimit } from "../_shared/rateLimit.ts";

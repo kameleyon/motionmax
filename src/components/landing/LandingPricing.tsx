@@ -5,6 +5,8 @@ import { PLAN_LIMITS } from "@/lib/planLimits";
 import { PLAN_PRICES, yearlyDiscountPercent } from "@/config/products";
 import { Button } from "@/components/ui/button";
 import { BillingToggle } from "@/components/pricing/BillingToggle";
+import { useExperiment } from "@/hooks/useExperiment";
+import { EXPERIMENTS } from "@/lib/experiments";
 
 // ─── Configurable urgency date ────────────────────────────────────────────────
 // Update this when you want to reset the countdown. Keep ~30 days out.
@@ -106,6 +108,8 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
   const [billingInterval, setBillingInterval] = useState<"monthly" | "yearly">("monthly");
   const daysRemaining = useDaysRemaining();
   const isClient = useIsClient();
+  // A/B: test ROI-focused headline vs current generic headline
+  const pricingHeadlineVariant = useExperiment(EXPERIMENTS.landing_pricing_headline);
 
   return (
     <section id="pricing" className="py-16 sm:py-24 bg-white/[0.02]">
@@ -117,10 +121,14 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
           className="text-center mb-10"
         >
           <h2 className="type-h1 tracking-tight text-foreground">
-            Simple, transparent pricing
+            {pricingHeadlineVariant === "roi_headline"
+              ? "Stop paying $500/video. Make them yourself."
+              : "Simple, transparent pricing"}
           </h2>
           <p className="mt-4 text-lg text-muted-foreground">
-            Start with a free trial. Upgrade when you're ready.
+            {pricingHeadlineVariant === "roi_headline"
+              ? "One subscription. Unlimited AI videos. Cancel anytime."
+              : "Start with a free trial. Upgrade when you're ready."}
           </p>
 
           {/* Billing toggle */}
@@ -228,8 +236,12 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
               </Button>
 
               {/* Social proof micro-copy under CTA */}
-              <p className="text-center text-xs text-muted-foreground mb-6">
+              <p className="text-center text-xs text-muted-foreground mb-1">
                 {plan.socialProof}
+              </p>
+              {/* Per-card refund guarantee — visible where the purchase decision is made */}
+              <p className="text-center text-xs text-muted-foreground/60 mb-6">
+                🛡️ 7-day money-back guarantee
               </p>
 
               <ul className="space-y-2.5">
@@ -250,8 +262,13 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
           ))}
         </div>
 
+        {/* Refund guarantee */}
+        <p className="text-center text-xs text-muted-foreground mt-6">
+          🛡️ 7-day money-back guarantee on first subscription payment. No questions asked.
+        </p>
+
         {/* Credit packs note */}
-        <p className="text-center text-xs text-muted-foreground mt-8">
+        <p className="text-center text-xs text-muted-foreground mt-3">
           Need more? Top up anytime with credit packs starting at $9.99.
         </p>
       </div>

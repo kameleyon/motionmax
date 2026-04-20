@@ -1,0 +1,26 @@
+/**
+ * Landing page CSS module.
+ * Provides a WebP hero background with PNG fallback via image-set().
+ */
+
+.heroBg {
+  /* Fallback for browsers with no image-set() support */
+  background-image: url(/herobackground.webp);
+
+  /* Vendor-prefixed form (Safari <16) */
+  /* stylelint-disable-next-line property-no-vendor-prefix */
+  background-image: -webkit-image-set(
+    url(/herobackground.webp) type("image/webp"),
+    url(/herobackground.png) type("image/png")
+  );
+
+  /* Standard image-set() — Chrome 113+, Firefox 90+, Safari 16+ */
+  background-image: image-set(
+    url(/herobackground.webp) type("image/webp"),
+    url(/herobackground.png) type("image/png")
+  );
+
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}

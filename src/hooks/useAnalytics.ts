@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import { hasAnalyticsConsent } from "@/components/CookieConsent";
 
 // ── UTM persistence ──────────────────────────────────────────────────────────
 // Capture UTM params on landing and persist in sessionStorage so they survive
@@ -109,6 +110,7 @@ export function useScrollDepthTracker() {
 
   useEffect(() => {
     function onScroll() {
+      if (!hasAnalyticsConsent()) return;
       const scrollTop = window.scrollY;
       const docHeight = document.documentElement.scrollHeight - window.innerHeight;
       if (docHeight <= 0) return;

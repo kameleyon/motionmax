@@ -848,14 +848,18 @@ process.on("unhandledRejection", (reason: unknown) => {
     .then(() => process.exit(1), () => process.exit(1));
 });
 
-/** Mask an API key for safe logging: first 6 + last 4 chars visible. */
+/**
+ * Mask an API key for safe logging.
+ * Only reveals total length and last 4 chars; never prints leading characters
+ * to avoid accidental partial-key exposure in log aggregation services.
+ */
 function maskKey(key: string | undefined): string {
   if (!key) return "(NOT SET)";
   const trimmed = key.trim();
   if (trimmed.length === 0) return "(EMPTY)";
-  if (trimmed !== key) return `⚠️ HAS WHITESPACE — trimmed len=${trimmed.length}, raw len=${key.length}`;
-  if (trimmed.length <= 12) return `${trimmed.substring(0, 3)}…${trimmed.substring(trimmed.length - 3)} (${trimmed.length} chars)`;
-  return `${trimmed.substring(0, 6)}…${trimmed.substring(trimmed.length - 4)} (${trimmed.length} chars)`;
+  if (trimmed !== key) return `⚠️ HAS WHITESPACE — len=${trimmed.length} (trimmed)`;
+  const tail = trimmed.length > 4 ? trimmed.substring(trimmed.length - 4) : "****";
+  return `[SET, ${trimmed.length} chars, …${tail}]`;
 }
 
 /* ---- Start health server ---- */

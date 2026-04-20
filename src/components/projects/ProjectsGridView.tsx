@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Star, MoreVertical, Eye, Pencil, Share2, Download, Trash2, Video, Clapperboard, Wallpaper, Film, Loader2 } from "lucide-react";
+import { Star, MoreVertical, Eye, Pencil, Share2, Download, Trash2, Clapperboard, Loader2 } from "lucide-react";
 import { gridThumbnailUrl } from "@/lib/thumbnailUrl";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import defaultThumbnail from "@/assets/dashboard/default-thumbnail.png";
-import { normalizeProjectType } from "@/lib/projectUtils";
+import { getProjectTypeMeta } from "@/lib/projectUtils";
 
 interface Project {
   id: string;
@@ -39,14 +39,7 @@ interface ProjectsGridViewProps {
   downloadingProjectId?: string | null;
 }
 
-const getProjectIcon = (projectType?: string) => {
-  switch (normalizeProjectType(projectType)) {
-    
-    case "smartflow":    return Wallpaper;
-    case "cinematic":   return Film;
-    default:            return Video;
-  }
-};
+const getProjectIcon = (projectType?: string) => getProjectTypeMeta(projectType).Icon;
 
 const getAspectRatio = (format: string) => {
   switch (format) {

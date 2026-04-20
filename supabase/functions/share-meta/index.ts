@@ -130,12 +130,18 @@ export async function handler(req: Request): Promise<Response> {
       appUrl = `https://motionmax.io/share/${generationId}`;
     }
 
-    // Parse Scenes safely
+    // Parse Scenes safely — enforce a size limit to prevent memory DoS
+    const SCENES_MAX_BYTES = 512 * 1024; // 512 KB
     if (typeof scenes === "string") {
-      try {
-        scenes = JSON.parse(scenes);
-      } catch (e) {
-        console.error("[Share-Meta] JSON parse fail", e);
+      if (scenes.length > SCENES_MAX_BYTES) {
+        console.error(`[Share-Meta] scenes JSON too large (${scenes.length} bytes), truncating`);
+        scenes = undefined;
+      } else {
+        try {
+          scenes = JSON.parse(scenes);
+        } catch (e) {
+          console.error("[Share-Meta] JSON parse fail", e);
+        }
       }
     }
 

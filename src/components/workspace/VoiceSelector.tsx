@@ -71,6 +71,7 @@ function VoiceSelectorInner({ selected, onSelect }: VoiceSelectorProps) {
       return data as UserVoice[];
     },
     enabled: !!user?.id,
+    staleTime: 5 * 60 * 1000, // 5 min — voice list rarely changes mid-session
   });
 
   const togglePreview = (e: React.MouseEvent, voice: UserVoice) => {

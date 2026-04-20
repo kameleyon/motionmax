@@ -121,6 +121,20 @@ export async function handler(req: Request): Promise<Response> {
       );
     }
 
+    // Block path traversal sequences before any ownership check
+    if (
+      typeof storagePath !== "string" ||
+      storagePath.includes("..") ||
+      storagePath.includes("%2e%2e") ||
+      storagePath.includes("%2E%2E") ||
+      storagePath.includes("\\")
+    ) {
+      return new Response(
+        JSON.stringify({ error: "Access denied: invalid storage path" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Enforce path ownership: storagePath must start with the user's own ID
     if (!storagePath.startsWith(`${user.id}/`)) {
       return new Response(

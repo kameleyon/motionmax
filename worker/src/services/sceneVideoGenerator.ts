@@ -19,6 +19,7 @@
  */
 import { generateGrokVideo, type GrokVideoInput, type GrokVideoResult } from "./grokVideo.js";
 import { writeApiLog } from "../lib/logger.js";
+import * as Sentry from "@sentry/node";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -135,7 +136,11 @@ export async function generateSceneVideo(
         status: "success",
         totalDurationMs: elapsed,
         cost: 0.05,
-      }).catch((err) => { console.warn('[SceneVideoGen] background log failed:', (err as Error).message); });
+      }).catch((err: unknown) => {
+        const msg = (err as Error).message ?? String(err);
+        console.warn('[SceneVideoGen] background log failed (success path):', msg);
+        Sentry.captureException(err instanceof Error ? err : new Error(msg));
+      });
 
       return {
         url: result.url,
@@ -171,7 +176,11 @@ export async function generateSceneVideo(
       totalDurationMs: elapsed,
       cost: 0,
       error: errorMsg,
-    }).catch((err) => { console.warn('[SceneVideoGen] background log failed:', (err as Error).message); });
+    }).catch((err: unknown) => {
+      const msg = (err as Error).message ?? String(err);
+      console.warn('[SceneVideoGen] background log failed (error path):', msg);
+      Sentry.captureException(err instanceof Error ? err : new Error(msg));
+    });
 
     return {
       url: null,

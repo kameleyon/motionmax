@@ -1,0 +1,35 @@
+You are working on the MotionMax project at C:\Users\Administrator\motionmax\. Complete ALL of these LOW priority UX + ACCESSIBILITY + SEO + COMPLIANCE items from C:\Users\Administrator\motionmax\360roadmap_fix.md. Do REAL code edits on the actual files. Read each file before editing. After all edits run: cd C:\Users\Administrator\motionmax && npm run build — fix any TypeScript errors your changes introduce. Then update the roadmap: change - [ ] to - [x] and add a Fixed: note for each item you completed.
+
+UX ITEMS:
+1. Shadow usage arbitrary no elevation system — src/pages/Dashboard.tsx:221,247,331; src/components/CookieConsent.tsx:58 — define shadow-sm/shadow-md/shadow-lg tokens in tailwind config and apply consistently
+2. Toaster may not respect force-dark routes — src/components/ui/sonner.tsx:6-24 — ensure theme prop reads from next-themes or document class
+3. Projects empty state CTA "Create Project" → "Create Your First Video" — src/pages/Projects.tsx:647-654
+4. Search no-results empty state has no "Clear search" button — src/pages/Projects.tsx:646-654 — add clear button that resets search state
+5. Landing hero buttons stacked full-width on mobile — src/pages/Landing.tsx:216-232 — fix layout to be less aggressive on mobile
+6. Projects list overflow-x-hidden clips table — src/pages/Projects.tsx:689 — change to overflow-x-auto
+7. Dashboard Did You Know tip references Stick Figure storytelling — src/pages/Dashboard.tsx:34-41 — remove/replace with relevant tip
+8. Toast pattern inconsistent title+description vs bare string — src/components/admin/AdminFlags.tsx:81,85,104 — standardize to consistent pattern
+9. No refund guarantee copy on Landing pricing card — src/components/landing/LandingPricing.tsx:105-116 — add "30-day money-back guarantee" line
+
+ACCESSIBILITY ITEMS:
+10. Logo alt="MotionMax" duplicated header and hero — src/pages/Landing.tsx:96, 206-210 — make one aria-hidden or use empty alt
+11. sr-only span describes decorative hero background — src/pages/Landing.tsx:196-197 — remove or mark as aria-hidden
+12. Mobile menu close button does not return focus to toggle — src/pages/Landing.tsx:158-170 — add focus return on close
+13. Required-field asterisks red color only no aria-required — src/components/pricing/EnterpriseContactModal.tsx:70,83,96 — add aria-required="true" and required attribute
+14. iframe video embed title is marketing-speak — src/pages/Landing.tsx:276-285 — change to descriptive title like "MotionMax product demo video"
+15. Scroll-depth analytics fire without consent check — src/hooks/useAnalytics.ts:17-36 — gate behind hasAnalyticsConsent()
+
+SEO ITEMS:
+16. Sitemap missing image:image entries and changefreq — public/sitemap.xml — add changefreq and priority to each URL
+17. SeoHead copy weaker than index.html keywords — src/components/landing/SeoHead.tsx:34-38 — strengthen meta description
+18. No BreadcrumbList schema on Pricing/Terms/Privacy — src/components/landing/SeoHead.tsx:81-83 — add BreadcrumbList JSON-LD for those pages
+19. twitter:site tag missing from index.html — index.html:45-51 — add twitter:site meta tag
+20. llms.txt lacks FAQ, use-case examples, brand handles — public/llms.txt — expand with FAQ section and examples
+21. llms.txt no AI-training disallow directive — public/llms.txt; public/robots.txt — add disallow for AI training crawlers
+22. No loading="lazy" on landing Feature/Testimonial/BeforeAfter images — src/components/landing/FeatureCard.tsx; BeforeAfterComparison.tsx — add loading="lazy" and decoding="async"
+
+COMPLIANCE ITEMS:
+23. Copyright clause omits third-party AI model licenses — src/pages/Terms.tsx:64-67 — add Kling, Hypereal, ElevenLabs, Gemini license acknowledgment
+24. No sub-processor list page — src/pages/Privacy.tsx:62-71 — add sub-processor section listing Supabase, Stripe, ElevenLabs, Replicate, Google, Sentry, PostHog
+25. deletion_requests RLS allows user to update scheduled_at to past — create migration in supabase/migrations/ with 20260419600000+ timestamp — add CHECK constraint or RLS policy blocking past dates
+26. process_deletion_request dead code webhook_events branch — check if Forge agent already fixed this in the roadmap; if not, create migration to remove dead branch

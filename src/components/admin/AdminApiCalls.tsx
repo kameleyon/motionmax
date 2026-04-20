@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
@@ -199,7 +199,7 @@ export function AdminApiCalls() {
                     <SelectItem value="all">All Status</SelectItem>
                     <SelectItem value="success">Success</SelectItem>
                     <SelectItem value="error">Failed</SelectItem>
-                    <SelectItem value="started">Running</SelectItem>
+                    {/* "started" removed: worker never writes this status, always empty results */}
                   </SelectContent>
                 </Select>
                 <Select value={providerFilter} onValueChange={(v) => { setProviderFilter(v); setPage(1); }}>
@@ -284,7 +284,7 @@ export function AdminApiCalls() {
                 </TableHeader>
                 <TableBody>
                   {data.logs.map((log) => (
-                    <>
+                    <React.Fragment key={log.id}>
                       <TableRow
                         key={log.id}
                         className={`text-xs cursor-pointer hover:bg-muted/50 transition-colors ${expandedRow === log.id ? "bg-muted/30" : ""}`}
@@ -354,7 +354,7 @@ export function AdminApiCalls() {
                           </TableCell>
                         </TableRow>
                       )}
-                    </>
+                    </React.Fragment>
                   ))}
                 </TableBody>
               </Table>

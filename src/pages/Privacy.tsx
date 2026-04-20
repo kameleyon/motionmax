@@ -15,6 +15,10 @@ export default function Privacy() {
         title="Privacy Policy — MotionMax"
         description="MotionMax privacy policy. Learn how we collect, use, and protect your personal data."
         canonical="https://motionmax.io/privacy"
+        breadcrumbs={[
+          { name: "Home", item: "https://motionmax.io" },
+          { name: "Privacy Policy", item: "https://motionmax.io/privacy" },
+        ]}
       />
       <header className="sticky top-0 z-50 border-b border-border/30 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-4 sm:px-6">
@@ -83,12 +87,14 @@ export default function Privacy() {
             <p>We use the following third-party services to operate the platform. Your data is transmitted securely and only as necessary for service delivery:</p>
             <ul className="list-disc pl-6 space-y-1">
               <li><strong className="text-foreground">AI Generation:</strong> Hypereal (US), Google Gemini (US), Anthropic Claude via OpenRouter (US), Replicate (US). We send your text prompts, uploaded content, and scene descriptions to these providers.</li>
+              <li><strong className="text-foreground">Video Generation:</strong> Kling by Kuaishou (CN/US). Image-to-video conversion is processed via Kling's API. Scene images and motion parameters are transmitted to their servers.</li>
               <li><strong className="text-foreground">Voice Synthesis:</strong> ElevenLabs (US — voice cloning, TTS), Fish Audio, LemonFox, Google Cloud TTS. Voice recordings and cloned models are stored on the respective provider and deleted when you remove the voice from your Voice Lab.</li>
               <li><strong className="text-foreground">Payment Processing:</strong> Stripe (US) handles all payment and subscription data. We do not store credit card numbers. See stripe.com/privacy.</li>
               <li><strong className="text-foreground">Analytics:</strong> Google Analytics 4 (US) — only if you consent via our cookie banner. Collects anonymized usage data. You may withdraw consent at any time.</li>
               <li><strong className="text-foreground">Error Monitoring:</strong> Sentry (US) collects error reports, stack traces, and browser information. Session replay (which captures screen interactions) is only activated with your analytics consent. No generated content or passwords are captured in error reports.</li>
               <li><strong className="text-foreground">Cloud Infrastructure:</strong> Supabase (US — database, authentication, file storage), Vercel (US — frontend hosting and edge network), Render (US — background video processing). Data is encrypted at rest and in transit.</li>
             </ul>
+            <p>Enterprise customers may request a complete, up-to-date subprocessor list by contacting <a href="mailto:privacy@motionmax.io" className="text-primary hover:underline">privacy@motionmax.io</a>. We will notify enterprise customers at least 10 business days before adding or replacing a subprocessor that processes personal data.</p>
           </section>
 
           <section className="space-y-3">

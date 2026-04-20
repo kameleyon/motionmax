@@ -16,7 +16,7 @@ import { DashboardQuickActions } from "@/components/workspace/DashboardQuickActi
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
 import { LowCreditWarning } from "@/components/dashboard/LowCreditWarning";
 import { GenerationQueueStatus } from "@/components/dashboard/GenerationQueueStatus";
-import { normalizeProjectType } from "@/lib/projectUtils";
+import { getProjectTypeMeta } from "@/lib/projectUtils";
 import {
   Carousel,
   CarouselContent,
@@ -35,7 +35,7 @@ const TIPS = [
   "Use 'Presenter Focus' to control which subjects appear in your visuals",
   "Short videos (< 1 min) work great for social media content",
   "Add 'Character Appearance' descriptions for consistent visuals",
-  "The 'Stick Figure' style is perfect for educational explainers",
+  "Cinematic style is great for high-impact storytelling and brand videos",
   "Use brand marks to add your logo to generated images",
 ];
 
@@ -48,23 +48,8 @@ const GREETINGS = [
   { greeting: "Welcome", suffix: "Let's get creative." },
 ];
 
-const getProjectIcon = (projectType?: string | null) => {
-  switch (normalizeProjectType(projectType)) {
-    
-    case "smartflow":    return Wallpaper;
-    case "cinematic":   return Film;
-    default:            return Video;
-  }
-};
-
-const getCreateMode = (projectType?: string | null) => {
-  switch (normalizeProjectType(projectType)) {
-    
-    case "smartflow":    return "smartflow";
-    case "cinematic":   return "cinematic";
-    default:            return "doc2video";
-  }
-};
+const getProjectIcon = (projectType?: string | null) => getProjectTypeMeta(projectType).Icon;
+const getCreateMode  = (projectType?: string | null) => getProjectTypeMeta(projectType).mode;
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -133,6 +118,7 @@ export default function Dashboard() {
       return { balance: data?.credits_balance ?? 0 };
     },
     enabled: !!user?.id,
+    staleTime: 2 * 60 * 1000, // 2 min
   });
 
   const { data: profile } = useQuery({
@@ -147,6 +133,7 @@ export default function Dashboard() {
       return data;
     },
     enabled: !!user?.id,
+    staleTime: 5 * 60 * 1000, // 5 min — shared with AppSidebar via same queryKey
   });
 
   const { data: recentProjects = [], isLoading: isLoadingProjects, isError: isProjectsError } = useQuery({
@@ -231,7 +218,7 @@ export default function Dashboard() {
           {/* Stats Row */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Credits Card */}
-            <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm p-5 shadow-sm">
+            <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
               <div className="flex items-center gap-5">
                 <div className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-primary/30 bg-primary/10 shrink-0">
                   {isCreditsError ? (
@@ -257,7 +244,7 @@ export default function Dashboard() {
             </div>
 
             {/* Did You Know */}
-            <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm p-5 shadow-sm">
+            <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
               <div className="flex items-start gap-3">
                 <div className="p-2 rounded-lg bg-primary/10 shrink-0">
                   <Lightbulb className="h-5 w-5 text-primary" />
@@ -283,7 +270,7 @@ export default function Dashboard() {
 
           {/* Referral Card — only shown once the code has been generated */}
           {referralCode && (
-            <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm p-5 shadow-sm">
+            <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
               <div className="flex items-start gap-3">
                 <div className="p-2 rounded-lg bg-primary/10 shrink-0">
                   <Gift className="h-5 w-5 text-primary" />
@@ -383,7 +370,7 @@ export default function Dashboard() {
             ) : isLoadingProjects ? (
               <div className="flex gap-4 overflow-hidden">
                 {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="shrink-0 w-[200px] rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm overflow-hidden shadow-sm">
+                  <div key={i} className="shrink-0 w-[200px] rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
                     <Skeleton className="h-24 w-full" />
                     <div className="p-3 space-y-2">
                       <Skeleton className="h-4 w-3/4" />
@@ -393,7 +380,7 @@ export default function Dashboard() {
                 ))}
               </div>
             ) : recentProjects.length === 0 ? (
-              <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm shadow-sm">
+              <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
                 <EmptyState
                   icon={FolderOpen}
                   title="Your studio is empty — not for long"
@@ -412,7 +399,7 @@ export default function Dashboard() {
                       <CarouselItem key={project.id} className="pl-4 basis-[200px] sm:basis-[220px]">
                         <div
                           onClick={() => navigate(`/app/create?mode=${getCreateMode(project.project_type)}&project=${project.id}`)}
-                          className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm overflow-hidden cursor-pointer hover:border-primary transition-colors shadow-sm group"
+                          className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm overflow-hidden cursor-pointer hover:border-primary transition-colors shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] group"
                         >
                           <div className="h-24 bg-gradient-to-br from-primary/30 via-primary/15 to-muted/20 flex items-center justify-center relative overflow-hidden">
                             <img

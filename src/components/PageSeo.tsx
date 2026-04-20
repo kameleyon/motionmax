@@ -3,6 +3,11 @@ import { Helmet } from "react-helmet-async";
 const SITE_URL = "https://motionmax.io";
 const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.png?v=20260129`;
 
+interface BreadcrumbItem {
+  name: string;
+  item: string;
+}
+
 interface PageSeoProps {
   title: string;
   description: string;
@@ -10,6 +15,8 @@ interface PageSeoProps {
   /** Adds noindex,nofollow — use for private/auth pages */
   noIndex?: boolean;
   ogImage?: string;
+  /** Breadcrumb trail for BreadcrumbList structured data */
+  breadcrumbs?: BreadcrumbItem[];
 }
 
 /**
@@ -17,12 +24,26 @@ interface PageSeoProps {
  * full OG/Twitter card so each marketing page gets its own social preview
  * instead of inheriting the landing-page defaults from index.html.
  */
+function buildBreadcrumbSchema(items: BreadcrumbItem[]) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: items.map((item, idx) => ({
+      "@type": "ListItem",
+      position: idx + 1,
+      name: item.name,
+      item: item.item,
+    })),
+  };
+}
+
 export default function PageSeo({
   title,
   description,
   canonical,
   noIndex = false,
   ogImage = DEFAULT_OG_IMAGE,
+  breadcrumbs,
 }: PageSeoProps) {
   return (
     <Helmet>
@@ -52,6 +73,11 @@ export default function PageSeo({
       <meta name="twitter:image:alt" content={title} />
       <meta name="twitter:site" content="@motionmaxio" />
       <meta name="twitter:creator" content="@motionmaxio" />
+      {breadcrumbs && breadcrumbs.length > 0 && (
+        <script type="application/ld+json">
+          {JSON.stringify(buildBreadcrumbSchema(breadcrumbs))}
+        </script>
+      )}
     </Helmet>
   );
 }

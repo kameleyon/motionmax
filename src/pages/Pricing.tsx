@@ -103,6 +103,10 @@ export default function Pricing() {
         title="MotionMax Pricing — AI Video Plans & Credits"
         description="Choose the right MotionMax plan. Free tier available. Credit-based pricing for AI cinematic videos, explainers, and more."
         canonical="https://motionmax.io/pricing"
+        breadcrumbs={[
+          { name: "Home", item: "https://motionmax.io" },
+          { name: "Pricing", item: "https://motionmax.io/pricing" },
+        ]}
       />
       <Helmet>
         <script type="application/ld+json">{JSON.stringify({

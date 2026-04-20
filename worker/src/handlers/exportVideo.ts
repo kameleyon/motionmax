@@ -20,7 +20,11 @@ import { writeSystemLog } from "../lib/logger.js";
 import { wlog } from "../lib/workerLogger.js";
 import { processScene, type ExportConfig } from "./export/sceneEncoder.js";
 import { concatFiles, concatWithCaptions, concatWithBrandMark } from "./export/concatScenes.js";
-import { concatWithCrossfade } from "./export/transitions.js";
+// concatWithCrossfade is imported conditionally; crossfade is currently disabled
+// (EXPORT_CROSSFADE_DURATION defaults to 0 and all project types force it to 0).
+// The module is kept in source but excluded from the active import graph until
+// crossfade is re-enabled via feature flag.
+// import { concatWithCrossfade } from "./export/transitions.js";
 import { compressIfNeeded } from "./export/compressVideo.js";
 import { uploadToSupabase, removeFiles } from "./export/storageHelpers.js";
 import { generateAssSubtitles, writeAssFile, type CaptionStyle, type ASRSceneResult } from "../services/captionBuilder.js";
@@ -508,6 +512,8 @@ async function _runExport(
       // Standard projects use fadeblack (clean fade to black between scenes)
       const transitionType = "fadeblack";
 
+      // Dynamic import: only load transitions module when crossfade is actually used
+      const { concatWithCrossfade } = await import("./export/transitions.js");
       usedCrossfade = await concatWithCrossfade(clipPaths, finalOutputPath, {
         duration: exportConfig.crossfadeDuration,
         transition: transitionType as any,

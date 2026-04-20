@@ -76,8 +76,28 @@ export async function handler(req: Request): Promise<Response> {
   );
 
   try {
+    // Guard against oversized webhook payloads before buffering the body.
+    // Stripe webhooks are typically < 10 KB; cap at 512 KB.
+    const MAX_BODY_BYTES = 512 * 1024;
+    const contentLength = req.headers.get("content-length");
+    if (contentLength && parseInt(contentLength, 10) > MAX_BODY_BYTES) {
+      logStep("ERROR", { message: `Payload too large: ${contentLength} bytes` });
+      return new Response(JSON.stringify({ error: "Payload too large" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 413,
+      });
+    }
+
     const signature = req.headers.get("stripe-signature");
     const body = await req.text();
+
+    if (body.length > MAX_BODY_BYTES) {
+      logStep("ERROR", { message: `Body too large after read: ${body.length} bytes` });
+      return new Response(JSON.stringify({ error: "Payload too large" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 413,
+      });
+    }
     
     logStep("Webhook received", { hasSignature: !!signature });
 
@@ -230,13 +250,7 @@ export async function handler(req: Request): Promise<Response> {
 
           logStep("Creating subscription record", { userId, planName, productId });
 
-          // Upsert subscription
-          const { data: existingSub } = await supabaseAdmin
-            .from("subscriptions")
-            .select("*")
-            .eq("user_id", userId)
-            .single();
-
+          // True upsert — avoids a select-then-insert race condition
           const subscriptionData = {
             user_id: userId,
             stripe_customer_id: customerId,
@@ -247,16 +261,9 @@ export async function handler(req: Request): Promise<Response> {
             current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
           };
 
-          if (existingSub) {
-            await supabaseAdmin
-              .from("subscriptions")
-              .update(subscriptionData)
-              .eq("user_id", userId);
-          } else {
-            await supabaseAdmin
-              .from("subscriptions")
-              .insert(subscriptionData);
-          }
+          await supabaseAdmin
+            .from("subscriptions")
+            .upsert(subscriptionData, { onConflict: "user_id" });
 
           // Send welcome email for new subscriptions
           const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId);

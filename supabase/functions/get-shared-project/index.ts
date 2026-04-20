@@ -1,6 +1,7 @@
 ﻿import { createClient } from "npm:@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rateLimit.ts";
+import { refreshSignedUrl } from "../_shared/signedUrlHelper.ts";
 
 interface Scene {
   imageUrl?: string;
@@ -13,56 +14,7 @@ interface Scene {
   [key: string]: unknown;
 }
 
-// Extract storage path from a signed URL
-function extractStoragePath(signedUrl: string): string | null {
-  try {
-    const url = new URL(signedUrl);
-    // Path format: /storage/v1/object/sign/bucket/path/to/file
-    const pathMatch = url.pathname.match(/\/storage\/v1\/object\/sign\/(.+)/);
-    if (pathMatch) {
-      return pathMatch[1]; // Returns "bucket/path/to/file"
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-// Generate a fresh signed URL from an old one
-async function refreshSignedUrl(
-  supabase: any,
-  oldUrl: string,
-  expiresIn: number = 604800 // 7 days
-): Promise<string> {
-  if (!oldUrl || !oldUrl.includes("/storage/v1/object/sign/")) {
-    return oldUrl; // Return as-is if not a signed URL
-  }
-
-  const fullPath = extractStoragePath(oldUrl);
-  if (!fullPath) {
-    return oldUrl;
-  }
-
-  // Split bucket from path
-  const slashIndex = fullPath.indexOf("/");
-  if (slashIndex === -1) {
-    return oldUrl;
-  }
-
-  const bucket = fullPath.substring(0, slashIndex);
-  const path = fullPath.substring(slashIndex + 1);
-
-  const { data, error } = await supabase.storage
-    .from(bucket)
-    .createSignedUrl(path, expiresIn);
-
-  if (error || !data?.signedUrl) {
-    console.error(`[get-shared-project] Failed to refresh URL: ${path}`, error);
-    return oldUrl; // Fallback to original
-  }
-
-  return data.signedUrl;
-}
+// refreshSignedUrl is imported from ../_shared/signedUrlHelper.ts
 
 // Refresh all URLs in a scene
 async function refreshSceneUrls(
@@ -168,7 +120,7 @@ export async function handler(req: Request): Promise<Response> {
     // Also fetch the latest completed generation video_url (for Doc2Video exports / stitched videos)
     let videoUrl: string | null = null;
     try {
-      const { data: gen } = await supabase
+      const { data: gen, error: genError } = await supabase
         .from("generations")
         .select("video_url")
         .eq("project_id", sharedData.project.id)
@@ -177,11 +129,15 @@ export async function handler(req: Request): Promise<Response> {
         .limit(1)
         .maybeSingle();
 
-      if (gen?.video_url) {
+      if (genError) {
+        // Surface the error so it appears in function logs / Sentry rather than
+        // silently falling back to no video URL.
+        console.error("[get-shared-project] DB error fetching project video_url:", genError.message, genError.code);
+      } else if (gen?.video_url) {
         videoUrl = await refreshSignedUrl(supabase, gen.video_url, 604800);
       }
     } catch (e) {
-      console.warn("[get-shared-project] Failed to fetch project video_url", e);
+      console.error("[get-shared-project] Unexpected error fetching project video_url:", e);
     }
 
     const result = {

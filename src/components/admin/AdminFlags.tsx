@@ -98,12 +98,12 @@ export function AdminFlags() {
     try {
       setResolvingId(flagId);
       await callAdminApi("resolve_flag", { flagId, resolutionNotes });
-      toast.success("Flag resolved");
+      toast.success("Flag resolved", { description: "The flag has been marked as resolved." });
       setResolutionNotes("");
       fetchFlags();
       fetchGlobalCounts();
     } catch (err) {
-      toast.error("Failed to resolve flag");
+      toast.error("Failed to resolve flag", { description: err instanceof Error ? err.message : "Please try again." });
     } finally {
       setResolvingId(null);
     }
@@ -122,7 +122,7 @@ export function AdminFlags() {
 
   const handleCreateFlag = async () => {
     if (!newFlagUserId.trim() || !newFlagReason.trim()) {
-      toast.error("User ID/email and reason are required");
+      toast.error("Missing required fields", { description: "User ID/email and reason are required." });
       return;
     }
     setCreating(true);
@@ -133,14 +133,14 @@ export function AdminFlags() {
         reason: newFlagReason.trim(),
         details: "Created from Flags tab",
       });
-      toast.success("Flag created");
+      toast.success("Flag created", { description: "The user flag has been added successfully." });
       setCreateOpen(false);
       setNewFlagUserId("");
       setNewFlagReason("");
       fetchFlags();
       fetchGlobalCounts();
     } catch (err) {
-      toast.error("Failed to create flag");
+      toast.error("Failed to create flag", { description: err instanceof Error ? err.message : "Please try again." });
     } finally {
       setCreating(false);
     }

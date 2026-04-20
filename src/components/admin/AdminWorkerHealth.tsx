@@ -139,12 +139,9 @@ export function AdminWorkerHealth() {
         status = "warning";
       }
 
-      const uptimeSeconds = liveVitals?.uptime ?? (() => {
-        const oldest = recentActivityAny?.[0];
-        return oldest?.created_at
-          ? (now.getTime() - new Date(oldest.created_at).getTime()) / 1000
-          : 0;
-      })();
+      // Use worker-reported uptime (accurate process uptime).
+      // Fallback is 0 — not the oldest recent job, which was misleading.
+      const uptimeSeconds = liveVitals?.uptime ?? 0;
 
       setHealth({
         status,

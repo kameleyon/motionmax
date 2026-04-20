@@ -25,7 +25,7 @@ export default function LandingFooter() {
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           {/* Brand */}
           <div className="space-y-4">
-            <img src={motionmaxLogo} alt="MotionMax" className="h-8 w-auto" />
+            <img src={motionmaxLogo} alt="MotionMax" loading="lazy" className="h-8 w-auto" />
             <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
               AI video generator. Create cinematic videos, explainers, and visual stories from text.
             </p>

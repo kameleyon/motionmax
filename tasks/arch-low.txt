@@ -1,0 +1,40 @@
+You are working on the MotionMax project at C:\Users\Administrator\motionmax\. Complete ALL of these LOW priority FRONTEND + OBSERVABILITY + ADMIN items from C:\Users\Administrator\motionmax\360roadmap_fix.md. Do REAL code edits on the actual files. Read each file before editing. After all edits run: cd C:\Users\Administrator\motionmax && npm run build — fix any TypeScript errors your changes introduce. Then update the roadmap: change - [ ] to - [x] and add a Fixed: note for each item you completed.
+
+FRONTEND ITEMS:
+1. Orphaned Index.tsx page never imported — src/pages/Index.tsx — verify zero imports then delete
+2. Orphaned ContentInput component zero consumers — src/components/workspace/ContentInput.tsx — verify then delete
+3. Orphaned workspaceTemplates.ts zero importers — src/config/workspaceTemplates.ts — verify then delete
+4. Orphaned src/assets/ files never imported — src/assets/Capture.PNG, hero-promo-optimized.mp4 and others — verify then delete
+5. Unused runtime dependencies — package.json — remove @radix-ui/react-hover-card, @radix-ui/react-radio-group, @radix-ui/react-toggle-group, react-resizable-panels, @types/dompurify if truly unused
+6. user-profile query duplicated in Dashboard and AppSidebar — extract to shared hook or context
+7. normalizeProjectType icon+label switch repeated in 7 files — create src/lib/projectTypeMeta.ts shared const, update all consumers
+8. Duplicate setup files src/setup.ts and src/__tests__/setup.ts — remove whichever is not wired in vitest.config.ts
+9. Hardcoded $14.99/month in AppSidebar — src/components/layout/AppSidebar.tsx:637 — reference PLAN_PRICES constant
+10. Two error boundaries duplicate stale-chunk auto-reload logic — src/components/GlobalErrorBoundary.tsx:28-42; WorkspaceErrorBoundary.tsx:32-46 — extract to shared utility
+11. plan narrowing via "as string" bypasses PlanTier union — src/components/layout/AppSidebar.tsx:134-140 — fix type narrowing properly
+12. noUnusedLocals/noUnusedParameters disabled in tsconfig — tsconfig.app.json:20-21 — enable both flags and fix all resulting TS errors
+13. Dual logger modules lib/logger.ts and lib/structuredLogger.ts — src/lib/structuredLogger.ts:134-147 — ensure slog singleton is wired, remove duplication
+14. Hero logo img no width/height attributes — src/pages/Landing.tsx:206-210 — add explicit dimensions
+15. .webp hero no PNG fallback — src/pages/Landing.tsx:189 — add image-set() with PNG fallback
+16. PWA Workbox only one caching rule — vite.config.ts:33-38 — add rules for thumbnails and Google Fonts
+17. build:dev script in package.json — package.json:9 — rename to preview:dev or add comment warning
+18. Missing staleTime on most queries — src/pages/Dashboard.tsx:104,118; src/components/layout/AppSidebar.tsx:143,160 — add staleTime: 60000
+
+OBSERVABILITY ITEMS:
+19. Dynamic Sentry import in logger.ts re-imports on every error — src/lib/logger.ts:57-63 — hoist import to module level
+20. No Sentry user feedback widget on error screen — src/components/GlobalErrorBoundary.tsx:95-99 — add Sentry.showReportDialog()
+21. No deploy marker on Vercel or Render — vite.config.ts:18-25; src/lib/sentry.ts — add SENTRY_RELEASE env inject
+22. No custom breadcrumbs for user actions — add Sentry.addBreadcrumb() calls in generation start, provider selection, export flows
+23. Sentry import failure swallowed silently with empty .catch — src/lib/logger.ts:62 — log warning on failure
+24. /health edge function missing — create supabase/functions/health/index.ts that returns 200 + timestamp
+25. API call durations in api_call_logs never surfaced as SLO — worker/src/lib/logger.ts:89-108 — add p95/p99 aggregation comment + TODO or basic summary log
+
+ADMIN ITEMS:
+26. AdminLogs realtime subscription lacks per-event admin re-check — src/components/admin/AdminLogs.tsx:128-155 — add admin check before rendering realtime events
+27. AdminApiCalls fragment inside TableBody has no React key — src/components/admin/AdminApiCalls.tsx:290-363 — add key prop
+28. AdminApiCalls filter offers "started" status option but worker never writes it — src/components/admin/AdminApiCalls.tsx:200-203 — remove "started" option
+29. AdminQueueMonitor avgProcessingTime uses created_at not started_at — src/components/admin/AdminQueueMonitor.tsx:107-113 — fix to use started_at
+30. AdminPerformanceMetrics percentage without .toFixed(1) — src/components/admin/AdminPerformanceMetrics.tsx:460 — add .toFixed(1)
+31. AdminWorkerHealth uptime computed from oldest recent job (meaningless) — src/components/admin/AdminWorkerHealth.tsx:82-113 — fix to use actual process start time or remove
+32. Admin rate limit 30 req/min too low — supabase/functions/admin-stats/index.ts:45-56 — increase to 120 req/min
+33. AdminRevenue PlanBreakdown returns null on error with no skeleton — src/components/admin/AdminRevenue.tsx:247-289 — add loading skeleton fallback

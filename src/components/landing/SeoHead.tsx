@@ -31,10 +31,14 @@ function buildFaqSchema() {
 export default function SeoHead() {
   return (
     <Helmet>
-      <title>MotionMax — Turn text into engaging visual content</title>
+      <title>MotionMax &#x2013; AI Video Generator | Turn Text into Cinematic Videos</title>
       <meta
         name="description"
-        content="Turn text into engaging visual content. Create narrated videos with AI visuals, voiceovers, and multiple styles — start free."
+        content="Create stunning AI-generated cinematic videos, explainers, and visual stories from any text. AI scriptwriting, voiceover, image-to-video with 25+ caption styles. Multi-language. Start free."
+      />
+      <meta
+        name="keywords"
+        content="AI video generator, text to video, cinematic video maker, AI explainer videos, document to video, AI narration, voice cloning, video storytelling, automated video production, AI video editor, TikTok video maker, YouTube Shorts generator, AI captions, image to video, Kling video, AI voiceover, multi-language video, MotionMax"
       />
       <link rel="canonical" href={SITE_URL} />
 

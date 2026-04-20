@@ -41,4 +41,32 @@ Disallow: /voice-lab
 Disallow: /workspace
 Crawl-delay: 10
 
+# AI training crawlers — disallow user-generated content areas
+User-agent: GPTBot
+Disallow: /app/
+Disallow: /auth
+Disallow: /dashboard
+Disallow: /projects
+
+User-agent: ChatGPT-User
+Disallow: /app/
+Disallow: /auth
+Disallow: /dashboard
+Disallow: /projects
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /app/
+Disallow: /auth
+Disallow: /dashboard
+Disallow: /projects
+
+User-agent: Claude-Web
+Disallow: /app/
+Disallow: /auth
+Disallow: /dashboard
+Disallow: /projects
+
 Sitemap: https://motionmax.io/sitemap.xml

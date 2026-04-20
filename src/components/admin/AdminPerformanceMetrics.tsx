@@ -439,7 +439,7 @@ export function AdminPerformanceMetrics() {
                 <div className="flex justify-between text-sm">
                   <span className="font-medium">{provider.provider}</span>
                   <span className="text-muted-foreground">
-                    {formatCurrency(provider.cost)} ({provider.percentage}%)
+                    {formatCurrency(provider.cost)} ({provider.percentage.toFixed(1)}%)
                   </span>
                 </div>
                 <div className="h-2 bg-muted rounded-full overflow-hidden">

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2, Clock, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { normalizeProjectType } from "@/lib/projectUtils";
+import { getProjectTypeMeta } from "@/lib/projectUtils";
 
 interface ActiveJob {
   id: string;
@@ -74,23 +74,8 @@ export function GenerationQueueStatus() {
     return Math.max(1, Math.round(elapsed / 60_000));
   };
 
-  const getModeLabel = (projectType: string | null) => {
-    switch (normalizeProjectType(projectType)) {
-      
-      case "smartflow": return "Infographic";
-      case "cinematic": return "Cinematic";
-      default: return "Video";
-    }
-  };
-
-  const getCreateMode = (projectType: string | null) => {
-    switch (normalizeProjectType(projectType)) {
-      
-      case "smartflow": return "smartflow";
-      case "cinematic": return "cinematic";
-      default: return "doc2video";
-    }
-  };
+  const getModeLabel = (projectType: string | null) => getProjectTypeMeta(projectType).label;
+  const getCreateMode  = (projectType: string | null) => getProjectTypeMeta(projectType).mode;
 
   return (
     <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm p-5 shadow-sm space-y-3">

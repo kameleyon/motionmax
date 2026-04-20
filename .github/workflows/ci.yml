@@ -8,7 +8,10 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel in-progress runs on feature branches to save CI minutes.
+  # Do NOT cancel on main: a mid-deploy cancellation can leave the branch
+  # in a partially-deployed state.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   lint-test-build:
@@ -58,7 +61,8 @@ jobs:
           BUNDLE_SIZE=$(du -sk dist/assets/*.js | awk '{sum+=$1} END{print sum}')
           echo "Bundle JS size: ${BUNDLE_SIZE}KB"
           if [ "$BUNDLE_SIZE" -gt "$MAX_SIZE_KB" ]; then
-            echo "::warning::JS bundle size (${BUNDLE_SIZE}KB) exceeds ${MAX_SIZE_KB}KB threshold"
+            echo "::error::JS bundle size (${BUNDLE_SIZE}KB) exceeds ${MAX_SIZE_KB}KB threshold. Investigate and reduce or update the threshold."
+            exit 1
           fi
 
       - name: Upload build artifact
@@ -100,12 +104,31 @@ jobs:
       - uses: denoland/setup-deno@v1
         with:
           deno-version: v1.x
+      - name: Generate Deno lock file
+        # Create a lock file from the shared module so deno check can verify
+        # remote imports consistently across CI runs.
+        run: |
+          deno cache --lock=deno.lock --lock-write \
+            supabase/functions/_shared/cors.ts \
+            supabase/functions/_shared/rateLimit.ts \
+            supabase/functions/_shared/signedUrlHelper.ts || true
+
       - name: Type check edge functions
         run: |
           for dir in supabase/functions/*/; do
+            # Skip one-time migration tooling that is not deployed
+            if [[ "$dir" == *"migrate-storage"* ]]; then
+              echo "Skipping deprecated $dir"
+              continue
+            fi
             if [ -f "$dir/index.ts" ]; then
               echo "Checking $dir..."
-              deno check --no-lock "$dir/index.ts"
+              # Use lock file when available; fall back to --no-lock on first run
+              if [ -f "deno.lock" ]; then
+                deno check --lock=deno.lock "$dir/index.ts"
+              else
+                deno check --no-lock "$dir/index.ts"
+              fi
             fi
           done
 

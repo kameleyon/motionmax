@@ -14,6 +14,10 @@ export default function Terms() {
         title="Terms of Service — MotionMax"
         description="MotionMax terms of service. Review our usage policies, subscription terms, and user agreement."
         canonical="https://motionmax.io/terms"
+        breadcrumbs={[
+          { name: "Home", item: "https://motionmax.io" },
+          { name: "Terms of Service", item: "https://motionmax.io/terms" },
+        ]}
       />
       <header className="sticky top-0 z-50 border-b border-border/30 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-4 sm:px-6">
@@ -69,7 +73,7 @@ export default function Terms() {
           <section className="space-y-3">
             <h2 className="text-lg font-semibold text-foreground">5. Intellectual Property</h2>
             <p>You retain ownership of the content you provide as input to the Service (your scripts, documents, and text). By submitting content to the Service, you grant MotionMax a limited, non-exclusive license to process that content solely for the purpose of providing the Service to you.</p>
-            <p>The AI-generated outputs produced by the Service are owned by you, subject to the limitations of the underlying AI model licenses. MotionMax retains all rights to the Service itself, including its software, design, and underlying technology.</p>
+            <p>The AI-generated outputs produced by the Service are owned by you, subject to the limitations of the underlying AI model licenses and any applicable terms of the third-party AI providers used to generate that content. These providers include Kling (image-to-video), Hypereal (image generation), ElevenLabs (voice synthesis and voice cloning), and Google Gemini (image generation and research), among others. You are responsible for reviewing and complying with the usage rights and restrictions published by each provider. MotionMax retains all rights to the Service itself, including its software, design, and underlying technology.</p>
           </section>
 
           <section className="space-y-3">

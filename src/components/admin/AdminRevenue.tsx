@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
@@ -243,10 +244,11 @@ export function AdminRevenue() {
 
 /** Subscription count breakdown by plan tier */
 function PlanBreakdown() {
-  const { data: plans } = useQuery({
+  const { data: plans, isLoading, isError } = useQuery({
     queryKey: ["admin-plan-breakdown"],
     queryFn: async () => {
-      const { data } = await supabase.from("subscriptions").select("plan_name, status").eq("status", "active");
+      const { data, error } = await supabase.from("subscriptions").select("plan_name, status").eq("status", "active");
+      if (error) throw error;
       if (!data) return [];
       const counts: Record<string, number> = {};
       for (const sub of data) {
@@ -257,6 +259,24 @@ function PlanBreakdown() {
     },
     staleTime: 120000,
   });
+
+  if (isLoading) {
+    return (
+      <Card className="shadow-sm">
+        <CardHeader><Skeleton className="h-5 w-48" /></CardHeader>
+        <CardContent><Skeleton className="h-[200px] w-full" /></CardContent>
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card className="shadow-sm">
+        <CardHeader><CardTitle className="type-h4">Active Subscriptions by Plan</CardTitle></CardHeader>
+        <CardContent><p className="text-sm text-muted-foreground">Failed to load plan breakdown.</p></CardContent>
+      </Card>
+    );
+  }
 
   if (!plans || plans.length === 0) return null;
 

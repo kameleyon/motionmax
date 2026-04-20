@@ -117,6 +117,35 @@ SHOW archive_mode;       -- should return 'on'
 
 **Estimated time**: 2 minutes
 
+### 4.3a Worker Rollback (Render)
+
+The worker (Node.js video-processing service) runs on **Render**.
+
+**Option A — Redeploy a prior Git commit (recommended)**
+1. Open **Render Dashboard → Services → motionmax-worker**
+2. Go to **Deploys** tab
+3. Find the last successful deploy before the regression
+4. Click **⋯ (options) → Rollback to this deploy**
+5. Confirm; Render will pull the pinned image and restart
+
+**Option B — Git revert + push**
+1. `git revert <bad-commit-sha>` locally
+2. Push to `main`; CI will run and trigger the Render deploy hook on success
+3. Monitor `#engineering-incidents` for confirmation
+
+**Option C — Environment variable hotfix (config-only regressions)**
+1. Render Dashboard → Service → **Environment** tab
+2. Edit the offending env var (e.g. `EXPORT_CROSSFADE_DURATION`, feature flag)
+3. Save; Render auto-restarts the service
+
+**Post-rollback checklist**
+- [ ] Confirm `/health` endpoint returns `{ accepting: true }` and correct `realtimeStatus: "SUBSCRIBED"`
+- [ ] Submit a test export job and verify it reaches `completed` status
+- [ ] Check `system_logs` for `export_video_completed` event within expected time
+- [ ] File an incident report (Section 10 template)
+
+**Estimated time**: 3–10 minutes
+
 ### 4.4 Edge Function Rollback
 
 1. Run `supabase functions deploy <function-name> --version <previous>`

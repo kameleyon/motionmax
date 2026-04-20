@@ -74,11 +74,13 @@ export default function EnterpriseContactModal({ open, onOpenChange }: Enterpris
         <div className="space-y-3 py-2">
           <div>
             <label htmlFor="ent-name" className="text-xs font-medium text-foreground">
-              Full Name <span className="text-destructive">*</span>
+              Full Name <span className="text-destructive" aria-hidden="true">*</span>
             </label>
             <input
               id="ent-name"
               type="text"
+              required
+              aria-required="true"
               value={name}
               onChange={(e) => { setName(e.target.value); if (errors.name) setErrors(prev => ({ ...prev, name: undefined })); }}
               placeholder="Jane Smith"
@@ -91,11 +93,13 @@ export default function EnterpriseContactModal({ open, onOpenChange }: Enterpris
           </div>
           <div>
             <label htmlFor="ent-email" className="text-xs font-medium text-foreground">
-              Work Email <span className="text-destructive">*</span>
+              Work Email <span className="text-destructive" aria-hidden="true">*</span>
             </label>
             <input
               id="ent-email"
               type="email"
+              required
+              aria-required="true"
               value={email}
               onChange={(e) => { setEmail(e.target.value); if (errors.email) setErrors(prev => ({ ...prev, email: undefined })); }}
               placeholder="jane@company.com"
@@ -108,11 +112,13 @@ export default function EnterpriseContactModal({ open, onOpenChange }: Enterpris
           </div>
           <div>
             <label htmlFor="ent-company" className="text-xs font-medium text-foreground">
-              Company <span className="text-destructive">*</span>
+              Company <span className="text-destructive" aria-hidden="true">*</span>
             </label>
             <input
               id="ent-company"
               type="text"
+              required
+              aria-required="true"
               value={company}
               onChange={(e) => { setCompany(e.target.value); if (errors.company) setErrors(prev => ({ ...prev, company: undefined })); }}
               placeholder="Acme Corp"

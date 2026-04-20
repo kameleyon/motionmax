@@ -76,12 +76,14 @@ export async function handler(req: Request): Promise<Response> {
 
     if (dbSubscription?.is_manual_subscription) {
       logStep("Manual enterprise user - no Stripe portal available");
+      // 422 Unprocessable Entity: the request is valid but cannot be fulfilled
+      // for this account type. The frontend checks for this specific error code.
       return new Response(JSON.stringify({ 
         error: "MANUAL_SUBSCRIPTION",
         message: "Your enterprise subscription is managed directly. Please contact support for billing inquiries."
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200, // Return 200 with error code so frontend can handle gracefully
+        status: 422,
       });
     }
 

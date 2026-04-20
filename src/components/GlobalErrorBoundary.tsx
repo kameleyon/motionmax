@@ -2,6 +2,7 @@ import { Component, type ReactNode } from "react";
 import * as Sentry from "@sentry/react";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, RefreshCw, Home } from "lucide-react";
+import { handleChunkError } from "@/lib/chunkReload";
 
 interface Props {
   children: ReactNode;
@@ -25,22 +26,8 @@ export class GlobalErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("[GlobalErrorBoundary] Uncaught error:", error, errorInfo);
     Sentry.captureException(error, { extra: { componentStack: errorInfo.componentStack } });
-
     // Auto-reload on stale chunk errors (happens after a new deployment)
-    if (
-      error.message?.includes("Failed to fetch dynamically imported module") ||
-      error.message?.includes("Loading chunk") ||
-      error.message?.includes("Loading CSS chunk")
-    ) {
-      const reloadKey = "global_chunk_reload";
-      const lastReload = sessionStorage.getItem(reloadKey);
-      const now = Date.now();
-      if (!lastReload || now - Number(lastReload) > 30_000) {
-        sessionStorage.setItem(reloadKey, String(now));
-        window.location.reload();
-        return;
-      }
-    }
+    handleChunkError(error, "global_chunk_reload");
   }
 
   render() {
@@ -99,6 +86,25 @@ export class GlobalErrorBoundary extends Component<Props, State> {
                 support@motionmax.io
               </a>
             </p>
+
+            <button
+              onClick={() => {
+                // Open Sentry user feedback dialog if available
+                try {
+                  const feedbackIntegration = Sentry.getClient()?.getIntegrationByName?.("Feedback");
+                  if (feedbackIntegration && typeof (feedbackIntegration as { openDialog?: () => void }).openDialog === "function") {
+                    (feedbackIntegration as { openDialog: () => void }).openDialog();
+                  } else {
+                    window.open("mailto:support@motionmax.io?subject=Error Report", "_blank");
+                  }
+                } catch {
+                  window.open("mailto:support@motionmax.io?subject=Error Report", "_blank");
+                }
+              }}
+              className="text-xs text-muted-foreground underline hover:text-foreground mt-1"
+            >
+              Send feedback
+            </button>
           </div>
         </div>
       );

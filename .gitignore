@@ -10,7 +10,7 @@ scripts/fix-sql-strings.mjs
 scripts/import-to-target.mjs
 scripts/migrate-storage.mjs
 
-# Environment files (never commit secrets)
+# Environment files — NEVER commit secrets (single authoritative block)
 .env
 .env.local
 .env.*.local
@@ -31,10 +31,9 @@ dist
 dist-ssr
 *.local
 
-# Environment variables — NEVER commit secrets
-.env
-.env.local
-.env.*.local
+# Source maps (never commit — may contain original source; Sentry uploads them from CI only)
+dist/assets/*.js.map
+dist/assets/*.css.map
 
 # Editor directories and files
 .vscode/*

@@ -1,0 +1,41 @@
+You are working on the MotionMax project at C:\Users\Administrator\motionmax\. Complete ALL of these LOW priority DATABASE + BACKEND + DEVOPS items from C:\Users\Administrator\motionmax\360roadmap_fix.md. Do REAL code edits on the actual files. Read each file before editing. For database items create migration files in supabase/migrations/ using 20260419500000+ timestamp range. After all edits run: cd C:\Users\Administrator\motionmax && npm run build — fix any TypeScript errors your changes introduce. Then update the roadmap: change - [ ] to - [x] and add a Fixed: note for each item you completed.
+
+DATABASE ITEMS:
+1. webhook_events column mismatch delivered_at vs processed_at — supabase/001_full_schema.sql:261-266 — align the column name
+2. deletion_requests redundant created_at and requested_at columns — supabase/migrations/20260310133700 — document/note in schema
+3. project-thumbnails permissive policy history — supabase/001_full_schema.sql:457-458 — verify no reintroduction, add comment
+4. Add composite partial index for user_flags WHERE resolved_at IS NULL — supabase/001_full_schema.sql:220-232 — create migration
+5. voice_samples bucket public->private flip — document in schema that it is intentionally private, no action needed
+6. system_logs no authenticated INSERT policy — supabase/001_full_schema.sql:532-537 — add INSERT policy for authenticated role
+7. No UNIQUE constraint on user_voices(user_id, voice_id) — supabase/001_full_schema.sql:201-209 — create migration to add it
+8. admin_logs and api_call_logs have no updated_at — supabase/001_full_schema.sql:234-244 — add columns + triggers in migration
+9. process_deletion_request dead code webhook_events no-op branch — supabase/migrations/20260404000005 — remove dead branch
+
+BACKEND ITEMS:
+10. stripe-webhook no max body size check before req.text() — supabase/functions/stripe-webhook/index.ts — add 1MB limit check
+11. share-meta no size limit on scenes JSON parse — supabase/functions/share-meta/index.ts:117-123 — add size check before parse
+12. customer-portal returns HTTP 200 with error MANUAL_SUBSCRIPTION — supabase/functions/customer-portal/index.ts:64-73 — return 400 instead
+13. get-shared-project swallows video URL fetch error — supabase/functions/get-shared-project/index.ts:154-170 — log + surface error
+14. admin-stats revenue swallows Stripe errors reports $0 — supabase/functions/admin-stats/index.ts:201-206 — propagate error
+15. Signed URL refresh logic duplicated in three functions — supabase/functions/get-shared-project/index.ts:16-64 — extract shared helper
+16. migrate-storage still registered one-time tooling — supabase/functions/migrate-storage/index.ts — add deprecation guard/comment
+17. manage-api-keys no key rotation support — supabase/functions/manage-api-keys/index.ts — add rotation endpoint
+18. subscription_upsert select-then-insert not true upsert — supabase/functions/stripe-webhook/index.ts:166-191 — use upsert
+19. Crossfade module compiled but globally disabled — worker/src/handlers/exportVideo.ts:180-196 — remove dead import/code
+20. Worker masked API key logs print partial chars — worker/src/index.ts:624-626 — mask to show only last 4 chars
+21. sceneVideoGenerator fires background promises with empty catch — worker/src/services/sceneVideoGenerator.ts:138,174 — add error logging
+22. admin-stats create_flag/resolve_flag no param validation — supabase/functions/admin-stats/index.ts:513-561 — add shape validation
+23. delete-voice no UUID format validation — supabase/functions/delete-voice/index.ts:65-72 — validate UUID before use
+24. clone-voice no path traversal block — supabase/functions/clone-voice/index.ts:108-123 — add ../ check
+
+DEVOPS ITEMS:
+25. Two duplicate .env gitignore blocks — .gitignore:13-18,34-37 — remove duplicate block
+26. Bundle size check warns but never fails CI — .github/workflows/ci.yml:42-49 — add --fail-on-violations or equivalent
+27. Edge functions deno check uses --no-lock with no lock file — .github/workflows/ci.yml:80-91 — generate deno.lock or remove flag
+28. dist/ .js.map source map files risk if hand-deployed — add dist/ to .gitignore
+29. Worker polls every 2 seconds — worker/src/index.ts:402 — replace with Supabase Realtime LISTEN/NOTIFY for job notifications, keep polling as fallback
+30. CI cancels in-progress runs on main pushes — .github/workflows/ci.yml:9-11 — change cancel-in-progress to false for main branch only
+31. Sentry DSN guarded only by console.warn — src/lib/sentry.ts:12-26 — throw error in production if DSN missing
+32. No explicit Vercel buildCommand/outputDirectory/framework — vercel.json — add these fields
+33. DEPLOYMENT_SECURITY.md contradicts live vercel.json CSP — DEPLOYMENT_SECURITY.md:67-101 — sync doc to match actual vercel.json
+34. Worker rollback path undocumented — DISASTER_RECOVERY.md:43-79 — add worker rollback runbook section

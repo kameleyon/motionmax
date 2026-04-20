@@ -114,6 +114,7 @@ export default function PublicShare() {
     },
     enabled: !!token,
     retry: false,
+    staleTime: 5 * 60 * 1000, // 5 min — public share data changes infrequently
   });
 
   const scenes = shareData?.scenes || [];

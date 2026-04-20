@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { db } from "@/lib/databaseService";
 import { toast as sonnerToast } from "sonner";
 import { createScopedLogger } from "@/lib/logger";
+import { breadcrumbGenerationStart } from "@/lib/sentryBreadcrumbs";
 import { callPhase } from "./generation/callPhase";
 import { resumeCinematicPipeline } from "./generation/cinematicPipeline";
 import { runUnifiedPipeline } from "./generation/unifiedPipeline";
@@ -70,6 +71,11 @@ export function useGenerationPipeline() {
   const startGeneration = useCallback(async (params: GenerationParams) => {
     const expectedSceneCount = SCENE_COUNTS[params.length] || 12;
     log.debug("startGeneration", { projectType: params.projectType, length: params.length, expectedSceneCount });
+    breadcrumbGenerationStart({
+      projectId: params.projectId ?? "new",
+      projectType: params.projectType,
+      creditCost: expectedSceneCount,
+    });
 
     // Bump epoch to abort any stale pipeline
     epochRef.current++;

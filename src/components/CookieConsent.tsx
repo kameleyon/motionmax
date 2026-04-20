@@ -72,7 +72,7 @@ export function CookieConsent() {
       aria-live="polite"
       className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:max-w-sm z-50 animate-in slide-in-from-bottom-4 fade-in duration-300"
     >
-      <div className="rounded-xl border border-border/50 bg-background/95 backdrop-blur-sm p-4 shadow-lg">
+      <div className="rounded-xl border border-border/50 bg-background/95 backdrop-blur-sm p-4 shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
         <div className="flex items-start gap-3">
           <div className="flex-1 space-y-2">
             <p className="text-sm text-foreground font-medium">Cookie preferences</p>

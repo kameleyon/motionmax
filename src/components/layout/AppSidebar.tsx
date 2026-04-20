@@ -16,10 +16,8 @@ import {
   Check,
   Wand2,
   Home,
-  Clapperboard,
   Mic,
   Wallpaper,
-  MicVocal,
   Shield,
   Film,
   ChevronDown,
@@ -80,7 +78,9 @@ import { toast } from "sonner";
 
 // No external props needed — navigation is handled internally
 
-import { PLAN_LIMITS } from "@/lib/planLimits";
+import { PLAN_LIMITS, normalizePlanName } from "@/lib/planLimits";
+import { getProjectTypeMeta } from "@/lib/projectUtils";
+import { PLAN_PRICES } from "@/config/products";
 
 const CREATOR_PERKS = [
   `${PLAN_LIMITS.creator.creditsPerMonth} credits/month + ${PLAN_LIMITS.creator.dailyFreeCredits} daily`,
@@ -131,15 +131,16 @@ export function AppSidebar() {
 
   const getPlanDisplayName = () => {
     if (cancelAtPeriodEnd) return "Cancelled";
-    switch (plan as string) {
-      case "creator": case "starter": return "Creator";
-      case "studio": case "professional": return "Studio";
+    switch (normalizePlanName(plan)) {
+      case "creator": return "Creator";
+      case "studio": return "Studio";
       case "enterprise": return "Enterprise";
       default: return "Free Plan";
     }
   };
 
   // Fetch user profile for display name
+  // Uses the same queryKey as Dashboard so navigation shares the cache (no double-fetch)
   const { data: profile } = useQuery({
     queryKey: ["user-profile", user?.id],
     queryFn: async () => {
@@ -153,6 +154,7 @@ export function AppSidebar() {
       return data;
     },
     enabled: !!user?.id,
+    staleTime: 5 * 60 * 1000, // 5 min — shared with Dashboard via same queryKey
   });
 
   const displayName = profile?.display_name || user?.email?.split("@")[0] || "User";
@@ -171,6 +173,7 @@ export function AppSidebar() {
       return data || [];
     },
     enabled: !!user?.id,
+    staleTime: 60 * 1000, // 1 min
   });
 
   const deleteProjectMutation = useMutation({
@@ -455,20 +458,9 @@ export function AppSidebar() {
                   <div className="px-3 py-2 text-xs sm:text-sm text-foreground/50 dark:text-white/50">No projects yet</div>
                 ) : (
                   recentProjects.map((project) => {
-                    const projectMode = project.project_type === "smartflow" || project.project_type === "smart-flow"
-                        ? "smartflow"
-                        : project.project_type === "cinematic"
-                          ? "cinematic"
-                          : "doc2video";
+                    const { mode: projectMode, Icon: ProjectIcon } = getProjectTypeMeta(project.project_type);
                     const currentProjectId = new URLSearchParams(location.search).get("project");
                     const isActiveProject = currentProjectId === project.id;
-                    
-                    // Get appropriate icon for project type
-                    const ProjectIcon = project.project_type === "smartflow" || project.project_type === "smart-flow"
-                        ? Wallpaper
-                        : project.project_type === "cinematic"
-                          ? Film
-                          : Video;
                     
                     return (
                       <SidebarMenuItem key={project.id} className="group relative">
@@ -629,7 +621,7 @@ export function AppSidebar() {
 
           <div className="rounded-lg bg-muted/50 p-2.5 text-center">
             <div className="flex items-baseline justify-center gap-1">
-              <span className="text-xl font-bold">$14.99</span>
+              <span className="text-xl font-bold">{PLAN_PRICES.creator.monthly}</span>
               <span className="text-xs text-muted-foreground">/month</span>
             </div>
           </div>

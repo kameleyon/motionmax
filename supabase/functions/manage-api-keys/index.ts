@@ -341,6 +341,49 @@ export async function handler(req: Request): Promise<Response> {
       );
     }
 
+    if (method === "PATCH") {
+      // Key rotation: re-encrypt all stored keys with the current ENCRYPTION_KEY.
+      // Call this after rotating the ENCRYPTION_KEY environment variable to
+      // migrate stored ciphertext from the old key to the new key.
+      const { data, error: fetchErr } = await serviceClient
+        .from("user_api_keys")
+        .select("gemini_api_key, replicate_api_token")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (fetchErr) throw fetchErr;
+      if (!data) {
+        return new Response(
+          JSON.stringify({ rotated: false, reason: "no keys stored" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const geminiResult = await decrypt(data.gemini_api_key || "", userId);
+      const replicateResult = await decrypt(data.replicate_api_token || "", userId);
+
+      const updates: Record<string, string | null> = { updated_at: new Date().toISOString() };
+      if (geminiResult.value) {
+        updates.gemini_api_key = await encrypt(geminiResult.value, userId);
+      }
+      if (replicateResult.value) {
+        updates.replicate_api_token = await encrypt(replicateResult.value, userId);
+      }
+
+      const { error: updateErr } = await serviceClient
+        .from("user_api_keys")
+        .update(updates)
+        .eq("user_id", userId);
+
+      if (updateErr) throw updateErr;
+
+      console.log("Key rotation complete for user:", userId);
+      return new Response(
+        JSON.stringify({ rotated: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     if (method === "DELETE") {
       // Delete API keys
       const { error } = await serviceClient

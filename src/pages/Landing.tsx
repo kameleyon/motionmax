@@ -12,6 +12,7 @@ import TrustIndicators from "@/components/landing/TrustIndicators";
 import { Testimonials } from "@/components/landing/Testimonials";
 import FaqSection from "@/components/landing/FaqSection";
 import motionmaxLogo from "@/assets/motionmax-logo.png";
+import styles from "./Landing.module.css";
 import LandingPricing from "@/components/landing/LandingPricing";
 import LandingCta from "@/components/landing/LandingCta";
 import LandingAbout from "@/components/landing/LandingAbout";
@@ -93,7 +94,7 @@ export default function Landing() {
       {/* Navigation with frosted glass effect */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/70 backdrop-blur-md border-b border-border/30">
         <div className="mx-auto flex h-16 sm:h-20 max-w-6xl items-center justify-between px-6 sm:px-8">
-          <img src={motionmaxLogo} alt="MotionMax" className="h-8 sm:h-10 w-auto" />
+          <img src={motionmaxLogo} alt="MotionMax home" className="h-8 sm:h-10 w-auto" />
           
           <nav aria-label="Main navigation" className="hidden items-center gap-8 md:flex">
             <a href="#features" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
@@ -163,6 +164,7 @@ export default function Landing() {
                     key={href}
                     onClick={() => {
                       setMobileMenuOpen(false);
+                      menuToggleRef.current?.focus();
                       setTimeout(() => {
                         document.querySelector(href)?.scrollIntoView({ behavior: "smooth" });
                       }, 50);
@@ -175,7 +177,7 @@ export default function Landing() {
                 <div className="pt-2 border-t border-border/30 mt-2">
                   <Button
                     className="w-full rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
-                    onClick={() => { setMobileMenuOpen(false); handleCta("Sign In Mobile"); }}
+                    onClick={() => { setMobileMenuOpen(false); menuToggleRef.current?.focus(); handleCta("Sign In Mobile"); }}
                   >
                     Sign In
                   </Button>
@@ -186,19 +188,13 @@ export default function Landing() {
         </AnimatePresence>
       </header>
 
-      {/* Hero Section — herobackground.webp as full background (PNG fallback kept in /public) */}
+      {/* Hero Section — herobackground.webp with PNG fallback via image-set() (Landing.module.css) */}
       <section
-        className="relative min-h-[85vh] sm:min-h-screen flex items-center pt-16 sm:pt-20 md:pt-32 xl:pt-16"
-        style={{
-          backgroundImage: "url(/herobackground.webp)",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          backgroundRepeat: "no-repeat",
-        }}
+        className={`relative min-h-[85vh] sm:min-h-screen flex items-center pt-16 sm:pt-20 md:pt-32 xl:pt-16 ${styles.heroBg}`}
       >
         {/* Dark overlay (70%) + blur for text dominance */}
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" aria-hidden="true" />
-        <span className="sr-only">Background showing code and data visualizations being transformed into video content</span>
+
 
         <div className="relative z-10 mx-auto max-w-7xl px-6 sm:px-8 w-full pb-8 md:pb-24">
           <h1 className="sr-only">MotionMax &#x2013; AI Video Generation</h1>
@@ -210,7 +206,10 @@ export default function Landing() {
           >
             <img
               src="/motion.png"
-              alt="MotionMax"
+              alt=""
+              aria-hidden="true"
+              width={480}
+              height={160}
               className="w-full max-w-[200px] sm:max-w-[300px] md:max-w-[400px] xl:max-w-[480px] mx-auto"
             />
 
@@ -222,9 +221,10 @@ export default function Landing() {
               Cinematic visuals. Natural voiceover.<br className="hidden sm:block" />Seamless transitions. <span className="text-primary">From one idea.</span>
             </p>
             
-            <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
               <Button
                 size="lg"
+                className="min-w-[140px]"
                 onClick={() => handleCta("Try for Free")}
               >
                 Try for Free
@@ -232,7 +232,7 @@ export default function Landing() {
               <Button
                 size="lg"
                 variant="outline"
-                className="gap-2 border-white/20 text-white/80 hover:bg-white/10 hover:text-white"
+                className="gap-2 min-w-[140px] border-white/20 text-white/80 hover:bg-white/10 hover:text-white"
                 onClick={() => document.querySelector("#demo")?.scrollIntoView({ behavior: "smooth" })}
               >
                 <Play className="h-4 w-4" />
@@ -287,7 +287,7 @@ export default function Landing() {
           >
             <iframe
               src="https://embed.app.guidde.com/playbooks/wvJwFaqbh66kuXS3hZ23ir?mode=videoOnly"
-              title="Demonstrate Visual Content Creation With MotionMax"
+              title="Product walkthrough: creating an AI video from text in MotionMax"
               frameBorder="0"
               referrerPolicy="unsafe-url"
               allowFullScreen

@@ -91,7 +91,7 @@ export async function writeApiLog(payload: ApiCallPayload) {
   // Emit Sentry measurement so API durations show up as live SLO
   // (Sentry Performance → Custom Measurements dashboard)
   if (payload.totalDurationMs > 0) {
-    Sentry.getCurrentScope().setMeasurement(
+    Sentry.setMeasurement(
       `api.${payload.provider}.total_ms`,
       payload.totalDurationMs,
       "millisecond",

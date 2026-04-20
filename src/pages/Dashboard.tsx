@@ -316,9 +316,6 @@ export default function Dashboard() {
           {/* Generation Queue Status */}
           <GenerationQueueStatus />
 
-          {/* Quick Actions */}
-          <DashboardQuickActions />
-
           {/* Onboarding for new users */}
           {!isLoadingProjects && recentProjects.length === 0 && (
             <>

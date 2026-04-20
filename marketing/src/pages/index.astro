@@ -153,15 +153,11 @@ const faqJsonLd = {
     </div>
   </nav>
 
-  <!-- Full-page SVG background (nav to footer) -->
-  <div class="absolute inset-0 -z-20 pointer-events-none">
-    <img src="/mmbg.svg" alt="" aria-hidden="true" class="w-full h-full object-cover object-top" />
-  </div>
-
   <main>
     <!-- ── Hero ─────────────────────────────────────────────── -->
-    <section class="relative min-h-screen flex items-center justify-center overflow-hidden pt-16">
-      <div class="mx-auto max-w-3xl px-4 sm:px-6 text-center">
+    <section class="hero relative min-h-screen flex items-center justify-center overflow-hidden pt-16">
+      <div class="hero-bg"></div>
+      <div class="hero-content mx-auto max-w-3xl px-4 sm:px-6 text-center">
         <!-- Hero image (replaces logo + brand name) -->
         <div class="mb-7 flex justify-center">
           <img src="/motion.png" alt="MotionMax" class="h-32 sm:h-40 md:h-48 w-auto" />
@@ -476,4 +472,31 @@ const faqJsonLd = {
       });
     });
   </script>
+<style>
+  .hero {
+    background: hsl(204 56% 4%);
+  }
+  .hero-bg {
+    position: absolute;
+    inset: -20% -10% auto -10%;
+    height: 120%;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(60% 60% at 85% 10%, rgba(217,164,65,0.18), transparent 60%),
+      radial-gradient(50% 60% at 10% 40%, rgba(20,200,204,0.22), transparent 60%);
+  }
+  .hero-bg::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(0deg,   rgba(255,255,255,0.04) 1px, transparent 1px),
+      linear-gradient(90deg,  rgba(255,255,255,0.04) 1px, transparent 1px);
+    background-size: 72px 72px;
+    -webkit-mask-image: radial-gradient(60% 60% at 50% 40%, #000, transparent 75%);
+            mask-image: radial-gradient(60% 60% at 50% 40%, #000, transparent 75%);
+  }
+  .hero-content { position: relative; z-index: 1; }
+</style>
 </BaseLayout>

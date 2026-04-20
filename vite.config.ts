@@ -42,7 +42,9 @@ export default defineConfig(({ mode }) => ({
       manifest: false, // use existing public/manifest.json
       workbox: {
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024, // 3 MiB — covers herobackground.webp (~116 KB) + other assets
-        globPatterns: ["**/*.{js,css,html,ico,png,webp,svg,woff2}"],
+        globPatterns: ["**/*.{js,css,ico,png,webp,svg,woff2}", "app-shell.html"],
+        navigateFallback: "app-shell.html",
+        navigateFallbackDenylist: [/^\/(?:$|terms|privacy|acceptable-use)(?:\/|$)/],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,

@@ -5,6 +5,7 @@
 import fs from "fs";
 import { pipeline } from "stream/promises";
 import { supabase } from "../../lib/supabase.js";
+import { validateMedia, MediaValidationError, type MediaKind } from "./mediaValidator.js";
 
 const BUCKET_NAME = "videos";
 
@@ -67,14 +68,10 @@ function extractPublicUrlParts(url: string): { bucket: string; path: string } | 
   return m ? { bucket: m[1], path: m[2] } : null;
 }
 
-/** Stream a URL directly to disk without buffering in Node.js heap.
- *  For scene-images public URLs: always converts to a fresh signed URL first
- *  because the Supabase Storage service caches the bucket's public flag and
- *  may return 400 even after the bucket is marked public.
- *  For other public URLs: falls back to a signed URL on 400/403. */
-export async function streamToFile(url: string, destPath: string): Promise<void> {
-  let fetchUrl = url;
-
+/** Resolve the best fetchable URL for a storage object, preferring a fresh
+ *  signed URL when we can generate one. Prevents stale-public-URL 400s and
+ *  expired-signature 403s. */
+async function resolveFetchUrl(url: string): Promise<string> {
   // scene-images public URLs → skip public-URL attempt entirely; use signed URL.
   // The Storage metadata cache can lag behind DB changes, causing spurious 400s.
   if (url.includes("/object/public/scene-images/")) {
@@ -84,16 +81,42 @@ export async function streamToFile(url: string, destPath: string): Promise<void>
         .from(parts.bucket)
         .createSignedUrl(parts.path, 3600);
       if (!error && data?.signedUrl) {
-        fetchUrl = data.signedUrl;
         console.log(`[StorageHelpers] Using signed URL for scene-images/${parts.path}`);
+        return data.signedUrl;
       }
     }
-  } else {
-    // Refresh expired signed URLs for non-public paths.
-    fetchUrl = await refreshSignedUrl(url);
+    return url;
   }
+  // Refresh expired signed URLs for non-public paths.
+  return refreshSignedUrl(url);
+}
 
-  let response = await fetch(fetchUrl);
+/** Try to produce a fresh signed URL for any Supabase storage URL
+ *  (public or signed). Returns null if we can't parse the URL. */
+async function makeFreshSignedUrl(url: string): Promise<string | null> {
+  // Signed URL form: /storage/v1/object/sign/<bucket>/<path>
+  const signedPath = extractStoragePath(url);
+  if (signedPath) {
+    const slash = signedPath.indexOf("/");
+    if (slash > 0) {
+      const bucket = signedPath.substring(0, slash);
+      const storagePath = signedPath.substring(slash + 1);
+      const { data } = await supabase.storage.from(bucket).createSignedUrl(storagePath, 3600);
+      if (data?.signedUrl) return data.signedUrl;
+    }
+  }
+  // Public URL form: /object/public/<bucket>/<path>
+  const pub = extractPublicUrlParts(url);
+  if (pub) {
+    const { data } = await supabase.storage.from(pub.bucket).createSignedUrl(pub.path, 3600);
+    if (data?.signedUrl) return data.signedUrl;
+  }
+  return null;
+}
+
+/** Fetch a URL to disk. Handles 400/403 fallback to signed URL. */
+async function fetchToDisk(url: string, destPath: string): Promise<void> {
+  let response = await fetch(url);
 
   // Fallback: any public URL that still returns 400/403 → create signed URL.
   if ((response.status === 400 || response.status === 403) && url.includes("/object/public/")) {
@@ -113,6 +136,62 @@ export async function streamToFile(url: string, destPath: string): Promise<void>
   if (!response.body) throw new Error(`No response body for ${url}`);
   const dest = fs.createWriteStream(destPath);
   await pipeline(response.body, dest);
+}
+
+/** Stream a URL directly to disk without buffering in Node.js heap.
+ *
+ *  When `expectedKind` is passed, validates the downloaded file's magic bytes
+ *  against the expected media type. If validation fails, retries ONCE with a
+ *  fresh signed URL (covers stale CDN caches / truncated responses). Any
+ *  second failure is reported as a clear MediaValidationError — much better
+ *  than a downstream ffmpeg error like "Header missing" on a corrupt MP3.
+ *
+ *  For scene-images public URLs: always converts to a fresh signed URL first
+ *  because the Supabase Storage service caches the bucket's public flag and
+ *  may return 400 even after the bucket is marked public.
+ *  For other public URLs: falls back to a signed URL on 400/403. */
+export async function streamToFile(
+  url: string,
+  destPath: string,
+  expectedKind?: MediaKind,
+): Promise<void> {
+  const fetchUrl = await resolveFetchUrl(url);
+  await fetchToDisk(fetchUrl, destPath);
+
+  // If caller didn't request validation, we're done.
+  if (!expectedKind) return;
+
+  try {
+    await validateMedia(destPath, expectedKind);
+    return;
+  } catch (firstErr) {
+    if (!(firstErr instanceof MediaValidationError)) throw firstErr;
+    console.warn(
+      `[StorageHelpers] ${expectedKind} validation failed on first download (${firstErr.reason}): ` +
+        `${firstErr.diagnostic ?? firstErr.message}. Retrying with fresh signed URL...`,
+    );
+
+    // Retry once with a freshly-signed URL.
+    const freshUrl = await makeFreshSignedUrl(url);
+    if (!freshUrl) {
+      throw new Error(
+        `${expectedKind} download corrupted and URL cannot be re-signed (${firstErr.reason}): ${url} — ${firstErr.diagnostic ?? ""}`,
+      );
+    }
+    // Remove the bad file so the retry writes fresh bytes.
+    try { await fs.promises.unlink(destPath); } catch { /* ignore */ }
+    await fetchToDisk(freshUrl, destPath);
+
+    try {
+      await validateMedia(destPath, expectedKind);
+      console.log(`[StorageHelpers] ${expectedKind} validation passed after retry`);
+    } catch (secondErr) {
+      if (!(secondErr instanceof MediaValidationError)) throw secondErr;
+      throw new Error(
+        `${expectedKind} download still corrupted after retry (${secondErr.reason}): ${url} — ${secondErr.diagnostic ?? secondErr.message}`,
+      );
+    }
+  }
 }
 
 /** Size threshold (in bytes) above which we skip straight to TUS resumable. */

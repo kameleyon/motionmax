@@ -241,7 +241,7 @@ async function tryAiVideo(
 
     // Download the AI-generated video to local temp
     const aiVidPath = path.join(tempDir, `scene_${sceneIndex}_ai_raw.mp4`);
-    await streamToFile(result.url, aiVidPath);
+    await streamToFile(result.url, aiVidPath, "video");
     console.log(`[SceneEncoder] Scene ${sceneIndex}: ✅ AI video downloaded (${result.provider})`);
     return aiVidPath;
   } catch (err) {
@@ -382,7 +382,7 @@ async function slideshowFromImages(
   for (let j = 0; j < n; j++) {
     const imgPath = path.join(tempDir, `scene_${sceneIndex}_img${j}.png`);
     const subPath = path.join(tempDir, `scene_${sceneIndex}_sub${j}.mp4`);
-    await streamToFile(imageUrls[j], imgPath);
+    await streamToFile(imageUrls[j], imgPath, "image");
 
     // Each sub-image in a slideshow gets its own Ken Burns preset
     // Offset by sub-index for variety within the scene
@@ -434,8 +434,8 @@ export async function processScene(
       const audPath = path.join(tempDir, `scene_${i}_aud.mp3`);
       console.log(`[SceneEncoder] Scene ${i}: video+audio → mux`);
       await Promise.all([
-        streamToFile(scene.videoUrl, vidPath),
-        streamToFile(scene.audioUrl, audPath),
+        streamToFile(scene.videoUrl, vidPath, "video"),
+        streamToFile(scene.audioUrl, audPath, "audio"),
       ]);
       await muxVideoAudio(vidPath, audPath, localPath, tempDir, i, config);
       removeFiles(vidPath, audPath);
@@ -446,7 +446,7 @@ export async function processScene(
     if (scene.videoUrl) {
       const vidPath = path.join(tempDir, `scene_${i}_vid_raw.mp4`);
       console.log(`[SceneEncoder] Scene ${i}: video only → normalize + silent audio`);
-      await streamToFile(scene.videoUrl, vidPath);
+      await streamToFile(scene.videoUrl, vidPath, "video");
 
       // Normalize resolution
       const normalizedPath = path.join(tempDir, `scene_${i}_vid_norm.mp4`);
@@ -478,7 +478,7 @@ export async function processScene(
     if (validImageUrls.length > 1 && scene.audioUrl) {
       const audPath = path.join(tempDir, `scene_${i}_aud.mp3`);
       console.log(`[SceneEncoder] Scene ${i}: ${validImageUrls.length} images+audio → slideshow`);
-      await streamToFile(scene.audioUrl, audPath);
+      await streamToFile(scene.audioUrl, audPath, "audio");
       await slideshowFromImages(validImageUrls, audPath, localPath, tempDir, i, config);
       removeFiles(audPath);
       return { index: i, path: localPath };
@@ -492,8 +492,8 @@ export async function processScene(
       const mode = config.aiVideo ? "AI video → Ken Burns fallback" : "Ken Burns";
       console.log(`[SceneEncoder] Scene ${i}: image+audio → ${mode}`);
       await Promise.all([
-        streamToFile(scene.imageUrl, imgPath),
-        streamToFile(scene.audioUrl, audPath),
+        streamToFile(scene.imageUrl, imgPath, "image"),
+        streamToFile(scene.audioUrl, audPath, "audio"),
       ]);
       const dur = await imageAudioToClip(imgPath, scene.imageUrl, scenePrompt, audPath, localPath, tempDir, i, config);
       console.log(`[SceneEncoder] Scene ${i}: done (${dur.toFixed(1)}s)`);
@@ -505,7 +505,7 @@ export async function processScene(
     if (scene.imageUrl) {
       const imgPath = path.join(tempDir, `scene_${i}_img.png`);
       console.log(`[SceneEncoder] Scene ${i}: image → Ken Burns + silent audio`);
-      await streamToFile(scene.imageUrl, imgPath);
+      await streamToFile(scene.imageUrl, imgPath, "image");
 
       const duration = scene.duration || 5;
       const silentVidPath = path.join(tempDir, `scene_${i}_imgonly.mp4`);

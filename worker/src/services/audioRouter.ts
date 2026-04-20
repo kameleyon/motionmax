@@ -23,6 +23,7 @@ import {
   generateElevenLabsTTS,
   transformElevenLabsSTS,
   generateChatterboxTTS,
+  generateOpenAITTS,
 } from "./audioProviders.js";
 import { generateQwen3TTS, SPEAKER_MAP } from "./qwen3TTS.js";
 
@@ -40,6 +41,7 @@ export interface AudioConfig {
   elevenLabsApiKey?: string;
   lemonfoxApiKey?: string;
   fishAudioApiKey?: string;
+  openRouterApiKey?: string;
   replicateApiKey: string;
   voiceGender?: string;           // "male" | "female"
   speakerName?: string;           // "Nova" | "Atlas" | "Marcus" etc. — for Qwen3 speaker mapping
@@ -210,7 +212,21 @@ export async function generateSceneAudio(
     return { url: null, error: "Spanish TTS requires Fish Audio API key (FISH_AUDIO_API_KEY)" };
   }
 
-  // ========== CASE 3f: Named Speaker → Qwen3 TTS ==========
+  // ========== CASE 3f: OpenAI TTS via OpenRouter (C.* speakers) ==========
+  // C.Alloy, C.Echo, C.Fable, C.Onyx, C.Nova, C.Shimmer — all languages except HC
+  if (!isHC && config.speakerName?.startsWith("C.") && config.openRouterApiKey) {
+    console.log(`[TTS] Scene ${scene.number}: OpenAI speaker "${config.speakerName}" → OpenRouter TTS`);
+    const result = await generateOpenAITTS(
+      voiceoverText, scene.number, config.speakerName, config.openRouterApiKey, projectId,
+    );
+    if (result.url) {
+      console.log(`✅ Scene ${scene.number}: OpenAI TTS via OpenRouter (${config.speakerName})`);
+      return result;
+    }
+    console.warn(`[TTS] Scene ${scene.number}: OpenRouter TTS failed (${result.error}), falling back`);
+  }
+
+  // ========== CASE 3g: Named Speaker → Qwen3 TTS ==========
   // When user selected a specific speaker (Nova, Atlas, Marcus, etc.), use Qwen3 which has per-speaker voices
   if (config.speakerName && SPEAKER_MAP[config.speakerName] && replicateApiKey) {
     console.log(`[TTS] Scene ${scene.number}: Named speaker "${config.speakerName}" → Qwen3 TTS`);

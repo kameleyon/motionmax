@@ -23,7 +23,9 @@ export type SpeakerVoice =
   // Spanish (Fish Audio)
   | "Carlos" | "Isabella"
   // English specific (LemonFox / Fish Audio)
-  | "Adam" | "River";
+  | "Adam" | "River"
+  // OpenAI TTS via OpenRouter (all languages except Haitian Creole)
+  | "C.Alloy" | "C.Echo" | "C.Fable" | "C.Onyx" | "C.Nova" | "C.Shimmer";
 
 const log = createScopedLogger("SpeakerSelector");
 
@@ -34,6 +36,15 @@ interface SpeakerSelectorProps {
 }
 
 interface SpeakerOption { id: SpeakerVoice; label: string; description: string }
+
+const openaiSpeakers: SpeakerOption[] = [
+  { id: "C.Alloy", label: "C.Alloy", description: "Neutral" },
+  { id: "C.Echo", label: "C.Echo", description: "Male" },
+  { id: "C.Fable", label: "C.Fable", description: "Expressive male" },
+  { id: "C.Onyx", label: "C.Onyx", description: "Deep male" },
+  { id: "C.Nova", label: "C.Nova", description: "Warm female" },
+  { id: "C.Shimmer", label: "C.Shimmer", description: "Soft female" },
+];
 
 const qwenSpeakers: SpeakerOption[] = [
   { id: "Nova", label: "Nova", description: "Warm female" },
@@ -56,18 +67,21 @@ const frenchSpeakers: SpeakerOption[] = [
   { id: "Jacques", label: "Jacques", description: "Male" },
   { id: "Camille", label: "Camille", description: "Female" },
   ...qwenSpeakers,
+  ...openaiSpeakers,
 ];
 
 const spanishSpeakers: SpeakerOption[] = [
   { id: "Carlos", label: "Carlos", description: "Male" },
   { id: "Isabella", label: "Isabella", description: "Female" },
   ...qwenSpeakers,
+  ...openaiSpeakers,
 ];
 
 const englishSpeakers: SpeakerOption[] = [
   { id: "Adam", label: "Adam", description: "Male" },
   { id: "River", label: "River", description: "Female" },
   ...qwenSpeakers,
+  ...openaiSpeakers,
 ];
 
 function getSpeakersForLanguage(language?: string): SpeakerOption[] {
@@ -76,7 +90,7 @@ function getSpeakersForLanguage(language?: string): SpeakerOption[] {
     case "fr": return frenchSpeakers;
     case "es": return spanishSpeakers;
     case "en": return englishSpeakers;
-    default: return qwenSpeakers;
+    default: return [...qwenSpeakers, ...openaiSpeakers];
   }
 }
 
@@ -195,7 +209,7 @@ export function SpeakerSelector({ value, onChange, language }: SpeakerSelectorPr
       while (Date.now() - start < MAX_WAIT) {
         await new Promise(r => setTimeout(r, 2000));
         const { data: row } = await (supabase
-          .from("video_generation_jobs") as any)
+          .from("video_generation_jobs") as unknown as ReturnType<typeof supabase.from>)
           .select("status, result")
           .eq("id", job.id)
           .single();

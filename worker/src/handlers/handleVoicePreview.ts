@@ -7,6 +7,7 @@
  */
 
 import { generateQwen3TTS } from "../services/qwen3TTS.js";
+import { generateOpenAITTS } from "../services/audioProviders.js";
 import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
 
 interface VoicePreviewPayload {
@@ -41,7 +42,12 @@ export async function handleVoicePreview(
 
   let result: { url: string | null; error?: string };
 
-  if (legacyMapping) {
+  if (speaker.startsWith("C.")) {
+    // OpenAI TTS via OpenRouter
+    const apiKey = (process.env.OPENROUTER_API_KEY || "").trim();
+    if (!apiKey) throw new Error("OPENROUTER_API_KEY not configured");
+    result = await generateOpenAITTS(previewText, 0, speaker, apiKey, "voice-preview");
+  } else if (legacyMapping) {
     // Fish Audio / LemonFox / Gemini
     const config: AudioConfig = {
       projectId: "voice-preview",

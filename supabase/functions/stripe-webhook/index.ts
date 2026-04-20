@@ -11,8 +11,20 @@ Sentry.init({
   environment: Deno.env.get("DENO_DEPLOYMENT_ID") ? "production" : "development",
 });
 
+const maskId = (id: string | undefined | null): string => {
+  if (!id) return '(none)';
+  return id.length > 8 ? `${id.substring(0, 4)}...${id.slice(-4)}` : '***';
+};
+
 const logStep = (step: string, details?: any) => {
-  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
+  // Mask Stripe customer IDs and user IDs before logging to avoid leaking PII in info-level logs
+  const safeDetails = details ? JSON.parse(JSON.stringify(details, (key, value) => {
+    if (typeof value === 'string' && (key === 'userId' || key === 'customerId' || key === 'customer' || key === 'client_id' || key === 'user_id')) {
+      return maskId(value);
+    }
+    return value;
+  })) : undefined;
+  const detailsStr = safeDetails ? ` - ${JSON.stringify(safeDetails)}` : '';
   console.log(`[STRIPE-WEBHOOK] ${step}${detailsStr}`);
 };
 

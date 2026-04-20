@@ -144,7 +144,8 @@ export default function Dashboard() {
         .from("projects")
         .select("id, title, created_at, updated_at, project_type, style, thumbnail_url")
         .eq("user_id", user.id)
-        .order("updated_at", { ascending: false })
+        .order("updated_at", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false })
         .limit(10);
       if (error) throw error;
       if (!projects?.length) return [];

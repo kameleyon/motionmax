@@ -86,7 +86,7 @@ export async function handleCinematicVideo(
   // Fetch project data
   const { data: project } = await supabase
     .from("projects")
-    .select("format, style, character_description, voice_inclination")
+    .select("format, style, character_description, voice_inclination, character_images")
     .eq("id", projectId)
     .single();
 
@@ -95,6 +95,7 @@ export async function handleCinematicVideo(
   const { getStylePrompt: getStyle } = await import("../services/prompts.js");
   const styleDesc = getStyle(styleId);
   const userCharacterDesc = project?.character_description || "";
+  const characterImages: string[] = (project as any)?.character_images || [];
 
   // Extract the AI-generated character bible from scene _meta (set during script generation)
   const characterBible: Record<string, string> = scene._meta?.characterBible || {};
@@ -118,7 +119,10 @@ export async function handleCinematicVideo(
     if (bibleSummary) {
       prompt = `${prompt}\n\nCHARACTER APPEARANCE (follow exactly): ${bibleSummary.substring(0, 400)}`;
     }
-    imageUrl = await generateImage(prompt, hyperealApiKey, replicateApiKey, format, projectId);
+    imageUrl = await generateImage(
+      prompt, hyperealApiKey, replicateApiKey, format, projectId,
+      characterImages.length > 0 ? characterImages : undefined,
+    );
     await updateSceneField(generationId, sceneIndex, "imageUrl", imageUrl);
   }
 
@@ -149,7 +153,10 @@ export async function handleCinematicVideo(
         const nextScene = freshScenes[sceneIndex + 1];
         const nextPrompt = nextScene?.visualPrompt || nextScene?.visual_prompt || "Cinematic scene";
         try {
-          endImageUrl = await generateImage(nextPrompt, hyperealApiKey, replicateApiKey, format, projectId);
+          endImageUrl = await generateImage(
+            nextPrompt, hyperealApiKey, replicateApiKey, format, projectId,
+            characterImages.length > 0 ? characterImages : undefined,
+          );
           await updateSceneField(generationId, sceneIndex + 1, "imageUrl", endImageUrl);
         } catch {
           console.error(`[CinematicVideo] Scene ${sceneIndex}: fallback image gen failed, proceeding without end_image`);

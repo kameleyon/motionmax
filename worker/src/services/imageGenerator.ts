@@ -281,6 +281,7 @@ export async function generateImage(
   replicateApiKey: string,
   format: string,
   projectId: string,
+  referenceImages?: string[],
 ): Promise<string> {
   const key = _cacheKey(prompt, format);
 
@@ -298,7 +299,7 @@ export async function generateImage(
     return existing;
   }
 
-  const work = _generateImageUncached(prompt, hyperealApiKey, replicateApiKey, format, projectId);
+  const work = _generateImageUncached(prompt, hyperealApiKey, replicateApiKey, format, projectId, referenceImages);
   _inFlight.set(key, work);
 
   try {
@@ -316,6 +317,7 @@ async function _generateImageUncached(
   replicateApiKey: string,
   format: string,
   projectId: string,
+  referenceImages?: string[],
 ): Promise<string> {
   const startTime = Date.now();
 
@@ -323,6 +325,22 @@ async function _generateImageUncached(
   // Toggle via DB feature_flags row or FLAG_IMAGE_GENERATION=false env var.
   if (!(await isEnabled("image_generation"))) {
     throw new Error("Image generation is disabled via feature flag (image_generation=false)");
+  }
+
+  const replicateEnabled = await isEnabled("image_provider_replicate");
+
+  // When reference images are provided (character consistency), skip Hypereal —
+  // it is text-only and cannot use image_input. Go straight to Replicate.
+  if (referenceImages && referenceImages.length > 0) {
+    console.log(`[ImageGen] Reference images provided (${referenceImages.length}) — routing to Replicate for consistency`);
+    if (replicateApiKey && replicateEnabled) {
+      const url = await tryReplicate(prompt, replicateApiKey, format, projectId, referenceImages);
+      if (url) {
+        writeApiLog({ userId: undefined, generationId: undefined, provider: "replicate", model: "nano-banana-2", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
+        return url;
+      }
+      console.warn("[ImageGen] Replicate (with reference images) failed — falling through to standard flow");
+    }
   }
 
   // Primary: Hypereal → download bytes → upload to Supabase
@@ -341,7 +359,6 @@ async function _generateImageUncached(
   }
 
   // Fallback: Replicate (already uploads to Supabase internally)
-  const replicateEnabled = await isEnabled("image_provider_replicate");
   if (replicateApiKey && replicateEnabled) {
     const url = await tryReplicate(prompt, replicateApiKey, format, projectId);
     if (url) {

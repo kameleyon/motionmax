@@ -35,7 +35,7 @@ export async function handleCinematicImage(
 
   const { data: generation, error: genError } = await supabase
     .from("generations")
-    .select("*, projects(format, style, character_description, character_consistency_enabled, project_type)")
+    .select("*, projects(format, style, character_description, character_consistency_enabled, project_type, character_images)")
     .eq("id", generationId)
     .maybeSingle();
 
@@ -52,6 +52,7 @@ export async function handleCinematicImage(
 
   const format = generation.projects?.format || "landscape";
   const style = generation.projects?.style || "realistic";
+  const characterImages: string[] = (generation.projects as any)?.character_images || [];
   const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
   const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
 
@@ -85,7 +86,10 @@ export async function handleCinematicImage(
     message: `Generating cinematic image for scene ${sceneIndex + 1}`,
   });
 
-  const imageUrl = await generateImage(prompt, hyperealApiKey, replicateApiKey, format, projectId);
+  const imageUrl = await generateImage(
+    prompt, hyperealApiKey, replicateApiKey, format, projectId,
+    characterImages.length > 0 ? characterImages : undefined,
+  );
 
   if (!imageUrl) {
     await updateSceneProgress(jobId, sceneIndex, "failed", {

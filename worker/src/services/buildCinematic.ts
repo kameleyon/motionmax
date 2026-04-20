@@ -288,7 +288,12 @@ If a character wears a "navy blue hoodie and white sneakers" in scene 1, they MU
 BAD: Scene 1: "woman with curly brown hair in a red dress" → Scene 5: "woman with straight dark hair in jeans"
 GOOD: Scene 1: "woman with curly brown hair in a red dress" → Scene 5: "woman with curly brown hair in a red dress, now running through the park"
 
-${PROMPT_ENGINEERING_SECTION}
+${p.characterConsistencyEnabled ? `=== STUDIO CHARACTER LOCK (ACTIVE) ===
+⚠️ This generation uses STUDIO-grade character consistency enforcement.
+In EVERY scene's visualPrompt, copy the character's EXACT physical description from the "characters" object — verbatim, not paraphrased.
+Same skin tone. Same hair color and style. Same clothing. Same build. Every scene. No exceptions.
+
+` : ""}${PROMPT_ENGINEERING_SECTION}
 
 ${buildCoverTitleSection('"The Untold Story", "When Everything Changed", "Against All Odds", "Rise to Power"', styleDesc)}
 

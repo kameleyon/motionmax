@@ -178,6 +178,7 @@ async function generateSceneImage(
   supabase: ReturnType<typeof createClient>,
   characterBible: Record<string, string> = {},
   characterDescription: string = "",
+  characterConsistencyEnabled: boolean = false,
 ): Promise<string> {
   const aspectRatio = format === "portrait" ? "9:16" : format === "square" ? "1:1" : "16:9";
 
@@ -211,6 +212,11 @@ CONSISTENCY RULES:
 2. Keep skin tone, hair color/style, clothing, and body type consistent throughout`;
   }
 
+  const studioLock = characterConsistencyEnabled ? `
+
+⚠️ STUDIO CHARACTER LOCK — ZERO DEVIATION:
+Copy the character description VERBATIM from the CHARACTER CONSISTENCY BIBLE into this image. Same skin tone, same hair, same clothing, same build — every detail must match exactly. No improvisation allowed.` : "";
+
   const imagePrompt = `${fullStylePrompt}
 
 SCENE DESCRIPTION: ${scene.visualPrompt}
@@ -218,7 +224,7 @@ SCENE DESCRIPTION: ${scene.visualPrompt}
 CAMERA/SHOT STYLE: ${scene.visualStyle}
 
 FORMAT: ${format === "portrait" ? "VERTICAL 9:16 portrait orientation (tall, like a phone screen)" : format === "square" ? "SQUARE 1:1 aspect ratio (equal width and height)" : "HORIZONTAL 16:9 landscape orientation (wide, like a TV screen)"}. The image MUST be composed for this exact aspect ratio.
-${characterConsistencyBlock}
+${characterConsistencyBlock}${studioLock}
 
 QUALITY REQUIREMENTS:
 - ULTRA DETAILED with rich textures, accurate lighting, and proper shadows
@@ -1085,14 +1091,14 @@ export async function handler(req: Request): Promise<Response> {
       // We need style + format + character data from the project record
       const { data: project, error: projectError } = await supabase
         .from("projects")
-        .select("id, style, format, character_description")
+        .select("id, style, format, character_description, character_consistency_enabled")
         .eq("id", generation.project_id)
         .maybeSingle();
 
       if (projectError || !project) throw new Error("Project not found");
 
-      // Read character bible stored on scenes[0] during script phase
-      const charBible: Record<string, string> = (scenesRaw[0] as any)?._characterBible || {};
+      // Character bible is stored inside _meta (set by generateVideo worker) — NOT at top level
+      const charBible: Record<string, string> = (scenesRaw[0] as any)?._meta?.characterBible || {};
 
       const imageUrl = await generateSceneImage(
         scene,
@@ -1102,6 +1108,7 @@ export async function handler(req: Request): Promise<Response> {
         supabase,
         charBible,
         project.character_description || "",
+        project.character_consistency_enabled ?? false,
       );
 
       scenes[idx] = { ...scene, imageUrl };
@@ -1292,19 +1299,20 @@ export async function handler(req: Request): Promise<Response> {
       // Get project for style/format/character data
       const { data: project, error: projectError } = await supabase
         .from("projects")
-        .select("id, style, format, character_description")
+        .select("id, style, format, character_description, character_consistency_enabled")
         .eq("id", generation.project_id)
         .maybeSingle();
       if (projectError || !project) throw new Error("Project not found");
 
       const format = (project.format || "portrait") as "landscape" | "portrait" | "square";
       const style = project.style || "realistic";
-      const regenCharBible: Record<string, string> = (scenesRaw[0] as any)?._characterBible || {};
+      // Character bible is stored inside _meta (set by generateVideo worker) — NOT at top level
+      const regenCharBible: Record<string, string> = (scenesRaw[0] as any)?._meta?.characterBible || {};
 
       console.log(`[IMG-REGEN] Scene ${scene.number}: Regenerating image`);
 
       // Generate new image with character consistency
-      const newImageUrl = await generateSceneImage(scene, style, format, replicateToken, supabase, regenCharBible, project.character_description || "");
+      const newImageUrl = await generateSceneImage(scene, style, format, replicateToken, supabase, regenCharBible, project.character_description || "", project.character_consistency_enabled ?? false);
 
       // Grok commented out for testing — use Hypereal Seedance 1.5
       console.log(`[IMG-REGEN] Scene ${scene.number}: Starting video regeneration with Hypereal Seedance 1.5`);

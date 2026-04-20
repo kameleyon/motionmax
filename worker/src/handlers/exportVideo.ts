@@ -318,10 +318,12 @@ async function _runExport(
   } else if (isSmartFlow) {
     exportConfig.crossfadeDuration = 0;
     exportConfig.kenBurns = false;
+    exportConfig.aiVideo = false; // SmartFlow = static slides, no AI video
     log.info("SmartFlow detected — static images, no animation");
   } else {
     exportConfig.kenBurns = false;
     exportConfig.crossfadeDuration = 0;
+    exportConfig.aiVideo = false; // doc2video / explainer = image-based, no AI video
     log.info("Standard project — direct concat, no Ken Burns, no crossfade");
   }
 

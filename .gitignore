@@ -29,6 +29,8 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+marketing-dist
+marketing/.astro
 *.local
 
 # Source maps (never commit — may contain original source; Sentry uploads them from CI only)

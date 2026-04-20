@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build:react": "vite build",
+    "build:marketing": "npm run build --prefix marketing",
+    "build:merge": "node scripts/merge-dist.mjs",
+    "build": "npm run build:react && npm run build:marketing && npm run build:merge",
     "build:dev-local": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",

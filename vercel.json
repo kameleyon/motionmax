@@ -17,10 +17,20 @@
       "has": [{ "type": "header", "key": "user-agent", "value": "(?i).*(bot|crawler|spider|googlebot|bingbot|twitterbot|facebookexternalhit|linkedinbot|slackbot|discordbot|whatsapp|telegram).*" }],
       "destination": "https://ayjbvcikuwknqdrpsdmj.supabase.co/functions/v1/share-meta?id=:id"
     },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/auth", "destination": "/app-shell.html" },
+    { "source": "/auth/:path*", "destination": "/app-shell.html" },
+    { "source": "/app", "destination": "/app-shell.html" },
+    { "source": "/app/:path*", "destination": "/app-shell.html" },
+    { "source": "/projects", "destination": "/app-shell.html" },
+    { "source": "/projects/:path*", "destination": "/app-shell.html" },
+    { "source": "/settings", "destination": "/app-shell.html" },
+    { "source": "/settings/:path*", "destination": "/app-shell.html" },
+    { "source": "/usage", "destination": "/app-shell.html" },
+    { "source": "/voice-lab", "destination": "/app-shell.html" },
+    { "source": "/voice-lab/:path*", "destination": "/app-shell.html" },
+    { "source": "/share/:path*", "destination": "/app-shell.html" },
+    { "source": "/admin", "destination": "/app-shell.html" },
+    { "source": "/admin/:path*", "destination": "/app-shell.html" }
   ],
   "headers": [
     {
@@ -54,12 +64,11 @@
     },
     {
       "source": "/index.html",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-cache, no-store, must-revalidate"
-        }
-      ]
+      "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+    },
+    {
+      "source": "/app-shell.html",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
     },
     {
       "source": "/assets/(.*)",

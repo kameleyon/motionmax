@@ -28,7 +28,10 @@ export function runFfmpeg(
       { timeout: timeoutMs, maxBuffer: 5 * 1024 * 1024 },
       (error, stdout, stderr) => {
         if (error) {
-          const msg = stderr?.slice(-500) || error.message;
+          const full = stderr || "";
+          const msg = full.length > 1200
+            ? full.slice(0, 600) + "\n...\n" + full.slice(-600)
+            : full || error.message;
           return reject(new Error(`ffmpeg failed: ${msg}`));
         }
         resolve({ stdout: stdout ?? "", stderr: stderr ?? "" });

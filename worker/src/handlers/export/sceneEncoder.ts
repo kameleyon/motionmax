@@ -13,7 +13,7 @@
  *   - Ken Burns motion on image-based scenes
  */
 import path from "path";
-import { runFfmpeg, probeDuration, X264_MEM_FLAGS } from "./ffmpegCmd.js";
+import { runFfmpeg, probeDuration, getExactAudioDuration, X264_MEM_FLAGS } from "./ffmpegCmd.js";
 import { streamToFile, removeFiles } from "./storageHelpers.js";
 import { concatFiles } from "./concatScenes.js";
 import {
@@ -267,7 +267,7 @@ async function imageAudioToClip(
   sceneIndex: number,
   config: ExportConfig
 ): Promise<number> {
-  const audioDur = await probeDuration(audioPath);
+  const audioDur = await getExactAudioDuration(audioPath);
   console.log(`[SceneEncoder] Scene ${sceneIndex} imageAudio: ${audioDur.toFixed(2)}s`);
 
   // Try AI video first (returns local path to downloaded video, or null)
@@ -284,7 +284,10 @@ async function imageAudioToClip(
   const silentVidPath = path.join(tempDir, `scene_${sceneIndex}_imgvid.mp4`);
   await imageToSilentClip(imagePath, silentVidPath, audioDur, sceneIndex, config);
 
-  // Merge video + audio (stream-copy video, re-encode audio with 1.1x speed)
+  // Merge video + audio (stream-copy video, re-encode audio)
+  // -t caps output at audioDur to prevent filter-graph reinit when one
+  // input outlasts the other (WAV files from TTS often have unknown RIFF
+  // data size, causing probeDuration to return 10 as fallback).
   await runFfmpeg([
     "-i", silentVidPath,
     "-i", audioPath,
@@ -295,6 +298,7 @@ async function imageAudioToClip(
     "-b:a", "128k",
     "-ar", "44100",
     "-ac", "2",
+    "-t", String(audioDur),
     "-movflags", "+faststart",
     outputPath,
   ]);
@@ -326,7 +330,7 @@ async function muxVideoAudio(
 ): Promise<void> {
   const [videoDur, audioDur] = await Promise.all([
     probeDuration(videoPath),
-    probeDuration(audioPath),
+    getExactAudioDuration(audioPath),
   ]);
 
   // AUDIO IS KING — video duration must EXACTLY match audio duration.
@@ -369,7 +373,7 @@ async function slideshowFromImages(
   sceneIndex: number,
   config: ExportConfig
 ): Promise<void> {
-  const audioDur = await probeDuration(audioPath);
+  const audioDur = await getExactAudioDuration(audioPath);
   const n = imageUrls.length;
   const perImgDur = audioDur / n;
 
@@ -404,6 +408,7 @@ async function slideshowFromImages(
     "-b:a", "128k",
     "-ar", "44100",
     "-ac", "2",
+    "-t", String(audioDur),
     "-movflags", "+faststart",
     outputPath,
   ]);

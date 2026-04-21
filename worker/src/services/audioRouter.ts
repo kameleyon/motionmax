@@ -1,15 +1,21 @@
 /**
- * TTS provider router — mirrors edge function audioEngine.ts with modifications:
+ * TTS provider router — STRICT per-voice routing.
  *
- * CASE 1: HC + Clone        → Gemini TTS → ElevenLabs STS (clone voice)
+ * Haitian Creole is the ONLY path that retains cross-provider behavior
+ * (Gemini → ElevenLabs STS for clone) because the user asked us to keep
+ * the existing Creole setup unchanged. Every other voice uses exactly ONE
+ * provider and fails the scene if that provider can't deliver — no silent
+ * fall-through that would produce a voice in the wrong identity.
+ *
+ * CASE 1: HC + Clone        → Gemini TTS → ElevenLabs STS (clone voice) [unchanged]
  * CASE 2: Non-HC/FR + Clone → ElevenLabs TTS (no fallback)
- * CASE 3: HC Standard       → Gemini TTS ONLY (no STS, no fallback)
- * CASE 3b: French Male      → Fish Audio (1cda4ad9…)
- * CASE 3c: French Female    → Fish Audio (42fe8376…)
- * CASE 3d: Spanish Male     → Fish Audio (53042fce…)
- * CASE 3e: Spanish Female   → Fish Audio (cd8052cd…)
- * CASE 4: English Male      → LemonFox (Adam) → Fish Audio (06a8fa…) → Chatterbox (Replicate)
- * CASE 5: English Female    → Fish Audio (c64a90…) → Chatterbox (Replicate)
+ * CASE 3: HC Standard       → Gemini TTS ONLY (no STS, no fallback)     [unchanged]
+ * CASE 3b: French Male      → Fish Audio ONLY (no fallback)
+ * CASE 3c: French Female    → Fish Audio ONLY (no fallback)
+ * CASE 3d: Spanish Male     → Fish Audio ONLY (no fallback)
+ * CASE 3e: Spanish Female   → Fish Audio ONLY (no fallback)
+ * CASE 4: English Male      → LemonFox (Adam) ONLY (no fallback)
+ * CASE 5: English Female    → Fish Audio ONLY (no fallback)
  *
  * Creole detected from: config.forceHaitianCreole OR isHaitianCreole(text)
  * French detected from: config.language === "fr" OR isFrench(text) auto-detection
@@ -22,7 +28,9 @@ import {
   generateGeminiTTS,
   generateElevenLabsTTS,
   transformElevenLabsSTS,
-  generateChatterboxTTS,
+  // generateChatterboxTTS removed as an English fallback — strict routing
+  // per user request. Keep import commented for quick rollback if needed.
+  // generateChatterboxTTS,
 } from "./audioProviders.js";
 // Qwen3 TTS (Replicate) disabled — kept importing SPEAKER_MAP only in case
 // callers still pass a Qwen3-style speakerName; named-speaker routing is no-op'd below.
@@ -219,55 +227,32 @@ export async function generateSceneAudio(
   // Re-enable by restoring the import and this block.
 
   // ========== CASE 4: English Male ==========
-  // LemonFox (Adam) → Fish Audio (male) → Chatterbox (Replicate)
+  // LemonFox (Adam) ONLY — no Fish Audio, no Chatterbox fallback. If
+  // LemonFox can't deliver, the scene fails and the caller decides how to
+  // surface the error. This preserves the speaker identity the user picked.
   if (voiceGender === "male") {
-    if (lemonfoxApiKey) {
-      console.log(`[TTS] Scene ${scene.number}: English Male → LemonFox (Adam)`);
-      const result = await generateLemonfoxTTS(voiceoverText, scene.number, "male", lemonfoxApiKey, projectId);
-      if (result.url) {
-        console.log(`✅ Scene ${scene.number}: LemonFox Adam (English male)`);
-        return result;
-      }
-      console.warn(`[TTS] Scene ${scene.number}: LemonFox failed (${result.error}), Fish Audio fallback`);
+    if (!lemonfoxApiKey) {
+      return { url: null, error: "English male (Adam) requires LEMONFOX_API_KEY" };
     }
-    if (fishAudioApiKey) {
-      console.log(`[TTS] Scene ${scene.number}: English Male → Fish Audio (fallback)`);
-      const result = await generateFishAudioTTS(
-        voiceoverText, scene.number, fishAudioApiKey, projectId, "06a8fa125ea54698b0c84feac214abad",
-      );
-      if (result.url) {
-        console.log(`✅ Scene ${scene.number}: Fish Audio (English male fallback)`);
-        return { ...result, provider: "Fish Audio (English male)" };
-      }
-      console.warn(`[TTS] Scene ${scene.number}: Fish Audio male failed (${result.error}), Chatterbox fallback`);
+    console.log(`[TTS] Scene ${scene.number}: English Male → LemonFox (Adam) [strict, no fallback]`);
+    const result = await generateLemonfoxTTS(voiceoverText, scene.number, "male", lemonfoxApiKey, projectId);
+    if (result.url) {
+      console.log(`✅ Scene ${scene.number}: LemonFox Adam (English male)`);
+      return result;
     }
-    if (replicateApiKey) {
-      const fb = await generateChatterboxTTS(voiceoverText, scene.number, "male", replicateApiKey, projectId);
-      if (fb.url) {
-        console.log(`✅ Scene ${scene.number}: Chatterbox (male fallback)`);
-        return fb;
-      }
-    }
-    return { url: null, error: "English male: LemonFox + Fish Audio + Chatterbox all failed" };
+    return { url: null, error: `English male (Adam) via LemonFox failed: ${result.error}` };
   }
 
   // ========== CASE 5: English Female ==========
-  // Fish Audio → Chatterbox (Replicate)
-  if (fishAudioApiKey) {
-    console.log(`[TTS] Scene ${scene.number}: English Female → Fish Audio`);
-    const result = await generateFishAudioTTS(voiceoverText, scene.number, fishAudioApiKey, projectId);
-    if (result.url) {
-      console.log(`✅ Scene ${scene.number}: Fish Audio (female)`);
-      return result;
-    }
-    console.warn(`[TTS] Scene ${scene.number}: Fish Audio failed (${result.error}), Chatterbox fallback`);
+  // Fish Audio ONLY — no Chatterbox fallback (see above).
+  if (!fishAudioApiKey) {
+    return { url: null, error: "English female (River) requires FISH_AUDIO_API_KEY" };
   }
-  if (replicateApiKey) {
-    const fb = await generateChatterboxTTS(voiceoverText, scene.number, "female", replicateApiKey, projectId);
-    if (fb.url) {
-      console.log(`✅ Scene ${scene.number}: Chatterbox (female fallback)`);
-      return fb;
-    }
+  console.log(`[TTS] Scene ${scene.number}: English Female → Fish Audio [strict, no fallback]`);
+  const result = await generateFishAudioTTS(voiceoverText, scene.number, fishAudioApiKey, projectId);
+  if (result.url) {
+    console.log(`✅ Scene ${scene.number}: Fish Audio (female)`);
+    return result;
   }
-  return { url: null, error: "English female: Fish Audio + Chatterbox both failed" };
+  return { url: null, error: `English female (River) via Fish Audio failed: ${result.error}` };
 }

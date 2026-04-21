@@ -229,38 +229,23 @@ export async function handleCinematicAudio(
         config,
       );
     } else {
-      // ── Qwen3 TTS disabled (Replicate rate-limit issues) ──
-      // Route ALL non-legacy speakers through the standard audio chain
-      // (Gemini → Fish Audio → Lemonfox) instead of Qwen3 on Replicate.
-      // Re-enable by uncommenting the generateQwen3TTS import and block above.
-      console.log(`[CinematicAudio] Scene ${sceneIndex}: speaker=${voiceName} → standard chain (Qwen3 disabled) lang=${resolvedLanguage}`);
-
-      const googleApiKeys = [
-        process.env.GOOGLE_TTS_API_KEY_3,
-        process.env.GOOGLE_TTS_API_KEY_2,
-        process.env.GOOGLE_TTS_API_KEY,
-      ].filter(Boolean) as string[];
-
-      // Best-effort gender heuristic from the speaker display name so the
-      // router picks a matching voice when Gemini/Fish/Lemonfox need one.
-      const MALE_NAMES = new Set(["Atlas", "Kai", "Marcus", "Leo", "Sage", "Adam", "Jacques", "Carlos", "Pierre"]);
-      const genderGuess = MALE_NAMES.has(voiceName) ? "male" : "female";
-
-      const stdConfig: AudioConfig = {
-        projectId,
-        googleApiKeys,
-        elevenLabsApiKey: process.env.ELEVENLABS_API_KEY,
-        lemonfoxApiKey: process.env.LEMONFOX_API_KEY,
-        fishAudioApiKey: process.env.FISH_AUDIO_API_KEY,
-        replicateApiKey: process.env.REPLICATE_API_KEY || "",
-        voiceGender: genderGuess,
-        language: resolvedLanguage,
-      };
-
-      result = await generateSceneAudio(
-        { number: sceneIndex + 1, voiceover, duration: scene.duration || 10 },
-        stdConfig,
-      );
+      // Speaker is not Haitian Creole, not `sm:`/`sm2:` (Smallest), and not
+      // in LEGACY_SPEAKER_MAP. That means it's an orphan value — typically
+      // a Qwen3 name (Nova, Atlas, Kai, …) saved on an older project before
+      // Qwen3 was disabled. Fail the scene rather than silently substituting
+      // a different voice: strict routing per user request — the voice the
+      // user picked is the voice they get, or nothing.
+      const errMsg =
+        `Voice "${voiceName}" is no longer supported for new generations. ` +
+        `Please reselect a voice (Adam, River, Carlos, Isabella, Jacques, Camille, ` +
+        `Pierre, Marie, or any Smallest voice) on this project and regenerate.`;
+      console.warn(`[CinematicAudio] Scene ${sceneIndex}: ${errMsg}`);
+      await updateSceneProgress(jobId, sceneIndex, "failed", {
+        message: `Scene ${sceneIndex + 1} audio generation failed`,
+        error: errMsg,
+      });
+      clearSceneProgress(jobId);
+      throw new Error(`Audio generation failed: ${errMsg}`);
     }
   }
 

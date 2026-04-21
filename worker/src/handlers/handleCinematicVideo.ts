@@ -1,14 +1,20 @@
 /**
- * Cinematic video handler — Grok Video I2V (active).
+ * Cinematic video handler — Kling V2.5 Turbo I2V (active).
  *
  * Flow:
  *   - All images are generated FIRST (in parallel batches by the frontend)
- *   - ALL scenes use Grok Video I2V (no end_image — Grok doesn't support last_image)
+ *   - ALL scenes use Kling V2.5 Turbo I2V with native `last_image` for
+ *     seamless start→end frame transitions between scenes.
  *   - Camera motion varies per scene (rotated from 7 movement types)
  *
- * Active: grok-video-i2v via Hypereal (1080P, 10s)
+ * Active: kling-2-5-i2v via Hypereal (10s)
  *
- * Previous models (commented out): Kling V2.5 Turbo, PixVerse V6
+ * Previously active (rolled back): Grok Video I2V — Hypereal's status
+ * endpoint kept returning "Failed to check status" for grok jobs,
+ * failing every scene. Kling has always been reliable on Hypereal.
+ *
+ * Commented-out alternatives kept for quick rollback: Grok, Kling V3,
+ * Kling V2.6, Veo 3.1, PixVerse V6.
  */
 
 import { supabase } from "../lib/supabase.js";
@@ -17,11 +23,11 @@ import { updateSceneField } from "../lib/sceneUpdate.js";
 import { generateImage } from "../services/imageGenerator.js";
 import {
   // generatePixVerseTransition,  // PixVerse V6 — disabled, returns 500 E1001
-  // generateKlingV25Video,       // Kling V2.5 Turbo — commented out, switching to Grok
+  generateKlingV25Video,          // Active model — Kling V2.5 Turbo I2V (last_image support)
   // generateKlingV3Video,        // V3.0 — faster + cheaper but lip sync issues
   // generateVeo31Video,          // Veo 3.1 — doesn't follow prompts, generates unwanted audio/lip sync
   // generateKlingV26Video,       // Previous fallback — kept for rollback
-  generateGrokVideo,              // Active model — Grok Video I2V (no end_image support)
+  // generateGrokVideo,           // Grok Video I2V — status-lookup failures on Hypereal, rolled back
 } from "../services/hypereal.js";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -211,7 +217,7 @@ export async function handleCinematicVideo(
 
   const cameraName = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("\u2014")[0].trim();
   console.log(
-    `[CinematicVideo] Scene ${sceneIndex}: Grok Video I2V, ` +
+    `[CinematicVideo] Scene ${sceneIndex}: Kling V2.5 Turbo I2V, ` +
     `camera=${cameraName}, prompt=${finalPrompt.length} chars`
   );
 
@@ -220,19 +226,24 @@ export async function handleCinematicVideo(
   let provider: string;
   const negPrompt = "blurry, low quality, watermark, text, UI elements, slow motion, sluggish, nudity, naked, exposed body, extra limbs, body contortion, distorted anatomy, lip sync, talking, mouth movement, speaking";
 
-  // ── Grok Video I2V (active) — no end_image support ──────────────
-  const aspectRatio = format === "portrait" ? "9:16" as const : "16:9" as const;
-  provider = "Grok Video I2V";
-  videoUrl = await generateGrokVideo(imageUrl, finalPrompt, apiKey, aspectRatio, 10, "1080P");
+  // Kling V2.5 Turbo I2V (active) — uses native last_image for seamless
+  // transitions when we have the next scene's image. Final scene passes
+  // undefined so Kling generates a natural conclusion instead of a
+  // transition back to the start frame.
+  if (endImageUrl) {
+    provider = "Kling V2.5 Turbo I2V";
+    videoUrl = await generateKlingV25Video(imageUrl, finalPrompt, apiKey, 10, endImageUrl, negPrompt, 0.8);
+  } else {
+    provider = "Kling V2.5 Turbo I2V";
+    videoUrl = await generateKlingV25Video(imageUrl, finalPrompt, apiKey, 10, undefined, negPrompt, 0.8);
+  }
 
-  // ── Kling V2.5 Turbo (commented out — previous model) ─────────
-  // if (endImageUrl) {
-  //   provider = "Kling V2.5 Turbo I2V";
-  //   videoUrl = await generateKlingV25Video(imageUrl, finalPrompt, apiKey, 10, endImageUrl, negPrompt, 0.8);
-  // } else {
-  //   provider = "Kling V2.5 Turbo I2V";
-  //   videoUrl = await generateKlingV25Video(imageUrl, finalPrompt, apiKey, 10, undefined, negPrompt, 0.8);
-  // }
+  // Grok Video I2V removed — Hypereal's status-lookup endpoint returned
+  // "Failed to check status" for every fresh Grok job, failing scenes ~5s
+  // after creation. Kling V2.5 (above) does not have this issue.
+  // const aspectRatio = format === "portrait" ? "9:16" as const : "16:9" as const;
+  // provider = "Grok Video I2V";
+  // videoUrl = await generateGrokVideo(imageUrl, finalPrompt, apiKey, aspectRatio, 10, "1080P");
 
   // Upload to Supabase storage
   const finalVideoUrl = await uploadVideoToStorage(videoUrl, projectId, generationId, sceneIndex);

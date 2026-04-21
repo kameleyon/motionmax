@@ -239,7 +239,11 @@ export async function generateKlingV26Video(
     duration: clampedDuration,
     cfg_scale: cfgScale,
     negative_prompt: negativePrompt,
-    sound: false, // must be false when using end_image
+    // sound is always false — we generate audio separately via the TTS
+    // providers (Smallest / Fish / LemonFox / Gemini) and mux it in at
+    // export time. Keeping sound off also avoids Kling's 2x cost
+    // multiplier and dodges the "cannot use with end_image" restriction.
+    sound: false,
   };
 
   if (endImageUrl) {

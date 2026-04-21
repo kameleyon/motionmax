@@ -1,20 +1,21 @@
 /**
- * Cinematic video handler — Kling V2.5 Turbo I2V (active).
+ * Cinematic video handler — Kling V2.6 Pro I2V (active).
  *
  * Flow:
  *   - All images are generated FIRST (in parallel batches by the frontend)
- *   - ALL scenes use Kling V2.5 Turbo I2V with native `last_image` for
+ *   - ALL scenes use Kling V2.6 Pro I2V with native `end_image` for
  *     seamless start→end frame transitions between scenes.
  *   - Camera motion varies per scene (rotated from 7 movement types)
  *
- * Active: kling-2-5-i2v via Hypereal (10s)
+ * Active: kling-2-6-i2v-pro via Hypereal (10s). Valid durations: 5 or 10.
+ * Note: sound is forced off when end_image is present (Kling requirement).
  *
  * Previously active (rolled back): Grok Video I2V — Hypereal's status
  * endpoint kept returning "Failed to check status" for grok jobs,
  * failing every scene. Kling has always been reliable on Hypereal.
  *
  * Commented-out alternatives kept for quick rollback: Grok, Kling V3,
- * Kling V2.6, Veo 3.1, PixVerse V6.
+ * Kling V2.5 Turbo, Veo 3.1, PixVerse V6.
  */
 
 import { supabase } from "../lib/supabase.js";
@@ -23,10 +24,10 @@ import { updateSceneField } from "../lib/sceneUpdate.js";
 import { generateImage } from "../services/imageGenerator.js";
 import {
   // generatePixVerseTransition,  // PixVerse V6 — disabled, returns 500 E1001
-  generateKlingV25Video,          // Active model — Kling V2.5 Turbo I2V (last_image support)
+  // generateKlingV25Video,       // Kling V2.5 Turbo — swapped for V2.6 Pro
   // generateKlingV3Video,        // V3.0 — faster + cheaper but lip sync issues
   // generateVeo31Video,          // Veo 3.1 — doesn't follow prompts, generates unwanted audio/lip sync
-  // generateKlingV26Video,       // Previous fallback — kept for rollback
+  generateKlingV26Video,          // Active model — Kling V2.6 Pro I2V (end_image support)
   // generateGrokVideo,           // Grok Video I2V — status-lookup failures on Hypereal, rolled back
 } from "../services/hypereal.js";
 
@@ -217,7 +218,7 @@ export async function handleCinematicVideo(
 
   const cameraName = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("\u2014")[0].trim();
   console.log(
-    `[CinematicVideo] Scene ${sceneIndex}: Kling V2.5 Turbo I2V, ` +
+    `[CinematicVideo] Scene ${sceneIndex}: Kling V2.6 Pro I2V, ` +
     `camera=${cameraName}, prompt=${finalPrompt.length} chars`
   );
 
@@ -226,16 +227,18 @@ export async function handleCinematicVideo(
   let provider: string;
   const negPrompt = "blurry, low quality, watermark, text, UI elements, slow motion, sluggish, nudity, naked, exposed body, extra limbs, body contortion, distorted anatomy, lip sync, talking, mouth movement, speaking";
 
-  // Kling V2.5 Turbo I2V (active) — uses native last_image for seamless
+  // Kling V2.6 Pro I2V (active) — uses native end_image for seamless
   // transitions when we have the next scene's image. Final scene passes
   // undefined so Kling generates a natural conclusion instead of a
-  // transition back to the start frame.
+  // transition back to the start frame. Kling V2.6 forces sound=false
+  // when end_image is present (handled inside generateKlingV26Video).
+  // Duration is clamped to valid values (5 or 10s) inside the service.
   if (endImageUrl) {
-    provider = "Kling V2.5 Turbo I2V";
-    videoUrl = await generateKlingV25Video(imageUrl, finalPrompt, apiKey, 10, endImageUrl, negPrompt, 0.8);
+    provider = "Kling V2.6 Pro I2V";
+    videoUrl = await generateKlingV26Video(imageUrl, finalPrompt, apiKey, 10, endImageUrl, negPrompt, 0.5);
   } else {
-    provider = "Kling V2.5 Turbo I2V";
-    videoUrl = await generateKlingV25Video(imageUrl, finalPrompt, apiKey, 10, undefined, negPrompt, 0.8);
+    provider = "Kling V2.6 Pro I2V";
+    videoUrl = await generateKlingV26Video(imageUrl, finalPrompt, apiKey, 10, undefined, negPrompt, 0.5);
   }
 
   // Grok Video I2V removed — Hypereal's status-lookup endpoint returned

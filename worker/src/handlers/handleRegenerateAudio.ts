@@ -11,7 +11,8 @@
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
-import { generateQwen3TTS } from "../services/qwen3TTS.js";
+// Qwen3 TTS (Replicate) disabled — standard audio chain handles all speakers.
+// import { generateQwen3TTS } from "../services/qwen3TTS.js";
 import { isHaitianCreole } from "../services/audioWavUtils.js";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -119,26 +120,10 @@ export async function handleRegenerateAudio(
 
   console.log(`[RegenerateAudio] Resolved voice → speaker=${voiceName}, gender=${gender}, language=${lang}, isHC=${isHC}`);
 
-  // Qwen3 path: cinematic projects with non-legacy speakers (Nova, Atlas, etc.)
-  if (projectType === "cinematic" && !legacyMapping && !isHC) {
-    const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
-    if (!replicateApiKey) throw new Error("REPLICATE_API_KEY not configured");
-
-    const styleInstruction = inferStyleInstruction(newVoiceover);
-    console.log(`[RegenerateAudio] Qwen3 speaker=${voiceName} lang=${resolvedLanguage}`);
-
-    audioResult = await generateQwen3TTS(
-      {
-        text: newVoiceover,
-        sceneNumber: sceneIndex + 1,
-        projectId,
-        speaker: voiceName,
-        language: resolvedLanguage,
-        styleInstruction,
-      },
-      replicateApiKey,
-    );
-  } else {
+  // Qwen3 TTS disabled — every speaker now routes through the standard audio
+  // chain (Gemini → Fish Audio → Lemonfox). Re-enable by restoring the
+  // `if (projectType === "cinematic" && !legacyMapping && !isHC)` block.
+  {
     // Standard audio router — handles all named speakers, all languages, all project types
     const voiceType = project?.voice_type || "standard";
     const voiceId = voiceType === "custom" ? project?.voice_id : undefined;

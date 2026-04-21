@@ -24,7 +24,9 @@ import {
   transformElevenLabsSTS,
   generateChatterboxTTS,
 } from "./audioProviders.js";
-import { generateQwen3TTS, SPEAKER_MAP } from "./qwen3TTS.js";
+// Qwen3 TTS (Replicate) disabled — kept importing SPEAKER_MAP only in case
+// callers still pass a Qwen3-style speakerName; named-speaker routing is no-op'd below.
+// import { generateQwen3TTS, SPEAKER_MAP } from "./qwen3TTS.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -210,20 +212,11 @@ export async function generateSceneAudio(
     return { url: null, error: "Spanish TTS requires Fish Audio API key (FISH_AUDIO_API_KEY)" };
   }
 
-  // ========== CASE 3f: Named Speaker → Qwen3 TTS ==========
-  // When user selected a specific speaker (Nova, Atlas, Marcus, etc.), use Qwen3 which has per-speaker voices
-  if (config.speakerName && SPEAKER_MAP[config.speakerName] && replicateApiKey) {
-    console.log(`[TTS] Scene ${scene.number}: Named speaker "${config.speakerName}" → Qwen3 TTS`);
-    const result = await generateQwen3TTS(
-      { text: voiceoverText, sceneNumber: scene.number, projectId, speaker: config.speakerName, language: config.language || "en" },
-      replicateApiKey,
-    );
-    if (result.url) {
-      console.log(`✅ Scene ${scene.number}: Qwen3 TTS (${config.speakerName})`);
-      return { url: result.url, durationSeconds: result.durationSeconds, provider: `Qwen3 (${config.speakerName})` };
-    }
-    console.warn(`[TTS] Scene ${scene.number}: Qwen3 failed (${result.error}), falling back to provider chain`);
-  }
+  // ========== CASE 3f: Named Speaker → Qwen3 TTS (DISABLED) ==========
+  // Qwen3 on Replicate removed due to rate-limit issues. Named speakers
+  // (Nova, Atlas, Marcus, etc.) now fall through to the English male/female
+  // chain below (LemonFox / Fish Audio / Chatterbox) based on gender heuristic.
+  // Re-enable by restoring the import and this block.
 
   // ========== CASE 4: English Male ==========
   // LemonFox (Adam) → Fish Audio (male) → Chatterbox (Replicate)

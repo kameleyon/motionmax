@@ -13,8 +13,8 @@
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField } from "../lib/sceneUpdate.js";
-import { generateQwen3TTS } from "../services/qwen3TTS.js";
-// Legacy router kept for Haitian Creole fallback
+// Qwen3 TTS (Replicate) disabled — kept around in case we re-enable later.
+// import { generateQwen3TTS } from "../services/qwen3TTS.js";
 import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
 import { isHaitianCreole } from "../services/audioWavUtils.js";
 import {
@@ -184,23 +184,37 @@ export async function handleCinematicAudio(
         config,
       );
     } else {
-      // ── Qwen3 TTS for all other speakers ──
-      const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
-      if (!replicateApiKey) throw new Error("REPLICATE_API_KEY not configured");
+      // ── Qwen3 TTS disabled (Replicate rate-limit issues) ──
+      // Route ALL non-legacy speakers through the standard audio chain
+      // (Gemini → Fish Audio → Lemonfox) instead of Qwen3 on Replicate.
+      // Re-enable by uncommenting the generateQwen3TTS import and block above.
+      console.log(`[CinematicAudio] Scene ${sceneIndex}: speaker=${voiceName} → standard chain (Qwen3 disabled) lang=${resolvedLanguage}`);
 
-      const styleInstruction = inferStyleInstruction(voiceover);
-      console.log(`[CinematicAudio] Scene ${sceneIndex}: Qwen3 TTS speaker=${voiceName} lang=${resolvedLanguage} style="${styleInstruction}"`);
+      const googleApiKeys = [
+        process.env.GOOGLE_TTS_API_KEY_3,
+        process.env.GOOGLE_TTS_API_KEY_2,
+        process.env.GOOGLE_TTS_API_KEY,
+      ].filter(Boolean) as string[];
 
-      result = await generateQwen3TTS(
-        {
-          text: voiceover,
-          sceneNumber: sceneIndex + 1,
-          projectId,
-          speaker: voiceName,
-          language: resolvedLanguage,
-          styleInstruction,
-        },
-        replicateApiKey,
+      // Best-effort gender heuristic from the speaker display name so the
+      // router picks a matching voice when Gemini/Fish/Lemonfox need one.
+      const MALE_NAMES = new Set(["Atlas", "Kai", "Marcus", "Leo", "Sage", "Adam", "Jacques", "Carlos", "Pierre"]);
+      const genderGuess = MALE_NAMES.has(voiceName) ? "male" : "female";
+
+      const stdConfig: AudioConfig = {
+        projectId,
+        googleApiKeys,
+        elevenLabsApiKey: process.env.ELEVENLABS_API_KEY,
+        lemonfoxApiKey: process.env.LEMONFOX_API_KEY,
+        fishAudioApiKey: process.env.FISH_AUDIO_API_KEY,
+        replicateApiKey: process.env.REPLICATE_API_KEY || "",
+        voiceGender: genderGuess,
+        language: resolvedLanguage,
+      };
+
+      result = await generateSceneAudio(
+        { number: sceneIndex + 1, voiceover, duration: scene.duration || 10 },
+        stdConfig,
       );
     }
   }

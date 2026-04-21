@@ -6,7 +6,8 @@
  * so users can hear the voice before choosing.
  */
 
-import { generateQwen3TTS } from "../services/qwen3TTS.js";
+// Qwen3 TTS (Replicate) disabled — previews route through standard chain.
+// import { generateQwen3TTS } from "../services/qwen3TTS.js";
 import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
 
 interface VoicePreviewPayload {
@@ -64,20 +65,29 @@ export async function handleVoicePreview(
       config,
     );
   } else {
-    // Qwen3 TTS
-    const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
-    if (!replicateApiKey) throw new Error("REPLICATE_API_KEY not configured");
+    // Qwen3 TTS disabled — route non-legacy speakers through the standard chain
+    // with a gender heuristic from the display name.
+    const MALE_NAMES = new Set(["Atlas", "Kai", "Marcus", "Leo", "Sage"]);
+    const genderGuess = MALE_NAMES.has(speaker) ? "male" : "female";
 
-    result = await generateQwen3TTS(
-      {
-        text: previewText,
-        sceneNumber: 0,
-        projectId: "voice-preview",
-        speaker,
-        language,
-        styleInstruction: "Speak with warmth and natural enthusiasm, like introducing yourself to a friend",
-      },
-      replicateApiKey,
+    const config: AudioConfig = {
+      projectId: "voice-preview",
+      googleApiKeys: [
+        process.env.GOOGLE_TTS_API_KEY_3,
+        process.env.GOOGLE_TTS_API_KEY_2,
+        process.env.GOOGLE_TTS_API_KEY,
+      ].filter(Boolean) as string[],
+      elevenLabsApiKey: process.env.ELEVENLABS_API_KEY,
+      lemonfoxApiKey: process.env.LEMONFOX_API_KEY,
+      fishAudioApiKey: process.env.FISH_AUDIO_API_KEY,
+      replicateApiKey: process.env.REPLICATE_API_KEY || "",
+      voiceGender: genderGuess,
+      language,
+    };
+
+    result = await generateSceneAudio(
+      { number: 0, voiceover: previewText, duration: 5 },
+      config,
     );
   }
 

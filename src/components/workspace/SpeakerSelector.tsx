@@ -41,13 +41,24 @@ export type SpeakerVoice =
   | "sm:daniella"  | "sm:carlos"     | "sm:jose"      | "sm:luis"
   | "sm:mariana"   | "sm:miguel"     | "sm:lucia"     | "sm:javier"
   | "sm:camilla"   | "sm:diego"      | "sm:gabriela"
-  // Smallest.ai Lightning v2 — `sm2:*` prefix routes to the v2 endpoint.
-  // European voices that weren't ported to v3.1, plus 2 extra Spanish.
-  | "sm2:claire"   | "sm2:emmanuel"     // French
-  | "sm2:adele"    | "sm2:leon"         // German
-  | "sm2:maria"    | "sm2:enzo"         // Italian
-  | "sm2:adriana"  | "sm2:lukas"        // Dutch
-  | "sm2:gerard"   | "sm2:isabel";      // Spanish (v2 extras)
+  // Smallest.ai Lightning v2 — removed from the dropdown (poor quality).
+  // IDs kept in the union so legacy saved projects still typecheck on
+  // load. Worker refuses them at runtime if re-selected.
+  | "sm2:claire"   | "sm2:emmanuel"     // French (retired)
+  | "sm2:adele"    | "sm2:leon"         // German (retired)
+  | "sm2:maria"    | "sm2:enzo"         // Italian (retired)
+  | "sm2:adriana"  | "sm2:lukas"        // Dutch (retired)
+  | "sm2:gerard"   | "sm2:isabel"       // Spanish v2 (retired)
+  // Gemini 3.1 Flash TTS — `gm:*` prefix, multilingual voices. Used for
+  // French / Spanish / Italian / German / Dutch. Each voice works across
+  // all Gemini-supported languages; the model picks the accent from the
+  // input text. Tone descriptors from Google's official Gemini TTS docs.
+  | "gm:Leda"         | "gm:Aoede"        | "gm:Callirrhoe"
+  | "gm:Kore"         | "gm:Vindemiatrix" | "gm:Achernar"
+  | "gm:Sulafat"      | "gm:Laomedeia"
+  | "gm:Charon"       | "gm:Orus"         | "gm:Iapetus"
+  | "gm:Fenrir"       | "gm:Algenib"      | "gm:Rasalgethi"
+  | "gm:Puck";
 
 const log = createScopedLogger("SpeakerSelector");
 
@@ -106,8 +117,9 @@ const englishSmallestSpeakers: SpeakerOption[] = [
   { id: "sm:robert",    label: "Robert",    description: "Male" },
 ];
 
-// Spanish — all 11 voices from v3.1 (mexican/latin accent) + 2 extras
-// from v2 so users can compare v3.1 vs v2 quality.
+// Spanish — all 11 voices from Smallest v3.1 (mexican/latin accent).
+// v2 extras removed (Gerard/Isabel) — v2 voices were replaced by Gemini
+// Flash below for the European-language lineup.
 const spanishSmallestSpeakers: SpeakerOption[] = [
   // Female (v3.1)
   { id: "sm:camilla",  label: "Camilla",   description: "Female" },
@@ -122,30 +134,35 @@ const spanishSmallestSpeakers: SpeakerOption[] = [
   { id: "sm:jose",     label: "Jose",      description: "Male" },
   { id: "sm:luis",     label: "Luis",      description: "Male" },
   { id: "sm:miguel",   label: "Miguel",    description: "Male" },
-  // Lightning v2 extras (different model — worth trying if v3.1 isn't right)
-  { id: "sm2:isabel",  label: "Isabel",    description: "Female" },
-  { id: "sm2:gerard",  label: "Gerard",    description: "Male" },
 ];
 
-// Smallest.ai Lightning v2 — European voices (2 per language, F + M).
-const frenchSmallestSpeakers: SpeakerOption[] = [
-  { id: "sm2:claire",   label: "Claire",   description: "Female" },
-  { id: "sm2:emmanuel", label: "Emmanuel", description: "Male" },
-];
-
-const germanSmallestSpeakers: SpeakerOption[] = [
-  { id: "sm2:adele", label: "Adele", description: "Female" },
-  { id: "sm2:leon",  label: "Leon",  description: "Male" },
-];
-
-const italianSmallestSpeakers: SpeakerOption[] = [
-  { id: "sm2:maria", label: "Maria", description: "Female" },
-  { id: "sm2:enzo",  label: "Enzo",  description: "Male" },
-];
-
-const dutchSmallestSpeakers: SpeakerOption[] = [
-  { id: "sm2:adriana", label: "Adriana", description: "Female" },
-  { id: "sm2:lukas",   label: "Lukas",   description: "Male" },
+// Gemini 3.1 Flash TTS — 15 voices that work across FR/ES/IT/DE/NL (model
+// picks the accent from the narration text). Descriptions are the tone
+// descriptors from Google's official docs, not gender labels, because
+// Gemini voices are intentionally non-gendered — listeners perceive gender
+// differently per voice+language combo.
+//
+// Selection rationale: balanced spread of tones for a 15-slot lineup.
+// 8 lighter/softer voices + 7 deeper/firmer voices, covering
+// documentary, conversational, energetic, and gentle use cases.
+const geminiFlashSpeakers: SpeakerOption[] = [
+  // Light / energetic / upbeat (tend to read female in most languages)
+  { id: "gm:Leda",         label: "Leda",         description: "Youthful" },
+  { id: "gm:Aoede",        label: "Aoede",        description: "Breezy" },
+  { id: "gm:Callirrhoe",   label: "Callirrhoe",   description: "Easy-going" },
+  { id: "gm:Sulafat",      label: "Sulafat",      description: "Warm" },
+  { id: "gm:Vindemiatrix", label: "Vindemiatrix", description: "Gentle" },
+  { id: "gm:Achernar",     label: "Achernar",     description: "Soft" },
+  { id: "gm:Laomedeia",    label: "Laomedeia",    description: "Upbeat" },
+  { id: "gm:Kore",         label: "Kore",         description: "Firm" },
+  // Deep / firm / authoritative (tend to read male in most languages)
+  { id: "gm:Charon",       label: "Charon",       description: "Informative" },
+  { id: "gm:Orus",         label: "Orus",         description: "Firm" },
+  { id: "gm:Iapetus",      label: "Iapetus",      description: "Clear" },
+  { id: "gm:Rasalgethi",   label: "Rasalgethi",   description: "Informative" },
+  { id: "gm:Algenib",      label: "Algenib",      description: "Gravelly" },
+  { id: "gm:Fenrir",       label: "Fenrir",       description: "Excitable" },
+  { id: "gm:Puck",         label: "Puck",         description: "Upbeat" },
 ];
 
 const creoleSpeakers: SpeakerOption[] = [
@@ -154,22 +171,35 @@ const creoleSpeakers: SpeakerOption[] = [
 ];
 
 const frenchSpeakers: SpeakerOption[] = [
+  // Legacy Fish Audio voices — untouched.
   { id: "Jacques", label: "Jacques", description: "Male" },
   { id: "Camille", label: "Camille", description: "Female" },
-  ...frenchSmallestSpeakers,
+  // Gemini 3.1 Flash (multilingual) — 15 voices.
+  ...geminiFlashSpeakers,
 ];
 
 const spanishSpeakers: SpeakerOption[] = [
+  // Legacy Fish Audio voices — untouched.
   { id: "Carlos", label: "Carlos", description: "Male" },
   { id: "Isabella", label: "Isabella", description: "Female" },
+  // Smallest v3.1 Spanish voices — retained (quality is fine here).
   ...spanishSmallestSpeakers,
+  // Gemini 3.1 Flash (multilingual) — 15 voices.
+  ...geminiFlashSpeakers,
 ];
 
 const englishSpeakers: SpeakerOption[] = [
+  // Legacy Adam/River + all 29 American Smallest voices — unchanged.
   { id: "Adam", label: "Adam", description: "Male" },
   { id: "River", label: "River", description: "Female" },
   ...englishSmallestSpeakers,
 ];
+
+// Languages where Gemini Flash is the SOLE non-HC provider (Smallest v2
+// was retired). Gemini voices auto-adapt the accent to the language.
+const germanSpeakers: SpeakerOption[]  = geminiFlashSpeakers;
+const italianSpeakers: SpeakerOption[] = geminiFlashSpeakers;
+const dutchSpeakers: SpeakerOption[]   = geminiFlashSpeakers;
 
 function getSpeakersForLanguage(language?: string): SpeakerOption[] {
   switch (language) {
@@ -177,9 +207,9 @@ function getSpeakersForLanguage(language?: string): SpeakerOption[] {
     case "fr": return frenchSpeakers;
     case "es": return spanishSpeakers;
     case "en": return englishSpeakers;
-    case "de": return germanSmallestSpeakers;
-    case "it": return italianSmallestSpeakers;
-    case "nl": return dutchSmallestSpeakers;
+    case "de": return germanSpeakers;
+    case "it": return italianSpeakers;
+    case "nl": return dutchSpeakers;
     default: return englishSpeakers;
   }
 }
@@ -190,9 +220,11 @@ export function getDefaultSpeaker(language: string): SpeakerVoice {
     case "fr": return "Camille";
     case "es": return "Isabella";
     case "en": return "Adam";
-    case "de": return "sm2:adele";
-    case "it": return "sm2:maria";
-    case "nl": return "sm2:adriana";
+    // For languages covered solely by Gemini Flash, default to a warm,
+    // conversational voice that reads well across most content.
+    case "de": return "gm:Sulafat";
+    case "it": return "gm:Sulafat";
+    case "nl": return "gm:Sulafat";
     default: return "Adam";
   }
 }

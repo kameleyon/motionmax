@@ -10,6 +10,7 @@
 // import { generateQwen3TTS } from "../services/qwen3TTS.js";
 import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
 import { generateSmallestTTS } from "../services/smallestTTS.js";
+import { generateGeminiFlashTTS } from "../services/geminiFlashTTS.js";
 
 interface VoicePreviewPayload {
   speaker: string;
@@ -43,6 +44,29 @@ export async function handleVoicePreview(
 
   let result: { url: string | null; error?: string };
 
+  // ── Gemini 3.1 Flash TTS preview (gm:*) ──
+  // Preview uses the exact style directives the user asked for so the
+  // voice sample showcases what the full narration will sound like with
+  // steering. This also doubles as a demo of the model's steerability.
+  if (speaker.startsWith("gm:")) {
+    result = await generateGeminiFlashTTS({
+      text: previewText,
+      sceneNumber: 0,
+      projectId: "voice-preview",
+      voiceName: speaker,
+      language,
+      apiKeys: [
+        process.env.GOOGLE_TTS_API_KEY_3,
+        process.env.GOOGLE_TTS_API_KEY_2,
+        process.env.GOOGLE_TTS_API_KEY,
+      ].filter(Boolean) as string[],
+      directives: {
+        style: "Enthusiastic and Sassy GenZ beauty YouTuber",
+        pacing: "Energetic, keeping up with the extremely fast, rapid delivery influencers use in short form videos",
+        accent: "Southern California valley girl from Laguna Beach",
+      },
+    });
+  } else
   // ── Smallest.ai preview (ADDITIVE — testing) ──
   // `sm:*`-prefixed speakers use Smallest Lightning v3.1. Legacy speakers
   // continue through the Fish Audio / LemonFox / Gemini path below.

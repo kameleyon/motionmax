@@ -357,7 +357,33 @@ async function pollHyperealJob(
     }
 
     if (data.status === "failed" || data.status === "error") {
-      const err = new Error(`${model} job failed: ${data.error || JSON.stringify(data)}`);
+      // Hypereal's status endpoint has a known quirk: on the first one or
+      // two polls of a freshly-created job it can return
+      //   { status: "failed", error: "Failed to check status" }
+      // when the job is actually still queuing on their end. Treating
+      // THAT as a terminal failure kills every Grok video immediately —
+      // observed in prod where 6 jobs all died on poll #1 with the same
+      // "Failed to check status" body. Keep polling on transient lookup
+      // errors; only fail hard on a concrete upstream failure.
+      const errText: string = (typeof data.error === "string" ? data.error : "").trim();
+      const errLower = errText.toLowerCase();
+      const isTransientLookup =
+        errLower.includes("failed to check status") ||
+        errLower.includes("not found") ||
+        errLower.includes("pending") ||
+        errLower.includes("in progress") ||
+        errLower === ""; // empty error body on a "failed" status — very likely a lookup blip
+
+      if (isTransientLookup && attempt <= 6) {
+        // First 6 attempts: assume the job exists, the checker doesn't.
+        // Log once per streak instead of on every poll to avoid spam.
+        if (attempt === 1 || attempt % 3 === 0) {
+          console.warn(`[Hypereal] ${model} ${jobId} poll ${attempt}/${maxAttempts}: transient lookup error "${errText || "<empty>"}" — will retry`);
+        }
+        continue;
+      }
+
+      const err = new Error(`${model} job failed: ${errText || JSON.stringify(data)}`);
       writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: err.message }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
       throw err;
     }

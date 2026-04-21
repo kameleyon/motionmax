@@ -14,6 +14,7 @@ import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js
 // Qwen3 TTS (Replicate) disabled — standard audio chain handles all speakers.
 // import { generateQwen3TTS } from "../services/qwen3TTS.js";
 import { generateSmallestTTS } from "../services/smallestTTS.js";
+import { generateGeminiFlashTTS } from "../services/geminiFlashTTS.js";
 import { isHaitianCreole } from "../services/audioWavUtils.js";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -121,10 +122,31 @@ export async function handleRegenerateAudio(
 
   console.log(`[RegenerateAudio] Resolved voice → speaker=${voiceName}, gender=${gender}, language=${lang}, isHC=${isHC}`);
 
-  // ── Smallest.ai (ADDITIVE — testing) ──
-  // `sm:*`-prefixed speakers route to Smallest Lightning v3.1. Legacy
-  // speakers and all existing provider paths below are untouched.
-  if ((voiceName.startsWith("sm:") || voiceName.startsWith("sm2:")) && !isHC) {
+  // ── Gemini 3.1 Flash TTS (gm:*) — FR/ES/IT/DE/NL with style directives ──
+  // No fallback — if the API fails the scene fails and we surface the error.
+  if (voiceName.startsWith("gm:") && !isHC) {
+    console.log(`[RegenerateAudio] Gemini Flash TTS speaker=${voiceName} lang=${resolvedLanguage}`);
+    const styleInstruction = inferStyleInstruction(newVoiceover);
+    audioResult = await generateGeminiFlashTTS({
+      text: newVoiceover,
+      sceneNumber: sceneIndex + 1,
+      projectId,
+      voiceName,
+      language: resolvedLanguage,
+      apiKeys: [
+        process.env.GOOGLE_TTS_API_KEY_3,
+        process.env.GOOGLE_TTS_API_KEY_2,
+        process.env.GOOGLE_TTS_API_KEY,
+      ].filter(Boolean) as string[],
+      directives: {
+        style: styleInstruction,
+        pacing: "energetic, varied — push forward in hook/action beats, soften into reflective moments",
+      },
+    });
+  } else if ((voiceName.startsWith("sm:") || voiceName.startsWith("sm2:")) && !isHC) {
+    // ── Smallest.ai (ADDITIVE — testing) ──
+    // `sm:*` + `sm2:*` prefixes route to Smallest. v2 voices removed from
+    // the UI but kept addressable so legacy projects don't blow up.
     console.log(`[RegenerateAudio] Smallest TTS speaker=${voiceName} lang=${resolvedLanguage}`);
     audioResult = await generateSmallestTTS({
       text: newVoiceover,

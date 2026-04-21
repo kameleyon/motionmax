@@ -17,6 +17,7 @@ import { updateSceneField } from "../lib/sceneUpdate.js";
 // import { generateQwen3TTS } from "../services/qwen3TTS.js";
 import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
 import { generateSmallestTTS } from "../services/smallestTTS.js";
+import { generateGeminiFlashTTS } from "../services/geminiFlashTTS.js";
 import { isHaitianCreole } from "../services/audioWavUtils.js";
 import {
   initSceneProgress,
@@ -145,11 +146,68 @@ export async function handleCinematicAudio(
   } else {
     const voiceName = generation.projects?.voice_name || "Nova";
 
-    // ── Smallest.ai Lightning v3.1 (ADDITIVE — testing phase) ──
+    // ── Gemini 3.1 Flash TTS (gm:*) — French / Spanish / Italian / German / Dutch ──
+    // Google's multilingual voices. NO cross-provider fallback — if the
+    // call fails, the scene fails. Style directives are inferred from the
+    // voiceover text so the narration feels alive instead of flat.
+    if (voiceName.startsWith("gm:")) {
+      console.log(`[CinematicAudio] Scene ${sceneIndex}: ${voiceName} → Gemini 3.1 Flash TTS (lang=${resolvedLanguage})`);
+      const googleApiKeys = [
+        process.env.GOOGLE_TTS_API_KEY_3,
+        process.env.GOOGLE_TTS_API_KEY_2,
+        process.env.GOOGLE_TTS_API_KEY,
+      ].filter(Boolean) as string[];
+
+      const styleInstruction = inferStyleInstruction(voiceover);
+      result = await generateGeminiFlashTTS({
+        text: voiceover,
+        sceneNumber: sceneIndex + 1,
+        projectId,
+        voiceName,
+        language: resolvedLanguage,
+        apiKeys: googleApiKeys,
+        directives: {
+          style: styleInstruction,
+          pacing: "energetic, varied — push forward in hook/action beats, soften into reflective moments",
+          accent: undefined, // auto-inferred from narration language
+        },
+      });
+
+      if (!result.url) {
+        await updateSceneProgress(jobId, sceneIndex, "failed", {
+          message: `Scene ${sceneIndex + 1} Gemini Flash TTS failed`,
+          error: result.error,
+        });
+        clearSceneProgress(jobId);
+        throw new Error(`Audio generation failed: ${result.error}`);
+      }
+
+      await updateSceneField(generationId, sceneIndex, "audioUrl", result.url);
+
+      const wordCount = (scene.voiceover || "").trim().split(/\s+/).length;
+      const estimatedDuration = Math.max(3, Math.ceil(wordCount / 2.5));
+      await updateSceneField(generationId, sceneIndex, "duration", String(estimatedDuration));
+
+      await updateSceneProgress(jobId, sceneIndex, "complete", {
+        message: `Scene ${sceneIndex + 1} cinematic audio complete (${result.provider})`,
+      });
+      clearSceneProgress(jobId);
+
+      await writeSystemLog({
+        jobId, projectId, userId, generationId,
+        category: "system_info",
+        eventType: "cinematic_audio_completed",
+        message: `Cinematic audio completed for scene ${sceneIndex} (${result.provider})`,
+      });
+      return { success: true, status: "complete", sceneIndex, audioUrl: result.url };
+    }
+
+    // ── Smallest.ai (ADDITIVE) — English + Spanish voice variety ──
     // Speaker IDs prefixed with `sm:` route to the new Smallest provider.
-    // This does NOT interfere with the Fish Audio / LemonFox / Gemini
-    // paths below — non-prefixed speakers continue to work exactly as
-    // they did before.
+    // Note: `sm2:*` (Lightning v2) voices were removed because quality was
+    // poor — Google's Gemini Flash voices (gm:*) replaced them. Any legacy
+    // saved project referencing a `sm2:*` voice still matches here and will
+    // fail cleanly through generateSmallestTTS with a clear error.
     if (voiceName.startsWith("sm:") || voiceName.startsWith("sm2:")) {
       console.log(`[CinematicAudio] Scene ${sceneIndex}: ${voiceName} → Smallest TTS (lang=${resolvedLanguage})`);
       result = await generateSmallestTTS({

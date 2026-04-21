@@ -19,7 +19,9 @@ const languages: { id: Language; label: string; flag: string }[] = [
   { id: "fr", label: "Fran\u00e7ais", flag: "\u{1F1EB}\u{1F1F7}" },
   { id: "es", label: "Espa\u00f1ol", flag: "\u{1F1EA}\u{1F1F8}" },
   { id: "ht", label: "Krey\u00f2l Ayisyen", flag: "\u{1F1ED}\u{1F1F9}" },
-  { id: "pt", label: "Portugu\u00eas", flag: "\u{1F1E7}\u{1F1F7}" },
+  // Portuguese removed — Smallest has no native Portuguese voices in v2 or
+  // v3.1 and no other provider is wired for PT. The `pt` code stays in the
+  // Language union so legacy saved projects still typecheck on load.
   { id: "de", label: "Deutsch", flag: "\u{1F1E9}\u{1F1EA}" },
   { id: "it", label: "Italiano", flag: "\u{1F1EE}\u{1F1F9}" },
   { id: "nl", label: "Nederlands", flag: "\u{1F1F3}\u{1F1F1}" },

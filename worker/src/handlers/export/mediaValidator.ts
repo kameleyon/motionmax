@@ -147,3 +147,39 @@ export async function isValidMedia(filePath: string, kind: MediaKind): Promise<b
     return false;
   }
 }
+
+/**
+ * Validate raw bytes (e.g., a TTS API response) before writing them to storage.
+ * Prevents garbage — JSON error bodies, UTF-16 text, HTML, truncated streams —
+ * from ever being uploaded as "audio.mp3". Callers should return an error
+ * rather than uploading when this throws.
+ */
+export function validateMediaBytes(bytes: Uint8Array | Buffer, kind: MediaKind): void {
+  const buf = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+  if (buf.length === 0) {
+    throw new MediaValidationError(`${kind} bytes are empty`, kind, "empty", "<buffer>");
+  }
+  if (buf.length < MIN_SIZE[kind]) {
+    throw new MediaValidationError(
+      `${kind} bytes too small (${buf.length} bytes, min ${MIN_SIZE[kind]})`,
+      kind, "too_small", "<buffer>",
+    );
+  }
+  const head = buf.slice(0, Math.min(128, buf.length));
+  if (!checkMagic(head, kind)) {
+    throw new MediaValidationError(
+      `${kind} bytes have wrong magic (got ${buildDiagnostic(head)})`,
+      kind, "bad_magic", "<buffer>", buildDiagnostic(head),
+    );
+  }
+}
+
+/** Predicate form of validateMediaBytes. */
+export function isValidMediaBytes(bytes: Uint8Array | Buffer, kind: MediaKind): boolean {
+  try {
+    validateMediaBytes(bytes, kind);
+    return true;
+  } catch {
+    return false;
+  }
+}

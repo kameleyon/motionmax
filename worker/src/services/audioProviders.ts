@@ -15,11 +15,21 @@ import {
   stitchWavBuffers,
   base64ToUint8Array,
 } from "./audioWavUtils.js";
+import { validateMediaBytes, MediaValidationError } from "../handlers/export/mediaValidator.js";
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 // ── Storage ────────────────────────────────────────────────────────
 
+/**
+ * Upload TTS audio bytes to the `audio` bucket and return a 7-day signed URL.
+ *
+ * Defence: validates the bytes against audio magic numbers BEFORE uploading.
+ * A provider can return HTTP 200 with garbage — JSON error, HTML page, UTF-16
+ * text, truncated stream — and the export worker would later fail in ffmpeg
+ * with "Header missing" across all scenes. We refuse to upload anything that
+ * doesn't look like audio so bad files never pollute storage.
+ */
 export async function uploadAudio(
   bytes: Uint8Array,
   contentType: string,
@@ -27,6 +37,21 @@ export async function uploadAudio(
   sceneNumber: number,
   suffix?: string,
 ): Promise<string> {
+  // Validate before upload. Throws MediaValidationError with diagnostic
+  // hex+preview of the first bytes when the content isn't actually audio.
+  try {
+    validateMediaBytes(bytes, "audio");
+  } catch (err) {
+    if (err instanceof MediaValidationError) {
+      throw new Error(
+        `Refusing to upload non-audio bytes to audio/${projectId}/scene-${sceneNumber}` +
+        (suffix ? `-${suffix}` : "") +
+        ` (${err.reason}): ${err.diagnostic ?? err.message}`,
+      );
+    }
+    throw err;
+  }
+
   const ext = contentType.includes("mpeg") ? "mp3" : "wav";
   const name = suffix ? `scene-${sceneNumber}-${suffix}-${Date.now()}.${ext}` : `scene-${sceneNumber}-${Date.now()}.${ext}`;
   // Use the same "audio" bucket + path pattern as the edge function
@@ -346,10 +371,27 @@ export async function generateOpenAITTS(
     return { url: null, error: `OpenRouter TTS ${res.status}: ${err.substring(0, 100)}` };
   }
 
+  // OpenRouter occasionally returns HTTP 200 with a JSON error body or
+  // non-audio content (observed: UTF-16 text encoded as bytes). Catch it
+  // before we try to upload — otherwise the file poisons the export later.
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!/^audio\//i.test(contentType)) {
+    const preview = await res.text().catch(() => "");
+    return {
+      url: null,
+      error: `OpenRouter TTS returned non-audio content-type "${contentType}": ${preview.substring(0, 200)}`,
+    };
+  }
+
   const bytes = new Uint8Array(await res.arrayBuffer());
   if (bytes.length < 100) return { url: null, error: "Empty audio from OpenRouter" };
-  const url = await uploadAudio(bytes, "audio/mpeg", projectId, sceneNumber, "openai");
-  return { url, durationSeconds: Math.max(1, bytes.length / 16000), provider: `OpenAI TTS (${speakerName})` };
+  try {
+    const url = await uploadAudio(bytes, "audio/mpeg", projectId, sceneNumber, "openai");
+    return { url, durationSeconds: Math.max(1, bytes.length / 16000), provider: `OpenAI TTS (${speakerName})` };
+  } catch (err) {
+    // uploadAudio rejects non-audio bytes up front; surface the diagnostic.
+    return { url: null, error: (err as Error).message };
+  }
 }
 
 // ── Replicate Chatterbox ───────────────────────────────────────────

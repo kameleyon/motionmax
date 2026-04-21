@@ -131,5 +131,34 @@ await t("ffmpeg-confusing garbage rejected as audio", async () => {
   await expectThrows(() => validateMedia(file, "audio"), /bad_magic/);
 });
 
+await t("UTF-16 LE text rejected as audio bytes (real prod failure)", async () => {
+  // Exact pattern from the production failure: 2f 00 2f 00 30 00 ...
+  // which is UTF-16 LE "/" "/" "0" ... — not audio.
+  const { validateMediaBytes } = await import("./mediaValidator.js");
+  const bytes = Buffer.alloc(500);
+  const pattern = [0x2f, 0x00, 0x2f, 0x00, 0x30, 0x00, 0x2d, 0x00, 0x30, 0x00, 0x2e, 0x00];
+  for (let i = 0; i < pattern.length; i++) bytes[i] = pattern[i];
+  let caught: MediaValidationError | null = null;
+  try { validateMediaBytes(bytes, "audio"); } catch (e) { caught = e as MediaValidationError; }
+  if (!caught) throw new Error("should have thrown");
+  if (caught.reason !== "bad_magic") throw new Error(`wrong reason: ${caught.reason}`);
+});
+
+await t("validateMediaBytes passes real MP3 bytes", async () => {
+  const { validateMediaBytes } = await import("./mediaValidator.js");
+  const bytes = Buffer.concat([
+    Buffer.from([0x49, 0x44, 0x33, 0x04]),
+    Buffer.alloc(400),
+  ]);
+  validateMediaBytes(bytes, "audio"); // should not throw
+});
+
+await t("validateMediaBytes rejects empty buffer", async () => {
+  const { validateMediaBytes } = await import("./mediaValidator.js");
+  let caught: MediaValidationError | null = null;
+  try { validateMediaBytes(Buffer.alloc(0), "audio"); } catch (e) { caught = e as MediaValidationError; }
+  if (!caught || caught.reason !== "empty") throw new Error(`expected empty error, got ${caught?.reason}`);
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

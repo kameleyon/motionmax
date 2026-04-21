@@ -46,7 +46,7 @@ export async function handleVoicePreview(
   // ── Smallest.ai preview (ADDITIVE — testing) ──
   // `sm:*`-prefixed speakers use Smallest Lightning v3.1. Legacy speakers
   // continue through the Fish Audio / LemonFox / Gemini path below.
-  if (speaker.startsWith("sm:")) {
+  if (speaker.startsWith("sm:") || speaker.startsWith("sm2:")) {
     result = await generateSmallestTTS({
       text: previewText,
       sceneNumber: 0,

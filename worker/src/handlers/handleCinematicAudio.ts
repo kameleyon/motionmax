@@ -150,7 +150,7 @@ export async function handleCinematicAudio(
     // This does NOT interfere with the Fish Audio / LemonFox / Gemini
     // paths below — non-prefixed speakers continue to work exactly as
     // they did before.
-    if (voiceName.startsWith("sm:")) {
+    if (voiceName.startsWith("sm:") || voiceName.startsWith("sm2:")) {
       console.log(`[CinematicAudio] Scene ${sceneIndex}: ${voiceName} → Smallest TTS (lang=${resolvedLanguage})`);
       result = await generateSmallestTTS({
         text: voiceover,

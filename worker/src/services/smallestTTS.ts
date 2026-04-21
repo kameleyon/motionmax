@@ -20,7 +20,18 @@ import { supabase } from "../lib/supabase.js";
 import { writeApiLog } from "../lib/logger.js";
 import { v4 as uuidv4 } from "uuid";
 
-const SMALLEST_API_URL = "https://api.smallest.ai/waves/v1/lightning-v3.1/get_speech";
+/** Smallest has multiple model generations. Lightning v3.1 is the current
+ *  flagship with the best English/Spanish/Hindi/Indian voices. Lightning v2
+ *  is the previous generation but still holds the European voice catalog
+ *  (French, German, Italian, Dutch) — those voices weren't ported into v3.1.
+ *
+ *  We pick the model per voice via its prefix:
+ *    - sm:*   → lightning-v3.1 (default — English, Spanish, Hindi, Indian)
+ *    - sm2:*  → lightning-v2    (European — French, German, Italian, Dutch)
+ *
+ *  Both endpoints share the same request/response shape. */
+const SMALLEST_V31_URL = "https://api.smallest.ai/waves/v1/lightning-v3.1/get_speech";
+const SMALLEST_V2_URL  = "https://api.smallest.ai/waves/v1/lightning-v2/get_speech";
 
 /** Smallest-supported language codes. Values mirror the `language` param
  *  accepted by the API; "auto" lets the model detect from text. */
@@ -92,12 +103,28 @@ function parseRetryAfter(hdr: string | null): number {
   return 0;
 }
 
-/** Strip the "sm:" prefix from a speaker value if present. Callers should
- *  pass the prefixed UI value (e.g. "sm:olivia") and we'll normalize. */
+/** Parse a UI speaker value into its Smallest model + voice id, or null if
+ *  the value isn't a Smallest voice. Supports both `sm:` (v3.1) and `sm2:`
+ *  (v2) prefixes so the caller doesn't have to know which model hosts
+ *  which voice. */
+export function extractSmallestVoice(
+  speaker: string,
+): { model: "lightning-v3.1" | "lightning-v2"; voiceId: string } | null {
+  if (speaker.startsWith("sm2:")) {
+    const id = speaker.slice(4).trim().toLowerCase();
+    return id ? { model: "lightning-v2", voiceId: id } : null;
+  }
+  if (speaker.startsWith("sm:")) {
+    const id = speaker.slice(3).trim().toLowerCase();
+    return id ? { model: "lightning-v3.1", voiceId: id } : null;
+  }
+  return null;
+}
+
+/** @deprecated Use {@link extractSmallestVoice} which also reports the model. */
 export function extractSmallestVoiceId(speaker: string): string | null {
-  if (!speaker.startsWith("sm:")) return null;
-  const id = speaker.slice(3).trim().toLowerCase();
-  return id.length > 0 ? id : null;
+  const v = extractSmallestVoice(speaker);
+  return v?.voiceId ?? null;
 }
 
 export interface SmallestTTSOptions {
@@ -132,8 +159,15 @@ export async function generateSmallestTTS(
   const apiKey = (process.env.SMALLEST_API_KEY || "").trim();
   if (!apiKey) return { url: null, error: "SMALLEST_API_KEY not configured" };
 
-  const voiceId = extractSmallestVoiceId(opts.voiceId) || opts.voiceId;
+  // Accept either "sm:alice", "sm2:alice", or a bare "alice" (legacy callers).
+  // Default model when no prefix is provided is lightning-v3.1.
+  const parsed = extractSmallestVoice(opts.voiceId) ?? {
+    model: "lightning-v3.1" as const,
+    voiceId: opts.voiceId.trim().toLowerCase(),
+  };
+  const { voiceId, model } = parsed;
   if (!voiceId) return { url: null, error: "Smallest TTS: empty voiceId" };
+  const apiUrl = model === "lightning-v2" ? SMALLEST_V2_URL : SMALLEST_V31_URL;
 
   const text = (opts.text || "").trim();
   if (text.length < 2) return { url: null, error: "Smallest TTS: empty text" };
@@ -141,13 +175,17 @@ export async function generateSmallestTTS(
   const language = SMALLEST_LANGUAGE_MAP[opts.language ?? "auto"] ?? "auto";
   const speed = Math.min(2.0, Math.max(0.5, opts.speed ?? 1.0));
 
+  // Use each model's native sample rate: v3.1 is 44.1 kHz, v2 is 24 kHz.
+  // Requesting the native rate avoids any server-side resampling artifacts.
+  const sampleRate = model === "lightning-v2" ? 24000 : 44100;
+
   // Request body. `output_format: "mp3"` matches the rest of the pipeline's
   // audio/mpeg uploads and keeps file size down vs raw WAV.
   const body = {
     text,
     voice_id: voiceId,
     language,
-    sample_rate: 44100,
+    sample_rate: sampleRate,
     speed,
     output_format: "mp3",
   };
@@ -158,7 +196,7 @@ export async function generateSmallestTTS(
     const MAX_ATTEMPTS = 5;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
-        const res = await fetch(SMALLEST_API_URL, {
+        const res = await fetch(apiUrl, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${apiKey}`,
@@ -207,15 +245,15 @@ export async function generateSmallestTTS(
         // Rough duration estimate — MP3 at 128kbps ≈ 16,000 bytes/sec.
         const durationSeconds = Math.max(1, bytes.length / 16000);
 
-        console.log(`[SmallestTTS] Scene ${opts.sceneNumber} ✅ ${voiceId} (${bytes.length} bytes, ~${durationSeconds.toFixed(1)}s)`);
+        console.log(`[SmallestTTS] Scene ${opts.sceneNumber} ✅ ${model}/${voiceId} (${bytes.length} bytes, ~${durationSeconds.toFixed(1)}s)`);
         writeApiLog({
           userId: undefined, generationId: undefined,
-          provider: "smallest", model: "lightning-v3.1",
+          provider: "smallest", model,
           status: "success", totalDurationMs: Date.now() - startTime,
           cost: 0, error: undefined,
         }).catch((err) => { console.warn('[SmallestTTS] background log failed:', (err as Error).message); });
 
-        return { url, durationSeconds, provider: `Smallest (${voiceId})` };
+        return { url, durationSeconds, provider: `Smallest ${model} (${voiceId})` };
       } catch (err) {
         console.warn(`[SmallestTTS] Scene ${opts.sceneNumber}: attempt ${attempt} threw: ${(err as Error).message}`);
         if (attempt < MAX_ATTEMPTS) await sleep(1500 * attempt);
@@ -224,7 +262,7 @@ export async function generateSmallestTTS(
 
     writeApiLog({
       userId: undefined, generationId: undefined,
-      provider: "smallest", model: "lightning-v3.1",
+      provider: "smallest", model,
       status: "error", totalDurationMs: Date.now() - startTime,
       cost: 0, error: `Smallest TTS failed after ${MAX_ATTEMPTS} attempts`,
     }).catch((err) => { console.warn('[SmallestTTS] background log failed:', (err as Error).message); });

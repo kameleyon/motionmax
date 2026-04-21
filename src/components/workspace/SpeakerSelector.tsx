@@ -34,7 +34,14 @@ export type SpeakerVoice =
   | "sm:daniel" | "sm:rachel" | "sm:nicole" | "sm:elizabeth"
   // Spanish: all 7 voices from the Smallest catalog
   | "sm:daniella" | "sm:sandra" | "sm:carlos" | "sm:jose"
-  | "sm:luis" | "sm:mariana" | "sm:miguel";
+  | "sm:luis" | "sm:mariana" | "sm:miguel"
+  // Smallest.ai Lightning v2 (European voices — not ported to v3.1). Prefix
+  // `sm2:` so the worker routes to the v2 endpoint. French, German,
+  // Italian, Dutch — 2 voices each (one female, one male).
+  | "sm2:claire"   | "sm2:emmanuel"
+  | "sm2:adele"    | "sm2:leon"
+  | "sm2:maria"    | "sm2:enzo"
+  | "sm2:adriana"  | "sm2:lukas";
 
 const log = createScopedLogger("SpeakerSelector");
 
@@ -75,6 +82,27 @@ const spanishSmallestSpeakers: SpeakerOption[] = [
   { id: "sm:miguel",   label: "Miguel",    description: "Male" },
 ];
 
+// Smallest.ai Lightning v2 — European voices (2 per language, F + M).
+const frenchSmallestSpeakers: SpeakerOption[] = [
+  { id: "sm2:claire",   label: "Claire",   description: "Female" },
+  { id: "sm2:emmanuel", label: "Emmanuel", description: "Male" },
+];
+
+const germanSmallestSpeakers: SpeakerOption[] = [
+  { id: "sm2:adele", label: "Adele", description: "Female" },
+  { id: "sm2:leon",  label: "Leon",  description: "Male" },
+];
+
+const italianSmallestSpeakers: SpeakerOption[] = [
+  { id: "sm2:maria", label: "Maria", description: "Female" },
+  { id: "sm2:enzo",  label: "Enzo",  description: "Male" },
+];
+
+const dutchSmallestSpeakers: SpeakerOption[] = [
+  { id: "sm2:adriana", label: "Adriana", description: "Female" },
+  { id: "sm2:lukas",   label: "Lukas",   description: "Male" },
+];
+
 const creoleSpeakers: SpeakerOption[] = [
   { id: "Pierre", label: "Pierre", description: "Male" },
   { id: "Marie", label: "Marie", description: "Female" },
@@ -83,6 +111,7 @@ const creoleSpeakers: SpeakerOption[] = [
 const frenchSpeakers: SpeakerOption[] = [
   { id: "Jacques", label: "Jacques", description: "Male" },
   { id: "Camille", label: "Camille", description: "Female" },
+  ...frenchSmallestSpeakers,
 ];
 
 const spanishSpeakers: SpeakerOption[] = [
@@ -103,6 +132,9 @@ function getSpeakersForLanguage(language?: string): SpeakerOption[] {
     case "fr": return frenchSpeakers;
     case "es": return spanishSpeakers;
     case "en": return englishSpeakers;
+    case "de": return germanSmallestSpeakers;
+    case "it": return italianSmallestSpeakers;
+    case "nl": return dutchSmallestSpeakers;
     default: return englishSpeakers;
   }
 }
@@ -113,6 +145,9 @@ export function getDefaultSpeaker(language: string): SpeakerVoice {
     case "fr": return "Camille";
     case "es": return "Isabella";
     case "en": return "Adam";
+    case "de": return "sm2:adele";
+    case "it": return "sm2:maria";
+    case "nl": return "sm2:adriana";
     default: return "Adam";
   }
 }

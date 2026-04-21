@@ -124,7 +124,7 @@ export async function handleRegenerateAudio(
   // ── Smallest.ai (ADDITIVE — testing) ──
   // `sm:*`-prefixed speakers route to Smallest Lightning v3.1. Legacy
   // speakers and all existing provider paths below are untouched.
-  if (voiceName.startsWith("sm:") && !isHC) {
+  if ((voiceName.startsWith("sm:") || voiceName.startsWith("sm2:")) && !isHC) {
     console.log(`[RegenerateAudio] Smallest TTS speaker=${voiceName} lang=${resolvedLanguage}`);
     audioResult = await generateSmallestTTS({
       text: newVoiceover,

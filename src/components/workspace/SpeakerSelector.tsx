@@ -37,13 +37,16 @@ interface SpeakerSelectorProps {
 
 interface SpeakerOption { id: SpeakerVoice; label: string; description: string }
 
+// NOTE: `id` keeps the "C." prefix because the worker routes on
+// `speakerName.startsWith("C.")` — only the display label drops it.
+// These voices appear last in each language list for visual identification.
 const openaiSpeakers: SpeakerOption[] = [
-  { id: "C.Alloy", label: "C.Alloy", description: "Neutral" },
-  { id: "C.Echo", label: "C.Echo", description: "Male" },
-  { id: "C.Fable", label: "C.Fable", description: "Expressive male" },
-  { id: "C.Onyx", label: "C.Onyx", description: "Deep male" },
-  { id: "C.Nova", label: "C.Nova", description: "Warm female" },
-  { id: "C.Shimmer", label: "C.Shimmer", description: "Soft female" },
+  { id: "C.Alloy", label: "Alloy", description: "Neutral" },
+  { id: "C.Echo", label: "Echo", description: "Male" },
+  { id: "C.Fable", label: "Fable", description: "Expressive male" },
+  { id: "C.Onyx", label: "Onyx", description: "Deep male" },
+  { id: "C.Nova", label: "Nova", description: "Warm female" },
+  { id: "C.Shimmer", label: "Shimmer", description: "Soft female" },
 ];
 
 const qwenSpeakers: SpeakerOption[] = [

@@ -183,14 +183,6 @@ export async function handleCinematicAudio(
         { number: sceneIndex + 1, voiceover, duration: scene.duration || 10 },
         config,
       );
-    } else if (voiceName.startsWith("C.")) {
-      // ── OpenAI TTS via OpenRouter (C.Alloy, C.Echo, C.Fable, C.Onyx, C.Nova, C.Shimmer) ──
-      const openRouterApiKey = (process.env.OPENROUTER_API_KEY || "").trim();
-      if (!openRouterApiKey) throw new Error("OPENROUTER_API_KEY not configured");
-
-      console.log(`[CinematicAudio] Scene ${sceneIndex}: OpenAI TTS speaker=${voiceName} lang=${resolvedLanguage}`);
-      const { generateOpenAITTS } = await import("../services/audioProviders.js");
-      result = await generateOpenAITTS(voiceover, sceneIndex + 1, voiceName, openRouterApiKey, projectId);
     } else {
       // ── Qwen3 TTS for all other speakers ──
       const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();

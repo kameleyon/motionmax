@@ -119,16 +119,8 @@ export async function handleRegenerateAudio(
 
   console.log(`[RegenerateAudio] Resolved voice → speaker=${voiceName}, gender=${gender}, language=${lang}, isHC=${isHC}`);
 
-  // OpenAI TTS via OpenRouter path: C.* speakers
-  if (projectType === "cinematic" && voiceName.startsWith("C.") && !isHC) {
-    const openRouterApiKey = (process.env.OPENROUTER_API_KEY || "").trim();
-    if (!openRouterApiKey) throw new Error("OPENROUTER_API_KEY not configured");
-
-    console.log(`[RegenerateAudio] OpenAI TTS speaker=${voiceName} lang=${resolvedLanguage}`);
-    const { generateOpenAITTS } = await import("../services/audioProviders.js");
-    audioResult = await generateOpenAITTS(newVoiceover, sceneIndex + 1, voiceName, openRouterApiKey, projectId);
   // Qwen3 path: cinematic projects with non-legacy speakers (Nova, Atlas, etc.)
-  } else if (projectType === "cinematic" && !legacyMapping && !isHC) {
+  if (projectType === "cinematic" && !legacyMapping && !isHC) {
     const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
     if (!replicateApiKey) throw new Error("REPLICATE_API_KEY not configured");
 

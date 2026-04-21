@@ -334,66 +334,6 @@ export async function generateFishAudioTTS(
   return { url: null, error: "Fish Audio failed" };
 }
 
-// ── OpenAI TTS via OpenRouter ──────────────────────────────────────
-
-const OPENAI_VOICE_MAP: Record<string, string> = {
-  "C.Alloy":   "alloy",
-  "C.Echo":    "echo",
-  "C.Fable":   "fable",
-  "C.Onyx":    "onyx",
-  "C.Nova":    "nova",
-  "C.Shimmer": "shimmer",
-};
-
-export async function generateOpenAITTS(
-  text: string, sceneNumber: number, speakerName: string, apiKey: string, projectId: string,
-): Promise<{ url: string | null; durationSeconds?: number; provider?: string; error?: string }> {
-  const sanitized = sanitizeVoiceover(text);
-  if (!sanitized) return { url: null, error: "No text" };
-  const voice = OPENAI_VOICE_MAP[speakerName];
-  if (!voice) return { url: null, error: `Unknown OpenAI speaker: ${speakerName}` };
-
-  const res = await fetch("https://openrouter.ai/api/v1/audio/speech", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "openai/gpt-4o-mini-tts-2025-12-15",
-      input: sanitized,
-      voice,
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.text().catch(() => "");
-    return { url: null, error: `OpenRouter TTS ${res.status}: ${err.substring(0, 100)}` };
-  }
-
-  // OpenRouter occasionally returns HTTP 200 with a JSON error body or
-  // non-audio content (observed: UTF-16 text encoded as bytes). Catch it
-  // before we try to upload — otherwise the file poisons the export later.
-  const contentType = res.headers.get("content-type") ?? "";
-  if (!/^audio\//i.test(contentType)) {
-    const preview = await res.text().catch(() => "");
-    return {
-      url: null,
-      error: `OpenRouter TTS returned non-audio content-type "${contentType}": ${preview.substring(0, 200)}`,
-    };
-  }
-
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  if (bytes.length < 100) return { url: null, error: "Empty audio from OpenRouter" };
-  try {
-    const url = await uploadAudio(bytes, "audio/mpeg", projectId, sceneNumber, "openai");
-    return { url, durationSeconds: Math.max(1, bytes.length / 16000), provider: `OpenAI TTS (${speakerName})` };
-  } catch (err) {
-    // uploadAudio rejects non-audio bytes up front; surface the diagnostic.
-    return { url: null, error: (err as Error).message };
-  }
-}
-
 // ── Replicate Chatterbox ───────────────────────────────────────────
 
 export async function generateChatterboxTTS(

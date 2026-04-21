@@ -23,9 +23,7 @@ export type SpeakerVoice =
   // Spanish (Fish Audio)
   | "Carlos" | "Isabella"
   // English specific (LemonFox / Fish Audio)
-  | "Adam" | "River"
-  // OpenAI TTS via OpenRouter (all languages except Haitian Creole)
-  | "C.Alloy" | "C.Echo" | "C.Fable" | "C.Onyx" | "C.Nova" | "C.Shimmer";
+  | "Adam" | "River";
 
 const log = createScopedLogger("SpeakerSelector");
 
@@ -36,18 +34,6 @@ interface SpeakerSelectorProps {
 }
 
 interface SpeakerOption { id: SpeakerVoice; label: string; description: string }
-
-// NOTE: `id` keeps the "C." prefix because the worker routes on
-// `speakerName.startsWith("C.")` — only the display label drops it.
-// These voices appear last in each language list for visual identification.
-const openaiSpeakers: SpeakerOption[] = [
-  { id: "C.Alloy", label: "Alloy", description: "Neutral" },
-  { id: "C.Echo", label: "Echo", description: "Male" },
-  { id: "C.Fable", label: "Fable", description: "Expressive male" },
-  { id: "C.Onyx", label: "Onyx", description: "Deep male" },
-  { id: "C.Nova", label: "Nova", description: "Warm female" },
-  { id: "C.Shimmer", label: "Shimmer", description: "Soft female" },
-];
 
 const qwenSpeakers: SpeakerOption[] = [
   { id: "Nova", label: "Nova", description: "Warm female" },
@@ -70,21 +56,18 @@ const frenchSpeakers: SpeakerOption[] = [
   { id: "Jacques", label: "Jacques", description: "Male" },
   { id: "Camille", label: "Camille", description: "Female" },
   ...qwenSpeakers,
-  ...openaiSpeakers,
 ];
 
 const spanishSpeakers: SpeakerOption[] = [
   { id: "Carlos", label: "Carlos", description: "Male" },
   { id: "Isabella", label: "Isabella", description: "Female" },
   ...qwenSpeakers,
-  ...openaiSpeakers,
 ];
 
 const englishSpeakers: SpeakerOption[] = [
   { id: "Adam", label: "Adam", description: "Male" },
   { id: "River", label: "River", description: "Female" },
   ...qwenSpeakers,
-  ...openaiSpeakers,
 ];
 
 function getSpeakersForLanguage(language?: string): SpeakerOption[] {
@@ -93,7 +76,7 @@ function getSpeakersForLanguage(language?: string): SpeakerOption[] {
     case "fr": return frenchSpeakers;
     case "es": return spanishSpeakers;
     case "en": return englishSpeakers;
-    default: return [...qwenSpeakers, ...openaiSpeakers];
+    default: return qwenSpeakers;
   }
 }
 

@@ -61,11 +61,11 @@ export function WorkspaceConfigGrid({
                   key={id}
                   onClick={() => !disabled && onFormatChange(id)}
                   disabled={disabled}
+                  data-active={format === id}
                   className={cn(
                     "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors",
-                    format === id
-                      ? "border-primary/50 bg-primary/10 text-foreground"
-                      : "border-border/50 bg-muted/30 text-muted-foreground hover:bg-muted/50",
+                    "data-[active=false]:border-border/50 data-[active=false]:bg-muted/30 data-[active=false]:text-muted-foreground data-[active=false]:hover:bg-muted/50",
+                    "data-[active=true]:border-primary/50 data-[active=true]:bg-primary/10 data-[active=true]:text-foreground",
                     disabled && "opacity-40 cursor-not-allowed",
                   )}
                 >
@@ -85,11 +85,11 @@ export function WorkspaceConfigGrid({
                 <button
                   key={id}
                   onClick={() => onDurationChange(id)}
+                  data-active={duration === id}
                   className={cn(
                     "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors",
-                    duration === id
-                      ? "border-primary/50 bg-primary/10 text-foreground"
-                      : "border-border/50 bg-muted/30 text-muted-foreground hover:bg-muted/50",
+                    "data-[active=false]:border-border/50 data-[active=false]:bg-muted/30 data-[active=false]:text-muted-foreground data-[active=false]:hover:bg-muted/50",
+                    "data-[active=true]:border-primary/50 data-[active=true]:bg-primary/10 data-[active=true]:text-foreground",
                   )}
                 >
                   {label}

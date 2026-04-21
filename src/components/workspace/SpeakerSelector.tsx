@@ -26,22 +26,28 @@ export type SpeakerVoice =
   // through the standard audio chain (see handleCinematicAudio.ts).
   | "Nova" | "Atlas" | "Kai" | "Marcus" | "Luna"
   | "Leo" | "Maya" | "Sage" | "Aria"
-  // Smallest.ai Lightning v3.1 (additive — testing). All IDs prefixed `sm:`
-  // so routing is explicit and collisions with legacy names are impossible.
-  // Worker detects the prefix and calls generateSmallestTTS.
-  // English (US): all 8 voices from the Smallest catalog
-  | "sm:quinn" | "sm:mia" | "sm:magnus" | "sm:olivia"
-  | "sm:daniel" | "sm:rachel" | "sm:nicole" | "sm:elizabeth"
-  // Spanish: all 7 voices from the Smallest catalog
-  | "sm:daniella" | "sm:sandra" | "sm:carlos" | "sm:jose"
-  | "sm:luis" | "sm:mariana" | "sm:miguel"
-  // Smallest.ai Lightning v2 (European voices — not ported to v3.1). Prefix
-  // `sm2:` so the worker routes to the v2 endpoint. French, German,
-  // Italian, Dutch — 2 voices each (one female, one male).
-  | "sm2:claire"   | "sm2:emmanuel"
-  | "sm2:adele"    | "sm2:leon"
-  | "sm2:maria"    | "sm2:enzo"
-  | "sm2:adriana"  | "sm2:lukas";
+  // Smallest.ai Lightning v3.1 — `sm:*` prefix routes to the v3.1 endpoint.
+  // English (US, American accent only) — all 29 voices tagged
+  // language:english + accent:american in the live API catalog.
+  | "sm:avery"     | "sm:mia"        | "sm:quinn"     | "sm:sophia"
+  | "sm:robert"    | "sm:sandra"     | "sm:daniel"    | "sm:lucas"
+  | "sm:vanessa"   | "sm:brooke"     | "sm:dina"      | "sm:kevin"
+  | "sm:rachel"    | "sm:nicole"     | "sm:ethan"     | "sm:hannah"
+  | "sm:lauren"    | "sm:olivia"     | "sm:magnus"    | "sm:brian"
+  | "sm:ella"      | "sm:alex"       | "sm:johnny"    | "sm:jessica"
+  | "sm:jordan"    | "sm:divyanshu"  | "sm:elizabeth" | "sm:harper"
+  | "sm:kyle"
+  // Spanish (mexican/latin accent) — all 11 voices from v3.1.
+  | "sm:daniella"  | "sm:carlos"     | "sm:jose"      | "sm:luis"
+  | "sm:mariana"   | "sm:miguel"     | "sm:lucia"     | "sm:javier"
+  | "sm:camilla"   | "sm:diego"      | "sm:gabriela"
+  // Smallest.ai Lightning v2 — `sm2:*` prefix routes to the v2 endpoint.
+  // European voices that weren't ported to v3.1, plus 2 extra Spanish.
+  | "sm2:claire"   | "sm2:emmanuel"     // French
+  | "sm2:adele"    | "sm2:leon"         // German
+  | "sm2:maria"    | "sm2:enzo"         // Italian
+  | "sm2:adriana"  | "sm2:lukas"        // Dutch
+  | "sm2:gerard"   | "sm2:isabel";      // Spanish (v2 extras)
 
 const log = createScopedLogger("SpeakerSelector");
 
@@ -57,29 +63,68 @@ interface SpeakerOption { id: SpeakerVoice; label: string; description: string }
 // are offered in the UI. Re-introduce the qwenSpeakers list when Qwen3 is
 // re-enabled in the worker.
 
-// Smallest.ai Lightning v3.1 (additive testing). Labels keep the voice
-// name — when a name collides with a legacy speaker (e.g. "Carlos"), we
-// suffix " 2" on the Smallest label so the dropdown stays unambiguous
-// without touching the legacy label. The id (`sm:*`) never collides.
+// Smallest.ai voices (additive — legacy Fish Audio / LemonFox / Gemini
+// speakers are untouched). Where a name collides with a legacy speaker
+// (e.g. "Carlos"), we suffix " 2" on the Smallest label so the dropdown
+// stays unambiguous without touching the legacy label. Voice ids are
+// namespaced with `sm:` (v3.1) or `sm2:` (v2) so they never collide.
+
+// English (US) — ALL 29 American-accent voices from the Smallest v3.1
+// live catalog. Alphabetized by label within each gender group. Voice
+// data (gender, accent) pulled from GET /waves/v1/lightning-v3.1/get_voices.
 const englishSmallestSpeakers: SpeakerOption[] = [
-  { id: "sm:quinn",     label: "Quinn",     description: "Female" },
-  { id: "sm:mia",       label: "Mia",       description: "Female" },
-  { id: "sm:olivia",    label: "Olivia",    description: "Female" },
-  { id: "sm:rachel",    label: "Rachel",    description: "Female" },
-  { id: "sm:nicole",    label: "Nicole",    description: "Female" },
+  // Female (American accent)
+  { id: "sm:avery",     label: "Avery",     description: "Female" },
+  { id: "sm:brooke",    label: "Brooke",    description: "Female" },
+  { id: "sm:dina",      label: "Dina",      description: "Female" },
   { id: "sm:elizabeth", label: "Elizabeth", description: "Female" },
-  { id: "sm:magnus",    label: "Magnus",    description: "Male" },
+  { id: "sm:ella",      label: "Ella",      description: "Female" },
+  { id: "sm:hannah",    label: "Hannah",    description: "Female" },
+  { id: "sm:harper",    label: "Harper",    description: "Female" },
+  { id: "sm:jessica",   label: "Jessica",   description: "Female" },
+  { id: "sm:kevin",     label: "Kevin",     description: "Female" }, // API tags Kevin as female
+  { id: "sm:lauren",    label: "Lauren",    description: "Female" },
+  { id: "sm:mia",       label: "Mia",       description: "Female" },
+  { id: "sm:nicole",    label: "Nicole",    description: "Female" },
+  { id: "sm:olivia",    label: "Olivia",    description: "Female" },
+  { id: "sm:quinn",     label: "Quinn",     description: "Female" },
+  { id: "sm:rachel",    label: "Rachel",    description: "Female" },
+  { id: "sm:sandra",    label: "Sandra",    description: "Female" },
+  { id: "sm:sophia",    label: "Sophia",    description: "Female" },
+  { id: "sm:vanessa",   label: "Vanessa",   description: "Female" },
+  // Male (American accent)
+  { id: "sm:alex",      label: "Alex",      description: "Male" },
+  { id: "sm:brian",     label: "Brian",     description: "Male" },
   { id: "sm:daniel",    label: "Daniel",    description: "Male" },
+  { id: "sm:divyanshu", label: "Divyanshu", description: "Male" },
+  { id: "sm:ethan",     label: "Ethan",     description: "Male" },
+  { id: "sm:johnny",    label: "Johnny",    description: "Male" },
+  { id: "sm:jordan",    label: "Jordan",    description: "Male" },
+  { id: "sm:kyle",      label: "Kyle",      description: "Male" },
+  { id: "sm:lucas",     label: "Lucas",     description: "Male" },
+  { id: "sm:magnus",    label: "Magnus",    description: "Male" },
+  { id: "sm:robert",    label: "Robert",    description: "Male" },
 ];
 
+// Spanish — all 11 voices from v3.1 (mexican/latin accent) + 2 extras
+// from v2 so users can compare v3.1 vs v2 quality.
 const spanishSmallestSpeakers: SpeakerOption[] = [
+  // Female (v3.1)
+  { id: "sm:camilla",  label: "Camilla",   description: "Female" },
   { id: "sm:daniella", label: "Daniella",  description: "Female" },
-  { id: "sm:sandra",   label: "Sandra",    description: "Female" },
+  { id: "sm:gabriela", label: "Gabriela",  description: "Female" },
+  { id: "sm:lucia",    label: "Lucia",     description: "Female" },
   { id: "sm:mariana",  label: "Mariana",   description: "Female" },
+  // Male (v3.1)
   { id: "sm:carlos",   label: "Carlos 2",  description: "Male" },
+  { id: "sm:diego",    label: "Diego",     description: "Male" },
+  { id: "sm:javier",   label: "Javier",    description: "Male" },
   { id: "sm:jose",     label: "Jose",      description: "Male" },
   { id: "sm:luis",     label: "Luis",      description: "Male" },
   { id: "sm:miguel",   label: "Miguel",    description: "Male" },
+  // Lightning v2 extras (different model — worth trying if v3.1 isn't right)
+  { id: "sm2:isabel",  label: "Isabel",    description: "Female" },
+  { id: "sm2:gerard",  label: "Gerard",    description: "Male" },
 ];
 
 // Smallest.ai Lightning v2 — European voices (2 per language, F + M).

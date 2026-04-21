@@ -280,6 +280,29 @@ export async function transformElevenLabsSTS(
 
 // ── LemonFox TTS ───────────────────────────────────────────────────
 
+// Same story as Fish Audio above — a 15-scene burst into LemonFox
+// produces a wave of 429s. Cap concurrency to 4 and honor Retry-After
+// with jittered exponential backoff.
+const LEMON_MAX_CONCURRENT = 4;
+let _lemonActive = 0;
+const _lemonQueue: Array<() => void> = [];
+
+function acquireLemonSlot(): Promise<void> {
+  if (_lemonActive < LEMON_MAX_CONCURRENT) {
+    _lemonActive++;
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    _lemonQueue.push(() => { _lemonActive++; resolve(); });
+  });
+}
+
+function releaseLemonSlot(): void {
+  _lemonActive--;
+  const next = _lemonQueue.shift();
+  if (next) next();
+}
+
 export async function generateLemonfoxTTS(
   text: string, sceneNumber: number, voiceGender: string, apiKey: string, projectId: string,
 ): Promise<{ url: string | null; durationSeconds?: number; provider?: string; error?: string }> {
@@ -287,22 +310,40 @@ export async function generateLemonfoxTTS(
   if (!sanitized) return { url: null, error: "No text" };
   const voice = voiceGender === "male" ? "adam" : "river";
 
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    const res = await fetch("https://api.lemonfox.ai/v1/audio/speech", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ input: sanitized, voice, response_format: "mp3", speed: 1.05 }),
-    });
-    if (!res.ok) {
-      if ((res.status === 429 || res.status >= 500) && attempt < 3) { await sleep(2000 * attempt); continue; }
-      return { url: null, error: `Lemonfox ${res.status}` };
+  await acquireLemonSlot();
+  try {
+    const MAX_ATTEMPTS = 5;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      const res = await fetch("https://api.lemonfox.ai/v1/audio/speech", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ input: sanitized, voice, response_format: "mp3", speed: 1.05 }),
+      });
+      if (!res.ok) {
+        console.warn(`[Lemonfox] Attempt ${attempt}/${MAX_ATTEMPTS} failed (${res.status})`);
+        if (res.status === 429 && attempt < MAX_ATTEMPTS) {
+          const retryHeader = res.headers.get("retry-after");
+          const retrySec = retryHeader ? Math.min(parseInt(retryHeader, 10) || 0, 30) : 0;
+          const base = retrySec > 0 ? retrySec * 1000 : 3000 * Math.pow(2, attempt - 1);
+          const jitter = base * 0.25 * (Math.random() * 2 - 1);
+          await sleep(Math.max(1000, base + jitter));
+          continue;
+        }
+        if (res.status >= 500 && attempt < MAX_ATTEMPTS) {
+          await sleep(2000 * attempt);
+          continue;
+        }
+        return { url: null, error: `Lemonfox ${res.status}` };
+      }
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      if (bytes.length < 100) return { url: null, error: "Empty audio" };
+      const url = await uploadAudio(bytes, "audio/mpeg", projectId, sceneNumber);
+      return { url, durationSeconds: Math.max(1, bytes.length / 16000), provider: `Lemonfox (${voice})` };
     }
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    if (bytes.length < 100) return { url: null, error: "Empty audio" };
-    const url = await uploadAudio(bytes, "audio/mpeg", projectId, sceneNumber);
-    return { url, durationSeconds: Math.max(1, bytes.length / 16000), provider: `Lemonfox (${voice})` };
+    return { url: null, error: "Lemonfox failed after 5 attempts" };
+  } finally {
+    releaseLemonSlot();
   }
-  return { url: null, error: "Lemonfox failed" };
 }
 
 // ── Fish Audio TTS ─────────────────────────────────────────────────
@@ -310,28 +351,85 @@ export async function generateLemonfoxTTS(
 const FISH_AUDIO_FEMALE_VOICE = "c64a9003acb44737ae2a2d548c772b91";
 const FISH_AUDIO_MALE_VOICE = "06a8fa125ea54698b0c84feac214abad";
 
+// Process-wide concurrency limiter. When 12-15 scene audio jobs all
+// enter generateFishAudioTTS at the same time, Fish Audio returns 429
+// for most of them (observed in prod with 9× "Attempt 1 failed (429)"
+// lines at once). Capping to 3 concurrent calls keeps us comfortably
+// under their per-account rate ceiling while still finishing a 15-scene
+// generation in roughly (15/3)×~3s ≈ 15s of audio time.
+const FISH_MAX_CONCURRENT = 3;
+let _fishActive = 0;
+const _fishQueue: Array<() => void> = [];
+
+function acquireFishSlot(): Promise<void> {
+  if (_fishActive < FISH_MAX_CONCURRENT) {
+    _fishActive++;
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    _fishQueue.push(() => { _fishActive++; resolve(); });
+  });
+}
+
+function releaseFishSlot(): void {
+  _fishActive--;
+  const next = _fishQueue.shift();
+  if (next) next();
+}
+
+/** Parse Fish Audio's Retry-After header (or body), clamped. Fish Audio
+ *  doesn't put retry-after in the JSON body, but if the header is present
+ *  we honor it so we don't retry faster than the server wants. */
+function parseFishRetryAfter(headerVal: string | null): number {
+  if (!headerVal) return 0;
+  const sec = parseInt(headerVal, 10);
+  if (Number.isFinite(sec) && sec > 0) return Math.min(sec, 30);
+  return 0;
+}
+
 export async function generateFishAudioTTS(
   text: string, sceneNumber: number, apiKey: string, projectId: string, voiceId?: string,
 ): Promise<{ url: string | null; durationSeconds?: number; provider?: string; error?: string }> {
   const referenceId = voiceId || FISH_AUDIO_FEMALE_VOICE;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    const res = await fetch("https://api.fish.audio/v1/tts", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", model: "s2" },
-      body: JSON.stringify({ text, reference_id: referenceId, format: "mp3", normalize: true, latency: "normal" }),
-    });
-    if (!res.ok) {
-      const errBody = await res.text().catch(() => "");
-      console.warn(`[FishAudio] Attempt ${attempt} failed (${res.status}): ${errBody.substring(0, 300)}`);
-      if ((res.status === 429 || res.status >= 500) && attempt < 3) { await sleep(2000 * Math.pow(2, attempt-1)); continue; }
-      return { url: null, error: `Fish Audio ${res.status}: ${errBody.substring(0, 100)}` };
+
+  // Gate concurrency so we don't burst all scenes at once.
+  await acquireFishSlot();
+  try {
+    const MAX_ATTEMPTS = 5;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      const res = await fetch("https://api.fish.audio/v1/tts", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", model: "s2" },
+        body: JSON.stringify({ text, reference_id: referenceId, format: "mp3", normalize: true, latency: "normal" }),
+      });
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => "");
+        console.warn(`[FishAudio] Attempt ${attempt}/${MAX_ATTEMPTS} failed (${res.status}): ${errBody.substring(0, 300)}`);
+        if (res.status === 429 && attempt < MAX_ATTEMPTS) {
+          // Prefer server-provided Retry-After when present; otherwise
+          // exponential backoff starting at 3s (3, 6, 12, 24s). Add ±25%
+          // jitter so parallel retries don't re-sync into the next 429.
+          const retryAfter = parseFishRetryAfter(res.headers.get("retry-after"));
+          const base = retryAfter > 0 ? retryAfter * 1000 : 3000 * Math.pow(2, attempt - 1);
+          const jitter = base * 0.25 * (Math.random() * 2 - 1);
+          await sleep(Math.max(1000, base + jitter));
+          continue;
+        }
+        if (res.status >= 500 && attempt < MAX_ATTEMPTS) {
+          await sleep(2000 * attempt);
+          continue;
+        }
+        return { url: null, error: `Fish Audio ${res.status}: ${errBody.substring(0, 100)}` };
+      }
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      if (bytes.length < 100) return { url: null, error: "Empty audio" };
+      const url = await uploadAudio(bytes, "audio/mpeg", projectId, sceneNumber);
+      return { url, durationSeconds: Math.max(1, bytes.length / 16000), provider: "Fish Audio TTS" };
     }
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    if (bytes.length < 100) return { url: null, error: "Empty audio" };
-    const url = await uploadAudio(bytes, "audio/mpeg", projectId, sceneNumber);
-    return { url, durationSeconds: Math.max(1, bytes.length / 16000), provider: "Fish Audio TTS" };
+    return { url: null, error: "Fish Audio failed after 5 attempts" };
+  } finally {
+    releaseFishSlot();
   }
-  return { url: null, error: "Fish Audio failed" };
 }
 
 // ── Replicate Chatterbox ───────────────────────────────────────────

@@ -7,7 +7,50 @@
  *
  * No database migration needed — uses existing JSONB payload column.
  */
-import { supabase } from "./supabase.js";
+import { supabase, WORKER_SUPABASE_URL, WORKER_SUPABASE_KEY } from "./supabase.js";
+
+/**
+ * POST directly to Supabase Realtime's REST broadcast endpoint.
+ *
+ * This is the same call `channel.httpSend()` makes in supabase-js 2.50+,
+ * reimplemented so the worker (on 2.45.6) can broadcast progress without
+ * triggering the "Realtime send() is automatically falling back to REST
+ * API" deprecation warning that `channel().send()` emits.
+ *
+ * Fire-and-forget — callers should NOT await this; a failed broadcast
+ * must never stall a generation.
+ */
+async function broadcastProgress(
+  jobId: string,
+  progress: JobSceneProgress,
+): Promise<void> {
+  const url = `${WORKER_SUPABASE_URL}/realtime/v1/api/broadcast`;
+  const body = {
+    messages: [
+      {
+        topic: `job-progress-${jobId}`,
+        event: "progress",
+        payload: { jobId, sceneProgress: progress },
+      },
+    ],
+  };
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      apikey: WORKER_SUPABASE_KEY,
+      Authorization: `Bearer ${WORKER_SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  // 202 Accepted is the happy path; other statuses we simply swallow
+  // because broadcasts are best-effort (the client polls every 5s anyway).
+  if (!res.ok && res.status !== 202) {
+    console.warn(`[SceneProgress] Broadcast HTTP ${res.status} for job ${jobId} — client will catch up on next poll`);
+  }
+}
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -229,17 +272,20 @@ async function _doFlush(jobId: string): Promise<void> {
 
     // Broadcast real-time progress so the client gets instant updates
     // instead of waiting for the 5s polling interval.
-    // The client subscribes to channel `job-progress-{jobId}` to receive these.
-    supabase
-      .channel(`job-progress-${jobId}`)
-      .send({
-        type: "broadcast",
-        event: "progress",
-        payload: { jobId, sceneProgress: progress },
-      })
-      .catch(() => {
-        // Non-fatal: Realtime broadcast failures don't break the job
-      });
+    //
+    // Implementation note: we call the Realtime REST broadcast endpoint
+    // directly rather than `supabase.channel(topic).send(...)`. That older
+    // pattern triggers the "Realtime send() is automatically falling back to
+    // REST API" deprecation warning on every progress flush because the
+    // channel isn't subscribed — `send()` silently falls back to REST and
+    // logs the warning. The explicit REST call is what the library does
+    // under the hood via `httpSend()`, but that method only exists in
+    // supabase-js 2.50+. Worker is on 2.45.6, so we issue the same HTTPS
+    // POST ourselves to avoid both the dep upgrade and the warning.
+    void broadcastProgress(jobId, progress).catch(() => {
+      // Non-fatal: Realtime broadcast failures must never break the job.
+      // The frontend's 5s poll will catch the update on the next tick.
+    });
   } catch (err) {
     console.error(`[SceneProgress] Failed to flush progress for job ${jobId}:`, (err as Error).message);
   }

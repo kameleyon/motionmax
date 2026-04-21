@@ -25,7 +25,16 @@ export type SpeakerVoice =
   // reference them still typecheck when loaded. The worker routes them
   // through the standard audio chain (see handleCinematicAudio.ts).
   | "Nova" | "Atlas" | "Kai" | "Marcus" | "Luna"
-  | "Leo" | "Maya" | "Sage" | "Aria";
+  | "Leo" | "Maya" | "Sage" | "Aria"
+  // Smallest.ai Lightning v3.1 (additive — testing). All IDs prefixed `sm:`
+  // so routing is explicit and collisions with legacy names are impossible.
+  // Worker detects the prefix and calls generateSmallestTTS.
+  // English (US): all 8 voices from the Smallest catalog
+  | "sm:quinn" | "sm:mia" | "sm:magnus" | "sm:olivia"
+  | "sm:daniel" | "sm:rachel" | "sm:nicole" | "sm:elizabeth"
+  // Spanish: all 7 voices from the Smallest catalog
+  | "sm:daniella" | "sm:sandra" | "sm:carlos" | "sm:jose"
+  | "sm:luis" | "sm:mariana" | "sm:miguel";
 
 const log = createScopedLogger("SpeakerSelector");
 
@@ -41,6 +50,31 @@ interface SpeakerOption { id: SpeakerVoice; label: string; description: string }
 // are offered in the UI. Re-introduce the qwenSpeakers list when Qwen3 is
 // re-enabled in the worker.
 
+// Smallest.ai Lightning v3.1 (additive testing). Labels keep the voice
+// name — when a name collides with a legacy speaker (e.g. "Carlos"), we
+// suffix " 2" on the Smallest label so the dropdown stays unambiguous
+// without touching the legacy label. The id (`sm:*`) never collides.
+const englishSmallestSpeakers: SpeakerOption[] = [
+  { id: "sm:quinn",     label: "Quinn",     description: "Female" },
+  { id: "sm:mia",       label: "Mia",       description: "Female" },
+  { id: "sm:olivia",    label: "Olivia",    description: "Female" },
+  { id: "sm:rachel",    label: "Rachel",    description: "Female" },
+  { id: "sm:nicole",    label: "Nicole",    description: "Female" },
+  { id: "sm:elizabeth", label: "Elizabeth", description: "Female" },
+  { id: "sm:magnus",    label: "Magnus",    description: "Male" },
+  { id: "sm:daniel",    label: "Daniel",    description: "Male" },
+];
+
+const spanishSmallestSpeakers: SpeakerOption[] = [
+  { id: "sm:daniella", label: "Daniella",  description: "Female" },
+  { id: "sm:sandra",   label: "Sandra",    description: "Female" },
+  { id: "sm:mariana",  label: "Mariana",   description: "Female" },
+  { id: "sm:carlos",   label: "Carlos 2",  description: "Male" },
+  { id: "sm:jose",     label: "Jose",      description: "Male" },
+  { id: "sm:luis",     label: "Luis",      description: "Male" },
+  { id: "sm:miguel",   label: "Miguel",    description: "Male" },
+];
+
 const creoleSpeakers: SpeakerOption[] = [
   { id: "Pierre", label: "Pierre", description: "Male" },
   { id: "Marie", label: "Marie", description: "Female" },
@@ -54,11 +88,13 @@ const frenchSpeakers: SpeakerOption[] = [
 const spanishSpeakers: SpeakerOption[] = [
   { id: "Carlos", label: "Carlos", description: "Male" },
   { id: "Isabella", label: "Isabella", description: "Female" },
+  ...spanishSmallestSpeakers,
 ];
 
 const englishSpeakers: SpeakerOption[] = [
   { id: "Adam", label: "Adam", description: "Male" },
   { id: "River", label: "River", description: "Female" },
+  ...englishSmallestSpeakers,
 ];
 
 function getSpeakersForLanguage(language?: string): SpeakerOption[] {
@@ -76,25 +112,27 @@ export function getDefaultSpeaker(language: string): SpeakerVoice {
     case "ht": return "Pierre";
     case "fr": return "Camille";
     case "es": return "Isabella";
-    case "en": return "River";
-    default: return "River";
+    case "en": return "Adam";
+    default: return "Adam";
   }
 }
 
-/** Sample text in each language for voice preview */
+/** Sample text in each language for voice preview.
+ *  Unified script: greeting + creative invitation, so every voice says the
+ *  same thing and can be compared apples-to-apples. */
 function getSampleText(speakerName: string, language: string): string {
   switch (language) {
-    case "ht": return `Bonjou, mwen se ${speakerName}. Se konsa vwa mwen sonnen lè m ap rakonte videyo ou.`;
-    case "fr": return `Bonjour, je suis ${speakerName}. Voici comment sonne ma voix pour vos vid\u00e9os.`;
-    case "es": return `Hola, soy ${speakerName}. As\u00ed suena mi voz cuando narro tu video.`;
-    case "pt": return `Ol\u00e1, eu sou ${speakerName}. \u00c9 assim que minha voz soa ao narrar seu v\u00eddeo.`;
-    case "de": return `Hallo, ich bin ${speakerName}. So klingt meine Stimme bei der Vertonung Ihres Videos.`;
-    case "it": return `Ciao, sono ${speakerName}. Ecco come suona la mia voce quando narro il tuo video.`;
-    case "ru": return `\u041f\u0440\u0438\u0432\u0435\u0442, \u044f ${speakerName}. \u0422\u0430\u043a \u0437\u0432\u0443\u0447\u0438\u0442 \u043c\u043e\u0439 \u0433\u043e\u043b\u043e\u0441 \u043f\u0440\u0438 \u043e\u0437\u0432\u0443\u0447\u0438\u0432\u0430\u043d\u0438\u0438 \u0432\u0430\u0448\u0435\u0433\u043e \u0432\u0438\u0434\u0435\u043e.`;
-    case "zh": return `\u4F60\u597D\uFF0C\u6211\u662F${speakerName}\u3002\u8FD9\u5C31\u662F\u6211\u4E3A\u60A8\u7684\u89C6\u9891\u89E3\u8BF4\u65F6\u7684\u58F0\u97F3\u3002`;
-    case "ja": return `\u3053\u3093\u306B\u3061\u306F\u3001${speakerName}\u3067\u3059\u3002\u52D5\u753B\u306E\u30CA\u30EC\u30FC\u30B7\u30E7\u30F3\u306F\u3053\u306E\u3088\u3046\u306B\u306A\u308A\u307E\u3059\u3002`;
-    case "ko": return `\uC548\uB155\uD558\uC138\uC694, ${speakerName}\uC785\uB2C8\uB2E4. \uBE44\uB514\uC624 \uB0B4\uB808\uC774\uC158 \uBAA9\uC18C\uB9AC\uC785\uB2C8\uB2E4.`;
-    default: return `Hello, I'm ${speakerName}. This is how my voice sounds when narrating your video.`;
+    case "ht": return `Bonjou, mwen se ${speakerName}. Mèsi paske w chwazi vwa m jodi a. Kisa n ap kreye?`;
+    case "fr": return `Bonjour, je suis ${speakerName}. Merci d'avoir choisi ma voix aujourd'hui. Qu'allons-nous cr\u00e9er ?`;
+    case "es": return `Hola, soy ${speakerName}. Gracias por elegir mi voz hoy. \u00bfQu\u00e9 vamos a crear?`;
+    case "pt": return `Ol\u00e1, sou ${speakerName}. Obrigado por escolher minha voz hoje. O que vamos criar?`;
+    case "de": return `Hallo, ich bin ${speakerName}. Danke, dass Sie heute meine Stimme gew\u00e4hlt haben. Was erschaffen wir?`;
+    case "it": return `Ciao, sono ${speakerName}. Grazie per aver scelto la mia voce oggi. Cosa creeremo?`;
+    case "ru": return `\u041f\u0440\u0438\u0432\u0435\u0442, \u044f ${speakerName}. \u0421\u043f\u0430\u0441\u0438\u0431\u043e, \u0447\u0442\u043e \u0432\u044b\u0431\u0440\u0430\u043b\u0438 \u043c\u043e\u0439 \u0433\u043e\u043b\u043e\u0441. \u0427\u0442\u043e \u043c\u044b \u0431\u0443\u0434\u0435\u043c \u0441\u043e\u0437\u0434\u0430\u0432\u0430\u0442\u044c?`;
+    case "zh": return `\u4f60\u597d\uff0c\u6211\u662f${speakerName}\u3002\u8c22\u8c22\u4f60\u4eca\u5929\u9009\u62e9\u4e86\u6211\u7684\u58f0\u97f3\u3002\u6211\u4eec\u8981\u521b\u4f5c\u4ec0\u4e48\uff1f`;
+    case "ja": return `\u3053\u3093\u306b\u3061\u306f\u3001${speakerName}\u3067\u3059\u3002\u4eca\u65e5\u306f\u79c1\u306e\u58f0\u3092\u9078\u3093\u3067\u3044\u305f\u3060\u304d\u3042\u308a\u304c\u3068\u3046\u3054\u3056\u3044\u307e\u3059\u3002\u4f55\u3092\u4f5c\u308a\u307e\u3057\u3087\u3046\u304b\uff1f`;
+    case "ko": return `\uc548\ub155\ud558\uc138\uc694, ${speakerName}\uc785\ub2c8\ub2e4. \uc624\ub298 \uc81c \ubaa9\uc18c\ub9ac\ub97c \uc120\ud0dd\ud574 \uc8fc\uc154\uc11c \uac10\uc0ac\ud569\ub2c8\ub2e4. \ubb34\uc5c7\uc744 \ub9cc\ub4e4\uc5b4 \ubcfc\uae4c\uc694?`;
+    default: return `Hello, I'm ${speakerName}. Thanks for choosing my voice today. What are we creating?`;
   }
 }
 

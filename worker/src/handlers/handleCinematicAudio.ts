@@ -16,6 +16,7 @@ import { updateSceneField } from "../lib/sceneUpdate.js";
 // Qwen3 TTS (Replicate) disabled — kept around in case we re-enable later.
 // import { generateQwen3TTS } from "../services/qwen3TTS.js";
 import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
+import { generateSmallestTTS } from "../services/smallestTTS.js";
 import { isHaitianCreole } from "../services/audioWavUtils.js";
 import {
   initSceneProgress,
@@ -143,6 +144,50 @@ export async function handleCinematicAudio(
     );
   } else {
     const voiceName = generation.projects?.voice_name || "Nova";
+
+    // ── Smallest.ai Lightning v3.1 (ADDITIVE — testing phase) ──
+    // Speaker IDs prefixed with `sm:` route to the new Smallest provider.
+    // This does NOT interfere with the Fish Audio / LemonFox / Gemini
+    // paths below — non-prefixed speakers continue to work exactly as
+    // they did before.
+    if (voiceName.startsWith("sm:")) {
+      console.log(`[CinematicAudio] Scene ${sceneIndex}: ${voiceName} → Smallest TTS (lang=${resolvedLanguage})`);
+      result = await generateSmallestTTS({
+        text: voiceover,
+        sceneNumber: sceneIndex + 1,
+        projectId,
+        voiceId: voiceName,
+        language: resolvedLanguage,
+      });
+
+      if (!result.url) {
+        await updateSceneProgress(jobId, sceneIndex, "failed", {
+          message: `Scene ${sceneIndex + 1} Smallest audio generation failed`,
+          error: result.error,
+        });
+        clearSceneProgress(jobId);
+        throw new Error(`Audio generation failed: ${result.error}`);
+      }
+
+      await updateSceneField(generationId, sceneIndex, "audioUrl", result.url);
+
+      const wordCount = (scene.voiceover || "").trim().split(/\s+/).length;
+      const estimatedDuration = Math.max(3, Math.ceil(wordCount / 2.5));
+      await updateSceneField(generationId, sceneIndex, "duration", String(estimatedDuration));
+
+      await updateSceneProgress(jobId, sceneIndex, "complete", {
+        message: `Scene ${sceneIndex + 1} cinematic audio complete (${result.provider})`,
+      });
+      clearSceneProgress(jobId);
+
+      await writeSystemLog({
+        jobId, projectId, userId, generationId,
+        category: "system_info",
+        eventType: "cinematic_audio_completed",
+        message: `Cinematic audio completed for scene ${sceneIndex} (${result.provider})`,
+      });
+      return { success: true, status: "complete", sceneIndex, audioUrl: result.url };
+    }
 
     // ── Fish Audio / LemonFox speakers → legacy audio router ──
     // These map specific speaker names to the standard TTS providers

@@ -9,6 +9,7 @@
 // Qwen3 TTS (Replicate) disabled — previews route through standard chain.
 // import { generateQwen3TTS } from "../services/qwen3TTS.js";
 import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
+import { generateSmallestTTS } from "../services/smallestTTS.js";
 
 interface VoicePreviewPayload {
   speaker: string;
@@ -42,7 +43,18 @@ export async function handleVoicePreview(
 
   let result: { url: string | null; error?: string };
 
-  if (legacyMapping) {
+  // ── Smallest.ai preview (ADDITIVE — testing) ──
+  // `sm:*`-prefixed speakers use Smallest Lightning v3.1. Legacy speakers
+  // continue through the Fish Audio / LemonFox / Gemini path below.
+  if (speaker.startsWith("sm:")) {
+    result = await generateSmallestTTS({
+      text: previewText,
+      sceneNumber: 0,
+      projectId: "voice-preview",
+      voiceId: speaker,
+      language,
+    });
+  } else if (legacyMapping) {
     // Fish Audio / LemonFox / Gemini
     const config: AudioConfig = {
       projectId: "voice-preview",

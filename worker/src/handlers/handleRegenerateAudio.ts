@@ -13,6 +13,7 @@ import { writeSystemLog } from "../lib/logger.js";
 import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
 // Qwen3 TTS (Replicate) disabled — standard audio chain handles all speakers.
 // import { generateQwen3TTS } from "../services/qwen3TTS.js";
+import { generateSmallestTTS } from "../services/smallestTTS.js";
 import { isHaitianCreole } from "../services/audioWavUtils.js";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -119,6 +120,20 @@ export async function handleRegenerateAudio(
   const lang = legacyMapping?.language || (isHC ? "ht" : resolvedLanguage);
 
   console.log(`[RegenerateAudio] Resolved voice → speaker=${voiceName}, gender=${gender}, language=${lang}, isHC=${isHC}`);
+
+  // ── Smallest.ai (ADDITIVE — testing) ──
+  // `sm:*`-prefixed speakers route to Smallest Lightning v3.1. Legacy
+  // speakers and all existing provider paths below are untouched.
+  if (voiceName.startsWith("sm:") && !isHC) {
+    console.log(`[RegenerateAudio] Smallest TTS speaker=${voiceName} lang=${resolvedLanguage}`);
+    audioResult = await generateSmallestTTS({
+      text: newVoiceover,
+      sceneNumber: sceneIndex + 1,
+      projectId,
+      voiceId: voiceName,
+      language: resolvedLanguage,
+    });
+  } else
 
   // Qwen3 TTS disabled — every speaker now routes through the standard audio
   // chain (Gemini → Fish Audio → Lemonfox). Re-enable by restoring the

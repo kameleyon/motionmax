@@ -13,17 +13,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 export type SpeakerVoice =
-  // Qwen3 voices (multi-language default)
-  | "Nova" | "Atlas" | "Kai" | "Marcus" | "Luna"
-  | "Leo" | "Maya" | "Sage" | "Aria"
   // Haitian Creole (Gemini TTS)
   | "Pierre" | "Marie"
   // French (Fish Audio)
   | "Jacques" | "Camille"
   // Spanish (Fish Audio)
   | "Carlos" | "Isabella"
-  // English specific (LemonFox / Fish Audio)
-  | "Adam" | "River";
+  // English (LemonFox / Fish Audio)
+  | "Adam" | "River"
+  // Legacy Qwen3 types kept in the union so previously-saved projects that
+  // reference them still typecheck when loaded. The worker routes them
+  // through the standard audio chain (see handleCinematicAudio.ts).
+  | "Nova" | "Atlas" | "Kai" | "Marcus" | "Luna"
+  | "Leo" | "Maya" | "Sage" | "Aria";
 
 const log = createScopedLogger("SpeakerSelector");
 
@@ -35,17 +37,9 @@ interface SpeakerSelectorProps {
 
 interface SpeakerOption { id: SpeakerVoice; label: string; description: string }
 
-const qwenSpeakers: SpeakerOption[] = [
-  { id: "Nova", label: "Nova", description: "Warm female" },
-  { id: "Aria", label: "Aria", description: "Expressive female" },
-  { id: "Luna", label: "Luna", description: "Gentle female" },
-  { id: "Maya", label: "Maya", description: "Bright female" },
-  { id: "Atlas", label: "Atlas", description: "Deep male" },
-  { id: "Kai", label: "Kai", description: "Smooth male" },
-  { id: "Marcus", label: "Marcus", description: "Confident male" },
-  { id: "Leo", label: "Leo", description: "Energetic male" },
-  { id: "Sage", label: "Sage", description: "Mature male" },
-];
+// Qwen3 (Replicate) is disabled — only Fish Audio / LemonFox / Gemini speakers
+// are offered in the UI. Re-introduce the qwenSpeakers list when Qwen3 is
+// re-enabled in the worker.
 
 const creoleSpeakers: SpeakerOption[] = [
   { id: "Pierre", label: "Pierre", description: "Male" },
@@ -55,19 +49,16 @@ const creoleSpeakers: SpeakerOption[] = [
 const frenchSpeakers: SpeakerOption[] = [
   { id: "Jacques", label: "Jacques", description: "Male" },
   { id: "Camille", label: "Camille", description: "Female" },
-  ...qwenSpeakers,
 ];
 
 const spanishSpeakers: SpeakerOption[] = [
   { id: "Carlos", label: "Carlos", description: "Male" },
   { id: "Isabella", label: "Isabella", description: "Female" },
-  ...qwenSpeakers,
 ];
 
 const englishSpeakers: SpeakerOption[] = [
   { id: "Adam", label: "Adam", description: "Male" },
   { id: "River", label: "River", description: "Female" },
-  ...qwenSpeakers,
 ];
 
 function getSpeakersForLanguage(language?: string): SpeakerOption[] {
@@ -76,7 +67,7 @@ function getSpeakersForLanguage(language?: string): SpeakerOption[] {
     case "fr": return frenchSpeakers;
     case "es": return spanishSpeakers;
     case "en": return englishSpeakers;
-    default: return qwenSpeakers;
+    default: return englishSpeakers;
   }
 }
 
@@ -85,8 +76,8 @@ export function getDefaultSpeaker(language: string): SpeakerVoice {
     case "ht": return "Pierre";
     case "fr": return "Camille";
     case "es": return "Isabella";
-    case "en": return "Nova";
-    default: return "Nova";
+    case "en": return "River";
+    default: return "River";
   }
 }
 

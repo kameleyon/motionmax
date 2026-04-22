@@ -163,6 +163,8 @@ export default function Sidebar() {
             <svg className="w-4 h-4 opacity-85" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M12 2v8M8 10h8l-1 6h-6l-1-6zM12 16v6"></path></svg>
             Brand reel · Q2
           </div>
+        </div>
+
         <div className="mb-5">
           <div className="flex items-center gap-2.5 px-3 py-2 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors">
             <svg className="w-4 h-4 opacity-85" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 10h18"></path></svg>

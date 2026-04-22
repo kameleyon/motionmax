@@ -35,10 +35,12 @@ export type { WorkspaceHandle } from "./types";
 
 interface Doc2VideoWorkspaceProps {
   projectId?: string | null;
+  autostart?: boolean;
+  onAutostartConsumed?: () => void;
 }
 
 export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspaceProps>(
-  function Doc2VideoWorkspace({ projectId: initialProjectId }, ref) {
+  function Doc2VideoWorkspace({ projectId: initialProjectId, autostart, onAutostartConsumed }, ref) {
     const [content, setContent] = useState("");
     const [sourceAttachments, setSourceAttachments] = useState<SourceAttachment[]>([]);
     const [format, setFormat] = useState<"landscape" | "portrait">("portrait");
@@ -110,10 +112,17 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
     // Load project if projectId provided, or reset if project param removed (tab click)
     useEffect(() => {
       if (initialProjectId) {
-        handleOpenProject(initialProjectId);
+        void (async () => {
+          await handleOpenProject(initialProjectId);
+          if (autostart) {
+            onAutostartConsumed?.();
+            setTimeout(() => { void handleGenerate(); }, 50);
+          }
+        })();
       } else {
         handleNewProject();
       }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [initialProjectId]);
 
     // Auto-recovery: if backend completes while UI is "generating" (e.g. after refresh),

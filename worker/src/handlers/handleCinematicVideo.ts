@@ -95,12 +95,18 @@ export async function handleCinematicVideo(
   // Fetch project data
   const { data: project } = await supabase
     .from("projects")
-    .select("format, style, character_description, voice_inclination, character_images")
+    .select("format, style, character_description, voice_inclination, character_images, intake_settings")
     .eq("id", projectId)
     .single();
 
   const format = project?.format || "landscape";
   const styleId = project?.style || "realistic";
+  // Intake settings are the new IntakeForm's JSONB blob. Camera + grade
+  // are the two keys we thread directly into the Kling prompt. Shape:
+  //   { camera?: string, grade?: string, ... }
+  const intake = (project?.intake_settings as Record<string, unknown> | null) || {};
+  const userCameraOverride = typeof intake.camera === "string" ? intake.camera : null;
+  const userColorGrade = typeof intake.grade === "string" ? intake.grade : null;
   const { getStylePrompt: getStyle } = await import("../services/prompts.js");
   const styleDesc = getStyle(styleId);
   const userCharacterDesc = project?.character_description || "";
@@ -187,8 +193,16 @@ export async function handleCinematicVideo(
   // ── Build prompt with camera motion ──────────────────────────────
   const visualPrompt = scene.visualPrompt || scene.visual_prompt || "";
   const voiceover = scene.voiceover || "";
-  const cameraMotion = getCameraMotion(sceneIndex);
-  const videoPrompt = buildVideoPrompt(visualPrompt, voiceover, characterDescription, styleDesc, language, cameraMotion);
+  // When the user picked an explicit camera motion in the IntakeForm, use
+  // it across every scene. Otherwise fall back to the scene-rotating
+  // default list so the video still has visual variety.
+  const cameraMotion = userCameraOverride
+    ? userCameraOverride // user chose: "Dolly", "Handheld", "Drone", etc.
+    : getCameraMotion(sceneIndex);
+  const gradeDirective = userColorGrade
+    ? `\nCOLOR GRADE: ${userColorGrade} — keep this look consistent across every frame (palette, contrast, film stock feel).`
+    : "";
+  const videoPrompt = buildVideoPrompt(visualPrompt, voiceover, characterDescription, styleDesc + gradeDirective, language, cameraMotion);
 
   const apiKey = (process.env.HYPEREAL_API_KEY || "").trim();
   if (!apiKey) throw new Error("HYPEREAL_API_KEY not configured");
@@ -260,7 +274,37 @@ export async function handleCinematicVideo(
   //   videoUrl = await generateGrokVideo(imageUrl, finalPrompt, apiKey, aspectRatio, 10, "1080P");
 
   // Upload to Supabase storage
-  const finalVideoUrl = await uploadVideoToStorage(videoUrl, projectId, generationId, sceneIndex);
+  let finalVideoUrl = await uploadVideoToStorage(videoUrl, projectId, generationId, sceneIndex);
+
+  // ── Optional lip-sync pass ────────────────────────────────────────
+  // If the user enabled Lip Sync in the new IntakeForm, run the scene
+  // through Hypereal's lip-sync model using this scene's narration
+  // audio. Failures are swallowed — the user still gets the Kling
+  // video, they just don't get mouth alignment on it. This mirrors
+  // music-gen finalize behaviour where additive features degrade
+  // gracefully rather than nuking the whole generation.
+  const lipSyncCfg = (intake as { lipSync?: { on?: boolean; strength?: number } }).lipSync;
+  const sceneAudioUrl = scene.audioUrl as string | undefined;
+  if (lipSyncCfg?.on && sceneAudioUrl) {
+    try {
+      const { applyLipSync } = await import("../services/lipSync.js");
+      const res = await applyLipSync({
+        videoUrl: finalVideoUrl,
+        audioUrl: sceneAudioUrl,
+        strength: lipSyncCfg.strength ?? 70,
+        apiKey,
+      });
+      if (res.applied) {
+        console.log(`[CinematicVideo] Scene ${sceneIndex}: lip-sync applied`);
+        finalVideoUrl = res.videoUrl;
+      } else {
+        console.warn(`[CinematicVideo] Scene ${sceneIndex}: lip-sync skipped — ${res.reason}`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[CinematicVideo] Scene ${sceneIndex}: lip-sync threw — ${msg}`);
+    }
+  }
 
   // Stale-image guard (for scene 0)
   if (sceneIndex === 0) {

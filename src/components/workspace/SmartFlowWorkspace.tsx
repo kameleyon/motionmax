@@ -33,12 +33,14 @@ import type { WorkspaceHandle } from "./types";
 
 interface SmartFlowWorkspaceProps {
   projectId?: string | null;
+  autostart?: boolean;
+  onAutostartConsumed?: () => void;
 }
 
 const log = createScopedLogger("SmartFlowWorkspace");
 
 export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspaceProps>(
-  function SmartFlowWorkspace({ projectId: initialProjectId }, ref) {
+  function SmartFlowWorkspace({ projectId: initialProjectId, autostart, onAutostartConsumed }, ref) {
     const [content, setContent] = useState("");
     const [sourceAttachments, setSourceAttachments] = useState<SourceAttachment[]>([]);
     const [format, setFormat] = useState<"landscape" | "portrait">("portrait");
@@ -81,10 +83,17 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
     // Load project if projectId provided, or reset if project param removed (tab click)
     useEffect(() => {
       if (initialProjectId) {
-        handleOpenProject(initialProjectId);
+        void (async () => {
+          await handleOpenProject(initialProjectId);
+          if (autostart) {
+            onAutostartConsumed?.();
+            setTimeout(() => { void handleGenerate(); }, 50);
+          }
+        })();
       } else {
         handleNewProject();
       }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [initialProjectId]);
 
     // Additional check: if we're in a "generating" state but the generation actually completed

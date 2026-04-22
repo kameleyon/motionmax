@@ -6,6 +6,7 @@
 
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
+import { generateLyriaMusic, lyriaIsConfigured, type LyriaMusicGenre } from "../services/lyriaMusic.js";
 
 // ── Pricing (matches edge function PRICING constants) ──────────────
 
@@ -67,10 +68,12 @@ export async function handleFinalizePhase(
     message: `Finalize phase started`,
   });
 
-  // Fetch generation + project
+  // Fetch generation + project. We now also grab `intake_settings` and
+  // `content` so the finalize step can kick off the background Lyria
+  // music track if the user enabled music in the new intake form.
   const { data: generation, error: genError } = await supabase
     .from("generations")
-    .select("*, projects(title, length, project_type, voice_inclination)")
+    .select("*, projects(title, length, project_type, voice_inclination, intake_settings, content)")
     .eq("id", generationId)
     .maybeSingle();
 
@@ -211,6 +214,54 @@ export async function handleFinalizePhase(
   // NOTE: Do NOT clean up scene-images / scene-videos here. Users still need
   // them to (1) preview the generation in the UI and (2) export the MP4 later.
   // Cleanup belongs in the export handler, and only after export succeeds.
+
+  // ── Music generation (Lyria 3 Pro via Hypereal) ──────────────────
+  // The user opts in via the new IntakeForm's Music & SFX toggle. The
+  // intake blob's shape is `{ music: { on, genre, intensity, sfx, uploadUrl? } }`.
+  // Music generation is ADDITIVE — failures must NOT fail the whole
+  // generation, because the scenes + audio are already rendered. We log
+  // and continue. The exportVideo handler (later, when the user hits
+  // "Export") picks up `scenes[0]._meta.musicUrl` if present and mixes
+  // it under the narration via ffmpeg.
+  try {
+    const intake = (generation.projects as any)?.intake_settings as
+      | { music?: { on?: boolean; genre?: string; intensity?: number } }
+      | null;
+    const music = intake?.music;
+    if (music?.on && lyriaIsConfigured()) {
+      // Estimate track length: ~10s per scene is our current scene clip
+      // length for cinematic. Explainer/SmartFlow can also use the same
+      // rough proxy. Cap at 120s so Lyria doesn't reject long calls.
+      const approxDurationSec = Math.min(120, Math.max(20, finalScenes.length * 10));
+      console.log(`[Finalize] Music on — calling Lyria 3 Pro for ~${approxDurationSec}s track`);
+      const musicUrl = await generateLyriaMusic({
+        prompt: (generation.projects as any)?.content ?? "",
+        durationSec: approxDurationSec,
+        apiKey: (process.env.HYPEREAL_API_KEY || "").trim(),
+        genre: music.genre as LyriaMusicGenre | undefined,
+        intensity: music.intensity,
+      });
+
+      // Persist onto scenes[0]._meta.musicUrl so it travels with the
+      // generation without needing a new column. The export step reads
+      // this key and mixes the track in during ffmpeg compression.
+      const augmented = finalScenesWithMeta.map((s: any, i: number) =>
+        i === 0
+          ? { ...s, _meta: { ...(s._meta || {}), musicUrl, musicGenre: music.genre, musicIntensity: music.intensity } }
+          : s,
+      );
+      await supabase.from("generations").update({ scenes: augmented }).eq("id", generationId);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[Finalize] Music generation skipped: ${msg}`);
+    await writeSystemLog({
+      jobId, projectId, userId, generationId,
+      category: "system_warning",
+      eventType: "finalize_music_skipped",
+      message: `Lyria music generation failed or skipped: ${msg}`,
+    });
+  }
 
   const phaseTime = Date.now() - phaseStart;
 

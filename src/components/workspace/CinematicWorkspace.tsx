@@ -40,10 +40,17 @@ const log = createScopedLogger("CinematicWorkspace");
 
 interface CinematicWorkspaceProps {
   projectId?: string | null;
+  /** When true, the workspace auto-kicks-off generation once the project
+   *  finishes loading. Set by WorkspaceRouter when `?autostart=1` is in
+   *  the URL (the new IntakeForm hands off to us with that param). */
+  autostart?: boolean;
+  /** Called once we consume the autostart signal so the router can strip
+   *  the param from the URL — prevents a refresh from re-firing. */
+  onAutostartConsumed?: () => void;
 }
 
 export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspaceProps>(
-  function CinematicWorkspace({ projectId: initialProjectId }, ref) {
+  function CinematicWorkspace({ projectId: initialProjectId, autostart, onAutostartConsumed }, ref) {
     // Content input (like Doc2Video)
     const [content, setContent] = useState("");
     const [format, setFormat] = useState<"landscape" | "portrait">("portrait");
@@ -295,7 +302,15 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
     useEffect(() => {
       hasReloadedRef.current = null; // Reset reload guard on project switch
       if (initialProjectId) {
-        void handleOpenProject(initialProjectId);
+        void (async () => {
+          await handleOpenProject(initialProjectId);
+          if (autostart) {
+            onAutostartConsumed?.();
+            // Wait a tick so local state from handleOpenProject flushes
+            // into the refs handleGenerate reads from.
+            setTimeout(() => { void handleGenerate(); }, 50);
+          }
+        })();
       } else {
         handleNewProject();
       }

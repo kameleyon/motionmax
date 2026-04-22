@@ -25,6 +25,10 @@ export const WorkspaceRouter = forwardRef<WorkspaceHandle>(function WorkspaceRou
   const modeParam = (searchParams.get("mode") as WorkspaceMode | null) ?? null;
   const mode: WorkspaceMode = modeParam || "doc2video";
   const projectId = searchParams.get("project");
+  // `autostart=1` is set by the new IntakeForm (src/components/intake/) so
+  // the user lands here and generation kicks off without an extra click.
+  // We strip it from the URL on consume so a refresh doesn't re-fire.
+  const autostart = searchParams.get("autostart") === "1";
 
   const doc2videoRef = useRef<WorkspaceHandle>(null);
   const smartflowRef = useRef<WorkspaceHandle>(null);
@@ -86,13 +90,20 @@ export const WorkspaceRouter = forwardRef<WorkspaceHandle>(function WorkspaceRou
     },
   }));
 
+  const clearAutostart = () => {
+    if (!searchParams.has("autostart")) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("autostart");
+    setSearchParams(next, { replace: true });
+  };
+
   if (mode === "smartflow") {
-    return <WorkspaceErrorBoundary><SmartFlowWorkspace ref={smartflowRef} projectId={projectId} /></WorkspaceErrorBoundary>;
+    return <WorkspaceErrorBoundary><SmartFlowWorkspace ref={smartflowRef} projectId={projectId} autostart={autostart} onAutostartConsumed={clearAutostart} /></WorkspaceErrorBoundary>;
   }
 
   if (mode === "cinematic") {
-    return <WorkspaceErrorBoundary><CinematicWorkspace ref={cinematicRef} projectId={projectId} /></WorkspaceErrorBoundary>;
+    return <WorkspaceErrorBoundary><CinematicWorkspace ref={cinematicRef} projectId={projectId} autostart={autostart} onAutostartConsumed={clearAutostart} /></WorkspaceErrorBoundary>;
   }
 
-  return <WorkspaceErrorBoundary><Doc2VideoWorkspace ref={doc2videoRef} projectId={projectId} /></WorkspaceErrorBoundary>;
+  return <WorkspaceErrorBoundary><Doc2VideoWorkspace ref={doc2videoRef} projectId={projectId} autostart={autostart} onAutostartConsumed={clearAutostart} /></WorkspaceErrorBoundary>;
 });

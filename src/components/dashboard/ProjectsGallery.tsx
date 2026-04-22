@@ -2,12 +2,21 @@ import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
+import { useState } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import { useReferral } from "@/hooks/useReferral";
+
 
 export default function ProjectsGallery() {
+  const { user } = useAuth();
+  const [filter, setFilter] = useState('All');
   const queryClient = useQueryClient();
+  const { referralLink } = useReferral();
+
 
   const { data: projects = [] } = useQuery({
-    queryKey: ['dashboard-projects'],
+    queryKey: ['dashboard-projects', user?.id],
+    enabled: !!user,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('projects')
@@ -23,7 +32,7 @@ export default function ProjectsGallery() {
     const channel = supabase
       .channel('projects_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['dashboard-projects'] });
+        queryClient.invalidateQueries({ queryKey: ['dashboard-projects', user?.id] });
       })
       .subscribe();
 
@@ -33,7 +42,7 @@ export default function ProjectsGallery() {
   }, [queryClient]);
 
   const recentProject = projects.length > 0 ? projects[0] : null;
-  const galleryProjects = projects;
+  const galleryProjects = filter === 'All' ? projects : projects.filter(p => p.project_type?.toLowerCase() === filter.toLowerCase() || (filter === 'Cinematic' && !p.project_type));
 
   const generateGradient = (id) => {
     if (!id) return '#10151A';
@@ -52,7 +61,7 @@ export default function ProjectsGallery() {
       </div>
 
       {recentProject && (
-      <a className="border border-white/5 rounded-2xl bg-[#10151A] overflow-hidden grid grid-cols-[240px_1fr] gap-0 text-inherit hover:border-white/10 transition-colors" href="editor.html">
+      <a className="border border-white/5 rounded-2xl bg-[#10151A] overflow-hidden grid grid-cols-[240px_1fr] gap-0 text-inherit hover:border-white/10 transition-colors" href={`/editor/${recentProject.id}`}>
         <div className="relative aspect-[4/3] bg-black overflow-hidden group">
           <div className="absolute inset-0 bg-[#0a0a0b]" style={{ background: generateGradient(recentProject.id) }}></div>
           <div className="absolute left-[20%] top-[30%] w-[40%] h-[55%] rounded-full opacity-90" style={{ background: "radial-gradient(circle at 35% 30%,#d6b592,#6b462a 60%,transparent 85%)" }}></div>
@@ -90,7 +99,7 @@ export default function ProjectsGallery() {
 
       <div className="grid grid-cols-4 gap-3.5">
         {galleryProjects.map(proj => (
-          <a key={proj.id} className="relative rounded-xl overflow-hidden border border-white/5 bg-[#10151A] flex flex-col hover:-translate-y-0.5 hover:border-white/10 transition-all group" href="editor.html">
+          <a key={proj.id} className="relative rounded-xl overflow-hidden border border-white/5 bg-[#10151A] flex flex-col hover:-translate-y-0.5 hover:border-white/10 transition-all group" href={`/editor/${proj.id}`}>
             <div className="relative aspect-[4/5] overflow-hidden bg-black">
               <div className="absolute inset-0" style={{ background: generateGradient(proj.id) }}></div>
               <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[9.5px] font-mono tracking-wider text-white/85 bg-black/55 backdrop-blur-sm border border-white/10">{proj.project_type || 'PROJ'}</div>

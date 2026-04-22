@@ -1,13 +1,59 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 
 export default function Sidebar() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  const { data: profile } = useQuery({
+    queryKey: ['profile', user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('display_name, avatar_url')
+        .eq('user_id', user!.id)
+        .single();
+      if (error) throw error;
+      return data;
+    }
+  });
+
+  const { data: subscription } = useQuery({
+    queryKey: ['subscription', user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('subscriptions')
+        .select('plan_name')
+        .eq('user_id', user!.id)
+        .eq('status', 'active')
+        .single();
+      if (error && error.code !== 'PGRST116') throw error;
+      return data || { plan_name: 'Free' };
+    }
+  });
+
+  const { data: credits } = useQuery({
+    queryKey: ['credits', user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('user_credits')
+        .select('credits_balance')
+        .eq('user_id', user!.id)
+        .single();
+      if (error && error.code !== 'PGRST116') throw error;
+      return data || { credits_balance: 0 };
+    }
+  });
 
   const { data: recentProjects = [] } = useQuery({
-    queryKey: ['sidebar-recent-projects'],
+    queryKey: ['sidebar-recent-projects', user?.id],
+    enabled: !!user,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('projects')
@@ -23,7 +69,7 @@ export default function Sidebar() {
     const channel = supabase
       .channel('sidebar_projects_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['sidebar-recent-projects'] });
+        queryClient.invalidateQueries({ queryKey: ['sidebar-recent-projects', user?.id] });
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -39,7 +85,7 @@ export default function Sidebar() {
   return (
     <aside className="w-[252px] bg-[#10151A] border-r border-white/5 hidden md:flex flex-col overflow-hidden shrink-0">
       <div className="flex items-center gap-2.5 px-5 py-[18px] border-b border-white/5">
-        <img src="bf82bef9-a850-4c8a-b37a-f6495468d643" alt="" className="w-[26px] h-[26px]" />
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#14C8CC" strokeWidth="2"><path d="M2 12h4l3-9 5 18 3-9h5"/></svg>
         <span className="font-serif text-[17px] font-medium tracking-tight">
           <b className="text-[#14C8CC] font-medium">Motion</b><i className="text-[#14C8CC] not-italic font-medium">Max</i>
         </span>
@@ -59,11 +105,11 @@ export default function Sidebar() {
             <svg className="w-4 h-4 opacity-85" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 12l9-8 9 8"></path><path d="M5 10v10h14V10"></path></svg>
             Studio
           </div>
-          <div className="flex items-center gap-2.5 px-3 py-2 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors">
+          <a href="/editor" className="flex items-center gap-2.5 px-3 py-2 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors" style={{ textDecoration: 'none' }}>
             <svg className="w-4 h-4 opacity-85" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M12 5v14M5 12h14"></path></svg>
             Create
             <svg className="ml-auto opacity-50 w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"></path></svg>
-          </div>
+          </a>
           <div className="pl-4 flex flex-col gap-px mt-1">
             <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors">
               <svg className="w-4 h-4 opacity-85" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M10 9l5 3-5 3V9z" fill="currentColor"></path></svg>
@@ -120,12 +166,18 @@ export default function Sidebar() {
       </nav>
 
       <div className="px-4 py-3.5 border-t border-white/5 flex items-center gap-2.5">
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#14C8CC] to-[#14C8CC] grid place-items-center font-serif font-semibold text-[14px] text-[#0A0D0F]">J</div>
+        {profile?.avatar_url ? (
+          <img src={profile.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />
+        ) : (
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#14C8CC] to-[#14C8CC] grid place-items-center font-serif font-semibold text-[14px] text-[#0A0D0F]">
+            {(profile?.display_name || user?.email || 'J').charAt(0).toUpperCase()}
+          </div>
+        )}
         <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-medium text-[#ECEAE4]">Jomama</div>
-          <div className="font-mono text-[10px] text-[#5A6268] tracking-wider uppercase">Studio · 996k</div>
+          <div className="text-[13px] font-medium text-[#ECEAE4]">{profile?.display_name || user?.email || 'User'}</div>
+          <div className="font-mono text-[10px] text-[#5A6268] tracking-wider uppercase">{subscription?.plan_name || 'Free'} • {Math.floor((credits?.credits_balance || 0) / 1000)}k</div>
         </div>
-        <svg className="opacity-50 cursor-pointer hover:opacity-100 transition-opacity w-4 h-4 text-[#ECEAE4]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg>
+        <a href="/settings"><svg className="opacity-50 cursor-pointer hover:opacity-100 transition-opacity w-4 h-4 text-[#ECEAE4]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg></a>
       </div>
     </aside>
   );

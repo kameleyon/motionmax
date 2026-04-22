@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 
 const mockVoices = [
@@ -9,10 +10,54 @@ const mockVoices = [
 ];
 
 export default function RightRail() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
+  const { data: userVoices = mockVoices } = useQuery({
+    queryKey: ['rightrail-voices', user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('user_voices')
+        .select('*')
+        .eq('user_id', user!.id)
+        .limit(3);
+      if (error) return mockVoices;
+      return data && data.length > 0 ? data : mockVoices;
+    }
+  });
+
+  const { data: credits } = useQuery({
+    queryKey: ['rightrail-credits', user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('user_credits')
+        .select('credits_balance')
+        .eq('user_id', user!.id)
+        .single();
+      return data || { credits_balance: 996794 };
+    }
+  });
+
+  const { data: subscription } = useQuery({
+    queryKey: ['rightrail-subscription', user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('subscriptions')
+        .select('plan_name')
+        .eq('user_id', user!.id)
+        .eq('status', 'active')
+        .single();
+      return data || { plan_name: 'Free Plan' };
+    }
+  });
+
+
   const { data: renderQueue = [] } = useQuery({
-    queryKey: ['rightrail-generations'],
+    queryKey: ['rightrail-generations', user?.id],
+    enabled: !!user,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('generations')
@@ -28,7 +73,7 @@ export default function RightRail() {
     const channel = supabase
       .channel('rightrail_generations_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'generations' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['rightrail-generations'] });
+        queryClient.invalidateQueries({ queryKey: ['rightrail-generations', user?.id] });
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -46,7 +91,7 @@ export default function RightRail() {
           <span className="w-1.5 h-1.5 rounded-full bg-[#14C8CC] shadow-[0_0_0_3px_rgba(20,200,204,0.2)]"></span>Credits
         </h4>
         <div className="flex items-baseline gap-2.5 mb-3.5">
-          <b className="font-serif text-[36px] tracking-tight font-normal text-[#ECEAE4]">996,794</b>
+          <b className="font-serif text-[36px] tracking-tight font-normal text-[#ECEAE4]">{credits?.credits_balance?.toLocaleString() || '996,794'}</b>
           <span className="font-mono text-[11px] text-[#5A6268] tracking-widest">/ 2,500,000</span>
         </div>
         <div className="h-1.5 rounded-full bg-[#1B2228] relative border border-white/5 overflow-hidden">
@@ -65,7 +110,7 @@ export default function RightRail() {
           ))}
         </div>
         <div className="flex justify-between items-center mt-3.5 pt-3.5 border-t border-white/5 text-[12px] text-[#8A9198]">
-          <span className="font-mono text-[10px] tracking-widest uppercase px-2 py-1 rounded bg-[#14C8CC]/10 text-[#14C8CC]">Studio plan</span>
+          <span className="font-mono text-[10px] tracking-widest uppercase px-2 py-1 rounded bg-[#14C8CC]/10 text-[#14C8CC]">{subscription?.plan_name || 'Free Plan'}</span>
           <a className="font-mono text-[10.5px] tracking-wider uppercase text-[#14C8CC] cursor-pointer">Top up →</a>
         </div>
       </div>
@@ -95,25 +140,24 @@ export default function RightRail() {
           <span className="w-1.5 h-1.5 rounded-full bg-[#14C8CC] shadow-[0_0_0_3px_rgba(20,200,204,0.14)]"></span>Voice lab
         </h4>
         <div className="flex flex-col">
-          {mockVoices.map((voice, i) => (
+          {userVoices.length === 0 ? (
+            <div className="text-[12.5px] text-[#5A6268] py-2">No custom voices yet</div>
+          ) : userVoices.map((voice, i) => (
             <div key={voice.id} className={`flex items-center gap-2.5 py-2.5 ${i > 0 ? 'border-t border-white/5' : ''}`}>
-              <div className={`w-7 h-7 rounded-full grid place-items-center font-serif text-[12px] text-[#0A0D0F] font-semibold bg-gradient-to-br ${voice.bg}`}>
-                {voice.initial}
+              <div className="w-7 h-7 rounded-full grid place-items-center font-serif text-[12px] text-[#0A0D0F] font-semibold bg-gradient-to-br from-[#14C8CC] to-[#0FA6AE]">
+                {(voice.voice_name || 'V').charAt(0).toUpperCase()}
               </div>
               <div className="flex-1">
                 <div className="text-[12.5px] text-[#ECEAE4]">
-                  {voice.name}
-                  {voice.tag && <span className="text-[#14C8CC] font-mono text-[9.5px] ml-1 tracking-widest">{voice.tag}</span>}
+                  {voice.voice_name}
                 </div>
-                <div className="font-mono text-[9.5px] text-[#5A6268] tracking-widest mt-px">{voice.desc}</div>
+                <div className="font-mono text-[9.5px] text-[#5A6268] tracking-widest mt-px">{voice.description || 'CUSTOM VOICE'}</div>
               </div>
               <div className="flex items-center gap-[1.5px] h-[18px]">
-                <b className={`w-[2px] rounded-[1px] ${voice.id === 1 ? 'bg-[#14C8CC]' : 'bg-white/20'}`} style={{height: '40%'}}></b>
-                <b className={`w-[2px] rounded-[1px] ${voice.id === 1 ? 'bg-[#14C8CC]' : 'bg-white/20'}`} style={{height: '70%'}}></b>
-                <b className={`w-[2px] rounded-[1px] ${voice.id === 1 ? 'bg-[#14C8CC]' : 'bg-white/20'}`} style={{height: '55%'}}></b>
-                <b className={`w-[2px] rounded-[1px] ${voice.id === 1 ? 'bg-[#14C8CC]' : 'bg-white/20'}`} style={{height: '85%'}}></b>
-                <b className={`w-[2px] rounded-[1px] ${voice.id === 1 ? 'bg-[#14C8CC]' : 'bg-white/20'}`} style={{height: '50%'}}></b>
-                <b className={`w-[2px] rounded-[1px] ${voice.id === 1 ? 'bg-[#14C8CC]' : 'bg-white/20'}`} style={{height: '30%'}}></b>
+                <b className="w-[2px] rounded-[1px] bg-[#14C8CC]" style={{height: '40%'}}></b>
+                <b className="w-[2px] rounded-[1px] bg-[#14C8CC]" style={{height: '70%'}}></b>
+                <b className="w-[2px] rounded-[1px] bg-[#14C8CC]" style={{height: '55%'}}></b>
+                <b className="w-[2px] rounded-[1px] bg-[#14C8CC]" style={{height: '85%'}}></b>
               </div>
             </div>
           ))}

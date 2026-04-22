@@ -62,6 +62,7 @@ export default function RightRail() {
       const { data, error } = await supabase
         .from('generations')
         .select('id, status, progress, project_id, created_at')
+        .eq('user_id', user!.id)
         .order('created_at', { ascending: false })
         .limit(4);
       if (error) throw error;

@@ -21,6 +21,7 @@ export default function ProjectsGallery() {
       const { data, error } = await supabase
         .from('projects')
         .select('*')
+        .eq('user_id', user!.id)
         .order('updated_at', { ascending: false })
         .limit(7);
       if (error) throw error;
@@ -61,7 +62,7 @@ export default function ProjectsGallery() {
       </div>
 
       {recentProject && (
-      <a className="border border-white/5 rounded-2xl bg-[#10151A] overflow-hidden grid grid-cols-[240px_1fr] gap-0 text-inherit hover:border-white/10 transition-colors" href={`/editor/${recentProject.id}`}>
+      <a className="border border-white/5 rounded-2xl bg-[#10151A] overflow-hidden grid grid-cols-[240px_1fr] gap-0 text-inherit hover:border-white/10 transition-colors" href={`/editor/${recentProject.id}`} style={{ textDecoration: 'none' }}>
         <div className="relative aspect-[4/3] bg-black overflow-hidden group">
           <div className="absolute inset-0 bg-[#0a0a0b]" style={{ background: generateGradient(recentProject.id) }}></div>
           <div className="absolute left-[20%] top-[30%] w-[40%] h-[55%] rounded-full opacity-90" style={{ background: "radial-gradient(circle at 35% 30%,#d6b592,#6b462a 60%,transparent 85%)" }}></div>
@@ -99,9 +100,13 @@ export default function ProjectsGallery() {
 
       <div className="grid grid-cols-4 gap-3.5">
         {galleryProjects.map(proj => (
-          <a key={proj.id} className="relative rounded-xl overflow-hidden border border-white/5 bg-[#10151A] flex flex-col hover:-translate-y-0.5 hover:border-white/10 transition-all group" href={`/editor/${proj.id}`}>
+          <a key={proj.id} className="relative rounded-xl overflow-hidden border border-white/5 bg-[#10151A] flex flex-col hover:-translate-y-0.5 hover:border-white/10 transition-all group" href={`/editor/${proj.id}`} style={{ textDecoration: 'none' }}>
             <div className="relative aspect-[4/5] overflow-hidden bg-black">
-              <div className="absolute inset-0" style={{ background: generateGradient(proj.id) }}></div>
+              {proj.thumbnail_url ? (
+                <img src={proj.thumbnail_url} alt={proj.title} className="absolute inset-0 w-full h-full object-cover opacity-70 group-hover:opacity-90 transition-opacity" />
+              ) : (
+                <div className="absolute inset-0" style={{ background: generateGradient(proj.id) }}></div>
+              )}
               <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[9.5px] font-mono tracking-wider text-white/85 bg-black/55 backdrop-blur-sm border border-white/10">{proj.project_type || 'PROJ'}</div>
               <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded text-[9.5px] font-mono tracking-widest text-white bg-black/60">{proj.length || '00:00'}</div>
             </div>

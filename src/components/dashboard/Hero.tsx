@@ -6,6 +6,8 @@ import { supabase } from '@/integrations/supabase/client';
 export default function Hero() {
   const { user } = useAuth();
   const [prompt, setPrompt] = useState("");
+  const [ratio, setRatio] = useState("16:9");
+  const [language, setLanguage] = useState("English");
 
   const { data: profile } = useQuery({
     queryKey: ['hero-profile', user?.id],
@@ -25,6 +27,11 @@ export default function Hero() {
     "Explain compound interest in 45 seconds",
     "Brand teaser with karaoke captions in French"
   ];
+
+  const handleSubmit = () => {
+    if (!prompt.trim()) return;
+    window.location.href = `/editor?prompt=${encodeURIComponent(prompt)}&ratio=${encodeURIComponent(ratio)}&language=${encodeURIComponent(language)}`;
+  };
 
   return (
     <section className="border border-white/5 rounded-2xl p-[42px_40px_36px] relative overflow-hidden bg-[#10151A]" style={{
@@ -48,8 +55,14 @@ export default function Hero() {
         <div className="font-mono text-[11px] tracking-widest uppercase text-[#5A6268]">Mon · Apr 20 · 2026</div>
       </div>
 
-      <form className="relative border border-white/10 rounded-xl bg-[#151B20] p-[16px_16px_12px] flex flex-col gap-3.5 focus-within:border-[#14C8CC] transition-colors" onSubmit={(e) => e.preventDefault()}>
+      <form className="relative border border-white/10 rounded-xl bg-[#151B20] p-[16px_16px_12px] flex flex-col gap-3.5 focus-within:border-[#14C8CC] transition-colors" onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
         <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} 
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleSubmit();
+            }
+          }}
           className="w-full bg-transparent border-0 outline-none resize-none text-[#ECEAE4] font-serif text-[22px] leading-[1.35] min-h-[64px] placeholder:text-[#5A6268] placeholder:italic"
           placeholder="A three-minute documentary about the origin of 35mm film, golden-hour Kodak factory, warm serif captions, narrated in my voice…"
         ></textarea>
@@ -73,18 +86,18 @@ export default function Hero() {
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="opacity-70"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"></path><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"></path></svg>
             Paste URL
           </button>
-          <button type="button" className="font-mono text-[10.5px] text-[#8A9198] px-2.5 py-1 rounded-md border border-white/5 tracking-wider inline-flex items-center gap-1.5 hover:text-[#ECEAE4] hover:border-white/10">
+          <button type="button" onClick={() => setLanguage(language === 'English' ? 'French' : 'English')} className="font-mono text-[10.5px] text-[#8A9198] px-2.5 py-1 rounded-md border border-white/5 tracking-wider inline-flex items-center gap-1.5 hover:text-[#ECEAE4] hover:border-white/10">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="opacity-70"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3a15 15 0 0 1 0 18"></path></svg>
-            English
+            {language}
           </button>
-          <button type="button" className="font-mono text-[10.5px] text-[#8A9198] px-2.5 py-1 rounded-md border border-white/5 tracking-wider inline-flex items-center gap-1.5 hover:text-[#ECEAE4] hover:border-white/10">
+          <button type="button" onClick={() => setRatio(ratio === '16:9' ? '9:16' : '16:9')} className="font-mono text-[10.5px] text-[#8A9198] px-2.5 py-1 rounded-md border border-white/5 tracking-wider inline-flex items-center gap-1.5 hover:text-[#ECEAE4] hover:border-white/10">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="opacity-70"><rect x="6" y="4" width="12" height="16" rx="2"></rect></svg>
-            16:9
+            {ratio}
           </button>
           
-          <a href={`/editor?prompt=${encodeURIComponent(prompt)}`} className="ml-auto inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 transition-all shadow-[0_10px_30px_-14px_rgba(20,200,204,0.55)] border-none">
+          <button type="button" onClick={handleSubmit} className="ml-auto inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 transition-all shadow-[0_10px_30px_-14px_rgba(20,200,204,0.55)] border-none">
             Direct <kbd className="font-mono text-[10px] px-1 py-px rounded bg-[#0A0D0F]/35 ml-1">⏎</kbd>
-          </a>
+          </button>
         </div>
       </form>
 

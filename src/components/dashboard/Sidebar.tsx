@@ -124,18 +124,19 @@ export default function Sidebar() {
               Smart Flow
             </div>
           </div>
+        <div className="mb-5">
+          <h6 className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#5A6268] mx-3 mb-1.5 font-medium">Tools</h6>
           <div className="flex items-center gap-2.5 px-3 py-2 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors mt-1">
             <svg className="w-4 h-4 opacity-85" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M8 4v16M16 4v16M4 8h4M16 8h4M4 16h4M16 16h4"></path></svg>
             Voice Lab
           </div>
           <div className="flex items-center gap-2.5 px-3 py-2 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors">
-            <svg className="w-4 h-4 opacity-85" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 10h18"></path></svg>
-            All projects
-            <span className="ml-auto font-mono text-[9px] tracking-wide px-1.5 py-0.5 rounded bg-white/5 text-[#8A9198]">142</span>
-          </div>
-          <div className="flex items-center gap-2.5 px-3 py-2 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors">
             <svg className="w-4 h-4 opacity-85" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="12" cy="8" r="3"></circle><circle cx="6" cy="16" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
             Brand kits
+          </div>
+          <div className="flex items-center gap-2.5 px-3 py-2 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors">
+            <svg className="w-4 h-4 opacity-85" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+            Templates
           </div>
         </div>
 
@@ -161,6 +162,16 @@ export default function Sidebar() {
           <div className="flex items-center gap-2.5 px-3 py-2 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors">
             <svg className="w-4 h-4 opacity-85" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M12 2v8M8 10h8l-1 6h-6l-1-6zM12 16v6"></path></svg>
             Brand reel · Q2
+          </div>
+        <div className="mb-5">
+          <div className="flex items-center gap-2.5 px-3 py-2 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors">
+            <svg className="w-4 h-4 opacity-85" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 10h18"></path></svg>
+            All projects
+            <span className="ml-auto font-mono text-[9px] tracking-wide px-1.5 py-0.5 rounded bg-white/5 text-[#8A9198]">142</span>
+          </div>
+          <div className="flex items-center gap-2.5 px-3 py-2 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors">
+            <svg className="w-4 h-4 opacity-85" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            Trash
           </div>
         </div>
       </nav>

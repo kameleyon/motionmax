@@ -2,6 +2,8 @@ import { cn } from "@/lib/utils";
 import { ThemedLogo } from "@/components/ThemedLogo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Sparkles } from "lucide-react";
+import { Link } from "react-router-dom";
 
 interface AppHeaderProps {
   /** Extra controls rendered to the right of the ThemeToggle */
@@ -30,9 +32,20 @@ export function AppHeader({ actions, className }: AppHeaderProps) {
       </div>
       <div className="hidden lg:block" />
 
-      {/* Right: actions + theme toggle */}
+      {/* Right: actions + "new dashboard" preview link + theme toggle */}
       <div className="flex items-center justify-end gap-2">
         {actions}
+        {/* Preview link to the new dashboard while it's under construction.
+            Sits next to the ThemeToggle (moon/sun icon). Remove this
+            button once DashboardLayout graduates to /app. */}
+        <Link
+          to="/dashboard-new"
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
+          title="Preview the new dashboard"
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">New Dashboard</span>
+        </Link>
         <ThemeToggle />
       </div>
     </header>

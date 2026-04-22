@@ -45,7 +45,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
     const [style, setStyle] = useState<SmartFlowStyle>("minimalist");
     const [customStyle, setCustomStyle] = useState("");
     const [customStyleImage, setCustomStyleImage] = useState<string | null>(null);
-    const [speaker, setSpeaker] = useState<SpeakerVoice>("Nova");
+    const [speaker, setSpeaker] = useState<SpeakerVoice>("Adam");
     const [language, setLanguage] = useState<Language>("en");
     const [brandMarkEnabled, setBrandMarkEnabled] = useState(false);
     const [brandMarkText, setBrandMarkText] = useState("");
@@ -193,7 +193,7 @@ export const SmartFlowWorkspace = forwardRef<WorkspaceHandle, SmartFlowWorkspace
       setStyle("minimalist");
       setCustomStyle("");
       setCustomStyleImage(null);
-      setSpeaker("Nova");
+      setSpeaker("Adam");
       setLanguage("en");
       setBrandMarkEnabled(false);
       setBrandMarkText("");

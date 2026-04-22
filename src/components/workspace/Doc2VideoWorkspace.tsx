@@ -46,7 +46,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
     const [style, setStyle] = useState<VisualStyle>("minimalist");
     const [customStyle, setCustomStyle] = useState("");
     const [customStyleImage, setCustomStyleImage] = useState<string | null>(null);
-    const [speaker, setSpeaker] = useState<SpeakerVoice>("Nova");
+    const [speaker, setSpeaker] = useState<SpeakerVoice>("Adam");
     const [language, setLanguage] = useState<Language>("en");
     const [characterDescription, setCharacterDescription] = useState("");
     const [characterImages, setCharacterImages] = useState<string[]>([]);
@@ -201,7 +201,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
       setStyle("minimalist");
       setCustomStyle("");
       setCustomStyleImage(null);
-      setSpeaker("Nova");
+      setSpeaker("Adam");
       setLanguage("en");
       setCharacterDescription("");
       setCharacterImages([]);

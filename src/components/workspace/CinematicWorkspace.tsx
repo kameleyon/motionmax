@@ -51,7 +51,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
     const [style, setStyle] = useState<VisualStyle>("realistic");
     const [customStyle, setCustomStyle] = useState("");
     const [customStyleImage, setCustomStyleImage] = useState<string | null>(null);
-    const [speaker, setSpeaker] = useState<SpeakerVoice>("Nova");
+    const [speaker, setSpeaker] = useState<SpeakerVoice>("Adam");
     const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("none");
     const [language, setLanguage] = useState<Language>("en");
     const [characterDescription, setCharacterDescription] = useState("");
@@ -235,7 +235,7 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
       setStyle("realistic");
       setCustomStyle("");
       setCustomStyleImage(null);
-      setSpeaker("Nova");
+      setSpeaker("Adam");
       setCaptionStyle("none");
       setLanguage("en");
       setCharacterDescription("");

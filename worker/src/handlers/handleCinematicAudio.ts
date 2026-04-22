@@ -287,23 +287,62 @@ export async function handleCinematicAudio(
         config,
       );
     } else {
-      // Speaker is not Haitian Creole, not `sm:`/`sm2:` (Smallest), and not
-      // in LEGACY_SPEAKER_MAP. That means it's an orphan value — typically
-      // a Qwen3 name (Nova, Atlas, Kai, …) saved on an older project before
-      // Qwen3 was disabled. Fail the scene rather than silently substituting
-      // a different voice: strict routing per user request — the voice the
-      // user picked is the voice they get, or nothing.
-      const errMsg =
-        `Voice "${voiceName}" is no longer supported for new generations. ` +
-        `Please reselect a voice (Adam, River, Carlos, Isabella, Jacques, Camille, ` +
-        `Pierre, Marie, or any Smallest voice) on this project and regenerate.`;
-      console.warn(`[CinematicAudio] Scene ${sceneIndex}: ${errMsg}`);
-      await updateSceneProgress(jobId, sceneIndex, "failed", {
-        message: `Scene ${sceneIndex + 1} audio generation failed`,
-        error: errMsg,
-      });
-      clearSceneProgress(jobId);
-      throw new Error(`Audio generation failed: ${errMsg}`);
+      // Speaker is not Haitian Creole, not `sm:`/`sm2:`/`gm:`, and not in
+      // LEGACY_SPEAKER_MAP. Two cases:
+      //   1. Orphan Qwen3 name (Nova, Atlas, Kai, Luna, Maya, Aria, Marcus,
+      //      Leo, Sage) saved on legacy projects OR defaulted by older UI
+      //      builds. User never truly "picked" these — they were just the
+      //      default. Silently remap to the nearest legacy equivalent
+      //      instead of failing the whole generation.
+      //   2. Unknown garbage → still fail.
+      const QWEN3_LEGACY_NAMES: Record<string, { name: string; gender: string; language: string }> = {
+        "Nova":   { name: "River", gender: "female", language: "en" },
+        "Aria":   { name: "River", gender: "female", language: "en" },
+        "Luna":   { name: "River", gender: "female", language: "en" },
+        "Maya":   { name: "River", gender: "female", language: "en" },
+        "Atlas":  { name: "Adam",  gender: "male",   language: "en" },
+        "Kai":    { name: "Adam",  gender: "male",   language: "en" },
+        "Marcus": { name: "Adam",  gender: "male",   language: "en" },
+        "Leo":    { name: "Adam",  gender: "male",   language: "en" },
+        "Sage":   { name: "Adam",  gender: "male",   language: "en" },
+      };
+      const remap = QWEN3_LEGACY_NAMES[voiceName];
+      if (remap) {
+        console.log(`[CinematicAudio] Scene ${sceneIndex}: legacy speaker "${voiceName}" → remap to "${remap.name}" (${remap.language}/${remap.gender})`);
+        const googleApiKeys = [
+          process.env.GOOGLE_TTS_API_KEY_3,
+          process.env.GOOGLE_TTS_API_KEY_2,
+          process.env.GOOGLE_TTS_API_KEY,
+        ].filter(Boolean) as string[];
+
+        const config: AudioConfig = {
+          projectId,
+          googleApiKeys,
+          elevenLabsApiKey: process.env.ELEVENLABS_API_KEY,
+          lemonfoxApiKey: process.env.LEMONFOX_API_KEY,
+          fishAudioApiKey: process.env.FISH_AUDIO_API_KEY,
+          replicateApiKey: process.env.REPLICATE_API_KEY || "",
+          voiceGender: remap.gender,
+          language: remap.language,
+        };
+
+        result = await generateSceneAudio(
+          { number: sceneIndex + 1, voiceover, duration: scene.duration || 10 },
+          config,
+        );
+      } else {
+        const errMsg =
+          `Voice "${voiceName}" is no longer supported. ` +
+          `Please reselect a voice (Adam, River, Carlos, Isabella, Jacques, Camille, ` +
+          `Pierre, Marie, or any Smallest/Gemini voice) on this project and regenerate.`;
+        console.warn(`[CinematicAudio] Scene ${sceneIndex}: ${errMsg}`);
+        await updateSceneProgress(jobId, sceneIndex, "failed", {
+          message: `Scene ${sceneIndex + 1} audio generation failed`,
+          error: errMsg,
+        });
+        clearSceneProgress(jobId);
+        throw new Error(`Audio generation failed: ${errMsg}`);
+      }
     }
   }
 

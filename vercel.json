@@ -21,6 +21,8 @@
     { "source": "/auth/:path*", "destination": "/app-shell.html" },
     { "source": "/app", "destination": "/app-shell.html" },
     { "source": "/app/:path*", "destination": "/app-shell.html" },
+    { "source": "/dashboard-new", "destination": "/app-shell.html" },
+    { "source": "/dashboard-new/:path*", "destination": "/app-shell.html" },
     { "source": "/projects", "destination": "/app-shell.html" },
     { "source": "/projects/:path*", "destination": "/app-shell.html" },
     { "source": "/settings", "destination": "/app-shell.html" },

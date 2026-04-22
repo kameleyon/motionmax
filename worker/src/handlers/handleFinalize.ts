@@ -68,16 +68,39 @@ export async function handleFinalizePhase(
     message: `Finalize phase started`,
   });
 
-  // Fetch generation + project. We now also grab `intake_settings` and
-  // `content` so the finalize step can kick off the background Lyria
-  // music track if the user enabled music in the new intake form.
+  // Fetch generation + project. We keep the nested project select
+  // limited to columns that are guaranteed to exist on every deploy so
+  // old DB schemas (where `intake_settings` hasn't been migrated yet)
+  // don't break finalize. The optional `intake_settings` / `content`
+  // columns are fetched in a separate, defensive query below.
   const { data: generation, error: genError } = await supabase
     .from("generations")
-    .select("*, projects(title, length, project_type, voice_inclination, intake_settings, content)")
+    .select("*, projects(title, length, project_type, voice_inclination)")
     .eq("id", generationId)
     .maybeSingle();
 
   if (genError || !generation) throw new Error(`Generation not found: ${genError?.message}`);
+
+  // Try to load the new intake settings + prompt content. Any failure
+  // (missing column on older DB, RLS quirk, etc.) must NOT fail the
+  // whole generation — we just skip music / lipsync wiring and let the
+  // render complete.
+  let intakeSettings: Record<string, unknown> | null = null;
+  let projectContent: string | null = null;
+  try {
+    const { data: proj } = await supabase
+      .from("projects")
+      .select("intake_settings, content")
+      .eq("id", projectId)
+      .maybeSingle();
+    if (proj) {
+      intakeSettings = (proj as { intake_settings?: Record<string, unknown> }).intake_settings ?? null;
+      projectContent = (proj as { content?: string }).content ?? null;
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[Finalize] intake_settings lookup skipped: ${msg}`);
+  }
 
   const scenes: any[] = generation.scenes || [];
   const meta = scenes[0]?._meta || {};
@@ -224,7 +247,7 @@ export async function handleFinalizePhase(
   // "Export") picks up `scenes[0]._meta.musicUrl` if present and mixes
   // it under the narration via ffmpeg.
   try {
-    const intake = (generation.projects as any)?.intake_settings as
+    const intake = intakeSettings as
       | { music?: { on?: boolean; genre?: string; intensity?: number } }
       | null;
     const music = intake?.music;
@@ -235,7 +258,7 @@ export async function handleFinalizePhase(
       const approxDurationSec = Math.min(120, Math.max(20, finalScenes.length * 10));
       console.log(`[Finalize] Music on — calling Lyria 3 Pro for ~${approxDurationSec}s track`);
       const musicUrl = await generateLyriaMusic({
-        prompt: (generation.projects as any)?.content ?? "",
+        prompt: projectContent ?? "",
         durationSec: approxDurationSec,
         apiKey: (process.env.HYPEREAL_API_KEY || "").trim(),
         genre: music.genre as LyriaMusicGenre | undefined,

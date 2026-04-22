@@ -92,19 +92,34 @@ export async function handleCinematicVideo(
   const totalScenes = scenes.length;
   const isLastScene = sceneIndex === totalScenes - 1;
 
-  // Fetch project data
+  // Fetch project data. Keep the core select to columns that are
+  // guaranteed on every deploy; the optional `intake_settings` column
+  // is read in a separate defensive query so pre-migration DBs don't
+  // break scene rendering.
   const { data: project } = await supabase
     .from("projects")
-    .select("format, style, character_description, voice_inclination, character_images, intake_settings")
+    .select("format, style, character_description, voice_inclination, character_images")
     .eq("id", projectId)
     .single();
 
+  let intake: Record<string, unknown> = {};
+  try {
+    const { data: proj } = await supabase
+      .from("projects")
+      .select("intake_settings")
+      .eq("id", projectId)
+      .maybeSingle();
+    if (proj && (proj as { intake_settings?: Record<string, unknown> }).intake_settings) {
+      intake = (proj as { intake_settings: Record<string, unknown> }).intake_settings;
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[CinematicVideo] intake_settings lookup skipped: ${msg}`);
+  }
+
   const format = project?.format || "landscape";
   const styleId = project?.style || "realistic";
-  // Intake settings are the new IntakeForm's JSONB blob. Camera + grade
-  // are the two keys we thread directly into the Kling prompt. Shape:
-  //   { camera?: string, grade?: string, ... }
-  const intake = (project?.intake_settings as Record<string, unknown> | null) || {};
+  // Intake settings shape: { camera?: string, grade?: string, lipSync?, music?, ... }
   const userCameraOverride = typeof intake.camera === "string" ? intake.camera : null;
   const userColorGrade = typeof intake.grade === "string" ? intake.grade : null;
   const { getStylePrompt: getStyle } = await import("../services/prompts.js");

@@ -62,7 +62,6 @@ export default function RightRail() {
       const { data, error } = await supabase
         .from('generations')
         .select('id, status, progress, project_id, created_at')
-        .eq('user_id', user!.id)
         .order('created_at', { ascending: false })
         .limit(4);
       if (error) throw error;
@@ -112,7 +111,7 @@ export default function RightRail() {
         </div>
         <div className="flex justify-between items-center mt-3.5 pt-3.5 border-t border-white/5 text-[12px] text-[#8A9198]">
           <span className="font-mono text-[10px] tracking-widest uppercase px-2 py-1 rounded bg-[#14C8CC]/10 text-[#14C8CC]">{subscription?.plan_name || 'Free Plan'}</span>
-          <a href="/billing" className="font-mono text-[10.5px] tracking-wider uppercase text-[#14C8CC] cursor-pointer hover:underline">Top up →</a>
+          <a className="font-mono text-[10.5px] tracking-wider uppercase text-[#14C8CC] cursor-pointer">Top up →</a>
         </div>
       </div>
 
@@ -154,16 +153,16 @@ export default function RightRail() {
                 </div>
                 <div className="font-mono text-[9.5px] text-[#5A6268] tracking-widest mt-px">{voice.description || 'CUSTOM VOICE'}</div>
               </div>
-          <div className="flex items-center gap-[1.5px] h-[18px] cursor-pointer hover:opacity-80 transition-opacity" title="Play sample">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#14C8CC" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-          </div>
+              <div className="flex items-center gap-[1.5px] h-[18px]">
+                <b className="w-[2px] rounded-[1px] bg-[#14C8CC]" style={{height: '40%'}}></b>
+                <b className="w-[2px] rounded-[1px] bg-[#14C8CC]" style={{height: '70%'}}></b>
+                <b className="w-[2px] rounded-[1px] bg-[#14C8CC]" style={{height: '55%'}}></b>
+                <b className="w-[2px] rounded-[1px] bg-[#14C8CC]" style={{height: '85%'}}></b>
+              </div>
+            </div>
+          ))}
         </div>
-      ))}
-    </div>
-    <div className="mt-3 pt-3 border-t border-white/5">
-      <a href="/voices" className="font-mono text-[10.5px] tracking-wider uppercase text-[#14C8CC] cursor-pointer block text-center">Manage voices →</a>
-    </div>
-  </div>
+      </div>
 
       <div className="border border-white/5 rounded-2xl bg-[#10151A] p-[18px_20px]">
         <h4 className="font-mono text-[10.5px] tracking-[0.18em] uppercase text-[#5A6268] m-0 mb-3 font-medium">This week</h4>

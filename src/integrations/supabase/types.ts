@@ -375,6 +375,7 @@ export type Database = {
           format: string
           id: string
           inspiration_style: string | null
+          intake_settings: Json
           is_favorite: boolean
           length: string
           presenter_focus: string | null
@@ -403,6 +404,7 @@ export type Database = {
           format?: string
           id?: string
           inspiration_style?: string | null
+          intake_settings?: Json
           is_favorite?: boolean
           length?: string
           presenter_focus?: string | null
@@ -431,6 +433,7 @@ export type Database = {
           format?: string
           id?: string
           inspiration_style?: string | null
+          intake_settings?: Json
           is_favorite?: boolean
           length?: string
           presenter_focus?: string | null

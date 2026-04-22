@@ -224,11 +224,11 @@ export default function ProjectsGallery() {
 
       {recentProject && (
         <a
-          className="border border-white/5 rounded-2xl bg-[#10151A] overflow-hidden grid grid-cols-[240px_1fr] gap-0 text-inherit hover:border-white/10 transition-colors"
+          className="border border-white/5 rounded-2xl bg-[#10151A] overflow-hidden grid grid-cols-1 sm:grid-cols-[200px_1fr] md:grid-cols-[240px_1fr] gap-0 text-inherit hover:border-white/10 transition-colors"
           href={`/app/create?project=${recentProject.id}`}
           style={{ textDecoration: 'none' }}
         >
-          <div className="relative aspect-[4/3] bg-black overflow-hidden group">
+          <div className="relative aspect-[4/3] sm:aspect-[4/3] bg-black overflow-hidden group">
             {recentProject.thumbnail_url ? (
               <img src={recentProject.thumbnail_url} alt={recentProject.title ?? ''} className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
             ) : (
@@ -282,9 +282,9 @@ export default function ProjectsGallery() {
       )}
 
       {/* Filter pills */}
-      <div className="flex items-baseline justify-between mt-9 mb-3.5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 mt-9 mb-3.5">
         <h2 className="font-serif font-medium text-[20px] tracking-tight m-0">Recent projects</h2>
-        <div className="flex gap-1 p-1 bg-[#1B2228] rounded-lg border border-white/5">
+        <div className="flex gap-1 p-1 bg-[#1B2228] rounded-lg border border-white/5 flex-wrap">
           {FILTER_PILLS.map((pill) => (
             <button
               key={pill.id}
@@ -308,7 +308,7 @@ export default function ProjectsGallery() {
           No projects match this filter.
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3.5">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-3.5">
           {galleryProjects.map((proj) => (
             <a
               key={proj.id}

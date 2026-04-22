@@ -90,7 +90,7 @@ export default function Hero() {
   const canSubmit = prompt.trim().length > 5;
 
   const submitHref = canSubmit
-    ? `/app/create?mode=${mode}&lang=${language}&format=${aspect === '9:16' ? 'portrait' : 'landscape'}&voice=${encodeURIComponent(voice)}&prompt=${encodeURIComponent(prompt.trim())}`
+    ? `/app/create/new?mode=${mode}&lang=${language}&format=${aspect === '9:16' ? 'portrait' : 'landscape'}&voice=${encodeURIComponent(voice)}&prompt=${encodeURIComponent(prompt.trim())}`
     : '#';
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -102,7 +102,7 @@ export default function Hero() {
 
   return (
     <section
-      className="border border-white/5 rounded-2xl p-[42px_40px_36px] relative overflow-hidden bg-[#10151A]"
+      className="border border-white/5 rounded-2xl p-5 sm:p-8 md:p-10 lg:p-[42px_40px_36px] relative overflow-hidden bg-[#10151A]"
       style={{
         background: `radial-gradient(60% 80% at 85% 10%, rgba(20,200,204,.06), transparent 60%), radial-gradient(55% 70% at 10% 90%, rgba(20,200,204,.14), transparent 60%), #10151A`,
       }}
@@ -116,16 +116,16 @@ export default function Hero() {
         }}
       />
 
-      <div className="relative flex justify-between items-start gap-5 mb-7">
-        <div>
-          <h1 className="font-serif font-normal text-[clamp(32px,3.6vw,48px)] leading-[1.02] tracking-tight m-0 mb-1.5 max-w-[22ch]">
+      <div className="relative flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 sm:gap-5 mb-5 sm:mb-7">
+        <div className="flex-1 min-w-0">
+          <h1 className="font-serif font-normal text-[clamp(24px,6vw,48px)] leading-[1.05] tracking-tight m-0 mb-1.5 max-w-[22ch]">
             {greeting}, {displayName}. What are we <em className="not-italic text-[#14C8CC]">making</em>?
           </h1>
-          <p className="text-[14px] text-[#8A9198] m-0 mb-6 relative">
+          <p className="text-[13px] sm:text-[14px] text-[#8A9198] m-0 mb-4 sm:mb-6 relative">
             Describe a scene, paste a link, or drop in a document. MotionMax takes it from there.
           </p>
         </div>
-        <div className="font-mono text-[11px] tracking-widest uppercase text-[#5A6268]">{todayLabel}</div>
+        <div className="font-mono text-[10px] sm:text-[11px] tracking-widest uppercase text-[#5A6268] shrink-0">{todayLabel}</div>
       </div>
 
       <form
@@ -139,7 +139,7 @@ export default function Hero() {
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="w-full bg-transparent border-0 outline-none resize-none text-[#ECEAE4] font-serif text-[22px] leading-[1.35] min-h-[64px] placeholder:text-[#5A6268]"
+          className="w-full bg-transparent border-0 outline-none resize-none text-[#ECEAE4] font-serif text-[16px] sm:text-[19px] md:text-[22px] leading-[1.35] min-h-[56px] sm:min-h-[64px] placeholder:text-[#5A6268]"
           placeholder="A three-minute documentary about the origin of 35mm film, golden-hour Kodak factory, warm serif captions, narrated in my voice…"
         />
 

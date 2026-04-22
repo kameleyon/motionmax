@@ -22,6 +22,11 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 // (Sidebar + topbar + main + RightRail) so it opts OUT of AppShell.
 const DashboardLayout = lazy(() => import("./components/dashboard/DashboardLayout"));
 const CreateWorkspace = lazy(() => import("./pages/CreateWorkspace"));
+// Unified intake form — /app/create/new. Reuses the dashboard-new shell
+// and feeds all three modes (cinematic/doc2video/smartflow) through a
+// single shared form. Added alongside the existing CreateWorkspace so we
+// don't break in-flight projects that depend on the old routes.
+const CreateNew = lazy(() => import("./pages/CreateNew"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Usage = lazy(() => import("./pages/Usage"));
 const Pricing = lazy(() => import("./pages/Pricing"));
@@ -103,6 +108,20 @@ const App = () => (
                 <ProtectedRoute>
                   <RouteErrorBoundary routeName="dashboard-new">
                     <DashboardLayout />
+                  </RouteErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* New unified intake form. Sits outside AppShell because it
+                reuses the dashboard-new Sidebar + topbar as its own shell
+                (via IntakeFrame). Auth-gated by ProtectedRoute. */}
+            <Route
+              path="/app/create/new"
+              element={
+                <ProtectedRoute>
+                  <RouteErrorBoundary routeName="create-new">
+                    <CreateNew />
                   </RouteErrorBoundary>
                 </ProtectedRoute>
               }

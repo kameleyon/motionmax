@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -7,7 +7,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
-import { Settings as SettingsIcon, History, Shield, Sun, Moon, LogOut } from 'lucide-react';
+import { Settings as SettingsIcon, History, Shield, Sun, Moon, LogOut, Video } from 'lucide-react';
+import motionmaxLogo from '@/assets/motionmax-logo.png';
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,14 +38,27 @@ export default function Sidebar() {
   const { isAdmin } = useAdminAuth();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
+  const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
   // Debounce the query term so we don't hammer Supabase on every keystroke.
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search.trim()), 250);
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 200);
     return () => clearTimeout(t);
   }, [search]);
+
+  // Global Cmd/Ctrl+K binding to open the search modal.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const { data: profile } = useQuery({
     queryKey: ['profile', user?.id],
@@ -148,32 +170,30 @@ export default function Sidebar() {
     return () => { supabase.removeChannel(channel); };
   }, [queryClient, user]);
 
-  // Server-side search — only runs while the user is typing (2+ chars).
-  // Below 2 chars we fall back to the preloaded recent list.
+  // Modal search — queries full library when the modal is open. Under 1
+  // char, we show the user's 20 most-recent projects as a "Recent" list.
   const { data: searchResults = [], isFetching: isSearching } = useQuery<SidebarProject[]>({
     queryKey: ['sidebar-search-projects', user?.id, debouncedSearch],
-    enabled: !!user && debouncedSearch.length >= 2,
+    enabled: !!user && searchOpen,
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from('projects')
         .select('id,title,thumbnail_url,updated_at')
         .eq('user_id', user!.id)
-        .ilike('title', `%${debouncedSearch}%`)
         .order('updated_at', { ascending: false })
-        .limit(12);
+        .limit(20);
+      if (debouncedSearch.length >= 1) {
+        q = q.ilike('title', `%${debouncedSearch}%`);
+      }
+      const { data, error } = await q;
       if (error) throw error;
       return (data ?? []) as SidebarProject[];
     },
   });
 
-  const filteredProjects = useMemo(() => {
-    if (debouncedSearch.length >= 2) return searchResults;
-    if (debouncedSearch.length === 1) {
-      const q = debouncedSearch.toLowerCase();
-      return recentProjects.filter((p) => (p.title ?? '').toLowerCase().includes(q)).slice(0, 6);
-    }
-    return recentProjects.slice(0, 4);
-  }, [debouncedSearch, recentProjects, searchResults]);
+  // Sidebar "Recent" list — always the 4 most-recent preloaded projects,
+  // unaffected by the modal search state.
+  const sidebarRecent = recentProjects.slice(0, 4);
 
   const generateGradient = (id: string) => {
     const hash = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -193,49 +213,34 @@ export default function Sidebar() {
 
   return (
     <aside className="w-[252px] bg-[#10151A] border-r border-white/5 hidden md:flex flex-col overflow-hidden shrink-0">
-      {/* Brand — lightning icon + "Motion" aqua + "Max" gold */}
-      <div className="flex items-center gap-2.5 px-5 py-[18px] border-b border-white/5">
-        <svg
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          fill="none"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <defs>
-            <linearGradient id="mm-brand" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stopColor="#14C8CC" />
-              <stop offset="100%" stopColor="#E4C875" />
-            </linearGradient>
-          </defs>
-          <path d="M2 12h4l3-9 5 18 3-9h5" stroke="url(#mm-brand)" />
-        </svg>
+      {/* Brand — real MotionMax logo + "Motion" aqua + "Max" gold wordmark */}
+      <a
+        href="/dashboard-new"
+        className="flex items-center gap-2.5 px-5 py-[18px] border-b border-white/5 hover:bg-white/[0.02] transition-colors"
+        style={{ textDecoration: 'none' }}
+      >
+        <img src={motionmaxLogo} alt="MotionMax" className="h-7 w-auto shrink-0" />
         <span className="font-serif text-[22px] font-medium tracking-tight leading-none">
           <span className="text-[#14C8CC]">Motion</span>
           <span className="text-[#E4C875]">Max</span>
         </span>
-      </div>
+      </a>
 
-      {/* Search */}
+      {/* Search — opens a modal (Cmd/Ctrl+K also opens it) */}
       <div className="p-[14px_16px] border-b border-white/5">
-        <div className="flex items-center gap-2 px-3 py-2 bg-[#151B20] border border-white/5 rounded-lg font-mono text-[11px] text-[#5A6268]">
+        <button
+          type="button"
+          onClick={() => setSearchOpen(true)}
+          className="w-full flex items-center gap-2 px-3 py-2 bg-[#151B20] border border-white/5 rounded-lg font-mono text-[11px] text-[#5A6268] hover:border-white/10 hover:text-[#8A9198] transition-colors"
+          title="Search projects (Ctrl+K)"
+        >
           <svg className="w-3.5 h-3.5 opacity-85" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="7" />
             <path d="M20 20l-3.5-3.5" />
           </svg>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search projects…"
-            className="flex-1 bg-transparent border-0 outline-none text-[#ECEAE4] font-sans text-[13px]"
-          />
-          {search === '' && (
-            <kbd className="font-mono text-[10px] px-1.5 py-0.5 rounded border border-white/10 bg-[#1B2228] text-[#8A9198]">⌘K</kbd>
-          )}
-        </div>
+          <span className="flex-1 text-left font-sans text-[13px]">Search projects…</span>
+          <kbd className="font-mono text-[10px] px-1.5 py-0.5 rounded border border-white/10 bg-[#1B2228] text-[#8A9198]">⌘K</kbd>
+        </button>
       </div>
 
       <nav className="flex-1 overflow-y-auto p-2.5 scrollbar-thin scrollbar-thumb-white/10">
@@ -274,21 +279,17 @@ export default function Sidebar() {
           </a>
         </div>
 
-        {/* Recent / Search results */}
+        {/* Recent */}
         <div className="mb-5">
           <h6 className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#5A6268] mx-3 mb-1.5 font-medium">
-            {debouncedSearch.length >= 2
-              ? (isSearching ? 'Searching…' : `Results (${filteredProjects.length})`)
-              : search.trim()
-                ? `Results (${filteredProjects.length})`
-                : 'Recent'}
+            Recent
           </h6>
-          {filteredProjects.length === 0 ? (
+          {sidebarRecent.length === 0 ? (
             <div className="px-3 py-2 text-[12px] text-[#5A6268] italic">
-              {debouncedSearch.length >= 2 && !isSearching ? 'No matches' : search.trim() ? 'No matches' : 'No projects yet'}
+              No projects yet
             </div>
           ) : (
-            filteredProjects.map((item) => (
+            sidebarRecent.map((item) => (
               <a
                 href={`/app/create?project=${item.id}`}
                 key={item.id}
@@ -379,6 +380,39 @@ export default function Sidebar() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {/* Search modal — opens from the search trigger or Cmd/Ctrl+K */}
+      <CommandDialog open={searchOpen} onOpenChange={setSearchOpen}>
+        <CommandInput
+          placeholder="Search your projects…"
+          value={search}
+          onValueChange={setSearch}
+        />
+        <CommandList>
+          <CommandEmpty>{isSearching ? 'Searching…' : 'No projects found.'}</CommandEmpty>
+          <CommandGroup heading={debouncedSearch ? 'Matches' : 'Recent'}>
+            {searchResults.map((p) => (
+              <CommandItem
+                key={p.id}
+                value={`${p.title ?? 'untitled'} ${p.id}`}
+                onSelect={() => {
+                  setSearchOpen(false);
+                  setSearch('');
+                  navigate(`/app/create?project=${p.id}`);
+                }}
+              >
+                <Video className="mr-2 h-4 w-4 text-muted-foreground" />
+                <div className="flex flex-col overflow-hidden">
+                  <span className="truncate text-sm font-medium">{p.title || 'Untitled'}</span>
+                  <span className="text-xs text-muted-foreground/70">
+                    {format(new Date(p.updated_at), 'MMM d, yyyy')}
+                  </span>
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </CommandList>
+      </CommandDialog>
     </aside>
   );
 }

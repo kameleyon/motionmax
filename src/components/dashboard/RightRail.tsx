@@ -4,7 +4,27 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { PLAN_LIMITS, normalizePlanName } from '@/lib/planLimits';
 import { toast } from 'sonner';
-import { Loader2, Play, Square } from 'lucide-react';
+import { Loader2, Square } from 'lucide-react';
+
+/** Tiny 4-bar equalizer icon. Animates when `playing` is true (simulates
+ *  audio levels via CSS `animate-pulse` at staggered delays). Idle render
+ *  is a static 4-bar silhouette so the shape reads as "voice waveform"
+ *  rather than a generic play button. */
+function BarsIcon({ playing = false }: { playing?: boolean }) {
+  const heights = [40, 80, 55, 90];
+  const delays = ['0ms', '120ms', '60ms', '180ms'];
+  return (
+    <div className="flex items-end gap-[2px] h-3.5 w-3.5" aria-hidden="true">
+      {heights.map((h, i) => (
+        <b
+          key={i}
+          className={`w-[2px] rounded-[1px] bg-current ${playing ? 'animate-pulse' : ''}`}
+          style={{ height: `${h}%`, animationDelay: playing ? delays[i] : undefined }}
+        />
+      ))}
+    </div>
+  );
+}
 
 /** Strip the sm:/sm2:/gm: provider prefix so UI shows "Quinn" not
  *  "sm:quinn". Capitalises the first letter of the result for
@@ -502,7 +522,7 @@ export default function RightRail() {
                       ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       : isPlaying
                         ? <Square className="w-3 h-3 fill-current" />
-                        : <Play className="w-3 h-3 fill-current" />}
+                        : <BarsIcon />}
                   </button>
                 </div>
               );

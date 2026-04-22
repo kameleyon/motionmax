@@ -61,6 +61,15 @@ export default function Inspector({
   }, [selectedSceneIndex, scene?.visualPrompt]);
   const dirty = promptDraft.trim() !== (scene?.visualPrompt ?? '').trim();
 
+  // Editable narration buffer — Voice tab mirrors the legacy
+  // CinematicEditModal pattern: show the text, let user edit, play the
+  // CURRENT audioUrl, fire Save & Regenerate when the text changed.
+  const [voiceoverDraft, setVoiceoverDraft] = useState(scene?.voiceover ?? '');
+  useEffect(() => {
+    setVoiceoverDraft(scene?.voiceover ?? '');
+  }, [selectedSceneIndex, scene?.voiceover]);
+  const voiceoverDirty = voiceoverDraft.trim() !== (scene?.voiceover ?? '').trim();
+
   const meta = scene?.meta ?? {};
   const motion = (meta.motion as Motion | undefined) ?? 'Push-in';
   const transition = (meta.transition as Transition | undefined) ?? 'Cut';
@@ -265,16 +274,52 @@ export default function Inspector({
         </div>
       )}
 
-      {/* VOICE TAB */}
+      {/* VOICE TAB — editable narration + current-audio player +
+          voice picker with preview + Save & Regenerate. Mirrors the
+          legacy CinematicEditModal audio section so users don't lose
+          the "listen to current, edit text, regenerate" flow. */}
       {!disabled && tab === 'voice' && sceneReady && scene && (
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5">
+          {/* Editable narration */}
           <section>
             <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">Narration text</h5>
-            <div className="bg-[#1B2228] border border-white/5 rounded-lg p-3 text-[12.5px] text-[#ECEAE4] leading-[1.55] max-h-[160px] overflow-y-auto">
-              {scene.voiceover?.trim() || <span className="text-[#5A6268] italic">No narration on this scene yet.</span>}
-            </div>
+            <textarea
+              value={voiceoverDraft}
+              onChange={(e) => setVoiceoverDraft(e.target.value)}
+              rows={5}
+              placeholder="Type the narration for this scene…"
+              className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-[12.5px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50 resize-y leading-[1.55]"
+            />
           </section>
 
+          {/* Current audio player — native <audio controls> so users
+              can scrub / adjust volume without us rebuilding transport. */}
+          {scene.audioUrl && (
+            <section>
+              <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">Current audio</h5>
+              <audio
+                key={scene.audioUrl}
+                controls
+                preload="none"
+                src={scene.audioUrl}
+                className="w-full h-9 [&::-webkit-media-controls-panel]:bg-[#1B2228]"
+              />
+            </section>
+          )}
+
+          {/* Save & Regenerate — runs if the user edited the text OR
+              just hits it again with the same text to retry TTS. */}
+          <button
+            type="button"
+            onClick={() => regenerateAudio(selectedSceneIndex, voiceoverDirty ? voiceoverDraft : undefined)}
+            disabled={busy !== 'idle' || voiceoverDraft.trim().length < 2}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-[12.5px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {busy === 'regen' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCw className="w-3.5 h-3.5" />}
+            {voiceoverDirty ? 'Save & Regenerate audio' : 'Regenerate audio'}
+          </button>
+
+          {/* Voice picker */}
           <section>
             <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">Voice</h5>
             <div className="flex items-center gap-2">
@@ -287,9 +332,6 @@ export default function Inspector({
                   <option key={v.id} value={v.id}>{v.label} · {v.description}</option>
                 ))}
               </select>
-              {/* AudioLines preview button — plays the voice with a
-                  language-appropriate script so Gemini voices speak the
-                  requested language cleanly instead of mixing English. */}
               <button
                 type="button"
                 onClick={() => playVoicePreview(voiceDraft)}
@@ -334,16 +376,6 @@ export default function Inspector({
               </button>
             </div>
           </section>
-
-          <button
-            type="button"
-            onClick={() => regenerateAudio(selectedSceneIndex)}
-            disabled={busy !== 'idle' || !scene.audioUrl}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] border border-white/10 text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {busy === 'regen' ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCw className="w-3 h-3" />}
-            Regenerate this scene's voice
-          </button>
         </div>
       )}
 

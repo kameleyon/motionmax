@@ -172,10 +172,28 @@ export function useSceneRegen(state: EditorState | null) {
     }
   }, [user, state]);
 
-  const regenerateAudio = useCallback(async (index: number) => {
+  /** Write a new voiceover string to `scenes[index].voiceover` without
+   *  rendering. Used by the Voice tab before firing audio regen. */
+  const updateSceneVoiceover = useCallback(async (index: number, text: string) => {
+    if (!state?.generation) return false;
+    const scenes = (state.generation.scenes as Array<Record<string, unknown>> | null) ?? [];
+    const patched = scenes.map((s, i) => (i === index ? { ...s, voiceover: text } : s));
+    const { error } = await supabase
+      .from('generations')
+      .update({ scenes: patched as unknown as never })
+      .eq('id', state.generation.id);
+    if (error) { toast.error(`Couldn't save: ${error.message}`); return false; }
+    return true;
+  }, [state?.generation]);
+
+  const regenerateAudio = useCallback(async (index: number, nextVoiceover?: string) => {
     if (!user || !state?.generation || !state?.project) return;
     setBusy('regen');
     try {
+      if (typeof nextVoiceover === 'string') {
+        const ok = await updateSceneVoiceover(index, nextVoiceover);
+        if (!ok) return;
+      }
       const { error } = await supabase
         .from('video_generation_jobs')
         .insert({
@@ -197,7 +215,7 @@ export function useSceneRegen(state: EditorState | null) {
     } finally {
       setBusy('idle');
     }
-  }, [user, state]);
+  }, [user, state, updateSceneVoiceover]);
 
   /** Swap the project voice (and optionally regen every scene's audio
    *  with the new voice). When `regenAll` is true we also update the
@@ -250,6 +268,7 @@ export function useSceneRegen(state: EditorState | null) {
     regenerateVideo,
     regenerateAudio,
     updateSceneMeta,
+    updateSceneVoiceover,
     updateProjectVoice,
   };
 }

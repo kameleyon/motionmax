@@ -12,16 +12,17 @@ type Generation = {
   project_id: string | null;
   created_at: string;
   completed_at: string | null;
+  /** Joined via Supabase foreign-table select — projects(title). */
+  projects?: { title: string | null } | null;
 };
 
-type UserVoice = {
-  id: string;
-  user_id: string | null;
-  voice_name?: string | null;
-  name?: string | null;
-  language?: string | null;
-  description?: string | null;
-  preview_url?: string | null;
+/** A voice "used" by the user — derived from their projects table,
+ *  not from the separate user_voices clone library. */
+type UsedVoice = {
+  voiceName: string;
+  language: string | null;
+  lastUsedAt: string;
+  projectId: string;
 };
 
 /** Count generations per day for the last 30 days, from an array of
@@ -82,19 +83,20 @@ export default function RightRail() {
     },
   });
 
-  // ── Render queue (last 4) ──────────────────────────────────
+  // ── Render queue (last 4) — joins projects.title so we can show a
+  // human name instead of "Project 37d48da3" ─────────────────────
   const { data: renderQueue = [] } = useQuery<Generation[]>({
     queryKey: ['rightrail-generations', user?.id],
     enabled: !!user,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('generations')
-        .select('id,user_id,status,progress,project_id,created_at,completed_at')
+        .select('id,user_id,status,progress,project_id,created_at,completed_at,projects(title)')
         .eq('user_id', user!.id)
         .order('created_at', { ascending: false })
         .limit(4);
       if (error) throw error;
-      return (data ?? []) as Generation[];
+      return (data ?? []) as unknown as Generation[];
     },
   });
 
@@ -115,18 +117,42 @@ export default function RightRail() {
     },
   });
 
-  // ── Voices ─────────────────────────────────────────────────
-  const { data: userVoices = [] } = useQuery<UserVoice[]>({
-    queryKey: ['rightrail-voices', user?.id],
+  // ── Voices — last 3 DISTINCT voices actually used on the user's
+  // own projects (not the clone library). Pulls voice_name from the
+  // most-recently-updated projects, de-duplicated, max 3. ──────
+  const { data: usedVoices = [] } = useQuery<UsedVoice[]>({
+    queryKey: ['rightrail-used-voices', user?.id],
     enabled: !!user,
     queryFn: async () => {
+      type VoiceRow = {
+        id: string;
+        voice_name: string | null;
+        voice_inclination: string | null;
+        updated_at: string;
+      };
       const { data, error } = await supabase
-        .from('user_voices')
-        .select('*')
+        .from('projects')
+        .select('id,voice_name,voice_inclination,updated_at')
         .eq('user_id', user!.id)
-        .limit(3);
-      if (error) return [] as UserVoice[];
-      return (data ?? []) as UserVoice[];
+        .not('voice_name', 'is', null)
+        .order('updated_at', { ascending: false })
+        .limit(30); // enough to find 3 distinct after dedup
+      if (error) throw error;
+
+      const seen = new Set<string>();
+      const out: UsedVoice[] = [];
+      for (const row of (data ?? []) as VoiceRow[]) {
+        if (!row.voice_name || seen.has(row.voice_name)) continue;
+        seen.add(row.voice_name);
+        out.push({
+          voiceName: row.voice_name,
+          language: row.voice_inclination,
+          lastUsedAt: row.updated_at,
+          projectId: row.id,
+        });
+        if (out.length >= 3) break;
+      }
+      return out;
     },
   });
 
@@ -291,7 +317,7 @@ export default function RightRail() {
                 >
                   <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
                   <span className="flex-1 min-w-0 text-[12.5px] text-[#ECEAE4] whitespace-nowrap overflow-hidden text-ellipsis">
-                    {item.project_id ? `Project ${item.project_id.slice(0, 8)}` : 'Generation'}
+                    {item.projects?.title?.trim() || 'Untitled project'}
                   </span>
                   <span className={`font-mono text-[10px] tracking-wider ${display.state === 'active' ? 'text-[#14C8CC]' : display.state === 'failed' ? 'text-[#E66666]' : 'text-[#5A6268]'}`}>
                     {display.text}
@@ -303,12 +329,12 @@ export default function RightRail() {
         </div>
       </div>
 
-      {/* ── Voice lab ────────────────────────────────────── */}
+      {/* ── Recent voices — last 3 DISTINCT voices used on this user's projects ── */}
       <div className="border border-white/5 rounded-2xl bg-[#10151A] p-[18px_20px]">
         <div className="flex items-center justify-between mb-3">
           <h4 className="font-mono text-[10.5px] tracking-[0.18em] uppercase text-[#5A6268] m-0 font-medium flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-[#14C8CC] shadow-[0_0_0_3px_rgba(20,200,204,0.14)]" />
-            Voice lab
+            Recent voices
           </h4>
           <a
             href="/voice-lab"
@@ -319,47 +345,38 @@ export default function RightRail() {
           </a>
         </div>
         <div className="flex flex-col">
-          {userVoices.length === 0 ? (
+          {usedVoices.length === 0 ? (
             <div className="text-[12.5px] text-[#5A6268] py-2">
-              No custom voices yet.{' '}
-              <a href="/voice-lab" className="text-[#14C8CC] hover:underline" style={{ textDecoration: 'none' }}>
-                Clone one →
+              You haven't used any voices yet.{' '}
+              <a href="/app/create" className="text-[#14C8CC] hover:underline" style={{ textDecoration: 'none' }}>
+                Start a project →
               </a>
             </div>
           ) : (
-            userVoices.map((voice, i) => {
-              const displayName = voice.voice_name || voice.name || 'Voice';
-              const initial = displayName.charAt(0).toUpperCase();
-              const desc = voice.description || (voice.language ? voice.language.toUpperCase() : 'CUSTOM VOICE');
+            usedVoices.map((voice, i) => {
+              const initial = (voice.voiceName || 'V').charAt(0).toUpperCase();
+              const desc = voice.language
+                ? `${voice.language.toUpperCase()} · LAST USED ${new Date(voice.lastUsedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }).toUpperCase()}`
+                : 'RECENT VOICE';
               return (
-                <div key={voice.id} className={`flex items-center gap-2.5 py-2.5 ${i > 0 ? 'border-t border-white/5' : ''}`}>
+                <div key={voice.voiceName + i} className={`flex items-center gap-2.5 py-2.5 ${i > 0 ? 'border-t border-white/5' : ''}`}>
                   <div className="w-7 h-7 rounded-full grid place-items-center font-serif text-[12px] text-[#0A0D0F] font-semibold bg-gradient-to-br from-[#14C8CC] to-[#0FA6AE]">
                     {initial}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[12.5px] text-[#ECEAE4] whitespace-nowrap overflow-hidden text-ellipsis">{displayName}</div>
-                    <div className="font-mono text-[9.5px] text-[#5A6268] tracking-widest mt-px uppercase">{desc}</div>
-                  </div>
-                  {voice.preview_url ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const audio = new Audio(voice.preview_url!);
-                        audio.play().catch(() => { /* ignore */ });
-                      }}
-                      className="w-7 h-7 rounded-full grid place-items-center border border-white/10 text-[#14C8CC] hover:bg-[#14C8CC]/10 transition-colors"
-                      title="Play preview"
-                    >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5l12 7-12 7V5z" /></svg>
-                    </button>
-                  ) : (
-                    <div className="flex items-center gap-[1.5px] h-[18px] opacity-60" aria-hidden="true">
-                      <b className="w-[2px] rounded-[1px] bg-[#14C8CC]" style={{ height: '40%' }} />
-                      <b className="w-[2px] rounded-[1px] bg-[#14C8CC]" style={{ height: '70%' }} />
-                      <b className="w-[2px] rounded-[1px] bg-[#14C8CC]" style={{ height: '55%' }} />
-                      <b className="w-[2px] rounded-[1px] bg-[#14C8CC]" style={{ height: '85%' }} />
+                    <div className="text-[12.5px] text-[#ECEAE4] whitespace-nowrap overflow-hidden text-ellipsis">
+                      {voice.voiceName}
                     </div>
-                  )}
+                    <div className="font-mono text-[9.5px] text-[#5A6268] tracking-widest mt-px uppercase">
+                      {desc}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-[1.5px] h-[18px] opacity-60" aria-hidden="true">
+                    <b className="w-[2px] rounded-[1px] bg-[#14C8CC]" style={{ height: '40%' }} />
+                    <b className="w-[2px] rounded-[1px] bg-[#14C8CC]" style={{ height: '70%' }} />
+                    <b className="w-[2px] rounded-[1px] bg-[#14C8CC]" style={{ height: '55%' }} />
+                    <b className="w-[2px] rounded-[1px] bg-[#14C8CC]" style={{ height: '85%' }} />
+                  </div>
                 </div>
               );
             })

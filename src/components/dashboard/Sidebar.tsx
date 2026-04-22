@@ -1,8 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
+import { useTheme } from 'next-themes';
+import { toast } from 'sonner';
+import { Settings as SettingsIcon, History, Shield, Sun, Moon, LogOut } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import motionmaxLogo from '@/assets/motionmax-logo.png';
 
 type SidebarProject = {
   id: string;
@@ -13,7 +26,10 @@ type SidebarProject = {
 
 export default function Sidebar() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const { isAdmin } = useAdminAuth();
+  const { theme, setTheme } = useTheme();
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
 
   const { data: profile } = useQuery({
@@ -59,18 +75,57 @@ export default function Sidebar() {
     },
   });
 
+  // Recent projects for this user, with thumbnail fallback from first
+  // scene image when thumbnail_url is null. Mirrors the fallback logic
+  // in the old Dashboard so we don't flash gradient placeholders for
+  // projects that actually have generated images.
   const { data: recentProjects = [] } = useQuery<SidebarProject[]>({
     queryKey: ['sidebar-recent-projects', user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data: projs, error } = await supabase
         .from('projects')
         .select('id,title,thumbnail_url,updated_at')
         .eq('user_id', user!.id)
         .order('updated_at', { ascending: false })
         .limit(10);
       if (error) throw error;
-      return (data ?? []) as SidebarProject[];
+      if (!projs?.length) return [];
+
+      const missing = projs.filter((p) => !p.thumbnail_url).map((p) => p.id);
+      const fromScenes: Record<string, string | null> = {};
+
+      if (missing.length > 0) {
+        const { data: gens } = await supabase
+          .from('generations')
+          .select('project_id, scenes')
+          .in('project_id', missing)
+          .eq('status', 'complete')
+          .order('created_at', { ascending: false });
+
+        if (gens) {
+          for (const gen of gens) {
+            if (fromScenes[gen.project_id] !== undefined) continue;
+            const scenes = gen.scenes as Array<{ imageUrl?: string; image_url?: string; imageUrls?: string[] }>;
+            if (!Array.isArray(scenes) || scenes.length === 0) continue;
+            for (const scene of scenes) {
+              const url = scene?.imageUrl
+                || scene?.image_url
+                || (Array.isArray(scene?.imageUrls) && scene.imageUrls[0]);
+              if (url) {
+                fromScenes[gen.project_id] = url;
+                break;
+              }
+            }
+            if (fromScenes[gen.project_id] === undefined) fromScenes[gen.project_id] = null;
+          }
+        }
+      }
+
+      return projs.map((p) => ({
+        ...p,
+        thumbnail_url: p.thumbnail_url ?? fromScenes[p.id] ?? null,
+      })) as SidebarProject[];
     },
   });
 
@@ -99,15 +154,21 @@ export default function Sidebar() {
     return `radial-gradient(60% 70% at 50% 50%, hsl(${hue}, 40%, 30%), hsl(${hue}, 60%, 10%) 70%, #05030a)`;
   };
 
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      toast.success('Signed out');
+      navigate('/');
+    } catch {
+      toast.error('Sign out failed. Please try again.');
+    }
+  };
+
   return (
     <aside className="w-[252px] bg-[#10151A] border-r border-white/5 hidden md:flex flex-col overflow-hidden shrink-0">
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-5 py-[18px] border-b border-white/5">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#14C8CC" strokeWidth="2"><path d="M2 12h4l3-9 5 18 3-9h5" /></svg>
-        <span className="font-serif text-[17px] font-medium tracking-tight">
-          <b className="text-[#14C8CC] font-medium">Motion</b>
-          <i className="text-[#14C8CC] not-italic font-medium">Max</i>
-        </span>
+        <img src={motionmaxLogo} alt="MotionMax" className="h-8 w-auto" />
       </div>
 
       {/* Search */}
@@ -183,7 +244,14 @@ export default function Sidebar() {
                 style={{ textDecoration: 'none' }}
               >
                 <div className="w-7 h-7 rounded-[5px] shrink-0 border border-white/5 relative overflow-hidden" style={{ background: generateGradient(item.id) }}>
-                  {item.thumbnail_url && <img src={item.thumbnail_url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-80" />}
+                  {item.thumbnail_url && (
+                    <img
+                      src={item.thumbnail_url}
+                      alt=""
+                      className="absolute inset-0 w-full h-full object-cover"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-[12.5px] text-[#ECEAE4] whitespace-nowrap overflow-hidden text-ellipsis">{item.title || 'Untitled'}</div>
@@ -195,12 +263,12 @@ export default function Sidebar() {
         </div>
       </nav>
 
-      {/* Profile footer */}
+      {/* Profile footer with dropdown — mirrors AppSidebar options */}
       <div className="px-4 py-3.5 border-t border-white/5 flex items-center gap-2.5">
         {profile?.avatar_url ? (
           <img src={profile.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />
         ) : (
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#14C8CC] to-[#14C8CC] grid place-items-center font-serif font-semibold text-[14px] text-[#0A0D0F]">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#14C8CC] to-[#0FA6AE] grid place-items-center font-serif font-semibold text-[14px] text-[#0A0D0F]">
             {(profile?.display_name || user?.email || '?').charAt(0).toUpperCase()}
           </div>
         )}
@@ -212,12 +280,52 @@ export default function Sidebar() {
             {subscription?.plan_name || 'Free'} · {Math.floor((credits?.credits_balance || 0) / 1000)}k
           </div>
         </div>
-        <a href="/settings" title="Settings" aria-label="Settings" style={{ textDecoration: 'none' }}>
-          <svg className="opacity-50 cursor-pointer hover:opacity-100 transition-opacity w-4 h-4 text-[#ECEAE4]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
-          </svg>
-        </a>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="Account menu"
+              title="Account menu"
+              className="opacity-60 hover:opacity-100 transition-opacity text-[#ECEAE4] p-1 rounded-md hover:bg-white/5"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+              </svg>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" side="top" className="w-56 rounded-xl border-border/50 shadow-sm">
+            <DropdownMenuItem className="cursor-pointer rounded-lg" onClick={() => navigate('/settings')}>
+              <SettingsIcon className="mr-2 h-4 w-4" />
+              <span>Settings</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer rounded-lg" onClick={() => navigate('/usage')}>
+              <History className="mr-2 h-4 w-4" />
+              <span>Usage &amp; Billing</span>
+            </DropdownMenuItem>
+            {isAdmin && (
+              <DropdownMenuItem className="cursor-pointer rounded-lg" onClick={() => navigate('/admin')}>
+                <Shield className="mr-2 h-4 w-4" />
+                <span>Admin</span>
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator className="bg-border/50" />
+            <DropdownMenuItem
+              className="cursor-pointer rounded-lg"
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            >
+              <Sun className="mr-2 h-4 w-4 dark:hidden" />
+              <Moon className="mr-2 hidden h-4 w-4 dark:block" />
+              <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-border/50" />
+            <DropdownMenuItem className="cursor-pointer rounded-lg" onClick={handleSignOut}>
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Log Out</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </aside>
   );

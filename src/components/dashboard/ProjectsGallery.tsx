@@ -50,14 +50,54 @@ export default function ProjectsGallery() {
     queryKey: ['dashboard-projects', user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data: projs, error } = await supabase
         .from('projects')
         .select('id,user_id,title,project_type,format,length,status,voice_name,voice_inclination,thumbnail_url,created_at,updated_at')
         .eq('user_id', user!.id)
         .order('updated_at', { ascending: false })
         .limit(12);
       if (error) throw error;
-      return (data ?? []) as Project[];
+      if (!projs?.length) return [];
+
+      // Belt-and-suspenders: RLS should already scope this to the
+      // signed-in user, but we filter client-side too in case a row
+      // slipped through (e.g. shared projects or RLS misconfig).
+      const mine = projs.filter((p) => p.user_id === user!.id);
+
+      // For projects without a thumbnail_url, pull the first generated
+      // scene image so we don't flash a placeholder gradient.
+      const missing = mine.filter((p) => !p.thumbnail_url).map((p) => p.id);
+      const fromScenes: Record<string, string | null> = {};
+      if (missing.length > 0) {
+        const { data: gens } = await supabase
+          .from('generations')
+          .select('project_id, scenes')
+          .in('project_id', missing)
+          .eq('status', 'complete')
+          .order('created_at', { ascending: false });
+        if (gens) {
+          for (const gen of gens) {
+            if (fromScenes[gen.project_id] !== undefined) continue;
+            const scenes = gen.scenes as Array<{ imageUrl?: string; image_url?: string; imageUrls?: string[] }>;
+            if (!Array.isArray(scenes) || scenes.length === 0) continue;
+            for (const scene of scenes) {
+              const url = scene?.imageUrl
+                || scene?.image_url
+                || (Array.isArray(scene?.imageUrls) && scene.imageUrls[0]);
+              if (url) {
+                fromScenes[gen.project_id] = url;
+                break;
+              }
+            }
+            if (fromScenes[gen.project_id] === undefined) fromScenes[gen.project_id] = null;
+          }
+        }
+      }
+
+      return mine.map((p) => ({
+        ...p,
+        thumbnail_url: p.thumbnail_url ?? fromScenes[p.id] ?? null,
+      })) as Project[];
     },
   });
 

@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { motion } from 'framer-motion';
 import {
-  AudioLines, Music, Users, Sparkles, Camera, Palette, Link as LinkIcon, Paperclip,
+  AudioLines, Music, Sparkles, Camera, Palette, Link as LinkIcon, Paperclip,
+  ChevronLeft, ChevronRight, ImagePlus, X, Upload, Loader2,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -13,9 +16,14 @@ import {
   type SpeakerVoice,
 } from '@/components/workspace/SpeakerSelector';
 import {
-  FEATURES, MODE_LABEL, COST_TABLE,
+  CaptionStyleSelector,
+  type CaptionStyle,
+} from '@/components/workspace/CaptionStyleSelector';
+import { uploadStyleReference } from '@/lib/uploadStyleReference';
+import {
+  FEATURES, MODE_LABEL, BASE_COST, ADDON_COST,
   type ProjectMode, type IntakeAspect, type IntakeDuration,
-  type MusicGenre, type CameraMotion, type ColorGrade, type CastMember,
+  type MusicGenre, type CameraMotion, type ColorGrade,
   type IntakeSettings,
 } from './types';
 import { IntakeField, IntakeLabel, IntakeSlider, Pill } from './primitives';
@@ -23,61 +31,80 @@ import FeatureToggle from './FeatureToggle';
 import IntakeRail from './IntakeRail';
 import { useIntakeRail } from './IntakeFrame';
 
-/** Visual-style catalog pulled from the domain type. Backgrounds are
- *  illustrative gradients (not final artwork) — the design bundle used
- *  the same placeholder approach and we can swap to real thumbnail PNGs
- *  later without changing the form. */
-const STYLES: Array<{ id: string; name: string; bg: string }> = [
-  { id: 'realistic',  name: 'Realistic',   bg: 'linear-gradient(135deg,#7b8a96,#2b3640)' },
-  { id: '3d-pixar',   name: '3D Pixar',    bg: 'linear-gradient(135deg,#ffd347,#2b7cd9)' },
-  { id: 'anime',      name: 'Anime',       bg: 'linear-gradient(135deg,#ff9cc0,#3b54a8)' },
-  { id: 'claymation', name: 'Claymation',  bg: 'linear-gradient(135deg,#c9a06b,#4a2d1a)' },
-  { id: 'storybook',  name: 'Storybook',   bg: 'linear-gradient(135deg,#d8b597,#8a5a3e)' },
-  { id: 'caricature', name: 'Caricature',  bg: 'linear-gradient(135deg,#f4a56f,#c96432)' },
-  { id: 'doodle',     name: 'Doodle',      bg: 'linear-gradient(135deg,#fafafa,#cfd8dc)' },
-  { id: 'stick',      name: 'Stick Figure',bg: 'linear-gradient(135deg,#fff,#e0e0e0)' },
-  { id: 'sketch',     name: 'Sketch',      bg: 'linear-gradient(135deg,#e8e2d5,#8a8275)' },
-  { id: 'crayon',     name: 'Crayon',      bg: 'linear-gradient(135deg,#ff7a7a,#ffde6b)' },
-  { id: 'minimalist', name: 'Minimalist',  bg: 'linear-gradient(135deg,#f5f5f0,#bfbfb8)' },
-  { id: 'moody',      name: 'Moody',       bg: 'radial-gradient(60% 70% at 40% 40%,#4a4a4a,#101010)' },
-  { id: 'chalkboard', name: 'Chalkboard',  bg: 'linear-gradient(135deg,#1f3d2a,#0b1a12)' },
-  { id: 'lego',       name: 'LEGO',        bg: 'linear-gradient(135deg,#ffd347,#e02424)' },
-  { id: 'cardboard',  name: 'Cardboard',   bg: 'linear-gradient(135deg,#c9a06b,#7a5433)' },
-  { id: 'babie',      name: 'Barbie',      bg: 'linear-gradient(135deg,#ff9ac8,#ffd1e8)' },
-  { id: 'custom',     name: 'Custom',      bg: 'linear-gradient(135deg,#14C8CC33,#0FA6AE11)' },
+// ── Real style preview thumbnails (same source as StyleSelector) ──
+import minimalistPreview from '@/assets/styles/minimalist-preview.png';
+import doodlePreview from '@/assets/styles/doodle-preview.png';
+import stickPreview from '@/assets/styles/stick-preview.png';
+import animePreview from '@/assets/styles/anime-preview.png';
+import realisticPreview from '@/assets/styles/realistic-preview.png';
+import pixarPreview from '@/assets/styles/3d-pixar-preview.png';
+import claymationPreview from '@/assets/styles/claymation-preview.png';
+import sketchPreview from '@/assets/styles/sketch-preview.png';
+import caricaturePreview from '@/assets/styles/caricature-preview.png';
+import storybookPreview from '@/assets/styles/painterly-preview.png';
+import customPreview from '@/assets/styles/custom-preview.png';
+import crayonPreview from '@/assets/styles/crayon-preview.png';
+import moodyPreview from '@/assets/styles/moody-preview.png';
+import chalkboardPreview from '@/assets/styles/chalkboard-preview.png';
+import legoPreview from '@/assets/styles/lego-preview.png';
+import cardboardPreview from '@/assets/styles/cardboard-preview.png';
+import babiePreview from '@/assets/styles/barbie-preview.png';
+
+const STYLES: Array<{ id: string; label: string; preview: string }> = [
+  { id: 'realistic',  label: 'Realistic',   preview: realisticPreview },
+  { id: '3d-pixar',   label: '3D Style',    preview: pixarPreview },
+  { id: 'anime',      label: 'Anime',       preview: animePreview },
+  { id: 'claymation', label: 'Claymation',  preview: claymationPreview },
+  { id: 'storybook',  label: 'Storybook',   preview: storybookPreview },
+  { id: 'caricature', label: 'Caricature',  preview: caricaturePreview },
+  { id: 'doodle',     label: 'Urban Doodle',preview: doodlePreview },
+  { id: 'stick',      label: 'Stick Figure',preview: stickPreview },
+  { id: 'sketch',     label: 'Papercut 3D', preview: sketchPreview },
+  { id: 'crayon',     label: 'Crayon',      preview: crayonPreview },
+  { id: 'minimalist', label: 'Minimalist',  preview: minimalistPreview },
+  { id: 'moody',      label: 'Moody',       preview: moodyPreview },
+  { id: 'chalkboard', label: 'Chalkboard',  preview: chalkboardPreview },
+  { id: 'lego',       label: 'LEGO',        preview: legoPreview },
+  { id: 'cardboard',  label: 'Cardboard',   preview: cardboardPreview },
+  { id: 'babie',      label: 'Babie',       preview: babiePreview },
+  { id: 'custom',     label: 'Custom',      preview: customPreview },
 ];
 
-const LANGUAGES: Array<{ code: string; label: string }> = [
-  { code: 'en', label: 'English' },
-  { code: 'fr', label: 'Français' },
-  { code: 'es', label: 'Español' },
-  { code: 'ht', label: 'Kreyòl' },
-  { code: 'de', label: 'Deutsch' },
-  { code: 'it', label: 'Italiano' },
-  { code: 'nl', label: 'Nederlands' },
+// Full language catalogue — mirrors src/components/workspace/LanguageSelector.tsx
+const LANGUAGES: Array<{ code: string; label: string; flag: string }> = [
+  { code: 'en', label: 'English',         flag: '\u{1F1FA}\u{1F1F8}' },
+  { code: 'fr', label: 'Français',        flag: '\u{1F1EB}\u{1F1F7}' },
+  { code: 'es', label: 'Español',         flag: '\u{1F1EA}\u{1F1F8}' },
+  { code: 'ht', label: 'Kreyòl Ayisyen',  flag: '\u{1F1ED}\u{1F1F9}' },
+  { code: 'de', label: 'Deutsch',         flag: '\u{1F1E9}\u{1F1EA}' },
+  { code: 'it', label: 'Italiano',        flag: '\u{1F1EE}\u{1F1F9}' },
+  { code: 'nl', label: 'Nederlands',      flag: '\u{1F1F3}\u{1F1F1}' },
+  { code: 'ru', label: 'Русский',         flag: '\u{1F1F7}\u{1F1FA}' },
+  { code: 'zh', label: '中文',            flag: '\u{1F1E8}\u{1F1F3}' },
+  { code: 'ja', label: '日本語',          flag: '\u{1F1EF}\u{1F1F5}' },
+  { code: 'ko', label: '한국어',          flag: '\u{1F1F0}\u{1F1F7}' },
 ];
 
 const MUSIC_GENRES: MusicGenre[] = ['Cinematic', 'Electronic', 'Acoustic', 'Ambient', 'Hip-hop', 'Jazz', 'Orchestral'];
 const CAMERA_MOTIONS: CameraMotion[] = ['Static', 'Dolly', 'Handheld', 'Drone', 'Crane', 'Whip Pan'];
 const COLOR_GRADES: ColorGrade[] = ['Kodak 250D', 'Bleach Bypass', 'Teal & Orange', 'Warm Film', 'Cool Noir', 'Desaturated'];
 
-const CAPTION_STYLES = ['Burned in · Minimal', 'Burned in · Karaoke', 'None'];
-
+// Default format = portrait (9:16) per product call.
 function aspectFromFormat(f: string): IntakeAspect {
-  return f === 'portrait' ? '9:16' : '16:9';
+  return f === 'landscape' ? '16:9' : '9:16';
 }
 function formatFromAspect(a: IntakeAspect): string {
   return a === '9:16' ? 'portrait' : 'landscape';
 }
 
-/** The big one — shared form across all three modes. Render-only decisions
- *  live in the FEATURES map so adding/removing a row for a given mode is
- *  a one-line change. */
+const MAX_CHAR_IMAGES = 3;
+const MAX_CHAR_IMAGE_BYTES = 5 * 1024 * 1024;
+
 export default function IntakeForm({
   mode,
   initialPrompt = '',
   initialLanguage = 'en',
-  initialFormat = 'landscape',
+  initialFormat = 'portrait',
   initialVoice = '',
 }: {
   mode: ProjectMode;
@@ -90,7 +117,6 @@ export default function IntakeForm({
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  // ── Core fields ──────────────────────────────────────────
   const [prompt, setPrompt] = useState(initialPrompt);
   const [aspect, setAspect] = useState<IntakeAspect>(aspectFromFormat(initialFormat));
   const [duration, setDuration] = useState<IntakeDuration>('<3min');
@@ -98,38 +124,57 @@ export default function IntakeForm({
   const [voice, setVoice] = useState<SpeakerVoice>(
     (initialVoice as SpeakerVoice) || getDefaultSpeaker(initialLanguage),
   );
-  const [caption, setCaption] = useState(CAPTION_STYLES[0]);
+  const [caption, setCaption] = useState<CaptionStyle>('cleanPop');
   const [brand, setBrand] = useState('');
 
-  // ── Direction ─────────────────────────────────────────────
   const [styleId, setStyleId] = useState('realistic');
+  const [customStyle, setCustomStyle] = useState('');
+  const [customStyleImage, setCustomStyleImage] = useState<string | null>(null);
+  const [uploadingStyle, setUploadingStyle] = useState(false);
+
   const [tone, setTone] = useState(45);
   const [camera, setCamera] = useState<CameraMotion>('Dolly');
   const [grade, setGrade] = useState<ColorGrade>('Kodak 250D');
 
-  // ── Feature toggles ───────────────────────────────────────
   const [lipSync, setLipSync] = useState(false);
   const [lipStrength, setLipStrength] = useState(70);
   const [music, setMusic] = useState(false);
   const [musicGenre, setMusicGenre] = useState<MusicGenre>('Cinematic');
   const [musicIntensity, setMusicIntensity] = useState(55);
   const [sfx, setSfx] = useState(false);
-  const [consistency, setConsistency] = useState(features.cast);
-  const [cast, setCast] = useState<CastMember[]>([]);
-  const [characterAppearance, setCharacterAppearance] = useState('');
+
+  // Character consistency is FORCED ON when the mode supports it — the
+  // base credit cost already covers it, so it's not a toggle.
+  const consistency = features.cast;
+  const [characterDescription, setCharacterDescription] = useState('');
+  const [characterImages, setCharacterImages] = useState<string[]>([]);
+  const charImageInput = useRef<HTMLInputElement>(null);
 
   const [generating, setGenerating] = useState(false);
 
-  // Reset voice when language flips to one the current voice doesn't
-  // support — mirrors the Hero behaviour so the two stay consistent.
+  // ── Style carousel scroll controls ──
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(true);
+  useEffect(() => {
+    const el = scrollRef.current; if (!el) return;
+    const check = () => {
+      setCanLeft(el.scrollLeft > 0);
+      setCanRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 10);
+    };
+    check();
+    el.addEventListener('scroll', check);
+    return () => el.removeEventListener('scroll', check);
+  }, []);
+  const scrollBy = (dir: 'left' | 'right') => {
+    scrollRef.current?.scrollBy({ left: dir === 'left' ? -240 : 240, behavior: 'smooth' });
+  };
+
   const speakersForLang = useMemo(() => getSpeakersForLanguage(language), [language]);
   useEffect(() => {
-    if (!speakersForLang.some((s) => s.id === voice)) {
-      setVoice(getDefaultSpeaker(language));
-    }
+    if (!speakersForLang.some((s) => s.id === voice)) setVoice(getDefaultSpeaker(language));
   }, [language, speakersForLang, voice]);
 
-  // ── Credits (for the "N available" meter) ────────────────
   const { data: credits } = useQuery({
     queryKey: ['intake-credits', user?.id],
     enabled: !!user,
@@ -139,41 +184,54 @@ export default function IntakeForm({
     },
   });
 
-  // ── Cost items (design-flat numbers for now) ─────────────
   const costItems = useMemo(() => {
-    const items: Array<{ label: string; v: number }> = [{ label: 'Base generation', v: COST_TABLE.base }];
-    if (features.duration && duration === '>3min') items.push({ label: 'Duration · > 3 min', v: COST_TABLE.durationLong });
-    if (features.lipSync && lipSync) items.push({ label: 'Lip sync', v: COST_TABLE.lipSync });
-    if (features.music && music) items.push({ label: `Music · ${musicGenre}`, v: COST_TABLE.music });
-    if (features.sfx && music && sfx) items.push({ label: 'SFX & foley', v: COST_TABLE.sfx });
-    if (features.cast && consistency) items.push({ label: 'Character consistency', v: COST_TABLE.cast });
+    const items: Array<{ label: string; v: number }> = [
+      { label: `Base · ${MODE_LABEL[mode]}`, v: BASE_COST[mode] },
+    ];
+    if (features.duration && duration === '>3min') items.push({ label: 'Duration · > 3 min', v: ADDON_COST.durationLong });
+    if (features.lipSync && lipSync) items.push({ label: 'Lip sync', v: ADDON_COST.lipSync });
+    if (features.music && music) items.push({ label: `Music · ${musicGenre}`, v: ADDON_COST.music });
+    if (features.sfx && music && sfx) items.push({ label: 'SFX & foley', v: ADDON_COST.sfx });
     return items;
-  }, [features, duration, lipSync, music, musicGenre, sfx, consistency]);
+  }, [mode, features, duration, lipSync, music, musicGenre, sfx]);
 
   const totalCost = costItems.reduce((a, x) => a + x.v, 0);
 
-  // ── Bridge to the rail (right side on desktop, bottom sheet on mobile) ─
-  const rail = useIntakeRail();
-  useEffect(() => {
-    rail.setTotalCost(totalCost);
-    rail.setRailContent(
-      <IntakeRail
-        aspect={aspect}
-        prompt={prompt}
-        visualStyle={STYLES.find((s) => s.id === styleId) ?? STYLES[0]}
-        camera={features.camera ? camera : undefined}
-        grade={features.colorGrade ? grade : undefined}
-        costItems={costItems}
-        totalCost={totalCost}
-        creditsAvailable={credits?.credits_balance ?? 0}
-        onGenerate={handleGenerate}
-        generating={generating}
-      />,
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aspect, prompt, styleId, camera, grade, costItems, totalCost, credits, generating]);
+  const handleCharImageUpload = (files: FileList | null) => {
+    if (!files) return;
+    const remaining = MAX_CHAR_IMAGES - characterImages.length;
+    if (remaining <= 0) { toast.error(`Max ${MAX_CHAR_IMAGES} reference images`); return; }
+    const toProcess = Array.from(files).slice(0, remaining);
+    const added: string[] = [];
+    let processed = 0;
+    for (const file of toProcess) {
+      if (!file.type.startsWith('image/')) { toast.error(`${file.name} is not an image`); processed++; continue; }
+      if (file.size > MAX_CHAR_IMAGE_BYTES) { toast.error(`${file.name} exceeds 5 MB`); processed++; continue; }
+      const reader = new FileReader();
+      reader.onload = () => {
+        added.push(reader.result as string);
+        processed++;
+        if (processed === toProcess.length) setCharacterImages((prev) => [...prev, ...added]);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
-  // ── Generate handler ─────────────────────────────────────
+  const handleCustomStyleImageUpload = async (file: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast.error('Please upload an image'); return; }
+    if (file.size > MAX_CHAR_IMAGE_BYTES) { toast.error('Max 5 MB'); return; }
+    setUploadingStyle(true);
+    try {
+      const url = await uploadStyleReference(file);
+      setCustomStyleImage(url);
+    } catch {
+      toast.error('Upload failed — try a different image');
+    } finally {
+      setUploadingStyle(false);
+    }
+  };
+
   async function handleGenerate() {
     if (!user) { toast.error('Please sign in to continue.'); return; }
     if (prompt.trim().length < 6) { toast.error('Describe your video first (at least a short sentence).'); return; }
@@ -187,13 +245,9 @@ export default function IntakeForm({
         ...(features.colorGrade ? { grade } : {}),
         ...(features.lipSync && lipSync ? { lipSync: { on: true, strength: lipStrength } } : {}),
         ...(features.music && music ? {
-          music: {
-            on: true, genre: musicGenre, intensity: musicIntensity,
-            sfx: features.sfx && sfx,
-          },
+          music: { on: true, genre: musicGenre, intensity: musicIntensity, sfx: features.sfx && sfx },
         } : {}),
-        ...(features.cast && consistency && cast.length > 0 ? { cast } : {}),
-        ...(features.characterAppearance && characterAppearance ? { characterAppearance } : {}),
+        ...(features.characterAppearance && characterDescription ? { characterAppearance: characterDescription } : {}),
         captionStyle: caption,
         ...(brand.trim() ? { brandName: brand.trim() } : {}),
       };
@@ -211,11 +265,10 @@ export default function IntakeForm({
         voice_name: voice,
         voice_inclination: language,
         style: styleId,
-        character_description: characterAppearance || null,
-        character_consistency_enabled: features.cast ? consistency : false,
+        character_description: characterDescription || null,
+        character_consistency_enabled: consistency,
         intake_settings: intakeSettings,
       }).select('id').single();
-
       if (error || !data) throw error || new Error('Insert returned no row');
 
       toast.success('Project created. Taking you to the editor…');
@@ -228,12 +281,31 @@ export default function IntakeForm({
     }
   }
 
-  // ── Render ───────────────────────────────────────────────
+  // Bridge cost + rail content into IntakeFrame.
+  const rail = useIntakeRail();
+  useEffect(() => {
+    rail.setTotalCost(totalCost);
+    rail.setRailContent(
+      <IntakeRail
+        aspect={aspect}
+        prompt={prompt}
+        visualStyle={{ name: STYLES.find((s) => s.id === styleId)?.label ?? 'Style', bg: 'radial-gradient(60% 70% at 50% 50%,#14C8CC33,#0FA6AE11 70%)' }}
+        camera={features.camera ? camera : undefined}
+        grade={features.colorGrade ? grade : undefined}
+        costItems={costItems}
+        totalCost={totalCost}
+        creditsAvailable={credits?.credits_balance ?? 0}
+        onGenerate={handleGenerate}
+        generating={generating}
+      />,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aspect, prompt, styleId, camera, grade, costItems, totalCost, credits, generating]);
+
+  const selectedStyle = STYLES.find((s) => s.id === styleId);
+
   return (
-    <form
-      onSubmit={(e) => { e.preventDefault(); handleGenerate(); }}
-      className="flex flex-col gap-6 sm:gap-7"
-    >
+    <form onSubmit={(e) => { e.preventDefault(); handleGenerate(); }} className="flex flex-col gap-6 sm:gap-7">
       {/* Header */}
       <div className="text-center">
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#14C8CC]/10 text-[#14C8CC] font-mono text-[10.5px] tracking-[0.14em] uppercase">
@@ -282,27 +354,24 @@ export default function IntakeForm({
         </IntakeField>
       </div>
 
-      {/* Format + Duration */}
-      <div className={`grid gap-4 sm:gap-5 ${features.duration ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+      {/* Format + Duration — compact pill groups, NOT full-width */}
+      <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
         <div>
           <IntakeLabel>Format</IntakeLabel>
-          <div className="flex gap-2">
+          <div className="inline-flex rounded-lg border border-white/5 bg-[#151B20] p-1 gap-1">
             {(['16:9', '9:16'] as IntakeAspect[]).map((a) => (
               <button
                 key={a}
                 type="button"
                 onClick={() => setAspect(a)}
-                className={
-                  'flex-1 px-3 py-2.5 rounded-lg inline-flex items-center justify-center gap-2 font-mono text-[11px] tracking-wider transition-colors ' +
-                  (a === aspect
-                    ? 'border border-[#14C8CC] bg-[#14C8CC]/10 text-[#14C8CC]'
-                    : 'border border-white/5 bg-[#151B20] text-[#ECEAE4] hover:border-white/10')
-                }
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-[11px] tracking-wider transition-colors',
+                  a === aspect
+                    ? 'bg-[#14C8CC]/10 text-[#14C8CC]'
+                    : 'text-[#8A9198] hover:text-[#ECEAE4]',
+                )}
               >
-                <div
-                  className="border-[1.5px] border-current rounded-[2px]"
-                  style={{ width: a === '16:9' ? 18 : 10, height: a === '16:9' ? 10 : 18 }}
-                />
+                <div className="border-[1.5px] border-current rounded-[2px]" style={{ width: a === '16:9' ? 14 : 8, height: a === '16:9' ? 8 : 14 }} />
                 {a}
               </button>
             ))}
@@ -312,18 +381,18 @@ export default function IntakeForm({
         {features.duration && (
           <div>
             <IntakeLabel>Duration</IntakeLabel>
-            <div className="flex gap-2">
+            <div className="inline-flex rounded-lg border border-white/5 bg-[#151B20] p-1 gap-1">
               {([['<3min', '< 3 min'], ['>3min', '> 3 min']] as Array<[IntakeDuration, string]>).map(([v, t]) => (
                 <button
                   key={v}
                   type="button"
                   onClick={() => setDuration(v)}
-                  className={
-                    'flex-1 px-3 py-2.5 rounded-lg font-mono text-[11px] tracking-wider transition-colors ' +
-                    (v === duration
-                      ? 'border border-[#14C8CC] bg-[#14C8CC]/10 text-[#14C8CC]'
-                      : 'border border-white/5 bg-[#151B20] text-[#ECEAE4] hover:border-white/10')
-                  }
+                  className={cn(
+                    'px-3 py-1.5 rounded-md font-mono text-[11px] tracking-wider transition-colors',
+                    v === duration
+                      ? 'bg-[#14C8CC]/10 text-[#14C8CC]'
+                      : 'text-[#8A9198] hover:text-[#ECEAE4]',
+                  )}
                 >
                   {t}
                 </button>
@@ -342,7 +411,7 @@ export default function IntakeForm({
             onChange={(e) => setLanguage(e.target.value)}
             className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50"
           >
-            {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
+            {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.flag} {l.label}</option>)}
           </select>
         </div>
         <div>
@@ -359,13 +428,9 @@ export default function IntakeForm({
         </div>
         <div>
           <IntakeLabel>Captions</IntakeLabel>
-          <select
-            value={caption}
-            onChange={(e) => setCaption(e.target.value)}
-            className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50"
-          >
-            {CAPTION_STYLES.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <div className="bg-[#151B20] border border-white/5 rounded-lg px-2 py-1.5">
+            <CaptionStyleSelector value={caption} onChange={setCaption} showLabel={false} />
+          </div>
         </div>
         <div>
           <IntakeLabel>Brand name</IntakeLabel>
@@ -378,17 +443,17 @@ export default function IntakeForm({
         </div>
       </div>
 
-      {/* Audio & Realism (feature toggles) — only renders rows the mode supports */}
-      {(features.lipSync || features.music || features.cast) && (
+      {/* Audio & Realism */}
+      {(features.lipSync || features.music) && (
         <div>
-          <IntakeLabel><span className="text-[#14C8CC]">★</span> Audio & Realism · NEW</IntakeLabel>
+          <IntakeLabel><span className="text-[#14C8CC]">★</span> Audio & realism · NEW</IntakeLabel>
           <div className="grid gap-3">
             {features.lipSync && (
               <FeatureToggle
                 icon={<AudioLines className="w-4 h-4" />}
                 title="Lip Sync"
                 subtitle="Align character mouth shapes to the narration line by line."
-                cost={COST_TABLE.lipSync}
+                cost={ADDON_COST.lipSync}
                 on={lipSync}
                 onToggle={setLipSync}
               >
@@ -406,7 +471,7 @@ export default function IntakeForm({
                 icon={<Music className="w-4 h-4" />}
                 title="Music & Sound Effects"
                 subtitle="Auto-scored soundtrack plus optional ambient SFX and foley."
-                cost={COST_TABLE.music}
+                cost={ADDON_COST.music}
                 on={music}
                 onToggle={setMusic}
               >
@@ -421,11 +486,7 @@ export default function IntakeForm({
                   </div>
                   <div>
                     <IntakeLabel>Intensity · auto-ducks under voice</IntakeLabel>
-                    <IntakeSlider
-                      value={musicIntensity}
-                      onChange={setMusicIntensity}
-                      fmt={(v) => v < 35 ? 'Bed' : v < 65 ? 'Balanced' : 'Driving'}
-                    />
+                    <IntakeSlider value={musicIntensity} onChange={setMusicIntensity} fmt={(v) => v < 35 ? 'Bed' : v < 65 ? 'Balanced' : 'Driving'} />
                   </div>
                   {features.sfx && (
                     <div className="flex items-center gap-2">
@@ -434,64 +495,20 @@ export default function IntakeForm({
                         role="switch"
                         aria-checked={sfx}
                         onClick={() => setSfx(!sfx)}
-                        className={
-                          'relative w-9 h-5 rounded-full transition-colors shrink-0 border ' +
-                          (sfx ? 'bg-[#14C8CC] border-transparent' : 'bg-[#1B2228] border-white/10')
-                        }
+                        className={cn(
+                          'relative w-9 h-5 rounded-full transition-colors shrink-0 border',
+                          sfx ? 'bg-[#14C8CC] border-transparent' : 'bg-[#1B2228] border-white/10',
+                        )}
                       >
-                        <span
-                          className={
-                            'absolute top-[1px] w-4 h-4 rounded-full transition-all ' +
-                            (sfx ? 'left-[18px] bg-[#0A0D0F]' : 'left-[1px] bg-[#8A9198]')
-                          }
-                        />
+                        <span className={cn(
+                          'absolute top-[1px] w-4 h-4 rounded-full transition-all',
+                          sfx ? 'left-[18px] bg-[#0A0D0F]' : 'left-[1px] bg-[#8A9198]',
+                        )} />
                       </button>
                       <div className="text-[12.5px] text-[#ECEAE4]">Add ambient SFX & foley</div>
-                      <span className="ml-auto font-mono text-[9px] text-[#5A6268] tracking-wider uppercase">+{COST_TABLE.sfx} cr</span>
+                      <span className="ml-auto font-mono text-[9px] text-[#5A6268] tracking-wider uppercase">+{ADDON_COST.sfx} cr</span>
                     </div>
                   )}
-                </div>
-              </FeatureToggle>
-            )}
-
-            {features.cast && (
-              <FeatureToggle
-                icon={<Users className="w-4 h-4" />}
-                title="Character Consistency"
-                subtitle="Lock character appearance across every scene."
-                cost={COST_TABLE.cast}
-                on={consistency}
-                onToggle={setConsistency}
-              >
-                <IntakeLabel>Cast · pin up to 3 characters</IntakeLabel>
-                <div className="grid grid-cols-3 gap-2">
-                  {[0, 1, 2].map((i) => {
-                    const m = cast[i];
-                    return m ? (
-                      <div key={i} className="flex items-center gap-2 p-2 rounded-lg border border-white/5 bg-[#1B2228]">
-                        <div className="w-7 h-7 rounded-full grid place-items-center bg-gradient-to-br from-[#14C8CC] to-[#0FA6AE] text-[#0A0D0F] font-serif font-semibold text-[12px]">
-                          {m.initial}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[12px] text-[#ECEAE4] truncate">{m.name}</div>
-                          <div className="font-mono text-[9px] text-[#5A6268] tracking-wider uppercase">{m.role}</div>
-                        </div>
-                        {m.locked && <span className="text-[#14C8CC] text-[10px]">🔒</span>}
-                      </div>
-                    ) : (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => {
-                          setCast((c) => [...c, { initial: 'C', name: `Character ${c.length + 1}`, role: c.length === 0 ? 'Narrator' : 'Supporting', locked: true }]);
-                        }}
-                        className="flex flex-col items-center gap-1 p-2 rounded-lg border border-dashed border-white/10 text-[#5A6268] hover:text-[#ECEAE4] hover:border-white/20 transition-colors"
-                      >
-                        <span className="text-[16px] leading-none">+</span>
-                        <span className="text-[11px]">Add cast</span>
-                      </button>
-                    );
-                  })}
                 </div>
               </FeatureToggle>
             )}
@@ -499,40 +516,162 @@ export default function IntakeForm({
         </div>
       )}
 
-      {/* Character appearance button */}
-      {features.characterAppearance && (
+      {/* Character consistency — ALWAYS ON for cinematic + explainer (folded
+          into base cost). Renders a read-only "on" pill + the char
+          description + image-upload area that used to live in the Cast slot. */}
+      {consistency && features.characterAppearance && (
         <div>
-          <textarea
-            value={characterAppearance}
-            onChange={(e) => setCharacterAppearance(e.target.value)}
-            placeholder="Describe your narrator / main character — face, wardrobe, age, vibe. Optional."
-            rows={2}
-            className="w-full bg-[#151B20] border border-white/5 rounded-xl px-4 py-3 text-[13px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50 placeholder:text-[#5A6268] resize-y"
-          />
+          <div className="flex items-center justify-between mb-2">
+            <IntakeLabel>Character consistency</IntakeLabel>
+            <span className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.1em] uppercase text-[#14C8CC] px-2 py-0.5 rounded-md bg-[#14C8CC]/10 border border-[#14C8CC]/30">
+              Always on · Included
+            </span>
+          </div>
+
+          <IntakeField className="p-3 sm:p-4">
+            <p className="text-[12px] text-[#8A9198] mb-3 leading-[1.5]">
+              Keep the same character across every scene. Describe your lead, and
+              optionally drop in up to {MAX_CHAR_IMAGES} reference images so the
+              model knows what they look like.
+            </p>
+
+            <textarea
+              value={characterDescription}
+              onChange={(e) => setCharacterDescription(e.target.value)}
+              rows={3}
+              placeholder="A 30-year-old man with short brown hair, warm brown eyes, a close-cropped beard, wearing a navy sweater. Earnest expression."
+              className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50 placeholder:text-[#5A6268] resize-y"
+            />
+
+            <input
+              ref={charImageInput}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => { handleCharImageUpload(e.target.files); e.target.value = ''; }}
+              className="hidden"
+            />
+
+            <div className="mt-3 flex flex-wrap gap-2.5">
+              {characterImages.map((src, i) => (
+                <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border border-white/10 bg-[#1B2228]">
+                  <img src={src} alt={`Reference ${i + 1}`} className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setCharacterImages((p) => p.filter((_, j) => j !== i))}
+                    className="absolute top-1 right-1 p-0.5 rounded-full bg-black/70 hover:bg-black text-white"
+                    aria-label="Remove reference"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+              {characterImages.length < MAX_CHAR_IMAGES && (
+                <button
+                  type="button"
+                  onClick={() => charImageInput.current?.click()}
+                  className="w-16 h-16 rounded-lg border border-dashed border-white/10 hover:border-[#14C8CC]/40 hover:bg-[#14C8CC]/5 text-[#5A6268] hover:text-[#14C8CC] transition-colors flex flex-col items-center justify-center gap-0.5"
+                >
+                  <ImagePlus className="w-4 h-4" />
+                  <span className="text-[9px] font-mono tracking-wider uppercase">Add</span>
+                </button>
+              )}
+            </div>
+          </IntakeField>
         </div>
       )}
 
-      {/* Visual style */}
+      {/* Visual style — real thumbnails, horizontal scroll */}
       <div>
         <IntakeLabel>Visual style</IntakeLabel>
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-2.5">
-          {STYLES.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => setStyleId(s.id)}
-              className={
-                'rounded-lg overflow-hidden text-[#ECEAE4] transition-all ' +
-                (s.id === styleId
-                  ? 'border-2 border-[#14C8CC] shadow-[0_0_0_4px_rgba(20,200,204,0.12)]'
-                  : 'border border-white/5 hover:border-white/15')
-              }
-            >
-              <div className="aspect-[4/3]" style={{ background: s.bg }} />
-              <div className="py-1.5 px-1 text-[11px] font-medium truncate bg-[#10151A]">{s.name}</div>
-            </button>
-          ))}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => scrollBy('left')}
+            className={cn(
+              'absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full grid place-items-center border border-white/10 bg-[#0A0D0F]/90 backdrop-blur-sm text-[#ECEAE4] hover:bg-[#151B20] transition-opacity',
+              canLeft ? 'opacity-100' : 'opacity-0 pointer-events-none',
+            )}
+            aria-label="Scroll styles left"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => scrollBy('right')}
+            className={cn(
+              'absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full grid place-items-center border border-white/10 bg-[#0A0D0F]/90 backdrop-blur-sm text-[#ECEAE4] hover:bg-[#151B20] transition-opacity',
+              canRight ? 'opacity-100' : 'opacity-0 pointer-events-none',
+            )}
+            aria-label="Scroll styles right"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+
+          <div
+            ref={scrollRef}
+            className="flex gap-2.5 overflow-x-auto scrollbar-hide px-1 py-1 snap-x snap-mandatory"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          >
+            {STYLES.map((s) => (
+              <motion.button
+                key={s.id}
+                type="button"
+                onClick={() => setStyleId(s.id)}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className={cn(
+                  'snap-start shrink-0 w-[108px] sm:w-[128px] rounded-xl overflow-hidden text-[#ECEAE4] transition-all border-2',
+                  s.id === styleId
+                    ? 'border-[#14C8CC] shadow-[0_0_0_4px_rgba(20,200,204,0.12)]'
+                    : 'border-white/5 hover:border-white/15',
+                )}
+              >
+                <div className="aspect-[4/3] bg-[#1B2228]">
+                  <img src={s.preview} alt={s.label} loading="lazy" className="w-full h-full object-cover" />
+                </div>
+                <div className={cn(
+                  'py-1.5 px-1 text-center text-[11.5px] font-medium transition-colors',
+                  s.id === styleId ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'bg-[#10151A] text-[#8A9198]',
+                )}>
+                  {s.label}
+                </div>
+              </motion.button>
+            ))}
+          </div>
         </div>
+
+        {selectedStyle?.id === 'custom' && (
+          <div className="mt-3 grid gap-2.5">
+            <input
+              value={customStyle}
+              onChange={(e) => setCustomStyle(e.target.value)}
+              placeholder="Describe your custom visual style…"
+              className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50 placeholder:text-[#5A6268]"
+            />
+            {customStyleImage ? (
+              <div className="relative inline-block">
+                <img src={customStyleImage} alt="Style reference" className="h-24 rounded-lg border border-white/10" />
+                <button
+                  type="button"
+                  onClick={() => setCustomStyleImage(null)}
+                  className="absolute top-1 right-1 p-1 rounded-full bg-black/70 text-white"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ) : (
+              <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-white/10 text-[#8A9198] hover:text-[#ECEAE4] hover:border-white/20 cursor-pointer text-[12.5px] w-fit">
+                {uploadingStyle ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                {uploadingStyle ? 'Uploading…' : 'Upload reference image'}
+                <input
+                  type="file" accept="image/*" className="hidden"
+                  onChange={(e) => handleCustomStyleImageUpload(e.target.files?.[0] ?? null)}
+                />
+              </label>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Direction: Tone / Camera / Grade */}
@@ -577,8 +716,7 @@ export default function IntakeForm({
         </div>
       </div>
 
-      {/* Mobile Generate button — desktop uses the rail, mobile sees it
-          here too so users don't have to open the bottom sheet. */}
+      {/* Mobile Generate button (desktop uses the rail CTA) */}
       <button
         type="submit"
         disabled={generating}

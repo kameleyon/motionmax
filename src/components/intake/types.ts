@@ -42,15 +42,24 @@ export type IntakeAspect = '16:9' | '9:16';
  *  literal string so existing worker code sees a stable value. */
 export type IntakeDuration = '<3min' | '>3min';
 
-/** Design-numbers cost table. Swap to real PLAN_LIMITS-based pricing
- *  when the backend gets its feature credits table. */
-export const COST_TABLE = {
-  base: 80,
+/** Per-mode base credit cost. Cinematic includes character consistency
+ *  in the base number (that's why cast is forced-on + hidden-toggle for
+ *  cinematic). Explainer/SmartFlow have their own base. Pricing may
+ *  change as we finalise the feature → credits table. */
+export const BASE_COST: Record<ProjectMode, number> = {
+  cinematic: 750,  // includes character consistency
+  doc2video: 150,
+  smartflow: 75,
+};
+
+/** Add-on credits on top of the base. Music / SFX / Lip Sync are still
+ *  the only things that bump the total today — character consistency is
+ *  free in cinematic (folded into the base) and not offered elsewhere. */
+export const ADDON_COST = {
   durationLong: 200,   // applied when duration = '>3min'
-  lipSync: 40,
-  music: 30,
-  sfx: 15,
-  cast: 45,
+  lipSync: 120,
+  music: 60,
+  sfx: 30,
 } as const;
 
 export type MusicGenre = 'Cinematic' | 'Electronic' | 'Acoustic' | 'Ambient' | 'Hip-hop' | 'Jazz' | 'Orchestral';

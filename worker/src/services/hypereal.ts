@@ -201,21 +201,48 @@ export async function generateKlingV3Video(
   return pollHyperealJob(jobId, apiKey, model, pollUrl);
 }
 
-// ── Kling V3.0 Pro I2V (premium — for regenerations) ──────────────
+// ── Kling V3.0 Pro I2V (active, end-to-end) ──────────────────────
+
+/** Spec-documented max prompt length for kling-3-0-pro-i2v. We truncate
+ *  at 2400 chars (under the 2500 ceiling) at a sentence boundary when
+ *  possible so the final chunk still reads naturally. */
+const KLING_V3_PRO_MAX_PROMPT_CHARS = 2400;
+
+function truncateKlingPrompt(input: string): string {
+  if (input.length <= KLING_V3_PRO_MAX_PROMPT_CHARS) return input;
+  const slice = input.slice(0, KLING_V3_PRO_MAX_PROMPT_CHARS);
+  // Prefer breaking at the last sentence terminator within the window;
+  // fall back to the last word boundary if there's no sentence break.
+  const lastSentence = Math.max(
+    slice.lastIndexOf(". "),
+    slice.lastIndexOf("! "),
+    slice.lastIndexOf("? "),
+    slice.lastIndexOf(".\n"),
+  );
+  if (lastSentence > KLING_V3_PRO_MAX_PROMPT_CHARS * 0.6) {
+    return slice.slice(0, lastSentence + 1).trimEnd();
+  }
+  const lastSpace = slice.lastIndexOf(" ");
+  return (lastSpace > 0 ? slice.slice(0, lastSpace) : slice).trimEnd();
+}
 
 /**
  * Generate video using Kling V3.0 Pro I2V.
  * Superior subject consistency + texture preservation vs V3.0 Std / V2.6.
- * Native start + end frame support (same as V3.0 Std).
+ * Native start + end frame support.
  *
  * Model: kling-3-0-pro-i2v (57 credits)
- * Duration: 3 / 5 / 10 / 15 seconds (clamped to nearest valid value)
- * Pricing: $0.34 / $0.56 / $1.12 / $1.68 (without sound)
+ * Duration: 3 / 5 / 10 / 15 seconds (clamped to nearest valid value; default 5)
+ * cfg_scale: 0.0–1.0 (clamped; default 0.5)
+ * Pricing (without sound): $0.34 / $0.56 / $1.12 / $1.68 at 3/5/10/15s
  *
- * Used primarily for per-scene VIDEO REGENERATION where the user is
- * willing to pay more for a higher-fidelity single clip. The initial
- * full-project pipeline still uses the cheaper V2.6 Pro to keep the
- * 15-scene cost manageable.
+ * Request body shape (matches Hypereal spec verbatim):
+ *   { model, input: { prompt, image, end_image?, negative_prompt,
+ *     duration, cfg_scale, sound } }
+ *
+ * sound is always false — audio is produced separately by the TTS
+ * providers and muxed in at export time. Enabling sound would also
+ * multiply cost by 1.5x per spec.
  */
 export async function generateKlingV3ProVideo(
   imageUrl: string,
@@ -227,6 +254,9 @@ export async function generateKlingV3ProVideo(
   cfgScale: number = 0.5,
 ): Promise<string> {
   const model = "kling-3-0-pro-i2v";
+
+  // Duration: spec allows 3 / 5 / 10 / 15 only. Pick the nearest valid
+  // value for any other input.
   const validDurations = [3, 5, 10, 15];
   const clampedDuration = validDurations.reduce((prev, curr) =>
     Math.abs(curr - duration) < Math.abs(prev - duration) ? curr : prev
@@ -234,20 +264,41 @@ export async function generateKlingV3ProVideo(
   if (clampedDuration !== duration) {
     console.warn(`[Hypereal] Kling V3 Pro duration ${duration}s invalid — clamped to ${clampedDuration}s`);
   }
-  console.log(`[Hypereal] Starting Kling V3.0 Pro I2V — ${clampedDuration}s${endImageUrl ? " (start→end)" : ""}`);
+
+  // cfg_scale: spec range 0.0–1.0. Clamp defensively (also catches NaN).
+  const clampedCfgScale = Number.isFinite(cfgScale)
+    ? Math.min(1, Math.max(0, cfgScale))
+    : 0.5;
+  if (clampedCfgScale !== cfgScale) {
+    console.warn(`[Hypereal] Kling V3 Pro cfg_scale ${cfgScale} out of range — clamped to ${clampedCfgScale}`);
+  }
+
+  // Prompt: spec max 2500 chars. Truncate at 2400 to leave a safety
+  // margin and avoid 4xx rejections on over-long prompts. Observed in
+  // prod: scene prompts routinely exceed 3000 chars after the style
+  // block + character bible get appended.
+  const clampedPrompt = truncateKlingPrompt(prompt);
+  if (clampedPrompt.length < prompt.length) {
+    console.warn(`[Hypereal] Kling V3 Pro prompt truncated ${prompt.length} → ${clampedPrompt.length} chars (spec max 2500)`);
+  }
+
+  console.log(`[Hypereal] Starting Kling V3.0 Pro I2V — ${clampedDuration}s${endImageUrl ? " (start→end)" : ""} cfg_scale=${clampedCfgScale}`);
   console.log(`[Hypereal] IMAGE: ${imageUrl.substring(0, 80)}...`);
   if (endImageUrl) console.log(`[Hypereal] END IMAGE: ${endImageUrl.substring(0, 80)}...`);
 
+  // Build request body in the exact order Hypereal documents.
   const inputPayload: Record<string, unknown> = {
-    prompt,
+    prompt: clampedPrompt,
     image: imageUrl,
     duration: clampedDuration,
-    cfg_scale: cfgScale,
+    cfg_scale: clampedCfgScale,
     negative_prompt: negativePrompt,
-    // sound stays off — we mux audio separately at export time.
+    // sound is always false — we mux audio separately at export time
+    // and we do not want the 1.5x cost multiplier.
     sound: false,
   };
 
+  // end_image is optional; only include when the caller supplied one.
   if (endImageUrl) {
     inputPayload.end_image = endImageUrl;
   }

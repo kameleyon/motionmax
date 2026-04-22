@@ -124,6 +124,8 @@ export default function Sidebar() {
               Smart Flow
             </div>
           </div>
+        </div>
+
         <div className="mb-5">
           <h6 className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#5A6268] mx-3 mb-1.5 font-medium">Tools</h6>
           <div className="flex items-center gap-2.5 px-3 py-2 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors mt-1">

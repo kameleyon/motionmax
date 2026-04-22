@@ -82,6 +82,12 @@ export default function Stage({
   const [, tick] = useState(0);
   const stageRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  // The TTS narration lives on scene.audioUrl — not baked into the
+  // Kling video clip (Kling is rendered with sound=false). We attach a
+  // parallel <audio> element that plays in sync with the video; the
+  // narration's end event drives scene auto-advance so the composite
+  // "scene duration" = audio duration, matching the timeline widths.
+  const audioRef = useRef<HTMLAudioElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // REC timecode ticks while rendering.
@@ -98,24 +104,68 @@ export default function Stage({
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
 
-  // Keep the <video> element's play state synced with the Timeline
-  // button. A HTMLMediaElement's play() is async and rejects if the
-  // user hasn't interacted with the page yet, so we swallow the error.
+  // Keep both the <video> AND the <audio> synchronised to the
+  // Timeline's play state. Video is muted so only the narration audio
+  // is audible — Kling clips ship silent anyway. `.play()` is async
+  // and rejects if the page hasn't seen a user gesture yet; we swallow.
   useEffect(() => {
-    const el = videoRef.current;
-    if (!el) return;
+    const v = videoRef.current;
+    const a = audioRef.current;
+    const playBoth = () => {
+      const vp = v?.play();
+      if (vp && typeof vp.catch === 'function') vp.catch(() => { /* autoplay blocked */ });
+      const ap = a?.play();
+      if (ap && typeof ap.catch === 'function') ap.catch(() => { /* autoplay blocked */ });
+    };
     if (playing) {
-      const p = el.play();
-      if (p && typeof p.catch === 'function') p.catch(() => { /* autoplay blocked */ });
+      playBoth();
     } else {
-      el.pause();
+      v?.pause();
+      a?.pause();
     }
   }, [playing, selectedSceneIndex]);
 
-  // Reset + auto-advance when a scene's video finishes.
+  // Rewind to the start of each new scene as we walk through them so
+  // a scene change always plays from 0, not from where the last one
+  // left off (browsers cache decoded positions per <video src>).
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.currentTime = 0;
+    if (audioRef.current) audioRef.current.currentTime = 0;
+  }, [selectedSceneIndex]);
+
+  // Narration audio drives scene boundaries because it's the canonical
+  // length (Kling clips are 10s regardless of how long the voiceover
+  // runs). When audio ends, advance if there's another scene; on the
+  // final scene's audio end, stop playback.
+  const isLastScene = selectedSceneIndex >= state.scenes.length - 1;
+  const handleAudioEnded = () => {
+    if (isLastScene || !onAdvanceScene) {
+      onPlayingChange?.(false);
+      return;
+    }
+    // Keep `playing` true — the scene-change useEffect above will fire
+    // `play()` on the next scene's audio + video automatically.
+    onAdvanceScene();
+  };
+
+  // If the video itself ends but audio is still playing, loop the
+  // video so the frame doesn't freeze on black before the narration
+  // finishes. Only scene transitions are driven by audio end.
   const handleVideoEnded = () => {
-    onPlayingChange?.(false);
-    if (onAdvanceScene) onAdvanceScene();
+    const v = videoRef.current;
+    const a = audioRef.current;
+    // If there's no audio track, fall back to the video's end event.
+    if (!a || !a.src) {
+      if (isLastScene || !onAdvanceScene) onPlayingChange?.(false);
+      else onAdvanceScene();
+      return;
+    }
+    // Loop the visual while narration finishes.
+    if (v && !a.ended) {
+      v.currentTime = 0;
+      const vp = v.play();
+      if (vp && typeof vp.catch === 'function') vp.catch(() => {});
+    }
   };
 
   const aspectCss = state.aspect === '16:9' ? '16/9' : '9/16';
@@ -209,19 +259,33 @@ export default function Stage({
           if (state.phase === 'ready' && onAdvanceScene) onAdvanceScene();
         }}
       >
-        {/* Preview: video if ready, else latest image */}
+        {/* Preview: video if ready, else latest image. Video is MUTED
+            and has no native controls — we drive playback from the
+            Timeline transport so video + narration stay in lockstep. */}
         {state.phase === 'ready' && sceneToShow?.videoUrl ? (
-          <video
-            ref={videoRef}
-            key={sceneToShow.videoUrl}
-            src={sceneToShow.videoUrl}
-            className="w-full h-full object-cover"
-            controls
-            playsInline
-            onPlay={() => onPlayingChange?.(true)}
-            onPause={() => onPlayingChange?.(false)}
-            onEnded={handleVideoEnded}
-          />
+          <>
+            <video
+              ref={videoRef}
+              key={sceneToShow.videoUrl}
+              src={sceneToShow.videoUrl}
+              className="w-full h-full object-cover"
+              muted
+              playsInline
+              preload="auto"
+              onEnded={handleVideoEnded}
+            />
+            {sceneToShow.audioUrl && (
+              <audio
+                ref={audioRef}
+                key={sceneToShow.audioUrl}
+                src={sceneToShow.audioUrl}
+                preload="auto"
+                onPlay={() => onPlayingChange?.(true)}
+                onPause={() => onPlayingChange?.(false)}
+                onEnded={handleAudioEnded}
+              />
+            )}
+          </>
         ) : sceneToShow?.imageUrl ? (
           <img
             src={sceneToShow.imageUrl}

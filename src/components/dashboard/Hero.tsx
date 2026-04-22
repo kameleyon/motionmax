@@ -143,7 +143,7 @@ export default function Hero() {
           placeholder="A three-minute documentary about the origin of 35mm film, golden-hour Kodak factory, warm serif captions, narrated in my voice…"
         />
 
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
           <div className="flex items-center gap-2 flex-wrap">
             {/* Mode pills */}
             <div className="flex gap-1 p-1 bg-[#1B2228] rounded-lg border border-white/5">

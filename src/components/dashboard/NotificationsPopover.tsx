@@ -106,7 +106,7 @@ export default function NotificationsPopover() {
           )}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[340px] p-0 bg-[#10151A] border-white/10 text-[#ECEAE4]">
+      <PopoverContent align="end" className="w-[90vw] max-w-[340px] p-0 bg-[#10151A] border-white/10 text-[#ECEAE4]">
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
           <div className="font-serif text-[15px] font-medium">Notifications</div>
           {notifications.length > 0 && (

@@ -221,7 +221,7 @@ export default function ProjectsGallery() {
 
   return (
     <>
-      <div className="flex items-baseline justify-between mt-9 mb-3.5">
+      <div className="flex items-center justify-between mt-9 mb-3.5">
         <h2 className="font-serif font-medium text-[20px] tracking-tight m-0">Pick up where you left off</h2>
         <span className="font-mono text-[11px] tracking-widest uppercase text-[#8A9198]">
           {recentProject ? `Auto-saved · ${format(new Date(recentProject.updated_at), 'MMM d, h:mm a')}` : 'No recent projects'}
@@ -256,7 +256,7 @@ export default function ProjectsGallery() {
                 ? 'Ready to watch or iterate — pick up where you left off.'
                 : 'Picking up from your latest edit.'}
             </p>
-            <div className="flex gap-5 mt-auto pt-4 border-t border-white/5">
+            <div className="flex gap-6 mt-auto pt-4 border-t border-white/5">
               <div className="flex flex-col gap-0.5">
                 <span className="font-mono text-[10px] tracking-widest uppercase text-[#5A6268]">Length</span>
                 <span className="font-serif text-[17px] text-[#ECEAE4]">{recentProject.length || 'brief'}</span>
@@ -290,7 +290,7 @@ export default function ProjectsGallery() {
       {/* Filter pills */}
       <div className="flex flex-wrap items-baseline justify-between gap-2 mt-9 mb-3.5">
         <h2 className="font-serif font-medium text-[20px] tracking-tight m-0">Recent projects</h2>
-        <div className="flex gap-1 p-1 bg-[#1B2228] rounded-lg border border-white/5 overflow-x-auto">
+        <div className="flex gap-2 p-1 bg-[#1B2228] rounded-lg border border-white/5 overflow-x-auto">
           {FILTER_PILLS.map((pill) => (
             <button
               key={pill.id}

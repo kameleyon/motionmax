@@ -41,7 +41,7 @@ export function WorkspaceLayout({ headerActions, mode, projectTitle, children }:
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto overflow-x-hidden">
-        <div className="mx-auto max-w-4xl px-3 sm:px-6 py-4 sm:py-12">
+        <div className="mx-auto max-w-4xl px-3 sm:px-6 py-4 sm:py-12 pb-24">
           {mode && <WorkspaceBreadcrumb mode={mode} projectTitle={projectTitle} />}
           {children}
         </div>

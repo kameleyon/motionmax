@@ -38,13 +38,14 @@ export function CharacterConsistencyToggle({ enabled, onToggle }: CharacterConsi
   // Studio+ plans: always on, no toggle needed
   if (isStudioPlus) {
     return (
-      <div className="flex items-center justify-between rounded-lg border border-primary/15 bg-primary/5 px-3 py-2">
-        <div className="flex items-center gap-2">
-          <Users className="h-3.5 w-3.5 text-primary/70 shrink-0" />
-          <span className="text-xs font-medium text-foreground/80">Character Consistency</span>
-          <span className="text-xs text-primary/60">&middot; Included</span>
+      <div>
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Character Consistency</h4>
+          <span className="text-[11px] font-medium text-primary/70 bg-primary/10 px-2 py-0.5 rounded-full whitespace-nowrap">ALWAYS ON &middot; INCLUDED</span>
         </div>
-        <span className="text-[11px] font-medium text-primary/70 bg-primary/10 px-2 py-0.5 rounded-full">Always On</span>
+        <p className="text-xs text-muted-foreground mt-1">
+          Keep the same character across every scene. Describe your lead, and optionally drop in up to 3 reference images so the model knows what they look like.
+        </p>
       </div>
     );
   }

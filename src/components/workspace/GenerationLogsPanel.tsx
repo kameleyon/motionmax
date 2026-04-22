@@ -4,8 +4,15 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
+interface Log {
+  id: string;
+  category: string;
+  created_at: string;
+  message: string;
+}
+
 interface GenerationLogsPanelProps {
-  logs: any[];
+  logs: Log[];
   show: boolean;
   onToggle: () => void;
   isGenerating?: boolean;

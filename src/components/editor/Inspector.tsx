@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { RotateCw, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { EditorState } from '@/hooks/useEditorState';
+import { useSceneRegen } from './useSceneRegen';
 
 type InspectorTab = 'scene' | 'voice' | 'captions' | 'motion';
 
@@ -22,6 +23,7 @@ export default function Inspector({
 }) {
   const [tab, setTab] = useState<InspectorTab>('scene');
   const scene = state.scenes[selectedSceneIndex];
+  const { busy, apply, regenerate } = useSceneRegen(state);
 
   // Local prompt buffer. Resets when the selected scene changes or
   // when the remote prompt lands.
@@ -29,6 +31,8 @@ export default function Inspector({
   useEffect(() => {
     setPromptDraft(scene?.visualPrompt ?? '');
   }, [selectedSceneIndex, scene?.visualPrompt]);
+
+  const dirty = promptDraft.trim() !== (scene?.visualPrompt ?? '').trim();
 
   const disabled = state.phase === 'rendering';
   const sceneReady = state.phase !== 'rendering' && !!scene;
@@ -85,16 +89,23 @@ export default function Inspector({
             <div className="grid grid-cols-2 gap-2 mt-2.5">
               <button
                 type="button"
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] border border-white/10 text-[#ECEAE4] hover:bg-white/5 transition-colors"
-                title="Regenerate this scene with the current prompt"
+                onClick={() => regenerate(selectedSceneIndex, promptDraft.trim())}
+                disabled={busy !== 'idle' || promptDraft.trim().length < 6}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] border border-white/10 text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Save the prompt and re-render this scene"
               >
-                <RotateCw className="w-3 h-3" />
+                {busy === 'regen'
+                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                  : <RotateCw className="w-3 h-3" />}
                 Regenerate
               </button>
               <button
                 type="button"
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105"
+                onClick={() => apply(selectedSceneIndex, promptDraft.trim())}
+                disabled={busy !== 'idle' || !dirty}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
               >
+                {busy === 'apply' ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
                 Apply
               </button>
             </div>

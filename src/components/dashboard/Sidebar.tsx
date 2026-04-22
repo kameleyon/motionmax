@@ -346,39 +346,34 @@ export default function Sidebar() {
         </div>
       </nav>
 
-      {/* Profile footer with dropdown — mirrors AppSidebar options */}
-      <div className="px-4 py-3.5 border-t border-white/5 flex items-center gap-2.5">
-        {profile?.avatar_url ? (
-          <img src={profile.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />
-        ) : (
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#14C8CC] to-[#0FA6AE] grid place-items-center font-serif font-semibold text-[14px] text-[#0A0D0F]">
-            {(profile?.display_name || user?.email || '?').charAt(0).toUpperCase()}
-          </div>
-        )}
-        <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-medium text-[#ECEAE4] whitespace-nowrap overflow-hidden text-ellipsis">
-            {profile?.display_name || user?.email || 'User'}
-          </div>
-          <div className="font-mono text-[10px] text-[#5A6268] tracking-wider uppercase">
-            {subscription?.plan_name || 'Free'} · {Math.floor((credits?.credits_balance || 0) / 1000)}k
-          </div>
-        </div>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              aria-label="Account menu"
-              title="Account menu"
-              className="opacity-60 hover:opacity-100 transition-opacity text-[#ECEAE4] p-1 rounded-md hover:bg-white/5"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
-              </svg>
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
+      {/* Profile footer — the whole row is the dropdown trigger so we
+          don't need a separate gear icon. Redundancy gone, target is
+          larger (better tap affordance on mobile too). */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="Account menu"
+            className="w-full px-4 py-3.5 border-t border-white/5 flex items-center gap-2.5 text-left hover:bg-white/5 transition-colors"
+          >
+            {profile?.avatar_url ? (
+              <img src={profile.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#14C8CC] to-[#0FA6AE] grid place-items-center font-serif font-semibold text-[14px] text-[#0A0D0F]">
+                {(profile?.display_name || user?.email || '?').charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] font-medium text-[#ECEAE4] whitespace-nowrap overflow-hidden text-ellipsis">
+                {profile?.display_name || user?.email || 'User'}
+              </div>
+              <div className="font-mono text-[10px] text-[#5A6268] tracking-wider uppercase">
+                {subscription?.plan_name || 'Free'} · {Math.floor((credits?.credits_balance || 0) / 1000)}k
+              </div>
+            </div>
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
             align="end"
             side="top"
             className="w-56 rounded-xl bg-[#10151A] border-white/10 text-[#ECEAE4] shadow-xl mb-4"
@@ -425,7 +420,6 @@ export default function Sidebar() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      </div>
 
       {/* Search modal — opens from the search trigger or Cmd/Ctrl+K.
           Dark palette matches the dashboard shell (#10151A / white borders

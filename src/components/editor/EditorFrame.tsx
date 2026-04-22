@@ -3,7 +3,7 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import MiniSidebar from './MiniSidebar';
 import EditorTopBar, { type SubView } from './EditorTopBar';
 import type { EditorState } from '@/hooks/useEditorState';
-import MobileMenuDrawer from './MobileMenuDrawer';
+import Sidebar from '@/components/dashboard/Sidebar';
 
 /** Responsive CSS-Grid shell:
  *
@@ -103,21 +103,31 @@ export default function EditorFrame({
         </div>
       </main>
 
-      {/* Mobile nav drawer — full menu (Studio, Projects, Voices…) +
-          profile footer with Log Out. This is what the topbar hamburger
-          opens on mobile. Scrollable so the footer is always reachable
-          on short viewports. */}
-      <MobileMenuDrawer open={menuDrawerOpen} onOpenChange={setMenuDrawerOpen} />
+      {/* Mobile nav drawer — uses the SAME Sidebar component the
+          Dashboard + Intake pages use, so the menu is identical
+          everywhere. Wrapper overrides the aside's hidden+overflow so
+          it renders inside the drawer and scrolls freely, meaning Log
+          Out stays reachable on short viewports. */}
+      <Sheet open={menuDrawerOpen} onOpenChange={setMenuDrawerOpen}>
+        <SheetContent
+          side="left"
+          className="w-[280px] p-0 bg-[#10151A] border-white/10 lg:hidden [&>button]:text-[#ECEAE4]"
+        >
+          <div className="h-full overflow-y-auto [&_aside]:flex [&_aside]:w-full [&_aside]:border-r-0 [&_aside]:h-auto [&_aside]:min-h-full [&_aside]:overflow-visible [&_aside_nav]:overflow-visible">
+            <Sidebar />
+          </div>
+        </SheetContent>
+      </Sheet>
 
-      {/* Mobile inspector drawer (triggered by the right-side button on
-          the topbar). Scenes have no dedicated drawer on mobile — users
-          click the stage frame to advance through scenes. */}
+      {/* Mobile inspector drawer (right-side button on the topbar).
+          Scenes have no dedicated drawer on mobile — users tap the
+          stage frame to advance through scenes. */}
       <Sheet open={inspectorDrawerOpen} onOpenChange={setInspectorDrawerOpen}>
         <SheetContent
           side="right"
           className="w-[320px] p-0 bg-[#10151A] border-white/10 lg:hidden [&>button]:text-[#ECEAE4]"
         >
-          <div className="h-full overflow-y-auto">{inspector}</div>
+          <div className="h-full overflow-y-auto pt-10">{inspector}</div>
         </SheetContent>
       </Sheet>
       {void scenes /* unused on mobile by design */}

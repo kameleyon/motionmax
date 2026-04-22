@@ -27,6 +27,10 @@ const CreateWorkspace = lazy(() => import("./pages/CreateWorkspace"));
 // single shared form. Added alongside the existing CreateWorkspace so we
 // don't break in-flight projects that depend on the old routes.
 const CreateNew = lazy(() => import("./pages/CreateNew"));
+// Unified Editor — post-intake surface that replaces the generation
+// progress screen + legacy Result view + legacy CreateWorkspace. See
+// player_editor_roadmap.md for the full rollout plan.
+const Editor = lazy(() => import("./pages/Editor"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Usage = lazy(() => import("./pages/Usage"));
 const Pricing = lazy(() => import("./pages/Pricing"));
@@ -122,6 +126,18 @@ const App = () => (
                 <ProtectedRoute>
                   <RouteErrorBoundary routeName="create-new">
                     <CreateNew />
+                  </RouteErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Unified Editor — generation screen + player + editor in one. */}
+            <Route
+              path="/app/editor/:projectId"
+              element={
+                <ProtectedRoute>
+                  <RouteErrorBoundary routeName="editor">
+                    <Editor />
                   </RouteErrorBoundary>
                 </ProtectedRoute>
               }

@@ -10,6 +10,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { isFlagOn } from '@/lib/featureFlags';
 import {
   getDefaultSpeaker,
   getSpeakersForLanguage,
@@ -292,7 +293,13 @@ export default function IntakeForm({
       if (error || !data) throw error || new Error('Insert returned no row');
 
       toast.success('Project created. Taking you to the editor…');
-      navigate(`/app/create?project=${data.id}&autostart=1`);
+      // Route to the new unified Editor when the flag is on, else fall
+      // back to the legacy workspace flow so we don't lose users mid-
+      // rollout. See player_editor_roadmap.md Phase 0.
+      const editorRoute = isFlagOn('UNIFIED_EDITOR')
+        ? `/app/editor/${data.id}?autostart=1`
+        : `/app/create?project=${data.id}&autostart=1`;
+      navigate(editorRoute);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Couldn't save project: ${msg}`);

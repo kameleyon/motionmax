@@ -219,12 +219,14 @@ export type Database = {
           created_at: string
           error_message: string | null
           id: string
+          music_url: string | null
           progress: number
           project_id: string
           scenes: Json | null
           script: string | null
           started_at: string | null
           status: string
+          stems: Json | null
           user_id: string
           video_url: string | null
         }
@@ -234,12 +236,14 @@ export type Database = {
           created_at?: string
           error_message?: string | null
           id?: string
+          music_url?: string | null
           progress?: number
           project_id: string
           scenes?: Json | null
           script?: string | null
           started_at?: string | null
           status?: string
+          stems?: Json | null
           user_id: string
           video_url?: string | null
         }
@@ -249,12 +253,14 @@ export type Database = {
           created_at?: string
           error_message?: string | null
           id?: string
+          music_url?: string | null
           progress?: number
           project_id?: string
           scenes?: Json | null
           script?: string | null
           started_at?: string | null
           status?: string
+          stems?: Json | null
           user_id?: string
           video_url?: string | null
         }
@@ -377,6 +383,7 @@ export type Database = {
           inspiration_style: string | null
           intake_settings: Json
           is_favorite: boolean
+          previous_export_url: string | null
           length: string
           presenter_focus: string | null
           project_type: string
@@ -406,6 +413,7 @@ export type Database = {
           inspiration_style?: string | null
           intake_settings?: Json
           is_favorite?: boolean
+          previous_export_url?: string | null
           length?: string
           presenter_focus?: string | null
           project_type?: string
@@ -435,6 +443,7 @@ export type Database = {
           inspiration_style?: string | null
           intake_settings?: Json
           is_favorite?: boolean
+          previous_export_url?: string | null
           length?: string
           presenter_focus?: string | null
           project_type?: string

@@ -32,12 +32,31 @@ const LANGUAGE_LABEL: Record<string, string> = {
   nl: 'Nederlands',
 };
 
+/** Treat legacy project types as their current equivalents. "storytelling"
+ *  was the first explainer variant we shipped and lives on old rows that
+ *  pre-date the rename; "doc2video" is the current id; anything else we
+ *  don't recognise stays on whatever category its literal name matches. */
+const EXPLAINER_TYPES = new Set(['doc2video', 'storytelling', 'explainer']);
+
+function isExplainer(p: Project): boolean {
+  return EXPLAINER_TYPES.has((p.project_type || '').toLowerCase());
+}
+
 const FILTER_PILLS: Array<{ id: string; label: string; match: (p: Project) => boolean }> = [
   { id: 'All',        label: 'All',        match: () => true },
   { id: 'cinematic',  label: 'Cinematic',  match: (p) => (p.project_type || '').toLowerCase() === 'cinematic' },
-  { id: 'doc2video',  label: 'Explainer',  match: (p) => (p.project_type || '').toLowerCase() === 'doc2video' },
+  { id: 'doc2video',  label: 'Explainer',  match: isExplainer },
   { id: 'smartflow',  label: 'Smart Flow', match: (p) => (p.project_type || '').toLowerCase() === 'smartflow' },
 ];
+
+/** Pretty label shown in UI for a raw project_type string. */
+function prettyProjectType(raw: string | null | undefined): string {
+  const t = (raw || '').toLowerCase();
+  if (EXPLAINER_TYPES.has(t)) return 'Explainer';
+  if (t === 'smartflow') return 'Smart Flow';
+  if (t === 'cinematic') return 'Cinematic';
+  return raw?.toUpperCase() || 'PROJECT';
+}
 
 function prettyVoiceName(raw: string | null): string {
   if (!raw) return '—';
@@ -246,7 +265,7 @@ export default function ProjectsGallery() {
           </div>
           <div className="p-[24px_28px] flex flex-col gap-2.5">
             <div className="font-mono text-[10.5px] tracking-[0.18em] uppercase text-[#14C8CC]">
-              {recentProject.project_type || 'PROJECT'}
+              {prettyProjectType(recentProject.project_type).toUpperCase()}
             </div>
             <h3 className="font-serif font-medium text-[26px] m-0 tracking-tight leading-[1.15]">
               {recentProject.title || 'Untitled Project'}
@@ -329,7 +348,7 @@ export default function ProjectsGallery() {
                   <div className="absolute inset-0" style={{ background: generateGradient(proj.id) }} />
                 )}
                 <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[9.5px] font-mono tracking-wider text-white/85 bg-black/55 backdrop-blur-sm border border-white/10">
-                  {(proj.project_type || 'PROJ').toUpperCase()}
+                  {prettyProjectType(proj.project_type).toUpperCase()}
                 </div>
                 <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded text-[9.5px] font-mono tracking-widest text-white bg-black/60">
                   {proj.length || '—'}

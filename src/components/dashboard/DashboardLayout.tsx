@@ -6,7 +6,6 @@ import RightRail from './RightRail';
 import NotificationsPopover from './NotificationsPopover';
 import HelpPopover from './HelpPopover';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
-import CreateModeTiles from './CreateModeTiles';
 
 /** Responsive dashboard shell.
  *
@@ -78,7 +77,6 @@ export default function DashboardLayout() {
           <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-4 sm:gap-5 xl:gap-6 px-3 sm:px-4 md:px-6 lg:px-8 py-5 sm:py-7 max-w-[1480px] mx-auto">
             <div className="col-main flex flex-col gap-6 sm:gap-8 min-w-0">
               <Hero />
-              <CreateModeTiles />
               <ProjectsGallery />
             </div>
             {/* Right rail — desktop only. At < xl the page hides it; the

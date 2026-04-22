@@ -118,7 +118,7 @@ export default function Hero() {
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="w-full bg-transparent border-0 outline-none resize-none text-[#ECEAE4] font-serif text-[22px] leading-[1.35] min-h-[64px] placeholder:text-[#5A6268] placeholder:italic"
+          className="w-full bg-transparent border-0 outline-none resize-none text-[#ECEAE4] font-serif text-[22px] leading-[1.35] min-h-[64px] placeholder:text-[#5A6268]"
           placeholder="A three-minute documentary about the origin of 35mm film, golden-hour Kodak factory, warm serif captions, narrated in my voice…"
         />
 

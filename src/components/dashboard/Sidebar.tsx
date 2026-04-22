@@ -15,7 +15,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import motionmaxLogo from '@/assets/motionmax-logo.png';
 
 type SidebarProject = {
   id: string;
@@ -166,9 +165,12 @@ export default function Sidebar() {
 
   return (
     <aside className="w-[252px] bg-[#10151A] border-r border-white/5 hidden md:flex flex-col overflow-hidden shrink-0">
-      {/* Brand */}
+      {/* Brand — "Motion" in aqua, "Max" in gold */}
       <div className="flex items-center gap-2.5 px-5 py-[18px] border-b border-white/5">
-        <img src={motionmaxLogo} alt="MotionMax" className="h-8 w-auto" />
+        <span className="font-serif text-[22px] font-medium tracking-tight leading-none">
+          <span className="text-[#14C8CC] font-medium">Motion</span>
+          <span className="text-[#E4C875] font-medium">Max</span>
+        </span>
       </div>
 
       {/* Search */}

@@ -89,7 +89,11 @@ export default function Editor() {
     );
   }
 
-  const scene = state.scenes[selectedSceneIndex];
+  const advanceScene = () => {
+    const next = Math.min(state.scenes.length - 1, selectedSceneIndex + 1);
+    if (next !== selectedSceneIndex) setManualSelection(next);
+  };
+
   return (
     <EditorFrame
       state={state}
@@ -103,7 +107,15 @@ export default function Editor() {
           onSelect={(i) => setManualSelection(i)}
         />
       }
-      stage={<Stage state={state} selectedSceneIndex={selectedSceneIndex} />}
+      stage={
+        <Stage
+          state={state}
+          selectedSceneIndex={selectedSceneIndex}
+          onAdvanceScene={advanceScene}
+          playing={playing}
+          onPlayingChange={setPlaying}
+        />
+      }
       inspector={<Inspector state={state} selectedSceneIndex={selectedSceneIndex} />}
       timeline={
         <Timeline
@@ -116,5 +128,4 @@ export default function Editor() {
       }
     />
   );
-  void scene; // scene currently unused at page level; lives in Inspector/Stage
 }

@@ -3,6 +3,7 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import MiniSidebar from './MiniSidebar';
 import EditorTopBar, { type SubView } from './EditorTopBar';
 import type { EditorState } from '@/hooks/useEditorState';
+import MobileMenuDrawer from './MobileMenuDrawer';
 
 /** Responsive CSS-Grid shell:
  *
@@ -33,7 +34,10 @@ export default function EditorFrame({
   inspector: ReactNode;
   timeline: ReactNode;
 }) {
-  const [scenesDrawerOpen, setScenesDrawerOpen] = useState(false);
+  // Mobile-only drawers. Scenes is intentionally NOT exposed to phones —
+  // users click the stage to walk through scenes, timeline Prev/Next to
+  // jump, so a redundant scene list drawer would just eat screen height.
+  const [menuDrawerOpen, setMenuDrawerOpen] = useState(false);
   const [inspectorDrawerOpen, setInspectorDrawerOpen] = useState(false);
 
   return (
@@ -47,7 +51,11 @@ export default function EditorFrame({
         }}
       />
 
-      <MiniSidebar />
+      {/* Icon-only sidebar on desktop. Hidden on mobile — the hamburger
+          opens the full menu drawer instead. */}
+      <div className="hidden lg:flex">
+        <MiniSidebar />
+      </div>
 
       <main
         className="flex flex-col flex-1 min-w-0 overflow-hidden"
@@ -57,7 +65,7 @@ export default function EditorFrame({
           subView={subView}
           onSubViewChange={onSubViewChange}
           saveStatus={saveStatus}
-          onOpenSceneDrawer={() => setScenesDrawerOpen(true)}
+          onOpenMenuDrawer={() => setMenuDrawerOpen(true)}
           onOpenInspectorDrawer={() => setInspectorDrawerOpen(true)}
         />
 
@@ -95,17 +103,15 @@ export default function EditorFrame({
         </div>
       </main>
 
-      {/* Mobile scenes drawer */}
-      <Sheet open={scenesDrawerOpen} onOpenChange={setScenesDrawerOpen}>
-        <SheetContent
-          side="left"
-          className="w-[280px] p-0 bg-[#10151A] border-white/10 lg:hidden [&>button]:text-[#ECEAE4]"
-        >
-          <div className="h-full overflow-y-auto">{scenes}</div>
-        </SheetContent>
-      </Sheet>
+      {/* Mobile nav drawer — full menu (Studio, Projects, Voices…) +
+          profile footer with Log Out. This is what the topbar hamburger
+          opens on mobile. Scrollable so the footer is always reachable
+          on short viewports. */}
+      <MobileMenuDrawer open={menuDrawerOpen} onOpenChange={setMenuDrawerOpen} />
 
-      {/* Mobile inspector drawer */}
+      {/* Mobile inspector drawer (triggered by the right-side button on
+          the topbar). Scenes have no dedicated drawer on mobile — users
+          click the stage frame to advance through scenes. */}
       <Sheet open={inspectorDrawerOpen} onOpenChange={setInspectorDrawerOpen}>
         <SheetContent
           side="right"
@@ -114,6 +120,7 @@ export default function EditorFrame({
           <div className="h-full overflow-y-auto">{inspector}</div>
         </SheetContent>
       </Sheet>
+      {void scenes /* unused on mobile by design */}
     </div>
   );
 }

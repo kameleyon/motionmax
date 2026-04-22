@@ -63,12 +63,25 @@ function LoadingRing({ size = 72 }: { size?: number }) {
 export default function Stage({
   state,
   selectedSceneIndex,
+  onAdvanceScene,
+  playing,
+  onPlayingChange,
 }: {
   state: EditorState;
   selectedSceneIndex: number;
+  /** Called when the user taps/clicks the frame — used on mobile to
+   *  walk through scenes without a visible scene list. */
+  onAdvanceScene?: () => void;
+  /** Timeline-driven play state. When this flips, Stage synchronises
+   *  its <video> element via play()/pause(). */
+  playing?: boolean;
+  /** Report intrinsic video events (ended, user-pause, user-play) back
+   *  to the parent so the Timeline button stays in sync. */
+  onPlayingChange?: (p: boolean) => void;
 }) {
   const [, tick] = useState(0);
   const stageRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // REC timecode ticks while rendering.
@@ -84,6 +97,26 @@ export default function Stage({
     document.addEventListener('fullscreenchange', onChange);
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
+
+  // Keep the <video> element's play state synced with the Timeline
+  // button. A HTMLMediaElement's play() is async and rejects if the
+  // user hasn't interacted with the page yet, so we swallow the error.
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    if (playing) {
+      const p = el.play();
+      if (p && typeof p.catch === 'function') p.catch(() => { /* autoplay blocked */ });
+    } else {
+      el.pause();
+    }
+  }, [playing, selectedSceneIndex]);
+
+  // Reset + auto-advance when a scene's video finishes.
+  const handleVideoEnded = () => {
+    onPlayingChange?.(false);
+    if (onAdvanceScene) onAdvanceScene();
+  };
 
   const aspectCss = state.aspect === '16:9' ? '16/9' : '9/16';
   const frameMaxW = state.aspect === '16:9' ? '92%' : '48%';
@@ -154,7 +187,9 @@ export default function Stage({
         </button>
       </div>
 
-      {/* Frame */}
+      {/* Frame. Clicking the frame advances to the next scene — this
+          is the primary navigation gesture on mobile (where we hide
+          the scenes column entirely). */}
       <div
         className="relative rounded-md overflow-hidden"
         style={{
@@ -166,16 +201,26 @@ export default function Stage({
           background: sceneToShow?.imageUrl ? '#050709' : '#0a0d10',
           boxShadow: '0 40px 120px -40px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.06)',
           transition: 'aspect-ratio .3s ease, width .3s ease, height .3s ease',
+          cursor: state.phase === 'ready' && onAdvanceScene ? 'pointer' : 'default',
+        }}
+        onClick={(e) => {
+          // Let the native <video> controls handle their own clicks.
+          if ((e.target as HTMLElement).tagName === 'VIDEO') return;
+          if (state.phase === 'ready' && onAdvanceScene) onAdvanceScene();
         }}
       >
         {/* Preview: video if ready, else latest image */}
         {state.phase === 'ready' && sceneToShow?.videoUrl ? (
           <video
+            ref={videoRef}
             key={sceneToShow.videoUrl}
             src={sceneToShow.videoUrl}
             className="w-full h-full object-cover"
             controls
             playsInline
+            onPlay={() => onPlayingChange?.(true)}
+            onPause={() => onPlayingChange?.(false)}
+            onEnded={handleVideoEnded}
           />
         ) : sceneToShow?.imageUrl ? (
           <img

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Share2, History, Loader2, Menu, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Download, Share2, History, Loader2, Menu, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import NotificationsPopover from '@/components/dashboard/NotificationsPopover';
 import HelpPopover from '@/components/dashboard/HelpPopover';
@@ -26,14 +26,17 @@ export default function EditorTopBar({
   subView,
   onSubViewChange,
   saveStatus,
-  onOpenSceneDrawer,
+  onOpenMenuDrawer,
   onOpenInspectorDrawer,
 }: {
   state: EditorState;
   subView: SubView;
   onSubViewChange: (v: SubView) => void;
   saveStatus: 'idle' | 'saving' | 'saved' | 'dirty';
-  onOpenSceneDrawer?: () => void;
+  /** Opens the mobile navigation drawer (Studio / Projects / Voices /
+   *  Settings / Log Out). Desktop users see the MiniSidebar instead. */
+  onOpenMenuDrawer?: () => void;
+  /** Opens the mobile inspector drawer (Scene tab etc.). */
   onOpenInspectorDrawer?: () => void;
 }) {
   const navigate = useNavigate();
@@ -71,11 +74,14 @@ export default function EditorTopBar({
 
   return (
     <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 border-b border-white/10 bg-[#0A0D0F]/80 backdrop-blur-md h-[54px] col-span-full overflow-hidden">
-      {/* Mobile hamburger — opens the scenes/inspector drawer on small screens */}
+      {/* Mobile hamburger — opens the main nav menu (Studio / Projects /
+          Voices / Settings / Log Out). Scenes are NOT in here: on
+          mobile, users advance scenes by tapping the stage. */}
       <button
         type="button"
-        onClick={onOpenSceneDrawer}
-        aria-label="Open scenes"
+        onClick={onOpenMenuDrawer}
+        aria-label="Open menu"
+        title="Menu"
         className="lg:hidden w-8 h-8 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4]"
       >
         <Menu className="w-4 h-4" />
@@ -216,9 +222,9 @@ export default function EditorTopBar({
         onClick={onOpenInspectorDrawer}
         aria-label="Open inspector"
         className="lg:hidden w-8 h-8 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4]"
-        title="Inspector"
+        title="Edit scene"
       >
-        <Menu className="w-4 h-4 rotate-90" />
+        <SlidersHorizontal className="w-4 h-4" />
       </button>
 
       {project && (

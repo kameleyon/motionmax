@@ -592,7 +592,7 @@ export default function Projects() {
           </motion.div>
 
         {/* Toolbar */}
-        <div className="flex flex-col lg:flex-row gap-4 mt-6 mb-6">
+        <div className="flex flex-col lg:flex-row gap-4 mt-6 mb-6 overflow-x-auto py-2">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -602,7 +602,7 @@ export default function Projects() {
               className="pl-10 bg-muted/50 border-border/50"
             />
           </div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2">
             <Select value={projectTypeFilter} onValueChange={setProjectTypeFilter}>
               <SelectTrigger className="w-[150px] bg-card border-border/50">
                 <SelectValue placeholder="All types" />

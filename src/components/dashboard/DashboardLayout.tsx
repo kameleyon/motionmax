@@ -73,7 +73,6 @@ export default function DashboardLayout() {
           <div className="flex-1" />
           <NotificationsPopover />
           <HelpPopover />
-          <ThemeToggle />
         </div>
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-white/10">

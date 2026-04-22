@@ -351,7 +351,7 @@ export default function Sidebar() {
           <DropdownMenuContent
             align="end"
             side="top"
-            className="w-56 rounded-xl bg-[#10151A] border-white/10 text-[#ECEAE4] shadow-xl"
+            className="w-56 rounded-xl bg-[#10151A] border-white/10 text-[#ECEAE4] shadow-xl mb-2"
           >
             <DropdownMenuItem
               className="cursor-pointer rounded-lg text-[#ECEAE4] focus:bg-white/5 focus:text-[#ECEAE4]"
@@ -376,15 +376,6 @@ export default function Sidebar() {
                 <span>Admin</span>
               </DropdownMenuItem>
             )}
-            <DropdownMenuSeparator className="bg-white/10" />
-            <DropdownMenuItem
-              className="cursor-pointer rounded-lg text-[#ECEAE4] focus:bg-white/5 focus:text-[#ECEAE4]"
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            >
-              <Sun className="mr-2 h-4 w-4 text-[#8A9198] dark:hidden" />
-              <Moon className="mr-2 hidden h-4 w-4 text-[#8A9198] dark:block" />
-              <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
-            </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-white/10" />
             <DropdownMenuItem
               className="cursor-pointer rounded-lg text-[#E66666] focus:bg-[#E66666]/10 focus:text-[#E66666]"

@@ -101,25 +101,8 @@ export default function IntakeFrame({
 
             <div className="flex-1" />
 
-            {/* Mobile cost chip — opens the bottom sheet with the full
-                right rail. Desktop keeps the full rail visible, so this
-                chip hides at ≥ lg. */}
-            <button
-              type="button"
-              onClick={() => setMobileRailOpen(true)}
-              className="lg:hidden inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-mono text-[10.5px] tracking-widest uppercase border border-[#14C8CC]/30 text-[#14C8CC] bg-[#14C8CC]/10 hover:bg-[#14C8CC]/20 transition-colors"
-              aria-label={`Total ${totalCost} credits — tap for preview and options`}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="opacity-80">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M9 10h6M9 14h4" />
-              </svg>
-              {totalCost} cr
-            </button>
-
             <NotificationsPopover />
             <HelpPopover />
-            <ThemeToggle />
           </div>
 
           <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-white/10">

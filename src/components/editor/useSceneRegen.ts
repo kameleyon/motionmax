@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import type { EditorState } from '@/hooks/useEditorState';
@@ -8,7 +9,23 @@ import type { EditorState } from '@/hooks/useEditorState';
  *  inserts in one place so UI code stays clean. */
 export function useSceneRegen(state: EditorState | null) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [busy, setBusy] = useState<'idle' | 'apply' | 'regen'>('idle');
+
+  /** Realtime can miss postgres_changes events in practice (timing,
+   *  connection blips, filter mismatches). After kicking a regen job
+   *  we also invalidate the editor state periodically for ~2 minutes
+   *  so the new scene URLs show up even when realtime silently drops
+   *  the update. */
+  const scheduleRefresh = useCallback((projectId: string | undefined) => {
+    if (!projectId) return;
+    const invalidate = () => {
+      queryClient.invalidateQueries({ queryKey: ['editor-state', projectId] });
+    };
+    // Fire now, then every 6 s for ~2 min. Clears itself.
+    const intervals = [1500, 4000, 8000, 15000, 25000, 40000, 60000, 90000, 120000];
+    intervals.forEach((ms) => setTimeout(invalidate, ms));
+  }, [queryClient]);
 
   const updateScenePrompt = useCallback(async (index: number, nextPrompt: string) => {
     if (!state?.generation) { toast.error('No generation loaded.'); return false; }
@@ -91,6 +108,7 @@ export function useSceneRegen(state: EditorState | null) {
         });
       if (error) throw new Error(error.message);
       toast.success('Scene queued · re-render video next when the new frame is ready.');
+      scheduleRefresh(state.project.id);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Regenerate failed: ${msg}`);
@@ -124,6 +142,7 @@ export function useSceneRegen(state: EditorState | null) {
         });
       if (error) throw new Error(error.message);
       toast.success(modification ? 'Image edit queued.' : 'Image queued for regeneration.');
+      scheduleRefresh(state.project.id);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Image regen failed: ${msg}`);
@@ -153,6 +172,7 @@ export function useSceneRegen(state: EditorState | null) {
         });
       if (error) throw new Error(error.message);
       toast.success('Video queued for regeneration.');
+      scheduleRefresh(state.project.id);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Video regen failed: ${msg}`);
@@ -211,6 +231,7 @@ export function useSceneRegen(state: EditorState | null) {
         });
       if (error) throw new Error(error.message);
       toast.success('Voice queued for regeneration.');
+      scheduleRefresh(state.project.id);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Voice regen failed: ${msg}`);
@@ -260,6 +281,7 @@ export function useSceneRegen(state: EditorState | null) {
             .insert(inserts);
           if (jobErr) throw new Error(jobErr.message);
           toast.success(`Voice switched to ${voice}. Re-rendering ${inserts.length} scenes…`);
+          scheduleRefresh(state.project!.id);
         }
       } else {
         toast.success(`Voice switched to ${voice}. New scenes will use it.`);
@@ -272,19 +294,37 @@ export function useSceneRegen(state: EditorState | null) {
     }
   }, [user, state]);
 
-  /** Merge a patch into `projects.intake_settings`. Used for
-   *  project-level toggles like captions on/off or the caption style
-   *  that applies across every scene. */
+  /** Merge a patch into `projects.intake_settings`. When the prod DB
+   *  hasn't yet had the intake_settings migration applied, Supabase
+   *  returns a "column not found in schema cache" error — catch it
+   *  explicitly so the user gets a helpful message instead of a raw
+   *  PGRST dump. The setting still persists locally via React Query
+   *  optimistic state; it just won't survive a reload until the
+   *  migration runs. */
   const updateIntakeSettings = useCallback(async (patch: Record<string, unknown>) => {
     if (!state?.project) return false;
     const current = (state.project.intake_settings as Record<string, unknown> | null) ?? {};
     const next = { ...current, ...patch };
-    const { error } = await supabase
-      .from('projects')
-      .update({ intake_settings: next as unknown as never })
-      .eq('id', state.project.id);
-    if (error) { toast.error(`Couldn't save: ${error.message}`); return false; }
-    return true;
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .update({ intake_settings: next as unknown as never })
+        .eq('id', state.project.id);
+      if (error) {
+        const msg = error.message || '';
+        if (msg.includes('intake_settings') && msg.toLowerCase().includes('schema cache')) {
+          toast.error("Project settings column isn't in your DB yet. Run migration 20260422010000_add_projects_intake_settings.sql.", { duration: 8000 });
+        } else {
+          toast.error(`Couldn't save: ${msg}`);
+        }
+        return false;
+      }
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Couldn't save: ${msg}`);
+      return false;
+    }
   }, [state?.project]);
 
   return {

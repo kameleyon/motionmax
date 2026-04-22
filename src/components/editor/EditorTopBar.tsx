@@ -61,12 +61,39 @@ export default function EditorTopBar({
   const exporting = exportState.status === 'submitting' || exportState.status === 'rendering';
   const exportDone = exportState.status === 'done' && exportState.url;
 
+  /** Force a real download to disk (not "open in new tab"). Cross-
+   *  origin MP4s usually open in the tab because browsers honour
+   *  Content-Disposition and the source isn't same-origin. We fetch
+   *  the video as a blob, create an object URL, and click a hidden
+   *  <a download> so the browser saves it to the downloads folder. */
+  const downloadVideo = async (url: string, filename: string) => {
+    try {
+      const res = await fetch(url, { mode: 'cors' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      // Release the blob a moment later — too-early revoke aborts Safari.
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
+    } catch {
+      // Fallback: old behaviour — open in a tab so the user can at
+      // least right-click Save As.
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   // Default download = master preset (re-export guarantees latest scene
   // edits are included). If an export is already done we just hand the
   // user the finished URL.
   const handleDefaultExport = () => {
     if (exportDone && exportState.url) {
-      window.open(exportState.url, '_blank', 'noopener,noreferrer');
+      const title = (project?.title ?? 'motionmax').replace(/[^a-z0-9-_]+/gi, '_').slice(0, 60);
+      void downloadVideo(exportState.url, `${title}.mp4`);
       return;
     }
     startExport('master');

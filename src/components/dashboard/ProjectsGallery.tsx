@@ -20,6 +20,7 @@ export default function ProjectsGallery() {
       const { data, error } = await supabase
         .from('projects')
         .select('*')
+        .eq('user_id', user!.id)
         .order('updated_at', { ascending: false })
         .limit(7);
       if (error) throw error;

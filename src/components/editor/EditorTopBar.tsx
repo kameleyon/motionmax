@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Download, Share2, History, Loader2, Menu, ChevronDown } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -11,6 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import type { EditorState } from '@/hooks/useEditorState';
 import { useExport, PRESET_MAP, type ExportPreset } from './useExport';
+import ShareModal from './ShareModal';
 
 type SubView = 'edit' | 'script' | 'storyboard';
 
@@ -35,6 +37,7 @@ export default function EditorTopBar({
   onOpenInspectorDrawer?: () => void;
 }) {
   const navigate = useNavigate();
+  const [shareOpen, setShareOpen] = useState(false);
   const { exportState, startExport } = useExport(state);
 
   const project = state.project;
@@ -146,7 +149,9 @@ export default function EditorTopBar({
         type="button"
         title="Share"
         aria-label="Share"
-        className="hidden md:inline-flex w-8 h-8 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors"
+        onClick={() => setShareOpen(true)}
+        disabled={state.phase !== 'ready' || !project}
+        className="hidden md:inline-flex w-8 h-8 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       >
         <Share2 className="w-4 h-4" />
       </button>
@@ -215,6 +220,15 @@ export default function EditorTopBar({
       >
         <Menu className="w-4 h-4 rotate-90" />
       </button>
+
+      {project && (
+        <ShareModal
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          projectId={project.id}
+          projectType={project.project_type ?? null}
+        />
+      )}
     </div>
   );
 }

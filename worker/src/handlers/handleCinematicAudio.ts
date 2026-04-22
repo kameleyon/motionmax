@@ -12,7 +12,40 @@
 
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
-import { updateSceneField } from "../lib/sceneUpdate.js";
+import { updateSceneField, updateSceneFieldJson } from "../lib/sceneUpdate.js";
+import { probeDuration } from "./export/ffmpegCmd.js";
+
+/** Probe the MP3 duration of `audioUrl` via ffprobe and merge
+ *  `audioDurationMs` into the scene's `_meta`. Best-effort — if the
+ *  probe fails we fall back to silent word-count estimation and the
+ *  Editor timeline uses that via estDurationMs instead. */
+async function recordAudioDurationMs(
+  generationId: string,
+  sceneIndex: number,
+  audioUrl: string,
+): Promise<void> {
+  try {
+    const durationSec = await probeDuration(audioUrl);
+    const ms = Math.max(500, Math.round(durationSec * 1000));
+    // Read current _meta, merge audioDurationMs in, write back. Race is
+    // negligible because per-scene jobs are serialised via depends_on.
+    const { data: gen } = await supabase
+      .from("generations")
+      .select("scenes")
+      .eq("id", generationId)
+      .maybeSingle();
+    const scenes = Array.isArray(gen?.scenes) ? (gen!.scenes as any[]) : [];
+    const existingMeta = (scenes[sceneIndex]?._meta ?? {}) as Record<string, unknown>;
+    await updateSceneFieldJson(generationId, sceneIndex, "_meta", {
+      ...existingMeta,
+      audioDurationMs: ms,
+    });
+    console.log(`[CinematicAudio] Scene ${sceneIndex}: audioDurationMs=${ms}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[CinematicAudio] Scene ${sceneIndex}: duration probe skipped — ${msg}`);
+  }
+}
 // Qwen3 TTS (Replicate) disabled — kept around in case we re-enable later.
 // import { generateQwen3TTS } from "../services/qwen3TTS.js";
 import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
@@ -187,6 +220,9 @@ export async function handleCinematicAudio(
       const wordCount = (scene.voiceover || "").trim().split(/\s+/).length;
       const estimatedDuration = Math.max(3, Math.ceil(wordCount / 2.5));
       await updateSceneField(generationId, sceneIndex, "duration", String(estimatedDuration));
+      // Best-effort: ffprobe the TTS mp3 and record the true duration
+      // so the Editor timeline can size scene clips to the narration.
+      await recordAudioDurationMs(generationId, sceneIndex, result.url);
 
       await updateSceneProgress(jobId, sceneIndex, "complete", {
         message: `Scene ${sceneIndex + 1} cinematic audio complete (${result.provider})`,
@@ -232,6 +268,9 @@ export async function handleCinematicAudio(
       const wordCount = (scene.voiceover || "").trim().split(/\s+/).length;
       const estimatedDuration = Math.max(3, Math.ceil(wordCount / 2.5));
       await updateSceneField(generationId, sceneIndex, "duration", String(estimatedDuration));
+      // Best-effort: ffprobe the TTS mp3 and record the true duration
+      // so the Editor timeline can size scene clips to the narration.
+      await recordAudioDurationMs(generationId, sceneIndex, result.url);
 
       await updateSceneProgress(jobId, sceneIndex, "complete", {
         message: `Scene ${sceneIndex + 1} cinematic audio complete (${result.provider})`,
@@ -363,6 +402,8 @@ export async function handleCinematicAudio(
   const wordCount = (scene.voiceover || "").trim().split(/\s+/).length;
   const estimatedDuration = Math.max(3, Math.ceil(wordCount / 2.5));
   await updateSceneField(generationId, sceneIndex, "duration", String(estimatedDuration));
+  // Editor timeline uses the exact probed duration to size clips.
+  await recordAudioDurationMs(generationId, sceneIndex, result.url);
 
   await updateSceneProgress(jobId, sceneIndex, "complete", {
     message: `Scene ${sceneIndex + 1} cinematic audio complete (${result.provider})`,

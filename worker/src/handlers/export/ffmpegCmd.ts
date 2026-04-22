@@ -47,8 +47,10 @@ export function runFfmpeg(
   });
 }
 
-/** Quick metadata-based probe (can be inaccurate for VBR MP3). */
-export function probeDuration(filePath: string): Promise<number> {
+/** Quick metadata-based probe (can be inaccurate for VBR MP3). Accepts a
+ *  file path OR an HTTPS URL — ffprobe streams the URL directly so we
+ *  don't need to download the mp3 to disk first. */
+export function probeDuration(filePathOrUrl: string): Promise<number> {
   return new Promise((resolve, reject) => {
     execFile(
       FFPROBE_BIN,
@@ -56,7 +58,7 @@ export function probeDuration(filePath: string): Promise<number> {
         "-v", "error",
         "-show_entries", "format=duration",
         "-of", "default=noprint_wrappers=1:nokey=1",
-        filePath,
+        filePathOrUrl,
       ],
       { timeout: 30_000 },
       (error, stdout) => {

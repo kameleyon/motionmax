@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { isFlagOn } from "@/lib/featureFlags";
 import { Doc2VideoWorkspace } from "./Doc2VideoWorkspace";
 import type { WorkspaceHandle } from "./types";
 import { SmartFlowWorkspace } from "./SmartFlowWorkspace";
@@ -33,6 +34,13 @@ export const WorkspaceRouter = forwardRef<WorkspaceHandle>(function WorkspaceRou
   const doc2videoRef = useRef<WorkspaceHandle>(null);
   const smartflowRef = useRef<WorkspaceHandle>(null);
   const cinematicRef = useRef<WorkspaceHandle>(null);
+
+  // Legacy-URL redirect shim: when UNIFIED_EDITOR is on and the URL
+  // carries a `?project=X`, redirect to the new editor. Hook-safe
+  // because it's evaluated *after* all hooks have been declared —
+  // React hooks rules require the hooks list to stay stable across
+  // renders, which is why we don't early-return above.
+  const shouldRedirectToEditor = isFlagOn("UNIFIED_EDITOR") && !!projectId;
 
   // If a project is specified, ensure we render the correct workspace for its type.
   useEffect(() => {
@@ -96,6 +104,13 @@ export const WorkspaceRouter = forwardRef<WorkspaceHandle>(function WorkspaceRou
     next.delete("autostart");
     setSearchParams(next, { replace: true });
   };
+
+  // Redirect out to the unified Editor only AFTER all hooks have run
+  // above — React requires a stable hook call order.
+  if (shouldRedirectToEditor) {
+    const qs = autostart ? "?autostart=1" : "";
+    return <Navigate to={`/app/editor/${projectId}${qs}`} replace />;
+  }
 
   if (mode === "smartflow") {
     return <WorkspaceErrorBoundary><SmartFlowWorkspace ref={smartflowRef} projectId={projectId} autostart={autostart} onAutostartConsumed={clearAutostart} /></WorkspaceErrorBoundary>;

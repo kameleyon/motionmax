@@ -28,82 +28,9 @@ import {
 } from './types';
 import { IntakeField, IntakeLabel, IntakeSlider, Pill } from './primitives';
 import FeatureToggle from './FeatureToggle';
-import IntakeRail, {
-  type PreviewThumbnailState,
-  type StoryboardState,
-} from './IntakeRail';
+import IntakeRail from './IntakeRail';
 import { useIntakeRail } from './IntakeFrame';
-
-// ── Preview cache helpers ────────────────────────────────────────────
-// Both preview types are deterministic given their inputs — same prompt
-// + style + format → same thumbnail URL, same storyboard. We memoize in
-// localStorage so users flipping between modes or tweaking settings
-// don't re-burn API calls. Keys are cheap hashes; values are the
-// worker result payloads serialised to JSON.
-
-const PREVIEW_CACHE_KEY = 'motionmax_intake_previews_v1';
-
-function previewCacheGet<T>(key: string): T | null {
-  try {
-    const raw = localStorage.getItem(PREVIEW_CACHE_KEY);
-    if (!raw) return null;
-    const map = JSON.parse(raw) as Record<string, T>;
-    return map[key] ?? null;
-  } catch { return null; }
-}
-function previewCacheSet<T>(key: string, value: T) {
-  try {
-    const raw = localStorage.getItem(PREVIEW_CACHE_KEY);
-    const map = raw ? JSON.parse(raw) as Record<string, unknown> : {};
-    map[key] = value;
-    // Soft cap: keep the newest 40 entries (LRU-ish).
-    const keys = Object.keys(map);
-    if (keys.length > 40) {
-      for (const k of keys.slice(0, keys.length - 40)) delete map[k];
-    }
-    localStorage.setItem(PREVIEW_CACHE_KEY, JSON.stringify(map));
-  } catch { /* quota — ignore */ }
-}
-
-/** Run a worker preview task: insert a job row, poll for completion,
- *  return result payload. Abortable via the passed AbortSignal so a
- *  newer call supersedes an in-flight one. */
-async function runPreviewJob<T>(
-  userId: string,
-  taskType: 'preview_thumbnail' | 'preview_storyboard',
-  payload: Record<string, unknown>,
-  signal: AbortSignal,
-): Promise<T> {
-  const { data: job, error } = await supabase
-    .from('video_generation_jobs')
-    .insert({
-      user_id: userId,
-      task_type: taskType,
-      // Supabase's generated Json type rejects plain Record<string,
-      // unknown> at compile time; cast is safe because payload is
-      // serialised to JSON inside the driver anyway.
-      payload: payload as unknown as never,
-      status: 'pending',
-    })
-    .select('id')
-    .single();
-  if (error || !job) throw new Error(error?.message || 'queue failed');
-
-  const MAX_WAIT = 25_000;
-  const start = Date.now();
-  while (Date.now() - start < MAX_WAIT) {
-    if (signal.aborted) throw new DOMException('aborted', 'AbortError');
-    await new Promise((r) => setTimeout(r, 1500));
-    const { data: row } = await supabase
-      .from('video_generation_jobs')
-      .select('status, result')
-      .eq('id', job.id)
-      .single();
-    if (row?.status === 'completed' && row.result) return row.result as T;
-    if (row?.status === 'failed') throw new Error('preview job failed');
-  }
-  throw new Error('preview timeout');
-}
+import { PLAN_LIMITS, normalizePlanName } from '@/lib/planLimits';
 
 // ── Real style preview thumbnails (same source as StyleSelector) ──
 import minimalistPreview from '@/assets/styles/minimalist-preview.png';
@@ -226,78 +153,6 @@ export default function IntakeForm({
 
   const [generating, setGenerating] = useState(false);
 
-  // ── Preview state ─────────────────────────────────────────────
-  const [thumbnail, setThumbnail] = useState<PreviewThumbnailState>({ status: 'idle' });
-  const [storyboard, setStoryboard] = useState<StoryboardState>({ status: 'idle' });
-  const thumbnailAbortRef = useRef<AbortController | null>(null);
-  const storyboardAbortRef = useRef<AbortController | null>(null);
-
-  // Debounced keys — recompute whenever an input that changes the
-  // preview changes. Short debounces keep the UI responsive without
-  // firing a job on every keystroke.
-  useEffect(() => {
-    if (!user || prompt.trim().length < 10) { setThumbnail({ status: 'idle' }); return; }
-    const trimmed = prompt.trim();
-    const fmt = formatFromAspect(aspect);
-    const cacheKey = `thumb|${fmt}|${styleId}|${trimmed.slice(0, 400)}`;
-    const cached = previewCacheGet<{ imageUrl: string }>(cacheKey);
-    if (cached?.imageUrl) { setThumbnail({ status: 'ready', url: cached.imageUrl }); return; }
-
-    const timer = setTimeout(() => {
-      thumbnailAbortRef.current?.abort();
-      const ctrl = new AbortController();
-      thumbnailAbortRef.current = ctrl;
-      setThumbnail({ status: 'loading' });
-      runPreviewJob<{ imageUrl: string }>(user.id, 'preview_thumbnail',
-        { prompt: trimmed, style: styleId, format: fmt },
-        ctrl.signal,
-      ).then((r) => {
-        if (ctrl.signal.aborted) return;
-        previewCacheSet(cacheKey, r);
-        setThumbnail({ status: 'ready', url: r.imageUrl });
-      }).catch((err) => {
-        if (ctrl.signal.aborted) return;
-        setThumbnail({ status: 'error', message: err instanceof Error ? err.message : String(err) });
-      });
-    }, 1000);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prompt, aspect, styleId, user?.id]);
-
-  useEffect(() => {
-    if (!user || prompt.trim().length < 10) { setStoryboard({ status: 'idle' }); return; }
-    const trimmed = prompt.trim();
-    const cacheKey = `story|${mode}|${trimmed.slice(0, 600)}`;
-    const cached = previewCacheGet<{ scenes: Array<{ title: string; description: string }> }>(cacheKey);
-    if (cached?.scenes?.length) { setStoryboard({ status: 'ready', scenes: cached.scenes }); return; }
-
-    const timer = setTimeout(() => {
-      storyboardAbortRef.current?.abort();
-      const ctrl = new AbortController();
-      storyboardAbortRef.current = ctrl;
-      setStoryboard({ status: 'loading' });
-      runPreviewJob<{ scenes: Array<{ title: string; description: string }> }>(
-        user.id, 'preview_storyboard',
-        { prompt: trimmed, mode },
-        ctrl.signal,
-      ).then((r) => {
-        if (ctrl.signal.aborted) return;
-        previewCacheSet(cacheKey, r);
-        setStoryboard({ status: 'ready', scenes: r.scenes });
-      }).catch((err) => {
-        if (ctrl.signal.aborted) return;
-        setStoryboard({ status: 'error', message: err instanceof Error ? err.message : String(err) });
-      });
-    }, 1500);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prompt, mode, user?.id]);
-
-  useEffect(() => () => {
-    thumbnailAbortRef.current?.abort();
-    storyboardAbortRef.current?.abort();
-  }, []);
-
   // ── Style carousel scroll controls ──
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canLeft, setCanLeft] = useState(false);
@@ -329,6 +184,25 @@ export default function IntakeForm({
       return data;
     },
   });
+
+  // Plan subscription lookup → drives the credits-cap number in the
+  // rail. Uses the shared PLAN_LIMITS table so this number matches the
+  // dashboard + billing page exactly.
+  const { data: subscription } = useQuery({
+    queryKey: ['intake-subscription', user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('subscriptions')
+        .select('plan_name, status')
+        .eq('user_id', user!.id)
+        .eq('status', 'active')
+        .maybeSingle();
+      return data;
+    },
+  });
+  const plan = normalizePlanName(subscription?.plan_name ?? 'free');
+  const creditsCap = PLAN_LIMITS[plan].creditsPerMonth || 1;
 
   const costItems = useMemo(() => {
     const items: Array<{ label: string; v: number }> = [
@@ -435,20 +309,27 @@ export default function IntakeForm({
       <IntakeRail
         aspect={aspect}
         prompt={prompt}
-        visualStyle={{ name: STYLES.find((s) => s.id === styleId)?.label ?? 'Style', bg: 'radial-gradient(60% 70% at 50% 50%,#14C8CC33,#0FA6AE11 70%)' }}
-        camera={features.camera ? camera : undefined}
-        grade={features.colorGrade ? grade : undefined}
+        mode={mode}
+        visualStyle={{ name: STYLES.find((s) => s.id === styleId)?.label ?? 'Style' }}
+        language={language}
+        voice={voice}
+        captionStyle={caption}
+        duration={features.duration ? duration : undefined}
+        consistency={consistency}
+        characterDescriptionLen={characterDescription.trim().length}
+        music={music}
+        lipSync={lipSync}
+        styleId={styleId}
         costItems={costItems}
         totalCost={totalCost}
         creditsAvailable={credits?.credits_balance ?? 0}
+        creditsCap={creditsCap}
         onGenerate={handleGenerate}
         generating={generating}
-        thumbnail={thumbnail}
-        storyboard={storyboard}
       />,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aspect, prompt, styleId, camera, grade, costItems, totalCost, credits, generating, thumbnail, storyboard]);
+  }, [aspect, prompt, mode, styleId, language, voice, caption, duration, consistency, characterDescription, music, lipSync, features, costItems, totalCost, credits, creditsCap, generating]);
 
   const selectedStyle = STYLES.find((s) => s.id === styleId);
 

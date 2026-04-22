@@ -320,18 +320,6 @@ async function processJob(job: Job) {
         const { handleVoicePreview } = await import("./handlers/handleVoicePreview.js");
         const previewResult = await handleVoicePreview(job.id, job.payload as any, job.user_id);
         finalPayload = { ...finalPayload, ...previewResult };
-      } else if (job.task_type === 'preview_thumbnail' as any) {
-        // Live-preview image for the Intake form's right rail. Cheap,
-        // cached, idempotent per (prompt, format) pair.
-        const { handlePreviewThumbnail } = await import("./handlers/handlePreviewThumbnail.js");
-        const result = await handlePreviewThumbnail(job.id, job.payload as any, job.user_id);
-        finalPayload = { ...finalPayload, ...result };
-      } else if (job.task_type === 'preview_storyboard' as any) {
-        // Text-only storyboard peek for the Intake form. 1 LLM call, no
-        // image/TTS cost. Frontend debounces so this is called sparingly.
-        const { handlePreviewStoryboard } = await import("./handlers/handlePreviewStoryboard.js");
-        const result = await handlePreviewStoryboard(job.id, job.payload as any, job.user_id);
-        finalPayload = { ...finalPayload, ...result };
       } else if (job.task_type === 'cinematic_video' as any) {
         const result = await handleCinematicVideo(job.id, job.payload as any, job.user_id);
         finalPayload = { ...finalPayload, ...result };

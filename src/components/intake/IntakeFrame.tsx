@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import Sidebar from '@/components/dashboard/Sidebar';
 import NotificationsPopover from '@/components/dashboard/NotificationsPopover';
 import HelpPopover from '@/components/dashboard/HelpPopover';
-import { ThemeToggle } from '@/components/ThemeToggle';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { type ProjectMode, MODE_LABEL } from './types';
 

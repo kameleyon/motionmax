@@ -5,9 +5,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
-import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
-import { Settings as SettingsIcon, History, Shield, Sun, Moon, LogOut, Video } from 'lucide-react';
+import { Settings as SettingsIcon, History, Shield, LogOut, Video } from 'lucide-react';
 import motionmaxLogo from '@/assets/motionmax-logo.png';
 import {
   CommandDialog,
@@ -36,7 +35,6 @@ export default function Sidebar() {
   const queryClient = useQueryClient();
   const { user, signOut } = useAuth();
   const { isAdmin } = useAdminAuth();
-  const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState('');

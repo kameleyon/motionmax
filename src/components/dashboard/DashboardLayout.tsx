@@ -5,7 +5,6 @@ import ProjectsGallery from './ProjectsGallery';
 import RightRail from './RightRail';
 import NotificationsPopover from './NotificationsPopover';
 import HelpPopover from './HelpPopover';
-import { ThemeToggle } from '@/components/ThemeToggle';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import CreateModeTiles from './CreateModeTiles';
 

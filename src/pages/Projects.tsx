@@ -195,7 +195,11 @@ export default function Projects() {
         if (generations) {
           for (const gen of generations) {
             if (thumbnailMap[gen.project_id] !== undefined) continue;
-            const scenes = gen.scenes as unknown[];
+            const scenes = gen.scenes as Array<{
+              imageUrl?: string;
+              image_url?: string;
+              imageUrls?: string[];
+            }> | null;
             if (!Array.isArray(scenes) || scenes.length === 0) continue;
 
             for (const scene of scenes) {
@@ -510,7 +514,7 @@ export default function Projects() {
       }
     } catch (err: unknown) {
       toast.error("Failed to create share link");
-      log.error(err);
+      log.error(err instanceof Error ? err.message : String(err));
     } finally {
       setShareLoading(false);
     }

@@ -557,10 +557,15 @@ export default function IntakeForm({
           description + image-upload area that used to live in the Cast slot. */}
       {consistency && features.characterAppearance && (
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <IntakeLabel>Character consistency</IntakeLabel>
-            <span className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.1em] uppercase text-[#14C8CC] px-2 py-0.5 rounded-md bg-[#14C8CC]/10 border border-[#14C8CC]/30">
-              Always on · Included
+          {/* Single-line header: label + "Always on" pill stay on the same
+              row at every breakpoint. Hand-rolled label classes so we can
+              control mb + whitespace at the container level. */}
+          <div className="flex items-center gap-2 mb-2 whitespace-nowrap">
+            <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#5A6268]">
+              Character consistency
+            </span>
+            <span className="inline-flex items-center font-mono text-[10px] tracking-[0.1em] uppercase text-[#14C8CC] px-2 py-0.5 rounded-md bg-[#14C8CC]/10 border border-[#14C8CC]/30 shrink-0">
+              Always on
             </span>
           </div>
 

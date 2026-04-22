@@ -240,9 +240,9 @@ export default function ProjectsGallery() {
 
   return (
     <>
-      <div className="flex items-center justify-between mt-9 mb-3.5">
-        <h2 className="font-serif font-medium text-[20px] tracking-tight m-0">Pick up where you left off</h2>
-        <span className="font-mono text-[11px] tracking-widest uppercase text-[#8A9198]">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 mt-9 mb-3.5">
+        <h2 className="font-serif font-medium text-[18px] sm:text-[20px] tracking-tight m-0">Pick up where you left off</h2>
+        <span className="font-mono text-[10px] sm:text-[11px] tracking-widest uppercase text-[#8A9198]">
           {recentProject ? `Auto-saved · ${format(new Date(recentProject.updated_at), 'MMM d, h:mm a')}` : 'No recent projects'}
         </span>
       </div>
@@ -306,16 +306,17 @@ export default function ProjectsGallery() {
         </a>
       )}
 
-      {/* Filter pills */}
-      <div className="flex flex-wrap items-baseline justify-between gap-2 mt-9 mb-3.5">
-        <h2 className="font-serif font-medium text-[20px] tracking-tight m-0">Recent projects</h2>
-        <div className="flex gap-2 p-1 bg-[#1B2228] rounded-lg border border-white/5 overflow-x-auto">
+      {/* Filter pills — stack on mobile so Smart Flow has room to breathe,
+          then swipe horizontally if the pills overflow. */}
+      <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2 sm:gap-3 mt-9 mb-3.5">
+        <h2 className="font-serif font-medium text-[18px] sm:text-[20px] tracking-tight m-0">Recent projects</h2>
+        <div className="flex gap-1 p-1 bg-[#1B2228] rounded-lg border border-white/5 overflow-x-auto scrollbar-hide -mx-1 sm:mx-0 whitespace-nowrap">
           {FILTER_PILLS.map((pill) => (
             <button
               key={pill.id}
               onClick={() => setFilter(pill.id)}
               className={
-                `px-3 py-1.5 text-[12px] rounded-md font-medium transition-colors ` +
+                `px-3 py-1.5 text-[12px] rounded-md font-medium transition-colors shrink-0 ` +
                 (filter === pill.id
                   ? 'bg-[#10151A] text-[#ECEAE4] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'
                   : 'text-[#8A9198] hover:text-[#ECEAE4]')

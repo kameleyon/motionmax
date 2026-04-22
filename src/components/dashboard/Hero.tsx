@@ -143,28 +143,30 @@ export default function Hero() {
           placeholder="A three-minute documentary about the origin of 35mm film, golden-hour Kodak factory, warm serif captions, narrated in my voice…"
         />
 
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
+          {/* Mode pills — own row on mobile so Smart Flow isn't cramped. */}
+          <div className="flex p-1 bg-[#1B2228] rounded-lg border border-white/5 w-full sm:w-auto sm:self-start overflow-x-auto scrollbar-hide">
+            {MODE_PILLS.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setMode(m.id)}
+                className={
+                  'flex-1 sm:flex-initial px-3 sm:px-3 py-1.5 text-[12px] rounded-md inline-flex items-center justify-center gap-1.5 font-sans font-medium transition-colors whitespace-nowrap ' +
+                  (mode === m.id
+                    ? 'bg-[#10151A] text-[#ECEAE4] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'
+                    : 'text-[#8A9198] hover:text-[#ECEAE4]')
+                }
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${mode === m.id ? 'bg-[#14C8CC]' : 'bg-[#5A6268]'}`} />
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Dropdown row — wraps on mobile, sits inline on ≥sm. */}
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Mode pills */}
-            <div className="flex gap-1 p-1 bg-[#1B2228] rounded-lg border border-white/5">
-              {MODE_PILLS.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setMode(m.id)}
-                  className={
-                    'px-2 sm:px-3 py-1.5 text-[12px] rounded-md inline-flex items-center gap-1.5 font-sans font-medium transition-colors ' +
-                    (mode === m.id
-                      ? 'bg-[#10151A] text-[#ECEAE4] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'
-                      : 'text-[#8A9198] hover:text-[#ECEAE4]')
-                  }
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full ${mode === m.id ? 'bg-[#14C8CC]' : 'bg-[#5A6268]'}`} />
-                  {m.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {/* Language */}
               <div className="relative">
                 <button

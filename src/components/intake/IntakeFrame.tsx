@@ -63,7 +63,10 @@ export default function IntakeFrame({
             side="left"
             className="w-[280px] p-0 bg-[#10151A] border-white/10 md:hidden [&>button]:text-[#ECEAE4]"
           >
-            <div className="h-full [&_aside]:flex [&_aside]:w-full [&_aside]:border-r-0">
+            {/* Scroll the whole drawer so the profile footer (Log Out)
+                remains reachable on short viewports. Overrides the
+                aside's desktop `overflow-hidden`. */}
+            <div className="h-full overflow-y-auto [&_aside]:flex [&_aside]:w-full [&_aside]:border-r-0 [&_aside]:h-auto [&_aside]:min-h-full [&_aside]:overflow-visible [&_aside_nav]:overflow-visible">
               <Sidebar />
             </div>
           </SheetContent>

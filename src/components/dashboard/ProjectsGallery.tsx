@@ -195,14 +195,14 @@ export default function ProjectsGallery() {
         </p>
         <div className="flex items-center justify-center gap-2 mt-5">
           <a
-            href="/app/create?mode=cinematic"
+            href="/app/create/new?mode=cinematic"
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 transition-all shadow-[0_10px_30px_-14px_rgba(20,200,204,0.55)]"
             style={{ textDecoration: 'none' }}
           >
             Start a cinematic
           </a>
           <a
-            href="/app/create?mode=doc2video"
+            href="/app/create/new?mode=doc2video"
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-medium text-[#ECEAE4] border border-white/10 hover:bg-white/5 transition-colors"
             style={{ textDecoration: 'none' }}
           >

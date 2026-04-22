@@ -464,7 +464,7 @@ export default function RightRail() {
           {usedVoices.length === 0 ? (
             <div className="text-[12.5px] text-[#5A6268] py-2">
               You haven't used any voices yet.{' '}
-              <a href="/app/create" className="text-[#14C8CC] hover:underline" style={{ textDecoration: 'none' }}>
+              <a href="/app/create/new?mode=cinematic" className="text-[#14C8CC] hover:underline" style={{ textDecoration: 'none' }}>
                 Start a project →
               </a>
             </div>

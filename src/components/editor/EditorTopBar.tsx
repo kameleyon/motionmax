@@ -113,24 +113,11 @@ export default function EditorTopBar({
         {savePill.text}
       </span>
 
-      {/* Sub-view toggle — Edit / Script / Storyboard */}
-      <div className="hidden md:inline-flex gap-[2px] p-[3px] bg-[#151B20] rounded-lg border border-white/5 shrink-0">
-        {(['edit', 'script', 'storyboard'] as SubView[]).map((v) => (
-          <button
-            key={v}
-            type="button"
-            onClick={() => onSubViewChange(v)}
-            className={
-              'px-3 py-1 font-mono text-[10.5px] tracking-[0.1em] uppercase rounded-md transition-colors ' +
-              (v === subView
-                ? 'bg-[#10151A] text-[#ECEAE4]'
-                : 'text-[#8A9198] hover:text-[#ECEAE4]')
-            }
-          >
-            {v}
-          </button>
-        ))}
-      </div>
+      {/* Sub-view toggle removed until Script + Storyboard views are
+          built. Single Edit view is the default; re-enable this when
+          the other two have actual content to render. */}
+      {void subView}
+      {void onSubViewChange}
 
       {/* Rendering status pill */}
       {state.phase === 'rendering' && (

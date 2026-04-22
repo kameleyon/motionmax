@@ -88,6 +88,12 @@ export default function Stage({
   // narration's end event drives scene auto-advance so the composite
   // "scene duration" = audio duration, matching the timeline widths.
   const audioRef = useRef<HTMLAudioElement>(null);
+  // Ref flag set while we imperatively swap src on a scene transition.
+  // The browser fires a spurious `pause` event during a src change,
+  // which would otherwise flip the external `playing` prop to false
+  // and stall the run at the end of every scene. The onPause handler
+  // below checks this flag and no-ops during the swap window.
+  const swappingRef = useRef(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // REC timecode ticks while rendering.
@@ -129,6 +135,10 @@ export default function Stage({
     const scene = state.scenes[selectedSceneIndex];
     if (!scene) return;
 
+    // Suppress the spurious pause events we're about to trigger by
+    // swapping src. Cleared on the next tick after the src is set.
+    swappingRef.current = true;
+
     if (v) {
       const nextSrc = scene.videoUrl ?? '';
       if (v.src !== nextSrc) { v.src = nextSrc; v.load(); }
@@ -144,6 +154,12 @@ export default function Stage({
       const vp = v?.play(); if (vp && typeof vp.catch === 'function') vp.catch(() => {});
       const ap = a?.play(); if (ap && typeof ap.catch === 'function') ap.catch(() => {});
     }
+
+    // Open the pause-event window on the next macrotask. By the time
+    // the browser fires its real "user pressed pause" event, the flag
+    // is false and onPlayingChange(false) gets through normally.
+    const t = setTimeout(() => { swappingRef.current = false; }, 50);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSceneIndex, state.scenes]);
 
@@ -293,7 +309,13 @@ export default function Stage({
               ref={audioRef}
               preload="auto"
               onPlay={() => onPlayingChange?.(true)}
-              onPause={() => onPlayingChange?.(false)}
+              onPause={() => {
+                // Ignore the pause event that fires during a scene-
+                // transition src swap — that's what used to halt
+                // playback after each scene.
+                if (swappingRef.current) return;
+                onPlayingChange?.(false);
+              }}
               onEnded={handleAudioEnded}
             />
           </>

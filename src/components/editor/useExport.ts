@@ -108,7 +108,7 @@ export function useExport(state: EditorState | null) {
         }
         const { data: row } = await supabase
           .from('video_generation_jobs')
-          .select('status, progress, payload')
+          .select('status, progress, payload, error_message')
           .eq('id', jobIdRef.current)
           .single();
         if (!row) return;
@@ -122,9 +122,15 @@ export function useExport(state: EditorState | null) {
           setExportState({ status: 'done', progress: 100, url: finalUrl });
           toast.success('Export ready. Download is in the topbar.');
         } else if (row.status === 'failed') {
+          // Surface the actual worker-side error instead of a generic
+          // "Export failed" — previously this masked whatever killed
+          // the job (missing ffmpeg arg, bad scene URL, etc.) and made
+          // the bar freeze at whatever % it last reported.
           cancelPolling();
-          setExportState({ status: 'error', progress: 0, error: 'Export failed' });
-          toast.error('Export failed. Please try again.');
+          const workerError = row.error_message || 'Export failed';
+          console.error('[Export] Job failed:', workerError, row);
+          setExportState({ status: 'error', progress: 0, error: workerError });
+          toast.error(`Export failed: ${workerError}`, { duration: 8000 });
         } else {
           setExportState((prev) => ({ ...prev, status: 'rendering', progress: Math.max(prev.progress, rowProgress) }));
         }

@@ -7,10 +7,7 @@ import {
   getSampleText,
   type SpeakerVoice,
 } from '@/components/workspace/SpeakerSelector';
-import {
-  CaptionStyleSelector,
-  type CaptionStyle,
-} from '@/components/workspace/CaptionStyleSelector';
+import { captionStyles, type CaptionStyle } from '@/components/workspace/CaptionStyleSelector';
 import type { EditorState } from '@/hooks/useEditorState';
 import { useSceneRegen } from './useSceneRegen';
 import { supabase } from '@/integrations/supabase/client';
@@ -52,7 +49,7 @@ export default function Inspector({
   const scene = state.scenes[selectedSceneIndex];
   const {
     busy, apply, regenerate, regenerateImage, regenerateVideo, regenerateAudio,
-    updateSceneMeta, updateProjectVoice,
+    updateSceneMeta, updateProjectVoice, updateIntakeSettings,
   } = useSceneRegen(state);
 
   const [promptDraft, setPromptDraft] = useState(scene?.visualPrompt ?? '');
@@ -73,9 +70,29 @@ export default function Inspector({
   const meta = scene?.meta ?? {};
   const motion = (meta.motion as Motion | undefined) ?? 'Push-in';
   const transition = (meta.transition as Transition | undefined) ?? 'Cut';
-  const captionsDisabled = meta.captionsDisabled === true;
-  const perSceneCaptionStyle =
-    (typeof meta.captionStyle === 'string' ? meta.captionStyle : null) as CaptionStyle | null;
+
+  // Captions are a PROJECT-level setting (apply to the entire video),
+  // stored in intake_settings. captionStyle === 'none' means off.
+  // Local draft state keeps the toggle / dropdown instantly responsive
+  // — we flush to Supabase asynchronously, so the UI doesn't wait on
+  // the round-trip.
+  const savedCaptionStyle = (state.intake.captionStyle as CaptionStyle | undefined) ?? 'cleanPop';
+  const [captionStyleDraft, setCaptionStyleDraft] = useState<CaptionStyle>(savedCaptionStyle);
+  useEffect(() => { setCaptionStyleDraft(savedCaptionStyle); }, [savedCaptionStyle]);
+  const captionsOn = captionStyleDraft !== 'none';
+
+  const toggleCaptions = () => {
+    // Off → on: flip to cleanPop (the default shipped style).
+    // On → off: store 'none' so the export knows to skip burn-in.
+    const next: CaptionStyle = captionsOn ? 'none' : (savedCaptionStyle === 'none' ? 'cleanPop' : savedCaptionStyle);
+    setCaptionStyleDraft(next);
+    void updateIntakeSettings({ captionStyle: next });
+  };
+
+  const setCaptionStyle = (s: CaptionStyle) => {
+    setCaptionStyleDraft(s);
+    void updateIntakeSettings({ captionStyle: s });
+  };
 
   const [imageEdit, setImageEdit] = useState('');
 
@@ -202,7 +219,9 @@ export default function Inspector({
             </div>
           </section>
 
-          {/* Per-asset regen: edit image / regen image / regen video */}
+          {/* Per-asset regen: edit image / regen image / regen video.
+              No Voice here — use the Voice tab for narration work so
+              we don't duplicate the same action in two places. */}
           <section>
             <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">Visuals</h5>
             <input
@@ -211,7 +230,7 @@ export default function Inspector({
               placeholder="Edit this frame (e.g. add a lens flare, darker sky…)"
               className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-[12px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50 placeholder:text-[#5A6268]"
             />
-            <div className="grid grid-cols-3 gap-2 mt-2">
+            <div className="grid grid-cols-2 gap-2 mt-2">
               <button
                 type="button"
                 onClick={() => { regenerateImage(selectedSceneIndex, imageEdit.trim() || undefined); setImageEdit(''); }}
@@ -220,25 +239,17 @@ export default function Inspector({
                 title={imageEdit.trim() ? 'Edit image with the prompt above' : 'Regenerate image only'}
               >
                 {imageEdit.trim() ? <Wand2 className="w-3 h-3" /> : <ImageIcon className="w-3 h-3" />}
-                {imageEdit.trim() ? 'Edit' : 'Image'}
+                {imageEdit.trim() ? 'Edit image' : 'Regenerate image'}
               </button>
               <button
                 type="button"
                 onClick={() => regenerateVideo(selectedSceneIndex)}
                 disabled={busy !== 'idle' || !scene.imageUrl}
                 className="inline-flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[11.5px] border border-white/10 text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-50"
+                title="Re-render video from the current image"
               >
                 <Video className="w-3 h-3" />
-                Video
-              </button>
-              <button
-                type="button"
-                onClick={() => regenerateAudio(selectedSceneIndex)}
-                disabled={busy !== 'idle'}
-                className="inline-flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[11.5px] border border-white/10 text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-50"
-              >
-                <RotateCw className="w-3 h-3" />
-                Voice
+                Regenerate video
               </button>
             </div>
           </section>
@@ -379,68 +390,83 @@ export default function Inspector({
         </div>
       )}
 
-      {/* CAPTIONS TAB — per-scene on/off + style picker + Generate */}
-      {!disabled && tab === 'captions' && sceneReady && scene && (
+      {/* CAPTIONS TAB — PROJECT-level (apply to the whole video).
+          Switching per-scene was confusing; users want one knob that
+          controls captions across every scene. Optimistic local state
+          so the toggle + dropdown respond instantly (no waiting on
+          Supabase round-trip). */}
+      {!disabled && tab === 'captions' && sceneReady && (
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5">
           <section>
-            <div className="flex items-center justify-between mb-2">
-              <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Show captions on this scene</h5>
+            <div className="flex items-center justify-between mb-2 gap-3">
+              <div className="min-w-0">
+                <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">
+                  Captions on video
+                </h5>
+                <p className="text-[11px] text-[#8A9198] leading-[1.45] mt-0.5">
+                  Burned into the export, applies to every scene.
+                </p>
+              </div>
               <button
                 type="button"
                 role="switch"
-                aria-checked={!captionsDisabled}
-                onClick={() => updateSceneMeta(selectedSceneIndex, { captionsDisabled: !captionsDisabled })}
+                aria-checked={captionsOn}
+                onClick={toggleCaptions}
                 className={cn(
-                  'relative w-9 h-5 rounded-full transition-colors shrink-0 border',
-                  !captionsDisabled ? 'bg-[#14C8CC] border-transparent' : 'bg-[#1B2228] border-white/10',
+                  'relative w-10 h-5 rounded-full transition-colors shrink-0 border',
+                  captionsOn ? 'bg-[#14C8CC] border-transparent' : 'bg-[#1B2228] border-white/10',
                 )}
               >
                 <span className={cn(
                   'absolute top-[1px] w-4 h-4 rounded-full transition-all',
-                  !captionsDisabled ? 'left-[18px] bg-[#0A0D0F]' : 'left-[1px] bg-[#8A9198]',
+                  captionsOn ? 'left-[22px] bg-[#0A0D0F]' : 'left-[1px] bg-[#8A9198]',
                 )} />
               </button>
             </div>
-            <p className="text-[11.5px] text-[#8A9198] leading-[1.5]">
-              Captions are burned in during export using word-level timing from the narration audio.
-            </p>
           </section>
 
+          {/* Native select — reliable on desktop + mobile, no portal
+              stacking issues. Shows "Off" in the list so users can
+              disable captions from the dropdown too. */}
           <section>
-            <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">Caption style</h5>
-            <div className="bg-[#1B2228] border border-white/5 rounded-lg p-2">
-              <CaptionStyleSelector
-                value={(perSceneCaptionStyle ?? (state.intake.captionStyle as CaptionStyle | undefined) ?? 'cleanPop')}
-                onChange={(v) => updateSceneMeta(selectedSceneIndex, { captionStyle: v })}
-                showLabel={false}
-              />
-            </div>
+            <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">
+              Caption style
+            </h5>
+            <select
+              value={captionStyleDraft}
+              onChange={(e) => setCaptionStyle(e.target.value as CaptionStyle)}
+              disabled={!captionsOn && captionStyleDraft === 'none'}
+              className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50 disabled:opacity-50"
+            >
+              <option value="none">Off</option>
+              {captionStyles
+                .filter((s) => s.id !== 'none')
+                .map((s) => (
+                  <option key={s.id} value={s.id}>{s.label}</option>
+                ))}
+            </select>
             <p className="font-mono text-[9.5px] text-[#5A6268] tracking-wider mt-2 uppercase">
-              {perSceneCaptionStyle ? 'Scene override' : `Inherits intake · ${state.intake.captionStyle ?? 'default'}`}
+              {captionsOn
+                ? `Active · ${captionStyles.find((c) => c.id === captionStyleDraft)?.label ?? 'default'}`
+                : 'Off · no captions will be burned in'}
             </p>
-            {perSceneCaptionStyle && (
-              <button
-                type="button"
-                onClick={() => updateSceneMeta(selectedSceneIndex, { captionStyle: null })}
-                className="mt-2 font-mono text-[10px] tracking-wider uppercase text-[#14C8CC] hover:text-[#ECEAE4]"
-              >
-                Clear override
-              </button>
-            )}
           </section>
 
           <button
             type="button"
             onClick={() => {
-              updateSceneMeta(selectedSceneIndex, { captionsGenerateRequested: true });
-              toast.success('Captions will be regenerated from narration on next export.');
+              toast.success(
+                captionsOn
+                  ? 'Captions will be burned in on your next export.'
+                  : 'Captions are off for this project.'
+              );
             }}
-            disabled={busy !== 'idle' || !scene.audioUrl || captionsDisabled}
+            disabled={busy !== 'idle'}
             className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] border border-white/10 text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Force caption regeneration from the narration audio on next export"
+            title="Captions are applied during export; no worker job needed"
           >
             <RotateCw className="w-3 h-3" />
-            Generate captions
+            {captionsOn ? 'Confirm captions' : 'Captions disabled'}
           </button>
         </div>
       )}

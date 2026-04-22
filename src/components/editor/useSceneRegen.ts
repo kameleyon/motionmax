@@ -60,7 +60,11 @@ export function useSceneRegen(state: EditorState | null) {
     }
   }, [updateScenePrompt]);
 
-  /** Full scene regen: image → video (DAG). */
+  /** Full scene regen: save prompt + queue image regen. (Video is then
+   *  a separate one-click via the Video button — less fragile than
+   *  chaining depends_on in the job table.) Payload shape matches the
+   *  legacy `useCinematicRegeneration` hook so the worker treats it
+   *  identically. */
   const regenerate = useCallback(async (index: number, nextPrompt: string) => {
     if (!user || !state?.generation || !state?.project) {
       toast.error('Not ready to regenerate yet.'); return;
@@ -70,7 +74,7 @@ export function useSceneRegen(state: EditorState | null) {
       const ok = await updateScenePrompt(index, nextPrompt);
       if (!ok) return;
 
-      const { data: imgJob, error: imgErr } = await supabase
+      const { error } = await supabase
         .from('video_generation_jobs')
         .insert({
           user_id: user.id,
@@ -80,31 +84,13 @@ export function useSceneRegen(state: EditorState | null) {
             generationId: state.generation.id,
             projectId: state.project.id,
             sceneIndex: index,
+            imageIndex: 0,
+            imageModification: '',
           } as unknown as never,
           status: 'pending',
-        })
-        .select('id')
-        .single();
-      if (imgErr || !imgJob) throw new Error(imgErr?.message || 'Image regen queue failed');
-
-      const { error: vidErr } = await supabase
-        .from('video_generation_jobs')
-        .insert({
-          user_id: user.id,
-          project_id: state.project.id,
-          task_type: 'cinematic_video',
-          payload: {
-            generationId: state.generation.id,
-            projectId: state.project.id,
-            sceneIndex: index,
-            regenerate: true,
-          } as unknown as never,
-          status: 'pending',
-          depends_on: [imgJob.id] as unknown as never,
         });
-      if (vidErr) throw new Error(vidErr.message);
-
-      toast.success('Scene queued for regeneration.');
+      if (error) throw new Error(error.message);
+      toast.success('Scene queued · re-render video next when the new frame is ready.');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Regenerate failed: ${msg}`);
@@ -113,8 +99,10 @@ export function useSceneRegen(state: EditorState | null) {
     }
   }, [user, state, updateScenePrompt]);
 
-  /** Image-only regen (no video re-render). Cheaper when the user
-   *  wants a different frame but the motion is fine. */
+  /** Image-only regen (no video re-render). Payload shape matches the
+   *  legacy useCinematicRegeneration contract exactly: imageIndex: 0
+   *  plus imageModification (empty string = plain regen, non-empty =
+   *  targeted edit via nanoBananaEdit). */
   const regenerateImage = useCallback(async (index: number, modification?: string) => {
     if (!user || !state?.generation || !state?.project) return;
     setBusy('regen');
@@ -129,7 +117,8 @@ export function useSceneRegen(state: EditorState | null) {
             generationId: state.generation.id,
             projectId: state.project.id,
             sceneIndex: index,
-            imageModification: modification,
+            imageIndex: 0,
+            imageModification: modification ?? '',
           } as unknown as never,
           status: 'pending',
         });
@@ -190,7 +179,18 @@ export function useSceneRegen(state: EditorState | null) {
     if (!user || !state?.generation || !state?.project) return;
     setBusy('regen');
     try {
-      if (typeof nextVoiceover === 'string') {
+      // Always decide which narration text to send. Worker's
+      // handleRegenerateAudio throws if `newVoiceover` is missing —
+      // that's why previous calls looked like "nothing was sent".
+      const scene = state.scenes[index];
+      const voiceover = (typeof nextVoiceover === 'string' && nextVoiceover.trim().length > 0)
+        ? nextVoiceover
+        : (scene?.voiceover ?? '');
+      if (!voiceover.trim()) {
+        toast.error('This scene has no narration text to render.');
+        return;
+      }
+      if (typeof nextVoiceover === 'string' && nextVoiceover.trim() !== (scene?.voiceover ?? '').trim()) {
         const ok = await updateSceneVoiceover(index, nextVoiceover);
         if (!ok) return;
       }
@@ -204,6 +204,8 @@ export function useSceneRegen(state: EditorState | null) {
             generationId: state.generation.id,
             projectId: state.project.id,
             sceneIndex: index,
+            newVoiceover: voiceover,
+            language: state.project.voice_inclination ?? 'en',
           } as unknown as never,
           status: 'pending',
         });
@@ -231,24 +233,34 @@ export function useSceneRegen(state: EditorState | null) {
       if (projErr) throw new Error(projErr.message);
 
       if (regenAll) {
-        // Queue a regenerate_audio per scene. Worker processes them
-        // in parallel so total time is ~2-5× a single scene, not N×.
-        const inserts = state.scenes.map((_, i) => ({
-          user_id: user.id,
-          project_id: state.project!.id,
-          task_type: 'regenerate_audio' as const,
-          payload: {
-            generationId: state.generation!.id,
-            projectId: state.project!.id,
-            sceneIndex: i,
-          } as unknown as never,
-          status: 'pending',
-        }));
-        const { error: jobErr } = await supabase
-          .from('video_generation_jobs')
-          .insert(inserts);
-        if (jobErr) throw new Error(jobErr.message);
-        toast.success(`Voice switched to ${voice}. Re-rendering all scenes…`);
+        // Queue a regenerate_audio per scene. `newVoiceover` must be
+        // the scene's CURRENT narration text — worker throws without
+        // it. Scenes with empty voiceover are skipped (nothing to TTS).
+        const inserts = state.scenes
+          .map((s, i) => ({ scene: s, index: i }))
+          .filter(({ scene }) => (scene.voiceover ?? '').trim().length > 0)
+          .map(({ scene, index: i }) => ({
+            user_id: user.id,
+            project_id: state.project!.id,
+            task_type: 'regenerate_audio' as const,
+            payload: {
+              generationId: state.generation!.id,
+              projectId: state.project!.id,
+              sceneIndex: i,
+              newVoiceover: scene.voiceover ?? '',
+              language: state.project!.voice_inclination ?? 'en',
+            } as unknown as never,
+            status: 'pending',
+          }));
+        if (inserts.length === 0) {
+          toast.info('No scenes with narration to re-render.');
+        } else {
+          const { error: jobErr } = await supabase
+            .from('video_generation_jobs')
+            .insert(inserts);
+          if (jobErr) throw new Error(jobErr.message);
+          toast.success(`Voice switched to ${voice}. Re-rendering ${inserts.length} scenes…`);
+        }
       } else {
         toast.success(`Voice switched to ${voice}. New scenes will use it.`);
       }
@@ -260,6 +272,21 @@ export function useSceneRegen(state: EditorState | null) {
     }
   }, [user, state]);
 
+  /** Merge a patch into `projects.intake_settings`. Used for
+   *  project-level toggles like captions on/off or the caption style
+   *  that applies across every scene. */
+  const updateIntakeSettings = useCallback(async (patch: Record<string, unknown>) => {
+    if (!state?.project) return false;
+    const current = (state.project.intake_settings as Record<string, unknown> | null) ?? {};
+    const next = { ...current, ...patch };
+    const { error } = await supabase
+      .from('projects')
+      .update({ intake_settings: next as unknown as never })
+      .eq('id', state.project.id);
+    if (error) { toast.error(`Couldn't save: ${error.message}`); return false; }
+    return true;
+  }, [state?.project]);
+
   return {
     busy,
     apply,
@@ -270,5 +297,6 @@ export function useSceneRegen(state: EditorState | null) {
     updateSceneMeta,
     updateSceneVoiceover,
     updateProjectVoice,
+    updateIntakeSettings,
   };
 }

@@ -263,38 +263,38 @@ export default function ProjectsGallery() {
               <svg width="16" height="16" viewBox="0 0 24 24"><path d="M8 5l12 7-12 7V5z" fill="#fff" /></svg>
             </div>
           </div>
-          <div className="p-[24px_28px] flex flex-col gap-2.5">
-            <div className="font-mono text-[10.5px] tracking-[0.18em] uppercase text-[#14C8CC]">
+          <div className="p-4 sm:p-[24px_28px] flex flex-col gap-2 sm:gap-2.5">
+            <div className="font-mono text-[9.5px] sm:text-[10.5px] tracking-[0.18em] uppercase text-[#14C8CC]">
               {prettyProjectType(recentProject.project_type).toUpperCase()}
             </div>
-            <h3 className="font-serif font-medium text-[26px] m-0 tracking-tight leading-[1.15]">
+            <h3 className="font-serif font-medium text-[18px] sm:text-[22px] md:text-[26px] m-0 tracking-tight leading-[1.15]">
               {recentProject.title || 'Untitled Project'}
             </h3>
-            <p className="text-[14px] text-[#8A9198] leading-[1.55] m-0 max-w-[50ch]">
+            <p className="text-[12px] sm:text-[14px] text-[#8A9198] leading-[1.55] m-0 max-w-[50ch]">
               {recentProject.status === 'complete'
                 ? 'Ready to watch or iterate — pick up where you left off.'
                 : 'Picking up from your latest edit.'}
             </p>
-            <div className="flex gap-6 mt-auto pt-4 border-t border-white/5">
+            <div className="flex flex-wrap gap-x-4 gap-y-2 sm:gap-6 mt-auto pt-3 sm:pt-4 border-t border-white/5">
               <div className="flex flex-col gap-0.5">
-                <span className="font-mono text-[10px] tracking-widest uppercase text-[#5A6268]">Length</span>
-                <span className="font-serif text-[17px] text-[#ECEAE4]">{recentProject.length || 'brief'}</span>
+                <span className="font-mono text-[9px] sm:text-[10px] tracking-widest uppercase text-[#5A6268]">Length</span>
+                <span className="font-serif text-[13px] sm:text-[17px] text-[#ECEAE4]">{recentProject.length || 'brief'}</span>
               </div>
               <div className="flex flex-col gap-0.5">
-                <span className="font-mono text-[10px] tracking-widest uppercase text-[#5A6268]">Language</span>
-                <span className="font-serif text-[17px] text-[#ECEAE4]">
+                <span className="font-mono text-[9px] sm:text-[10px] tracking-widest uppercase text-[#5A6268]">Language</span>
+                <span className="font-serif text-[13px] sm:text-[17px] text-[#ECEAE4]">
                   {LANGUAGE_LABEL[recentProject.voice_inclination ?? 'en'] ?? 'English'}
                 </span>
               </div>
               <div className="flex flex-col gap-0.5">
-                <span className="font-mono text-[10px] tracking-widest uppercase text-[#5A6268]">Format</span>
-                <span className="font-serif text-[17px] text-[#ECEAE4]">
+                <span className="font-mono text-[9px] sm:text-[10px] tracking-widest uppercase text-[#5A6268]">Format</span>
+                <span className="font-serif text-[13px] sm:text-[17px] text-[#ECEAE4]">
                   {recentProject.format === 'portrait' ? '9:16' : recentProject.format === 'square' ? '1:1' : '16:9'}
                 </span>
               </div>
               <div className="flex flex-col gap-0.5">
-                <span className="font-mono text-[10px] tracking-widest uppercase text-[#5A6268]">Voice</span>
-                <span className="font-serif text-[17px] text-[#ECEAE4]">{prettyVoiceName(recentProject.voice_name)}</span>
+                <span className="font-mono text-[9px] sm:text-[10px] tracking-widest uppercase text-[#5A6268]">Voice</span>
+                <span className="font-serif text-[13px] sm:text-[17px] text-[#ECEAE4]">{prettyVoiceName(recentProject.voice_name)}</span>
               </div>
             </div>
             <div className="flex gap-2.5 mt-4">

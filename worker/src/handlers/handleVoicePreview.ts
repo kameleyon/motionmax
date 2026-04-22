@@ -49,6 +49,14 @@ export async function handleVoicePreview(
   // voice sample showcases what the full narration will sound like with
   // steering. This also doubles as a demo of the model's steerability.
   if (speaker.startsWith("gm:")) {
+    // IMPORTANT: do NOT pass English-language style directives for the
+    // preview. Gemini TTS prepends directive text into the input; an
+    // English "Southern California valley girl" directive in front of
+    // a French sample produced the mixed FR/EN garbling users were
+    // hearing ("Bonjour, merci for choosing my voice..."). For
+    // previews we want a clean, language-native read. Steering stays
+    // applied during the FULL generation path where the directives are
+    // authored per-scene and in the target language.
     result = await generateGeminiFlashTTS({
       text: previewText,
       sceneNumber: 0,
@@ -60,11 +68,7 @@ export async function handleVoicePreview(
         process.env.GOOGLE_TTS_API_KEY_2,
         process.env.GOOGLE_TTS_API_KEY,
       ].filter(Boolean) as string[],
-      directives: {
-        style: "Enthusiastic and Sassy GenZ beauty YouTuber",
-        pacing: "Energetic, keeping up with the extremely fast, rapid delivery influencers use in short form videos",
-        accent: "Southern California valley girl from Laguna Beach",
-      },
+      // No directives → clean native-language preview.
     });
   } else
   // ── Smallest.ai preview (ADDITIVE — testing) ──

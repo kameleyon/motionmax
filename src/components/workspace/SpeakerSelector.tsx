@@ -232,7 +232,7 @@ export function getDefaultSpeaker(language: string): SpeakerVoice {
 /** Sample text in each language for voice preview.
  *  Unified script: greeting + creative invitation, so every voice says the
  *  same thing and can be compared apples-to-apples. */
-function getSampleText(speakerName: string, language: string): string {
+export function getSampleText(speakerName: string, language: string): string {
   switch (language) {
     case "ht": return `Bonjou, mwen se ${speakerName}. Mèsi paske w chwazi vwa m jodi a. Kisa n ap kreye?`;
     case "fr": return `Bonjour, je suis ${speakerName}. Merci d'avoir choisi ma voix aujourd'hui. Qu'allons-nous cr\u00e9er ?`;

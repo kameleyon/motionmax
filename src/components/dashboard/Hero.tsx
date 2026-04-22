@@ -29,10 +29,13 @@ const MODE_PILLS: Array<{ id: ProjectMode; label: string }> = [
   { id: 'smartflow', label: 'Smart Flow' },
 ];
 
+// Keep this short — the row is display-width-limited on mobile and
+// MotionMax doesn't offer variable durations (scenes are ~10s each,
+// total length is mode-bound). So no "60-second" or "45 seconds"
+// phrasing here.
 const SUGGESTIONS = [
-  'Turn my latest blog post into a 9:16 reel',
-  'A 60-second history of the Polaroid',
-  'Explain compound interest in 45 seconds',
+  'Turn my blog post into a reel',
+  'The history of the Polaroid',
   'Brand teaser with karaoke captions in French',
 ];
 
@@ -129,7 +132,7 @@ export default function Hero() {
       </div>
 
       <form
-        className="relative border border-white/10 rounded-xl bg-[#151B20] p-[16px_16px_12px] flex flex-col gap-3.5 focus-within:border-[#14C8CC] transition-colors"
+        className="relative border border-white/10 rounded-xl bg-[#151B20] p-3 sm:p-[16px_16px_12px] flex flex-col gap-3.5 focus-within:border-[#14C8CC] transition-colors"
         onSubmit={(e) => {
           e.preventDefault();
           if (canSubmit) window.location.href = submitHref;
@@ -144,21 +147,23 @@ export default function Hero() {
         />
 
         <div className="flex flex-col gap-3">
-          {/* Mode pills — own row on mobile so Smart Flow isn't cramped. */}
-          <div className="flex p-1 bg-[#1B2228] rounded-lg border border-white/5 w-full sm:w-auto sm:self-start overflow-x-auto scrollbar-hide">
+          {/* Mode pills — no horizontal scroll on mobile. Equal-flex
+              pills at small widths so they share the row evenly; tight
+              padding so Smart Flow fits. */}
+          <div className="flex p-[3px] bg-[#1B2228] rounded-lg border border-white/5 w-full sm:w-auto sm:self-start">
             {MODE_PILLS.map((m) => (
               <button
                 key={m.id}
                 type="button"
                 onClick={() => setMode(m.id)}
                 className={
-                  'flex-1 sm:flex-initial px-3 sm:px-3 py-1.5 text-[12px] rounded-md inline-flex items-center justify-center gap-1.5 font-sans font-medium transition-colors whitespace-nowrap ' +
+                  'flex-1 sm:flex-initial px-1.5 sm:px-3 py-1.5 text-[11px] sm:text-[12px] rounded-md inline-flex items-center justify-center gap-1 sm:gap-1.5 font-sans font-medium transition-colors whitespace-nowrap ' +
                   (mode === m.id
                     ? 'bg-[#10151A] text-[#ECEAE4] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'
                     : 'text-[#8A9198] hover:text-[#ECEAE4]')
                 }
               >
-                <span className={`w-1.5 h-1.5 rounded-full ${mode === m.id ? 'bg-[#14C8CC]' : 'bg-[#5A6268]'}`} />
+                <span className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full ${mode === m.id ? 'bg-[#14C8CC]' : 'bg-[#5A6268]'}`} />
                 {m.label}
               </button>
             ))}
@@ -273,13 +278,15 @@ export default function Hero() {
         </div>
       </form>
 
-      <div className="flex gap-2 mt-4 overflow-x-auto relative py-1">
+      {/* Suggestions — wrap (no scrollbar) and only 3 items, so the
+          row breathes on mobile without horizontal scroll. */}
+      <div className="flex flex-wrap gap-2 mt-4 relative">
         {SUGGESTIONS.map((s) => (
           <button
             type="button"
             key={s}
             onClick={() => setPrompt(s)}
-            className="text-[11px] whitespace-nowrap text-[#8A9198] px-3 py-1.5 rounded-full border border-white/5 cursor-pointer transition-colors bg-black/15 hover:text-[#ECEAE4] hover:border-white/10"
+            className="text-[11px] text-[#8A9198] px-2.5 py-1.5 rounded-full border border-white/5 cursor-pointer transition-colors bg-black/15 hover:text-[#ECEAE4] hover:border-white/10"
           >
             <span className="font-mono text-[10px] text-[#5A6268] mr-1.5 tracking-wider">TRY</span>
             {s}

@@ -71,20 +71,20 @@ export default function ScenesColumn({
                 type="button"
                 onClick={() => onSelect(i)}
                 className={
-                  'w-full grid grid-cols-[28px_64px_1fr] gap-2.5 items-center px-3 py-2.5 border-b border-white/5 text-left transition-colors relative ' +
+                  'w-full grid grid-cols-[24px_44px_1fr] gap-2 items-center px-2.5 py-2 border-b border-white/5 text-left transition-colors relative ' +
                   (isActive
                     ? 'bg-[#151B20]'
                     : 'hover:bg-[#151B20]/60')
                 }
               >
                 {isActive && (
-                  <span className="absolute left-0 top-2.5 bottom-2.5 w-[2px] bg-[#14C8CC] rounded-full" />
+                  <span className="absolute left-0 top-2 bottom-2 w-[2px] bg-[#14C8CC] rounded-full" />
                 )}
-                <span className="font-mono text-[10px] text-[#5A6268] tracking-[0.06em] text-center">
+                <span className="font-mono text-[9.5px] text-[#5A6268] tracking-[0.06em] text-center">
                   {String(i + 1).padStart(2, '0')}
                 </span>
                 <div
-                  className="rounded-md border border-white/5 relative overflow-hidden"
+                  className="rounded-[4px] border border-white/5 relative overflow-hidden"
                   style={{
                     aspectRatio: state.aspect === '9:16' ? '9/16' : '16/9',
                     background: scene.imageUrl

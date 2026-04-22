@@ -348,32 +348,48 @@ export default function Sidebar() {
               </svg>
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" side="top" className="w-56 rounded-xl border-border/50 shadow-sm">
-            <DropdownMenuItem className="cursor-pointer rounded-lg" onClick={() => navigate('/settings')}>
-              <SettingsIcon className="mr-2 h-4 w-4" />
+          <DropdownMenuContent
+            align="end"
+            side="top"
+            className="w-56 rounded-xl bg-[#10151A] border-white/10 text-[#ECEAE4] shadow-xl"
+          >
+            <DropdownMenuItem
+              className="cursor-pointer rounded-lg text-[#ECEAE4] focus:bg-white/5 focus:text-[#ECEAE4]"
+              onClick={() => navigate('/settings')}
+            >
+              <SettingsIcon className="mr-2 h-4 w-4 text-[#8A9198]" />
               <span>Settings</span>
             </DropdownMenuItem>
-            <DropdownMenuItem className="cursor-pointer rounded-lg" onClick={() => navigate('/usage')}>
-              <History className="mr-2 h-4 w-4" />
+            <DropdownMenuItem
+              className="cursor-pointer rounded-lg text-[#ECEAE4] focus:bg-white/5 focus:text-[#ECEAE4]"
+              onClick={() => navigate('/usage')}
+            >
+              <History className="mr-2 h-4 w-4 text-[#8A9198]" />
               <span>Usage &amp; Billing</span>
             </DropdownMenuItem>
             {isAdmin && (
-              <DropdownMenuItem className="cursor-pointer rounded-lg" onClick={() => navigate('/admin')}>
-                <Shield className="mr-2 h-4 w-4" />
+              <DropdownMenuItem
+                className="cursor-pointer rounded-lg text-[#ECEAE4] focus:bg-white/5 focus:text-[#ECEAE4]"
+                onClick={() => navigate('/admin')}
+              >
+                <Shield className="mr-2 h-4 w-4 text-[#8A9198]" />
                 <span>Admin</span>
               </DropdownMenuItem>
             )}
-            <DropdownMenuSeparator className="bg-border/50" />
+            <DropdownMenuSeparator className="bg-white/10" />
             <DropdownMenuItem
-              className="cursor-pointer rounded-lg"
+              className="cursor-pointer rounded-lg text-[#ECEAE4] focus:bg-white/5 focus:text-[#ECEAE4]"
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             >
-              <Sun className="mr-2 h-4 w-4 dark:hidden" />
-              <Moon className="mr-2 hidden h-4 w-4 dark:block" />
+              <Sun className="mr-2 h-4 w-4 text-[#8A9198] dark:hidden" />
+              <Moon className="mr-2 hidden h-4 w-4 text-[#8A9198] dark:block" />
               <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
             </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-border/50" />
-            <DropdownMenuItem className="cursor-pointer rounded-lg" onClick={handleSignOut}>
+            <DropdownMenuSeparator className="bg-white/10" />
+            <DropdownMenuItem
+              className="cursor-pointer rounded-lg text-[#E66666] focus:bg-[#E66666]/10 focus:text-[#E66666]"
+              onClick={handleSignOut}
+            >
               <LogOut className="mr-2 h-4 w-4" />
               <span>Log Out</span>
             </DropdownMenuItem>
@@ -381,37 +397,42 @@ export default function Sidebar() {
         </DropdownMenu>
       </div>
 
-      {/* Search modal — opens from the search trigger or Cmd/Ctrl+K */}
+      {/* Search modal — opens from the search trigger or Cmd/Ctrl+K.
+          Dark palette matches the dashboard shell (#10151A / white borders
+          at 5% and 10%). */}
       <CommandDialog open={searchOpen} onOpenChange={setSearchOpen}>
-        <CommandInput
-          placeholder="Search your projects…"
-          value={search}
-          onValueChange={setSearch}
-        />
-        <CommandList>
-          <CommandEmpty>{isSearching ? 'Searching…' : 'No projects found.'}</CommandEmpty>
-          <CommandGroup heading={debouncedSearch ? 'Matches' : 'Recent'}>
-            {searchResults.map((p) => (
-              <CommandItem
-                key={p.id}
-                value={`${p.title ?? 'untitled'} ${p.id}`}
-                onSelect={() => {
-                  setSearchOpen(false);
-                  setSearch('');
-                  navigate(`/app/create?project=${p.id}`);
-                }}
-              >
-                <Video className="mr-2 h-4 w-4 text-muted-foreground" />
-                <div className="flex flex-col overflow-hidden">
-                  <span className="truncate text-sm font-medium">{p.title || 'Untitled'}</span>
-                  <span className="text-xs text-muted-foreground/70">
-                    {format(new Date(p.updated_at), 'MMM d, yyyy')}
-                  </span>
-                </div>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        </CommandList>
+        <div className="bg-[#10151A] text-[#ECEAE4] [&_[cmdk-input-wrapper]]:border-white/10 [&_[cmdk-group-heading]]:text-[#5A6268] [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-widest [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-item]]:text-[#ECEAE4] [&_[cmdk-item][data-selected=true]]:bg-white/5 [&_[cmdk-item][data-selected=true]]:text-[#ECEAE4] [&_[cmdk-empty]]:text-[#5A6268]">
+          <CommandInput
+            placeholder="Search your projects…"
+            value={search}
+            onValueChange={setSearch}
+            className="text-[#ECEAE4] placeholder:text-[#5A6268]"
+          />
+          <CommandList>
+            <CommandEmpty>{isSearching ? 'Searching…' : 'No projects found.'}</CommandEmpty>
+            <CommandGroup heading={debouncedSearch ? 'Matches' : 'Recent'}>
+              {searchResults.map((p) => (
+                <CommandItem
+                  key={p.id}
+                  value={`${p.title ?? 'untitled'} ${p.id}`}
+                  onSelect={() => {
+                    setSearchOpen(false);
+                    setSearch('');
+                    navigate(`/app/create?project=${p.id}`);
+                  }}
+                >
+                  <Video className="mr-2 h-4 w-4 text-[#8A9198]" />
+                  <div className="flex flex-col overflow-hidden">
+                    <span className="truncate text-sm font-medium text-[#ECEAE4]">{p.title || 'Untitled'}</span>
+                    <span className="text-xs text-[#5A6268]">
+                      {format(new Date(p.updated_at), 'MMM d, yyyy')}
+                    </span>
+                  </div>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </div>
       </CommandDialog>
     </aside>
   );

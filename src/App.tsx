@@ -17,6 +17,10 @@ import { CookieConsent } from "./components/CookieConsent";
 const Landing = lazy(() => import("./pages/Landing"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+// New dashboard under construction — lives at /dashboard-new until it's
+// ready to replace the /app route entirely. Self-contained layout
+// (Sidebar + topbar + main + RightRail) so it opts OUT of AppShell.
+const DashboardLayout = lazy(() => import("./components/dashboard/DashboardLayout"));
 const CreateWorkspace = lazy(() => import("./pages/CreateWorkspace"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Usage = lazy(() => import("./pages/Usage"));
@@ -77,24 +81,9 @@ const App = () => (
             {/* Public share page - no auth required */}
             <Route path="/share/:token" element={<PublicShare />} />
 
-            {/* /app dashboard — ships its own sidebar + topbar in
-                DashboardLayout, so it opts OUT of AppShell (which would
-                render a second AppSidebar). ProtectedRoute still guards
-                the URL for unauthenticated visitors. */}
-            <Route
-              path="/app"
-              element={
-                <ProtectedRoute>
-                  <RouteErrorBoundary routeName="dashboard">
-                    <Dashboard />
-                  </RouteErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
-
-            {/* All OTHER authenticated app routes share AppShell
-                (SidebarProvider + AppSidebar) */}
+            {/* All authenticated app routes share AppShell (SidebarProvider + AppSidebar) */}
             <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
+              <Route path="/app" element={<RouteErrorBoundary routeName="dashboard"><Dashboard /></RouteErrorBoundary>} />
               <Route path="/app/create" element={<RouteErrorBoundary routeName="create"><CreateWorkspace /></RouteErrorBoundary>} />
               <Route path="/pricing" element={<Pricing />} />
               <Route path="/settings" element={<Settings />} />
@@ -103,6 +92,21 @@ const App = () => (
               <Route path="/voice-lab" element={<RouteErrorBoundary routeName="voice-lab"><VoiceLab /></RouteErrorBoundary>} />
             </Route>
             <Route path="/admin" element={<AdminRoute><RouteErrorBoundary routeName="admin"><Admin /></RouteErrorBoundary></AdminRoute>} />
+
+            {/* New dashboard preview — outside AppShell so its own
+                Sidebar/topbar don't stack with AppSidebar. Still
+                auth-gated by ProtectedRoute. Delete this route once
+                DashboardLayout graduates and replaces /app. */}
+            <Route
+              path="/dashboard-new"
+              element={
+                <ProtectedRoute>
+                  <RouteErrorBoundary routeName="dashboard-new">
+                    <DashboardLayout />
+                  </RouteErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
 
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="/terms" element={<Terms />} />

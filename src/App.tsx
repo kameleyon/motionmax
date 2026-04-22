@@ -77,9 +77,24 @@ const App = () => (
             {/* Public share page - no auth required */}
             <Route path="/share/:token" element={<PublicShare />} />
 
-            {/* All authenticated app routes share AppShell (SidebarProvider + AppSidebar) */}
+            {/* /app dashboard — ships its own sidebar + topbar in
+                DashboardLayout, so it opts OUT of AppShell (which would
+                render a second AppSidebar). ProtectedRoute still guards
+                the URL for unauthenticated visitors. */}
+            <Route
+              path="/app"
+              element={
+                <ProtectedRoute>
+                  <RouteErrorBoundary routeName="dashboard">
+                    <Dashboard />
+                  </RouteErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* All OTHER authenticated app routes share AppShell
+                (SidebarProvider + AppSidebar) */}
             <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
-              <Route path="/app" element={<RouteErrorBoundary routeName="dashboard"><Dashboard /></RouteErrorBoundary>} />
               <Route path="/app/create" element={<RouteErrorBoundary routeName="create"><CreateWorkspace /></RouteErrorBoundary>} />
               <Route path="/pricing" element={<Pricing />} />
               <Route path="/settings" element={<Settings />} />

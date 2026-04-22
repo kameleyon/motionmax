@@ -26,12 +26,17 @@ export default function Timeline({
   state,
   selectedSceneIndex,
   onSelectScene,
+  onSelectVoice,
   playing,
   onPlayToggle,
 }: {
   state: EditorState;
   selectedSceneIndex: number;
   onSelectScene: (index: number) => void;
+  /** Called when the user clicks a VOICE track clip. The editor page
+   *  uses this to both select the scene AND focus the Inspector's
+   *  Voice tab, so one click puts the user right at Regenerate voice. */
+  onSelectVoice?: (index: number) => void;
   playing: boolean;
   onPlayToggle: () => void;
 }) {
@@ -134,30 +139,44 @@ export default function Timeline({
           })}
         </Track>
 
-        {/* VOICE track — uses waveform peaks when available, falls back to a
-            proxy sine pattern during rendering or pre-finalize. */}
+        {/* VOICE track — per-scene buttons. Clicking a voice clip
+            selects that scene and drops the user into the Inspector's
+            Voice tab so they can regenerate. Real waveform peaks render
+            when scene._meta.waveformPeaks is populated by finalize;
+            otherwise a stable sine-proxy stands in so the track isn't
+            empty. Each clip has a scene-index seed so the sine pattern
+            differs visually between scenes. */}
         <Track label="VOICE">
           {state.scenes.map((scene, i) => {
             const offsetPct = (sceneOffsets[i] / totalMs) * 100;
             const widthPct = (sceneDurationMs(scene) / totalMs) * 100;
             const peaks = scene.waveformPeaks ?? Array.from({ length: 40 }, (_, k) =>
-              20 + Math.abs(Math.sin(k * 0.31) + Math.cos(k * 0.77) * 0.6) * 60,
+              20 + Math.abs(Math.sin((k + i * 3) * 0.31) + Math.cos((k + i * 2) * 0.77) * 0.6) * 60,
             );
+            const isActive = i === selectedSceneIndex;
             return (
-              <div
+              <button
                 key={i}
-                className="absolute top-[4px] bottom-[4px] flex items-center gap-[1px]"
+                type="button"
+                onClick={() => (onSelectVoice ?? onSelectScene)(i)}
+                title={`Scene ${i + 1} · click to edit voice`}
+                aria-label={`Scene ${i + 1} voice — click to regenerate`}
+                className={
+                  'absolute top-[3px] bottom-[3px] flex items-center gap-[1px] rounded-[3px] border transition-colors ' +
+                  (isActive
+                    ? 'border-[#14C8CC] bg-[#14C8CC]/10'
+                    : 'border-transparent hover:border-[#14C8CC]/40 hover:bg-[#14C8CC]/5')
+                }
                 style={{ left: `${offsetPct}%`, width: `${widthPct}%` }}
-                aria-label={`Scene ${i + 1} voice waveform`}
               >
                 {peaks.slice(0, 40).map((h, k) => (
                   <span
                     key={k}
-                    className="flex-1 rounded-[1px] bg-[#14C8CC]/55"
+                    className={`flex-1 rounded-[1px] ${isActive ? 'bg-[#14C8CC]' : 'bg-[#14C8CC]/55'}`}
                     style={{ height: `${Math.min(100, Math.max(8, h))}%` }}
                   />
                 ))}
-              </div>
+              </button>
             );
           })}
         </Track>

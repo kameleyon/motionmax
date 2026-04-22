@@ -54,6 +54,12 @@ export default function Editor() {
   }, [state, params, setParams]);
 
   const [playing, setPlaying] = useState(false);
+  // Which Inspector tab should open when the user clicks a timeline
+  // clip. Undefined means "don't override — leave the user's current
+  // tab alone". Timeline VOICE clips call `selectVoice` which sets
+  // this to 'voice' so one click gets the user to Regenerate voice.
+  const [inspectorFocusTab, setInspectorFocusTab] =
+    useState<'scene' | 'voice' | 'captions' | 'motion' | undefined>(undefined);
   const saveStatus: 'idle' | 'saving' | 'saved' | 'dirty' = 'saved';
 
   if (isLoading) {
@@ -116,12 +122,20 @@ export default function Editor() {
           onPlayingChange={setPlaying}
         />
       }
-      inspector={<Inspector state={state} selectedSceneIndex={selectedSceneIndex} />}
+      inspector={
+        <Inspector
+          state={state}
+          selectedSceneIndex={selectedSceneIndex}
+          focusTab={inspectorFocusTab}
+          onTabConsumed={() => setInspectorFocusTab(undefined)}
+        />
+      }
       timeline={
         <Timeline
           state={state}
           selectedSceneIndex={selectedSceneIndex}
-          onSelectScene={(i) => setManualSelection(i)}
+          onSelectScene={(i) => { setManualSelection(i); setInspectorFocusTab('scene'); }}
+          onSelectVoice={(i) => { setManualSelection(i); setInspectorFocusTab('voice'); }}
           playing={playing}
           onPlayToggle={() => setPlaying((p) => !p)}
         />

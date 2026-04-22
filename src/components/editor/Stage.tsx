@@ -104,34 +104,48 @@ export default function Stage({
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
 
-  // Keep both the <video> AND the <audio> synchronised to the
-  // Timeline's play state. Video is muted so only the narration audio
-  // is audible — Kling clips ship silent anyway. `.play()` is async
-  // and rejects if the page hasn't seen a user gesture yet; we swallow.
+  // Play/pause sync when the Timeline button flips. Video is muted
+  // (Kling clips are silent) and the <audio> carries the narration.
   useEffect(() => {
     const v = videoRef.current;
     const a = audioRef.current;
-    const playBoth = () => {
-      const vp = v?.play();
-      if (vp && typeof vp.catch === 'function') vp.catch(() => { /* autoplay blocked */ });
-      const ap = a?.play();
-      if (ap && typeof ap.catch === 'function') ap.catch(() => { /* autoplay blocked */ });
-    };
     if (playing) {
-      playBoth();
+      const vp = v?.play(); if (vp && typeof vp.catch === 'function') vp.catch(() => {});
+      const ap = a?.play(); if (ap && typeof ap.catch === 'function') ap.catch(() => {});
     } else {
       v?.pause();
       a?.pause();
     }
-  }, [playing, selectedSceneIndex]);
+  }, [playing]);
 
-  // Rewind to the start of each new scene as we walk through them so
-  // a scene change always plays from 0, not from where the last one
-  // left off (browsers cache decoded positions per <video src>).
+  // Scene transition: swap src imperatively on the SAME elements so the
+  // user-gesture autoplay authorisation persists across scenes. Using
+  // React's `key=` to remount would create fresh elements that the
+  // browser treats as un-authorised, which is why Play used to only
+  // work on scene 1.
   useEffect(() => {
-    if (videoRef.current) videoRef.current.currentTime = 0;
-    if (audioRef.current) audioRef.current.currentTime = 0;
-  }, [selectedSceneIndex]);
+    const v = videoRef.current;
+    const a = audioRef.current;
+    const scene = state.scenes[selectedSceneIndex];
+    if (!scene) return;
+
+    if (v) {
+      const nextSrc = scene.videoUrl ?? '';
+      if (v.src !== nextSrc) { v.src = nextSrc; v.load(); }
+      else { v.currentTime = 0; }
+    }
+    if (a) {
+      const nextSrc = scene.audioUrl ?? '';
+      if (a.src !== nextSrc) { a.src = nextSrc; a.load(); }
+      else { a.currentTime = 0; }
+    }
+
+    if (playing) {
+      const vp = v?.play(); if (vp && typeof vp.catch === 'function') vp.catch(() => {});
+      const ap = a?.play(); if (ap && typeof ap.catch === 'function') ap.catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSceneIndex, state.scenes]);
 
   // Narration audio drives scene boundaries because it's the canonical
   // length (Kling clips are 10s regardless of how long the voiceover
@@ -261,30 +275,27 @@ export default function Stage({
       >
         {/* Preview: video if ready, else latest image. Video is MUTED
             and has no native controls — we drive playback from the
-            Timeline transport so video + narration stay in lockstep. */}
+            Timeline transport so video + narration stay in lockstep.
+            src is set imperatively in the scene-change effect so these
+            elements persist (same MediaElement keeps its autoplay
+            authorisation across scenes). */}
         {state.phase === 'ready' && sceneToShow?.videoUrl ? (
           <>
             <video
               ref={videoRef}
-              key={sceneToShow.videoUrl}
-              src={sceneToShow.videoUrl}
               className="w-full h-full object-cover"
               muted
               playsInline
               preload="auto"
               onEnded={handleVideoEnded}
             />
-            {sceneToShow.audioUrl && (
-              <audio
-                ref={audioRef}
-                key={sceneToShow.audioUrl}
-                src={sceneToShow.audioUrl}
-                preload="auto"
-                onPlay={() => onPlayingChange?.(true)}
-                onPause={() => onPlayingChange?.(false)}
-                onEnded={handleAudioEnded}
-              />
-            )}
+            <audio
+              ref={audioRef}
+              preload="auto"
+              onPlay={() => onPlayingChange?.(true)}
+              onPause={() => onPlayingChange?.(false)}
+              onEnded={handleAudioEnded}
+            />
           </>
         ) : sceneToShow?.imageUrl ? (
           <img

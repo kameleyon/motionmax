@@ -99,5 +99,34 @@ export function useSceneRegen(state: EditorState | null) {
     }
   }, [user, state, updateScenePrompt]);
 
-  return { busy, apply, regenerate };
+  const regenerateAudio = useCallback(async (index: number) => {
+    if (!user || !state?.generation || !state?.project) {
+      toast.error('Not ready to regenerate audio yet.'); return;
+    }
+    setBusy('regen');
+    try {
+      const { error } = await supabase
+        .from('video_generation_jobs')
+        .insert({
+          user_id: user.id,
+          project_id: state.project.id,
+          task_type: 'regenerate_audio',
+          payload: {
+            generationId: state.generation.id,
+            projectId: state.project.id,
+            sceneIndex: index,
+          } as unknown as never,
+          status: 'pending',
+        });
+      if (error) throw new Error(error.message);
+      toast.success('Voice queued for regeneration.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Voice regen failed: ${msg}`);
+    } finally {
+      setBusy('idle');
+    }
+  }, [user, state]);
+
+  return { busy, apply, regenerate, regenerateAudio };
 }

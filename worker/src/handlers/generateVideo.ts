@@ -415,7 +415,13 @@ ${researchBrief}
       progress: 10,
       script: rawText,
       scenes: scenesWithMeta,
-      started_at: new Date().toISOString(),
+      // Use the phaseStart captured at the VERY TOP of handleGenerateVideo —
+      // that's the moment the worker picked up the job. By the time we
+      // reach this insert we've already spent 30-180s on research + LLM,
+      // and a fresh `new Date()` here would undercount the user's actual
+      // wait. handleFinalize reads this value to compute the accurate
+      // wall-clock totalTimeMs displayed in the UI.
+      started_at: new Date(phaseStart).toISOString(),
     })
     .select("id")
     .single();

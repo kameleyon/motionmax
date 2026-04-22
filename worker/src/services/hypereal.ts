@@ -201,6 +201,88 @@ export async function generateKlingV3Video(
   return pollHyperealJob(jobId, apiKey, model, pollUrl);
 }
 
+// ── Kling V3.0 Pro I2V (premium — for regenerations) ──────────────
+
+/**
+ * Generate video using Kling V3.0 Pro I2V.
+ * Superior subject consistency + texture preservation vs V3.0 Std / V2.6.
+ * Native start + end frame support (same as V3.0 Std).
+ *
+ * Model: kling-3-0-pro-i2v (57 credits)
+ * Duration: 3 / 5 / 10 / 15 seconds (clamped to nearest valid value)
+ * Pricing: $0.34 / $0.56 / $1.12 / $1.68 (without sound)
+ *
+ * Used primarily for per-scene VIDEO REGENERATION where the user is
+ * willing to pay more for a higher-fidelity single clip. The initial
+ * full-project pipeline still uses the cheaper V2.6 Pro to keep the
+ * 15-scene cost manageable.
+ */
+export async function generateKlingV3ProVideo(
+  imageUrl: string,
+  prompt: string,
+  apiKey: string,
+  duration: number = 5,
+  endImageUrl?: string,
+  negativePrompt: string = "blurry, low quality, watermark, text, UI elements",
+  cfgScale: number = 0.5,
+): Promise<string> {
+  const model = "kling-3-0-pro-i2v";
+  const validDurations = [3, 5, 10, 15];
+  const clampedDuration = validDurations.reduce((prev, curr) =>
+    Math.abs(curr - duration) < Math.abs(prev - duration) ? curr : prev
+  );
+  if (clampedDuration !== duration) {
+    console.warn(`[Hypereal] Kling V3 Pro duration ${duration}s invalid — clamped to ${clampedDuration}s`);
+  }
+  console.log(`[Hypereal] Starting Kling V3.0 Pro I2V — ${clampedDuration}s${endImageUrl ? " (start→end)" : ""}`);
+  console.log(`[Hypereal] IMAGE: ${imageUrl.substring(0, 80)}...`);
+  if (endImageUrl) console.log(`[Hypereal] END IMAGE: ${endImageUrl.substring(0, 80)}...`);
+
+  const inputPayload: Record<string, unknown> = {
+    prompt,
+    image: imageUrl,
+    duration: clampedDuration,
+    cfg_scale: cfgScale,
+    negative_prompt: negativePrompt,
+    // sound stays off — we mux audio separately at export time.
+    sound: false,
+  };
+
+  if (endImageUrl) {
+    inputPayload.end_image = endImageUrl;
+  }
+
+  const requestBody = { model, input: inputPayload };
+  const bodyJson = JSON.stringify(requestBody);
+  console.log(`[Hypereal] Kling V3 Pro body (${bodyJson.length} chars): ${truncate(bodyJson)}`);
+
+  const response = await hyperealFetch(HYPEREAL_VIDEO_URL, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: bodyJson,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Hypereal Kling V3 Pro API Error: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json() as any;
+  const jobId = data.jobId;
+  const pollUrl = data.pollUrl || null;
+
+  console.log(`[Hypereal] Kling V3 Pro job created: ${jobId} (credits: ${data.creditsUsed})`);
+
+  if (!jobId) {
+    throw new Error(`No jobId from Kling V3 Pro — response: ${JSON.stringify(data)}`);
+  }
+
+  return pollHyperealJob(jobId, apiKey, model, pollUrl);
+}
+
 // ── Kling V2.6 Pro I2V (fallback for transitions) ─────────────────
 
 /**

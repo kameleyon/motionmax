@@ -87,9 +87,29 @@ export async function handleFinalizePhase(
   const phaseTimings = meta.phaseTimings || {};
   phaseTimings.finalize = Date.now() - phaseStart;
 
-  const totalTimeMs =
-    (phaseTimings.script || 0) + (phaseTimings.audio || 0) +
-    (phaseTimings.images || 0) + phaseTimings.finalize;
+  // Accurate wall-clock generation time — from when the script worker
+  // picked up the job (generation.started_at) to RIGHT NOW (just before
+  // we mark the row complete below). Previously we summed per-phase
+  // timings which undercounted parallel work + queue waits. The user
+  // specifically asked for start-of-pickup → 100%-complete accuracy.
+  //
+  // `generation.started_at` is stamped by generateVideo.ts at the same
+  // moment the generation row is inserted, which is ~100ms after the
+  // worker claims the generate_video job. Close enough to "pickup".
+  const startedAtMs = generation.started_at
+    ? new Date(generation.started_at).getTime()
+    : null;
+  const totalTimeMs = startedAtMs
+    ? Date.now() - startedAtMs
+    // Fallback (should never hit): sum phase timings if started_at is
+    // missing on a legacy row.
+    : (phaseTimings.script || 0) + (phaseTimings.audio || 0) +
+      (phaseTimings.images || 0) + phaseTimings.finalize;
+
+  // Also store a structured generation_duration_sec so dashboards /
+  // analytics can read it without parsing _meta.
+  const totalTimeSec = Math.max(0, Math.round(totalTimeMs / 1000));
+  phaseTimings.totalWallClockMs = totalTimeMs;
 
   // Strip _meta from final scene output
   const finalScenes = scenes.map((s: any) => {

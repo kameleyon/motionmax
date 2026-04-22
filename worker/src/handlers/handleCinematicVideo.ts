@@ -25,9 +25,10 @@ import { generateImage } from "../services/imageGenerator.js";
 import {
   // generatePixVerseTransition,  // PixVerse V6 — disabled, returns 500 E1001
   // generateKlingV25Video,       // Kling V2.5 Turbo — swapped for V2.6 Pro
-  // generateKlingV3Video,        // V3.0 — faster + cheaper but lip sync issues
+  // generateKlingV3Video,        // V3.0 Std — kept commented; Pro variant below
   // generateVeo31Video,          // Veo 3.1 — doesn't follow prompts, generates unwanted audio/lip sync
-  generateKlingV26Video,          // Active model — Kling V2.6 Pro I2V (end_image support)
+  generateKlingV26Video,          // Primary (first-time generation) — Kling V2.6 Pro
+  generateKlingV3ProVideo,        // Regenerations — Kling V3.0 Pro (57 credits, best fidelity)
   // generateGrokVideo,           // Grok Video I2V — status-lookup failures on Hypereal, rolled back
 } from "../services/hypereal.js";
 
@@ -218,7 +219,7 @@ export async function handleCinematicVideo(
 
   const cameraName = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("\u2014")[0].trim();
   console.log(
-    `[CinematicVideo] Scene ${sceneIndex}: Kling V2.6 Pro I2V, ` +
+    `[CinematicVideo] Scene ${sceneIndex}: ${regenerate ? "Kling V3.0 Pro I2V (regen)" : "Kling V2.6 Pro I2V"}, ` +
     `camera=${cameraName}, prompt=${finalPrompt.length} chars`
   );
 
@@ -233,7 +234,17 @@ export async function handleCinematicVideo(
   // transition back to the start frame. Kling V2.6 forces sound=false
   // when end_image is present (handled inside generateKlingV26Video).
   // Duration is clamped to valid values (5 or 10s) inside the service.
-  if (endImageUrl) {
+  // Provider split by phase:
+  //   - First-time: Kling V2.6 Pro (35 credits, fast, good enough at 15x)
+  //   - Regeneration: Kling V3.0 Pro (57 credits, premium quality —
+  //     superior subject consistency + texture preservation)
+  // Both support native end_image for transitions. Final scene passes
+  // undefined so the model renders a natural conclusion. Both force
+  // sound=false — audio is muxed in at export time.
+  if (regenerate) {
+    provider = "Kling V3.0 Pro I2V";
+    videoUrl = await generateKlingV3ProVideo(imageUrl, finalPrompt, apiKey, 10, endImageUrl, negPrompt, 0.5);
+  } else if (endImageUrl) {
     provider = "Kling V2.6 Pro I2V";
     videoUrl = await generateKlingV26Video(imageUrl, finalPrompt, apiKey, 10, endImageUrl, negPrompt, 0.5);
   } else {

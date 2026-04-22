@@ -32,6 +32,7 @@ dist-ssr
 marketing-dist
 marketing/.astro
 *.local
+*.md
 
 # Source maps (never commit — may contain original source; Sentry uploads them from CI only)
 dist/assets/*.js.map

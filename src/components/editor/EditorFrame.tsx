@@ -61,38 +61,34 @@ export default function EditorFrame({
           onOpenInspectorDrawer={() => setInspectorDrawerOpen(true)}
         />
 
-        {/* Editor grid body. On desktop this is a 3-column layout
-            topped by the stage; on mobile scenes + inspector hide
-            behind drawers. The timeline sits across the bottom. */}
-        <div
-          className="grid flex-1 min-h-0 overflow-hidden"
-          style={{
-            gridTemplateColumns: 'var(--scenes-col, 260px) 1fr var(--inspector-col, 300px)',
-            gridTemplateRows: '1fr var(--timeline-row, 180px)',
-          }}
-        >
-          {/* Scenes column (desktop + tablet) */}
+        {/* Editor grid body. CSS Grid collapses columns by breakpoint:
+            ≥1280: 260 | 1fr | 300
+            1024-1279: 220 | 1fr | 280
+            < 1024: 1fr (scenes + inspector hidden; accessed via drawer).
+            Timeline spans full width at the bottom (180px; 140px mobile). */}
+        <div className="grid flex-1 min-h-0 overflow-hidden grid-cols-1 lg:grid-cols-[220px_1fr_280px] xl:grid-cols-[260px_1fr_300px] grid-rows-[1fr_140px] sm:grid-rows-[1fr_160px] lg:grid-rows-[1fr_180px]">
+          {/* Scenes column (desktop only — mobile uses the drawer) */}
           <aside
-            className="border-r border-white/5 bg-[#10151A] overflow-y-auto row-start-1 col-start-1 hidden lg:block"
+            className="border-r border-white/5 bg-[#10151A] overflow-y-auto row-start-1 hidden lg:block lg:col-start-1"
           >
             {scenes}
           </aside>
 
           {/* Stage */}
-          <section className="row-start-1 col-start-1 lg:col-start-2 lg:col-end-3 overflow-hidden min-w-0 bg-[#050709]">
+          <section className="row-start-1 col-start-1 lg:col-start-2 overflow-hidden min-w-0 bg-[#050709]">
             {stage}
           </section>
 
-          {/* Inspector (desktop + tablet) */}
+          {/* Inspector (desktop only) */}
           <aside
-            className="border-l border-white/5 bg-[#10151A] overflow-y-auto row-start-1 col-start-3 hidden lg:block"
+            className="border-l border-white/5 bg-[#10151A] overflow-y-auto row-start-1 hidden lg:block lg:col-start-3"
           >
             {inspector}
           </aside>
 
           {/* Timeline — spans full width */}
           <section
-            className="border-t border-white/5 bg-[#10151A] overflow-hidden row-start-2 col-span-3 lg:col-start-1 lg:col-end-4"
+            className="border-t border-white/5 bg-[#10151A] overflow-hidden row-start-2 col-start-1 lg:col-span-3"
           >
             {timeline}
           </section>

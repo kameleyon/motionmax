@@ -1,12 +1,22 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
+import {
+  getDefaultSpeaker,
+  getSpeakersForLanguage,
+  type SpeakerVoice,
+} from '@/components/workspace/SpeakerSelector';
 
 type ProjectMode = 'cinematic' | 'doc2video' | 'smartflow';
 type Language = 'en' | 'fr' | 'es' | 'ht' | 'de' | 'it' | 'nl';
-type AspectRatio = '16:9' | '9:16' | '1:1';
+type AspectRatio = '16:9' | '9:16';
+
+function prettyVoiceLabel(id: string, fallback: string): string {
+  const stripped = id.replace(/^(sm2?|gm):/i, '');
+  return fallback || (stripped.charAt(0).toUpperCase() + stripped.slice(1));
+}
 
 const LANGUAGE_LABEL: Record<Language, string> = {
   en: 'English', fr: 'Français', es: 'Español', ht: 'Kreyòl',
@@ -40,8 +50,19 @@ export default function Hero() {
   const [mode, setMode] = useState<ProjectMode>('cinematic');
   const [language, setLanguage] = useState<Language>('en');
   const [aspect, setAspect] = useState<AspectRatio>('16:9');
+  const [voice, setVoice] = useState<SpeakerVoice>('Adam');
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [aspectMenuOpen, setAspectMenuOpen] = useState(false);
+  const [voiceMenuOpen, setVoiceMenuOpen] = useState(false);
+
+  const speakersForLang = useMemo(() => getSpeakersForLanguage(language), [language]);
+  const currentSpeaker = speakersForLang.find((s) => s.id === voice) ?? speakersForLang[0];
+
+  useEffect(() => {
+    if (!speakersForLang.some((s) => s.id === voice)) {
+      setVoice(getDefaultSpeaker(language));
+    }
+  }, [language, speakersForLang, voice]);
 
   const { data: profile } = useQuery({
     queryKey: ['hero-profile', user?.id],
@@ -69,7 +90,7 @@ export default function Hero() {
   const canSubmit = prompt.trim().length > 5;
 
   const submitHref = canSubmit
-    ? `/app/create?mode=${mode}&lang=${language}&format=${aspect === '9:16' ? 'portrait' : aspect === '1:1' ? 'square' : 'landscape'}&prompt=${encodeURIComponent(prompt.trim())}`
+    ? `/app/create?mode=${mode}&lang=${language}&format=${aspect === '9:16' ? 'portrait' : 'landscape'}&voice=${encodeURIComponent(voice)}&prompt=${encodeURIComponent(prompt.trim())}`
     : '#';
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -147,7 +168,7 @@ export default function Hero() {
           <div className="relative">
             <button
               type="button"
-              onClick={() => { setLangMenuOpen((v) => !v); setAspectMenuOpen(false); }}
+              onClick={() => { setLangMenuOpen((v) => !v); setAspectMenuOpen(false); setVoiceMenuOpen(false); }}
               className="font-mono text-[10.5px] text-[#8A9198] px-2.5 py-1 rounded-md border border-white/5 tracking-wider inline-flex items-center gap-1.5 hover:text-[#ECEAE4] hover:border-white/10"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="opacity-70">
@@ -172,11 +193,41 @@ export default function Hero() {
             )}
           </div>
 
+          {/* Speaker */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => { setVoiceMenuOpen((v) => !v); setLangMenuOpen(false); setAspectMenuOpen(false); }}
+              className="font-mono text-[10.5px] text-[#8A9198] px-2.5 py-1 rounded-md border border-white/5 tracking-wider inline-flex items-center gap-1.5 hover:text-[#ECEAE4] hover:border-white/10"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="opacity-70">
+                <rect x="9" y="3" width="6" height="13" rx="3" />
+                <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+              </svg>
+              {prettyVoiceLabel(voice, currentSpeaker?.label ?? 'Voice')}
+            </button>
+            {voiceMenuOpen && (
+              <div className="absolute z-20 top-full left-0 mt-1 bg-[#10151A] border border-white/10 rounded-lg p-1 min-w-[180px] max-h-[240px] overflow-y-auto shadow-xl">
+                {speakersForLang.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => { setVoice(s.id); setVoiceMenuOpen(false); }}
+                    className={`w-full text-left px-2.5 py-1.5 text-[12px] rounded-md transition-colors flex items-center gap-2 ${voice === s.id ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'text-[#ECEAE4] hover:bg-white/5'}`}
+                  >
+                    <span className="font-medium">{s.label}</span>
+                    <span className="text-[#5A6268] text-[10.5px] ml-auto">{s.description}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Aspect ratio */}
           <div className="relative">
             <button
               type="button"
-              onClick={() => { setAspectMenuOpen((v) => !v); setLangMenuOpen(false); }}
+              onClick={() => { setAspectMenuOpen((v) => !v); setLangMenuOpen(false); setVoiceMenuOpen(false); }}
               className="font-mono text-[10.5px] text-[#8A9198] px-2.5 py-1 rounded-md border border-white/5 tracking-wider inline-flex items-center gap-1.5 hover:text-[#ECEAE4] hover:border-white/10"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="opacity-70">
@@ -186,7 +237,7 @@ export default function Hero() {
             </button>
             {aspectMenuOpen && (
               <div className="absolute z-20 top-full left-0 mt-1 bg-[#10151A] border border-white/10 rounded-lg p-1 min-w-[100px] shadow-xl">
-                {(['16:9', '9:16', '1:1'] as AspectRatio[]).map((a) => (
+                {(['16:9', '9:16'] as AspectRatio[]).map((a) => (
                   <button
                     key={a}
                     type="button"

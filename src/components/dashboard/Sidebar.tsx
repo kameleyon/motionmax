@@ -30,6 +30,13 @@ export default function Sidebar() {
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  // Debounce the query term so we don't hammer Supabase on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 250);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const { data: profile } = useQuery({
     queryKey: ['profile', user?.id],
@@ -141,11 +148,32 @@ export default function Sidebar() {
     return () => { supabase.removeChannel(channel); };
   }, [queryClient, user]);
 
+  // Server-side search — only runs while the user is typing (2+ chars).
+  // Below 2 chars we fall back to the preloaded recent list.
+  const { data: searchResults = [], isFetching: isSearching } = useQuery<SidebarProject[]>({
+    queryKey: ['sidebar-search-projects', user?.id, debouncedSearch],
+    enabled: !!user && debouncedSearch.length >= 2,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id,title,thumbnail_url,updated_at')
+        .eq('user_id', user!.id)
+        .ilike('title', `%${debouncedSearch}%`)
+        .order('updated_at', { ascending: false })
+        .limit(12);
+      if (error) throw error;
+      return (data ?? []) as SidebarProject[];
+    },
+  });
+
   const filteredProjects = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return recentProjects.slice(0, 4);
-    return recentProjects.filter((p) => (p.title ?? '').toLowerCase().includes(q)).slice(0, 6);
-  }, [recentProjects, search]);
+    if (debouncedSearch.length >= 2) return searchResults;
+    if (debouncedSearch.length === 1) {
+      const q = debouncedSearch.toLowerCase();
+      return recentProjects.filter((p) => (p.title ?? '').toLowerCase().includes(q)).slice(0, 6);
+    }
+    return recentProjects.slice(0, 4);
+  }, [debouncedSearch, recentProjects, searchResults]);
 
   const generateGradient = (id: string) => {
     const hash = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -165,11 +193,29 @@ export default function Sidebar() {
 
   return (
     <aside className="w-[252px] bg-[#10151A] border-r border-white/5 hidden md:flex flex-col overflow-hidden shrink-0">
-      {/* Brand — "Motion" in aqua, "Max" in gold */}
+      {/* Brand — lightning icon + "Motion" aqua + "Max" gold */}
       <div className="flex items-center gap-2.5 px-5 py-[18px] border-b border-white/5">
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <defs>
+            <linearGradient id="mm-brand" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#14C8CC" />
+              <stop offset="100%" stopColor="#E4C875" />
+            </linearGradient>
+          </defs>
+          <path d="M2 12h4l3-9 5 18 3-9h5" stroke="url(#mm-brand)" />
+        </svg>
         <span className="font-serif text-[22px] font-medium tracking-tight leading-none">
-          <span className="text-[#14C8CC] font-medium">Motion</span>
-          <span className="text-[#E4C875] font-medium">Max</span>
+          <span className="text-[#14C8CC]">Motion</span>
+          <span className="text-[#E4C875]">Max</span>
         </span>
       </div>
 
@@ -231,11 +277,15 @@ export default function Sidebar() {
         {/* Recent / Search results */}
         <div className="mb-5">
           <h6 className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#5A6268] mx-3 mb-1.5 font-medium">
-            {search.trim() ? `Results (${filteredProjects.length})` : 'Recent'}
+            {debouncedSearch.length >= 2
+              ? (isSearching ? 'Searching…' : `Results (${filteredProjects.length})`)
+              : search.trim()
+                ? `Results (${filteredProjects.length})`
+                : 'Recent'}
           </h6>
           {filteredProjects.length === 0 ? (
             <div className="px-3 py-2 text-[12px] text-[#5A6268] italic">
-              {search.trim() ? 'No matches' : 'No projects yet'}
+              {debouncedSearch.length >= 2 && !isSearching ? 'No matches' : search.trim() ? 'No matches' : 'No projects yet'}
             </div>
           ) : (
             filteredProjects.map((item) => (

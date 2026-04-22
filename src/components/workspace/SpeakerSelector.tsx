@@ -68,7 +68,7 @@ interface SpeakerSelectorProps {
   language?: string;
 }
 
-interface SpeakerOption { id: SpeakerVoice; label: string; description: string }
+export interface SpeakerOption { id: SpeakerVoice; label: string; description: string }
 
 // Qwen3 (Replicate) is disabled — only Fish Audio / LemonFox / Gemini speakers
 // are offered in the UI. Re-introduce the qwenSpeakers list when Qwen3 is
@@ -201,7 +201,7 @@ const germanSpeakers: SpeakerOption[]  = geminiFlashSpeakers;
 const italianSpeakers: SpeakerOption[] = geminiFlashSpeakers;
 const dutchSpeakers: SpeakerOption[]   = geminiFlashSpeakers;
 
-function getSpeakersForLanguage(language?: string): SpeakerOption[] {
+export function getSpeakersForLanguage(language?: string): SpeakerOption[] {
   switch (language) {
     case "ht": return creoleSpeakers;
     case "fr": return frenchSpeakers;

@@ -1,8 +1,35 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { PLAN_LIMITS, normalizePlanName } from '@/lib/planLimits';
+import { toast } from 'sonner';
+import { Loader2, Play, Square } from 'lucide-react';
+
+/** Strip the sm:/sm2:/gm: provider prefix so UI shows "Quinn" not
+ *  "sm:quinn". Capitalises the first letter of the result for
+ *  display consistency. */
+function prettyVoiceName(raw: string): string {
+  const stripped = raw.replace(/^(sm2?|gm):/i, '');
+  return stripped.charAt(0).toUpperCase() + stripped.slice(1);
+}
+
+const VOICE_PREVIEW_CACHE_KEY = 'motionmax_voice_previews';
+
+function getCachedPreview(speakerId: string, lang: string): string | null {
+  try {
+    const cache = JSON.parse(localStorage.getItem(VOICE_PREVIEW_CACHE_KEY) || '{}');
+    return cache[`${speakerId}_${lang}`] ?? null;
+  } catch { return null; }
+}
+
+function setCachedPreview(speakerId: string, lang: string, url: string) {
+  try {
+    const cache = JSON.parse(localStorage.getItem(VOICE_PREVIEW_CACHE_KEY) || '{}');
+    cache[`${speakerId}_${lang}`] = url;
+    localStorage.setItem(VOICE_PREVIEW_CACHE_KEY, JSON.stringify(cache));
+  } catch { /* ignore quota errors */ }
+}
 
 type Generation = {
   id: string;
@@ -24,6 +51,18 @@ type UsedVoice = {
   lastUsedAt: string;
   projectId: string;
 };
+
+function sampleTextFor(speakerLabel: string, lang: string): string {
+  switch (lang) {
+    case 'ht': return `Bonjou, mwen se ${speakerLabel}. Kisa n ap kreye?`;
+    case 'fr': return `Bonjour, je suis ${speakerLabel}. Qu'allons-nous créer ?`;
+    case 'es': return `Hola, soy ${speakerLabel}. ¿Qué vamos a crear?`;
+    case 'de': return `Hallo, ich bin ${speakerLabel}. Was erschaffen wir?`;
+    case 'it': return `Ciao, sono ${speakerLabel}. Cosa creeremo?`;
+    case 'nl': return `Hallo, ik ben ${speakerLabel}. Wat gaan we maken?`;
+    default:   return `Hello, I'm ${speakerLabel}. What are we creating?`;
+  }
+}
 
 /** Count generations per day for the last 30 days, from an array of
  *  generation rows. Returns a fixed-length [oldest …today] array. */
@@ -53,6 +92,83 @@ function formatRuntime(totalSec: number): string {
 export default function RightRail() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+
+  const [previewLoading, setPreviewLoading] = useState<string | null>(null);
+  const [previewPlaying, setPreviewPlaying] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const stopPlayback = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    setPreviewPlaying(null);
+  }, []);
+
+  const playPreview = useCallback(async (rawVoice: string, language: string | null) => {
+    if (!user) return;
+    const voiceId = rawVoice;
+    const lang = language || 'en';
+    const label = prettyVoiceName(rawVoice);
+
+    if (previewPlaying === voiceId) { stopPlayback(); return; }
+    stopPlayback();
+
+    const cached = getCachedPreview(voiceId, lang);
+    if (cached) {
+      const audio = new Audio(cached);
+      audioRef.current = audio;
+      setPreviewPlaying(voiceId);
+      audio.onended = () => setPreviewPlaying(null);
+      audio.onerror = () => setPreviewPlaying(null);
+      audio.play().catch(() => setPreviewPlaying(null));
+      return;
+    }
+
+    setPreviewLoading(voiceId);
+    try {
+      const { data: job, error } = await supabase
+        .from('video_generation_jobs')
+        .insert({
+          user_id: user.id,
+          task_type: 'voice_preview',
+          payload: { speaker: voiceId, language: lang, text: sampleTextFor(label, lang) },
+          status: 'pending',
+        })
+        .select('id')
+        .single();
+      if (error || !job) throw new Error('queue failed');
+
+      const MAX_WAIT = 30_000;
+      const start = Date.now();
+      while (Date.now() - start < MAX_WAIT) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const { data: row } = await supabase
+          .from('video_generation_jobs')
+          .select('status, result')
+          .eq('id', job.id)
+          .single();
+        const result = (row?.result ?? null) as { audioUrl?: string } | null;
+        if (row?.status === 'completed' && result?.audioUrl) {
+          setCachedPreview(voiceId, lang, result.audioUrl);
+          const audio = new Audio(result.audioUrl);
+          audioRef.current = audio;
+          setPreviewPlaying(voiceId);
+          audio.onended = () => setPreviewPlaying(null);
+          audio.onerror = () => setPreviewPlaying(null);
+          audio.play().catch(() => setPreviewPlaying(null));
+          break;
+        }
+        if (row?.status === 'failed') break;
+      }
+    } catch {
+      toast.error('Voice preview unavailable. Please try again.');
+    } finally {
+      setPreviewLoading(null);
+    }
+  }, [user, previewPlaying, stopPlayback]);
+
+  useEffect(() => () => stopPlayback(), [stopPlayback]);
 
   // ── Subscription / plan ────────────────────────────────────
   const { data: subscription } = useQuery({
@@ -354,10 +470,14 @@ export default function RightRail() {
             </div>
           ) : (
             usedVoices.map((voice, i) => {
-              const initial = (voice.voiceName || 'V').charAt(0).toUpperCase();
+              const displayName = prettyVoiceName(voice.voiceName);
+              const initial = (displayName || 'V').charAt(0).toUpperCase();
               const desc = voice.language
                 ? `${voice.language.toUpperCase()} · LAST USED ${new Date(voice.lastUsedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }).toUpperCase()}`
                 : 'RECENT VOICE';
+              const isLoading = previewLoading === voice.voiceName;
+              const isPlaying = previewPlaying === voice.voiceName;
+              const busy = previewLoading !== null;
               return (
                 <div key={voice.voiceName + i} className={`flex items-center gap-2.5 py-2.5 ${i > 0 ? 'border-t border-white/5' : ''}`}>
                   <div className="w-7 h-7 rounded-full grid place-items-center font-serif text-[12px] text-[#0A0D0F] font-semibold bg-gradient-to-br from-[#14C8CC] to-[#0FA6AE]">
@@ -365,18 +485,25 @@ export default function RightRail() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-[12.5px] text-[#ECEAE4] whitespace-nowrap overflow-hidden text-ellipsis">
-                      {voice.voiceName}
+                      {displayName}
                     </div>
                     <div className="font-mono text-[9.5px] text-[#5A6268] tracking-widest mt-px uppercase">
                       {desc}
                     </div>
                   </div>
-                  <div className="flex items-center gap-[1.5px] h-[18px] opacity-60" aria-hidden="true">
-                    <b className="w-[2px] rounded-[1px] bg-[#14C8CC]" style={{ height: '40%' }} />
-                    <b className="w-[2px] rounded-[1px] bg-[#14C8CC]" style={{ height: '70%' }} />
-                    <b className="w-[2px] rounded-[1px] bg-[#14C8CC]" style={{ height: '55%' }} />
-                    <b className="w-[2px] rounded-[1px] bg-[#14C8CC]" style={{ height: '85%' }} />
-                  </div>
+                  <button
+                    type="button"
+                    disabled={busy && !isLoading}
+                    onClick={() => playPreview(voice.voiceName, voice.language)}
+                    title={isPlaying ? 'Stop preview' : 'Play preview'}
+                    className="w-7 h-7 rounded-full grid place-items-center border border-[#14C8CC]/30 text-[#14C8CC] hover:bg-[#14C8CC]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {isLoading
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : isPlaying
+                        ? <Square className="w-3 h-3 fill-current" />
+                        : <Play className="w-3 h-3 fill-current" />}
+                  </button>
                 </div>
               );
             })

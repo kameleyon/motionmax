@@ -54,7 +54,7 @@ export default function ProjectsGallery() {
         .from('projects')
         .select('id,user_id,title,project_type,format,length,status,voice_name,voice_inclination,thumbnail_url,created_at,updated_at')
         .eq('user_id', user!.id)
-        .order('updated_at', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(12);
       if (error) throw error;
       if (!projs?.length) return [];

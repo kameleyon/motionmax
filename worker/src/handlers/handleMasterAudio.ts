@@ -245,15 +245,20 @@ export async function handleMasterAudio(
           slicePath,
         ]);
         const sliceBuf = fs.readFileSync(slicePath);
+        // Bucket name is `audio` in prod (not `scene-audio`) — matches
+        // what geminiFlashTTS uploads to. The wrong name caused every
+        // slice to fail and every scene fell back to the full master
+        // URL, which made the scene encoder try to render each scene
+        // at 158s instead of its proper slice length.
         const fileName = `${projectId}/master-slice-${i}-${Date.now()}.mp3`;
         const { error: uploadErr } = await supabase.storage
-          .from("scene-audio")
+          .from("audio")
           .upload(fileName, sliceBuf, { contentType: "audio/mpeg", upsert: true });
         if (uploadErr) {
           console.warn(`[MasterAudio] Scene ${i} slice upload failed: ${uploadErr.message}`);
           sceneAudioUrls[i] = result.url;
         } else {
-          const { data } = supabase.storage.from("scene-audio").getPublicUrl(fileName);
+          const { data } = supabase.storage.from("audio").getPublicUrl(fileName);
           sceneAudioUrls[i] = data.publicUrl;
         }
       } catch (err) {

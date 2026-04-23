@@ -1,8 +1,14 @@
 /**
  * Hypereal Lyria 3 Pro music generation.
  *
- * Hooks up to POST https://api.hypereal.cloud/api/v1/audio/generate with
+ * Hooks up to POST https://api.hypereal.cloud/v1/audio/generate with
  * model `lyria-3-pro` — Google Lyria 3 Pro for professional music.
+ *
+ * IMPORTANT: path is `/v1/audio/generate` NOT `/api/v1/audio/generate`.
+ * The extra `/api` returns a misleading 404 ("Use hypereal.tech
+ * instead") which is a catch-all for unknown paths; hypereal.tech is
+ * deprecated. All working Hypereal services (images, videos, chat,
+ * audio-asr) use the flat `/v1/...` shape — this matches them.
  *
  * Public surface:
  *   generateLyriaMusic({ prompt, durationSec, apiKey, genre, intensity })
@@ -13,7 +19,7 @@
  * the track itself.
  */
 
-const LYRIA_ENDPOINT = "https://api.hypereal.cloud/api/v1/audio/generate";
+const LYRIA_ENDPOINT = "https://api.hypereal.cloud/v1/audio/generate";
 
 // Tiny scoped logger (the frontend has createScopedLogger, the worker
 // uses console + writeSystemLog directly — keep it simple here).

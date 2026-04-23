@@ -118,6 +118,7 @@ export default function Stage({
   // PWA installs — we always do the CSS-driven app-level fullscreen.
   const isFullscreen = fullscreen;
   const setFullscreen = (v: boolean) => onFullscreenChange?.(v);
+  const toggleFullscreen = () => setFullscreen(!isFullscreen);
 
   // REC timecode ticks while rendering.
   useEffect(() => {

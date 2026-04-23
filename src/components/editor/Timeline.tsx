@@ -305,7 +305,11 @@ export default function Timeline({
                 )}
               </TrackRail>
 
-              {/* MUSIC track */}
+              {/* MUSIC track. "Generating…" only while the generation
+                  is still rendering. Once generation.status === 'complete'
+                  and music_url is still null, the user opted out OR Lyria
+                  failed — either way it's "Off" / "Failed" now, not
+                  "Generating forever". */}
               <TrackRail>
                 {hasMusic ? (
                   <div
@@ -316,7 +320,13 @@ export default function Timeline({
                     }}
                   >
                     <span className="font-mono text-[9.5px] text-white/80 tracking-wider uppercase">
-                      {state.intake.music?.genre ?? 'Lyria'} · {state.generation?.music_url ? 'Ready' : 'Generating…'}
+                      {state.intake.music?.genre ?? 'Lyria'} · {(() => {
+                        const url = (state.generation as { music_url?: string | null } | null)?.music_url;
+                        if (url) return 'Ready';
+                        if (state.phase === 'ready') return 'Failed';
+                        if (state.phase === 'error') return 'Failed';
+                        return 'Generating…';
+                      })()}
                     </span>
                   </div>
                 ) : (
@@ -326,24 +336,30 @@ export default function Timeline({
                 )}
               </TrackRail>
 
-              {/* SFX track */}
+              {/* SFX track. Same Ready/Failed/Generating/Off lifecycle
+                  as music — a single Lyria-generated ambient bed lives
+                  on generations.sfx_url. Rendered as one band across
+                  the whole timeline (not per-scene) since it's a
+                  continuous ambient layer. */}
               <TrackRail>
                 {hasSfx ? (
-                  state.scenes.map((scene, i) => {
-                    const offsetPct = (sceneOffsets[i] / totalMs) * 100 + 4;
-                    const widthPct = Math.min(18, (sceneDurationMs(scene) / totalMs) * 40);
-                    return (
-                      <div
-                        key={i}
-                        className="absolute top-[6px] bottom-[6px] bg-white/10 border border-white/[0.18] rounded-[3px] flex items-center px-1.5"
-                        style={{ left: `${offsetPct}%`, width: `${widthPct}%` }}
-                      >
-                        <span className="font-mono text-[9px] text-[#8A9198] tracking-wider">
-                          sfx
-                        </span>
-                      </div>
-                    );
-                  })
+                  <div
+                    className="absolute top-[4px] bottom-[4px] left-0 right-0 rounded-[3px] flex items-center px-2"
+                    style={{
+                      background: 'linear-gradient(90deg, rgba(120,210,180,.26), rgba(120,210,180,.14))',
+                      border: '1px solid rgba(120,210,180,.3)',
+                    }}
+                  >
+                    <span className="font-mono text-[9.5px] text-white/80 tracking-wider uppercase">
+                      Ambient · {(() => {
+                        const url = (state.generation as { sfx_url?: string | null } | null)?.sfx_url;
+                        if (url) return 'Ready';
+                        if (state.phase === 'ready') return 'Failed';
+                        if (state.phase === 'error') return 'Failed';
+                        return 'Generating…';
+                      })()}
+                    </span>
+                  </div>
                 ) : (
                   <div className="absolute inset-0 grid place-items-center font-mono text-[9.5px] text-[#5A6268] tracking-wider">
                     SFX off

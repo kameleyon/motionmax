@@ -284,28 +284,23 @@ export async function handleFinalizePhase(
   // the data is there in scene._meta and editor reads/writes it.
   try {
     const intake = intakeSettings as
-      | { music?: { on?: boolean; genre?: string; intensity?: number } }
+      | { music?: { on?: boolean; genre?: string; intensity?: number; sfx?: boolean } }
       | null;
     const music = intake?.music;
+    const apiKey = (process.env.HYPEREAL_API_KEY || "").trim();
+
+    // ── Music bed (Lyria 3 Pro) ──
     if (music?.on && lyriaIsConfigured()) {
-      // Estimate track length: ~10s per scene is our current scene clip
-      // length for cinematic. Explainer/SmartFlow can also use the same
-      // rough proxy. Cap at 120s so Lyria doesn't reject long calls.
       const approxDurationSec = Math.min(120, Math.max(20, finalScenes.length * 10));
       console.log(`[Finalize] Music on — calling Lyria 3 Pro for ~${approxDurationSec}s track`);
       const musicUrl = await generateLyriaMusic({
         prompt: projectContent ?? "",
         durationSec: approxDurationSec,
-        apiKey: (process.env.HYPEREAL_API_KEY || "").trim(),
+        apiKey,
         genre: music.genre as LyriaMusicGenre | undefined,
         intensity: music.intensity,
       });
 
-      // Persist in BOTH places: the new `generations.music_url`
-      // column (editor's Timeline + Stage read from here) AND the
-      // legacy `scenes[0]._meta.musicUrl` slot (export pipeline reads
-      // from here and per-scene mute toggles live alongside it).
-      // Writing to both keeps forward + backward compat during rollout.
       const augmented = finalScenesWithMeta.map((s: any, i: number) =>
         i === 0
           ? { ...s, _meta: { ...(s._meta || {}), musicUrl, musicGenre: music.genre, musicIntensity: music.intensity } }
@@ -316,6 +311,46 @@ export async function handleFinalizePhase(
         .update({ scenes: augmented, music_url: musicUrl })
         .eq("id", generationId);
       console.log(`[Finalize] Music URL persisted to generations.music_url: ${musicUrl.slice(0, 80)}`);
+    }
+
+    // ── SFX bed (Lyria 3 Pro with ambient/foley prompt) ──
+    // Separate try inside the outer try so a SFX failure doesn't abort
+    // music (they're independent additives). Prompt is deliberately
+    // ambient — no melody, no percussion — so it rides under both
+    // the music bed and narration without competing.
+    try {
+      if (music?.sfx && lyriaIsConfigured()) {
+        const sfxDurationSec = Math.min(120, Math.max(20, finalScenes.length * 10));
+        const sfxPrompt = [
+          "Ambient atmospheric bed, subtle room tone and environmental foley.",
+          "No melody, no vocals, no drums, no percussion.",
+          "Low, diffuse, cinematic texture that fills the space without competing.",
+          projectContent?.trim() ? `Context: ${projectContent.trim().slice(0, 300)}` : "",
+        ].filter(Boolean).join(" ");
+
+        console.log(`[Finalize] SFX on — calling Lyria 3 Pro for ~${sfxDurationSec}s ambient bed`);
+        const sfxUrl = await generateLyriaMusic({
+          prompt: sfxPrompt,
+          durationSec: sfxDurationSec,
+          apiKey,
+          // No genre — we want pure ambient. intensity low so it sits under.
+          intensity: 15,
+        });
+        await supabase
+          .from("generations")
+          .update({ sfx_url: sfxUrl })
+          .eq("id", generationId);
+        console.log(`[Finalize] SFX URL persisted to generations.sfx_url: ${sfxUrl.slice(0, 80)}`);
+      }
+    } catch (sfxErr) {
+      const msg = sfxErr instanceof Error ? sfxErr.message : String(sfxErr);
+      console.warn(`[Finalize] SFX bed skipped: ${msg}`);
+      await writeSystemLog({
+        jobId, projectId, userId, generationId,
+        category: "system_warning",
+        eventType: "finalize_sfx_skipped",
+        message: `Lyria SFX bed failed or skipped: ${msg}`,
+      });
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

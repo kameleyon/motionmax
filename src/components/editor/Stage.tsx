@@ -182,6 +182,15 @@ export default function Stage({
   const sceneMuteMusic = Boolean(
     (state.scenes[selectedSceneIndex]?.meta as { muteMusic?: boolean } | undefined)?.muteMusic,
   );
+
+  // SFX / ambient bed (also Lyria-generated, lower gain) plays in
+  // parallel with music. Same persistent-element pattern — never
+  // resets on scene change. Source = `state.generation.sfx_url`.
+  const sfxRef = useRef<HTMLAudioElement>(null);
+  const sfxUrl = (state.generation as { sfx_url?: string | null } | null)?.sfx_url ?? null;
+  const sceneMuteSfx = Boolean(
+    (state.scenes[selectedSceneIndex]?.meta as { muteSfx?: boolean } | undefined)?.muteSfx,
+  );
   // Fullscreen state is OWNED by EditorFrame so the frame can hide its
   // own chrome (topbar, sidebar, scenes, inspector, timeline) when the
   // stage goes fullscreen. Stage just reflects + toggles it via the
@@ -355,6 +364,30 @@ export default function Stage({
     music.volume = sceneMuteMusic ? 0 : 0.15;
   }, [sceneMuteMusic]);
 
+  // SFX / ambient bed priming — same pattern as music, lower volume
+  // (0.10) since it's pure atmosphere and sits under both music + voice.
+  useEffect(() => {
+    const sfx = sfxRef.current;
+    if (!sfx) return;
+    if (sfxUrl) {
+      if (sfx.src !== sfxUrl) {
+        sfx.src = sfxUrl;
+        sfx.load();
+      }
+      sfx.loop = true;
+    } else {
+      sfx.pause();
+      sfx.removeAttribute('src');
+      sfx.load();
+    }
+  }, [sfxUrl]);
+
+  useEffect(() => {
+    const sfx = sfxRef.current;
+    if (!sfx) return;
+    sfx.volume = sceneMuteSfx ? 0 : 0.10;
+  }, [sceneMuteSfx]);
+
   // ── Play/pause + end-of-scene handling. Ported from PublicShare's
   // share-page player. Handles THREE scene shapes:
   //   • Cinematic: video + audio  → drive scene end off audio
@@ -366,12 +399,14 @@ export default function Stage({
     const video = videoRef.current;
     const audio = audioRef.current;
     const music = musicRef.current;
+    const sfx = sfxRef.current;
     const scene = state.scenes[selectedSceneIndex];
 
     if (!playing) {
       video?.pause();
       audio?.pause();
       music?.pause();
+      sfx?.pause();
       return;
     }
 
@@ -380,6 +415,7 @@ export default function Stage({
     const hasVideo = !!(video && scene.videoUrl);
     const hasAudio = !!(audio && scene.audioUrl);
     const hasMusic = !!(music && musicUrl);
+    const hasSfx = !!(sfx && sfxUrl);
 
     // If neither media is present there's nothing to play — flip the
     // transport state back so the button doesn't stay in "pause" mode.
@@ -446,6 +482,13 @@ export default function Stage({
           music!.volume = sceneMuteMusic ? 0 : 0.15;
           const mp = music!.play();
           if (mp && typeof mp.catch === 'function') mp.catch(() => {});
+        }
+        // SFX ambient bed — even quieter than music, same continuous
+        // playback semantics.
+        if (hasSfx && sfx!.paused) {
+          sfx!.volume = sceneMuteSfx ? 0 : 0.10;
+          const sp = sfx!.play();
+          if (sp && typeof sp.catch === 'function') sp.catch(() => {});
         }
       } catch {
         // Autoplay blocked — user needs a gesture. Reset external state.
@@ -546,12 +589,13 @@ export default function Stage({
         </button>
       </div>
 
-      {/* Background music element — persists for the entire editor
-          session (not reset on scene change). Rendered OUTSIDE the
-          scene-aware preview block so scene navigation never pauses
-          or reseeks it. Volume is controlled imperatively via the
-          ducking + per-scene mute effects above. */}
+      {/* Background music + SFX beds — both persist for the entire
+          editor session (not reset on scene change). Rendered OUTSIDE
+          the scene-aware preview block so scene navigation never
+          pauses or reseeks them. Volume is controlled imperatively
+          via the ducking + per-scene mute effects above. */}
       <audio ref={musicRef} preload="auto" loop />
+      <audio ref={sfxRef} preload="auto" loop />
 
       {/* Frame. Clicking the frame advances to the next scene — this
           is the primary navigation gesture on mobile (where we hide

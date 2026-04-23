@@ -9,7 +9,7 @@ import Stage from '@/components/editor/Stage';
 import ScenesColumn from '@/components/editor/ScenesColumn';
 import Inspector from '@/components/editor/Inspector';
 import Timeline from '@/components/editor/Timeline';
-import { callPhase } from '@/hooks/generation/callPhase';
+import { useGenerationPipeline } from '@/hooks/useGenerationPipeline';
 import { createScopedLogger } from '@/lib/logger';
 
 const log = createScopedLogger('Editor');
@@ -23,6 +23,13 @@ export default function Editor() {
   const navigate = useNavigate();
 
   const { state, isLoading, isError } = useEditorState(projectId ?? null);
+
+  // The UNIFIED pipeline orchestrator — this is the one SmartFlow /
+  // Explainer / Cinematic have always used via the legacy workspaces.
+  // It chains script → images → audio → (video for cinematic) →
+  // finalize with proper dependency gates. Using it verbatim so we
+  // don't re-invent what already works.
+  const { startGeneration: startPipeline } = useGenerationPipeline();
 
   // During rendering, keep the selected scene pinned to the newest
   // scene that has any asset. Once ready, users can click around.
@@ -83,55 +90,49 @@ export default function Editor() {
     next.delete('autostart');
     setParams(next, { replace: true });
 
-    const payload: Record<string, unknown> = {
-      phase: 'script',
+    // Build the GenerationParams expected by the SAME pipeline
+    // orchestrator the legacy workspace used (useGenerationPipeline →
+    // runUnifiedPipeline). This is what chains script → images →
+    // audio → finalize with proper dep gates. We just hand it the
+    // project's data + intake_settings and let it run the full chain.
+    const projectFormat = project.format as 'landscape' | 'portrait' | 'square';
+    const projectLength = project.length as 'short' | 'brief' | 'presentation';
+    const genParams = {
       projectId: project.id,
-      projectType: project.project_type,
+      projectType: (project.project_type ?? 'doc2video') as 'doc2video' | 'smartflow' | 'cinematic',
       content: project.content,
-      format: project.format,
-      length: project.length,
-      style: project.style,
+      format: projectFormat,
+      length: projectLength,
+      style: project.style ?? 'realistic',
+      brandMark: project.brand_mark ?? intake.brandName ?? undefined,
       characterDescription: project.character_description ?? undefined,
-      // Supabase generated types lag the character_images column
-      // (added via migration 20260411000001). Cast through unknown
-      // so the consumer gets the raw jsonb array if present.
       characterImages: Array.isArray((project as unknown as { character_images?: string[] }).character_images)
         ? (project as unknown as { character_images: string[] }).character_images
         : undefined,
       characterConsistencyEnabled: project.character_consistency_enabled ?? true,
-      voiceType: 'standard',
+      voiceType: 'standard' as const,
       voiceName: project.voice_name ?? undefined,
       language: project.voice_inclination ?? 'en',
-      // Intake settings live in projects.intake_settings (or its
-      // _meta fallback) — every piece of context the worker's script
-      // builder needs lives inside `intake`, so spread it last so it
-      // takes precedence over any undefined fallbacks above.
       captionStyle: intake.captionStyle,
       brandName: intake.brandName,
-      brandMark: intake.brandName,
-      music: intake.music,
-      lipSync: intake.lipSync,
-      tone: intake.tone,
-      visualStyle: intake.visualStyle,
     };
 
-    log.info('Kicking off generate_video job', {
+    log.info('Kicking off unified pipeline', {
       projectId: project.id,
-      projectType: project.project_type,
-      format: project.format,
-      length: project.length,
+      projectType: genParams.projectType,
+      format: genParams.format,
+      length: genParams.length,
     });
 
-    // Fire-and-forget. callPhase deducts credits upfront, queues the
-    // job, and then polls until completion. We don't await — the
-    // editor's realtime + polling already picks up the new generation
-    // row and updates the UI. If credit deduction fails, we show a
-    // toast and route the user back to the dashboard rather than
-    // leaving them on a blank screen.
+    // Fire-and-forget. runUnifiedPipeline handles credit deduction
+    // (via callPhase inside the script step), queues every downstream
+    // job, and polls them. We don't await — the editor's realtime
+    // refresh + useEditorState picks up scene-level progress as the
+    // worker writes back.
     void (async () => {
       try {
         setKickoffState('starting');
-        await callPhase(payload, 10 * 60 * 1000);
+        await startPipeline(genParams);
         setKickoffState('started');
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -140,7 +141,7 @@ export default function Editor() {
         setKickoffState('error');
       }
     })();
-  }, [state, params, setParams]);
+  }, [state, params, setParams, startPipeline]);
 
   // Awaiting-generation render trigger — covers THREE scenarios:
   //   1. Fresh autostart in flight (kickoffState='starting') — show

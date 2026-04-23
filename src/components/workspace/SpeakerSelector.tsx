@@ -56,9 +56,11 @@ export type SpeakerVoice =
   | "gm:Leda"         | "gm:Aoede"        | "gm:Callirrhoe"
   | "gm:Kore"         | "gm:Vindemiatrix" | "gm:Achernar"
   | "gm:Sulafat"      | "gm:Laomedeia"
+  | "gm:Erinome"      | "gm:Zephyr"
   | "gm:Charon"       | "gm:Orus"         | "gm:Iapetus"
   | "gm:Fenrir"       | "gm:Algenib"      | "gm:Rasalgethi"
-  | "gm:Puck";
+  | "gm:Puck"         | "gm:Schedar"      | "gm:Umbriel"
+  | "gm:Enceladus"    | "gm:Algieba"      | "gm:Zubenelgenubi";
 
 const log = createScopedLogger("SpeakerSelector");
 
@@ -85,36 +87,36 @@ export interface SpeakerOption { id: SpeakerVoice; label: string; description: s
 // data (gender, accent) pulled from GET /waves/v1/lightning-v3.1/get_voices.
 const englishSmallestSpeakers: SpeakerOption[] = [
   // Female (American accent)
-  { id: "sm:avery",     label: "Avery",     description: "Female" },
-  { id: "sm:brooke",    label: "Brooke",    description: "Female" },
-  { id: "sm:dina",      label: "Dina",      description: "Female" },
-  { id: "sm:elizabeth", label: "Elizabeth", description: "Female" },
-  { id: "sm:ella",      label: "Ella",      description: "Female" },
-  { id: "sm:hannah",    label: "Hannah",    description: "Female" },
-  { id: "sm:harper",    label: "Harper",    description: "Female" },
-  { id: "sm:jessica",   label: "Jessica",   description: "Female" },
-  { id: "sm:kevin",     label: "Kevin",     description: "Female" }, // API tags Kevin as female
-  { id: "sm:lauren",    label: "Lauren",    description: "Female" },
-  { id: "sm:mia",       label: "Mia",       description: "Female" },
-  { id: "sm:nicole",    label: "Nicole",    description: "Female" },
-  { id: "sm:olivia",    label: "Olivia",    description: "Female" },
-  { id: "sm:quinn",     label: "Quinn",     description: "Female" },
-  { id: "sm:rachel",    label: "Rachel",    description: "Female" },
-  { id: "sm:sandra",    label: "Sandra",    description: "Female" },
-  { id: "sm:sophia",    label: "Sophia",    description: "Female" },
-  { id: "sm:vanessa",   label: "Vanessa",   description: "Female" },
+  { id: "sm:avery",     label: "Avery",     description: "Female · Energetic, upbeat · social-media" },
+  { id: "sm:brooke",    label: "Brooke",    description: "Female · Warm, conversational · explainers" },
+  { id: "sm:dina",      label: "Dina",      description: "Female · Mature, authoritative · documentary" },
+  { id: "sm:elizabeth", label: "Elizabeth", description: "Female · Calm, sophisticated · luxury/brand" },
+  { id: "sm:ella",      label: "Ella",      description: "Female · Youthful, bright · lifestyle/wellness" },
+  { id: "sm:hannah",    label: "Hannah",    description: "Female · Friendly, approachable · tutorials" },
+  { id: "sm:harper",    label: "Harper",    description: "Female · Bright, expressive · storytelling" },
+  { id: "sm:jessica",   label: "Jessica",   description: "Female · Smooth, professional · corporate" },
+  { id: "sm:kevin",     label: "Kevin",     description: "Female · Soft, intimate · meditation/ASMR" }, // API tags Kevin as female
+  { id: "sm:lauren",    label: "Lauren",    description: "Female · Clear, articulate · e-learning" },
+  { id: "sm:mia",       label: "Mia",       description: "Female · Young, playful · kids/animated" },
+  { id: "sm:nicole",    label: "Nicole",    description: "Female · Confident, business · sales/marketing" },
+  { id: "sm:olivia",    label: "Olivia",    description: "Female · Warm, welcoming · hospitality" },
+  { id: "sm:quinn",     label: "Quinn",     description: "Female · Modern, youthful · social-media" },
+  { id: "sm:rachel",    label: "Rachel",    description: "Female · Classic, neutral · versatile narration" },
+  { id: "sm:sandra",    label: "Sandra",    description: "Female · Mature, storytelling · documentary" },
+  { id: "sm:sophia",    label: "Sophia",    description: "Female · Elegant, refined · premium brand" },
+  { id: "sm:vanessa",   label: "Vanessa",   description: "Female · Bold, expressive · advertising" },
   // Male (American accent)
-  { id: "sm:alex",      label: "Alex",      description: "Male" },
-  { id: "sm:brian",     label: "Brian",     description: "Male" },
-  { id: "sm:daniel",    label: "Daniel",    description: "Male" },
-  { id: "sm:divyanshu", label: "Divyanshu", description: "Male" },
-  { id: "sm:ethan",     label: "Ethan",     description: "Male" },
-  { id: "sm:johnny",    label: "Johnny",    description: "Male" },
-  { id: "sm:jordan",    label: "Jordan",    description: "Male" },
-  { id: "sm:kyle",      label: "Kyle",      description: "Male" },
-  { id: "sm:lucas",     label: "Lucas",     description: "Male" },
-  { id: "sm:magnus",    label: "Magnus",    description: "Male" },
-  { id: "sm:robert",    label: "Robert",    description: "Male" },
+  { id: "sm:alex",      label: "Alex",      description: "Male · Casual, everyday · vlogs/talking-head" },
+  { id: "sm:brian",     label: "Brian",     description: "Male · Deep, authoritative · trailers/corporate" },
+  { id: "sm:daniel",    label: "Daniel",    description: "Male · Warm, measured · documentary" },
+  { id: "sm:divyanshu", label: "Divyanshu", description: "Male · Conversational · Indian-American accent" },
+  { id: "sm:ethan",     label: "Ethan",     description: "Male · Young, energetic · social-media/ads" },
+  { id: "sm:johnny",    label: "Johnny",    description: "Male · Gravelly, mature · storytelling" },
+  { id: "sm:jordan",    label: "Jordan",    description: "Male · Neutral, flexible · versatile narration" },
+  { id: "sm:kyle",      label: "Kyle",      description: "Male · Bright, youthful · product demos" },
+  { id: "sm:lucas",     label: "Lucas",     description: "Male · Smooth, cinematic · voiceover" },
+  { id: "sm:magnus",    label: "Magnus",    description: "Male · Deep, commanding · trailers/epic" },
+  { id: "sm:robert",    label: "Robert",    description: "Male · Classic, professional · corporate/news" },
 ];
 
 // Spanish — all 11 voices from Smallest v3.1 (mexican/latin accent).
@@ -122,18 +124,18 @@ const englishSmallestSpeakers: SpeakerOption[] = [
 // Flash below for the European-language lineup.
 const spanishSmallestSpeakers: SpeakerOption[] = [
   // Female (v3.1)
-  { id: "sm:camilla",  label: "Camilla",   description: "Female" },
-  { id: "sm:daniella", label: "Daniella",  description: "Female" },
-  { id: "sm:gabriela", label: "Gabriela",  description: "Female" },
-  { id: "sm:lucia",    label: "Lucia",     description: "Female" },
-  { id: "sm:mariana",  label: "Mariana",   description: "Female" },
+  { id: "sm:camilla",  label: "Camilla",   description: "Female · Warm, conversational · Latin accent" },
+  { id: "sm:daniella", label: "Daniella",  description: "Female · Bright, youthful · social-media" },
+  { id: "sm:gabriela", label: "Gabriela",  description: "Female · Clear, conversational · tutorials" },
+  { id: "sm:lucia",    label: "Lucia",     description: "Female · Elegant, refined · premium brand" },
+  { id: "sm:mariana",  label: "Mariana",   description: "Female · Expressive, storytelling · narrative" },
   // Male (v3.1)
-  { id: "sm:carlos",   label: "Carlos 2",  description: "Male" },
-  { id: "sm:diego",    label: "Diego",     description: "Male" },
-  { id: "sm:javier",   label: "Javier",    description: "Male" },
-  { id: "sm:jose",     label: "Jose",      description: "Male" },
-  { id: "sm:luis",     label: "Luis",      description: "Male" },
-  { id: "sm:miguel",   label: "Miguel",    description: "Male" },
+  { id: "sm:carlos",   label: "Carlos 2",  description: "Male · Smooth, neutral · Latin accent" },
+  { id: "sm:diego",    label: "Diego",     description: "Male · Bold, confident · advertising" },
+  { id: "sm:javier",   label: "Javier",    description: "Male · Measured, documentary · narration" },
+  { id: "sm:jose",     label: "Jose",      description: "Male · Casual, friendly · vlogs/talking-head" },
+  { id: "sm:luis",     label: "Luis",      description: "Male · Deep, authoritative · trailers/corporate" },
+  { id: "sm:miguel",   label: "Miguel",    description: "Male · Warm, approachable · explainers" },
 ];
 
 // Gemini 3.1 Flash TTS — 15 voices that work across FR/ES/IT/DE/NL (model
@@ -150,41 +152,48 @@ const geminiFlashSpeakers: SpeakerOption[] = [
   // docs). Description = perceived gender + tone so users picking a
   // "social media influencer" voice can actually tell what they're
   // choosing instead of guessing from abstract tone descriptors.
-  { id: "gm:Leda",         label: "Leda",         description: "Female · Youthful, playful" },
-  { id: "gm:Aoede",        label: "Aoede",        description: "Female · Breezy, light" },
-  { id: "gm:Callirrhoe",   label: "Callirrhoe",   description: "Female · Easy-going" },
-  { id: "gm:Sulafat",      label: "Sulafat",      description: "Female · Warm, conversational" },
-  { id: "gm:Vindemiatrix", label: "Vindemiatrix", description: "Female · Gentle" },
-  { id: "gm:Achernar",     label: "Achernar",     description: "Female · Soft" },
-  { id: "gm:Laomedeia",    label: "Laomedeia",    description: "Female · Upbeat, social-media style" },
-  { id: "gm:Kore",         label: "Kore",         description: "Female · Firm, authoritative" },
+  { id: "gm:Leda",          label: "Leda",          description: "Female · Youthful, playful" },
+  { id: "gm:Aoede",         label: "Aoede",         description: "Female · Breezy, light" },
+  { id: "gm:Callirrhoe",    label: "Callirrhoe",    description: "Female · Easy-going" },
+  { id: "gm:Sulafat",       label: "Sulafat",       description: "Female · Warm, conversational" },
+  { id: "gm:Vindemiatrix",  label: "Vindemiatrix",  description: "Female · Gentle" },
+  { id: "gm:Achernar",      label: "Achernar",      description: "Female · Soft" },
+  { id: "gm:Laomedeia",     label: "Laomedeia",     description: "Female · Upbeat, social-media style" },
+  { id: "gm:Kore",          label: "Kore",          description: "Female · Firm, authoritative" },
+  { id: "gm:Erinome",       label: "Erinome",       description: "Female · Clear, articulate" },
+  { id: "gm:Zephyr",        label: "Zephyr",        description: "Female · Bright, higher pitch" },
   // Male-leaning voices.
-  { id: "gm:Charon",       label: "Charon",       description: "Male · Informative, documentary" },
-  { id: "gm:Orus",         label: "Orus",         description: "Male · Firm, serious (dramatic)" },
-  { id: "gm:Iapetus",      label: "Iapetus",      description: "Male · Clear, neutral" },
-  { id: "gm:Rasalgethi",   label: "Rasalgethi",   description: "Male · Informative, explanatory" },
-  { id: "gm:Algenib",      label: "Algenib",      description: "Male · Gravelly, deep" },
-  { id: "gm:Fenrir",       label: "Fenrir",       description: "Male · Excitable, energetic" },
-  { id: "gm:Puck",         label: "Puck",         description: "Male · Upbeat, social-media style" },
+  { id: "gm:Charon",        label: "Charon",        description: "Male · Informative, documentary" },
+  { id: "gm:Orus",          label: "Orus",          description: "Male · Firm, serious (dramatic)" },
+  { id: "gm:Iapetus",       label: "Iapetus",       description: "Male · Clear, neutral" },
+  { id: "gm:Rasalgethi",    label: "Rasalgethi",    description: "Male · Informative, explanatory" },
+  { id: "gm:Algenib",       label: "Algenib",       description: "Male · Gravelly, deep" },
+  { id: "gm:Fenrir",        label: "Fenrir",        description: "Male · Excitable, energetic" },
+  { id: "gm:Puck",          label: "Puck",          description: "Male · Upbeat, social-media style" },
+  { id: "gm:Schedar",       label: "Schedar",       description: "Male · Even, measured" },
+  { id: "gm:Umbriel",       label: "Umbriel",       description: "Male · Easy-going" },
+  { id: "gm:Enceladus",     label: "Enceladus",     description: "Male · Breathy, intimate" },
+  { id: "gm:Algieba",       label: "Algieba",       description: "Male · Smooth, lower pitch" },
+  { id: "gm:Zubenelgenubi", label: "Zubenelgenubi", description: "Male · Casual, conversational" },
 ];
 
 const creoleSpeakers: SpeakerOption[] = [
-  { id: "Pierre", label: "Pierre", description: "Male" },
-  { id: "Marie", label: "Marie", description: "Female" },
+  { id: "Pierre", label: "Pierre", description: "Male · Warm, measured · Haitian Creole narration" },
+  { id: "Marie",  label: "Marie",  description: "Female · Clear, friendly · Haitian Creole narration" },
 ];
 
 const frenchSpeakers: SpeakerOption[] = [
   // Legacy Fish Audio voices — untouched.
-  { id: "Jacques", label: "Jacques", description: "Male" },
-  { id: "Camille", label: "Camille", description: "Female" },
+  { id: "Jacques", label: "Jacques", description: "Male · Neutral, professional · French narration/corporate" },
+  { id: "Camille", label: "Camille", description: "Female · Warm, conversational · French explainers/lifestyle" },
   // Gemini 3.1 Flash (multilingual) — 15 voices.
   ...geminiFlashSpeakers,
 ];
 
 const spanishSpeakers: SpeakerOption[] = [
   // Legacy Fish Audio voices — untouched.
-  { id: "Carlos", label: "Carlos", description: "Male" },
-  { id: "Isabella", label: "Isabella", description: "Female" },
+  { id: "Carlos",   label: "Carlos",   description: "Male · Authoritative, mature · Spanish corporate/news" },
+  { id: "Isabella", label: "Isabella", description: "Female · Warm, expressive · Spanish storytelling" },
   // Smallest v3.1 Spanish voices — retained (quality is fine here).
   ...spanishSmallestSpeakers,
   // Gemini 3.1 Flash (multilingual) — 15 voices.
@@ -198,8 +207,8 @@ const englishSpeakers: SpeakerOption[] = [
   // Adam / River / Smallest voices lower down.
   ...geminiFlashSpeakers,
   // Legacy Adam/River — kept for continuity, pushed below Gemini.
-  { id: "Adam", label: "Adam", description: "Male" },
-  { id: "River", label: "River", description: "Female" },
+  { id: "Adam",  label: "Adam",  description: "Male · Versatile, confident · general-purpose narration" },
+  { id: "River", label: "River", description: "Female · Professional, clear · corporate/explainers" },
   // Smallest v3.1 29-voice American-English catalog — pushed to the
   // bottom but still fully available.
   ...englishSmallestSpeakers,

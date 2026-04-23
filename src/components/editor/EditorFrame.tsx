@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { WifiOff } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { WifiOff, ChevronLeft, ChevronRight, GripHorizontal } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import MiniSidebar from './MiniSidebar';
 import EditorTopBar, { type SubView } from './EditorTopBar';
@@ -47,6 +47,68 @@ export default function EditorFrame({
   // jump, so a redundant scene list drawer would just eat screen height.
   const [menuDrawerOpen, setMenuDrawerOpen] = useState(false);
   const [inspectorDrawerOpen, setInspectorDrawerOpen] = useState(false);
+
+  // Layout state — collapsible side panels + draggable timeline.
+  // Persists per-browser via localStorage so the user's layout sticks
+  // across sessions. Mobile (< lg) doesn't use these — scenes column
+  // and inspector are accessed via drawers there. Timeline height
+  // is clamped to [140, 360] so it stays usable: 140 fits 3 tracks,
+  // 360 fits all 5 (Video / Voice / Captions / Music / SFX) with
+  // breathing room.
+  const [scenesCollapsed, setScenesCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('mm.editor.scenesCollapsed') === '1';
+  });
+  const [inspectorCollapsed, setInspectorCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('mm.editor.inspectorCollapsed') === '1';
+  });
+  const [timelineHeight, setTimelineHeight] = useState<number>(() => {
+    if (typeof window === 'undefined') return 180;
+    const saved = parseInt(localStorage.getItem('mm.editor.timelineH') ?? '180', 10);
+    return Number.isFinite(saved) ? Math.min(360, Math.max(140, saved)) : 180;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('mm.editor.scenesCollapsed', scenesCollapsed ? '1' : '0');
+  }, [scenesCollapsed]);
+  useEffect(() => {
+    localStorage.setItem('mm.editor.inspectorCollapsed', inspectorCollapsed ? '1' : '0');
+  }, [inspectorCollapsed]);
+  useEffect(() => {
+    localStorage.setItem('mm.editor.timelineH', String(timelineHeight));
+  }, [timelineHeight]);
+
+  // Drag state for the timeline resize handle. Tracks the pointer's
+  // starting Y + the timeline's starting height so the user can drag
+  // smoothly without jitter. Clamped to [140, 360] on every move.
+  const dragStateRef = useRef<{ startY: number; startH: number } | null>(null);
+  useEffect(() => {
+    const onMove = (e: MouseEvent | TouchEvent) => {
+      const drag = dragStateRef.current;
+      if (!drag) return;
+      const clientY = 'touches' in e ? e.touches[0]?.clientY ?? 0 : e.clientY;
+      // Dragging UP = larger timeline (deltaY negative → height grows)
+      const delta = drag.startY - clientY;
+      const next = Math.min(360, Math.max(140, drag.startH + delta));
+      setTimelineHeight(next);
+    };
+    const onUp = () => { dragStateRef.current = null; document.body.style.userSelect = ''; };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('touchmove', onMove, { passive: true });
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchend', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('touchend', onUp);
+    };
+  }, []);
+  const startResize = (clientY: number) => {
+    dragStateRef.current = { startY: clientY, startH: timelineHeight };
+    document.body.style.userSelect = 'none';
+  };
 
   // Offline banner — react-query retries + Supabase realtime will
   // silently eat updates when the tab goes offline (job status won't
@@ -121,17 +183,57 @@ export default function EditorFrame({
           onOpenInspectorDrawer={() => setInspectorDrawerOpen(true)}
         />
 
-        {/* Editor grid body. CSS Grid collapses columns by breakpoint:
-            ≥1280: 260 | 1fr | 300
-            1024-1279: 220 | 1fr | 280
-            < 1024: 1fr (scenes + inspector hidden; accessed via drawer).
-            Timeline spans full width at the bottom (180px; 140px mobile). */}
-        <div className="grid flex-1 min-h-0 overflow-hidden grid-cols-1 lg:grid-cols-[220px_1fr_280px] xl:grid-cols-[260px_1fr_300px] grid-rows-[1fr_140px] sm:grid-rows-[1fr_160px] lg:grid-rows-[1fr_180px]">
-          {/* Scenes column (desktop only — mobile uses the drawer) */}
+        {/* Editor grid body — fully dynamic at lg+:
+              • Scenes column: 240px (or 32px when collapsed)
+              • Stage:         1fr
+              • Inspector:     290px (or 32px when collapsed)
+              • Timeline row:  user-draggable, clamped [140, 360]
+            Mobile/tablet (< lg) keeps the single-column layout with
+            scenes + inspector hidden behind drawers. Inline grid
+            template via CSS variable so we don't have to fight
+            Tailwind's static class system. */}
+        <div
+          className="grid flex-1 min-h-0 overflow-hidden grid-cols-1 lg:[grid-template-columns:var(--mm-cols)]"
+          style={{
+            // grid-template-rows: stage flex + handle 6px + timeline (user height)
+            gridTemplateRows: `1fr 6px ${timelineHeight}px`,
+            // CSS variable consumed only at lg+ — mobile sticks with grid-cols-1.
+            ['--mm-cols' as string]: `${scenesCollapsed ? '32px' : '240px'} 1fr ${inspectorCollapsed ? '32px' : '290px'}`,
+          } as React.CSSProperties}
+        >
+          {/* Scenes column (desktop only) — collapsed state shrinks to
+              a 32px gutter with just the chevron, expanded shows the
+              full ScenesColumn. */}
           <aside
-            className="border-r border-white/5 bg-[#10151A] overflow-y-auto row-start-1 hidden lg:block lg:col-start-1"
+            className="relative border-r border-white/5 bg-[#10151A] row-start-1 hidden lg:block lg:col-start-1 overflow-hidden"
           >
-            {scenes}
+            {scenesCollapsed ? (
+              <button
+                type="button"
+                onClick={() => setScenesCollapsed(false)}
+                title="Show scenes panel"
+                aria-label="Expand scenes panel"
+                className="w-full h-full grid place-items-center text-[#8A9198] hover:text-[#ECEAE4] hover:bg-white/5 transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <>
+                <div className="h-full overflow-y-auto">{scenes}</div>
+                {/* Inner-edge collapse handle — sits on the right border
+                    of the scenes column, points back toward the column
+                    so the user knows clicking will close it. */}
+                <button
+                  type="button"
+                  onClick={() => setScenesCollapsed(true)}
+                  title="Collapse scenes panel"
+                  aria-label="Collapse scenes panel"
+                  className="absolute top-1/2 -right-[1px] -translate-y-1/2 z-10 w-4 h-12 rounded-r-md bg-[#10151A] border border-l-0 border-white/10 grid place-items-center text-[#5A6268] hover:text-[#14C8CC] hover:bg-[#1B2228] transition-colors"
+                >
+                  <ChevronLeft className="w-3 h-3" />
+                </button>
+              </>
+            )}
           </aside>
 
           {/* Stage */}
@@ -139,16 +241,56 @@ export default function EditorFrame({
             {stage}
           </section>
 
-          {/* Inspector (desktop only) */}
+          {/* Inspector (desktop only) — same collapsed/expanded
+              treatment as the scenes column, mirrored. */}
           <aside
-            className="border-l border-white/5 bg-[#10151A] overflow-y-auto row-start-1 hidden lg:block lg:col-start-3"
+            className="relative border-l border-white/5 bg-[#10151A] row-start-1 hidden lg:block lg:col-start-3 overflow-hidden"
           >
-            {inspector}
+            {inspectorCollapsed ? (
+              <button
+                type="button"
+                onClick={() => setInspectorCollapsed(false)}
+                title="Show inspector panel"
+                aria-label="Expand inspector panel"
+                className="w-full h-full grid place-items-center text-[#8A9198] hover:text-[#ECEAE4] hover:bg-white/5 transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            ) : (
+              <>
+                <div className="h-full overflow-y-auto">{inspector}</div>
+                <button
+                  type="button"
+                  onClick={() => setInspectorCollapsed(true)}
+                  title="Collapse inspector panel"
+                  aria-label="Collapse inspector panel"
+                  className="absolute top-1/2 -left-[1px] -translate-y-1/2 z-10 w-4 h-12 rounded-l-md bg-[#10151A] border border-r-0 border-white/10 grid place-items-center text-[#5A6268] hover:text-[#14C8CC] hover:bg-[#1B2228] transition-colors"
+                >
+                  <ChevronRight className="w-3 h-3" />
+                </button>
+              </>
+            )}
           </aside>
 
-          {/* Timeline — spans full width */}
+          {/* Timeline resize handle — 6px tall draggable bar above the
+              timeline. Drag UP to grow, DOWN to shrink. Clamped to
+              [140, 360]. Subtle by default, brightens on hover so the
+              user can find it without it being visually noisy. */}
+          <div
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label="Resize timeline"
+            title="Drag to resize the timeline"
+            onMouseDown={(e) => { e.preventDefault(); startResize(e.clientY); }}
+            onTouchStart={(e) => { startResize(e.touches[0]?.clientY ?? 0); }}
+            className="row-start-2 col-start-1 lg:col-span-3 group cursor-row-resize bg-[#0A0D0F] hover:bg-[#14C8CC]/20 transition-colors flex items-center justify-center"
+          >
+            <GripHorizontal className="w-4 h-4 text-[#5A6268] group-hover:text-[#14C8CC]" />
+          </div>
+
+          {/* Timeline — spans full width, height controlled by user */}
           <section
-            className="border-t border-white/5 bg-[#10151A] overflow-hidden row-start-2 col-start-1 lg:col-span-3"
+            className="border-t border-white/5 bg-[#10151A] overflow-hidden row-start-3 col-start-1 lg:col-span-3"
           >
             {timeline}
           </section>

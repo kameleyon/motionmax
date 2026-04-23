@@ -54,7 +54,7 @@ export default function Inspector({
     busy, apply, regenerate, regenerateImage, regenerateVideo, regenerateAudio,
     undoLastRegen,
     updateSceneMeta, updateAllScenesMeta, updateProjectVoice, updateIntakeSettings,
-    applyCaptionsAll,
+    applyCaptionsAll, regenerateAllVideos,
   } = useSceneRegen(state);
   const { tasksForScene, bulkAudioRegenActive, bulkOpActive, bulkOpKind } =
     useActiveJobs(state.project?.id ?? null);
@@ -690,14 +690,41 @@ export default function Inspector({
                 </p>
               </section>
 
+              {/* Two re-render paths:
+                  • Primary "Re-render all" → bulk: queues a
+                    cinematic_video job for every scene with an image,
+                    each tagged _bulk: 'motion-apply-all'. Trips
+                    bulkOpActive so every scene in ScenesColumn shows
+                    its own loader, every Timeline clip stripes, and
+                    Inspector overlays with the bulk message.
+                  • Secondary "just this scene" → per-scene only;
+                    only this scene locks. */}
+              <button
+                type="button"
+                onClick={async () => {
+                  if (window.confirm(`Re-render every scene's video with the current motion settings? This queues ${state.scenes.length} video jobs and locks editing while it runs.`)) {
+                    await regenerateAllVideos();
+                  }
+                }}
+                disabled={busy !== 'idle' || projectLocked}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-[12.5px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {projectLocked && bulkOpKind === 'motion-apply-all'
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <RotateCw className="w-3.5 h-3.5" />}
+                {projectLocked && bulkOpKind === 'motion-apply-all'
+                  ? `Re-rendering all (${state.scenes.length})…`
+                  : `Re-render all videos with new motion`}
+              </button>
               <button
                 type="button"
                 onClick={() => regenerateVideo(selectedSceneIndex)}
-                disabled={busy !== 'idle' || videoRegenActive || !scene.imageUrl}
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] border border-white/10 text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={busy !== 'idle' || videoRegenActive || !scene.imageUrl || projectLocked}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-[11.5px] text-[#8A9198] hover:text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed -mt-2"
+                title="Only re-render the current scene"
               >
                 {(busy === 'regen' || videoRegenActive) ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCw className="w-3 h-3" />}
-                {videoRegenActive ? 'Rendering video…' : 'Re-render video with new motion'}
+                {videoRegenActive ? 'Rendering this scene…' : 'or just this scene'}
               </button>
             </>
           )}

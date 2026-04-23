@@ -347,6 +347,53 @@ export function useSceneRegen(state: EditorState | null) {
     return true;
   }, [state?.generation]);
 
+  /** Re-render the video for EVERY scene that has an image. Used by
+   *  the Motion tab's "Re-render all" button after the user applies a
+   *  new camera motion across the project — every cinematic_video
+   *  insert is tagged _bulk: 'motion-apply-all' so useActiveJobs flips
+   *  bulkOpActive on. That triggers the project-wide lock UI: every
+   *  scene thumbnail shows its own loader, every timeline clip stripes,
+   *  and the Inspector overlay swaps to the bulk message. */
+  const regenerateAllVideos = useCallback(async () => {
+    if (!user || !state?.project || !state?.generation) return false;
+    setBusy('regen');
+    try {
+      const inserts = state.scenes
+        .map((s, i) => ({ scene: s, index: i }))
+        .filter(({ scene }) => !!scene.imageUrl)
+        .map(({ index: i }) => ({
+          user_id: user.id,
+          project_id: state.project!.id,
+          task_type: 'cinematic_video' as const,
+          payload: {
+            generationId: state.generation!.id,
+            projectId: state.project!.id,
+            sceneIndex: i,
+            regenerate: true,
+            _bulk: 'motion-apply-all',
+          } as unknown as never,
+          status: 'pending',
+        }));
+      if (inserts.length === 0) {
+        toast.info('No scenes with images to re-render.');
+        return false;
+      }
+      const { error } = await supabase
+        .from('video_generation_jobs')
+        .insert(inserts);
+      if (error) throw new Error(error.message);
+      toast.success(`Re-rendering ${inserts.length} scenes with new motion. Editing locked while it runs.`);
+      scheduleRefresh(state.project.id);
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Couldn't re-render: ${msg}`);
+      return false;
+    } finally {
+      setBusy('idle');
+    }
+  }, [user, state, scheduleRefresh]);
+
   /** Apply captions across the whole project. Persists the new
    *  caption_style to intake_settings (which the export reads from) and
    *  queues an export_video job marked as a bulk caption-apply op so
@@ -494,5 +541,6 @@ export function useSceneRegen(state: EditorState | null) {
     updateProjectVoice,
     updateIntakeSettings,
     applyCaptionsAll,
+    regenerateAllVideos,
   };
 }

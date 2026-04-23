@@ -54,6 +54,7 @@ export default function Editor() {
   }, [state, params, setParams]);
 
   const [playing, setPlaying] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   // Which Inspector tab should open when the user clicks a timeline
   // clip. Undefined means "don't override — leave the user's current
   // tab alone". Timeline VOICE clips call `selectVoice` which sets
@@ -106,6 +107,7 @@ export default function Editor() {
       subView={subView}
       onSubViewChange={setSubView}
       saveStatus={saveStatus}
+      fullscreen={fullscreen}
       scenes={
         <ScenesColumn
           state={state}
@@ -120,6 +122,8 @@ export default function Editor() {
           onAdvanceScene={advanceScene}
           playing={playing}
           onPlayingChange={setPlaying}
+          fullscreen={fullscreen}
+          onFullscreenChange={setFullscreen}
         />
       }
       inspector={

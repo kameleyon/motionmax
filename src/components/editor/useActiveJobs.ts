@@ -22,6 +22,16 @@ export interface ActiveJob {
   taskType: ActiveTask;
   sceneIndex: number | null;
   status: 'pending' | 'processing';
+  /** When set, this job is part of a project-wide bulk operation
+   *  (export, voice-apply-all, captions-apply, motion-apply-all).
+   *  Drives the project-wide lock UI so per-scene work isn't gated by
+   *  individual regens but IS gated by global re-renders. */
+  bulkKind:
+    | 'export'
+    | 'voice-apply-all'
+    | 'captions-apply'
+    | 'motion-apply-all'
+    | null;
 }
 
 type Row = {
@@ -58,14 +68,26 @@ export function useActiveJobs(projectId: string | null | undefined) {
       if (error) throw error;
       return ((data ?? []) as Row[])
         .filter((r) => isActiveTask(r.task_type))
-        .map((r) => ({
-          id: r.id,
-          taskType: r.task_type as ActiveTask,
-          sceneIndex: typeof r.payload?.sceneIndex === 'number'
-            ? (r.payload.sceneIndex as number)
-            : null,
-          status: r.status as 'pending' | 'processing',
-        }));
+        .map((r) => {
+          // export_video is always a bulk op. Other task types only
+          // count as bulk when explicitly tagged via payload._bulk so
+          // a normal per-scene regen doesn't accidentally lock the
+          // whole project.
+          const explicit = r.payload?._bulk as ActiveJob['bulkKind'] | undefined;
+          const bulkKind: ActiveJob['bulkKind'] =
+            r.task_type === 'export_video'
+              ? 'export'
+              : (explicit ?? null);
+          return {
+            id: r.id,
+            taskType: r.task_type as ActiveTask,
+            sceneIndex: typeof r.payload?.sceneIndex === 'number'
+              ? (r.payload.sceneIndex as number)
+              : null,
+            status: r.status as 'pending' | 'processing',
+            bulkKind,
+          };
+        });
     },
   });
 
@@ -99,12 +121,27 @@ export function useActiveJobs(projectId: string | null | undefined) {
    *  job. Used for the "Update all" bulk loader. */
   const bulkAudioRegenActive = jobs.filter((j) => j.taskType === 'regenerate_audio').length > 1;
 
-  /** Any regen of any kind running anywhere in the project. Used to
-   *  lock the timeline clips + Inspector tabs so the user can't
-   *  layer a new change onto a scene while its previous regen is
-   *  still in flight (the second change would silently lose to the
-   *  first worker's write-back). */
+  /** Any regen of any kind running anywhere in the project. Kept for
+   *  legacy callers — UI should prefer per-scene tasksForScene() so
+   *  one scene's regen doesn't block edits on another scene. */
   const anyRegenActive = jobs.length > 0;
 
-  return { jobs, tasksForScene, bulkAudioRegenActive, anyRegenActive };
+  /** True only while a project-wide operation is running: an export,
+   *  a voice-apply-all bulk regen, a captions-apply re-render, or a
+   *  motion-apply-all re-render. THIS is the flag UI uses to gate
+   *  global edits — per-scene regens DO NOT trip it, so the user can
+   *  edit scene 1 image, regen scene 7 video, and queue scene 5
+   *  audio all at the same time without locking each other out. */
+  const bulkOp = jobs.find((j) => j.bulkKind !== null) ?? null;
+  const bulkOpActive = !!bulkOp;
+  const bulkOpKind = bulkOp?.bulkKind ?? null;
+
+  return {
+    jobs,
+    tasksForScene,
+    bulkAudioRegenActive,
+    anyRegenActive,
+    bulkOpActive,
+    bulkOpKind,
+  };
 }

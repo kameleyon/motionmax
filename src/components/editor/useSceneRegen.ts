@@ -300,6 +300,10 @@ export function useSceneRegen(state: EditorState | null) {
               sceneIndex: i,
               newVoiceover: scene.voiceover ?? '',
               language: state.project!.voice_inclination ?? 'en',
+              // Tag every insert so useActiveJobs.bulkOpActive flips
+              // on. Per-scene regens stay un-tagged so they don't lock
+              // the rest of the project.
+              _bulk: 'voice-apply-all',
             } as unknown as never,
             status: 'pending',
           }));
@@ -342,6 +346,82 @@ export function useSceneRegen(state: EditorState | null) {
     if (error) { toast.error(`Couldn't save: ${error.message}`); return false; }
     return true;
   }, [state?.generation]);
+
+  /** Apply captions across the whole project. Persists the new
+   *  caption_style to intake_settings (which the export reads from) and
+   *  queues an export_video job marked as a bulk caption-apply op so
+   *  the entire timeline flips into the project-wide lock state until
+   *  the burn-in finishes. The export's task_type is what tells the
+   *  worker to rebuild the whole video; the `_bulk` tag is what tells
+   *  the editor UI to lock all scenes during it. */
+  const applyCaptionsAll = useCallback(async (style: string) => {
+    if (!user || !state?.project || !state?.generation) return false;
+    setBusy('regen');
+    try {
+      // Persist the style first so the export job picks it up.
+      const ok = await (async () => {
+        const current = (state.project!.intake_settings as Record<string, unknown> | null) ?? {};
+        const next = { ...current, captionStyle: style };
+        const { error } = await supabase
+          .from('projects')
+          .update({ intake_settings: next as unknown as never })
+          .eq('id', state.project!.id);
+        return !error;
+      })();
+      if (!ok) {
+        // Schema-cache miss — fall back via updateIntakeSettings handles
+        // it elsewhere. For Apply we still try to fire the export.
+      }
+
+      const scenes = state.scenes
+        .filter((s) => s.videoUrl || s.imageUrl)
+        .map((s) => ({
+          videoUrl: s.videoUrl,
+          imageUrl: s.imageUrl,
+          audioUrl: s.audioUrl,
+          voiceover: s.voiceover,
+          title: s.title,
+          duration: (s.audioDurationMs ?? s.estDurationMs ?? 10_000) / 1000,
+        }));
+
+      if (scenes.length === 0) {
+        toast.error('No renderable scenes yet.');
+        return false;
+      }
+
+      const format = state.project.format === 'portrait' ? 'portrait' : 'landscape';
+      const { error } = await supabase
+        .from('video_generation_jobs')
+        .insert({
+          user_id: user.id,
+          project_id: state.project.id,
+          task_type: 'export_video',
+          payload: {
+            project_id: state.project.id,
+            project_type: state.project.project_type,
+            format,
+            scenes,
+            caption_style: style,
+            preset: 'master',
+            // Marks this export as a captions-apply re-render so the
+            // editor UI flips into the project-wide lock state (vs. a
+            // user-initiated download export from the topbar).
+            _bulk: 'captions-apply',
+          } as unknown as never,
+          status: 'pending',
+        });
+      if (error) throw new Error(error.message);
+      toast.success('Captions applying — re-rendering full video. This locks editing while it runs.');
+      scheduleRefresh(state.project.id);
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Couldn't apply captions: ${msg}`);
+      return false;
+    } finally {
+      setBusy('idle');
+    }
+  }, [user, state, scheduleRefresh]);
 
   /** Merge a patch into `projects.intake_settings`, with a fallback
    *  to `generations.scenes[0]._meta.intakeOverrides` when that column
@@ -413,5 +493,6 @@ export function useSceneRegen(state: EditorState | null) {
     updateSceneVoiceover,
     updateProjectVoice,
     updateIntakeSettings,
+    applyCaptionsAll,
   };
 }

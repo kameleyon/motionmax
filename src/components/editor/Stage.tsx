@@ -67,6 +67,8 @@ export default function Stage({
   onAdvanceScene,
   playing,
   onPlayingChange,
+  fullscreen = false,
+  onFullscreenChange,
 }: {
   state: EditorState;
   selectedSceneIndex: number;
@@ -79,6 +81,13 @@ export default function Stage({
   /** Report intrinsic video events (ended, user-pause, user-play) back
    *  to the parent so the Timeline button stays in sync. */
   onPlayingChange?: (p: boolean) => void;
+  /** Fullscreen is owned by EditorFrame (so it can hide topbar /
+   *  scenes / inspector / timeline) — Stage just reflects + toggles
+   *  the flag. When true, Stage hides its own chrome (aspect chip,
+   *  quality chip, REC, AI disclaimer) and lets the frame fill the
+   *  viewport. */
+  fullscreen?: boolean;
+  onFullscreenChange?: (v: boolean) => void;
 }) {
   const [, tick] = useState(0);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -101,14 +110,14 @@ export default function Stage({
   // narration's end event drives scene auto-advance so the composite
   // "scene duration" = audio duration, matching the timeline widths.
   const audioRef = useRef<HTMLAudioElement>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  // iOS Safari doesn't implement the Fullscreen API on <div> elements
-  // (only on <video>), so the native call is a no-op there. When that
-  // happens we flip into a CSS-driven "pseudo fullscreen" — a fixed
-  // overlay covering the viewport — so the button actually does
-  // something on mobile. `fauxFullscreen` tracks that fallback so we
-  // can add/remove the fixed-position styling.
-  const [fauxFullscreen, setFauxFullscreen] = useState(false);
+  // Fullscreen state is OWNED by EditorFrame so the frame can hide its
+  // own chrome (topbar, sidebar, scenes, inspector, timeline) when the
+  // stage goes fullscreen. Stage just reflects + toggles it via the
+  // `fullscreen` / `onFullscreenChange` props. The native Fullscreen
+  // API path is no longer used — too inconsistent across iOS Safari /
+  // PWA installs — we always do the CSS-driven app-level fullscreen.
+  const isFullscreen = fullscreen;
+  const setFullscreen = (v: boolean) => onFullscreenChange?.(v);
 
   // REC timecode ticks while rendering.
   useEffect(() => {
@@ -117,38 +126,16 @@ export default function Stage({
     return () => clearInterval(i);
   }, [state.phase]);
 
-  // Fullscreen handling — track BOTH the native API event AND our
-  // CSS-fallback state, since only one of them will fire per platform.
+  // ESC exits app-level fullscreen.
   useEffect(() => {
-    const onChange = () => setIsFullscreen(!!document.fullscreenElement || fauxFullscreen);
-    document.addEventListener('fullscreenchange', onChange);
-    // webkit prefix covers older iOS Safari that still reports the event.
-    document.addEventListener('webkitfullscreenchange', onChange as EventListener);
-    return () => {
-      document.removeEventListener('fullscreenchange', onChange);
-      document.removeEventListener('webkitfullscreenchange', onChange as EventListener);
-    };
-  }, [fauxFullscreen]);
-
-  // ESC exits the CSS-fallback fullscreen (native fullscreen already
-  // handles ESC itself).
-  useEffect(() => {
-    if (!fauxFullscreen) return;
+    if (!isFullscreen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setFauxFullscreen(false);
-        setIsFullscreen(false);
-      }
+      if (e.key === 'Escape') setFullscreen(false);
     };
     window.addEventListener('keydown', onKey);
-    // Lock page scroll so the overlay feels like real fullscreen.
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [fauxFullscreen]);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFullscreen]);
 
   // ── Scene-change priming. Runs whenever the selected scene changes,
   // regardless of playing state. This is what gives the preview a
@@ -260,10 +247,12 @@ export default function Stage({
   // constraint: `auto` width + maxHeight lets the browser compute
   // width from the aspect ratio and available vertical space, which
   // is what actually produces a true 9:16 looking frame on phones.
-  const frameMaxW = state.aspect === '16:9' ? '92%' : '94%';
-  const frameMaxH = state.aspect === '16:9' ? '88%' : '90%';
-  const frameW    = state.aspect === '16:9' ? '82%' : 'auto';
-  const frameH    = state.aspect === '16:9' ? 'auto' : '90%';
+  // Fullscreen blows the cap out: 100% w + 100% h with object-contain
+  // on the inner image/video means the preview owns the entire viewport.
+  const frameMaxW = isFullscreen ? '100%' : (state.aspect === '16:9' ? '92%' : '94%');
+  const frameMaxH = isFullscreen ? '100%' : (state.aspect === '16:9' ? '88%' : '90%');
+  const frameW    = isFullscreen ? '100%' : (state.aspect === '16:9' ? '82%' : 'auto');
+  const frameH    = isFullscreen ? '100%' : (state.aspect === '16:9' ? 'auto' : '90%');
 
   const sceneToShow: EditorScene | undefined =
     state.scenes[selectedSceneIndex] ??
@@ -271,94 +260,63 @@ export default function Stage({
     state.scenes.slice().reverse().find((s) => s.videoUrl || s.imageUrl) ??
     state.scenes[0];
 
-  const toggleFullscreen = async () => {
-    if (!stageRef.current) return;
-
-    // Already fullscreen — exit whichever mode we're in.
-    if (document.fullscreenElement) {
-      try { await document.exitFullscreen(); } catch { /* ignore */ }
-      setFauxFullscreen(false);
-      setIsFullscreen(false);
-      return;
-    }
-    if (fauxFullscreen) {
-      setFauxFullscreen(false);
-      setIsFullscreen(false);
-      return;
-    }
-
-    // Prefer the real Fullscreen API. iOS Safari on <div> elements
-    // throws / resolves with no effect — fall back to CSS fullscreen
-    // so the button still works there.
-    const el = stageRef.current as HTMLDivElement & {
-      webkitRequestFullscreen?: () => Promise<void> | void;
-    };
-    if (typeof el.requestFullscreen === 'function') {
-      try {
-        await el.requestFullscreen();
-        return;
-      } catch {
-        // fall through to CSS fallback
-      }
-    } else if (typeof el.webkitRequestFullscreen === 'function') {
-      try {
-        await el.webkitRequestFullscreen();
-        return;
-      } catch {
-        // fall through
-      }
-    }
-
-    setFauxFullscreen(true);
-    setIsFullscreen(true);
-  };
-
   return (
     <div
       ref={stageRef}
-      className={
-        'relative grid place-items-center overflow-hidden ' +
-        (fauxFullscreen
-          ? 'fixed inset-0 z-[9998] w-screen h-screen'
-          : 'h-full w-full')
-      }
+      className="relative grid place-items-center overflow-hidden h-full w-full"
       style={{
         background:
-          'radial-gradient(80% 100% at 50% 50%, rgba(20,200,204,.04), transparent 65%), #050709',
+          'radial-gradient(80% 100% at 50% 50%, rgba(20,200,204,.04), transparent 65%), ' +
+          (isFullscreen ? '#000' : '#050709'),
       }}
     >
-      {/* Subtle grid */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage: 'radial-gradient(rgba(255,255,255,.035) 1px, transparent 1px)',
-          backgroundSize: '22px 22px',
-        }}
-      />
+      {/* Subtle grid (hidden in fullscreen for cinema feel). */}
+      {!isFullscreen && (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            backgroundImage: 'radial-gradient(rgba(255,255,255,.035) 1px, transparent 1px)',
+            backgroundSize: '22px 22px',
+          }}
+        />
+      )}
 
-      {/* Aspect chip — single pill showing only the project's actual
-          aspect. The old two-button toggle suggested the user could
-          switch formats from here, which they can't (format is fixed
-          at generation time). */}
-      <div className="absolute top-3 left-3 z-[4] p-[3px] bg-[#10151A]/80 border border-white/5 rounded-lg backdrop-blur-sm font-mono text-[10px] tracking-[0.08em]">
-        <span className="px-2.5 py-1 rounded bg-[#1B2228] text-[#ECEAE4]">
-          {state.aspect}
-        </span>
-      </div>
+      {/* Aspect chip — hidden in fullscreen so the frame owns the screen. */}
+      {!isFullscreen && (
+        <div className="absolute top-3 left-3 z-[4] p-[3px] bg-[#10151A]/80 border border-white/5 rounded-lg backdrop-blur-sm font-mono text-[10px] tracking-[0.08em]">
+          <span className="px-2.5 py-1 rounded bg-[#1B2228] text-[#ECEAE4]">
+            {state.aspect}
+          </span>
+        </div>
+      )}
 
-      {/* Quality + fullscreen */}
-      <div className="absolute top-3 right-3 z-[4] flex gap-1.5">
-        <span className="font-mono text-[10px] tracking-[0.1em] text-[#8A9198] px-2 py-1 bg-[#10151A]/80 border border-white/5 rounded-md backdrop-blur-sm">
-          1080p · 24fps
-        </span>
+      {/* Quality + fullscreen — quality pill hidden in fullscreen,
+          but the Exit button stays so the user can leave. */}
+      <div className="absolute top-3 right-3 z-[9999] flex gap-1.5">
+        {!isFullscreen && (
+          <span className="font-mono text-[10px] tracking-[0.1em] text-[#8A9198] px-2 py-1 bg-[#10151A]/80 border border-white/5 rounded-md backdrop-blur-sm">
+            1080p · 24fps
+          </span>
+        )}
         <button
           type="button"
           onClick={toggleFullscreen}
           title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
           aria-label="Toggle fullscreen"
-          className="w-7 h-7 grid place-items-center bg-[#10151A]/80 border border-white/5 rounded-md text-[#8A9198] hover:text-[#ECEAE4]"
+          className={
+            isFullscreen
+              ? 'inline-flex items-center gap-1.5 px-2.5 h-8 bg-[#10151A]/80 border border-white/15 rounded-md text-[#ECEAE4] hover:bg-[#1B2228] backdrop-blur-sm font-mono text-[10.5px] tracking-[0.12em] uppercase'
+              : 'w-7 h-7 grid place-items-center bg-[#10151A]/80 border border-white/5 rounded-md text-[#8A9198] hover:text-[#ECEAE4]'
+          }
         >
-          {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+          {isFullscreen ? (
+            <>
+              <Minimize2 className="w-3.5 h-3.5" />
+              Exit
+            </>
+          ) : (
+            <Maximize2 className="w-3.5 h-3.5" />
+          )}
         </button>
       </div>
 
@@ -403,7 +361,10 @@ export default function Stage({
                 imperatively in the scene-priming effect above). */}
             <video
               ref={videoRef}
-              className="w-full h-full object-cover"
+              className={
+                'w-full h-full ' +
+                (isFullscreen ? 'object-contain' : 'object-cover')
+              }
               muted
               playsInline
               preload="auto"
@@ -418,7 +379,10 @@ export default function Stage({
           <img
             src={sceneToShow.imageUrl}
             alt={sceneToShow.title ?? 'Scene preview'}
-            className="w-full h-full object-cover"
+            className={
+              'w-full h-full ' +
+              (isFullscreen ? 'object-contain' : 'object-cover')
+            }
             loading="lazy"
           />
         ) : null}
@@ -465,7 +429,7 @@ export default function Stage({
             <div className="font-serif text-[18px] sm:text-[22px] font-medium text-[#ECEAE4] text-center">
               Rendering your video…
             </div>
-            <div className="w-[60%] max-w-[420px] h-1 rounded-full bg-white/10 overflow-hidden">
+            <div className="w-[60%] max-w-[420px] h-[3px] rounded-full bg-white/10 overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-[#14C8CC] to-[#0FA6AE] rounded-full transition-[width] duration-500"
                 style={{ width: `${state.progress}%` }}
@@ -500,8 +464,8 @@ export default function Stage({
         )}
       </div>
 
-      {/* AI disclaimer */}
-      {state.phase === 'ready' && (
+      {/* AI disclaimer — hidden in fullscreen for distraction-free playback. */}
+      {state.phase === 'ready' && !isFullscreen && (
         <div className="absolute bottom-3 left-0 right-0 text-center font-mono text-[10px] text-[#5A6268] tracking-[0.08em]">
           ⚠ AI-generated content — may not reflect real people, places, or events
         </div>

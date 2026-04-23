@@ -54,16 +54,31 @@ export default function Inspector({
     busy, apply, regenerate, regenerateImage, regenerateVideo, regenerateAudio,
     undoLastRegen,
     updateSceneMeta, updateAllScenesMeta, updateProjectVoice, updateIntakeSettings,
+    applyCaptionsAll,
   } = useSceneRegen(state);
-  const { tasksForScene, bulkAudioRegenActive } = useActiveJobs(state.project?.id ?? null);
+  const { tasksForScene, bulkAudioRegenActive, bulkOpActive, bulkOpKind } =
+    useActiveJobs(state.project?.id ?? null);
   const sceneTasks = tasksForScene(selectedSceneIndex);
   const imageRegenActive = sceneTasks.has('regenerate_image') || sceneTasks.has('cinematic_image');
   const videoRegenActive = sceneTasks.has('cinematic_video');
   const audioRegenActive = sceneTasks.has('regenerate_audio');
 
-  // While ANY regen is active for this scene, lock the panel so the
-  // user can't queue a conflicting edit on top of a pending write-back.
+  // Per-scene lock: only blocks edits to THIS scene while ITS regen is
+  // in flight. A regen on scene 5 doesn't lock scene 1 here. The
+  // project-wide lock (bulkOpActive) is separate and DOES lock all
+  // scenes — that's the export / voice-apply-all / captions-apply path.
   const sceneLocked = imageRegenActive || videoRegenActive || audioRegenActive;
+  const projectLocked = bulkOpActive;
+  const projectLockLabel =
+    bulkOpKind === 'export'
+      ? 'Exporting full video · edits locked'
+      : bulkOpKind === 'captions-apply'
+        ? 'Burning captions across all scenes · edits locked'
+        : bulkOpKind === 'voice-apply-all'
+          ? 'Re-rendering every voiceover · edits locked'
+          : bulkOpKind === 'motion-apply-all'
+            ? 'Applying motion to every scene · edits locked'
+            : 'Project re-rendering · edits locked';
   const projectType = state.project?.project_type ?? 'cinematic';
   const isCinematic = projectType === 'cinematic';
   const isExplainer = projectType === 'doc2video';
@@ -484,7 +499,7 @@ export default function Inspector({
                     updateProjectVoice(voiceDraft, true);
                   }
                 }}
-                disabled={busy !== 'idle' || bulkAudioRegenActive || voiceDraft === currentVoice}
+                disabled={busy !== 'idle' || bulkAudioRegenActive || projectLocked || voiceDraft === currentVoice}
                 className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 disabled:opacity-50"
                 title={`Switch voice AND regenerate all ${state.scenes.length} scenes`}
               >
@@ -551,21 +566,34 @@ export default function Inspector({
             </p>
           </section>
 
+          {/* Apply captions = re-render the full video with captions
+              burned across every scene. Triggers a project-wide lock
+              (bulkOpActive) so the timeline + every scene panel are
+              shielded for the duration. */}
           <button
             type="button"
-            onClick={() => {
-              toast.success(
-                captionsOn
-                  ? 'Captions will be burned in on your next export.'
-                  : 'Captions are off for this project.'
-              );
+            onClick={async () => {
+              if (!captionsOn) {
+                toast.info('Captions are currently off — toggle on, pick a style, then Apply.');
+                return;
+              }
+              await applyCaptionsAll(captionStyleDraft);
             }}
-            disabled={busy !== 'idle'}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] border border-white/10 text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Captions are applied during export; no worker job needed"
+            disabled={busy !== 'idle' || !captionsOn || projectLocked}
+            className={cn(
+              'inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12.5px] font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed',
+              captionsOn
+                ? 'text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105'
+                : 'border border-white/10 text-[#ECEAE4] hover:bg-white/5',
+            )}
+            title={captionsOn ? 'Re-render the full video with captions burned in' : 'Captions are disabled'}
           >
-            <RotateCw className="w-3 h-3" />
-            {captionsOn ? 'Confirm captions' : 'Captions disabled'}
+            {projectLocked && bulkOpKind === 'captions-apply'
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <RotateCw className="w-3.5 h-3.5" />}
+            {projectLocked && bulkOpKind === 'captions-apply'
+              ? 'Burning captions…'
+              : (captionsOn ? 'Apply captions' : 'Captions disabled')}
           </button>
         </div>
       )}
@@ -680,15 +708,19 @@ export default function Inspector({
         </div>
       )}
 
-      {/* Scene regen lock — while the current scene has any in-flight
-          job, overlay the whole panel with a translucent shield so no
-          second edit can race the worker's write-back. */}
-      {sceneLocked && (
+      {/* Lock overlay — two flavours, project-wide takes priority:
+          • projectLocked (export / voice-apply-all / captions-apply /
+            motion-apply-all) shields the whole inspector with a label
+            describing which bulk op is running.
+          • sceneLocked (per-scene regen) shields only this scene's
+            panel; other scenes remain freely editable thanks to the
+            timeline's per-clip lock + Inspector being scene-scoped. */}
+      {(projectLocked || sceneLocked) && (
         <div className="absolute inset-0 z-10 bg-[#0A0D0F]/65 backdrop-blur-[1px] grid place-items-center pointer-events-auto">
           <div className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-[#10151A]/95 border border-[#14C8CC]/40 shadow-lg">
             <Loader2 className="w-3.5 h-3.5 animate-spin text-[#14C8CC]" />
             <span className="font-mono text-[11px] tracking-wider uppercase text-[#14C8CC]">
-              Scene regenerating · edits locked
+              {projectLocked ? projectLockLabel : 'Scene regenerating · edits locked'}
             </span>
           </div>
         </div>

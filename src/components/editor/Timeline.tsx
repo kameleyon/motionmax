@@ -41,7 +41,17 @@ export default function Timeline({
   playing: boolean;
   onPlayToggle: () => void;
 }) {
-  const { tasksForScene } = useActiveJobs(state.project?.id ?? null);
+  const { tasksForScene, bulkOpActive, bulkOpKind } = useActiveJobs(state.project?.id ?? null);
+  const bulkOpLabel =
+    bulkOpKind === 'export'
+      ? 'Exporting full video'
+      : bulkOpKind === 'captions-apply'
+        ? 'Burning captions across all scenes'
+        : bulkOpKind === 'voice-apply-all'
+          ? 'Re-rendering every voiceover'
+          : bulkOpKind === 'motion-apply-all'
+            ? 'Applying motion to every scene'
+            : 'Project re-rendering';
   const totalMs = useMemo(() => {
     if (state.totalDurationMs > 0) return state.totalDurationMs;
     // Fallback: approximate from scene count while still rendering.
@@ -110,6 +120,13 @@ export default function Timeline({
           {formatMs(sceneOffsets[selectedSceneIndex] ?? 0)}
           <span className="text-[#5A6268]"> / {formatMs(totalMs)}</span>
         </div>
+
+        {bulkOpActive && (
+          <span className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-mono text-[10px] tracking-[0.1em] uppercase border border-[#14C8CC]/30 text-[#14C8CC] bg-[#14C8CC]/10 truncate">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#14C8CC] animate-pulse" />
+            {bulkOpLabel}
+          </span>
+        )}
       </div>
 
       {/* Ruler + Tracks — share one horizontal scroll container so the
@@ -160,7 +177,12 @@ export default function Timeline({
                   const widthPct = (sceneDurationMs(scene) / totalMs) * 100;
                   const isActive = i === selectedSceneIndex;
                   const sceneTasks = tasksForScene(i);
+                  // Per-scene lock OR project-wide bulk lock — the
+                  // latter freezes EVERY clip during export / voice
+                  // apply-all / captions apply-all so the user can't
+                  // queue an edit on top of an in-flight global rebuild.
                   const locked =
+                    bulkOpActive ||
                     sceneTasks.has('regenerate_image') ||
                     sceneTasks.has('cinematic_image') ||
                     sceneTasks.has('cinematic_video');

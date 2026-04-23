@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import MiniSidebar from './MiniSidebar';
 import EditorTopBar, { type SubView } from './EditorTopBar';
@@ -24,6 +24,7 @@ export default function EditorFrame({
   stage,
   inspector,
   timeline,
+  fullscreen,
 }: {
   state: EditorState;
   subView: SubView;
@@ -33,12 +34,36 @@ export default function EditorFrame({
   stage: ReactNode;
   inspector: ReactNode;
   timeline: ReactNode;
+  /** True while the user is in fullscreen preview mode. When set,
+   *  EditorFrame hides the topbar / sidebar / scenes / inspector /
+   *  timeline and lets the stage own the entire viewport. The stage
+   *  itself renders an Exit button that flips this back. */
+  fullscreen?: boolean;
 }) {
   // Mobile-only drawers. Scenes is intentionally NOT exposed to phones —
   // users click the stage to walk through scenes, timeline Prev/Next to
   // jump, so a redundant scene list drawer would just eat screen height.
   const [menuDrawerOpen, setMenuDrawerOpen] = useState(false);
   const [inspectorDrawerOpen, setInspectorDrawerOpen] = useState(false);
+
+  // Lock body scroll while fullscreen so phantom scrollbars never show.
+  useEffect(() => {
+    if (!fullscreen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [fullscreen]);
+
+  // Fullscreen branch — only the stage renders, in a fixed
+  // viewport-covering container. No topbar / sidebar / scenes /
+  // inspector / timeline. The stage handles its own Exit button.
+  if (fullscreen) {
+    return (
+      <div className="fixed inset-0 z-[9998] bg-black overflow-hidden">
+        {stage}
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-[#0A0D0F] text-[#ECEAE4] font-sans overflow-hidden">

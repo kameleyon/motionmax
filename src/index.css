@@ -182,21 +182,32 @@
     scroll-padding-top: 5rem; /* 80px - accounts for fixed header */
   }
 
-  html::-webkit-scrollbar {
-    width: 6px;
+  html::-webkit-scrollbar,
+  *::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
   }
 
-  html::-webkit-scrollbar-track {
+  html::-webkit-scrollbar-track,
+  *::-webkit-scrollbar-track {
     background: transparent;
   }
 
-  html::-webkit-scrollbar-thumb {
-    background: hsl(var(--primary) / 0.6);
-    border-radius: 3px;
+  html::-webkit-scrollbar-thumb,
+  *::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.45);
+    border-radius: 2px;
   }
 
-  html::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--primary));
+  html::-webkit-scrollbar-thumb:hover,
+  *::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.7);
+  }
+
+  /* Firefox / Edge — every scrollable element, not just html. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.45) transparent;
   }
 
   body {
@@ -221,7 +232,8 @@
 }
 
 .scrollbar-thin::-webkit-scrollbar {
-  width: 4px;
+  width: 3px;
+  height: 3px;
 }
 
 .scrollbar-thin::-webkit-scrollbar-track {
@@ -244,7 +256,8 @@
 }
 
 .scrollbar-thin.narrow::-webkit-scrollbar {
-  width: 3px;
+  width: 2px;
+  height: 2px;
 }
 
 .scrollbar-thin.narrow::-webkit-scrollbar-thumb {

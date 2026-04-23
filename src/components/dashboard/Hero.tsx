@@ -36,7 +36,7 @@ const MODE_PILLS: Array<{ id: ProjectMode; label: string }> = [
 const SUGGESTIONS = [
   'Turn my blog post into a reel',
   'The history of the Polaroid',
-  'Brand teaser with karaoke captions in French',
+  'Brand teaser for tiktok in French',
 ];
 
 function greetingFor(hour: number): string {

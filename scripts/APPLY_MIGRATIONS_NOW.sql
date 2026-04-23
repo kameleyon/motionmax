@@ -83,8 +83,26 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.claim_pending_job(TEXT, TEXT, INTEGER, TEXT) TO service_role;
 
+-- 4. Master audio columns — one continuous TTS track per generation
+-- (doc2video + cinematic), replacing N per-scene audio calls.
+-- Smartflow stays on per-scene audio (always single-scene anyway).
+ALTER TABLE public.generations
+  ADD COLUMN IF NOT EXISTS master_audio_url text,
+  ADD COLUMN IF NOT EXISTS master_audio_duration_ms integer;
+
+COMMENT ON COLUMN public.generations.master_audio_url IS
+  'Single continuous narration track for doc2video + cinematic. One
+   Gemini Flash TTS call per project instead of one per scene.';
+
+COMMENT ON COLUMN public.generations.master_audio_duration_ms IS
+  'ffprobed duration of master_audio_url in milliseconds. Used by
+   export to stretch scene image/video clips proportionally.';
+
 -- Verify
 SELECT column_name, data_type FROM information_schema.columns
  WHERE table_name IN ('projects','generations')
-   AND column_name IN ('intake_settings','previous_export_url','music_url','stems')
+   AND column_name IN (
+     'intake_settings','previous_export_url','music_url','stems',
+     'master_audio_url','master_audio_duration_ms'
+   )
  ORDER BY table_name, column_name;

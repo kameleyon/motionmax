@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Copy, Check, Link as LinkIcon, X, Loader2 } from 'lucide-react';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Copy, Check, Link as LinkIcon, Loader2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -99,21 +99,19 @@ export default function ShareModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-[#10151A] border-white/10 text-[#ECEAE4] w-[calc(100%-2rem)] max-w-md p-0 overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
-          <div>
-            <div className="font-serif text-[16px] font-medium text-[#ECEAE4]">Share this video</div>
-            <div className="text-[11.5px] text-[#8A9198] mt-0.5">
-              Anyone with the link can watch for 30 days. {projectType === 'cinematic' ? 'Cinematic' : projectType === 'smartflow' ? 'Smart Flow' : 'Explainer'} project.
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            className="w-7 h-7 rounded-md grid place-items-center text-[#8A9198] hover:bg-white/5"
-            aria-label="Close"
-          >
-            <X className="w-4 h-4" />
-          </button>
+        {/* Real Radix Title + Description primitives (rather than plain
+            divs) so screen readers pick up the dialog's
+            aria-labelledby / aria-describedby wiring. Styled to match
+            the prior visual layout. The DialogContent primitive
+            already ships its own top-right Close button, so the
+            hand-rolled one here is gone. */}
+        <div className="flex flex-col gap-0.5 px-5 py-4 pr-10 border-b border-white/5">
+          <DialogTitle className="font-serif text-[16px] font-medium text-[#ECEAE4] leading-tight">
+            Share this video
+          </DialogTitle>
+          <DialogDescription className="text-[11.5px] text-[#8A9198]">
+            Anyone with the link can watch for 30 days. {projectType === 'cinematic' ? 'Cinematic' : projectType === 'smartflow' ? 'Smart Flow' : 'Explainer'} project.
+          </DialogDescription>
         </div>
 
         <div className="p-5 flex flex-col gap-4 min-w-0">

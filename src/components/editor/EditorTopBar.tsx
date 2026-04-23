@@ -61,30 +61,68 @@ export default function EditorTopBar({
   const exporting = exportState.status === 'submitting' || exportState.status === 'rendering';
   const exportDone = exportState.status === 'done' && exportState.url;
 
-  /** Force a real download to disk (not "open in new tab"). Cross-
-   *  origin MP4s usually open in the tab because browsers honour
-   *  Content-Disposition and the source isn't same-origin. We fetch
-   *  the video as a blob, create an object URL, and click a hidden
-   *  <a download> so the browser saves it to the downloads folder. */
+  /** Save the exported MP4. Three paths by platform:
+   *
+   *   1. iOS/iPadOS Safari — the `<a download>` attribute is ignored,
+   *      which is why users were seeing the video render in a tab and
+   *      never getting the "Save to Photos" action. Instead we use
+   *      `navigator.share({ files: [...] })` to open the native iOS
+   *      share sheet, which INCLUDES a "Save Video" action that
+   *      writes the clip straight to the Photos album.
+   *
+   *   2. Desktop + Android Chrome — fetch to a blob, create an
+   *      object URL, click a synthetic `<a download>` so the file
+   *      lands in the Downloads folder (same-origin bypass for
+   *      cross-origin MP4s that would otherwise stream inline).
+   *
+   *   3. Anything that rejects both paths — open the raw URL in a
+   *      new tab so the user can at least long-press / Save As. */
   const downloadVideo = async (url: string, filename: string) => {
+    // Fetch the blob once; reuse for either share or download.
+    let blob: Blob;
     try {
       const res = await fetch(url, { mode: 'cors' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = objectUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      // Release the blob a moment later — too-early revoke aborts Safari.
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
+      blob = await res.blob();
     } catch {
-      // Fallback: old behaviour — open in a tab so the user can at
-      // least right-click Save As.
       window.open(url, '_blank', 'noopener,noreferrer');
+      return;
     }
+
+    const file = new File([blob], filename, { type: blob.type || 'video/mp4' });
+
+    // iOS path — Web Share sheet → "Save Video" writes to Photos.
+    const nav = navigator as Navigator & {
+      canShare?: (data: { files?: File[] }) => boolean;
+      share?: (data: { files?: File[]; title?: string; text?: string }) => Promise<void>;
+    };
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !('MSStream' in window);
+    if (
+      (isIOS || !('download' in HTMLAnchorElement.prototype)) &&
+      nav.canShare?.({ files: [file] }) &&
+      typeof nav.share === 'function'
+    ) {
+      try {
+        await nav.share({ files: [file], title: filename });
+        return;
+      } catch (err) {
+        // AbortError just means the user cancelled the sheet — don't
+        // fall through to download in that case, they made a choice.
+        if ((err as Error)?.name === 'AbortError') return;
+        // Any other error → fall through to the anchor-download path.
+      }
+    }
+
+    // Desktop / Android path — synthetic anchor download.
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    // Release the blob a moment later — too-early revoke aborts Safari.
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
   };
 
   // Default download = master preset (re-export guarantees latest scene

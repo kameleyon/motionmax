@@ -102,6 +102,13 @@ export default function Stage({
   // "scene duration" = audio duration, matching the timeline widths.
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // iOS Safari doesn't implement the Fullscreen API on <div> elements
+  // (only on <video>), so the native call is a no-op there. When that
+  // happens we flip into a CSS-driven "pseudo fullscreen" — a fixed
+  // overlay covering the viewport — so the button actually does
+  // something on mobile. `fauxFullscreen` tracks that fallback so we
+  // can add/remove the fixed-position styling.
+  const [fauxFullscreen, setFauxFullscreen] = useState(false);
 
   // REC timecode ticks while rendering.
   useEffect(() => {
@@ -110,50 +117,92 @@ export default function Stage({
     return () => clearInterval(i);
   }, [state.phase]);
 
-  // Fullscreen handling.
+  // Fullscreen handling — track BOTH the native API event AND our
+  // CSS-fallback state, since only one of them will fire per platform.
   useEffect(() => {
-    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement || fauxFullscreen);
     document.addEventListener('fullscreenchange', onChange);
-    return () => document.removeEventListener('fullscreenchange', onChange);
-  }, []);
+    // webkit prefix covers older iOS Safari that still reports the event.
+    document.addEventListener('webkitfullscreenchange', onChange as EventListener);
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      document.removeEventListener('webkitfullscreenchange', onChange as EventListener);
+    };
+  }, [fauxFullscreen]);
 
-  // ── Unified playback effect — ported from PublicShare's share-page
-  // player (which plays every scene end-to-end non-stop). Re-runs
-  // whenever `playing` flips or the selected scene changes. Sets up
-  // video + audio srcs, attaches end listeners, calls play() on both.
-  // Advances scenes via scene-end events so the user hits Play once
-  // and the whole project plays through. On last-scene end, stops.
+  // ESC exits the CSS-fallback fullscreen (native fullscreen already
+  // handles ESC itself).
   useEffect(() => {
-    if (!playing) {
-      videoRef.current?.pause();
-      audioRef.current?.pause();
-      return;
-    }
+    if (!fauxFullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setFauxFullscreen(false);
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    // Lock page scroll so the overlay feels like real fullscreen.
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [fauxFullscreen]);
+
+  // ── Scene-change priming. Runs whenever the selected scene changes,
+  // regardless of playing state. This is what gives the preview a
+  // visible first frame before the user ever clicks Play — if we only
+  // assigned `video.src` inside the play branch, the <video> element
+  // would render empty-and-black on mount until playback started.
+  useEffect(() => {
     const scene = state.scenes[selectedSceneIndex];
     if (!scene) return;
     const video = videoRef.current;
     const audio = audioRef.current;
+
+    if (video && scene.videoUrl) {
+      video.muted = true;
+      video.playsInline = true;
+      if (video.src !== scene.videoUrl) {
+        video.src = scene.videoUrl;
+        video.load();
+      }
+      video.currentTime = 0;
+    }
+
+    if (audio) {
+      if (scene.audioUrl) {
+        if (audio.src !== scene.audioUrl) {
+          audio.src = scene.audioUrl;
+          audio.load();
+        }
+        audio.currentTime = 0;
+      } else {
+        audio.pause();
+        audio.removeAttribute('src');
+        audio.load();
+      }
+    }
+  }, [selectedSceneIndex, state.scenes]);
+
+  // ── Play/pause + end-of-scene handling. Ported from PublicShare's
+  // share-page player (which plays every scene end-to-end non-stop).
+  // Scene priming happens in the effect above — this one only flips
+  // play/pause and wires up the end listeners that drive scene advance.
+  useEffect(() => {
+    const video = videoRef.current;
+    const audio = audioRef.current;
     if (!video) return;
 
-    // Prime the video element with this scene's source.
-    if (scene.videoUrl) {
-      video.muted = true;
-      video.src = scene.videoUrl;
-      video.currentTime = 0;
-      video.playsInline = true;
-      video.load();
+    if (!playing) {
+      video.pause();
+      audio?.pause();
+      return;
     }
 
-    // Prime the audio element with this scene's narration (if any).
-    if (audio && scene.audioUrl) {
-      audio.src = scene.audioUrl;
-      audio.currentTime = 0;
-      audio.load();
-    } else if (audio) {
-      audio.pause();
-      audio.removeAttribute('src');
-      audio.load();
-    }
+    const scene = state.scenes[selectedSceneIndex];
+    if (!scene) return;
 
     const handleEnded = () => {
       if (selectedSceneIndex < state.scenes.length - 1) {
@@ -205,10 +254,16 @@ export default function Stage({
   }, [playing, selectedSceneIndex, state.scenes]);
 
   const aspectCss = state.aspect === '16:9' ? '16/9' : '9/16';
-  const frameMaxW = state.aspect === '16:9' ? '92%' : '48%';
-  const frameMaxH = state.aspect === '16:9' ? '88%' : '92%';
+  // 9:16 used to cap at 48% width — sized for desktop where the
+  // scenes column ate half the stage. On mobile the column is hidden,
+  // so that cap left the preview tiny. Let height be the binding
+  // constraint: `auto` width + maxHeight lets the browser compute
+  // width from the aspect ratio and available vertical space, which
+  // is what actually produces a true 9:16 looking frame on phones.
+  const frameMaxW = state.aspect === '16:9' ? '92%' : '94%';
+  const frameMaxH = state.aspect === '16:9' ? '88%' : '90%';
   const frameW    = state.aspect === '16:9' ? '82%' : 'auto';
-  const frameH    = state.aspect === '16:9' ? 'auto' : '88%';
+  const frameH    = state.aspect === '16:9' ? 'auto' : '90%';
 
   const sceneToShow: EditorScene | undefined =
     state.scenes[selectedSceneIndex] ??
@@ -216,16 +271,57 @@ export default function Stage({
     state.scenes.slice().reverse().find((s) => s.videoUrl || s.imageUrl) ??
     state.scenes[0];
 
-  const toggleFullscreen = () => {
+  const toggleFullscreen = async () => {
     if (!stageRef.current) return;
-    if (document.fullscreenElement) { void document.exitFullscreen(); }
-    else { void stageRef.current.requestFullscreen(); }
+
+    // Already fullscreen — exit whichever mode we're in.
+    if (document.fullscreenElement) {
+      try { await document.exitFullscreen(); } catch { /* ignore */ }
+      setFauxFullscreen(false);
+      setIsFullscreen(false);
+      return;
+    }
+    if (fauxFullscreen) {
+      setFauxFullscreen(false);
+      setIsFullscreen(false);
+      return;
+    }
+
+    // Prefer the real Fullscreen API. iOS Safari on <div> elements
+    // throws / resolves with no effect — fall back to CSS fullscreen
+    // so the button still works there.
+    const el = stageRef.current as HTMLDivElement & {
+      webkitRequestFullscreen?: () => Promise<void> | void;
+    };
+    if (typeof el.requestFullscreen === 'function') {
+      try {
+        await el.requestFullscreen();
+        return;
+      } catch {
+        // fall through to CSS fallback
+      }
+    } else if (typeof el.webkitRequestFullscreen === 'function') {
+      try {
+        await el.webkitRequestFullscreen();
+        return;
+      } catch {
+        // fall through
+      }
+    }
+
+    setFauxFullscreen(true);
+    setIsFullscreen(true);
   };
 
   return (
     <div
       ref={stageRef}
-      className="relative h-full w-full grid place-items-center overflow-hidden"
+      className={
+        'relative grid place-items-center overflow-hidden ' +
+        (fauxFullscreen
+          ? 'fixed inset-0 z-[9998] w-screen h-screen'
+          : 'h-full w-full')
+      }
       style={{
         background:
           'radial-gradient(80% 100% at 50% 50%, rgba(20,200,204,.04), transparent 65%), #050709',
@@ -240,21 +336,14 @@ export default function Stage({
         }}
       />
 
-      {/* Aspect chip */}
-      <div className="absolute top-3 left-3 z-[4] flex gap-1 p-[3px] bg-[#10151A]/80 border border-white/5 rounded-lg backdrop-blur-sm font-mono text-[10px] tracking-[0.08em]">
-        {(['16:9', '9:16'] as const).map((a) => (
-          <span
-            key={a}
-            className={
-              'px-2.5 py-1 rounded ' +
-              (a === state.aspect
-                ? 'bg-[#1B2228] text-[#ECEAE4]'
-                : 'text-[#5A6268]')
-            }
-          >
-            {a}
-          </span>
-        ))}
+      {/* Aspect chip — single pill showing only the project's actual
+          aspect. The old two-button toggle suggested the user could
+          switch formats from here, which they can't (format is fixed
+          at generation time). */}
+      <div className="absolute top-3 left-3 z-[4] p-[3px] bg-[#10151A]/80 border border-white/5 rounded-lg backdrop-blur-sm font-mono text-[10px] tracking-[0.08em]">
+        <span className="px-2.5 py-1 rounded bg-[#1B2228] text-[#ECEAE4]">
+          {state.aspect}
+        </span>
       </div>
 
       {/* Quality + fullscreen */}
@@ -308,12 +397,17 @@ export default function Stage({
                 listeners imperatively, so there's no onEnded / onPause
                 JSX binding here — it would race with the effect's
                 own addEventListener cleanup. */}
+            {/* `poster` gives the preview a visible first frame before
+                Play is pressed — otherwise the <video> element would
+                render empty-and-black (the src is assigned
+                imperatively in the scene-priming effect above). */}
             <video
               ref={videoRef}
               className="w-full h-full object-cover"
               muted
               playsInline
               preload="auto"
+              poster={sceneToShow?.imageUrl || undefined}
             />
             <audio
               ref={audioRef}

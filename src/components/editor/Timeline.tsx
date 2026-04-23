@@ -62,6 +62,15 @@ export default function Timeline({
   const hasSfx = !!state.intake.music?.sfx;
   const hasCaptions = state.intake.captionStyle && state.intake.captionStyle !== 'none';
 
+  // Give every scene at least ~110 px on the timeline. A 15-scene
+  // project at 100% width would cram each clip into 6% of the track
+  // (~24 px on mobile) — thumbnails and titles are unreadable there.
+  // Setting a pixel-based min-width and scrolling horizontally lets
+  // the whole timeline breathe; the ruler + every track sit on the
+  // same scrolled rail so they stay aligned.
+  const MIN_PX_PER_SCENE = 110;
+  const tracksMinPx = Math.max(state.scenes.length * MIN_PX_PER_SCENE, 600);
+
   return (
     <div className="h-full flex flex-col text-[#ECEAE4]">
       {/* Transport */}
@@ -103,203 +112,248 @@ export default function Timeline({
         </div>
       </div>
 
-      {/* Ruler */}
-      <div className="relative px-[58px] h-4 bg-[#10151A] border-b border-white/5 font-mono text-[9px] text-[#5A6268] tracking-[0.08em]">
-        {[0, 20, 40, 60, 80, 100].map((p) => (
-          <span key={p} className="absolute top-0.5" style={{ left: `calc(${p}% + 4px)` }}>
-            {formatMs((totalMs * p) / 100)}
-          </span>
-        ))}
-      </div>
+      {/* Ruler + Tracks — share one horizontal scroll container so the
+          ruler ticks stay aligned with clip offsets as the user
+          scrolls. The track-label gutter on the left is OUTSIDE the
+          scrolling strip (flex parent below) so labels stay pinned. */}
+      <div className="flex-1 min-h-0 flex">
+        {/* Pinned label gutter (narrower than before so the track rail
+            gets more pixels). Kept in sync with the heights below. */}
+        <div className="w-[40px] shrink-0 bg-[#10151A] border-r border-white/5 flex flex-col">
+          {/* Spacer above — matches ruler height so labels line up with tracks. */}
+          <div className="h-4 border-b border-white/5" />
+          <div className="flex-1 overflow-hidden py-2 flex flex-col gap-1.5">
+            <TrackLabel>VIDEO</TrackLabel>
+            <TrackLabel>VOICE</TrackLabel>
+            <TrackLabel dim={!hasCaptions}>CAPTIONS</TrackLabel>
+            <TrackLabel dim={!hasMusic}>MUSIC</TrackLabel>
+            <TrackLabel dim={!hasSfx}>SFX</TrackLabel>
+          </div>
+        </div>
 
-      {/* Tracks */}
-      <div className="flex-1 overflow-y-auto px-3 py-2 flex flex-col gap-1.5 min-h-0">
-        {/* VIDEO track — clip is LOCKED (disabled + stripe overlay)
-            while its scene has an in-flight image/video regen. Stops
-            the user from layering a second edit on top of a
-            pending worker write-back. */}
-        <Track label="VIDEO">
-          {state.scenes.map((scene, i) => {
-            const offsetPct = (sceneOffsets[i] / totalMs) * 100;
-            const widthPct = (sceneDurationMs(scene) / totalMs) * 100;
-            const isActive = i === selectedSceneIndex;
-            const sceneTasks = tasksForScene(i);
-            const locked =
-              sceneTasks.has('regenerate_image') ||
-              sceneTasks.has('cinematic_image') ||
-              sceneTasks.has('cinematic_video');
-            return (
-              <button
-                key={i}
-                type="button"
-                disabled={locked}
-                onClick={() => onSelectScene(i)}
-                title={locked ? 'Scene is regenerating — locked' : undefined}
-                className={
-                  'absolute top-0 bottom-0 rounded-md border transition-colors overflow-hidden flex items-center px-2 ' +
-                  (locked
-                    ? 'border-[#14C8CC] bg-[#14C8CC]/10 cursor-not-allowed'
-                    : isActive
-                      ? 'border-[#14C8CC] bg-gradient-to-b from-[#14C8CC]/55 to-[#14C8CC]/30 shadow-[0_0_0_1px_#14C8CC_inset]'
-                      : 'border-[#14C8CC]/30 bg-gradient-to-b from-[#14C8CC]/28 to-[#14C8CC]/14 hover:border-[#14C8CC]/50')
-                }
-                style={{ left: `${offsetPct}%`, width: `${widthPct}%` }}
-              >
-                {locked && (
-                  <span
-                    className="absolute inset-0 pointer-events-none rounded-md"
-                    style={{
-                      background:
-                        'repeating-linear-gradient(135deg, rgba(20,200,204,.18) 0 8px, transparent 8px 16px)',
-                    }}
-                  />
-                )}
-                <span className="font-mono text-[9.5px] tracking-wider text-white whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1 relative">
-                  {locked && <Lock className="w-2.5 h-2.5" />}
-                  {String(i + 1).padStart(2, '0')} · {scene.title || scene.visualPrompt?.slice(0, 30) || ''}
+        {/* Scrolling strip. `minWidth` = scenes × MIN_PX_PER_SCENE so
+            long projects scroll instead of cramming. The ruler and
+            every track live INSIDE this container at 100% width of
+            that wider strip, which is how their percentage-based
+            offsets stay aligned. */}
+        <div className="flex-1 overflow-x-auto overflow-y-auto">
+          <div style={{ minWidth: tracksMinPx }}>
+            {/* Ruler */}
+            <div className="relative h-4 bg-[#10151A] border-b border-white/5 font-mono text-[9px] text-[#5A6268] tracking-[0.08em]">
+              {[0, 20, 40, 60, 80, 100].map((p) => (
+                <span key={p} className="absolute top-0.5" style={{ left: `calc(${p}% + 4px)` }}>
+                  {formatMs((totalMs * p) / 100)}
                 </span>
-              </button>
-            );
-          })}
-        </Track>
-
-        {/* VOICE track — per-scene buttons. Clicking a voice clip
-            selects that scene and drops the user into the Inspector's
-            Voice tab so they can regenerate. Real waveform peaks render
-            when scene._meta.waveformPeaks is populated by finalize;
-            otherwise a stable sine-proxy stands in so the track isn't
-            empty. Each clip has a scene-index seed so the sine pattern
-            differs visually between scenes. */}
-        <Track label="VOICE">
-          {state.scenes.map((scene, i) => {
-            const offsetPct = (sceneOffsets[i] / totalMs) * 100;
-            const widthPct = (sceneDurationMs(scene) / totalMs) * 100;
-            const peaks = scene.waveformPeaks ?? Array.from({ length: 40 }, (_, k) =>
-              20 + Math.abs(Math.sin((k + i * 3) * 0.31) + Math.cos((k + i * 2) * 0.77) * 0.6) * 60,
-            );
-            const isActive = i === selectedSceneIndex;
-            return (
-              <button
-                key={i}
-                type="button"
-                onClick={() => (onSelectVoice ?? onSelectScene)(i)}
-                title={`Scene ${i + 1} · click to edit voice`}
-                aria-label={`Scene ${i + 1} voice — click to regenerate`}
-                className={
-                  'absolute top-[3px] bottom-[3px] flex items-center gap-[1px] rounded-[3px] border transition-colors ' +
-                  (isActive
-                    ? 'border-[#14C8CC] bg-[#14C8CC]/10'
-                    : 'border-transparent hover:border-[#14C8CC]/40 hover:bg-[#14C8CC]/5')
-                }
-                style={{ left: `${offsetPct}%`, width: `${widthPct}%` }}
-              >
-                {peaks.slice(0, 40).map((h, k) => (
-                  <span
-                    key={k}
-                    className={`flex-1 rounded-[1px] ${isActive ? 'bg-[#14C8CC]' : 'bg-[#14C8CC]/55'}`}
-                    style={{ height: `${Math.min(100, Math.max(8, h))}%` }}
-                  />
-                ))}
-              </button>
-            );
-          })}
-        </Track>
-
-        {/* CAPTIONS track */}
-        <Track label="CAPTIONS" dim={!hasCaptions}>
-          {hasCaptions ? (
-            state.scenes.map((scene, i) => {
-              const offsetPct = (sceneOffsets[i] / totalMs) * 100;
-              const widthPct = (sceneDurationMs(scene) / totalMs) * 100;
-              const text = scene.voiceover?.slice(0, 40) ?? '';
-              return (
-                <div
-                  key={i}
-                  className="absolute top-[4px] bottom-[4px] bg-white/[0.06] border border-white/10 rounded-[3px] px-1.5 flex items-center overflow-hidden"
-                  style={{ left: `${offsetPct}%`, width: `${widthPct}%` }}
-                >
-                  <span className="font-serif italic text-[9.5px] text-[#8A9198] whitespace-nowrap overflow-hidden text-ellipsis">
-                    {text}
-                  </span>
-                </div>
-              );
-            })
-          ) : (
-            <div className="absolute inset-0 grid place-items-center font-mono text-[9.5px] text-[#5A6268] tracking-wider">
-              Captions off · turn on in intake to see chips here
+              ))}
             </div>
-          )}
-        </Track>
 
-        {/* MUSIC track — single chip spanning whole duration if on */}
-        <Track label="MUSIC" dim={!hasMusic}>
-          {hasMusic ? (
-            <div
-              className="absolute top-[4px] bottom-[4px] left-0 right-0 rounded-[3px] flex items-center px-2"
-              style={{
-                background: 'linear-gradient(90deg, rgba(197,147,255,.3), rgba(197,147,255,.18))',
-                border: '1px solid rgba(197,147,255,.3)',
-              }}
-            >
-              <span className="font-mono text-[9.5px] text-white/80 tracking-wider uppercase">
-                {state.intake.music?.genre ?? 'Lyria'} · {state.generation?.music_url ? 'Ready' : 'Generating…'}
-              </span>
-            </div>
-          ) : (
-            <div className="absolute inset-0 grid place-items-center font-mono text-[9.5px] text-[#5A6268] tracking-wider">
-              Music off
-            </div>
-          )}
-        </Track>
+            {/* Tracks (no per-track label column here — labels are pinned
+                in the gutter to the left). */}
+            <div className="px-2 py-2 flex flex-col gap-1.5 min-h-0">
+              {/* VIDEO track — each clip uses its scene imageUrl as a
+                  cover background so the user can see the actual scene
+                  at a glance (like a real NLE). Locked styling + stripe
+                  overlay still apply when a regen is in flight. */}
+              <TrackRail>
+                {state.scenes.map((scene, i) => {
+                  const offsetPct = (sceneOffsets[i] / totalMs) * 100;
+                  const widthPct = (sceneDurationMs(scene) / totalMs) * 100;
+                  const isActive = i === selectedSceneIndex;
+                  const sceneTasks = tasksForScene(i);
+                  const locked =
+                    sceneTasks.has('regenerate_image') ||
+                    sceneTasks.has('cinematic_image') ||
+                    sceneTasks.has('cinematic_video');
+                  const thumbUrl = scene.imageUrl || scene.imageUrls?.[0] || null;
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      disabled={locked}
+                      onClick={() => onSelectScene(i)}
+                      title={locked ? 'Scene is regenerating — locked' : (scene.title || `Scene ${i + 1}`)}
+                      className={
+                        'absolute top-0 bottom-0 rounded-md border transition-colors overflow-hidden flex items-end ' +
+                        (locked
+                          ? 'border-[#14C8CC] cursor-not-allowed'
+                          : isActive
+                            ? 'border-[#14C8CC] shadow-[0_0_0_1px_#14C8CC_inset]'
+                            : 'border-[#14C8CC]/30 hover:border-[#14C8CC]/70')
+                      }
+                      style={{
+                        left: `${offsetPct}%`,
+                        width: `${widthPct}%`,
+                        backgroundImage: thumbUrl ? `url(${thumbUrl})` : undefined,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        backgroundColor: thumbUrl ? '#050709' : '#14C8CC22',
+                      }}
+                    >
+                      {/* Dark gradient so the bottom label stays legible
+                          on top of the thumbnail. */}
+                      <span
+                        className="absolute inset-0 pointer-events-none"
+                        style={{
+                          background:
+                            'linear-gradient(to top, rgba(0,0,0,.75) 0%, rgba(0,0,0,.15) 45%, transparent 75%)',
+                        }}
+                      />
+                      {locked && (
+                        <span
+                          className="absolute inset-0 pointer-events-none rounded-md"
+                          style={{
+                            background:
+                              'repeating-linear-gradient(135deg, rgba(20,200,204,.28) 0 8px, transparent 8px 16px)',
+                          }}
+                        />
+                      )}
+                      {/* Active-scene overlay tint keeps the selection
+                          cue on top of the photo. */}
+                      {isActive && !locked && (
+                        <span className="absolute inset-0 pointer-events-none rounded-md bg-[#14C8CC]/18" />
+                      )}
+                      <span className="relative w-full px-1.5 py-0.5 font-mono text-[9.5px] tracking-wider text-white whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1">
+                        {locked && <Lock className="w-2.5 h-2.5 shrink-0" />}
+                        {String(i + 1).padStart(2, '0')} · {scene.title || scene.visualPrompt?.slice(0, 30) || ''}
+                      </span>
+                    </button>
+                  );
+                })}
+              </TrackRail>
 
-        {/* SFX track */}
-        <Track label="SFX" dim={!hasSfx}>
-          {hasSfx ? (
-            state.scenes.map((scene, i) => {
-              const offsetPct = (sceneOffsets[i] / totalMs) * 100 + 4;
-              const widthPct = Math.min(18, (sceneDurationMs(scene) / totalMs) * 40);
-              return (
-                <div
-                  key={i}
-                  className="absolute top-[6px] bottom-[6px] bg-white/10 border border-white/[0.18] rounded-[3px] flex items-center px-1.5"
-                  style={{ left: `${offsetPct}%`, width: `${widthPct}%` }}
-                >
-                  <span className="font-mono text-[9px] text-[#8A9198] tracking-wider">
-                    sfx
-                  </span>
-                </div>
-              );
-            })
-          ) : (
-            <div className="absolute inset-0 grid place-items-center font-mono text-[9.5px] text-[#5A6268] tracking-wider">
-              SFX off
+              {/* VOICE track */}
+              <TrackRail>
+                {state.scenes.map((scene, i) => {
+                  const offsetPct = (sceneOffsets[i] / totalMs) * 100;
+                  const widthPct = (sceneDurationMs(scene) / totalMs) * 100;
+                  const peaks = scene.waveformPeaks ?? Array.from({ length: 40 }, (_, k) =>
+                    20 + Math.abs(Math.sin((k + i * 3) * 0.31) + Math.cos((k + i * 2) * 0.77) * 0.6) * 60,
+                  );
+                  const isActive = i === selectedSceneIndex;
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => (onSelectVoice ?? onSelectScene)(i)}
+                      title={`Scene ${i + 1} · click to edit voice`}
+                      aria-label={`Scene ${i + 1} voice — click to regenerate`}
+                      className={
+                        'absolute top-[3px] bottom-[3px] flex items-center gap-[1px] rounded-[3px] border transition-colors ' +
+                        (isActive
+                          ? 'border-[#14C8CC] bg-[#14C8CC]/10'
+                          : 'border-transparent hover:border-[#14C8CC]/40 hover:bg-[#14C8CC]/5')
+                      }
+                      style={{ left: `${offsetPct}%`, width: `${widthPct}%` }}
+                    >
+                      {peaks.slice(0, 40).map((h, k) => (
+                        <span
+                          key={k}
+                          className={`flex-1 rounded-[1px] ${isActive ? 'bg-[#14C8CC]' : 'bg-[#14C8CC]/55'}`}
+                          style={{ height: `${Math.min(100, Math.max(8, h))}%` }}
+                        />
+                      ))}
+                    </button>
+                  );
+                })}
+              </TrackRail>
+
+              {/* CAPTIONS track */}
+              <TrackRail>
+                {hasCaptions ? (
+                  state.scenes.map((scene, i) => {
+                    const offsetPct = (sceneOffsets[i] / totalMs) * 100;
+                    const widthPct = (sceneDurationMs(scene) / totalMs) * 100;
+                    const text = scene.voiceover?.slice(0, 40) ?? '';
+                    return (
+                      <div
+                        key={i}
+                        className="absolute top-[4px] bottom-[4px] bg-white/[0.06] border border-white/10 rounded-[3px] px-1.5 flex items-center overflow-hidden"
+                        style={{ left: `${offsetPct}%`, width: `${widthPct}%` }}
+                      >
+                        <span className="font-serif italic text-[9.5px] text-[#8A9198] whitespace-nowrap overflow-hidden text-ellipsis">
+                          {text}
+                        </span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="absolute inset-0 grid place-items-center font-mono text-[9.5px] text-[#5A6268] tracking-wider">
+                    Captions off · turn on in intake to see chips here
+                  </div>
+                )}
+              </TrackRail>
+
+              {/* MUSIC track */}
+              <TrackRail>
+                {hasMusic ? (
+                  <div
+                    className="absolute top-[4px] bottom-[4px] left-0 right-0 rounded-[3px] flex items-center px-2"
+                    style={{
+                      background: 'linear-gradient(90deg, rgba(197,147,255,.3), rgba(197,147,255,.18))',
+                      border: '1px solid rgba(197,147,255,.3)',
+                    }}
+                  >
+                    <span className="font-mono text-[9.5px] text-white/80 tracking-wider uppercase">
+                      {state.intake.music?.genre ?? 'Lyria'} · {state.generation?.music_url ? 'Ready' : 'Generating…'}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="absolute inset-0 grid place-items-center font-mono text-[9.5px] text-[#5A6268] tracking-wider">
+                    Music off
+                  </div>
+                )}
+              </TrackRail>
+
+              {/* SFX track */}
+              <TrackRail>
+                {hasSfx ? (
+                  state.scenes.map((scene, i) => {
+                    const offsetPct = (sceneOffsets[i] / totalMs) * 100 + 4;
+                    const widthPct = Math.min(18, (sceneDurationMs(scene) / totalMs) * 40);
+                    return (
+                      <div
+                        key={i}
+                        className="absolute top-[6px] bottom-[6px] bg-white/10 border border-white/[0.18] rounded-[3px] flex items-center px-1.5"
+                        style={{ left: `${offsetPct}%`, width: `${widthPct}%` }}
+                      >
+                        <span className="font-mono text-[9px] text-[#8A9198] tracking-wider">
+                          sfx
+                        </span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="absolute inset-0 grid place-items-center font-mono text-[9.5px] text-[#5A6268] tracking-wider">
+                    SFX off
+                  </div>
+                )}
+              </TrackRail>
             </div>
-          )}
-        </Track>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function Track({
-  label,
-  dim,
-  children,
-}: {
-  label: string;
-  dim?: boolean;
-  children: React.ReactNode;
-}) {
+/** Pinned left-gutter label. Stays in place while the track rails
+ *  scroll horizontally on their own axis. */
+function TrackLabel({ children, dim }: { children: React.ReactNode; dim?: boolean }) {
   return (
-    <div className="flex items-center gap-2.5 min-h-[30px]">
-      <div
-        className={`w-[48px] shrink-0 text-right font-mono text-[9.5px] tracking-[0.14em] uppercase ${dim ? 'text-[#5A6268]/60' : 'text-[#5A6268]'}`}
-      >
-        {label}
-      </div>
-      <div className="flex-1 h-[30px] bg-[#151B20] border border-white/5 rounded-md relative overflow-hidden">
-        {children}
-      </div>
+    <div
+      className={`h-[30px] flex items-center justify-end pr-2 font-mono text-[9.5px] tracking-[0.14em] uppercase ${dim ? 'text-[#5A6268]/60' : 'text-[#5A6268]'}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Absolute-positioned content rail — the thing clips sit inside.
+ *  Matches the pinned label gutter's 30 px row height. */
+function TrackRail({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="h-[30px] bg-[#151B20] border border-white/5 rounded-md relative overflow-hidden">
+      {children}
     </div>
   );
 }

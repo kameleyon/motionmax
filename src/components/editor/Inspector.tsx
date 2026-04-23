@@ -106,6 +106,24 @@ export default function Inspector({
   const motion = (meta.motion as Motion | undefined) ?? 'Push-in';
   const transition = (meta.transition as Transition | undefined) ?? 'Cut';
 
+  // Music + SFX availability — toggle stems are only meaningful if
+  // the project actually generated those stems. Two signals:
+  //   • intake.music.on / intake.music.sfx — what the user picked at
+  //     intake time
+  //   • generations.music_url + per-scene sfxUrls — proof the worker
+  //     actually produced the asset
+  // We accept EITHER signal so freshly-finished projects don't show
+  // the toggles as unavailable just because realtime hasn't caught up.
+  const intakeMusicOn = !!state.intake.music?.on;
+  const intakeSfxOn = !!state.intake.music?.sfx;
+  const generationHasMusic = !!state.generation?.music_url;
+  const sceneHasSfx = state.scenes.some((s) =>
+    Array.isArray((s.meta as { sfxUrls?: unknown[] })?.sfxUrls) &&
+    ((s.meta as { sfxUrls?: unknown[] }).sfxUrls?.length ?? 0) > 0,
+  );
+  const hasProjectMusic = intakeMusicOn || generationHasMusic;
+  const hasProjectSfx = intakeSfxOn || sceneHasSfx;
+
   // Captions are a PROJECT-level setting (apply to the entire video),
   // stored in intake_settings. captionStyle === 'none' means off.
   // Local draft state keeps the toggle / dropdown instantly responsive
@@ -401,27 +419,38 @@ export default function Inspector({
               export pipeline to skip music / sfx for this scene. No
               regen needed: export reads scene._meta on the next run
               and just doesn't mix those stems in. "With or without" —
-              simple toggles, no slider. */}
+              simple toggles, no slider. Each toggle is GREYED OUT
+              when the underlying stem doesn't exist in the project
+              (music wasn't enabled at intake, or no SFX track was
+              generated) — flipping a toggle for a stem that doesn't
+              exist would do nothing, so we surface that visually
+              instead of pretending the control works. */}
           <section>
             <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">Audio bed for this scene</h5>
             <div className="flex flex-col gap-1.5">
               <AudioBedToggle
                 label="Background music"
-                sub="Mute the Lyria bed under this scene"
-                enabled={!(meta.muteMusic as boolean | undefined)}
+                sub={hasProjectMusic
+                  ? 'Mute the Lyria bed under this scene'
+                  : 'No music was generated for this project'}
+                enabled={hasProjectMusic && !(meta.muteMusic as boolean | undefined)}
                 onToggle={(on) => updateSceneMeta(selectedSceneIndex, { muteMusic: !on })}
-                disabled={busy !== 'idle' || sceneLocked || projectLocked}
+                disabled={!hasProjectMusic || busy !== 'idle' || sceneLocked || projectLocked}
               />
               <AudioBedToggle
                 label="Sound effects"
-                sub="Mute the per-scene SFX stems"
-                enabled={!(meta.muteSfx as boolean | undefined)}
+                sub={hasProjectSfx
+                  ? 'Mute the per-scene SFX stems'
+                  : 'No sound effects were generated for this project'}
+                enabled={hasProjectSfx && !(meta.muteSfx as boolean | undefined)}
                 onToggle={(on) => updateSceneMeta(selectedSceneIndex, { muteSfx: !on })}
-                disabled={busy !== 'idle' || sceneLocked || projectLocked}
+                disabled={!hasProjectSfx || busy !== 'idle' || sceneLocked || projectLocked}
               />
             </div>
             <p className="font-mono text-[9.5px] text-[#5A6268] tracking-wider mt-2 uppercase">
-              Applied on next export · no regeneration needed
+              {(hasProjectMusic || hasProjectSfx)
+                ? 'Applied on next export · no regeneration needed'
+                : 'Add music / SFX in a new project to enable these toggles'}
             </p>
           </section>
         </div>
@@ -859,7 +888,12 @@ function AudioBedToggle({
   disabled?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 px-2.5 py-2 rounded-lg border border-white/5 bg-[#1B2228]">
+    <div
+      className={cn(
+        'flex items-center justify-between gap-3 px-2.5 py-2 rounded-lg border bg-[#1B2228] transition-opacity',
+        disabled ? 'border-white/5 opacity-50' : 'border-white/5',
+      )}
+    >
       <div className="min-w-0">
         <div className="text-[12.5px] text-[#ECEAE4] leading-tight">{label}</div>
         <div className="text-[11px] text-[#8A9198] mt-0.5">{sub}</div>
@@ -871,9 +905,11 @@ function AudioBedToggle({
         disabled={disabled}
         onClick={() => onToggle(!enabled)}
         className={cn(
-          'relative w-10 h-5 rounded-full transition-colors shrink-0 border disabled:opacity-40',
+          'relative w-10 h-5 rounded-full transition-colors shrink-0 border',
           enabled ? 'bg-[#14C8CC] border-transparent' : 'bg-[#0A0D0F] border-white/10',
+          disabled && 'cursor-not-allowed',
         )}
+        title={disabled ? 'Unavailable for this project' : undefined}
       >
         <span className={cn(
           'absolute top-[1px] w-4 h-4 rounded-full transition-all',

@@ -3,6 +3,7 @@ import { WifiOff } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import MiniSidebar from './MiniSidebar';
 import EditorTopBar, { type SubView } from './EditorTopBar';
+import BulkOpModal from './BulkOpModal';
 import type { EditorState } from '@/hooks/useEditorState';
 import Sidebar from '@/components/dashboard/Sidebar';
 
@@ -78,6 +79,7 @@ export default function EditorFrame({
     return (
       <div className="fixed inset-0 z-[9998] bg-black overflow-hidden">
         {stage}
+        <BulkOpModal projectId={state.project?.id} />
       </div>
     );
   }
@@ -152,6 +154,12 @@ export default function EditorFrame({
           </section>
         </div>
       </main>
+
+      {/* Bulk-op progress modal — renders ONLY while bulkOpActive
+          (export / voice-apply-all / captions-apply / motion-apply-all).
+          Sits on top of the editor at z-[10000] with verbose rotating
+          status messages + REC timecode + percentage. */}
+      <BulkOpModal projectId={state.project?.id} />
 
       {/* Mobile nav drawer — uses the SAME Sidebar component the
           Dashboard + Intake pages use, so the menu is identical

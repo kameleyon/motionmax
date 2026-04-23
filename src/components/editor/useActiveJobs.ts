@@ -32,6 +32,9 @@ export interface ActiveJob {
     | 'captions-apply'
     | 'motion-apply-all'
     | null;
+  /** 0–100. Worker writes this on processing rows; pending rows
+   *  default to 0. Used by the bulk-op progress modal. */
+  progress: number;
 }
 
 type Row = {
@@ -39,6 +42,7 @@ type Row = {
   task_type: string;
   status: string;
   payload: Record<string, unknown> | null;
+  progress: number | null;
 };
 
 function isActiveTask(t: string): t is ActiveTask {
@@ -60,7 +64,7 @@ export function useActiveJobs(projectId: string | null | undefined) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('video_generation_jobs')
-        .select('id, task_type, status, payload')
+        .select('id, task_type, status, payload, progress')
         .eq('project_id', projectId!)
         .in('status', ['pending', 'processing'])
         .order('created_at', { ascending: false })
@@ -86,6 +90,7 @@ export function useActiveJobs(projectId: string | null | undefined) {
               : null,
             status: r.status as 'pending' | 'processing',
             bulkKind,
+            progress: typeof r.progress === 'number' ? r.progress : 0,
           };
         });
     },
@@ -136,6 +141,17 @@ export function useActiveJobs(projectId: string | null | undefined) {
   const bulkOpActive = !!bulkOp;
   const bulkOpKind = bulkOp?.bulkKind ?? null;
 
+  // Aggregate progress across every in-flight job in the bulk batch.
+  // Sharing the same bulkKind = same user-initiated operation. For an
+  // export there's typically one job; for voice/motion-apply-all there
+  // are N parallel jobs and we average their progress so the modal
+  // shows realistic project-wide completion. Pending rows count as 0.
+  const bulkBatch = bulkOpKind ? jobs.filter((j) => j.bulkKind === bulkOpKind) : [];
+  const bulkOpProgress = bulkBatch.length > 0
+    ? Math.round(bulkBatch.reduce((acc, j) => acc + j.progress, 0) / bulkBatch.length)
+    : 0;
+  const bulkOpJobCount = bulkBatch.length;
+
   return {
     jobs,
     tasksForScene,
@@ -143,5 +159,7 @@ export function useActiveJobs(projectId: string | null | undefined) {
     anyRegenActive,
     bulkOpActive,
     bulkOpKind,
+    bulkOpProgress,
+    bulkOpJobCount,
   };
 }

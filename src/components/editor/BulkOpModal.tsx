@@ -1,0 +1,199 @@
+import { useEffect, useState } from 'react';
+import { useActiveJobs } from './useActiveJobs';
+
+/** Full-screen modal that shows progress for project-wide operations:
+ *  exports, voice apply-all, captions burn, and motion re-render-all.
+ *  Rotates through verbose status messages on a timer so the user sees
+ *  movement even while the worker is in a long phase. Driven entirely
+ *  by useActiveJobs — appears when bulkOpActive flips true and goes
+ *  away when it flips false. */
+
+const MESSAGES_BY_KIND: Record<string, Array<[number, string]>> = {
+  export: [
+    [0,  'Spinning up the export pipeline…'],
+    [10, 'Fetching scene videos from storage…'],
+    [22, 'Decoding scene clips…'],
+    [38, 'Aligning narration tracks to scene boundaries…'],
+    [55, 'Mixing music + SFX bed under the master…'],
+    [70, 'Burning captions across every scene…'],
+    [82, 'Final color pass + transcoding to H.264…'],
+    [92, 'Writing the master file…'],
+    [98, 'Almost there — encoding the last frames…'],
+  ],
+  'captions-apply': [
+    [0,  'Pulling caption settings from the project…'],
+    [10, 'Reading every scene narration…'],
+    [25, 'Generating word-level timing from the audio…'],
+    [45, 'Building the caption track…'],
+    [65, 'Compiling ASS subtitle stream…'],
+    [78, 'Burning captions into the master…'],
+    [92, 'Wrapping up the new export…'],
+  ],
+  'voice-apply-all': [
+    [0,  'Switching the project voice…'],
+    [10, 'Queueing per-scene narration jobs…'],
+    [25, 'TTS rendering scene voiceovers…'],
+    [55, 'Re-synthesising every line in the new voice…'],
+    [82, 'Writing the new audio tracks back to the timeline…'],
+    [95, 'Almost done — finalising audio…'],
+  ],
+  'motion-apply-all': [
+    [0,  'Re-queueing every scene with the new motion…'],
+    [10, 'Booting up Kling V3.0 Pro renderers…'],
+    [25, 'Generating fresh keyframes per scene…'],
+    [55, 'Animating new camera motion across scenes…'],
+    [80, 'Encoding new scene clips…'],
+    [94, 'Stitching back into the timeline…'],
+  ],
+};
+
+const TITLE_BY_KIND: Record<string, string> = {
+  export: 'Exporting your full video',
+  'captions-apply': 'Burning captions across every scene',
+  'voice-apply-all': 'Applying voice + re-rendering every scene',
+  'motion-apply-all': 'Re-rendering every scene with new motion',
+};
+
+function messageForProgress(kind: string, pct: number): string {
+  const msgs = MESSAGES_BY_KIND[kind] ?? MESSAGES_BY_KIND.export;
+  let msg = msgs[0][1];
+  for (const [threshold, text] of msgs) {
+    if (pct >= threshold) msg = text;
+  }
+  return msg;
+}
+
+function LoadingRing({ size = 92 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 50 50" width={size} height={size} aria-hidden="true">
+      <circle cx="25" cy="25" r="20" fill="none" stroke="rgba(20,200,204,.12)" strokeWidth="3" />
+      <circle
+        cx="25" cy="25" r="20" fill="none"
+        stroke="url(#bulkSg)" strokeWidth="3" strokeLinecap="round" strokeDasharray="50 200"
+        transform="rotate(-90 25 25)"
+      >
+        <animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="1.2s" repeatCount="indefinite" />
+      </circle>
+      <defs>
+        <linearGradient id="bulkSg" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stopColor="#14C8CC" />
+          <stop offset="100%" stopColor="#0FA6AE" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
+function formatElapsed(start: number): string {
+  const sec = Math.max(0, Math.floor((Date.now() - start) / 1000));
+  const m = Math.floor(sec / 60).toString().padStart(2, '0');
+  const s = (sec % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+export default function BulkOpModal({
+  projectId,
+}: {
+  projectId: string | null | undefined;
+}) {
+  const { bulkOpActive, bulkOpKind, bulkOpProgress, bulkOpJobCount } =
+    useActiveJobs(projectId ?? null);
+
+  // Track when the op started so we can show an elapsed counter. We
+  // reset it whenever the kind changes (different op started).
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  // Tick every second so the elapsed time updates smoothly.
+  const [, tick] = useState(0);
+
+  useEffect(() => {
+    if (bulkOpActive && !startedAt) setStartedAt(Date.now());
+    if (!bulkOpActive) setStartedAt(null);
+  }, [bulkOpActive, startedAt]);
+
+  useEffect(() => {
+    if (!bulkOpActive) return;
+    const i = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(i);
+  }, [bulkOpActive]);
+
+  if (!bulkOpActive || !bulkOpKind) return null;
+
+  const title = TITLE_BY_KIND[bulkOpKind] ?? 'Project re-rendering';
+  // Display floor: the worker may not write progress at 0–5% range
+  // (especially for parallel batches that are still pending), so we
+  // show at least 2% so the bar isn't a stuck zero.
+  const displayProgress = Math.max(2, Math.min(99, bulkOpProgress));
+  const message = messageForProgress(bulkOpKind, displayProgress);
+
+  return (
+    <div
+      className="fixed inset-0 z-[10000] grid place-items-center bg-black/80 backdrop-blur-md"
+      role="dialog"
+      aria-live="polite"
+      aria-label={title}
+    >
+      <div
+        className="relative w-[min(92vw,520px)] rounded-2xl border border-white/10 bg-gradient-to-b from-[#10151A] to-[#0A0D0F] p-7 sm:p-9 text-center shadow-[0_40px_120px_-30px_rgba(20,200,204,.45)]"
+      >
+        {/* Subtle grid texture so the modal feels like the editor */}
+        <div
+          className="absolute inset-0 pointer-events-none rounded-2xl opacity-[0.05]"
+          style={{
+            backgroundImage: 'radial-gradient(rgba(255,255,255,.7) 1px, transparent 1px)',
+            backgroundSize: '22px 22px',
+          }}
+        />
+        {/* Aurora glow underlay */}
+        <div
+          className="absolute inset-0 pointer-events-none rounded-2xl"
+          style={{
+            background:
+              'radial-gradient(60% 80% at 50% 0%, rgba(20,200,204,.18), transparent 70%)',
+          }}
+        />
+
+        <div className="relative flex flex-col items-center gap-4">
+          {/* REC pill */}
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#E66666]/10 border border-[#E66666]/30 font-mono text-[9px] tracking-[0.16em] uppercase text-[#E66666]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#E66666] animate-pulse" />
+            REC · {startedAt ? formatElapsed(startedAt) : '00:00'}
+          </div>
+
+          <LoadingRing size={84} />
+
+          <div className="font-serif text-[20px] sm:text-[24px] font-medium text-[#ECEAE4] leading-tight">
+            {title}
+          </div>
+
+          {/* Progress bar */}
+          <div className="w-full max-w-[420px] mt-1">
+            <div className="h-[3px] rounded-full bg-white/8 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-[#14C8CC] to-[#0FA6AE] rounded-full transition-[width] duration-700"
+                style={{ width: `${displayProgress}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between mt-2 font-mono text-[11px] tracking-[0.14em] uppercase">
+              <span className="text-[#14C8CC]">{displayProgress}%</span>
+              {bulkOpJobCount > 1 && (
+                <span className="text-[#5A6268]">{bulkOpJobCount} parallel jobs</span>
+              )}
+            </div>
+          </div>
+
+          {/* Verbose status — rotates as progress climbs */}
+          <div className="font-serif italic text-[13px] sm:text-[14px] text-[#8A9198] text-center max-w-[90%] min-h-[40px] leading-[1.55]">
+            {message}
+          </div>
+
+          {/* Footer note */}
+          <div className="font-mono text-[9.5px] tracking-[0.14em] uppercase text-[#5A6268] mt-1">
+            {bulkOpKind === 'export'
+              ? 'Your file will download as soon as encoding finishes'
+              : 'Editing is locked while this finishes'}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

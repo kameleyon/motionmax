@@ -337,6 +337,15 @@ async function processJob(job: Job) {
       } else if (job.task_type === 'cinematic_audio' as any) {
         const result = await handleCinematicAudio(job.id, job.payload as any, job.user_id);
         finalPayload = { ...finalPayload, ...result };
+      } else if (job.task_type === 'master_audio' as any) {
+        // ONE continuous TTS track per generation for doc2video +
+        // cinematic. Replaces N per-scene cinematic_audio jobs — cuts
+        // Gemini quota burn from 15× to 1× and eliminates cross-scene
+        // tonality jumps. Handler back-fills every scene's audioUrl
+        // with the master URL so existing editor + export paths work.
+        const { handleMasterAudio } = await import("./handlers/handleMasterAudio.js");
+        const result = await handleMasterAudio(job.id, job.payload as any, job.user_id);
+        finalPayload = { ...finalPayload, ...result };
       } else if (job.task_type === 'cinematic_image' as any) {
         const result = await handleCinematicImage(job.id, job.payload as any, job.user_id);
         finalPayload = { ...finalPayload, ...result };

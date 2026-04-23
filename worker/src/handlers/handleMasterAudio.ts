@@ -15,13 +15,16 @@
  * 1-scene anyway, so the two paths produce identical output there).
  */
 
+import fs from "fs";
+import path from "path";
+import os from "os";
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { generateGeminiFlashTTS } from "../services/geminiFlashTTS.js";
 import { generateSmallestTTS } from "../services/smallestTTS.js";
 import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
 import { isHaitianCreole } from "../services/audioWavUtils.js";
-import { probeDuration } from "./export/ffmpegCmd.js";
+import { probeDuration, runFfmpeg } from "./export/ffmpegCmd.js";
 
 interface MasterAudioPayload {
   generationId: string;
@@ -200,22 +203,79 @@ export async function handleMasterAudio(
     }
   }
 
-  // Persist master-audio fields + back-fill each scene's audioUrl with
-  // the master URL so existing editor + export code works unchanged.
-  // Also give each scene its proportional duration slice based on its
-  // voiceover word count vs. total.
+  // Compute each scene's slice based on its voiceover word count
+  // proportional to total words. This is what determines how long
+  // each scene's visual will be in the final export.
   const totalWords = masterText.split(/\s+/).length || 1;
+  const sceneSlices: Array<{ startMs: number; sliceMs: number; words: number }> = [];
   let cursorMs = 0;
-  const updatedScenes = scenes.map((s: any) => {
+  for (const s of scenes) {
     const words = typeof s.voiceover === "string"
       ? s.voiceover.trim().split(/\s+/).filter(Boolean).length
       : 0;
     const sliceMs = Math.max(500, Math.round((words / totalWords) * durationMs));
-    const startMs = cursorMs;
+    sceneSlices.push({ startMs: cursorMs, sliceMs, words });
     cursorMs += sliceMs;
+  }
+
+  // Slice the master audio into per-scene segments via ffmpeg + upload
+  // each so the existing scene encoder (which uses scene.audioUrl to
+  // size per-scene clips) works unchanged. Trim-only, no re-encode —
+  // very fast. Failures fall back to pointing every scene at the
+  // master URL, which produces 1 long clip during export (degraded
+  // but not broken).
+  const sceneAudioUrls: (string | null)[] = new Array(scenes.length).fill(null);
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `master-slice-${generationId.slice(0, 8)}-`));
+  try {
+    const masterLocal = path.join(tempDir, "master.mp3");
+    const resp = await fetch(result.url);
+    if (!resp.ok) throw new Error(`Master audio download failed: ${resp.status}`);
+    fs.writeFileSync(masterLocal, Buffer.from(await resp.arrayBuffer()));
+
+    for (let i = 0; i < scenes.length; i++) {
+      const { startMs, sliceMs } = sceneSlices[i];
+      const slicePath = path.join(tempDir, `scene-${i}.mp3`);
+      try {
+        await runFfmpeg([
+          "-ss", (startMs / 1000).toFixed(3),
+          "-t", (sliceMs / 1000).toFixed(3),
+          "-i", masterLocal,
+          "-c:a", "libmp3lame",
+          "-b:a", "128k",
+          slicePath,
+        ]);
+        const sliceBuf = fs.readFileSync(slicePath);
+        const fileName = `${projectId}/master-slice-${i}-${Date.now()}.mp3`;
+        const { error: uploadErr } = await supabase.storage
+          .from("scene-audio")
+          .upload(fileName, sliceBuf, { contentType: "audio/mpeg", upsert: true });
+        if (uploadErr) {
+          console.warn(`[MasterAudio] Scene ${i} slice upload failed: ${uploadErr.message}`);
+          sceneAudioUrls[i] = result.url;
+        } else {
+          const { data } = supabase.storage.from("scene-audio").getPublicUrl(fileName);
+          sceneAudioUrls[i] = data.publicUrl;
+        }
+      } catch (err) {
+        console.warn(`[MasterAudio] Scene ${i} slice failed: ${(err as Error).message}`);
+        sceneAudioUrls[i] = result.url; // fallback to master URL
+      }
+    }
+  } catch (err) {
+    console.warn(`[MasterAudio] Master download failed, using master URL for all scenes: ${(err as Error).message}`);
+    for (let i = 0; i < scenes.length; i++) sceneAudioUrls[i] = result.url;
+  } finally {
+    try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }
+  }
+
+  // Persist: each scene gets its sliced audioUrl + slice metadata.
+  // generations.master_audio_url holds the FULL track so the editor
+  // can play it continuously across scene navigation.
+  const updatedScenes = scenes.map((s: any, i: number) => {
+    const { startMs, sliceMs } = sceneSlices[i];
     return {
       ...s,
-      audioUrl: result.url,
+      audioUrl: sceneAudioUrls[i] ?? result.url,
       duration: Math.max(1, Math.round(sliceMs / 1000)),
       _meta: {
         ...(s._meta || {}),

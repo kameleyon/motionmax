@@ -91,15 +91,36 @@ export async function runUnifiedPipeline(
   const imageJobIds: string[] = [];
   const videoJobIds: string[] = [];
 
-  // Submit all audio jobs (no dependencies — script already complete)
-  for (let i = 0; i < sceneCount; i++) {
-    const jobId = await submitJob(
-      { phase: "audio", projectId, generationId, sceneIndex: i, language: params.language },
-      "cinematic_audio",
+  // Audio strategy:
+  //  - smartflow  → 1 scene so 1 cinematic_audio job (unchanged)
+  //  - doc2video  → ONE master_audio job covering all scenes (NEW)
+  //  - cinematic  → ONE master_audio job covering all scenes (NEW)
+  //
+  // The master handler concatenates all scene voiceovers, makes one
+  // Gemini Flash TTS call, probes duration, and back-fills every
+  // scene's audioUrl with the master URL so editor + export code
+  // keeps working unchanged. Cuts Gemini quota burn from N× to 1×
+  // and gives one continuous narration take instead of N cold takes.
+  const isSmartflow = params.projectType === "smartflow";
+  if (isSmartflow) {
+    // Legacy per-scene path for smartflow (single-scene anyway)
+    for (let i = 0; i < sceneCount; i++) {
+      const jobId = await submitJob(
+        { phase: "audio", projectId, generationId, sceneIndex: i, language: params.language },
+        "cinematic_audio",
+      );
+      audioJobIds.push(jobId);
+    }
+    log.debug(`Submitted ${audioJobIds.length} audio jobs (smartflow per-scene)`);
+  } else {
+    // doc2video + cinematic → one master_audio job
+    const masterJobId = await submitJob(
+      { phase: "master_audio", projectId, generationId, language: params.language },
+      "master_audio",
     );
-    audioJobIds.push(jobId);
+    audioJobIds.push(masterJobId);
+    log.debug(`Submitted 1 master_audio job covering ${sceneCount} scenes`);
   }
-  log.debug(`Submitted ${audioJobIds.length} audio jobs`);
 
   // Submit all image jobs (no dependencies — script already complete)
   for (let i = 0; i < sceneCount; i++) {

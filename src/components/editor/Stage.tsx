@@ -292,11 +292,26 @@ export default function Stage({
 
     if (audio) {
       if (scene.audioUrl) {
-        if (audio.src !== scene.audioUrl) {
+        const srcChanged = audio.src !== scene.audioUrl;
+        if (srcChanged) {
           audio.src = scene.audioUrl;
           audio.load();
         }
-        audio.currentTime = 0;
+        // Master-audio mode: all scenes share the same audioUrl. When
+        // the user navigates to a different scene, DO NOT reset
+        // currentTime to 0 — seek to that scene's slice so the track
+        // continues playing continuously instead of restarting every
+        // time the user clicks a thumbnail. Falls back to the legacy
+        // per-scene reset when scenes have distinct audioUrls.
+        const sceneMeta = scene.meta as { masterAudioSliceStartMs?: number } | undefined;
+        const sliceStartMs = sceneMeta?.masterAudioSliceStartMs;
+        const allScenesShareAudio = state.scenes.length > 1 &&
+          state.scenes.every((s) => s.audioUrl === scene.audioUrl);
+        if (allScenesShareAudio && typeof sliceStartMs === 'number') {
+          audio.currentTime = sliceStartMs / 1000;
+        } else if (srcChanged) {
+          audio.currentTime = 0;
+        }
       } else {
         audio.pause();
         audio.removeAttribute('src');

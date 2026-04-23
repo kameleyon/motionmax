@@ -146,23 +146,26 @@ const spanishSmallestSpeakers: SpeakerOption[] = [
 // 8 lighter/softer voices + 7 deeper/firmer voices, covering
 // documentary, conversational, energetic, and gentle use cases.
 const geminiFlashSpeakers: SpeakerOption[] = [
-  // Light / energetic / upbeat (tend to read female in most languages)
-  { id: "gm:Leda",         label: "Leda",         description: "Youthful" },
-  { id: "gm:Aoede",        label: "Aoede",        description: "Breezy" },
-  { id: "gm:Callirrhoe",   label: "Callirrhoe",   description: "Easy-going" },
-  { id: "gm:Sulafat",      label: "Sulafat",      description: "Warm" },
-  { id: "gm:Vindemiatrix", label: "Vindemiatrix", description: "Gentle" },
-  { id: "gm:Achernar",     label: "Achernar",     description: "Soft" },
-  { id: "gm:Laomedeia",    label: "Laomedeia",    description: "Upbeat" },
-  { id: "gm:Kore",         label: "Kore",         description: "Firm" },
-  // Deep / firm / authoritative (tend to read male in most languages)
-  { id: "gm:Charon",       label: "Charon",       description: "Informative" },
-  { id: "gm:Orus",         label: "Orus",         description: "Firm" },
-  { id: "gm:Iapetus",      label: "Iapetus",      description: "Clear" },
-  { id: "gm:Rasalgethi",   label: "Rasalgethi",   description: "Informative" },
-  { id: "gm:Algenib",      label: "Algenib",      description: "Gravelly" },
-  { id: "gm:Fenrir",       label: "Fenrir",       description: "Excitable" },
-  { id: "gm:Puck",         label: "Puck",         description: "Upbeat" },
+  // Female-leaning voices (Google's internal gender bias per their
+  // docs). Description = perceived gender + tone so users picking a
+  // "social media influencer" voice can actually tell what they're
+  // choosing instead of guessing from abstract tone descriptors.
+  { id: "gm:Leda",         label: "Leda",         description: "Female · Youthful, playful" },
+  { id: "gm:Aoede",        label: "Aoede",        description: "Female · Breezy, light" },
+  { id: "gm:Callirrhoe",   label: "Callirrhoe",   description: "Female · Easy-going" },
+  { id: "gm:Sulafat",      label: "Sulafat",      description: "Female · Warm, conversational" },
+  { id: "gm:Vindemiatrix", label: "Vindemiatrix", description: "Female · Gentle" },
+  { id: "gm:Achernar",     label: "Achernar",     description: "Female · Soft" },
+  { id: "gm:Laomedeia",    label: "Laomedeia",    description: "Female · Upbeat, social-media style" },
+  { id: "gm:Kore",         label: "Kore",         description: "Female · Firm, authoritative" },
+  // Male-leaning voices.
+  { id: "gm:Charon",       label: "Charon",       description: "Male · Informative, documentary" },
+  { id: "gm:Orus",         label: "Orus",         description: "Male · Firm, serious (dramatic)" },
+  { id: "gm:Iapetus",      label: "Iapetus",      description: "Male · Clear, neutral" },
+  { id: "gm:Rasalgethi",   label: "Rasalgethi",   description: "Male · Informative, explanatory" },
+  { id: "gm:Algenib",      label: "Algenib",      description: "Male · Gravelly, deep" },
+  { id: "gm:Fenrir",       label: "Fenrir",       description: "Male · Excitable, energetic" },
+  { id: "gm:Puck",         label: "Puck",         description: "Male · Upbeat, social-media style" },
 ];
 
 const creoleSpeakers: SpeakerOption[] = [

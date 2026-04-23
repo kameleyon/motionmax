@@ -142,13 +142,25 @@ export default function Editor() {
     })();
   }, [state, params, setParams]);
 
-  // If kickoff is in-flight but the generation row hasn't appeared
-  // yet (useEditorState hasn't seen it), flip the phase-derivation
-  // into a "starting" mode so the Stage overlay doesn't render as
-  // an empty-scene black frame. This is purely a UI concern; the
-  // real state transitions when the worker writes the generation row.
-  const awaitingGeneration =
-    kickoffState === 'starting' && !!state?.project && !state?.generation;
+  // Awaiting-generation render trigger — covers THREE scenarios:
+  //   1. Fresh autostart in flight (kickoffState='starting') — show
+  //      animated loader + verbose status.
+  //   2. Kickoff failed (kickoffState='error') — show retry CTA.
+  //   3. Zombie project — project row exists but generation never
+  //      materialised (user reloaded mid-kickoff, autostart flag
+  //      stripped, network blip ate the script job). In this case
+  //      we also show the awaiting screen with a "Start generation"
+  //      retry button so the user is never stuck on a dead black
+  //      editor frame.
+  const awaitingGeneration = !!state?.project && !state?.generation;
+
+  const retryStartGeneration = () => {
+    autostartFiredRef.current = false;
+    setKickoffState('idle');
+    const next = new URLSearchParams(params);
+    next.set('autostart', '1');
+    setParams(next, { replace: true });
+  };
 
   const [playing, setPlaying] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -242,7 +254,13 @@ export default function Editor() {
                   Starting your {modeLabel} generation…
                 </div>
                 <div className="font-serif italic text-[13px] text-[#8A9198]">
-                  Deducting credits and queueing the script job. This usually takes 5–10 seconds.
+                  Working on your script. It may take{' '}
+                  {state.project.project_type === 'cinematic'
+                    ? '8–12 minutes'
+                    : state.project.project_type === 'smartflow'
+                      ? '60–90 seconds'
+                      : '4–6 minutes'}
+                  {' '}to finish everything. Feel free to leave this tab open — we'll keep working.
                 </div>
                 <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mt-2">
                   {state.project.project_type === 'cinematic'
@@ -251,6 +269,20 @@ export default function Editor() {
                       ? 'Script ~20s · image ~30s · audio ~30s'
                       : 'Script ~30s · images ~2min · audio ~2min'}
                 </div>
+                {/* Retry affordance — if the kickoff hasn't fired in
+                    the current session (idle) or we think it died,
+                    offer a manual start. Critical for reload / stale
+                    tab scenarios where the autostart flag has been
+                    stripped but no generation row exists yet. */}
+                {kickoffState === 'idle' && (
+                  <button
+                    type="button"
+                    onClick={retryStartGeneration}
+                    className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#14C8CC]/10 border border-[#14C8CC]/30 text-[#14C8CC] text-[13px] hover:bg-[#14C8CC]/20"
+                  >
+                    Start generation
+                  </button>
+                )}
               </div>
             </>
           )}

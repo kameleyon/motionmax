@@ -386,18 +386,62 @@ ${researchBrief}
     `[GenerateVideo] Script parsed: ${scenes.length} scenes, ${totalImages} images, ${phaseTime}ms`,
   );
 
-  // ── Step 5: Create project ────────────────────────────────────────
-  const projectRow = buildProjectInsert(userId, title, payload, projectType);
-  const { data: project, error: projectError } = await supabase
-    .from("projects")
-    .insert(projectRow)
-    .select("id")
-    .single();
+  // ── Step 5: Create project (or REUSE an existing one) ──────────────
+  // The new unified editor flow creates the project row client-side
+  // via IntakeForm.tsx BEFORE calling callPhase. In that case payload
+  // carries `projectId` and we MUST NOT insert a duplicate — the
+  // user's editor is already watching the original projectId; a
+  // duplicate insert would create an orphan project with the
+  // generation attached, leaving the user's editor forever empty.
+  // Only fall back to creating a fresh project when projectId is
+  // absent (legacy workspace flow).
+  const existingProjectId: string | undefined =
+    typeof payload.projectId === "string" && payload.projectId.length > 0
+      ? payload.projectId
+      : undefined;
 
-  if (projectError || !project) {
-    throw new Error(
-      `Failed to create project: ${projectError?.message || "no data returned"}`,
-    );
+  let project: { id: string } | null = null;
+  if (existingProjectId) {
+    const { data: existing, error: fetchErr } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", existingProjectId)
+      .maybeSingle();
+    if (fetchErr) {
+      throw new Error(`Failed to look up project ${existingProjectId}: ${fetchErr.message}`);
+    }
+    if (existing) {
+      project = existing;
+      // Refresh the project title + content fields from the payload
+      // in case the user tweaked them before kickoff. Also flip
+      // status to 'generating' so the editor can react.
+      const patch: Record<string, unknown> = {
+        title,
+        status: "generating",
+        project_type: projectType,
+      };
+      if (payload.style) patch.style = payload.style;
+      if (payload.format) patch.format = payload.format;
+      if (payload.length) patch.length = payload.length;
+      await supabase.from("projects").update(patch).eq("id", existingProjectId);
+      console.log(`[GenerateVideo] Reusing existing project ${existingProjectId}`);
+    }
+  }
+
+  if (!project) {
+    const projectRow = buildProjectInsert(userId, title, payload, projectType);
+    const { data: inserted, error: projectError } = await supabase
+      .from("projects")
+      .insert(projectRow)
+      .select("id")
+      .single();
+
+    if (projectError || !inserted) {
+      throw new Error(
+        `Failed to create project: ${projectError?.message || "no data returned"}`,
+      );
+    }
+    project = inserted;
   }
 
   // ── Step 6: Create generation ─────────────────────────────────────

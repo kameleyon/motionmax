@@ -189,17 +189,32 @@ const spanishSpeakers: SpeakerOption[] = [
 ];
 
 const englishSpeakers: SpeakerOption[] = [
-  // Legacy Adam/River + all 29 American Smallest voices — unchanged.
+  // Gemini 3.1 Flash voices FIRST — testing whether the Google API
+  // can keep up for 28-scene English projects. If it holds, this is
+  // the new default ordering; if it doesn't, users can still pick
+  // Adam / River / Smallest voices lower down.
+  ...geminiFlashSpeakers,
+  // Legacy Adam/River — kept for continuity, pushed below Gemini.
   { id: "Adam", label: "Adam", description: "Male" },
   { id: "River", label: "River", description: "Female" },
+  // Smallest v3.1 29-voice American-English catalog — pushed to the
+  // bottom but still fully available.
   ...englishSmallestSpeakers,
 ];
 
-// Languages where Gemini Flash is the SOLE non-HC provider (Smallest v2
-// was retired). Gemini voices auto-adapt the accent to the language.
-const germanSpeakers: SpeakerOption[]  = geminiFlashSpeakers;
-const italianSpeakers: SpeakerOption[] = geminiFlashSpeakers;
-const dutchSpeakers: SpeakerOption[]   = geminiFlashSpeakers;
+// Languages where Gemini Flash is the SOLE non-HC provider. Gemini
+// voices auto-adapt the accent to the language — the model reads the
+// accent from the input text, so the exact same 15-voice roster
+// serves every one of these. Russian / Chinese / Japanese / Korean
+// previously fell through the switch default (English voices) —
+// now they get proper native-speaking Gemini voices.
+const germanSpeakers: SpeakerOption[]   = geminiFlashSpeakers;
+const italianSpeakers: SpeakerOption[]  = geminiFlashSpeakers;
+const dutchSpeakers: SpeakerOption[]    = geminiFlashSpeakers;
+const russianSpeakers: SpeakerOption[]  = geminiFlashSpeakers;
+const chineseSpeakers: SpeakerOption[]  = geminiFlashSpeakers;
+const japaneseSpeakers: SpeakerOption[] = geminiFlashSpeakers;
+const koreanSpeakers: SpeakerOption[]   = geminiFlashSpeakers;
 
 export function getSpeakersForLanguage(language?: string): SpeakerOption[] {
   switch (language) {
@@ -210,6 +225,10 @@ export function getSpeakersForLanguage(language?: string): SpeakerOption[] {
     case "de": return germanSpeakers;
     case "it": return italianSpeakers;
     case "nl": return dutchSpeakers;
+    case "ru": return russianSpeakers;
+    case "zh": return chineseSpeakers;
+    case "ja": return japaneseSpeakers;
+    case "ko": return koreanSpeakers;
     default: return englishSpeakers;
   }
 }
@@ -219,12 +238,19 @@ export function getDefaultSpeaker(language: string): SpeakerVoice {
     case "ht": return "Pierre";
     case "fr": return "Camille";
     case "es": return "Isabella";
+    // English default stays "Adam" (legacy Fish Audio) so existing
+    // users don't get a surprise voice swap on their next project.
+    // The Gemini voices sit above Adam in the list for easy testing.
     case "en": return "Adam";
-    // For languages covered solely by Gemini Flash, default to a warm,
-    // conversational voice that reads well across most content.
+    // Gemini-only languages default to a warm, conversational voice
+    // that reads well across most content.
     case "de": return "gm:Sulafat";
     case "it": return "gm:Sulafat";
     case "nl": return "gm:Sulafat";
+    case "ru": return "gm:Sulafat";
+    case "zh": return "gm:Sulafat";
+    case "ja": return "gm:Sulafat";
+    case "ko": return "gm:Sulafat";
     default: return "Adam";
   }
 }

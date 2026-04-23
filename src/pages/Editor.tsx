@@ -32,9 +32,13 @@ export default function Editor() {
   // The UNIFIED pipeline orchestrator — this is the one SmartFlow /
   // Explainer / Cinematic have always used via the legacy workspaces.
   // It chains script → images → audio → (video for cinematic) →
-  // finalize with proper dependency gates. Using it verbatim so we
-  // don't re-invent what already works.
-  const { startGeneration: startPipeline } = useGenerationPipeline();
+  // finalize with proper dependency gates. We consume BOTH:
+  //   - startGeneration (fire the chain)
+  //   - state (live progress tracked by the pipeline itself — this
+  //     is what the legacy workspaces use to decide when the render
+  //     overlay should go away. NOT a DB query, so it's immune to
+  //     React Query cache / realtime race issues.)
+  const { startGeneration: startPipeline, state: pipelineState } = useGenerationPipeline();
 
   // During rendering, keep the selected scene pinned to the newest
   // scene that has any asset. Once ready, users can click around.

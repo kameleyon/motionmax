@@ -159,10 +159,24 @@ export default function Stage({
     const words = scene.voiceover.trim().split(/\s+/).filter(Boolean);
     if (words.length === 0) { setCaptionText(''); return; }
 
-    // 3-word chunks — matches typical caption-style pacing and keeps
-    // the overlay readable on mobile. If audioDuration is known we
-    // distribute windows across it; else we fall back to ~0.45s/word.
-    const chunkSize = 3;
+    // Chunk size mirrors the worker's caption builder so the editor
+    // preview matches what the export will look like:
+    //   • Single-word styles (orangeBox, yellowSlanted, redSlantedBox,
+    //     motionBlur, thickStroke, comicBurst, heavyDropShadow, glitch,
+    //     bouncyPill, cleanPop, toxicBounce, proShortForm) → 1 word
+    //   • Subtitle styles (cinematicFade, retroTerminal, typewriter)
+    //     → 5 words
+    //   • Everything else → karaoke 3-word groups
+    // See worker/src/services/captionBuilder.ts SINGLE_WORD_STYLES /
+    // SUBTITLE_STYLES.
+    const SINGLE_WORD = new Set([
+      'orangeBox', 'yellowSlanted', 'redSlantedBox', 'motionBlur',
+      'thickStroke', 'comicBurst', 'heavyDropShadow', 'glitch',
+      'bouncyPill', 'cleanPop', 'toxicBounce', 'proShortForm',
+    ]);
+    const SUBTITLE = new Set(['cinematicFade', 'retroTerminal', 'typewriter']);
+    const styleId = state.intake.captionStyle ?? '';
+    const chunkSize = SINGLE_WORD.has(styleId) ? 1 : SUBTITLE.has(styleId) ? 5 : 3;
     const chunks: string[] = [];
     for (let i = 0; i < words.length; i += chunkSize) {
       chunks.push(words.slice(i, i + chunkSize).join(' '));
@@ -515,6 +529,17 @@ export default function Stage({
             </div>
             <div className="font-serif italic text-[13px] text-[#8A9198] text-center max-w-[80%]">
               {messageForProgress(state.progress)}
+            </div>
+            {/* ETA breakdown — order-of-magnitude estimate so users
+                don't think the page is frozen at 30%. Cinematic is
+                the heaviest (Kling I2V per scene); explainer +
+                smartflow are image-only and finish faster. */}
+            <div className="font-mono text-[10px] tracking-[0.12em] text-[#5A6268] text-center mt-1 max-w-[90%]">
+              {state.project?.project_type === 'cinematic'
+                ? 'Script ~30s · images ~3min · audio ~2min · video ~5min'
+                : state.project?.project_type === 'smartflow'
+                  ? 'Script ~20s · image ~30s · audio ~30s'
+                  : 'Script ~30s · images ~2min · audio ~2min'}
             </div>
           </div>
         )}

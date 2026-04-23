@@ -168,8 +168,13 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
         brandMark: brandMarkEnabled && brandMarkText.trim() ? brandMarkText.trim() : undefined,
         characterDescription: characterDescription.trim() || undefined,
         characterImages: characterImages.length > 0 ? characterImages : undefined,
-        disableExpressions: true,
-        characterConsistencyEnabled: plan === "studio" || plan === "enterprise" || characterConsistencyEnabled,
+        // Match Cinematic's behaviour: character consistency always
+        // ON, expressions enabled. Worker handlers (handleCinematicImage)
+        // already accept both regardless of project_type — the gate
+        // here was the only thing keeping Free/Starter Explainer users
+        // from getting consistent character renders.
+        disableExpressions: false,
+        characterConsistencyEnabled: true,
         language,
         projectType: "doc2video",
         voiceType: "standard",

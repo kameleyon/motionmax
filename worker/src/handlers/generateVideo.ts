@@ -255,7 +255,16 @@ ${researchBrief}
           number: idx + 1,
           voiceover: narrationField?.val || "",
           visualPrompt: visualField?.val || narrationField?.val || "",
-          duration: projectType === "smartflow" ? 60 : 11,
+          // SmartFlow defaults to a single 60s slide (single-image
+          // infographic). If the user later picks a duration in
+          // intake (currently hidden via FEATURES.smartflow.duration
+          // = false), the payload.length === 'presentation' branch
+          // bumps it to 90s. Other project types stick with 11s
+          // estimated per scene; real audio length overrides at
+          // finalize time.
+          duration: projectType === "smartflow"
+            ? (payload.length === 'presentation' ? 90 : 60)
+            : 11,
         };
       });
       console.log(`[GenerateVideo] Transform: ${parsed.scenes.length} scenes from array`);

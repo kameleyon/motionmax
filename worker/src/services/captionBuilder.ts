@@ -22,6 +22,27 @@ export type CaptionStyle =
   | "comicBurst" | "retroTerminal" | "heavyDropShadow"
   | "cleanPop" | "toxicBounce" | "proShortForm";
 
+const VALID_CAPTION_STYLES = new Set<string>([
+  "none",
+  "orangeBox", "yellowSlanted", "redSlantedBox", "cyanOutline",
+  "motionBlur", "yellowSmall", "thickStroke", "karaokePop",
+  "typewriter", "neonTeal", "goldLuxury", "bouncyPill",
+  "glitch", "cinematicFade", "redTag", "blackBox",
+  "comicBurst", "retroTerminal", "heavyDropShadow",
+  "cleanPop", "toxicBounce", "proShortForm",
+]);
+
+/** Runtime guard — payload arrives loosely typed from JSON, so a
+ *  typo'd style name would otherwise reach STYLE_DEFS[style] and
+ *  return undefined → ffmpeg failure or silently no captions.
+ *  Returns the canonical style or 'none' if unknown. */
+export function normalizeCaptionStyle(raw: unknown): CaptionStyle {
+  if (typeof raw !== 'string') return 'none';
+  if (VALID_CAPTION_STYLES.has(raw)) return raw as CaptionStyle;
+  console.warn(`[captionBuilder] Unknown captionStyle "${raw}" — falling back to "none"`);
+  return 'none';
+}
+
 export interface CaptionWord {
   text: string;
   startMs: number;

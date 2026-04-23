@@ -246,6 +246,14 @@ export async function handleFinalizePhase(
   // and continue. The exportVideo handler (later, when the user hits
   // "Export") picks up `scenes[0]._meta.musicUrl` if present and mixes
   // it under the narration via ffmpeg.
+  //
+  // PER-SCENE MUTE TOGGLES: The editor surfaces per-scene
+  // `_meta.muteMusic` and `_meta.muteSfx` switches in the Inspector's
+  // Scene tab. When the export's mix step is implemented it MUST
+  // check these flags per-scene and skip stem mixing for any scene
+  // where the corresponding flag is true. Today the export concat
+  // doesn't mix music yet, so the toggles are forward-compat — but
+  // the data is there in scene._meta and editor reads/writes it.
   try {
     const intake = intakeSettings as
       | { music?: { on?: boolean; genre?: string; intensity?: number } }

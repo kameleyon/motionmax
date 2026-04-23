@@ -274,6 +274,17 @@ async function processJob(job: Job) {
 
   let finalPayload = { ...job.payload };
 
+  // Log bulk-op tag if present — payload._bulk = 'voice-apply-all' |
+  // 'captions-apply' | 'motion-apply-all'. Editor uses this to flip
+  // the project-wide lock UI; worker doesn't behave differently per
+  // tag, but logging it makes per-batch debugging greppable. Unknown
+  // payload fields are passed through untouched (handlers destructure
+  // only what they need), so this is purely observational.
+  const bulkTag = (job.payload as { _bulk?: string } | null)?._bulk;
+  if (bulkTag) {
+    console.log(`[Worker] Job ${job.id} (${job.task_type}) tagged _bulk=${bulkTag}`);
+  }
+
   try {
     // Status already set to 'processing' by claim_pending_job RPC
     // Only update if job was recovered from startup diagnostic (not via atomic claim)
@@ -886,9 +897,37 @@ console.log(
   `Slots: export=${MAX_EXPORT_SLOTS} llm=${MAX_LLM_SLOTS} total=${MAX_CONCURRENT_JOBS}. ` +
   `Realtime + ${FALLBACK_POLL_INTERVAL_MS / 1000}s fallback poll.`
 );
-console.log(`[Worker] 🔑 HYPEREAL_API_KEY: ${maskKey(process.env.HYPEREAL_API_KEY)}`);
-console.log(`[Worker] 🔑 REPLICATE_API_KEY: ${maskKey(process.env.REPLICATE_API_KEY)}`);
-console.log(`[Worker] 🔑 OPENROUTER_API_KEY: ${maskKey(process.env.OPENROUTER_API_KEY)}`);
+// Comprehensive startup banner — every external provider the worker
+// can talk to. Missing keys are surfaced here at boot instead of as
+// runtime throws inside a handler 5 minutes into a generation. We
+// don't EXIT on missing keys (some are optional / used only by
+// specific project types) — just log a warning so deploy logs make
+// the gap obvious.
+const PROVIDER_KEYS: Array<[string, string, 'required' | 'optional']> = [
+  ['HYPEREAL_API_KEY',     'Hypereal (image, ASR, video, edit)', 'required'],
+  ['REPLICATE_API_KEY',    'Replicate (fallback image, audio)',   'required'],
+  ['OPENROUTER_API_KEY',   'OpenRouter (LLM script)',             'required'],
+  ['ELEVENLABS_API_KEY',   'ElevenLabs TTS',                      'optional'],
+  ['SMALLEST_API_KEY',     'Smallest.ai TTS',                     'optional'],
+  ['GEMINI_API_KEY',       'Gemini Flash TTS',                    'optional'],
+  ['LYRIA_API_KEY',        'Lyria music generation',              'optional'],
+  ['LTX_API_KEY',          'LTX video',                           'optional'],
+  ['QWEN3_API_KEY',        'Qwen3 TTS',                           'optional'],
+  ['FISH_AUDIO_API_KEY',   'Fish Audio TTS',                      'optional'],
+  ['LEMONFOX_API_KEY',     'Lemonfox TTS',                        'optional'],
+];
+let missingRequired = 0;
+console.log(`[Worker] ── Provider key check ────────────────────────`);
+for (const [envName, label, requirement] of PROVIDER_KEYS) {
+  const key = process.env[envName];
+  const status = key ? `🔑 ${maskKey(key)}` : (requirement === 'required' ? '❌ MISSING (required)' : '○ not set (optional)');
+  if (!key && requirement === 'required') missingRequired++;
+  console.log(`[Worker]   ${envName.padEnd(22)} ${label.padEnd(40)} ${status}`);
+}
+console.log(`[Worker] ──────────────────────────────────────────────`);
+if (missingRequired > 0) {
+  console.warn(`[Worker] ⚠ ${missingRequired} REQUIRED provider key(s) missing — generations will fail until these are set.`);
+}
 
 startupDiagnostic().then((hadOrphans) => {
   const startPolling = () => {

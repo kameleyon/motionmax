@@ -61,13 +61,29 @@ export async function handleUndoRegeneration(
 
   const previousVersion = versions[0];
 
+  // Defensive image_urls parse — legacy rows may be a JSON-stringified
+  // array, an already-parsed array (jsonb column), or a bare URL
+  // string from very old rows. JSON.parse on a bare URL throws
+  // "Unexpected token 'h'" (the user hit this on Restore).
+  const parseImageUrls = (raw: unknown): string[] | null => {
+    if (raw == null) return null;
+    if (Array.isArray(raw)) return raw as string[];
+    if (typeof raw !== 'string') return null;
+    const t = raw.trim();
+    if (!t) return null;
+    if (t.startsWith('[') || t.startsWith('{')) {
+      try { return JSON.parse(t) as string[]; } catch { return [t]; }
+    }
+    return [t];
+  };
+
   // Restore previous state
   scenes[sceneIndex] = {
     ...scene,
     voiceover: previousVersion.voiceover || scene.voiceover,
     visualPrompt: previousVersion.visual_prompt || scene.visualPrompt,
     imageUrl: previousVersion.image_url || scene.imageUrl,
-    imageUrls: previousVersion.image_urls ? JSON.parse(previousVersion.image_urls as any) : scene.imageUrls,
+    imageUrls: parseImageUrls(previousVersion.image_urls) ?? scene.imageUrls,
     audioUrl: previousVersion.audio_url || scene.audioUrl,
     duration: previousVersion.duration || scene.duration,
     videoUrl: previousVersion.video_url || null, // Clear video if restoring old image/audio

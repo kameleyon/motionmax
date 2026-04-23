@@ -276,7 +276,13 @@ export default function IntakeForm({
       const title = prompt.trim().slice(0, 80);
       const length = features.duration && duration === '>3min' ? 'presentation' : 'short';
 
-      const { data, error } = await supabase.from('projects').insert({
+      // characterImages was previously DROPPED on insert — the
+      // workspace had to re-attach them on first load. Worker
+      // generateVideo.ts:119 reads payload.characterImages from the
+      // job; the kickoff includes them, but the project row didn't,
+      // so any flow that re-loaded the project (refresh, share) lost
+      // the references entirely. Now they ride along on the row.
+      const projectInsert: Record<string, unknown> = {
         user_id: user.id,
         title,
         content: prompt.trim(),
@@ -288,8 +294,21 @@ export default function IntakeForm({
         style: styleId,
         character_description: characterDescription || null,
         character_consistency_enabled: consistency,
+        character_images: characterImages.length > 0 ? characterImages : null,
         intake_settings: intakeSettings,
-      }).select('id').single();
+      };
+
+      let insertResult = await supabase.from('projects').insert(projectInsert as never).select('id').single();
+      // Defensive fallback — if intake_settings column is missing in
+      // prod (migration 20260422010000 not applied), retry without it.
+      // The editor's useSceneRegen.updateIntakeSettings has its own
+      // fallback that writes into scenes[0]._meta.intakeOverrides.
+      if (insertResult.error && insertResult.error.message?.toLowerCase().includes('intake_settings')) {
+        const { intake_settings: _drop, ...withoutIntake } = projectInsert;
+        void _drop;
+        insertResult = await supabase.from('projects').insert(withoutIntake as never).select('id').single();
+      }
+      const { data, error } = insertResult;
       if (error || !data) throw error || new Error('Insert returned no row');
 
       toast.success('Project created. Taking you to the editor…');

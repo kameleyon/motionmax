@@ -27,7 +27,7 @@ import { concatFiles, concatWithCaptions, concatWithBrandMark } from "./export/c
 // import { concatWithCrossfade } from "./export/transitions.js";
 import { compressIfNeeded } from "./export/compressVideo.js";
 import { uploadToSupabase, removeFiles } from "./export/storageHelpers.js";
-import { generateAssSubtitles, writeAssFile, type CaptionStyle, type ASRSceneResult } from "../services/captionBuilder.js";
+import { generateAssSubtitles, writeAssFile, normalizeCaptionStyle, type ASRSceneResult } from "../services/captionBuilder.js";
 import { transcribeAllScenes } from "../services/audioASR.js";
 import { getTargetResolution } from "./export/kenBurns.js";
 import {
@@ -365,7 +365,10 @@ async function _runExport(
       .eq("id", jobId);
 
     // ── 0.5. Start ASR transcription in parallel (for caption sync) ──
-    const captionStyle = (payload.caption_style || "none") as CaptionStyle;
+    // Normalise via the captionBuilder's whitelist so a typo'd style
+    // name in payload doesn't silently fall through to undefined and
+    // skip captions or crash ffmpeg.
+    const captionStyle = normalizeCaptionStyle(payload.caption_style);
     const brandMark: string | undefined = payload.brandMark || payload.brand_mark || undefined;
     // Free-tier watermark takes precedence over user-supplied brand mark
     const effectiveBrandMark: string | undefined = watermarkText ?? brandMark;

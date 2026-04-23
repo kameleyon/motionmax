@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -11,6 +11,24 @@ export function useSceneRegen(state: EditorState | null) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState<'idle' | 'apply' | 'regen'>('idle');
+
+  // Per-(scene, action) debounce — guards against rapid double-clicks
+  // queueing N parallel jobs for the same operation. The editor's
+  // bulk-op lock helps too, but this is finer-grained: stops a user
+  // mashing "Regenerate image" 3× in <1s from spawning 3 jobs that
+  // would race on write-back. 2.5s window matches the typical user
+  // "did anything happen?" re-click latency.
+  const lastFiredRef = useRef<Map<string, number>>(new Map());
+  const debounceFire = useCallback((key: string, ms = 2500): boolean => {
+    const now = Date.now();
+    const last = lastFiredRef.current.get(key) ?? 0;
+    if (now - last < ms) {
+      toast.info('Already in flight — give it a moment.');
+      return false;
+    }
+    lastFiredRef.current.set(key, now);
+    return true;
+  }, []);
 
   /** Realtime can miss postgres_changes events in practice (timing,
    *  connection blips, filter mismatches). After kicking a regen job
@@ -123,6 +141,7 @@ export function useSceneRegen(state: EditorState | null) {
    *  targeted edit via nanoBananaEdit). */
   const regenerateImage = useCallback(async (index: number, modification?: string) => {
     if (!user || !state?.generation || !state?.project) return;
+    if (!debounceFire(`image:${index}`)) return;
     setBusy('regen');
     try {
       const { error } = await supabase
@@ -154,6 +173,7 @@ export function useSceneRegen(state: EditorState | null) {
   /** Video-only regen (reuses existing scene image). */
   const regenerateVideo = useCallback(async (index: number) => {
     if (!user || !state?.generation || !state?.project) return;
+    if (!debounceFire(`video:${index}`)) return;
     setBusy('regen');
     try {
       const { error } = await supabase
@@ -227,6 +247,7 @@ export function useSceneRegen(state: EditorState | null) {
 
   const regenerateAudio = useCallback(async (index: number, nextVoiceover?: string) => {
     if (!user || !state?.generation || !state?.project) return;
+    if (!debounceFire(`audio:${index}`)) return;
     setBusy('regen');
     try {
       // Always decide which narration text to send. Worker's

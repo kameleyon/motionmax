@@ -20,6 +20,7 @@ import path from "path";
 import os from "os";
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
+import { updateSceneField, updateSceneFieldJson } from "../lib/sceneUpdate.js";
 import { generateGeminiFlashTTS } from "../services/geminiFlashTTS.js";
 import { generateSmallestTTS } from "../services/smallestTTS.js";
 import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
@@ -273,32 +274,54 @@ export async function handleMasterAudio(
     try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }
   }
 
-  // Persist: each scene gets its sliced audioUrl + slice metadata.
-  // generations.master_audio_url holds the FULL track so the editor
-  // can play it continuously across scene navigation.
-  const updatedScenes = scenes.map((s: any, i: number) => {
-    const { startMs, sliceMs } = sceneSlices[i];
-    return {
-      ...s,
-      audioUrl: sceneAudioUrls[i] ?? result.url,
-      duration: Math.max(1, Math.round(sliceMs / 1000)),
-      _meta: {
-        ...(s._meta || {}),
-        audioDurationMs: sliceMs,
-        masterAudioSliceStartMs: startMs,
-        masterAudioSliceEndMs: startMs + sliceMs,
-      },
-    };
-  });
-
+  // Persist the master-level fields (these are new columns, no race
+  // with per-scene jobs touching `scenes`).
   await supabase
     .from("generations")
     .update({
       master_audio_url: result.url,
       master_audio_duration_ms: durationMs,
-      scenes: updatedScenes,
     })
     .eq("id", generationId);
+
+  // Per-scene updates use ATOMIC jsonb_set RPCs instead of overwriting
+  // the whole `scenes` array. Critical: during the 145+ seconds of TTS
+  // generation, cinematic_image jobs have been writing scene.imageUrl
+  // in parallel via the same atomic RPC. If we did a full-array
+  // overwrite here with the `scenes` we read 145s ago, we'd blow away
+  // every image written during that window. This loop touches only the
+  // fields master_audio owns (audioUrl, duration, slice metadata in
+  // _meta) and leaves imageUrl / videoUrl / other fields untouched.
+  for (let i = 0; i < scenes.length; i++) {
+    const { startMs, sliceMs } = sceneSlices[i];
+    const finalAudioUrl = sceneAudioUrls[i] ?? result.url;
+    try {
+      await updateSceneField(generationId, i, "audioUrl", finalAudioUrl);
+      await updateSceneField(generationId, i, "duration", String(Math.max(1, Math.round(sliceMs / 1000))));
+      // Read current _meta to preserve keys set by other handlers
+      // (characterBible, language, sceneIndex, etc.), then merge our
+      // slice fields. Still uses atomic RPC so no read-modify-write
+      // race at the field level.
+      const { data: currentGen } = await supabase
+        .from("generations")
+        .select("scenes")
+        .eq("id", generationId)
+        .maybeSingle();
+      const currentScenes = Array.isArray(currentGen?.scenes)
+        ? (currentGen!.scenes as any[])
+        : [];
+      const existingMeta = (currentScenes[i]?._meta ?? {}) as Record<string, unknown>;
+      await updateSceneFieldJson(generationId, i, "_meta", {
+        ...existingMeta,
+        audioDurationMs: sliceMs,
+        masterAudioSliceStartMs: startMs,
+        masterAudioSliceEndMs: startMs + sliceMs,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[MasterAudio] Scene ${i} field update failed (non-fatal): ${msg}`);
+    }
+  }
 
   await writeSystemLog({
     jobId, projectId, userId, generationId,

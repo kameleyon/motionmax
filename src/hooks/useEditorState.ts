@@ -89,6 +89,15 @@ export interface EditorState {
   progress: number;
   aspect: '16:9' | '9:16';
   totalDurationMs: number;
+  /** Set by `hydrateEditorStateFromPipeline` — marks this cache entry
+   *  as the authoritative in-memory result from the finalize job.
+   *  While true, the queryFn refuses to downgrade `scenes` from a
+   *  non-empty hydration to an empty DB response, closing the
+   *  flash-and-disappear window where the finalize UPDATE hasn't
+   *  propagated to the next `refetchInterval` read yet. The flag
+   *  clears itself only when a fresh poll returns non-empty scenes
+   *  (i.e. the DB has caught up). */
+  hydratedFromPipeline?: boolean;
 }
 
 function phaseFromGeneration(g: Generation | null): EditorPhase {
@@ -129,7 +138,19 @@ export function useEditorState(projectId: string | null): {
     // arrives first the client was still handshaking and misses it.
     // Polling every 3s guarantees the new generation row is picked up
     // within one cycle regardless of realtime state.
-    refetchInterval: 3000,
+    // Back off to 10s polling once the cache is hydrated from the
+    // pipeline — at that point the authoritative result is in memory
+    // and the only reason to poll is to reconcile project/intake
+    // metadata. Still 3s while rendering so scene-level progress
+    // keeps flowing through. Returning `false` would stop polling
+    // entirely, but we keep a slow heartbeat so edits (regens, caption
+    // tab writes) that bump `generations.updated_at` still get picked
+    // up without waiting on realtime.
+    refetchInterval: (query) => {
+      const data = query.state.data as EditorState | undefined;
+      if (data?.hydratedFromPipeline) return 10_000;
+      return 3000;
+    },
     // Keep polling even when the tab is backgrounded. Users commonly
     // switch tabs during a 3-5 min cinematic render; if refetch only
     // fires in foreground, the query can serve stale null for the
@@ -166,26 +187,41 @@ export function useEditorState(projectId: string | null): {
         console.warn('[useEditorState] generation fetch failed:', genErr.message);
       }
 
-      // Stale-complete race guard — if the row says status='complete'
-      // but `scenes` is null/empty/not-an-array, the worker is mid-flush
-      // (finalize wrote status before the jsonb UPDATE landed, OR a
-      // concurrent read-modify-write race with the atomic RPC fallback
-      // path blew away scenes temporarily). Prefer any previously-cached
-      // state over an empty "complete" snapshot so the UI doesn't jump
-      // from rendering → empty-ready → ready-with-scenes. Without this
-      // guard the Editor briefly paints "0 scenes" after finalize.
+      // Stale-complete race guard — if a prior cache exists with
+      // non-empty scenes AND the fresh DB read returns empty scenes,
+      // keep the prior cache. This covers two distinct failure modes:
+      //
+      // 1. Finalize wrote `status='complete'` but the jsonb `scenes`
+      //    UPDATE hasn't propagated to this read yet (sub-100ms race,
+      //    but 3s polls can land inside it).
+      // 2. Worker's `updateSceneFieldJson` fallback does read-modify-
+      //    write on the whole `scenes` array. If a read lands during
+      //    the write half of that cycle, the row is briefly empty.
+      //
+      // The guard is STRONGER when the cache was hydrated from the
+      // pipeline's in-memory finalize result (`hydratedFromPipeline`) —
+      // in that case we know the scenes are authoritative and refuse
+      // to downgrade them, regardless of what the DB reports.
       const rawScenes = generation?.scenes;
-      const isComplete = (generation?.status ?? '').toLowerCase() === 'complete';
       const scenesLookEmpty = !Array.isArray(rawScenes) || rawScenes.length === 0;
-      if (isComplete && scenesLookEmpty) {
+      if (scenesLookEmpty) {
         const prev = queryClient.getQueryData<EditorState>(
           editorStateKey(projectId, user?.id),
         );
         if (prev && prev.scenes.length > 0) {
-          console.warn(
-            '[useEditorState] complete+empty scenes detected — keeping previous cache until next poll',
-          );
-          return prev;
+          if (prev.hydratedFromPipeline) {
+            // Pipeline hydration wins — return it unchanged so the
+            // sticky flag keeps protecting scenes on every subsequent
+            // poll until the DB catches up with a non-empty response.
+            return prev;
+          }
+          const isComplete = (generation?.status ?? '').toLowerCase() === 'complete';
+          if (isComplete) {
+            console.warn(
+              '[useEditorState] complete+empty scenes detected — keeping previous cache until next poll',
+            );
+            return prev;
+          }
         }
       }
 
@@ -293,6 +329,7 @@ export function hydrateEditorStateFromPipeline(
       phase: 'ready',
       progress: 100,
       totalDurationMs,
+      hydratedFromPipeline: true,
     });
     return;
   }
@@ -306,5 +343,6 @@ export function hydrateEditorStateFromPipeline(
     progress: 100,
     aspect: '16:9',
     totalDurationMs,
+    hydratedFromPipeline: true,
   });
 }

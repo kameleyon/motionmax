@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { WifiOff, ChevronLeft, ChevronRight, GripHorizontal } from 'lucide-react';
+import { WifiOff, GripVertical, GripHorizontal } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import MiniSidebar from './MiniSidebar';
 import EditorTopBar, { type SubView } from './EditorTopBar';
@@ -201,11 +201,10 @@ export default function EditorFrame({
             ['--mm-cols' as string]: `${scenesCollapsed ? '32px' : '240px'} 1fr ${inspectorCollapsed ? '32px' : '290px'}`,
           } as React.CSSProperties}
         >
-          {/* Scenes column (desktop only) — collapsed state shrinks to
-              a 32px gutter with just the chevron, expanded shows the
-              full ScenesColumn. The collapse handle is now a
-              FULL-HEIGHT light-aqua tinted strip on the inner edge,
-              matching the timeline grip's visibility. Hard to miss. */}
+          {/* Scenes column (desktop only) — collapse handle uses the
+              same 6-dot GripVertical icon family as the timeline
+              grip, on a plain dark background. Subtle by default,
+              brightens on hover. No aqua tinting, no chevron pills. */}
           <aside
             className="relative border-r border-white/5 bg-[#10151A] row-start-1 hidden lg:block lg:col-start-1 overflow-hidden"
           >
@@ -215,27 +214,21 @@ export default function EditorFrame({
                 onClick={() => setScenesCollapsed(false)}
                 title="Show scenes panel"
                 aria-label="Expand scenes panel"
-                className="w-full h-full grid place-items-center bg-[#14C8CC]/10 hover:bg-[#14C8CC]/20 text-[#14C8CC] transition-colors"
+                className="w-full h-full grid place-items-center bg-[#0A0D0F] hover:bg-[#1B2228] text-[#5A6268] hover:text-[#ECEAE4] transition-colors"
               >
-                <ChevronRight className="w-4 h-4" />
+                <GripVertical className="w-4 h-4" />
               </button>
             ) : (
               <>
-                <div className="h-full overflow-y-auto pr-2">{scenes}</div>
-                {/* Full-height aqua-tinted handle — sits on the right
-                    edge as a visible vertical bar. Chevron centered.
-                    Tinted by default so users can find it without
-                    hunting. */}
+                <div className="h-full overflow-y-auto pr-1">{scenes}</div>
                 <button
                   type="button"
                   onClick={() => setScenesCollapsed(true)}
                   title="Collapse scenes panel"
                   aria-label="Collapse scenes panel"
-                  className="absolute top-0 right-0 bottom-0 z-10 w-2 bg-[#14C8CC]/15 hover:bg-[#14C8CC]/35 transition-colors flex items-center justify-center group"
+                  className="absolute top-0 right-0 bottom-0 z-10 w-1.5 bg-[#0A0D0F] hover:bg-[#1B2228] transition-colors flex items-center justify-center group cursor-pointer"
                 >
-                  <span className="absolute top-1/2 -translate-y-1/2 -translate-x-px w-5 h-12 rounded-l-md bg-[#14C8CC]/25 group-hover:bg-[#14C8CC]/45 grid place-items-center text-[#0A0D0F] shadow-[0_2px_8px_rgba(20,200,204,.3)]">
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                  </span>
+                  <GripVertical className="w-3 h-3 text-[#5A6268] group-hover:text-[#ECEAE4]" />
                 </button>
               </>
             )}
@@ -246,8 +239,8 @@ export default function EditorFrame({
             {stage}
           </section>
 
-          {/* Inspector (desktop only) — same collapsed/expanded
-              treatment as the scenes column, mirrored. */}
+          {/* Inspector (desktop only) — mirrored, same understated
+              GripVertical treatment as the scenes column. */}
           <aside
             className="relative border-l border-white/5 bg-[#10151A] row-start-1 hidden lg:block lg:col-start-3 overflow-hidden"
           >
@@ -257,23 +250,21 @@ export default function EditorFrame({
                 onClick={() => setInspectorCollapsed(false)}
                 title="Show inspector panel"
                 aria-label="Expand inspector panel"
-                className="w-full h-full grid place-items-center bg-[#14C8CC]/10 hover:bg-[#14C8CC]/20 text-[#14C8CC] transition-colors"
+                className="w-full h-full grid place-items-center bg-[#0A0D0F] hover:bg-[#1B2228] text-[#5A6268] hover:text-[#ECEAE4] transition-colors"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <GripVertical className="w-4 h-4" />
               </button>
             ) : (
               <>
-                <div className="h-full overflow-y-auto pl-2">{inspector}</div>
+                <div className="h-full overflow-y-auto pl-1">{inspector}</div>
                 <button
                   type="button"
                   onClick={() => setInspectorCollapsed(true)}
                   title="Collapse inspector panel"
                   aria-label="Collapse inspector panel"
-                  className="absolute top-0 left-0 bottom-0 z-10 w-2 bg-[#14C8CC]/15 hover:bg-[#14C8CC]/35 transition-colors flex items-center justify-center group"
+                  className="absolute top-0 left-0 bottom-0 z-10 w-1.5 bg-[#0A0D0F] hover:bg-[#1B2228] transition-colors flex items-center justify-center group cursor-pointer"
                 >
-                  <span className="absolute top-1/2 -translate-y-1/2 translate-x-px w-5 h-12 rounded-r-md bg-[#14C8CC]/25 group-hover:bg-[#14C8CC]/45 grid place-items-center text-[#0A0D0F] shadow-[0_2px_8px_rgba(20,200,204,.3)]">
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </span>
+                  <GripVertical className="w-3 h-3 text-[#5A6268] group-hover:text-[#ECEAE4]" />
                 </button>
               </>
             )}
@@ -290,9 +281,9 @@ export default function EditorFrame({
             title="Drag to resize the timeline"
             onMouseDown={(e) => { e.preventDefault(); startResize(e.clientY); }}
             onTouchStart={(e) => { startResize(e.touches[0]?.clientY ?? 0); }}
-            className="row-start-2 col-start-1 lg:col-span-3 group cursor-row-resize bg-[#14C8CC]/15 hover:bg-[#14C8CC]/35 transition-colors flex items-center justify-center"
+            className="row-start-2 col-start-1 lg:col-span-3 group cursor-row-resize bg-[#0A0D0F] hover:bg-[#1B2228] transition-colors flex items-center justify-center"
           >
-            <GripHorizontal className="w-4 h-4 text-[#14C8CC] group-hover:text-[#ECEAE4]" />
+            <GripHorizontal className="w-4 h-4 text-[#5A6268] group-hover:text-[#ECEAE4]" />
           </div>
 
           {/* Timeline — spans full width, height controlled by user */}

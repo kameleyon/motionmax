@@ -240,22 +240,34 @@ export default function Stage({
   }, [selectedSceneIndex, state.scenes]);
 
   // ── Play/pause + end-of-scene handling. Ported from PublicShare's
-  // share-page player (which plays every scene end-to-end non-stop).
-  // Scene priming happens in the effect above — this one only flips
-  // play/pause and wires up the end listeners that drive scene advance.
+  // share-page player. Handles THREE scene shapes:
+  //   • Cinematic: video + audio  → drive scene end off audio
+  //   • SmartFlow / Explainer static: image + audio → drive off audio
+  //     (no video ref — used to short-circuit and never play anything)
+  //   • Image-only: no audio, no video → just sit on the image, no
+  //     auto-advance possible
   useEffect(() => {
     const video = videoRef.current;
     const audio = audioRef.current;
-    if (!video) return;
+    const scene = state.scenes[selectedSceneIndex];
 
     if (!playing) {
-      video.pause();
+      video?.pause();
       audio?.pause();
       return;
     }
 
-    const scene = state.scenes[selectedSceneIndex];
     if (!scene) return;
+
+    const hasVideo = !!(video && scene.videoUrl);
+    const hasAudio = !!(audio && scene.audioUrl);
+
+    // If neither media is present there's nothing to play — flip the
+    // transport state back so the button doesn't stay in "pause" mode.
+    if (!hasVideo && !hasAudio) {
+      onPlayingChange?.(false);
+      return;
+    }
 
     const handleEnded = () => {
       if (selectedSceneIndex < state.scenes.length - 1) {
@@ -268,27 +280,30 @@ export default function Stage({
     // When the video itself ends but audio is still playing, loop the
     // visual so the frame doesn't freeze black while narration finishes.
     const handleVideoEndedInner = () => {
-      if (audio && scene.audioUrl && !audio.ended) {
-        video.currentTime = 0;
-        const vp = video.play();
+      if (hasAudio && !audio!.ended) {
+        video!.currentTime = 0;
+        const vp = video!.play();
         if (vp && typeof vp.catch === 'function') vp.catch(() => {});
         return;
       }
       handleEnded();
     };
 
-    // Prefer audio as the "end of scene" signal when narration exists
-    // (it's the canonical scene length). Fall back to video end.
-    const useAudioAsBoundary = !!(audio && scene.audioUrl);
-    if (useAudioAsBoundary) audio.addEventListener('ended', handleEnded);
-    video.addEventListener('ended', handleVideoEndedInner);
+    // Prefer audio as the "end of scene" signal when narration exists.
+    // For audio-only scenes (SmartFlow / image-based) audio drives the
+    // whole thing. For video-only scenes the video's end fires it.
+    if (hasAudio) audio!.addEventListener('ended', handleEnded);
+    if (hasVideo) video!.addEventListener('ended', handleVideoEndedInner);
+    else if (!hasAudio && video) video.addEventListener('ended', handleEnded);
 
     (async () => {
       try {
-        const p = video.play();
-        if (p) await p;
-        if (audio && scene.audioUrl) {
-          const ap = audio.play();
+        if (hasVideo) {
+          const p = video!.play();
+          if (p) await p;
+        }
+        if (hasAudio) {
+          const ap = audio!.play();
           if (ap) await ap;
         }
       } catch {
@@ -298,9 +313,10 @@ export default function Stage({
     })();
 
     return () => {
-      if (useAudioAsBoundary) audio.removeEventListener('ended', handleEnded);
-      video.removeEventListener('ended', handleVideoEndedInner);
-      video.pause();
+      if (hasAudio) audio!.removeEventListener('ended', handleEnded);
+      if (hasVideo) video!.removeEventListener('ended', handleVideoEndedInner);
+      else if (!hasAudio && video) video.removeEventListener('ended', handleEnded);
+      video?.pause();
       audio?.pause();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -445,15 +461,23 @@ export default function Stage({
             />
           </>
         ) : sceneToShow?.imageUrl ? (
-          <img
-            src={sceneToShow.imageUrl}
-            alt={sceneToShow.title ?? 'Scene preview'}
-            className={
-              'w-full h-full ' +
-              (isFullscreen ? 'object-contain' : 'object-cover')
-            }
-            loading="lazy"
-          />
+          <>
+            <img
+              src={sceneToShow.imageUrl}
+              alt={sceneToShow.title ?? 'Scene preview'}
+              className={
+                'w-full h-full ' +
+                (isFullscreen ? 'object-contain' : 'object-cover')
+              }
+              loading="lazy"
+            />
+            {/* Audio element ALWAYS rendered when a scene has narration —
+                SmartFlow / image-based Explainer scenes have no video
+                but still have audioUrl. Without this element the Play
+                button did nothing (the playback effect has no audio
+                ref to attach to). */}
+            <audio ref={audioRef} preload="auto" />
+          </>
         ) : null}
 
         {/* Caption overlay — client-side live preview of the export's

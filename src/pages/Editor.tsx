@@ -266,6 +266,24 @@ export default function Editor() {
   };
   void forceRefresh;
 
+  // When the pipeline hook reports completion, stop trusting the DB
+  // poll to catch up. This fires the same moment the legacy workspaces
+  // flipped to "done" — we just invalidate the editor-state query so
+  // useEditorState's queryFn re-runs and pulls the now-committed
+  // generation row. The Stage overlay is already dismissed via the
+  // `pipelineDone` prop (passed below), so the user sees the ready
+  // editor immediately; the refetch just ensures the scene list /
+  // video URLs hydrate as soon as the worker flushed them.
+  const pipelineStep = pipelineState.step;
+  useEffect(() => {
+    if (pipelineStep !== 'complete') return;
+    void (async () => {
+      await queryClient.invalidateQueries({ queryKey: ['editor-state', projectId] });
+      await queryClient.invalidateQueries({ queryKey: ['active-jobs', projectId] });
+      await refetchEditor();
+    })();
+  }, [pipelineStep, projectId, queryClient, refetchEditor]);
+
   const [playing, setPlaying] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   // Which Inspector tab should open when the user clicks a timeline
@@ -373,6 +391,8 @@ export default function Editor() {
           onPlayingChange={setPlaying}
           fullscreen={fullscreen}
           onFullscreenChange={setFullscreen}
+          pipelineProgress={pipelineState.progress}
+          pipelineDone={pipelineState.step === 'complete'}
         />
       }
       inspector={

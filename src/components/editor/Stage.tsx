@@ -108,6 +108,8 @@ export default function Stage({
   onPlayingChange,
   fullscreen = false,
   onFullscreenChange,
+  pipelineProgress,
+  pipelineDone,
 }: {
   state: EditorState;
   selectedSceneIndex: number;
@@ -127,6 +129,19 @@ export default function Stage({
    *  viewport. */
   fullscreen?: boolean;
   onFullscreenChange?: (v: boolean) => void;
+  /** Live progress from useGenerationPipeline — this is the legacy
+   *  workspace's authoritative progress source (internal setState,
+   *  not DB polling), so it moves smoothly through script → images →
+   *  audio → finalize. When present, it overrides state.progress
+   *  (which comes from generations.progress via React Query poll
+   *  and can lag by 3+ seconds). */
+  pipelineProgress?: number;
+  /** True when useGenerationPipeline reports step === 'complete'.
+   *  The pipeline's own completion signal fires BEFORE the DB-backed
+   *  React Query refetch sees status='complete' — so trust this to
+   *  hide the rendering overlay without waiting for the DB round-trip.
+   *  Matches how legacy workspaces dismissed their progress screens. */
+  pipelineDone?: boolean;
 }) {
   const [, tick] = useState(0);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -582,9 +597,19 @@ export default function Stage({
             The user lands in the real editor shell and watches the
             project build itself in place; as scenes / audio / music
             land, the ScenesColumn + Timeline light up live. */}
-        {(state.phase === 'rendering' || (state.phase === 'idle' && !!state.project)) && (
+        {!pipelineDone &&
+          (state.phase === 'rendering' || (state.phase === 'idle' && !!state.project)) && (
           <ProcessingOverlay
-            progress={state.phase === 'idle' ? 2 : state.progress}
+            // Pipeline progress wins when available — it's the same
+            // signal the legacy workspaces used, and it ticks forward
+            // in real time rather than waiting on a DB poll.
+            progress={
+              pipelineProgress && pipelineProgress > 0
+                ? pipelineProgress
+                : state.phase === 'idle'
+                  ? 2
+                  : state.progress
+            }
             projectType={state.project?.project_type ?? 'doc2video'}
             aspect={state.aspect}
           />

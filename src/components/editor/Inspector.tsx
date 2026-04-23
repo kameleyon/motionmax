@@ -185,11 +185,42 @@ export default function Inspector({
   const disabled = state.phase === 'rendering';
   const sceneReady = state.phase !== 'rendering' && !!scene;
 
+  // Smart Flow has no per-scene motion controls — those are baked
+  // into the SmartFlow render pipeline. Hide the tab entirely so it
+  // doesn't surface a confusing empty panel.
+  const isSmartFlow = projectType === 'smartflow';
+  const visibleTabs: InspectorTab[] = isSmartFlow
+    ? ['scene', 'voice', 'captions']
+    : ['scene', 'voice', 'captions', 'motion'];
+
+  // If the user is on Motion when we hide it, send them to Scene.
+  useEffect(() => {
+    if (isSmartFlow && tab === 'motion') setTab('scene');
+  }, [isSmartFlow, tab]);
+
+  // Defaults from the original generation — used by the Clear button
+  // to revert a scene's overridden meta back to the project default.
+  // intake.camera holds the user's original camera-motion choice;
+  // transition wasn't part of intake (it's exposed in the editor for
+  // the first time), so its default is "Cut" — the export's no-op
+  // boundary that matches the legacy concat behaviour.
+  const intakeCamera = (state.intake.camera as Motion | undefined) ?? 'Push-in';
+  const defaultTransition: Transition = 'Cut';
+
+  const clearSceneMotion = async () => {
+    const ok = await updateSceneMeta(selectedSceneIndex, { motion: intakeCamera });
+    if (ok) toast.success(`Camera motion reset to "${intakeCamera}" (project default).`);
+  };
+  const clearSceneTransition = async () => {
+    const ok = await updateSceneMeta(selectedSceneIndex, { transition: defaultTransition });
+    if (ok) toast.success(`Transition reset to "${defaultTransition}".`);
+  };
+
   return (
     <div className="flex flex-col h-full relative">
       {/* Tabs */}
       <div className="flex border-b border-white/5">
-        {(['scene', 'voice', 'captions', 'motion'] as InspectorTab[]).map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t}
             type="button"
@@ -598,104 +629,126 @@ export default function Inspector({
         </div>
       )}
 
-      {/* MOTION TAB — per-scene motion + transition to next scene.
-          Camera motion is CINEMATIC-only (explainer/smartflow scenes
-          are still images with transitions, no per-shot camera
-          movement). Both cinematic + explainer get the transition
-          picker because they share the scene-concat export step. */}
+      {/* MOTION TAB — split by project type:
+          • Cinematic → Camera motion ONLY (no transition; cinematic
+            scenes flow into each other via Kling's own continuity).
+          • Explainer → Transition ONLY (no camera motion; explainer
+            scenes are still images concatenated at export time).
+          • SmartFlow → tab is hidden entirely (see visibleTabs above).
+          Each section gets a Clear button that resets THIS scene to
+          the project's intake default — so users can experiment per
+          scene then revert without remembering what was originally
+          generated. */}
       {!disabled && tab === 'motion' && sceneReady && scene && (
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5">
-          {isCinematic ? (
+          {isCinematic && (
+            <>
+              <section>
+                <div className="flex items-baseline justify-between mb-2 gap-3">
+                  <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Camera motion</h5>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={clearSceneMotion}
+                      disabled={busy !== 'idle' || sceneLocked || projectLocked}
+                      className="font-mono text-[9.5px] tracking-wider uppercase text-[#8A9198] hover:text-[#ECEAE4] transition-colors disabled:opacity-40"
+                      title={`Reset this scene to the project default (${intakeCamera})`}
+                    >
+                      Clear
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const ok = await updateAllScenesMeta({ motion });
+                        if (ok) toast.success(`Camera motion "${motion}" applied to all ${state.scenes.length} scenes.`);
+                      }}
+                      disabled={busy !== 'idle' || projectLocked}
+                      className="font-mono text-[9.5px] tracking-wider uppercase text-[#14C8CC] hover:text-[#ECEAE4] transition-colors disabled:opacity-40"
+                      title="Use this camera motion on every scene"
+                    >
+                      Apply to all
+                    </button>
+                  </div>
+                </div>
+                <div className="inline-flex rounded-lg border border-white/5 bg-[#1B2228] p-[2px] gap-[2px] w-full">
+                  {MOTION_OPTIONS.map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => updateSceneMeta(selectedSceneIndex, { motion: m })}
+                      className={cn(
+                        'flex-1 px-2 py-1.5 font-mono text-[10.5px] tracking-wider rounded-md transition-colors',
+                        m === motion ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'text-[#8A9198] hover:text-[#ECEAE4]',
+                      )}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11.5px] text-[#8A9198] leading-[1.5] mt-2">
+                  Injected into the Kling prompt on the next video regeneration. "Clear" reverts this scene to the project default ({intakeCamera}).
+                </p>
+              </section>
+
+              <button
+                type="button"
+                onClick={() => regenerateVideo(selectedSceneIndex)}
+                disabled={busy !== 'idle' || videoRegenActive || !scene.imageUrl}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] border border-white/10 text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {(busy === 'regen' || videoRegenActive) ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCw className="w-3 h-3" />}
+                {videoRegenActive ? 'Rendering video…' : 'Re-render video with new motion'}
+              </button>
+            </>
+          )}
+
+          {isExplainer && (
             <section>
-              <div className="flex items-baseline justify-between mb-2">
-                <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Camera motion</h5>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const ok = await updateAllScenesMeta({ motion });
-                    if (ok) toast.success(`Camera motion "${motion}" applied to all ${state.scenes.length} scenes.`);
-                  }}
-                  disabled={busy !== 'idle'}
-                  className="font-mono text-[9.5px] tracking-wider uppercase text-[#14C8CC] hover:text-[#ECEAE4] transition-colors disabled:opacity-40"
-                  title="Use this camera motion on every scene"
-                >
-                  Apply to all
-                </button>
+              <div className="flex items-baseline justify-between mb-2 gap-3">
+                <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Transition to next scene</h5>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={clearSceneTransition}
+                    disabled={busy !== 'idle' || sceneLocked || projectLocked}
+                    className="font-mono text-[9.5px] tracking-wider uppercase text-[#8A9198] hover:text-[#ECEAE4] transition-colors disabled:opacity-40"
+                    title={`Reset this scene to the default (${defaultTransition})`}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const ok = await updateAllScenesMeta({ transition });
+                      if (ok) toast.success(`Transition "${transition}" applied to all ${state.scenes.length} scenes.`);
+                    }}
+                    disabled={busy !== 'idle' || projectLocked}
+                    className="font-mono text-[9.5px] tracking-wider uppercase text-[#14C8CC] hover:text-[#ECEAE4] transition-colors disabled:opacity-40"
+                    title="Use this transition on every scene boundary"
+                  >
+                    Apply to all
+                  </button>
+                </div>
               </div>
               <div className="inline-flex rounded-lg border border-white/5 bg-[#1B2228] p-[2px] gap-[2px] w-full">
-                {MOTION_OPTIONS.map((m) => (
+                {TRANSITION_OPTIONS.map((t) => (
                   <button
-                    key={m}
+                    key={t}
                     type="button"
-                    onClick={() => updateSceneMeta(selectedSceneIndex, { motion: m })}
+                    onClick={() => updateSceneMeta(selectedSceneIndex, { transition: t })}
                     className={cn(
                       'flex-1 px-2 py-1.5 font-mono text-[10.5px] tracking-wider rounded-md transition-colors',
-                      m === motion ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'text-[#8A9198] hover:text-[#ECEAE4]',
+                      t === transition ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'text-[#8A9198] hover:text-[#ECEAE4]',
                     )}
                   >
-                    {m}
+                    {t}
                   </button>
                 ))}
               </div>
               <p className="text-[11.5px] text-[#8A9198] leading-[1.5] mt-2">
-                Injected into the Kling prompt on the next video regeneration. "Apply to all" sets this motion on every scene.
+                Applied when the video is exported. "Cut" is instant; "Dissolve" / "Whip" / "Black" cross-fade at the scene boundary. "Clear" reverts this scene to the default ({defaultTransition}).
               </p>
             </section>
-          ) : (
-            <section>
-              <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">Camera motion</h5>
-              <p className="text-[11.5px] text-[#8A9198] leading-[1.5]">
-                Camera motion is a Cinematic-only feature. {isExplainer ? 'Explainer scenes' : 'Smart Flow scenes'} use scene transitions below instead.
-              </p>
-            </section>
-          )}
-
-          <section>
-            <div className="flex items-baseline justify-between mb-2">
-              <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Transition to next scene</h5>
-              <button
-                type="button"
-                onClick={async () => {
-                  const ok = await updateAllScenesMeta({ transition });
-                  if (ok) toast.success(`Transition "${transition}" applied to all ${state.scenes.length} scenes.`);
-                }}
-                disabled={busy !== 'idle'}
-                className="font-mono text-[9.5px] tracking-wider uppercase text-[#14C8CC] hover:text-[#ECEAE4] transition-colors disabled:opacity-40"
-                title="Use this transition on every scene boundary"
-              >
-                Apply to all
-              </button>
-            </div>
-            <div className="inline-flex rounded-lg border border-white/5 bg-[#1B2228] p-[2px] gap-[2px] w-full">
-              {TRANSITION_OPTIONS.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => updateSceneMeta(selectedSceneIndex, { transition: t })}
-                  className={cn(
-                    'flex-1 px-2 py-1.5 font-mono text-[10.5px] tracking-wider rounded-md transition-colors',
-                    t === transition ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'text-[#8A9198] hover:text-[#ECEAE4]',
-                  )}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-            <p className="text-[11.5px] text-[#8A9198] leading-[1.5] mt-2">
-              Applied when the video is exported. "Cut" is instant; "Dissolve" / "Whip" / "Black" cross-fade at the scene boundary.
-            </p>
-          </section>
-
-          {isCinematic && (
-            <button
-              type="button"
-              onClick={() => regenerateVideo(selectedSceneIndex)}
-              disabled={busy !== 'idle' || videoRegenActive || !scene.imageUrl}
-              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] border border-white/10 text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {(busy === 'regen' || videoRegenActive) ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCw className="w-3 h-3" />}
-              {videoRegenActive ? 'Rendering video…' : 'Re-render video with new motion'}
-            </button>
           )}
         </div>
       )}

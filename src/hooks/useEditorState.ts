@@ -117,14 +117,24 @@ export function useEditorState(projectId: string | null): {
     enabled: !!user && !!projectId,
     // Belt-and-suspenders on top of realtime. Supabase realtime can
     // drop INSERT events when the channel is mid-subscription — which
-    // is exactly the race that keeps users stuck on "Starting your
-    // generation…" after a fresh autostart: the generation row is
+    // is exactly the race that keeps users stuck on "Creating your
+    // content…" after a fresh autostart: the generation row is
     // inserted ~3s after the channel subscribes, and if the event
     // arrives first the client was still handshaking and misses it.
     // Polling every 3s guarantees the new generation row is picked up
-    // within one cycle regardless of realtime state. Matches the
-    // cadence useActiveJobs already uses.
+    // within one cycle regardless of realtime state.
     refetchInterval: 3000,
+    // Keep polling even when the tab is backgrounded. Users commonly
+    // switch tabs during a 3-5 min cinematic render; if refetch only
+    // fires in foreground, the query can serve stale null for the
+    // entire duration and the page looks frozen when they switch back.
+    refetchIntervalInBackground: true,
+    // staleTime: 0 guarantees every refetch hits the network instead
+    // of returning the cached (possibly null) generation. Without
+    // this, React Query can decide a 3s-old result is still "fresh"
+    // and skip re-running queryFn, trapping the UI in the awaiting
+    // state long after the worker has written the row.
+    staleTime: 0,
     queryFn: async (): Promise<EditorState> => {
       const { data: project, error: projErr } = await supabase
         .from('projects')
@@ -134,13 +144,21 @@ export function useEditorState(projectId: string | null): {
       if (projErr) throw projErr;
       if (!project) throw new Error('Project not found');
 
-      const { data: generation } = await supabase
+      // Generation query errors were previously swallowed silently,
+      // which made it impossible to tell whether a null generation
+      // meant "not created yet" or "RLS blocked" or "schema mismatch".
+      // Log errors (but keep fallback behaviour of treating as idle)
+      // so the issue is visible in console and Sentry.
+      const { data: generation, error: genErr } = await supabase
         .from('generations')
         .select('*')
         .eq('project_id', projectId!)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
+      if (genErr) {
+        console.warn('[useEditorState] generation fetch failed:', genErr.message);
+      }
 
       const scenes = normalizeScenes(generation?.scenes);
       // Start from the real `intake_settings` column when present,

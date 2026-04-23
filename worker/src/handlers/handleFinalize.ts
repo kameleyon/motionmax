@@ -100,6 +100,34 @@ export async function handleFinalizePhase(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`[Finalize] intake_settings lookup skipped: ${msg}`);
+    // Column doesn't exist — fall back to content-only fetch so we can
+    // still recover settings from the IntakeForm's content-suffix fallback.
+    try {
+      const { data: proj } = await supabase
+        .from("projects")
+        .select("content")
+        .eq("id", projectId)
+        .maybeSingle();
+      if (proj) projectContent = (proj as { content?: string }).content ?? null;
+    } catch { /* ignore */ }
+  }
+
+  // Recover intake settings from the content-suffix fallback
+  // (IntakeForm stores them there when projects.intake_settings column
+  // is missing). Sentinel: `<!--INTAKE_SETTINGS:{json}:END-->`. We also
+  // strip the suffix from projectContent so it doesn't leak into the
+  // Lyria music prompt or any downstream LLM call.
+  if (!intakeSettings && projectContent) {
+    const match = projectContent.match(/<!--INTAKE_SETTINGS:(.*?):END-->/s);
+    if (match && match[1]) {
+      try {
+        intakeSettings = JSON.parse(match[1]) as Record<string, unknown>;
+        projectContent = projectContent.replace(match[0], "").trim();
+        console.log(`[Finalize] Recovered intake_settings from content suffix`);
+      } catch (err) {
+        console.warn(`[Finalize] Intake suffix parse failed: ${(err as Error).message}`);
+      }
+    }
   }
 
   const scenes: any[] = generation.scenes || [];

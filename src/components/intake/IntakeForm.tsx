@@ -326,13 +326,28 @@ export default function IntakeForm({
 
       let insertResult = await supabase.from('projects').insert(projectInsert as never).select('id').single();
       // Defensive fallback — if intake_settings column is missing in
-      // prod (migration 20260422010000 not applied), retry without it.
-      // The editor's useSceneRegen.updateIntakeSettings has its own
-      // fallback that writes into scenes[0]._meta.intakeOverrides.
+      // prod (migration 20260422010000 not applied), STORE the settings
+      // inside the project's `content` field as a JSON suffix so the
+      // worker can still recover them. Previous behaviour silently
+      // dropped the settings, which meant music/sfx/captions/lipsync
+      // toggles never reached handleFinalize and features appeared
+      // completely broken even when fully wired. The suffix is a
+      // sentinel-delimited JSON blob that buildSmartFlow/Cinematic
+      // preprocess strips before the LLM sees it.
       if (insertResult.error && insertResult.error.message?.toLowerCase().includes('intake_settings')) {
         const { intake_settings: _drop, ...withoutIntake } = projectInsert;
         void _drop;
-        insertResult = await supabase.from('projects').insert(withoutIntake as never).select('id').single();
+        const contentWithIntake =
+          (withoutIntake as { content: string }).content +
+          `\n\n<!--INTAKE_SETTINGS:${JSON.stringify(intakeSettings)}:END-->\n`;
+        insertResult = await supabase
+          .from('projects')
+          .insert({ ...withoutIntake, content: contentWithIntake } as never)
+          .select('id')
+          .single();
+        console.warn(
+          '[IntakeForm] intake_settings column missing — persisted to content suffix as fallback',
+        );
       }
       const { data, error } = insertResult;
       if (error || !data) throw error || new Error('Insert returned no row');

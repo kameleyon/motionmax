@@ -516,16 +516,47 @@ export default function Inspector({
             </div>
           </section>
 
-          {/* Voice picker moved directly below the narration so the
-              "who reads this" choice sits next to the text it will
-              read. Preview button kept inline with the select. */}
+          {/* Current audio player — native <audio controls> so users
+              can scrub / adjust volume without us rebuilding transport. */}
+          {scene.audioUrl && (
+            <section>
+              <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">Current audio</h5>
+              <audio
+                key={scene.audioUrl}
+                controls
+                preload="none"
+                src={scene.audioUrl}
+                className="w-full h-9 [&::-webkit-media-controls-panel]:bg-[#1B2228]"
+              />
+            </section>
+          )}
+
+          {/* Save & Regenerate — runs if the user edited the text OR
+              just hits it again with the same text to retry TTS. */}
+          <button
+            type="button"
+            onClick={() => regenerateAudio(selectedSceneIndex, voiceoverDirty ? voiceoverDraft : undefined)}
+            disabled={busy !== 'idle' || audioRegenActive || voiceoverDraft.trim().length < 2}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-[12.5px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {(busy === 'regen' || audioRegenActive) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCw className="w-3.5 h-3.5" />}
+            {audioRegenActive ? 'Generating audio…' : (voiceoverDirty ? 'Save & Regenerate audio' : 'Regenerate audio')}
+          </button>
+
+          {/* Voice picker */}
           <section>
             <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">Voice</h5>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              {/* min-w-0 + truncate on a flex child — without it the
+                  native <select> expands to its widest <option> and
+                  pushes the preview button off-screen. Long voice
+                  descriptions (e.g. "Rasalgethi · Male · Informative,
+                  documentary") now clip with ellipsis instead of
+                  overflowing the Inspector column. */}
               <select
                 value={voiceDraft}
                 onChange={(e) => setVoiceDraft(e.target.value as SpeakerVoice)}
-                className="flex-1 bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-[12.5px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50"
+                className="flex-1 min-w-0 w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-[12.5px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50 overflow-hidden text-ellipsis whitespace-nowrap"
               >
                 {voiceOptions.map((v) => (
                   <option key={v.id} value={v.id}>{v.label} · {v.description}</option>
@@ -548,43 +579,10 @@ export default function Inspector({
             <div className="font-mono text-[10px] text-[#5A6268] tracking-wider mt-1.5 uppercase">
               Current: {prettyVoiceName(currentVoice)} · {language.toUpperCase()}
             </div>
-          </section>
 
-          {/* Current audio player — native <audio controls> so users
-              can scrub / adjust volume without us rebuilding transport. */}
-          {scene.audioUrl && (
-            <section>
-              <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">Current audio</h5>
-              <audio
-                key={scene.audioUrl}
-                controls
-                preload="none"
-                src={scene.audioUrl}
-                className="w-full h-9 [&::-webkit-media-controls-panel]:bg-[#1B2228]"
-              />
-            </section>
-          )}
-
-          {/* Action buttons grouped at the bottom so they read as
-              "now do something with the text above". Primary
-              (this-scene-only) first, secondary (project-wide bulk)
-              second, visually demoted with a lighter background to
-              signal the heavier action. */}
-          <section className="flex flex-col gap-2 pt-1">
-            {/* Primary: regenerate THIS scene's audio only. */}
-            <button
-              type="button"
-              onClick={() => regenerateAudio(selectedSceneIndex, voiceoverDirty ? voiceoverDraft : undefined)}
-              disabled={busy !== 'idle' || audioRegenActive || voiceoverDraft.trim().length < 2}
-              className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-[12.5px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {(busy === 'regen' || audioRegenActive) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCw className="w-3.5 h-3.5" />}
-              {audioRegenActive ? 'Generating audio…' : (voiceoverDirty ? 'Save & Regenerate audio' : 'Regenerate this scene')}
-            </button>
-
-            {/* Secondary: project-wide voice change + bulk regen.
-                Heavier action → demoted visual weight (outline style)
-                so it doesn't compete with the primary button. */}
+            {/* One-click "Apply to all & regenerate" — flips the project
+                voice AND queues a bulk regenerate_audio for every
+                scene with narration. */}
             <button
               type="button"
               onClick={() => {
@@ -594,11 +592,11 @@ export default function Inspector({
                 }
               }}
               disabled={busy !== 'idle' || bulkAudioRegenActive || projectLocked || voiceDraft === currentVoice}
-              className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-[12.5px] font-medium text-[#14C8CC] bg-[#14C8CC]/10 border border-[#14C8CC]/30 hover:bg-[#14C8CC]/15 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full mt-3 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-[12.5px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 disabled:opacity-50"
               title={`Switch voice AND regenerate all ${state.scenes.length} scenes`}
             >
               {(busy === 'regen' || bulkAudioRegenActive) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCw className="w-3.5 h-3.5" />}
-              {bulkAudioRegenActive ? `Rendering all (${state.scenes.length})…` : `Apply voice to all ${state.scenes.length} scenes`}
+              {bulkAudioRegenActive ? `Rendering all (${state.scenes.length})…` : 'Apply to all & regenerate'}
             </button>
           </section>
         </div>

@@ -170,6 +170,18 @@ export default function Stage({
   // narration's end event drives scene auto-advance so the composite
   // "scene duration" = audio duration, matching the timeline widths.
   const audioRef = useRef<HTMLAudioElement>(null);
+  // Background music (Lyria) plays continuously across scenes, ducked
+  // to ~0.15 while narration is active so voiceover sits on top cleanly.
+  // Source = `state.generation.music_url` (DB column populated by
+  // handleFinalize when intake.music.on). One element for the whole
+  // playback session — we DON'T reset music on scene change; music
+  // loops across the full video like a bed. Respects per-scene
+  // `_meta.muteMusic` via volume gating.
+  const musicRef = useRef<HTMLAudioElement>(null);
+  const musicUrl = (state.generation as { music_url?: string | null } | null)?.music_url ?? null;
+  const sceneMuteMusic = Boolean(
+    (state.scenes[selectedSceneIndex]?.meta as { muteMusic?: boolean } | undefined)?.muteMusic,
+  );
   // Fullscreen state is OWNED by EditorFrame so the frame can hide its
   // own chrome (topbar, sidebar, scenes, inspector, timeline) when the
   // stage goes fullscreen. Stage just reflects + toggles it via the
@@ -293,6 +305,41 @@ export default function Stage({
     }
   }, [selectedSceneIndex, state.scenes]);
 
+  // ── Background music priming. The music element persists across
+  // scene changes (unlike video/audio which reset on each scene) so
+  // the Lyria track plays continuously like a real film score. We
+  // only touch `src` when the underlying music_url changes — never
+  // on scene navigation. Volume is ducked to 0.15 while narration
+  // plays and muted entirely when the current scene has muteMusic.
+  useEffect(() => {
+    const music = musicRef.current;
+    if (!music) return;
+
+    if (musicUrl) {
+      if (music.src !== musicUrl) {
+        music.src = musicUrl;
+        music.load();
+      }
+      music.loop = true;
+    } else {
+      music.pause();
+      music.removeAttribute('src');
+      music.load();
+    }
+  }, [musicUrl]);
+
+  // Volume gating — reruns on scene change so a per-scene muteMusic
+  // toggle takes effect immediately without pausing/resuming the
+  // music element (keeps playback smooth).
+  useEffect(() => {
+    const music = musicRef.current;
+    if (!music) return;
+    // 0 if muted for this scene; 0.15 ducked under narration; 0.35
+    // between scenes (no audio). The "between scenes" case is covered
+    // by the voiceover `onended` handler below raising the volume.
+    music.volume = sceneMuteMusic ? 0 : 0.15;
+  }, [sceneMuteMusic]);
+
   // ── Play/pause + end-of-scene handling. Ported from PublicShare's
   // share-page player. Handles THREE scene shapes:
   //   • Cinematic: video + audio  → drive scene end off audio
@@ -303,11 +350,13 @@ export default function Stage({
   useEffect(() => {
     const video = videoRef.current;
     const audio = audioRef.current;
+    const music = musicRef.current;
     const scene = state.scenes[selectedSceneIndex];
 
     if (!playing) {
       video?.pause();
       audio?.pause();
+      music?.pause();
       return;
     }
 
@@ -315,6 +364,7 @@ export default function Stage({
 
     const hasVideo = !!(video && scene.videoUrl);
     const hasAudio = !!(audio && scene.audioUrl);
+    const hasMusic = !!(music && musicUrl);
 
     // If neither media is present there's nothing to play — flip the
     // transport state back so the button doesn't stay in "pause" mode.
@@ -328,6 +378,19 @@ export default function Stage({
         onAdvanceScene?.();
       } else {
         onPlayingChange?.(false);
+        // Full video complete — fade music out over 1.5s instead of
+        // stopping abruptly. Gracefully returns to UI silence.
+        if (hasMusic) {
+          const start = music!.volume;
+          const t0 = performance.now();
+          const fade = () => {
+            const t = (performance.now() - t0) / 1500;
+            if (t >= 1) { music!.volume = 0; music!.pause(); return; }
+            music!.volume = start * (1 - t);
+            requestAnimationFrame(fade);
+          };
+          requestAnimationFrame(fade);
+        }
       }
     };
 
@@ -359,6 +422,15 @@ export default function Stage({
         if (hasAudio) {
           const ap = audio!.play();
           if (ap) await ap;
+        }
+        // Music plays in parallel at ducked volume. It's continuous —
+        // we never pause it between scenes, only when the user pauses
+        // the whole transport. Autoplay policies: if voice+video
+        // started successfully via user gesture, music will too.
+        if (hasMusic && music!.paused) {
+          music!.volume = sceneMuteMusic ? 0 : 0.15;
+          const mp = music!.play();
+          if (mp && typeof mp.catch === 'function') mp.catch(() => {});
         }
       } catch {
         // Autoplay blocked — user needs a gesture. Reset external state.
@@ -458,6 +530,13 @@ export default function Stage({
           )}
         </button>
       </div>
+
+      {/* Background music element — persists for the entire editor
+          session (not reset on scene change). Rendered OUTSIDE the
+          scene-aware preview block so scene navigation never pauses
+          or reseeks it. Volume is controlled imperatively via the
+          ducking + per-scene mute effects above. */}
+      <audio ref={musicRef} preload="auto" loop />
 
       {/* Frame. Clicking the frame advances to the next scene — this
           is the primary navigation gesture on mobile (where we hide

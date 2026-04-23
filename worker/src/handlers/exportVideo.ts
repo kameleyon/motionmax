@@ -26,6 +26,7 @@ import { concatFiles, concatWithCaptions, concatWithBrandMark } from "./export/c
 // crossfade is re-enabled via feature flag.
 // import { concatWithCrossfade } from "./export/transitions.js";
 import { compressIfNeeded } from "./export/compressVideo.js";
+import { mixBackgroundMusic } from "./export/mixMusic.js";
 import { uploadToSupabase, removeFiles } from "./export/storageHelpers.js";
 import { generateAssSubtitles, writeAssFile, normalizeCaptionStyle, type ASRSceneResult } from "../services/captionBuilder.js";
 import { transcribeAllScenes } from "../services/audioASR.js";
@@ -93,6 +94,34 @@ async function fetchScenesFromDb(projectId: string): Promise<any[]> {
     const { _meta, ...rest } = s;
     return rest;
   });
+}
+
+/** Fetch the generation-level music_url (set by handleFinalize when
+ *  intake.music.on + Lyria generated a track). Separate from
+ *  fetchScenesFromDb because that helper strips `_meta` — the legacy
+ *  musicUrl in `scenes[0]._meta.musicUrl` would be lost. We pull from
+ *  the real column first; fall back to _meta for projects generated
+ *  before the music_url column was populated.
+ *
+ *  Returns null if no music is configured — export proceeds without
+ *  the mix step. */
+async function fetchMusicUrl(projectId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("generations")
+    .select("music_url, scenes")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  const direct = (data as { music_url?: string | null }).music_url ?? null;
+  if (direct) return direct;
+  const scenes = (data as { scenes?: any[] }).scenes;
+  if (Array.isArray(scenes) && scenes[0]?._meta?.musicUrl) {
+    return scenes[0]._meta.musicUrl as string;
+  }
+  return null;
 }
 
 /** Check whether any scene has at least one downloadable URL. */
@@ -628,6 +657,56 @@ async function _runExport(
 
     // Free individual scene MP4s
     for (const f of clipPaths) removeFiles(f);
+
+    // ── 2b. Mix background music (Lyria) if one was generated ──────
+    // handleFinalize stamps `generations.music_url` when the user
+    // opted into music in the intake form AND Lyria succeeded. We
+    // download the track, use ffmpeg sidechaincompress to duck music
+    // under the narration, and overwrite finalOutputPath. Video
+    // stream is copied (no re-encode) — only the audio is remuxed,
+    // so this adds ~5-10s to the export, not a full encode pass.
+    // Silently skipped when no music_url is set.
+    try {
+      const musicUrl = await fetchMusicUrl(project_id);
+      if (musicUrl) {
+        sceneProgress.overallMessage = "Mixing background music...";
+        await flushSceneProgress(jobId);
+        await supabase.from("video_generation_jobs").update({ progress: 79, updated_at: new Date().toISOString() }).eq("id", jobId);
+
+        await writeSystemLog({
+          jobId, projectId: project_id, userId,
+          category: "system_info",
+          eventType: "music_mix_started",
+          message: `Mixing Lyria background music under narration`,
+        });
+
+        const mixedPath = finalOutputPath + ".mixed.mp4";
+        await mixBackgroundMusic(finalOutputPath, musicUrl, mixedPath, tempDir);
+        // Replace the un-mixed video with the mixed one so compress
+        // picks up the music-mixed output without further plumbing.
+        try { fs.unlinkSync(finalOutputPath); } catch { /* ignore */ }
+        fs.renameSync(mixedPath, finalOutputPath);
+
+        await writeSystemLog({
+          jobId, projectId: project_id, userId,
+          category: "system_info",
+          eventType: "music_mix_completed",
+          message: `Background music mixed into final video`,
+        });
+      }
+    } catch (err) {
+      // Music mix failure must NOT fail the whole export — the video
+      // is already valid at this point, just without music. Log and
+      // continue so the user still gets their MP4.
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn("Music mix skipped", { error: msg });
+      await writeSystemLog({
+        jobId, projectId: project_id, userId,
+        category: "system_warning",
+        eventType: "music_mix_skipped",
+        message: `Background music mix failed (non-fatal): ${msg}`,
+      });
+    }
 
     sceneProgress.overallMessage = "Scenes stitched. Compressing...";
     await flushSceneProgress(jobId);

@@ -273,15 +273,21 @@ export async function handleFinalizePhase(
         intensity: music.intensity,
       });
 
-      // Persist onto scenes[0]._meta.musicUrl so it travels with the
-      // generation without needing a new column. The export step reads
-      // this key and mixes the track in during ffmpeg compression.
+      // Persist in BOTH places: the new `generations.music_url`
+      // column (editor's Timeline + Stage read from here) AND the
+      // legacy `scenes[0]._meta.musicUrl` slot (export pipeline reads
+      // from here and per-scene mute toggles live alongside it).
+      // Writing to both keeps forward + backward compat during rollout.
       const augmented = finalScenesWithMeta.map((s: any, i: number) =>
         i === 0
           ? { ...s, _meta: { ...(s._meta || {}), musicUrl, musicGenre: music.genre, musicIntensity: music.intensity } }
           : s,
       );
-      await supabase.from("generations").update({ scenes: augmented }).eq("id", generationId);
+      await supabase
+        .from("generations")
+        .update({ scenes: augmented, music_url: musicUrl })
+        .eq("id", generationId);
+      console.log(`[Finalize] Music URL persisted to generations.music_url: ${musicUrl.slice(0, 80)}`);
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

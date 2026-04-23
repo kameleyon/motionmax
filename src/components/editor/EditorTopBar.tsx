@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Share2, History, Loader2, Menu, ChevronDown, SlidersHorizontal } from 'lucide-react';
-import { ThemeToggle } from '@/components/ThemeToggle';
+import { ArrowLeft, Download, Share2, Loader2, Menu, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import NotificationsPopover from '@/components/dashboard/NotificationsPopover';
 import HelpPopover from '@/components/dashboard/HelpPopover';
 import {
@@ -234,16 +233,6 @@ export default function EditorTopBar({
         </span>
       )}
 
-      {/* History */}
-      <button
-        type="button"
-        title="Version history"
-        aria-label="Version history"
-        className="hidden md:inline-flex w-8 h-8 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors"
-      >
-        <History className="w-4 h-4" />
-      </button>
-
       {/* Share */}
       <button
         type="button"
@@ -307,7 +296,6 @@ export default function EditorTopBar({
       <div className="hidden md:inline-flex items-center gap-1">
         <NotificationsPopover />
         <HelpPopover />
-        <ThemeToggle />
       </div>
 
       {/* Mobile inspector drawer toggle */}

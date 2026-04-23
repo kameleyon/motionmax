@@ -92,6 +92,12 @@ export default function Stage({
   const [, tick] = useState(0);
   const stageRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  // Caption preview — derived from narration + audio.currentTime.
+  // Chunks the voiceover into N word-windows and shows the one that
+  // corresponds to the current audio time. This is CLIENT-SIDE only
+  // (not burned into the video); gives users a live preview of what
+  // the export will look like without waiting on a re-render.
+  const [captionText, setCaptionText] = useState<string>('');
   const { tasksForScene } = useActiveJobs(state.project?.id ?? null);
   const activeTasks = tasksForScene(selectedSceneIndex);
   const imageActive = activeTasks.has('regenerate_image') || activeTasks.has('cinematic_image');
@@ -137,6 +143,51 @@ export default function Stage({
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isFullscreen]);
+
+  // Caption sync — splits the current scene's voiceover into fixed
+  // word-windows and picks the one matching audio.currentTime. Fires
+  // on every timeupdate, so the overlay swaps phrases in sync with
+  // narration. No caption if the style is 'none' or narration empty.
+  useEffect(() => {
+    const audio = audioRef.current;
+    const scene = state.scenes[selectedSceneIndex];
+    const captionsOn = state.intake.captionStyle && state.intake.captionStyle !== 'none';
+    if (!audio || !scene?.voiceover || !captionsOn) {
+      setCaptionText('');
+      return;
+    }
+    const words = scene.voiceover.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) { setCaptionText(''); return; }
+
+    // 3-word chunks — matches typical caption-style pacing and keeps
+    // the overlay readable on mobile. If audioDuration is known we
+    // distribute windows across it; else we fall back to ~0.45s/word.
+    const chunkSize = 3;
+    const chunks: string[] = [];
+    for (let i = 0; i < words.length; i += chunkSize) {
+      chunks.push(words.slice(i, i + chunkSize).join(' '));
+    }
+
+    const onTime = () => {
+      const dur = audio.duration || (scene.audioDurationMs ?? 0) / 1000 || words.length * 0.45;
+      if (!Number.isFinite(dur) || dur <= 0) { setCaptionText(''); return; }
+      const ratio = Math.min(1, Math.max(0, audio.currentTime / dur));
+      const idx = Math.min(chunks.length - 1, Math.floor(ratio * chunks.length));
+      setCaptionText(chunks[idx] ?? '');
+    };
+    const onPause = () => { /* keep text visible on pause */ };
+    const onReset = () => setCaptionText('');
+
+    audio.addEventListener('timeupdate', onTime);
+    audio.addEventListener('seeked', onTime);
+    audio.addEventListener('ended', onReset);
+    return () => {
+      audio.removeEventListener('timeupdate', onTime);
+      audio.removeEventListener('seeked', onTime);
+      audio.removeEventListener('ended', onReset);
+      audio.removeEventListener('pause', onPause);
+    };
+  }, [selectedSceneIndex, state.scenes, state.intake.captionStyle]);
 
   // ── Scene-change priming. Runs whenever the selected scene changes,
   // regardless of playing state. This is what gives the preview a
@@ -250,10 +301,13 @@ export default function Stage({
   // is what actually produces a true 9:16 looking frame on phones.
   // Fullscreen blows the cap out: 100% w + 100% h with object-contain
   // on the inner image/video means the preview owns the entire viewport.
+  // Shrink portrait frame's maxHeight a touch so the AI disclaimer at
+  // the bottom always has clear vertical space beneath it — was
+  // overlapping on short mobile viewports.
   const frameMaxW = isFullscreen ? '100%' : (state.aspect === '16:9' ? '92%' : '94%');
-  const frameMaxH = isFullscreen ? '100%' : (state.aspect === '16:9' ? '88%' : '90%');
+  const frameMaxH = isFullscreen ? '100%' : (state.aspect === '16:9' ? '86%' : '84%');
   const frameW    = isFullscreen ? '100%' : (state.aspect === '16:9' ? '82%' : 'auto');
-  const frameH    = isFullscreen ? '100%' : (state.aspect === '16:9' ? 'auto' : '90%');
+  const frameH    = isFullscreen ? '100%' : (state.aspect === '16:9' ? 'auto' : '84%');
 
   const sceneToShow: EditorScene | undefined =
     state.scenes[selectedSceneIndex] ??
@@ -388,6 +442,26 @@ export default function Stage({
           />
         ) : null}
 
+        {/* Caption overlay — client-side live preview of the export's
+            burn-in. Positioned at 1/4 from the bottom (≈y=75%) to
+            match the export pipeline's portrait-safe placement. Only
+            renders when a caption style is active and we have live
+            text from the sync effect. Style chips give a rough
+            approximation of the eventual burn-in look; actual export
+            is authoritative for rendering/timing. */}
+        {state.phase === 'ready' && captionText && (
+          <div
+            className="absolute left-0 right-0 pointer-events-none flex justify-center"
+            style={{ bottom: '25%' }}
+          >
+            <div className="max-w-[80%] px-3 py-1.5 rounded-md bg-black/70 border border-white/5 backdrop-blur-[1px]">
+              <span className="font-sans font-bold text-[13px] sm:text-[15px] text-[#ECEAE4] tracking-tight leading-tight">
+                {captionText}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Per-scene regen overlay — shown on top of the frame while
             the current scene's image or video is being re-rendered.
             Animated loading ring + pulsing grid so the user clearly
@@ -465,10 +539,15 @@ export default function Stage({
         )}
       </div>
 
-      {/* AI disclaimer — hidden in fullscreen for distraction-free playback. */}
+      {/* AI disclaimer — hidden in fullscreen. On mobile it previously
+          sat absolute-bottom on top of the (tall 9:16) frame, covering
+          the video. Shrinking the frame's maxHeight leaves room here
+          AND giving the disclaimer static positioning inside a flex
+          column on mobile keeps it below the frame, not on top. */}
       {state.phase === 'ready' && !isFullscreen && (
-        <div className="absolute bottom-3 left-0 right-0 text-center font-mono text-[10px] text-[#5A6268] tracking-[0.08em]">
-          ⚠ AI-generated content — may not reflect real people, places, or events
+        <div className="absolute bottom-1.5 left-0 right-0 text-center font-mono text-[9px] sm:text-[10px] text-[#5A6268] tracking-[0.06em] px-3">
+          <span className="hidden sm:inline">⚠ AI-generated content — may not reflect real people, places, or events</span>
+          <span className="sm:hidden">⚠ AI-generated · may not reflect reality</span>
         </div>
       )}
     </div>

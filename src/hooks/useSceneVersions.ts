@@ -34,9 +34,27 @@ export function useSceneVersions(generationId: string | undefined, sceneIndex: n
 
       if (error) throw error;
 
+      // Legacy scene_versions rows stored image_urls as either a JSON
+      // string OR a raw URL (some rows from before the column was
+      // switched to jsonb). A bare URL like "https://ay..." crashes
+      // JSON.parse with the "Unexpected token 'h'" the user hit on
+      // restore. Parse defensively: treat a non-JSON string as a
+      // single-element array so the rest of the flow still works.
+      const parseImageUrls = (v: string | string[] | null | undefined): string[] | null => {
+        if (v == null) return null;
+        if (Array.isArray(v)) return v;
+        if (typeof v !== 'string') return null;
+        const trimmed = v.trim();
+        if (!trimmed) return null;
+        if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+          try { return JSON.parse(trimmed) as string[]; } catch { return [trimmed]; }
+        }
+        return [trimmed];
+      };
+
       return ((data || []) as Array<SceneVersion & { image_urls: string | string[] | null }>).map((v) => ({
         ...v,
-        image_urls: typeof v.image_urls === "string" ? JSON.parse(v.image_urls) : v.image_urls,
+        image_urls: parseImageUrls(v.image_urls),
       })) as SceneVersion[];
     },
     enabled: !!generationId,

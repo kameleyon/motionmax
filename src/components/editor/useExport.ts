@@ -50,7 +50,18 @@ export function useExport(state: EditorState | null) {
       return;
     }
 
-    const presetCfg = PRESET_MAP[preset];
+    // Export format must FOLLOW the project's actual aspect. The old
+    // "master" preset hardcoded 'landscape' which meant portrait
+    // projects were exported as 16:9 (letterbox/center-crop disaster).
+    // Now we override presetCfg.format with whatever the project was
+    // generated in, unless the user explicitly picked a platform
+    // preset (tiktok / reels / youtube) that implies its own format.
+    const rawPreset = PRESET_MAP[preset];
+    const projectFormat: 'landscape' | 'portrait' =
+      state.project.format === 'portrait' ? 'portrait' : 'landscape';
+    const presetCfg = preset === 'master'
+      ? { ...rawPreset, format: projectFormat }
+      : rawPreset;
     const scenes = state.scenes
       .filter((s) => s.videoUrl || s.imageUrl)
       .map((s) => ({

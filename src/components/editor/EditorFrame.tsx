@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { WifiOff } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import MiniSidebar from './MiniSidebar';
 import EditorTopBar, { type SubView } from './EditorTopBar';
@@ -46,6 +47,22 @@ export default function EditorFrame({
   const [menuDrawerOpen, setMenuDrawerOpen] = useState(false);
   const [inspectorDrawerOpen, setInspectorDrawerOpen] = useState(false);
 
+  // Offline banner — react-query retries + Supabase realtime will
+  // silently eat updates when the tab goes offline (job status won't
+  // reach the UI, and regen clicks will queue to an unreachable DB).
+  // Surface it so users don't think the app is broken.
+  const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
+  useEffect(() => {
+    const up = () => setOnline(true);
+    const down = () => setOnline(false);
+    window.addEventListener('online', up);
+    window.addEventListener('offline', down);
+    return () => {
+      window.removeEventListener('online', up);
+      window.removeEventListener('offline', down);
+    };
+  }, []);
+
   // Lock body scroll while fullscreen so phantom scrollbars never show.
   useEffect(() => {
     if (!fullscreen) return;
@@ -64,6 +81,13 @@ export default function EditorFrame({
       </div>
     );
   }
+
+  const offlineBanner = !online ? (
+    <div className="w-full bg-[#E66666]/15 border-b border-[#E66666]/30 text-[#F2B4B4] text-[11.5px] font-mono tracking-wider uppercase px-3 py-1.5 flex items-center justify-center gap-2">
+      <WifiOff className="w-3.5 h-3.5" />
+      You're offline — new edits + regens will retry when the connection returns.
+    </div>
+  ) : null;
 
   return (
     <div className="flex h-screen bg-[#0A0D0F] text-[#ECEAE4] font-sans overflow-hidden">
@@ -85,6 +109,7 @@ export default function EditorFrame({
       <main
         className="flex flex-col flex-1 min-w-0 overflow-hidden"
       >
+        {offlineBanner}
         <EditorTopBar
           state={state}
           subView={subView}

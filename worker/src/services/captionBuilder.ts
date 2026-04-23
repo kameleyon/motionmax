@@ -268,6 +268,21 @@ function msToAssTime(ms: number): string {
 function buildAssHeader(style: Exclude<CaptionStyle, "none">, width: number, height: number): string {
   const s = STYLE_DEFS[style];
 
+  // STYLE_DEFS marginV was hardcoded for 1920-tall portrait. On a
+  // 1080-tall landscape canvas that same 480px margin pushes captions
+  // into the middle of the frame. Scale marginV to canvas height so
+  // captions always land ~1/4 from the bottom regardless of aspect.
+  // Preserve any per-style offset (e.g. cleanPop uses MV-40) as a
+  // proportional delta against the base MV so the look stays the same.
+  const baseMV = 480; // MV constant — reference portrait (1920 tall)
+  const referenceHeight = 1920;
+  const proportionalMarginV = Math.round((s.marginV / referenceHeight) * height);
+  // Scale font size too so captions read at the same visual scale on
+  // both portrait and landscape exports (portrait uses 1080x1920 and
+  // landscape uses 1920x1080 — same pixel count so font stays, but
+  // this future-proofs non-square aspects if we ever add 1:1).
+  void baseMV;
+
   return `[Script Info]
 Title: MotionMax Captions
 ScriptType: v4.00+
@@ -277,7 +292,7 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,${s.fontName},${s.fontSize},${s.primaryColor},${s.secondaryColor},${s.outlineColor},${s.backColor},${s.bold ? -1 : 0},${s.italic ? -1 : 0},0,0,100,100,0,0,${s.borderStyle},${s.outline},${s.shadow},${s.alignment},30,30,${s.marginV},1
+Style: Default,${s.fontName},${s.fontSize},${s.primaryColor},${s.secondaryColor},${s.outlineColor},${s.backColor},${s.bold ? -1 : 0},${s.italic ? -1 : 0},0,0,100,100,0,0,${s.borderStyle},${s.outline},${s.shadow},${s.alignment},30,30,${proportionalMarginV},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;

@@ -34,6 +34,13 @@ export async function runUnifiedPipeline(
 
   const scriptResult = await ctx.callPhase({
     phase: "script",
+    // CRITICAL: forward projectId so the worker's handleGenerateVideo
+    // reuses the existing row (created by IntakeForm before it
+    // navigated to /app/editor/:id?autostart=1) instead of inserting a
+    // phantom duplicate. Without this, every generation run left a
+    // second "draft" project on the dashboard — the real one rendering
+    // plus a ghost one with the raw prompt as its title.
+    projectId: params.projectId,
     content: params.content,
     format: params.format,
     length: params.length,

@@ -69,6 +69,11 @@ export interface GenerationState {
 }
 
 export interface GenerationParams {
+  /** Existing project row ID — passed through the script job payload
+   *  so the worker's `handleGenerateVideo` reuses it instead of
+   *  creating a phantom duplicate. Omitting this (legacy workspaces)
+   *  makes the worker insert a brand-new project. */
+  projectId?: string;
   content: string;
   format: VideoFormat;
   length: VideoLength;

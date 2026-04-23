@@ -92,6 +92,12 @@ export function useGenerationPipeline() {
       costTracking: undefined,
       phaseTimings: undefined,
       projectType: params.projectType,
+      // Seed projectId from the kickoff params so realtime subscriptions
+      // + progress hooks tie to the existing project row immediately.
+      // Without this, projectId only becomes known after the script
+      // phase returns — a window where the editor polls against a
+      // projectId it technically already has.
+      projectId: params.projectId,
     });
 
     try {

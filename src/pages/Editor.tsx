@@ -254,23 +254,50 @@ export default function Editor() {
   // intake_settings / project metadata catches up on the next tick.
   const pipelineStep = pipelineState.step;
   const pipelineScenes = pipelineState.scenes;
+  const pipelineError = pipelineState.error;
   useEffect(() => {
-    if (pipelineStep !== 'complete') return;
+    // We care about TWO terminal pipeline states:
+    //   - 'complete' → full success, hydrate from pipeline memory
+    //   - 'error'    → partial failure (e.g. one scene's TTS gave up
+    //                  after 5 retries, which blocks finalize and
+    //                  rejects waitForJob). The DB still holds every
+    //                  scene that DID complete, so we want the editor
+    //                  to show those scenes + per-scene fail badges so
+    //                  the user can regenerate the broken ones from
+    //                  the Inspector instead of losing the whole run.
+    if (pipelineStep !== 'complete' && pipelineStep !== 'error') return;
     if (!projectId) return;
 
-    // Paint scenes RIGHT NOW from the pipeline's in-memory result.
-    if (pipelineScenes && pipelineScenes.length > 0) {
+    // Paint scenes RIGHT NOW from the pipeline's in-memory result
+    // (success path only — on error, pipelineScenes is typically
+    // empty because unifiedPipeline only assigns scenes on complete).
+    if (pipelineStep === 'complete' && pipelineScenes && pipelineScenes.length > 0) {
       hydrateEditorStateFromPipeline(queryClient, projectId, user?.id, pipelineScenes);
     }
 
-    // Kick the DB round-trip to fill in anything the pipeline didn't
-    // carry (project.intake_settings, generation row metadata, etc.).
+    // Kick the DB round-trip. On complete this fills in
+    // intake_settings / project metadata that the pipeline didn't
+    // carry. On error this is the ONLY way scenes land — the DB has
+    // whatever per-scene jobs completed before the failure.
     void (async () => {
       await queryClient.invalidateQueries({ queryKey: ['editor-state', projectId] });
       await queryClient.invalidateQueries({ queryKey: ['active-jobs', projectId] });
       await refetchEditor();
     })();
-  }, [pipelineStep, pipelineScenes, projectId, user?.id, queryClient, refetchEditor]);
+
+    // Surface the error once per transition so the user knows the
+    // partial-failure state without having to dig through the
+    // inspector. The editor shell (scenes column + timeline) still
+    // renders whatever landed.
+    if (pipelineStep === 'error') {
+      toast.error('Generation partially failed', {
+        description:
+          pipelineError ??
+          'Some scenes didn\'t finish. Regenerate them from the Inspector — your completed scenes are safe.',
+        duration: 10000,
+      });
+    }
+  }, [pipelineStep, pipelineScenes, pipelineError, projectId, user?.id, queryClient, refetchEditor]);
 
   const [playing, setPlaying] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -380,7 +407,7 @@ export default function Editor() {
           fullscreen={fullscreen}
           onFullscreenChange={setFullscreen}
           pipelineProgress={pipelineState.progress}
-          pipelineDone={pipelineState.step === 'complete'}
+          pipelineDone={pipelineState.step === 'complete' || pipelineState.step === 'error'}
         />
       }
       inspector={

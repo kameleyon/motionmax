@@ -100,11 +100,32 @@ export interface EditorState {
   hydratedFromPipeline?: boolean;
 }
 
-function phaseFromGeneration(g: Generation | null): EditorPhase {
+/** Unstuck threshold — a generation row sitting on `status='processing'`
+ *  for this long without `updated_at` moving is almost certainly dead
+ *  (failed upstream job blocked finalize). We flip the phase to 'ready'
+ *  so the editor dismisses the rendering overlay and shows whatever
+ *  scenes landed, letting the user regenerate the broken ones in-place
+ *  instead of sitting on a forever-spinner after a page reload. */
+const STALE_RENDERING_MS = 90_000;
+
+function phaseFromGeneration(g: Generation | null, scenes: EditorScene[]): EditorPhase {
   if (!g) return 'idle';
   const s = (g.status ?? '').toLowerCase();
   if (s === 'complete' || s === 'completed' || s === 'done') return 'ready';
   if (s === 'failed' || s === 'error') return 'error';
+
+  // Still nominally 'processing' / 'rendering'. Check if the worker has
+  // actually moved recently — if the row hasn't been touched in 90s AND
+  // we have at least one scene with an asset landed, treat this as a
+  // stalled run and flip to ready. User can regen missing scenes from
+  // the Inspector.
+  const updatedAt = g.updated_at ? new Date(g.updated_at).getTime() : 0;
+  const ageMs = updatedAt ? Date.now() - updatedAt : 0;
+  const hasAnyAsset = scenes.some((s) => s.imageUrl || s.audioUrl || s.videoUrl);
+  if (updatedAt && ageMs > STALE_RENDERING_MS && hasAnyAsset) {
+    return 'ready';
+  }
+
   return 'rendering';
 }
 
@@ -244,7 +265,7 @@ export function useEditorState(projectId: string | null): {
         generation,
         scenes,
         intake,
-        phase: phaseFromGeneration(generation),
+        phase: phaseFromGeneration(generation, scenes),
         progress: generation?.progress ?? 0,
         aspect,
         totalDurationMs,

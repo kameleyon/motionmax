@@ -39,14 +39,20 @@ export default function DashboardLayout() {
         <SheetContent
           side="left"
           className="w-[280px] p-0 bg-[#10151A] border-white/10 md:hidden [&>button]:text-[#ECEAE4]"
+          // Use the dynamic viewport unit so iOS Safari's collapsing
+          // address bar doesn't leave the drawer's last few pixels
+          // hidden behind the toolbar.
+          style={{ height: '100dvh' }}
         >
           {/* Force-show the Sidebar inside the drawer and make the whole
               panel vertically scrollable so the profile footer (with
-              Log Out) stays reachable even on short viewports. The
-              aside itself is `overflow-hidden` for the desktop layout,
-              so we override that inside the drawer via the `[&_aside]`
-              selector. */}
-          <div className="h-full overflow-y-auto [&_aside]:flex [&_aside]:w-full [&_aside]:border-r-0 [&_aside]:h-auto [&_aside]:min-h-full [&_aside]:overflow-visible [&_aside_nav]:overflow-visible">
+              avatar + plan + tokens) stays fully reachable even on short
+              viewports. Bottom padding honours the iOS home-indicator
+              safe area so the avatar circle doesn't sit half-off-screen. */}
+          <div
+            className="h-full overflow-y-auto [&_aside]:flex [&_aside]:w-full [&_aside]:border-r-0 [&_aside]:h-auto [&_aside]:min-h-full [&_aside]:overflow-visible [&_aside_nav]:overflow-visible"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+          >
             <Sidebar />
           </div>
         </SheetContent>

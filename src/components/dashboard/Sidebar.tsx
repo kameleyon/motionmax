@@ -354,7 +354,12 @@ export default function Sidebar() {
           <button
             type="button"
             aria-label="Account menu"
-            className="w-full px-4 py-3.5 border-t border-white/5 flex items-center gap-2.5 text-left hover:bg-white/5 transition-colors"
+            // shrink-0 + sticky-footer behaviour: this row must always
+            // render at the bottom of the drawer flexbox, never compress.
+            // Slightly tighter vertical padding so the avatar + name +
+            // plan/tokens line all fit on short mobile viewports without
+            // being clipped by the iOS home-indicator safe area.
+            className="shrink-0 w-full px-4 py-2.5 border-t border-white/5 flex items-center gap-2.5 text-left hover:bg-white/5 transition-colors"
           >
             {profile?.avatar_url ? (
               <img src={profile.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />

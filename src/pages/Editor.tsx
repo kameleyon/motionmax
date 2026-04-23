@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import { useEditorState } from '@/hooks/useEditorState';
 import EditorFrame from '@/components/editor/EditorFrame';
 import type { SubView } from '@/components/editor/EditorTopBar';
@@ -23,6 +26,8 @@ export default function Editor() {
   const navigate = useNavigate();
 
   const { state, isLoading, isError, refetch: refetchEditor } = useEditorState(projectId ?? null);
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   // The UNIFIED pipeline orchestrator — this is the one SmartFlow /
   // Explainer / Cinematic have always used via the legacy workspaces.
@@ -163,19 +168,66 @@ export default function Editor() {
     setParams(next, { replace: true });
   };
 
-  // Aggressive refetch while stuck on the awaiting screen — 1s polling
-  // until the generation row appears, then useEditorState's normal 3s
-  // poll takes over. This closes the realtime-race gap: if Supabase
-  // realtime drops the INSERT event for the generations row (common
-  // when the channel is still handshaking at kickoff time), we still
-  // pick it up within a second via direct refetch. Once the user can
-  // see the editor, we stop the fast poll.
+  // Aggressive refetch while stuck on the awaiting screen. We've seen
+  // React Query's cache stick on the first null result and refuse to
+  // update even with staleTime: 0 + refetchIntervalInBackground: true.
+  // So this effect does TWO things every 2 seconds while waiting:
+  //   1. A RAW Supabase select that bypasses React Query entirely —
+  //      if the generation row now exists, we know the cache is stale
+  //      and we force a full invalidate.
+  //   2. Calls refetchEditor() as a fallback.
+  // The raw probe also logs what it finds so the browser console
+  // shows exactly why the UI is stuck (row missing, RLS denied, etc).
   useEffect(() => {
-    const waiting = !!state?.project && !state?.generation;
+    const waiting = !!state?.project && !state?.generation && !!projectId && !!user;
     if (!waiting) return;
-    const iv = setInterval(() => { void refetchEditor(); }, 1000);
-    return () => clearInterval(iv);
-  }, [state?.project, state?.generation, refetchEditor]);
+    let cancelled = false;
+    const probe = async () => {
+      if (cancelled) return;
+      try {
+        const { data, error } = await supabase
+          .from('generations')
+          .select('id, status, progress, created_at')
+          .eq('project_id', projectId!)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (cancelled) return;
+        if (error) {
+          log.warn('raw generation probe error', { error: error.message, projectId });
+          return;
+        }
+        if (data) {
+          log.info('raw probe found generation — forcing invalidate', {
+            generationId: data.id,
+            status: data.status,
+            progress: data.progress,
+          });
+          // Nuke both the editor-state cache AND the active-jobs cache
+          // so the UI picks up the new row + any downstream jobs. Then
+          // refetch immediately so the transition is instant, not
+          // waiting on the next 3s tick.
+          await queryClient.invalidateQueries({ queryKey: ['editor-state', projectId] });
+          await queryClient.invalidateQueries({ queryKey: ['active-jobs', projectId] });
+          void refetchEditor();
+        }
+      } catch (err) {
+        log.warn('raw generation probe threw', { error: err instanceof Error ? err.message : String(err) });
+      }
+    };
+    void probe(); // fire once immediately
+    const iv = setInterval(probe, 2000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [state?.project, state?.generation, projectId, user, refetchEditor, queryClient]);
+
+  // Manual "Refresh" action exposed on the overlay. Full nuke + refetch.
+  const forceRefresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['editor-state', projectId] });
+    await queryClient.invalidateQueries({ queryKey: ['active-jobs', projectId] });
+    await refetchEditor();
+    toast.success('Refreshed');
+  };
+  void forceRefresh;
 
   const [playing, setPlaying] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);

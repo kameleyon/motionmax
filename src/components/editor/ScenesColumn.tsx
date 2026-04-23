@@ -1,5 +1,6 @@
 import { Plus, Loader2 } from 'lucide-react';
 import type { EditorScene, EditorState } from '@/hooks/useEditorState';
+import { useActiveJobs } from './useActiveJobs';
 
 /** Scene list column. Renders one row per scene with status badge,
  *  thumbnail (project aspect), title, and duration. Clicking a row
@@ -38,6 +39,8 @@ export default function ScenesColumn({
   selectedSceneIndex: number;
   onSelect: (index: number) => void;
 }) {
+  const { tasksForScene } = useActiveJobs(state.project?.id ?? null);
+
   return (
     <div className="flex flex-col h-full">
       <div className="sticky top-0 z-[2] flex items-center justify-between px-3 py-3 border-b border-white/5 bg-[#10151A]">
@@ -65,6 +68,11 @@ export default function ScenesColumn({
         ) : (
           state.scenes.map((scene, i) => {
             const isActive = i === selectedSceneIndex;
+            const active = tasksForScene(i);
+            const imageRegen = active.has('regenerate_image') || active.has('cinematic_image');
+            const videoRegen = active.has('cinematic_video');
+            const audioRegen = active.has('regenerate_audio') || active.has('cinematic_audio');
+            const anyActive = imageRegen || videoRegen || audioRegen;
             return (
               <button
                 key={i}
@@ -84,7 +92,10 @@ export default function ScenesColumn({
                   {String(i + 1).padStart(2, '0')}
                 </span>
                 <div
-                  className="rounded-[4px] border border-white/5 relative overflow-hidden"
+                  className={
+                    'rounded-[4px] border relative overflow-hidden ' +
+                    (anyActive ? 'border-[#14C8CC] shadow-[0_0_0_1px_#14C8CC_inset]' : 'border-white/5')
+                  }
                   style={{
                     aspectRatio: state.aspect === '9:16' ? '9/16' : '16/9',
                     background: scene.imageUrl
@@ -92,9 +103,9 @@ export default function ScenesColumn({
                       : `linear-gradient(135deg, hsl(${(i * 40 + 180) % 360} 40% 28%), hsl(${(i * 40 + 200) % 360} 50% 12%))`,
                   }}
                 >
-                  {scene.status === 'render' && (
-                    <div className="absolute inset-0 grid place-items-center bg-black/40">
-                      <Loader2 className="w-3 h-3 animate-spin text-[#14C8CC]" />
+                  {(scene.status === 'render' || anyActive) && (
+                    <div className="absolute inset-0 grid place-items-center bg-black/55">
+                      <Loader2 className="w-4 h-4 animate-spin text-[#14C8CC]" />
                     </div>
                   )}
                 </div>
@@ -102,12 +113,27 @@ export default function ScenesColumn({
                   <div className="font-serif text-[12.5px] text-[#ECEAE4] truncate leading-tight">
                     {scene.title || scene.visualPrompt?.slice(0, 40) || `Scene ${i + 1}`}
                   </div>
-                  <div className="font-mono text-[9.5px] text-[#5A6268] tracking-[0.06em] mt-1 flex items-center gap-1.5">
+                  <div className="font-mono text-[9.5px] text-[#5A6268] tracking-[0.06em] mt-1 flex items-center gap-1.5 flex-wrap">
                     <span>{formatSceneDuration(scene)}</span>
                     <span className="text-white/20">·</span>
                     <span className={`px-1 py-[1px] rounded ${STATUS_CLASS[scene.status]}`}>
                       {STATUS_LABEL[scene.status]}
                     </span>
+                    {imageRegen && (
+                      <span className="px-1 py-[1px] rounded text-[#14C8CC] bg-[#14C8CC]/14 inline-flex items-center gap-1">
+                        <Loader2 className="w-2.5 h-2.5 animate-spin" />IMAGE
+                      </span>
+                    )}
+                    {videoRegen && (
+                      <span className="px-1 py-[1px] rounded text-[#14C8CC] bg-[#14C8CC]/14 inline-flex items-center gap-1">
+                        <Loader2 className="w-2.5 h-2.5 animate-spin" />VIDEO
+                      </span>
+                    )}
+                    {audioRegen && (
+                      <span className="px-1 py-[1px] rounded text-[#14C8CC] bg-[#14C8CC]/14 inline-flex items-center gap-1">
+                        <Loader2 className="w-2.5 h-2.5 animate-spin" />VOICE
+                      </span>
+                    )}
                   </div>
                 </div>
               </button>

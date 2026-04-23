@@ -7,7 +7,8 @@ import {
   getSampleText,
   type SpeakerVoice,
 } from '@/components/workspace/SpeakerSelector';
-import { captionStyles, type CaptionStyle } from '@/components/workspace/CaptionStyleSelector';
+import { CaptionStyleSelector, type CaptionStyle } from '@/components/workspace/CaptionStyleSelector';
+import { useActiveJobs } from './useActiveJobs';
 import type { EditorState } from '@/hooks/useEditorState';
 import { useSceneRegen } from './useSceneRegen';
 import { supabase } from '@/integrations/supabase/client';
@@ -51,6 +52,11 @@ export default function Inspector({
     busy, apply, regenerate, regenerateImage, regenerateVideo, regenerateAudio,
     updateSceneMeta, updateProjectVoice, updateIntakeSettings,
   } = useSceneRegen(state);
+  const { tasksForScene, bulkAudioRegenActive } = useActiveJobs(state.project?.id ?? null);
+  const sceneTasks = tasksForScene(selectedSceneIndex);
+  const imageRegenActive = sceneTasks.has('regenerate_image') || sceneTasks.has('cinematic_image');
+  const videoRegenActive = sceneTasks.has('cinematic_video');
+  const audioRegenActive = sceneTasks.has('regenerate_audio');
 
   const [promptDraft, setPromptDraft] = useState(scene?.visualPrompt ?? '');
   useEffect(() => {
@@ -201,11 +207,11 @@ export default function Inspector({
               <button
                 type="button"
                 onClick={() => regenerate(selectedSceneIndex, promptDraft.trim())}
-                disabled={busy !== 'idle' || promptDraft.trim().length < 6}
+                disabled={busy !== 'idle' || imageRegenActive || promptDraft.trim().length < 6}
                 className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] border border-white/10 text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {busy === 'regen' ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCw className="w-3 h-3" />}
-                Regenerate
+                {(busy === 'regen' || imageRegenActive) ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCw className="w-3 h-3" />}
+                {imageRegenActive ? 'Regenerating…' : 'Regenerate'}
               </button>
               <button
                 type="button"
@@ -219,37 +225,57 @@ export default function Inspector({
             </div>
           </section>
 
-          {/* Per-asset regen: edit image / regen image / regen video.
-              No Voice here — use the Voice tab for narration work so
-              we don't duplicate the same action in two places. */}
+          {/* Per-asset actions. Three distinct buttons so each
+              affordance is obvious:
+                Edit image  → uses Nano Banana Edit with the text above
+                Regenerate  → full image regen from the scene prompt
+                Video       → re-render the video from the current image.
+              No Voice button here — that lives in the Voice tab. */}
           <section>
             <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">Visuals</h5>
             <input
               value={imageEdit}
               onChange={(e) => setImageEdit(e.target.value)}
-              placeholder="Edit this frame (e.g. add a lens flare, darker sky…)"
+              placeholder="Describe the edit (e.g. add a lens flare, darker sky…)"
               className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-[12px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50 placeholder:text-[#5A6268]"
             />
-            <div className="grid grid-cols-2 gap-2 mt-2">
+            <div className="grid grid-cols-3 gap-2 mt-2">
               <button
                 type="button"
-                onClick={() => { regenerateImage(selectedSceneIndex, imageEdit.trim() || undefined); setImageEdit(''); }}
-                disabled={busy !== 'idle'}
-                className="inline-flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[11.5px] border border-white/10 text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-50"
-                title={imageEdit.trim() ? 'Edit image with the prompt above' : 'Regenerate image only'}
+                onClick={() => {
+                  const text = imageEdit.trim();
+                  if (!text) { toast.info('Type the edit you want first.'); return; }
+                  regenerateImage(selectedSceneIndex, text);
+                  setImageEdit('');
+                }}
+                disabled={busy !== 'idle' || imageRegenActive || !scene.imageUrl}
+                className="inline-flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[11px] border border-[#14C8CC]/30 bg-[#14C8CC]/5 text-[#14C8CC] hover:bg-[#14C8CC]/10 transition-colors disabled:opacity-50"
+                title="Edit the current image with Nano Banana (natural-language edit)"
               >
-                {imageEdit.trim() ? <Wand2 className="w-3 h-3" /> : <ImageIcon className="w-3 h-3" />}
-                {imageEdit.trim() ? 'Edit image' : 'Regenerate image'}
+                {imageRegenActive ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => regenerateImage(selectedSceneIndex)}
+                disabled={busy !== 'idle' || imageRegenActive}
+                className="inline-flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[11px] border border-white/10 text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-50"
+                title="Regenerate image from the scene prompt"
+              >
+                {imageRegenActive
+                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                  : <ImageIcon className="w-3 h-3" />}
+                Image
               </button>
               <button
                 type="button"
                 onClick={() => regenerateVideo(selectedSceneIndex)}
-                disabled={busy !== 'idle' || !scene.imageUrl}
-                className="inline-flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[11.5px] border border-white/10 text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-50"
+                disabled={busy !== 'idle' || videoRegenActive || !scene.imageUrl}
+                className="inline-flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[11px] border border-white/10 text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-50"
                 title="Re-render video from the current image"
               >
-                <Video className="w-3 h-3" />
-                Regenerate video
+                {videoRegenActive ? <Loader2 className="w-3 h-3 animate-spin" /> : <Video className="w-3 h-3" />}
+                Video
               </button>
             </div>
           </section>
@@ -323,11 +349,11 @@ export default function Inspector({
           <button
             type="button"
             onClick={() => regenerateAudio(selectedSceneIndex, voiceoverDirty ? voiceoverDraft : undefined)}
-            disabled={busy !== 'idle' || voiceoverDraft.trim().length < 2}
+            disabled={busy !== 'idle' || audioRegenActive || voiceoverDraft.trim().length < 2}
             className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-[12.5px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {busy === 'regen' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCw className="w-3.5 h-3.5" />}
-            {voiceoverDirty ? 'Save & Regenerate audio' : 'Regenerate audio'}
+            {(busy === 'regen' || audioRegenActive) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCw className="w-3.5 h-3.5" />}
+            {audioRegenActive ? 'Generating audio…' : (voiceoverDirty ? 'Save & Regenerate audio' : 'Regenerate audio')}
           </button>
 
           {/* Voice picker */}
@@ -378,12 +404,12 @@ export default function Inspector({
                     updateProjectVoice(voiceDraft, true);
                   }
                 }}
-                disabled={busy !== 'idle' || voiceDraft === currentVoice}
+                disabled={busy !== 'idle' || bulkAudioRegenActive || voiceDraft === currentVoice}
                 className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 disabled:opacity-50"
                 title={`Switch voice AND regenerate all ${state.scenes.length} scenes`}
               >
-                {busy === 'regen' ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                Update all
+                {(busy === 'regen' || bulkAudioRegenActive) ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                {bulkAudioRegenActive ? 'Rendering all…' : 'Update all'}
               </button>
             </div>
           </section>
@@ -425,30 +451,23 @@ export default function Inspector({
             </div>
           </section>
 
-          {/* Native select — reliable on desktop + mobile, no portal
-              stacking issues. Shows "Off" in the list so users can
-              disable captions from the dropdown too. */}
+          {/* Same CaptionStyleSelector used on the intake form — shows
+              animated per-style preview rows ("Your idea in motion").
+              This is the component the user is already familiar with
+              from the generation flow; no point reinventing it here. */}
           <section>
             <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">
               Caption style
             </h5>
-            <select
-              value={captionStyleDraft}
-              onChange={(e) => setCaptionStyle(e.target.value as CaptionStyle)}
-              disabled={!captionsOn && captionStyleDraft === 'none'}
-              className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50 disabled:opacity-50"
-            >
-              <option value="none">Off</option>
-              {captionStyles
-                .filter((s) => s.id !== 'none')
-                .map((s) => (
-                  <option key={s.id} value={s.id}>{s.label}</option>
-                ))}
-            </select>
+            <div className="bg-[#1B2228] border border-white/5 rounded-lg px-2 py-1.5">
+              <CaptionStyleSelector
+                value={captionStyleDraft}
+                onChange={(v) => setCaptionStyle(v)}
+                showLabel={false}
+              />
+            </div>
             <p className="font-mono text-[9.5px] text-[#5A6268] tracking-wider mt-2 uppercase">
-              {captionsOn
-                ? `Active · ${captionStyles.find((c) => c.id === captionStyleDraft)?.label ?? 'default'}`
-                : 'Off · no captions will be burned in'}
+              {captionsOn ? 'Applies to every scene on export' : 'Off · no captions will be burned in'}
             </p>
           </section>
 
@@ -521,11 +540,11 @@ export default function Inspector({
           <button
             type="button"
             onClick={() => regenerateVideo(selectedSceneIndex)}
-            disabled={busy !== 'idle' || !scene.imageUrl}
+            disabled={busy !== 'idle' || videoRegenActive || !scene.imageUrl}
             className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] border border-white/10 text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {busy === 'regen' ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCw className="w-3 h-3" />}
-            Re-render video with new motion
+            {(busy === 'regen' || videoRegenActive) ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCw className="w-3 h-3" />}
+            {videoRegenActive ? 'Rendering video…' : 'Re-render video with new motion'}
           </button>
         </div>
       )}

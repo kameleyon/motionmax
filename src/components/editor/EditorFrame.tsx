@@ -119,15 +119,18 @@ export default function EditorFrame({
         </SheetContent>
       </Sheet>
 
-      {/* Mobile inspector drawer (right-side button on the topbar).
-          Scenes have no dedicated drawer on mobile — users tap the
-          stage frame to advance through scenes. */}
+      {/* Mobile inspector drawer. The Sheet primitive renders a close
+          button absolutely-positioned at top-4 right-4. We:
+          - push the close button higher (top-2 right-2 via &>button
+            selector) so it has more finger-room;
+          - drop the tab row down to pt-12 so the X never sits on top
+            of the SCENE / VOICE / CAPTIONS / MOTION tabs. */}
       <Sheet open={inspectorDrawerOpen} onOpenChange={setInspectorDrawerOpen}>
         <SheetContent
           side="right"
-          className="w-[320px] p-0 bg-[#10151A] border-white/10 lg:hidden [&>button]:text-[#ECEAE4]"
+          className="w-[320px] p-0 bg-[#10151A] border-white/10 lg:hidden [&>button]:text-[#ECEAE4] [&>button]:top-2 [&>button]:right-2 [&>button]:z-20"
         >
-          <div className="h-full overflow-y-auto pt-10">{inspector}</div>
+          <div className="h-full overflow-y-auto pt-12">{inspector}</div>
         </SheetContent>
       </Sheet>
       {void scenes /* unused on mobile by design */}

@@ -192,6 +192,52 @@ export async function handleRegenerateImage(
 
   console.log(`[RegenerateImage] Scene ${sceneIndex + 1} img ${targetImageIndex + 1}: ${imageUrl.substring(0, 80)}`);
 
+  // ── Auto-chain: after the primary image regen succeeds on a
+  // cinematic project, queue a video regen so the scene's video clip
+  // refreshes with the new image. Only runs for:
+  //   - cinematic projects (other types don't have per-scene video)
+  //   - targetImageIndex === 0 (the primary image)
+  //   - scenes that previously had a video (avoid queuing for scenes
+  //     whose video hasn't been produced yet — first-time generation
+  //     flow handles those).
+  //
+  // Wrapped in try/catch: if the enqueue fails we still return success
+  // for the image regen itself.
+  try {
+    const { data: proj } = await supabase
+      .from("projects")
+      .select("project_type")
+      .eq("id", projectId)
+      .maybeSingle();
+    const isCinematic = proj?.project_type === "cinematic";
+    const sceneHadVideo = !!scenes[sceneIndex]?.imageUrl; // guaranteed true now
+    if (isCinematic && targetImageIndex === 0 && sceneHadVideo && userId) {
+      const { error: chainErr } = await supabase
+        .from("video_generation_jobs")
+        .insert({
+          user_id: userId,
+          project_id: projectId,
+          task_type: "cinematic_video",
+          payload: {
+            generationId,
+            projectId,
+            sceneIndex,
+            regenerate: true,
+            _chainedFromImage: true,
+          },
+          status: "pending",
+        });
+      if (chainErr) {
+        console.warn(`[RegenerateImage] Auto-chain video regen failed (non-fatal): ${chainErr.message}`);
+      } else {
+        console.log(`[RegenerateImage] Auto-queued cinematic_video regen for scene ${sceneIndex + 1}`);
+      }
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[RegenerateImage] Auto-chain skipped (non-fatal): ${msg}`);
+  }
+
   return {
     success: true,
     sceneIndex,

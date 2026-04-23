@@ -531,7 +531,7 @@ export default function IntakeForm({
                     type="button"
                     onClick={() => setSourceAttachments((prev) => prev.filter((x) => x.id !== a.id))}
                     aria-label={`Remove ${a.name}`}
-                    className="text-[#8A9198] hover:text-[#E66666]"
+                    className="text-[#8A9198] hover:text-[#E4C875]"
                   >
                     ×
                   </button>

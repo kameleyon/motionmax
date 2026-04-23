@@ -99,6 +99,12 @@ function phaseFromGeneration(g: Generation | null): EditorPhase {
   return 'rendering';
 }
 
+/** Query key for the editor state. Exported so consumers (e.g. the
+ *  pipeline-completion hydrator in Editor.tsx) can write the cache
+ *  directly via `queryClient.setQueryData` without re-deriving the key. */
+export const editorStateKey = (projectId: string | null, userId: string | null | undefined) =>
+  ['editor-state', projectId, userId] as const;
+
 /** Single source of truth hook for the Editor page. Subscribes to
  *  realtime updates on `generations`, `projects`, and the per-project
  *  `video_generation_jobs` so the UI reflects every scene-level tick.
@@ -113,7 +119,7 @@ export function useEditorState(projectId: string | null): {
   const queryClient = useQueryClient();
 
   const query = useQuery({
-    queryKey: ['editor-state', projectId, user?.id],
+    queryKey: editorStateKey(projectId, user?.id),
     enabled: !!user && !!projectId,
     // Belt-and-suspenders on top of realtime. Supabase realtime can
     // drop INSERT events when the channel is mid-subscription — which
@@ -160,7 +166,30 @@ export function useEditorState(projectId: string | null): {
         console.warn('[useEditorState] generation fetch failed:', genErr.message);
       }
 
-      const scenes = normalizeScenes(generation?.scenes);
+      // Stale-complete race guard — if the row says status='complete'
+      // but `scenes` is null/empty/not-an-array, the worker is mid-flush
+      // (finalize wrote status before the jsonb UPDATE landed, OR a
+      // concurrent read-modify-write race with the atomic RPC fallback
+      // path blew away scenes temporarily). Prefer any previously-cached
+      // state over an empty "complete" snapshot so the UI doesn't jump
+      // from rendering → empty-ready → ready-with-scenes. Without this
+      // guard the Editor briefly paints "0 scenes" after finalize.
+      const rawScenes = generation?.scenes;
+      const isComplete = (generation?.status ?? '').toLowerCase() === 'complete';
+      const scenesLookEmpty = !Array.isArray(rawScenes) || rawScenes.length === 0;
+      if (isComplete && scenesLookEmpty) {
+        const prev = queryClient.getQueryData<EditorState>(
+          editorStateKey(projectId, user?.id),
+        );
+        if (prev && prev.scenes.length > 0) {
+          console.warn(
+            '[useEditorState] complete+empty scenes detected — keeping previous cache until next poll',
+          );
+          return prev;
+        }
+      }
+
+      const scenes = normalizeScenes(rawScenes);
       // Start from the real `intake_settings` column when present,
       // then merge in `scenes[0]._meta.intakeOverrides` — our silent
       // fallback store used when the prod DB hasn't run the
@@ -218,4 +247,64 @@ export function useEditorState(projectId: string | null): {
     isError: query.isError,
     refetch: query.refetch,
   };
+}
+
+/** Imperative hydrator — call this the moment `useGenerationPipeline`
+ *  reports `step === 'complete'`. The finalize job's result payload is
+ *  already in memory (the pipeline's in-hook `scenes`), so we can
+ *  paint the Editor immediately instead of waiting for the next poll
+ *  to re-read `generations.scenes` from Postgres. Mirrors what the
+ *  legacy workspaces did implicitly via `generationState.scenes`.
+ *
+ *  Safe across races:
+ *   - Returns early if pipelineScenes normalizes to empty so we never
+ *     write a worse "complete+empty" cache than the queryFn already
+ *     guards against.
+ *   - Merges over any existing cache (preserving project + intake +
+ *     aspect) so the next DB round-trip doesn't regress.
+ *   - Seeds a minimal cache with no project row if the first poll
+ *     hasn't landed yet — scenes render, other metadata fills in
+ *     asynchronously. */
+export function hydrateEditorStateFromPipeline(
+  queryClient: ReturnType<typeof useQueryClient>,
+  projectId: string,
+  userId: string | null | undefined,
+  pipelineScenes: unknown,
+): void {
+  const scenes = normalizeScenes(pipelineScenes);
+  if (scenes.length === 0) return;
+
+  const key = editorStateKey(projectId, userId);
+  const prev = queryClient.getQueryData<EditorState>(key);
+
+  const totalDurationMs = scenes.reduce(
+    (a, s) => a + (s.audioDurationMs ?? s.estDurationMs ?? 10_000),
+    0,
+  );
+
+  if (prev) {
+    const nextGeneration: Generation | null = prev.generation
+      ? ({ ...prev.generation, status: 'complete', progress: 100 } as Generation)
+      : prev.generation;
+    queryClient.setQueryData<EditorState>(key, {
+      ...prev,
+      generation: nextGeneration,
+      scenes,
+      phase: 'ready',
+      progress: 100,
+      totalDurationMs,
+    });
+    return;
+  }
+
+  queryClient.setQueryData<EditorState>(key, {
+    project: null,
+    generation: null,
+    scenes,
+    intake: {},
+    phase: 'ready',
+    progress: 100,
+    aspect: '16:9',
+    totalDurationMs,
+  });
 }

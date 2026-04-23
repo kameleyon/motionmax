@@ -56,9 +56,10 @@
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
-    /* Destructive - Red for errors */
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 100%;
+    /* Destructive - Gold (was red) — all destructive affordances render
+       in brand gold so error/warning chrome stays on-palette. */
+    --destructive: 45 67% 55%;
+    --destructive-foreground: 200 9% 10%;
 
     /* Success - Aqua (brand-aligned) */
     --success: 186 85% 35%;
@@ -134,9 +135,10 @@
     --warning: 38 92% 55%;
     --warning-foreground: 200 9% 10%;
 
-    /* Destructive - Red */
-    --destructive: 0 72% 55%;
-    --destructive-foreground: 0 0% 100%;
+    /* Destructive - Gold (was red) — dark-mode variant of the same
+       gold mapping used in light mode. */
+    --destructive: 45 67% 68%;
+    --destructive-foreground: 200 9% 10%;
 
     /* Success - Aqua (brand-aligned) */
     --success: 184 75% 55%;

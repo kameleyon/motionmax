@@ -175,7 +175,7 @@ export default function MiniSidebar() {
           </DropdownMenuItem>
           <DropdownMenuSeparator className="bg-white/10" />
           <DropdownMenuItem
-            className="cursor-pointer rounded-lg text-[#E66666] focus:bg-[#E66666]/10 focus:text-[#E66666]"
+            className="cursor-pointer rounded-lg text-[#E4C875] focus:bg-[#E4C875]/10 focus:text-[#E4C875]"
             onClick={handleSignOut}
           >
             <LogOut className="mr-2 h-4 w-4" />

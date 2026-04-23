@@ -285,20 +285,20 @@ export default function IntakeRail({
           />
           {/* Projected after this generation */}
           <div
-            className={`absolute inset-y-0 left-0 ${overBudget ? 'bg-[#E66666]' : 'bg-[#14C8CC]'}`}
+            className={`absolute inset-y-0 left-0 ${overBudget ? 'bg-[#E4C875]' : 'bg-[#14C8CC]'}`}
             style={{ width: `${afterPct}%` }}
           />
         </div>
 
         <div className="mt-2.5 flex items-baseline justify-between font-mono text-[10.5px] text-[#5A6268] tracking-wider">
           <span>This video</span>
-          <span className={overBudget ? 'text-[#E66666]' : 'text-[#ECEAE4]'}>
+          <span className={overBudget ? 'text-[#E4C875]' : 'text-[#ECEAE4]'}>
             {totalCost.toLocaleString()} cr
           </span>
         </div>
         <div className="flex items-baseline justify-between font-mono text-[10.5px] text-[#5A6268] tracking-wider">
           <span>After generate</span>
-          <span className={overBudget ? 'text-[#E66666]' : 'text-[#ECEAE4]'}>
+          <span className={overBudget ? 'text-[#E4C875]' : 'text-[#ECEAE4]'}>
             {afterGenerate.toLocaleString()} cr
           </span>
         </div>

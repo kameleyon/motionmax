@@ -421,8 +421,8 @@ export default function RightRail() {
               const display = getStatusDisplay(item);
               const dotColor =
                 display.state === 'active'  ? 'bg-[#14C8CC] animate-pulse shadow-[0_0_0_4px_rgba(20,200,204,0.3)]' :
-                display.state === 'done'    ? 'bg-[#5CD68D]' :
-                display.state === 'failed'  ? 'bg-[#E66666]' :
+                display.state === 'done'    ? 'bg-[#14C8CC]' :
+                display.state === 'failed'  ? 'bg-[#E4C875]' :
                                               'bg-[#5A6268]';
               return (
                 <a
@@ -435,7 +435,7 @@ export default function RightRail() {
                   <span className="flex-1 min-w-0 text-[12.5px] text-[#ECEAE4] whitespace-nowrap overflow-hidden text-ellipsis">
                     {item.projects?.title?.trim() || 'Untitled project'}
                   </span>
-                  <span className={`font-mono text-[10px] tracking-wider ${display.state === 'active' ? 'text-[#14C8CC]' : display.state === 'failed' ? 'text-[#E66666]' : 'text-[#5A6268]'}`}>
+                  <span className={`font-mono text-[10px] tracking-wider ${display.state === 'active' ? 'text-[#14C8CC]' : display.state === 'failed' ? 'text-[#E4C875]' : 'text-[#5A6268]'}`}>
                     {display.text}
                   </span>
                 </a>
@@ -527,7 +527,7 @@ export default function RightRail() {
             <div className="font-mono text-[10.5px] tracking-[0.18em] uppercase text-[#5A6268] font-sans">Total runtime</div>
           </div>
           <div>
-            <div className={`text-[28px] tracking-tight ${stats.weekDeltaPct >= 0 ? 'text-[#14C8CC]' : 'text-[#E66666]'}`}>
+            <div className={`text-[28px] tracking-tight ${stats.weekDeltaPct >= 0 ? 'text-[#14C8CC]' : 'text-[#E4C875]'}`}>
               {stats.weekDeltaPct >= 0 ? '+' : ''}{stats.weekDeltaPct}%
             </div>
             <div className="font-mono text-[10.5px] tracking-[0.18em] uppercase text-[#5A6268] font-sans">vs last week</div>

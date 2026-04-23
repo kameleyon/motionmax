@@ -178,8 +178,8 @@ export default function Pricing() {
 
             {/* Money-Back Guarantee */}
             <div className="flex items-center justify-center gap-2 mt-4">
-              <ShieldCheck className="h-4 w-4 text-green-600 dark:text-green-400" />
-              <span className="text-xs font-medium text-green-600 dark:text-green-400">
+              <ShieldCheck className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+              <span className="text-xs font-medium text-cyan-600 dark:text-cyan-400">
                 7-Day Money-Back Guarantee — No questions asked
               </span>
             </div>
@@ -199,19 +199,19 @@ export default function Pricing() {
           {/* Trust badges */}
           <div className="flex flex-wrap items-center justify-center gap-6 mt-6 mb-2">
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <ShieldCheck className="h-4 w-4 text-green-500" />
+              <ShieldCheck className="h-4 w-4 text-cyan-500" />
               7-Day Money-Back Guarantee
             </span>
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Lock className="h-4 w-4 text-green-500" />
+              <Lock className="h-4 w-4 text-cyan-500" />
               SSL / TLS encrypted
             </span>
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <CreditCard className="h-4 w-4 text-green-500" />
+              <CreditCard className="h-4 w-4 text-cyan-500" />
               Powered by Stripe
             </span>
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <RefreshCcw className="h-4 w-4 text-green-500" />
+              <RefreshCcw className="h-4 w-4 text-cyan-500" />
               Cancel anytime
             </span>
           </div>

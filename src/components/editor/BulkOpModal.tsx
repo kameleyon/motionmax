@@ -154,8 +154,8 @@ export default function BulkOpModal({
 
         <div className="relative flex flex-col items-center gap-4">
           {/* REC pill */}
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#E66666]/10 border border-[#E66666]/30 font-mono text-[9px] tracking-[0.16em] uppercase text-[#E66666]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#E66666] animate-pulse" />
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#E4C875]/10 border border-[#E4C875]/30 font-mono text-[9px] tracking-[0.16em] uppercase text-[#E4C875]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#E4C875] animate-pulse" />
             REC · {startedAt ? formatElapsed(startedAt) : '00:00'}
           </div>
 

@@ -303,7 +303,7 @@ export default function Sidebar() {
             <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
           </button>
           <div className="bg-white/5 h-px my-1 mx-3" />
-          <button onClick={handleSignOut} className="w-full flex items-center gap-2.5 px-3 py-2 my-px rounded-lg text-[13.5px] text-[#E66666] hover:bg-[#E66666]/10 cursor-pointer transition-colors" style={{ textDecoration: 'none' }}>
+          <button onClick={handleSignOut} className="w-full flex items-center gap-2.5 px-3 py-2 my-px rounded-lg text-[13.5px] text-[#E4C875] hover:bg-[#E4C875]/10 cursor-pointer transition-colors" style={{ textDecoration: 'none' }}>
             <LogOut className="w-4 h-4 opacity-85" />
             <span>Log Out</span>
           </button>
@@ -417,7 +417,7 @@ export default function Sidebar() {
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-white/10" />
             <DropdownMenuItem
-              className="cursor-pointer rounded-lg text-[#E66666] focus:bg-[#E66666]/10 focus:text-[#E66666]"
+              className="cursor-pointer rounded-lg text-[#E4C875] focus:bg-[#E4C875]/10 focus:text-[#E4C875]"
               onClick={handleSignOut}
             >
               <LogOut className="mr-2 h-4 w-4" />

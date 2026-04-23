@@ -147,7 +147,7 @@ export default function EditorFrame({
   }
 
   const offlineBanner = !online ? (
-    <div className="w-full bg-[#E66666]/15 border-b border-[#E66666]/30 text-[#F2B4B4] text-[11.5px] font-mono tracking-wider uppercase px-3 py-1.5 flex items-center justify-center gap-2">
+    <div className="w-full bg-[#E4C875]/15 border-b border-[#E4C875]/30 text-[#F2E2B4] text-[11.5px] font-mono tracking-wider uppercase px-3 py-1.5 flex items-center justify-center gap-2">
       <WifiOff className="w-3.5 h-3.5" />
       You're offline — new edits + regens will retry when the connection returns.
     </div>

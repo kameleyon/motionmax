@@ -51,8 +51,8 @@ export default function EditorTopBar({
       : 'Cinematic';
 
   const savePill = {
-    idle:   { text: '● Auto-saved', color: 'text-[#5CD68D]' },
-    saved:  { text: '● Auto-saved', color: 'text-[#5CD68D]' },
+    idle:   { text: '● Auto-saved', color: 'text-[#14C8CC]' },
+    saved:  { text: '● Auto-saved', color: 'text-[#14C8CC]' },
     saving: { text: '● Saving…',    color: 'text-[#14C8CC]' },
     dirty:  { text: '● Unsaved',    color: 'text-[#E4C875]' },
   }[saveStatus];

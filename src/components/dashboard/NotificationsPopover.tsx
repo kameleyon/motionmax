@@ -100,7 +100,7 @@ export default function NotificationsPopover() {
         >
           <Bell className="w-4 h-4" />
           {unreadCount > 0 && (
-            <span className="absolute top-0.5 right-0.5 min-w-[14px] h-[14px] px-1 rounded-full bg-[#E66666] text-white text-[9px] font-semibold grid place-items-center border border-[#0A0D0F]">
+            <span className="absolute top-0.5 right-0.5 min-w-[14px] h-[14px] px-1 rounded-full bg-[#E4C875] text-white text-[9px] font-semibold grid place-items-center border border-[#0A0D0F]">
               {unreadCount > 9 ? '9+' : unreadCount}
             </span>
           )}
@@ -138,8 +138,8 @@ export default function NotificationsPopover() {
                   className="w-full text-left px-4 py-3 flex items-start gap-2.5 hover:bg-white/5 transition-colors border-b border-white/5 last:border-b-0"
                 >
                   {failed
-                    ? <XCircle className="w-4 h-4 text-[#E66666] shrink-0 mt-0.5" />
-                    : <CheckCircle2 className="w-4 h-4 text-[#5CD68D] shrink-0 mt-0.5" />}
+                    ? <XCircle className="w-4 h-4 text-[#E4C875] shrink-0 mt-0.5" />
+                    : <CheckCircle2 className="w-4 h-4 text-[#14C8CC] shrink-0 mt-0.5" />}
                   <div className="flex-1 min-w-0">
                     <div className="text-[12.5px] text-[#ECEAE4] truncate">
                       {failed ? 'Render failed' : 'Render complete'}

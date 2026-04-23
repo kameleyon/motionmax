@@ -294,7 +294,7 @@ export default function Dashboard() {
                       aria-label="Copy referral link"
                     >
                       {linkCopied ? (
-                        <><Check className="h-3.5 w-3.5 text-green-500" /><span className="text-xs">Copied</span></>
+                        <><Check className="h-3.5 w-3.5 text-cyan-500" /><span className="text-xs">Copied</span></>
                       ) : (
                         <><Copy className="h-3.5 w-3.5" /><span className="text-xs">Copy</span></>
                       )}

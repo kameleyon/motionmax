@@ -618,7 +618,7 @@ export default function Stage({
         {/* Error overlay */}
         {state.phase === 'error' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-[8%] bg-black/55">
-            <div className="font-serif text-[20px] font-medium text-[#E66666]">
+            <div className="font-serif text-[20px] font-medium text-[#E4C875]">
               Generation failed
             </div>
             <div className="font-mono text-[11px] text-[#8A9198] tracking-wider uppercase">

@@ -148,7 +148,7 @@ export default function ShareModal({
                 type="button"
                 onClick={handleRevoke}
                 disabled={loading}
-                className="uppercase text-[#E66666] hover:text-[#F27B7B] disabled:opacity-50"
+                className="uppercase text-[#E4C875] hover:text-[#F2D47B] disabled:opacity-50"
               >
                 Revoke
               </button>

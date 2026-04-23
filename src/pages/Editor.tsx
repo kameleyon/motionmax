@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { useEditorState } from '@/hooks/useEditorState';
+import { useEditorState, hydrateEditorStateFromPipeline } from '@/hooks/useEditorState';
 import EditorFrame from '@/components/editor/EditorFrame';
 import type { SubView } from '@/components/editor/EditorTopBar';
 import Stage from '@/components/editor/Stage';
@@ -172,31 +172,21 @@ export default function Editor() {
     setParams(next, { replace: true });
   };
 
-  // Aggressive probe while stuck on the awaiting screen. React
-  // Query's own refetch mechanisms (staleTime: 0, refetchInterval,
-  // invalidateQueries) have been provably unreliable here — multiple
-  // users have sat on "Creating your content… 2%" for minutes after
-  // the worker finished. We stop trusting the library and go raw.
-  //
-  // Every 2s while waiting:
-  //   1. Raw Supabase select on BOTH projects and generations,
-  //      using the same authed client but bypassing React Query.
-  //   2. If project.status is 'complete' OR a generation row exists,
-  //      we know the data is ready. `resetQueries` wipes the cache
-  //      entirely (more aggressive than invalidate) and forces a
-  //      fresh refetch.
-  //   3. Last-resort: if we've been stuck >15s AND project.status
-  //      is complete, hard-reload the page. Proven to work from
-  //      earlier testing — user had to manually refresh each time
-  //      to unstick. Now we do it for them.
-  const stuckSinceRef = useRef<number | null>(null);
+  // Aggressive probe while stuck on the awaiting screen. React Query's
+  // own refetch mechanisms (staleTime: 0, refetchInterval,
+  // invalidateQueries) can race against Supabase realtime handshakes,
+  // leaving the UI sitting on "Creating your content… 2%" after the
+  // generation row has actually been inserted. Every 2s while waiting,
+  // we do a raw select on `projects` + `generations` and, if a
+  // generation row exists, wipe the React Query cache (resetQueries
+  // removes the entry entirely, more aggressive than invalidate) so
+  // the next access re-runs queryFn from scratch. No hard reload — the
+  // pipeline-hydrator in the pipelineStep effect above paints scenes
+  // the moment finalize returns, so there's no "stuck after complete"
+  // case left to paper over.
   useEffect(() => {
     const waiting = !!state?.project && !state?.generation && !!projectId && !!user;
-    if (!waiting) {
-      stuckSinceRef.current = null;
-      return;
-    }
-    if (stuckSinceRef.current === null) stuckSinceRef.current = Date.now();
+    if (!waiting) return;
     let cancelled = false;
     const probe = async () => {
       if (cancelled) return;
@@ -225,28 +215,12 @@ export default function Editor() {
           projectStatus: projStatus ?? 'none',
           generationFound: !!genRow,
           generationStatus: genRow ? (genRow as { status?: string }).status : 'n/a',
-          stuckForMs: stuckSinceRef.current ? Date.now() - stuckSinceRef.current : 0,
         });
 
         if (genRow || projStatus === 'complete') {
-          // Wipe cache and force fresh fetch. resetQueries is more
-          // aggressive than invalidateQueries — removes the cache
-          // entry entirely so the next access re-runs queryFn from
-          // scratch, no chance of a stale successful result hanging on.
           await queryClient.resetQueries({ queryKey: ['editor-state', projectId] });
           await queryClient.resetQueries({ queryKey: ['active-jobs', projectId] });
           void refetchEditor();
-
-          // Nuclear option: if we've been stuck > 15s despite the
-          // row existing, the React Query refetch isn't working.
-          // Just reload the page. Users confirmed earlier that a
-          // manual refresh always unsticks the UI — this does it
-          // automatically so they don't have to.
-          const stuckMs = stuckSinceRef.current ? Date.now() - stuckSinceRef.current : 0;
-          if (stuckMs > 15000) {
-            log.warn('[Editor] stuck > 15s with completed data — hard reload');
-            window.location.reload();
-          }
         }
       } catch (err) {
         log.warn('[Editor] raw probe threw', { error: err instanceof Error ? err.message : String(err) });
@@ -267,22 +241,36 @@ export default function Editor() {
   void forceRefresh;
 
   // When the pipeline hook reports completion, stop trusting the DB
-  // poll to catch up. This fires the same moment the legacy workspaces
-  // flipped to "done" — we just invalidate the editor-state query so
-  // useEditorState's queryFn re-runs and pulls the now-committed
-  // generation row. The Stage overlay is already dismissed via the
-  // `pipelineDone` prop (passed below), so the user sees the ready
-  // editor immediately; the refetch just ensures the scene list /
-  // video URLs hydrate as soon as the worker flushed them.
+  // poll to catch up. The finalize job's result payload already lives
+  // in `pipelineState.scenes` (see useGenerationPipeline →
+  // runUnifiedPipeline), so we hydrate the editor-state cache directly
+  // from that in-memory value. This mirrors what the legacy workspaces
+  // did implicitly (`generationState.scenes` was the source of truth
+  // for SmartFlowResult / CinematicResult) and eliminates the "0 scenes
+  // after complete" flash that the previous invalidate-only path left
+  // open whenever React Query polled a jsonb column mid-flush.
+  //
+  // After hydrating, we STILL invalidate so the full generation row /
+  // intake_settings / project metadata catches up on the next tick.
   const pipelineStep = pipelineState.step;
+  const pipelineScenes = pipelineState.scenes;
   useEffect(() => {
     if (pipelineStep !== 'complete') return;
+    if (!projectId) return;
+
+    // Paint scenes RIGHT NOW from the pipeline's in-memory result.
+    if (pipelineScenes && pipelineScenes.length > 0) {
+      hydrateEditorStateFromPipeline(queryClient, projectId, user?.id, pipelineScenes);
+    }
+
+    // Kick the DB round-trip to fill in anything the pipeline didn't
+    // carry (project.intake_settings, generation row metadata, etc.).
     void (async () => {
       await queryClient.invalidateQueries({ queryKey: ['editor-state', projectId] });
       await queryClient.invalidateQueries({ queryKey: ['active-jobs', projectId] });
       await refetchEditor();
     })();
-  }, [pipelineStep, projectId, queryClient, refetchEditor]);
+  }, [pipelineStep, pipelineScenes, projectId, user?.id, queryClient, refetchEditor]);
 
   const [playing, setPlaying] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -311,7 +299,7 @@ export default function Editor() {
     return (
       <div className="h-screen grid place-items-center bg-[#0A0D0F] text-[#ECEAE4]">
         <div className="text-center max-w-[320px]">
-          <div className="font-serif text-[22px] text-[#E66666] mb-2">Project not found</div>
+          <div className="font-serif text-[22px] text-[#E4C875] mb-2">Project not found</div>
           <p className="text-[13px] text-[#8A9198] mb-4">
             This project may have been deleted, or you don't have access to it.
           </p>
@@ -336,7 +324,7 @@ export default function Editor() {
     return (
       <div className="h-screen grid place-items-center bg-[#0A0D0F] text-[#ECEAE4]">
         <div className="text-center max-w-[420px] px-6">
-          <div className="font-serif text-[22px] text-[#E66666] mb-2">Couldn't start generation</div>
+          <div className="font-serif text-[22px] text-[#E4C875] mb-2">Couldn't start generation</div>
           <p className="text-[13px] text-[#8A9198] mb-4">
             The script job failed to queue — this is usually a credits or auth issue. Check the toast for details.
           </p>

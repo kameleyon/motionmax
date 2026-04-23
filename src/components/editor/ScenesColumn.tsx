@@ -16,12 +16,12 @@ const STATUS_LABEL: Record<EditorScene['status'], string> = {
 };
 
 const STATUS_CLASS: Record<EditorScene['status'], string> = {
-  done:   'text-[#5CD68D] bg-[#5CD68D]/10',
+  done:   'text-[#14C8CC] bg-[#14C8CC]/14',
   render: 'text-[#14C8CC] bg-[#14C8CC]/14',
   image:  'text-[#14C8CC] bg-[#14C8CC]/14',
   audio:  'text-[#14C8CC] bg-[#14C8CC]/14',
   queue:  'text-[#8A9198] bg-[#1B2228]',
-  fail:   'text-[#E66666] bg-[#E66666]/10',
+  fail:   'text-[#E4C875] bg-[#E4C875]/10',
 };
 
 function formatSceneDuration(scene: EditorScene): string {

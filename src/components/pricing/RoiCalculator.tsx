@@ -124,9 +124,9 @@ export default function RoiCalculator() {
                 ${result.costPerVideo.toFixed(2)}/video
               </p>
             </div>
-            <div className="rounded-lg bg-green-500/5 border border-green-500/30 p-3">
-              <p className="text-xs uppercase tracking-wider text-green-600 dark:text-green-400 mb-1">You Save</p>
-              <p className="text-lg sm:text-xl font-bold text-green-600 dark:text-green-400 flex items-center justify-center gap-1">
+            <div className="rounded-lg bg-cyan-500/5 border border-cyan-500/30 p-3">
+              <p className="text-xs uppercase tracking-wider text-cyan-600 dark:text-cyan-400 mb-1">You Save</p>
+              <p className="text-lg sm:text-xl font-bold text-cyan-600 dark:text-cyan-400 flex items-center justify-center gap-1">
                 <TrendingDown className="h-4 w-4" />
                 {result.savingsPercent}%
               </p>

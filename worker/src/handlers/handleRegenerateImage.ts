@@ -172,13 +172,23 @@ export async function handleRegenerateImage(
     scenes[sceneIndex].imageUrls = [imageUrl];
   }
 
-  // Clear the stale videoUrl — it was generated from the old image.
-  // The export will use the new imageUrl + audioUrl to build the clip.
-  // Use null (not undefined) so the key is explicitly set in the JSON column.
-  if (scenes[sceneIndex].videoUrl) {
+  // Clear stale videoUrls invalidated by this image change. LEGACY
+  // logic (useCinematicRegeneration.applyImageEdit / regenerateImage):
+  //   - scene N:   its video's FIRST frame was this image → stale.
+  //   - scene N-1: its video's END frame (transition to next scene)
+  //                was this image → stale.
+  // Both get cleared + both get video regen queued below.
+  if (scenes[sceneIndex]?.videoUrl) {
     console.log(`[RegenerateImage] Clearing stale videoUrl for scene ${sceneIndex + 1}`);
     scenes[sceneIndex].videoUrl = null;
     scenes[sceneIndex].videoPredictionId = null;
+  }
+  const prevIndex = sceneIndex - 1;
+  const prevHasVideo = prevIndex >= 0 && !!scenes[prevIndex]?.videoUrl;
+  if (prevHasVideo) {
+    console.log(`[RegenerateImage] Clearing stale videoUrl for previous scene ${prevIndex + 1} (its end-frame transition uses this image)`);
+    scenes[prevIndex].videoUrl = null;
+    scenes[prevIndex].videoPredictionId = null;
   }
 
   await supabase.from("generations").update({ scenes }).eq("id", generationId);
@@ -192,17 +202,16 @@ export async function handleRegenerateImage(
 
   console.log(`[RegenerateImage] Scene ${sceneIndex + 1} img ${targetImageIndex + 1}: ${imageUrl.substring(0, 80)}`);
 
-  // ── Auto-chain: after the primary image regen succeeds on a
-  // cinematic project, queue a video regen so the scene's video clip
-  // refreshes with the new image. Only runs for:
-  //   - cinematic projects (other types don't have per-scene video)
-  //   - targetImageIndex === 0 (the primary image)
-  //   - scenes that previously had a video (avoid queuing for scenes
-  //     whose video hasn't been produced yet — first-time generation
-  //     flow handles those).
+  // ── Auto-chain (LEGACY regenAffectedVideos logic): after a
+  // cinematic primary-image regen, queue video re-renders for every
+  // scene whose video was just invalidated:
+  //   - THIS scene (its video's first frame changed)
+  //   - PREVIOUS scene (its video's end-frame transition used this
+  //     image). First scene (sceneIndex===0) has no previous and
+  //     gets skipped; last scene works normally (just one affected).
   //
-  // Wrapped in try/catch: if the enqueue fails we still return success
-  // for the image regen itself.
+  // Each queue is wrapped in its own try/catch so one failure doesn't
+  // nuke the other. Image regen itself still returns success.
   try {
     const { data: proj } = await supabase
       .from("projects")
@@ -210,27 +219,41 @@ export async function handleRegenerateImage(
       .eq("id", projectId)
       .maybeSingle();
     const isCinematic = proj?.project_type === "cinematic";
-    const sceneHadVideo = !!scenes[sceneIndex]?.imageUrl; // guaranteed true now
-    if (isCinematic && targetImageIndex === 0 && sceneHadVideo && userId) {
-      const { error: chainErr } = await supabase
-        .from("video_generation_jobs")
-        .insert({
-          user_id: userId,
-          project_id: projectId,
-          task_type: "cinematic_video",
-          payload: {
-            generationId,
-            projectId,
-            sceneIndex,
-            regenerate: true,
-            _chainedFromImage: true,
-          },
-          status: "pending",
-        });
-      if (chainErr) {
-        console.warn(`[RegenerateImage] Auto-chain video regen failed (non-fatal): ${chainErr.message}`);
-      } else {
-        console.log(`[RegenerateImage] Auto-queued cinematic_video regen for scene ${sceneIndex + 1}`);
+    if (isCinematic && targetImageIndex === 0 && userId) {
+      // Indices whose videos were just invalidated above.
+      const affected: number[] = [];
+      if (scenes[sceneIndex]) affected.push(sceneIndex);
+      if (prevIndex >= 0 && scenes[prevIndex]) affected.push(prevIndex);
+
+      for (const idx of affected) {
+        try {
+          const { error: chainErr } = await supabase
+            .from("video_generation_jobs")
+            .insert({
+              user_id: userId,
+              project_id: projectId,
+              task_type: "cinematic_video",
+              payload: {
+                generationId,
+                projectId,
+                sceneIndex: idx,
+                regenerate: true,
+                _chainedFromImage: true,
+                _reason: idx === sceneIndex
+                  ? "scene-image-changed"
+                  : "prev-scene-end-frame-changed",
+              },
+              status: "pending",
+            });
+          if (chainErr) {
+            console.warn(`[RegenerateImage] Auto-chain video regen for scene ${idx + 1} failed (non-fatal): ${chainErr.message}`);
+          } else {
+            console.log(`[RegenerateImage] Auto-queued cinematic_video regen for scene ${idx + 1}${idx === sceneIndex ? "" : " (previous-scene end-frame refresh)"}`);
+          }
+        } catch (queueErr) {
+          const qm = queueErr instanceof Error ? queueErr.message : String(queueErr);
+          console.warn(`[RegenerateImage] Auto-chain scene ${idx + 1} threw (non-fatal): ${qm}`);
+        }
       }
     }
   } catch (err) {

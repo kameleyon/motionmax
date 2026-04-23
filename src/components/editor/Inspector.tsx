@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { RotateCw, Loader2, Video, Image as ImageIcon, Wand2, Lock, UserPlus, AudioLines, Square } from 'lucide-react';
+import { RotateCw, Loader2, Video, Image as ImageIcon, Wand2, Lock, UserPlus, AudioLines, Square, Undo2, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
@@ -8,6 +8,8 @@ import {
   type SpeakerVoice,
 } from '@/components/workspace/SpeakerSelector';
 import { CaptionStyleSelector, type CaptionStyle } from '@/components/workspace/CaptionStyleSelector';
+import { SceneVersionHistory } from '@/components/workspace/SceneVersionHistory';
+import { useSceneVersionCount } from '@/hooks/useSceneVersions';
 import { useActiveJobs } from './useActiveJobs';
 import type { EditorState } from '@/hooks/useEditorState';
 import { useSceneRegen } from './useSceneRegen';
@@ -50,13 +52,25 @@ export default function Inspector({
   const scene = state.scenes[selectedSceneIndex];
   const {
     busy, apply, regenerate, regenerateImage, regenerateVideo, regenerateAudio,
-    updateSceneMeta, updateProjectVoice, updateIntakeSettings,
+    undoLastRegen,
+    updateSceneMeta, updateAllScenesMeta, updateProjectVoice, updateIntakeSettings,
   } = useSceneRegen(state);
   const { tasksForScene, bulkAudioRegenActive } = useActiveJobs(state.project?.id ?? null);
   const sceneTasks = tasksForScene(selectedSceneIndex);
   const imageRegenActive = sceneTasks.has('regenerate_image') || sceneTasks.has('cinematic_image');
   const videoRegenActive = sceneTasks.has('cinematic_video');
   const audioRegenActive = sceneTasks.has('regenerate_audio');
+
+  // While ANY regen is active for this scene, lock the panel so the
+  // user can't queue a conflicting edit on top of a pending write-back.
+  const sceneLocked = imageRegenActive || videoRegenActive || audioRegenActive;
+  const projectType = state.project?.project_type ?? 'cinematic';
+  const isCinematic = projectType === 'cinematic';
+  const isExplainer = projectType === 'doc2video';
+
+  // Version history modal
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const { data: versionCount = 0 } = useSceneVersionCount(state.generation?.id, selectedSceneIndex);
 
   const [promptDraft, setPromptDraft] = useState(scene?.visualPrompt ?? '');
   useEffect(() => {
@@ -157,7 +171,7 @@ export default function Inspector({
   const sceneReady = state.phase !== 'rendering' && !!scene;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full relative">
       {/* Tabs */}
       <div className="flex border-b border-white/5">
         {(['scene', 'voice', 'captions', 'motion'] as InspectorTab[]).map((t) => (
@@ -176,6 +190,34 @@ export default function Inspector({
           </button>
         ))}
       </div>
+
+      {/* Version-history toolbar — only visible post-render. Undo button
+          walks the scene back one step; History button opens the
+          SceneVersionHistory modal with every past state. */}
+      {!disabled && scene && state.generation && state.project && versionCount > 0 && (
+        <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-white/5 bg-[#10151A]/60">
+          <button
+            type="button"
+            onClick={() => undoLastRegen(selectedSceneIndex)}
+            disabled={busy !== 'idle' || sceneLocked}
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10.5px] font-mono tracking-wider text-[#8A9198] hover:text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed uppercase"
+            title="Restore this scene to its previous version"
+          >
+            {busy === 'regen' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Undo2 className="w-3 h-3" />}
+            Undo
+          </button>
+          <button
+            type="button"
+            onClick={() => setHistoryOpen(true)}
+            disabled={busy !== 'idle' || sceneLocked}
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10.5px] font-mono tracking-wider text-[#8A9198] hover:text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-40 uppercase ml-auto"
+            title="Browse all past versions of this scene"
+          >
+            <History className="w-3 h-3" />
+            History ({versionCount})
+          </button>
+        </div>
+      )}
 
       {disabled && (
         <div className="flex-1 flex items-center justify-center p-6">
@@ -528,33 +570,74 @@ export default function Inspector({
         </div>
       )}
 
-      {/* MOTION TAB — per-scene motion + transition to next scene */}
+      {/* MOTION TAB — per-scene motion + transition to next scene.
+          Camera motion is CINEMATIC-only (explainer/smartflow scenes
+          are still images with transitions, no per-shot camera
+          movement). Both cinematic + explainer get the transition
+          picker because they share the scene-concat export step. */}
       {!disabled && tab === 'motion' && sceneReady && scene && (
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5">
-          <section>
-            <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">Camera motion</h5>
-            <div className="inline-flex rounded-lg border border-white/5 bg-[#1B2228] p-[2px] gap-[2px] w-full">
-              {MOTION_OPTIONS.map((m) => (
+          {isCinematic ? (
+            <section>
+              <div className="flex items-baseline justify-between mb-2">
+                <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Camera motion</h5>
                 <button
-                  key={m}
                   type="button"
-                  onClick={() => updateSceneMeta(selectedSceneIndex, { motion: m })}
-                  className={cn(
-                    'flex-1 px-2 py-1.5 font-mono text-[10.5px] tracking-wider rounded-md transition-colors',
-                    m === motion ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'text-[#8A9198] hover:text-[#ECEAE4]',
-                  )}
+                  onClick={async () => {
+                    const ok = await updateAllScenesMeta({ motion });
+                    if (ok) toast.success(`Camera motion "${motion}" applied to all ${state.scenes.length} scenes.`);
+                  }}
+                  disabled={busy !== 'idle'}
+                  className="font-mono text-[9.5px] tracking-wider uppercase text-[#14C8CC] hover:text-[#ECEAE4] transition-colors disabled:opacity-40"
+                  title="Use this camera motion on every scene"
                 >
-                  {m}
+                  Apply to all
                 </button>
-              ))}
-            </div>
-            <p className="text-[11.5px] text-[#8A9198] leading-[1.5] mt-2">
-              Injected into the Kling prompt on the next video regeneration.
-            </p>
-          </section>
+              </div>
+              <div className="inline-flex rounded-lg border border-white/5 bg-[#1B2228] p-[2px] gap-[2px] w-full">
+                {MOTION_OPTIONS.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => updateSceneMeta(selectedSceneIndex, { motion: m })}
+                    className={cn(
+                      'flex-1 px-2 py-1.5 font-mono text-[10.5px] tracking-wider rounded-md transition-colors',
+                      m === motion ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'text-[#8A9198] hover:text-[#ECEAE4]',
+                    )}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11.5px] text-[#8A9198] leading-[1.5] mt-2">
+                Injected into the Kling prompt on the next video regeneration. "Apply to all" sets this motion on every scene.
+              </p>
+            </section>
+          ) : (
+            <section>
+              <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">Camera motion</h5>
+              <p className="text-[11.5px] text-[#8A9198] leading-[1.5]">
+                Camera motion is a Cinematic-only feature. {isExplainer ? 'Explainer scenes' : 'Smart Flow scenes'} use scene transitions below instead.
+              </p>
+            </section>
+          )}
 
           <section>
-            <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">Transition to next scene</h5>
+            <div className="flex items-baseline justify-between mb-2">
+              <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Transition to next scene</h5>
+              <button
+                type="button"
+                onClick={async () => {
+                  const ok = await updateAllScenesMeta({ transition });
+                  if (ok) toast.success(`Transition "${transition}" applied to all ${state.scenes.length} scenes.`);
+                }}
+                disabled={busy !== 'idle'}
+                className="font-mono text-[9.5px] tracking-wider uppercase text-[#14C8CC] hover:text-[#ECEAE4] transition-colors disabled:opacity-40"
+                title="Use this transition on every scene boundary"
+              >
+                Apply to all
+              </button>
+            </div>
             <div className="inline-flex rounded-lg border border-white/5 bg-[#1B2228] p-[2px] gap-[2px] w-full">
               {TRANSITION_OPTIONS.map((t) => (
                 <button
@@ -575,15 +658,17 @@ export default function Inspector({
             </p>
           </section>
 
-          <button
-            type="button"
-            onClick={() => regenerateVideo(selectedSceneIndex)}
-            disabled={busy !== 'idle' || videoRegenActive || !scene.imageUrl}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] border border-white/10 text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {(busy === 'regen' || videoRegenActive) ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCw className="w-3 h-3" />}
-            {videoRegenActive ? 'Rendering video…' : 'Re-render video with new motion'}
-          </button>
+          {isCinematic && (
+            <button
+              type="button"
+              onClick={() => regenerateVideo(selectedSceneIndex)}
+              disabled={busy !== 'idle' || videoRegenActive || !scene.imageUrl}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] border border-white/10 text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {(busy === 'regen' || videoRegenActive) ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCw className="w-3 h-3" />}
+              {videoRegenActive ? 'Rendering video…' : 'Re-render video with new motion'}
+            </button>
+          )}
         </div>
       )}
 
@@ -593,6 +678,32 @@ export default function Inspector({
             Select a scene on the left to edit its prompt, voice, or captions.
           </div>
         </div>
+      )}
+
+      {/* Scene regen lock — while the current scene has any in-flight
+          job, overlay the whole panel with a translucent shield so no
+          second edit can race the worker's write-back. */}
+      {sceneLocked && (
+        <div className="absolute inset-0 z-10 bg-[#0A0D0F]/65 backdrop-blur-[1px] grid place-items-center pointer-events-auto">
+          <div className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-[#10151A]/95 border border-[#14C8CC]/40 shadow-lg">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#14C8CC]" />
+            <span className="font-mono text-[11px] tracking-wider uppercase text-[#14C8CC]">
+              Scene regenerating · edits locked
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Version history modal */}
+      {historyOpen && state.generation && state.project && scene && (
+        <SceneVersionHistory
+          generationId={state.generation.id}
+          projectId={state.project.id}
+          sceneIndex={selectedSceneIndex}
+          sceneName={scene.title || `Scene ${selectedSceneIndex + 1}`}
+          onClose={() => setHistoryOpen(false)}
+          onVersionRestored={() => { setHistoryOpen(false); }}
+        />
       )}
     </div>
   );

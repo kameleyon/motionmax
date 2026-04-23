@@ -99,5 +99,12 @@ export function useActiveJobs(projectId: string | null | undefined) {
    *  job. Used for the "Update all" bulk loader. */
   const bulkAudioRegenActive = jobs.filter((j) => j.taskType === 'regenerate_audio').length > 1;
 
-  return { jobs, tasksForScene, bulkAudioRegenActive };
+  /** Any regen of any kind running anywhere in the project. Used to
+   *  lock the timeline clips + Inspector tabs so the user can't
+   *  layer a new change onto a scene while its previous regen is
+   *  still in flight (the second change would silently lose to the
+   *  first worker's write-back). */
+  const anyRegenActive = jobs.length > 0;
+
+  return { jobs, tasksForScene, bulkAudioRegenActive, anyRegenActive };
 }

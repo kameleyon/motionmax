@@ -195,6 +195,36 @@ export function useSceneRegen(state: EditorState | null) {
     return true;
   }, [state?.generation]);
 
+  /** Walk scene[index] back one step via the worker's undo handler.
+   *  Matches legacy useCinematicRegeneration.undoRegeneration. */
+  const undoLastRegen = useCallback(async (index: number) => {
+    if (!user || !state?.generation || !state?.project) return;
+    setBusy('regen');
+    try {
+      const { error } = await supabase
+        .from('video_generation_jobs')
+        .insert({
+          user_id: user.id,
+          project_id: state.project.id,
+          task_type: 'undo_regeneration',
+          payload: {
+            generationId: state.generation.id,
+            projectId: state.project.id,
+            sceneIndex: index,
+          } as unknown as never,
+          status: 'pending',
+        });
+      if (error) throw new Error(error.message);
+      toast.success('Undo queued — restoring previous version.');
+      scheduleRefresh(state.project.id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Undo failed: ${msg}`);
+    } finally {
+      setBusy('idle');
+    }
+  }, [user, state, scheduleRefresh]);
+
   const regenerateAudio = useCallback(async (index: number, nextVoiceover?: string) => {
     if (!user || !state?.generation || !state?.project) return;
     setBusy('regen');
@@ -294,6 +324,25 @@ export function useSceneRegen(state: EditorState | null) {
     }
   }, [user, state]);
 
+  /** Shallow-merge `patch` into `scenes[i]._meta` for EVERY scene in
+   *  one write. Used by the Motion tab's "Apply to all scenes" button
+   *  when the user wants the same camera motion / transition across
+   *  the whole video. */
+  const updateAllScenesMeta = useCallback(async (patch: Record<string, unknown>) => {
+    if (!state?.generation) return false;
+    const scenes = (state.generation.scenes as Array<Record<string, unknown>> | null) ?? [];
+    const patched = scenes.map((s) => {
+      const meta = (s._meta as Record<string, unknown> | undefined) ?? {};
+      return { ...s, _meta: { ...meta, ...patch } };
+    });
+    const { error } = await supabase
+      .from('generations')
+      .update({ scenes: patched as unknown as never })
+      .eq('id', state.generation.id);
+    if (error) { toast.error(`Couldn't save: ${error.message}`); return false; }
+    return true;
+  }, [state?.generation]);
+
   /** Merge a patch into `projects.intake_settings`, with a fallback
    *  to `generations.scenes[0]._meta.intakeOverrides` when that column
    *  hasn't been migrated into the live DB yet. The fallback keeps
@@ -358,7 +407,9 @@ export function useSceneRegen(state: EditorState | null) {
     regenerateImage,
     regenerateVideo,
     regenerateAudio,
+    undoLastRegen,
     updateSceneMeta,
+    updateAllScenesMeta,
     updateSceneVoiceover,
     updateProjectVoice,
     updateIntakeSettings,

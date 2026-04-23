@@ -225,34 +225,38 @@ export async function handleRegenerateImage(
       if (scenes[sceneIndex]) affected.push(sceneIndex);
       if (prevIndex >= 0 && scenes[prevIndex]) affected.push(prevIndex);
 
-      for (const idx of affected) {
+      // Batch-insert both rows in a single Supabase call so the worker
+      // can pick them up in parallel. Mirrors the legacy
+      // regenAffectedVideos() Promise.allSettled pattern.
+      if (affected.length > 0) {
+        const inserts = affected.map((idx) => ({
+          user_id: userId,
+          project_id: projectId,
+          task_type: "cinematic_video" as const,
+          payload: {
+            generationId,
+            projectId,
+            sceneIndex: idx,
+            regenerate: true,
+            _chainedFromImage: true,
+            _reason: idx === sceneIndex
+              ? "scene-image-changed"
+              : "prev-scene-end-frame-changed",
+          },
+          status: "pending",
+        }));
         try {
           const { error: chainErr } = await supabase
             .from("video_generation_jobs")
-            .insert({
-              user_id: userId,
-              project_id: projectId,
-              task_type: "cinematic_video",
-              payload: {
-                generationId,
-                projectId,
-                sceneIndex: idx,
-                regenerate: true,
-                _chainedFromImage: true,
-                _reason: idx === sceneIndex
-                  ? "scene-image-changed"
-                  : "prev-scene-end-frame-changed",
-              },
-              status: "pending",
-            });
+            .insert(inserts);
           if (chainErr) {
-            console.warn(`[RegenerateImage] Auto-chain video regen for scene ${idx + 1} failed (non-fatal): ${chainErr.message}`);
+            console.warn(`[RegenerateImage] Auto-chain batch insert failed (non-fatal): ${chainErr.message}`);
           } else {
-            console.log(`[RegenerateImage] Auto-queued cinematic_video regen for scene ${idx + 1}${idx === sceneIndex ? "" : " (previous-scene end-frame refresh)"}`);
+            console.log(`[RegenerateImage] Auto-queued ${inserts.length} cinematic_video regens in parallel: scenes [${affected.map((i) => i + 1).join(", ")}]`);
           }
         } catch (queueErr) {
           const qm = queueErr instanceof Error ? queueErr.message : String(queueErr);
-          console.warn(`[RegenerateImage] Auto-chain scene ${idx + 1} threw (non-fatal): ${qm}`);
+          console.warn(`[RegenerateImage] Auto-chain threw (non-fatal): ${qm}`);
         }
       }
     }

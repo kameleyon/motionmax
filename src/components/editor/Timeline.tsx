@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
-import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Lock } from 'lucide-react';
 import type { EditorScene, EditorState } from '@/hooks/useEditorState';
+import { useActiveJobs } from './useActiveJobs';
 
 /** Multi-track timeline. Scene N's clip width is canonical:
  *  duration = audioDurationMs (narration) when known, else estDurationMs.
@@ -40,6 +41,7 @@ export default function Timeline({
   playing: boolean;
   onPlayToggle: () => void;
 }) {
+  const { tasksForScene } = useActiveJobs(state.project?.id ?? null);
   const totalMs = useMemo(() => {
     if (state.totalDurationMs > 0) return state.totalDurationMs;
     // Fallback: approximate from scene count while still rendering.
@@ -112,26 +114,48 @@ export default function Timeline({
 
       {/* Tracks */}
       <div className="flex-1 overflow-y-auto px-3 py-2 flex flex-col gap-1.5 min-h-0">
-        {/* VIDEO track */}
+        {/* VIDEO track — clip is LOCKED (disabled + stripe overlay)
+            while its scene has an in-flight image/video regen. Stops
+            the user from layering a second edit on top of a
+            pending worker write-back. */}
         <Track label="VIDEO">
           {state.scenes.map((scene, i) => {
             const offsetPct = (sceneOffsets[i] / totalMs) * 100;
             const widthPct = (sceneDurationMs(scene) / totalMs) * 100;
             const isActive = i === selectedSceneIndex;
+            const sceneTasks = tasksForScene(i);
+            const locked =
+              sceneTasks.has('regenerate_image') ||
+              sceneTasks.has('cinematic_image') ||
+              sceneTasks.has('cinematic_video');
             return (
               <button
                 key={i}
                 type="button"
+                disabled={locked}
                 onClick={() => onSelectScene(i)}
+                title={locked ? 'Scene is regenerating — locked' : undefined}
                 className={
                   'absolute top-0 bottom-0 rounded-md border transition-colors overflow-hidden flex items-center px-2 ' +
-                  (isActive
-                    ? 'border-[#14C8CC] bg-gradient-to-b from-[#14C8CC]/55 to-[#14C8CC]/30 shadow-[0_0_0_1px_#14C8CC_inset]'
-                    : 'border-[#14C8CC]/30 bg-gradient-to-b from-[#14C8CC]/28 to-[#14C8CC]/14 hover:border-[#14C8CC]/50')
+                  (locked
+                    ? 'border-[#14C8CC] bg-[#14C8CC]/10 cursor-not-allowed'
+                    : isActive
+                      ? 'border-[#14C8CC] bg-gradient-to-b from-[#14C8CC]/55 to-[#14C8CC]/30 shadow-[0_0_0_1px_#14C8CC_inset]'
+                      : 'border-[#14C8CC]/30 bg-gradient-to-b from-[#14C8CC]/28 to-[#14C8CC]/14 hover:border-[#14C8CC]/50')
                 }
                 style={{ left: `${offsetPct}%`, width: `${widthPct}%` }}
               >
-                <span className="font-mono text-[9.5px] tracking-wider text-white whitespace-nowrap overflow-hidden text-ellipsis">
+                {locked && (
+                  <span
+                    className="absolute inset-0 pointer-events-none rounded-md"
+                    style={{
+                      background:
+                        'repeating-linear-gradient(135deg, rgba(20,200,204,.18) 0 8px, transparent 8px 16px)',
+                    }}
+                  />
+                )}
+                <span className="font-mono text-[9.5px] tracking-wider text-white whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1 relative">
+                  {locked && <Lock className="w-2.5 h-2.5" />}
                   {String(i + 1).padStart(2, '0')} · {scene.title || scene.visualPrompt?.slice(0, 30) || ''}
                 </span>
               </button>

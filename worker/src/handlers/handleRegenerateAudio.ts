@@ -46,6 +46,26 @@ const LEGACY_SPEAKER_MAP: Record<string, { gender: string; language: string }> =
   "River":    { gender: "female", language: "en" },
   "Pierre":   { gender: "male",   language: "ht" },
   "Marie":    { gender: "female", language: "ht" },
+  // Gemini Flash voices — gender per Google's internal bias. Logged
+  // only (Gemini path routes by voiceName, not gender), but the log
+  // used to say "female" for every gm:* voice because of the fall-
+  // back default on an unrecognised name. Matches the new labels
+  // surfaced in SpeakerSelector.tsx.
+  "gm:Leda":         { gender: "female", language: "en" },
+  "gm:Aoede":        { gender: "female", language: "en" },
+  "gm:Callirrhoe":   { gender: "female", language: "en" },
+  "gm:Sulafat":      { gender: "female", language: "en" },
+  "gm:Vindemiatrix": { gender: "female", language: "en" },
+  "gm:Achernar":     { gender: "female", language: "en" },
+  "gm:Laomedeia":    { gender: "female", language: "en" },
+  "gm:Kore":         { gender: "female", language: "en" },
+  "gm:Charon":       { gender: "male",   language: "en" },
+  "gm:Orus":         { gender: "male",   language: "en" },
+  "gm:Iapetus":      { gender: "male",   language: "en" },
+  "gm:Rasalgethi":   { gender: "male",   language: "en" },
+  "gm:Algenib":      { gender: "male",   language: "en" },
+  "gm:Fenrir":       { gender: "male",   language: "en" },
+  "gm:Puck":         { gender: "male",   language: "en" },
 };
 
 /** Infer style instruction from voiceover (same as handleCinematicAudio) */

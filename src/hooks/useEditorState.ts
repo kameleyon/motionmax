@@ -133,7 +133,13 @@ export function useEditorState(projectId: string | null): {
         .maybeSingle();
 
       const scenes = normalizeScenes(generation?.scenes);
-      const intake = ((project.intake_settings ?? {}) as IntakeSettings) || {};
+      // Start from the real `intake_settings` column when present,
+      // then merge in `scenes[0]._meta.intakeOverrides` — our silent
+      // fallback store used when the prod DB hasn't run the
+      // intake_settings migration yet (e.g. captions tab writes).
+      const baseIntake = ((project.intake_settings ?? {}) as IntakeSettings) || {};
+      const overrides = (scenes[0]?.meta?.intakeOverrides as IntakeSettings | undefined) ?? {};
+      const intake: IntakeSettings = { ...baseIntake, ...overrides };
       const aspect: '16:9' | '9:16' = project.format === 'portrait' ? '9:16' : '16:9';
       const totalDurationMs = scenes.reduce(
         (a, s) => a + (s.audioDurationMs ?? s.estDurationMs ?? 10_000),

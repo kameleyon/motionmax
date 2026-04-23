@@ -294,13 +294,12 @@ export function useSceneRegen(state: EditorState | null) {
     }
   }, [user, state]);
 
-  /** Merge a patch into `projects.intake_settings`. When the prod DB
-   *  hasn't yet had the intake_settings migration applied, Supabase
-   *  returns a "column not found in schema cache" error — catch it
-   *  explicitly so the user gets a helpful message instead of a raw
-   *  PGRST dump. The setting still persists locally via React Query
-   *  optimistic state; it just won't survive a reload until the
-   *  migration runs. */
+  /** Merge a patch into `projects.intake_settings`, with a fallback
+   *  to `generations.scenes[0]._meta.intakeOverrides` when that column
+   *  hasn't been migrated into the live DB yet. The fallback keeps
+   *  captions + style persistent across reloads (export handler can
+   *  read either location), so the user never sees the raw PGRST
+   *  schema-cache error for a simple caption toggle. */
   const updateIntakeSettings = useCallback(async (patch: Record<string, unknown>) => {
     if (!state?.project) return false;
     const current = (state.project.intake_settings as Record<string, unknown> | null) ?? {};
@@ -310,22 +309,47 @@ export function useSceneRegen(state: EditorState | null) {
         .from('projects')
         .update({ intake_settings: next as unknown as never })
         .eq('id', state.project.id);
-      if (error) {
-        const msg = error.message || '';
-        if (msg.includes('intake_settings') && msg.toLowerCase().includes('schema cache')) {
-          toast.error("Project settings column isn't in your DB yet. Run migration 20260422010000_add_projects_intake_settings.sql.", { duration: 8000 });
-        } else {
-          toast.error(`Couldn't save: ${msg}`);
-        }
+      if (!error) return true;
+
+      // Schema-cache miss = intake_settings column not in prod yet.
+      // Fall back to writing into scenes[0]._meta.intakeOverrides on
+      // the generation row, which is a jsonb column that definitely
+      // exists. Completely silent fallback — the user just gets a
+      // working toggle.
+      const msg = error.message || '';
+      const isSchemaMiss = msg.includes('intake_settings') && msg.toLowerCase().includes('schema cache');
+      if (!isSchemaMiss) {
+        toast.error(`Couldn't save: ${msg}`);
+        return false;
+      }
+
+      if (!state.generation) return false;
+      const scenes = (state.generation.scenes as Array<Record<string, unknown>> | null) ?? [];
+      if (scenes.length === 0) return false;
+      const scene0 = scenes[0];
+      const meta0 = (scene0._meta as Record<string, unknown> | undefined) ?? {};
+      const overrides = (meta0.intakeOverrides as Record<string, unknown> | undefined) ?? {};
+      const mergedOverrides = { ...overrides, ...patch };
+      const patchedScenes = scenes.map((s, i) =>
+        i === 0
+          ? { ...s, _meta: { ...meta0, intakeOverrides: mergedOverrides } }
+          : s,
+      );
+      const { error: genErr } = await supabase
+        .from('generations')
+        .update({ scenes: patchedScenes as unknown as never })
+        .eq('id', state.generation.id);
+      if (genErr) {
+        console.warn('[updateIntakeSettings] fallback failed:', genErr.message);
         return false;
       }
       return true;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`Couldn't save: ${msg}`);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      toast.error(`Couldn't save: ${errMsg}`);
       return false;
     }
-  }, [state?.project]);
+  }, [state?.project, state?.generation]);
 
   return {
     busy,

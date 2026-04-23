@@ -317,16 +317,54 @@ export default function Inspector({
           the "listen to current, edit text, regenerate" flow. */}
       {!disabled && tab === 'voice' && sceneReady && scene && (
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5">
-          {/* Editable narration */}
+          {/* Editable narration. Disabled + animated overlay while the
+              audio is regenerating so the user can't edit mid-render
+              (that would race the worker's write-back) and also sees
+              visible "something is happening" feedback. */}
           <section>
             <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">Narration text</h5>
-            <textarea
-              value={voiceoverDraft}
-              onChange={(e) => setVoiceoverDraft(e.target.value)}
-              rows={5}
-              placeholder="Type the narration for this scene…"
-              className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-[12.5px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50 resize-y leading-[1.55]"
-            />
+            <div className="relative">
+              <textarea
+                value={voiceoverDraft}
+                onChange={(e) => setVoiceoverDraft(e.target.value)}
+                rows={5}
+                placeholder="Type the narration for this scene…"
+                disabled={audioRegenActive}
+                className={cn(
+                  'w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-[12.5px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50 resize-y leading-[1.55]',
+                  audioRegenActive && 'opacity-50 cursor-not-allowed',
+                )}
+              />
+              {audioRegenActive && (
+                <div className="absolute inset-0 rounded-lg pointer-events-none overflow-hidden">
+                  {/* Shimmer sweep */}
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      background:
+                        'linear-gradient(110deg, transparent 0%, rgba(20,200,204,.08) 40%, rgba(20,200,204,.22) 50%, rgba(20,200,204,.08) 60%, transparent 100%)',
+                      backgroundSize: '200% 100%',
+                      animation: 'shimmer 1.8s ease-in-out infinite',
+                    }}
+                  />
+                  {/* Centered status chip */}
+                  <div className="absolute inset-0 grid place-items-center">
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#10151A]/90 border border-[#14C8CC]/40 backdrop-blur-sm">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-[#14C8CC]" />
+                      <span className="font-mono text-[10.5px] tracking-wider uppercase text-[#14C8CC]">
+                        Generating audio…
+                      </span>
+                    </div>
+                  </div>
+                  <style>{`
+                    @keyframes shimmer {
+                      0%   { background-position: 200% 0; }
+                      100% { background-position: -200% 0; }
+                    }
+                  `}</style>
+                </div>
+              )}
+            </div>
           </section>
 
           {/* Current audio player — native <audio controls> so users

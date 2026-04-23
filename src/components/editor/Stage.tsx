@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Maximize2, Minimize2 } from 'lucide-react';
 import type { EditorState, EditorScene } from '@/hooks/useEditorState';
+import { useActiveJobs } from './useActiveJobs';
 
 /** The center stage. Three render modes driven by phase:
  *    rendering — progress ring + rotating status message, on top of
@@ -82,6 +83,18 @@ export default function Stage({
   const [, tick] = useState(0);
   const stageRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const { tasksForScene } = useActiveJobs(state.project?.id ?? null);
+  const activeTasks = tasksForScene(selectedSceneIndex);
+  const imageActive = activeTasks.has('regenerate_image') || activeTasks.has('cinematic_image');
+  const videoActive = activeTasks.has('cinematic_video');
+  const sceneActive = imageActive || videoActive;
+  const regenLabel = imageActive && videoActive
+    ? 'Rendering new image + video…'
+    : imageActive
+      ? 'Generating new image…'
+      : videoActive
+        ? 'Rendering new video…'
+        : '';
   // The TTS narration lives on scene.audioUrl — not baked into the
   // Kling video clip (Kling is rendered with sound=false). We attach a
   // parallel <audio> element that plays in sync with the video; the
@@ -315,6 +328,41 @@ export default function Stage({
             loading="lazy"
           />
         ) : null}
+
+        {/* Per-scene regen overlay — shown on top of the frame while
+            the current scene's image or video is being re-rendered.
+            Animated loading ring + pulsing grid so the user clearly
+            sees "work is happening", even though the underlying thumb
+            is unchanged until the worker finishes. */}
+        {state.phase === 'ready' && sceneActive && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-[8%] bg-black/55 backdrop-blur-[2px] animate-in fade-in duration-200">
+            {/* Secondary shimmer overlay */}
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background:
+                  'linear-gradient(110deg, transparent 0%, rgba(20,200,204,.10) 30%, rgba(20,200,204,.20) 50%, rgba(20,200,204,.10) 70%, transparent 100%)',
+                backgroundSize: '200% 100%',
+                animation: 'shimmer 2.2s ease-in-out infinite',
+              }}
+            />
+            <LoadingRing size={state.aspect === '9:16' ? 44 : 60} />
+            <div className="font-serif text-[15px] sm:text-[18px] font-medium text-[#ECEAE4] text-center">
+              {regenLabel}
+            </div>
+            <div className="font-mono text-[10.5px] text-[#8A9198] tracking-[0.14em] uppercase">
+              Scene {selectedSceneIndex + 1} of {state.scenes.length}
+            </div>
+            {/* Inline keyframes so we don't need a tailwind config
+                change. Scoped via a <style> tag inside the overlay. */}
+            <style>{`
+              @keyframes shimmer {
+                0%   { background-position: 200% 0; }
+                100% { background-position: -200% 0; }
+              }
+            `}</style>
+          </div>
+        )}
 
         {/* Rendering overlay */}
         {state.phase === 'rendering' && (

@@ -168,54 +168,87 @@ export default function Editor() {
     setParams(next, { replace: true });
   };
 
-  // Aggressive refetch while stuck on the awaiting screen. We've seen
-  // React Query's cache stick on the first null result and refuse to
-  // update even with staleTime: 0 + refetchIntervalInBackground: true.
-  // So this effect does TWO things every 2 seconds while waiting:
-  //   1. A RAW Supabase select that bypasses React Query entirely —
-  //      if the generation row now exists, we know the cache is stale
-  //      and we force a full invalidate.
-  //   2. Calls refetchEditor() as a fallback.
-  // The raw probe also logs what it finds so the browser console
-  // shows exactly why the UI is stuck (row missing, RLS denied, etc).
+  // Aggressive probe while stuck on the awaiting screen. React
+  // Query's own refetch mechanisms (staleTime: 0, refetchInterval,
+  // invalidateQueries) have been provably unreliable here — multiple
+  // users have sat on "Creating your content… 2%" for minutes after
+  // the worker finished. We stop trusting the library and go raw.
+  //
+  // Every 2s while waiting:
+  //   1. Raw Supabase select on BOTH projects and generations,
+  //      using the same authed client but bypassing React Query.
+  //   2. If project.status is 'complete' OR a generation row exists,
+  //      we know the data is ready. `resetQueries` wipes the cache
+  //      entirely (more aggressive than invalidate) and forces a
+  //      fresh refetch.
+  //   3. Last-resort: if we've been stuck >15s AND project.status
+  //      is complete, hard-reload the page. Proven to work from
+  //      earlier testing — user had to manually refresh each time
+  //      to unstick. Now we do it for them.
+  const stuckSinceRef = useRef<number | null>(null);
   useEffect(() => {
     const waiting = !!state?.project && !state?.generation && !!projectId && !!user;
-    if (!waiting) return;
+    if (!waiting) {
+      stuckSinceRef.current = null;
+      return;
+    }
+    if (stuckSinceRef.current === null) stuckSinceRef.current = Date.now();
     let cancelled = false;
     const probe = async () => {
       if (cancelled) return;
       try {
-        const { data, error } = await supabase
-          .from('generations')
-          .select('id, status, progress, created_at')
-          .eq('project_id', projectId!)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+        const [projRes, genRes] = await Promise.all([
+          supabase
+            .from('projects')
+            .select('id, status')
+            .eq('id', projectId!)
+            .maybeSingle(),
+          supabase
+            .from('generations')
+            .select('id, status, progress')
+            .eq('project_id', projectId!)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+        ]);
+
         if (cancelled) return;
-        if (error) {
-          log.warn('raw generation probe error', { error: error.message, projectId });
-          return;
-        }
-        if (data) {
-          log.info('raw probe found generation — forcing invalidate', {
-            generationId: data.id,
-            status: data.status,
-            progress: data.progress,
-          });
-          // Nuke both the editor-state cache AND the active-jobs cache
-          // so the UI picks up the new row + any downstream jobs. Then
-          // refetch immediately so the transition is instant, not
-          // waiting on the next 3s tick.
-          await queryClient.invalidateQueries({ queryKey: ['editor-state', projectId] });
-          await queryClient.invalidateQueries({ queryKey: ['active-jobs', projectId] });
+
+        const projStatus = (projRes.data as { status?: string } | null)?.status;
+        const genRow = genRes.data;
+
+        log.info('[Editor] raw probe tick', {
+          projectStatus: projStatus ?? 'none',
+          generationFound: !!genRow,
+          generationStatus: genRow ? (genRow as { status?: string }).status : 'n/a',
+          stuckForMs: stuckSinceRef.current ? Date.now() - stuckSinceRef.current : 0,
+        });
+
+        if (genRow || projStatus === 'complete') {
+          // Wipe cache and force fresh fetch. resetQueries is more
+          // aggressive than invalidateQueries — removes the cache
+          // entry entirely so the next access re-runs queryFn from
+          // scratch, no chance of a stale successful result hanging on.
+          await queryClient.resetQueries({ queryKey: ['editor-state', projectId] });
+          await queryClient.resetQueries({ queryKey: ['active-jobs', projectId] });
           void refetchEditor();
+
+          // Nuclear option: if we've been stuck > 15s despite the
+          // row existing, the React Query refetch isn't working.
+          // Just reload the page. Users confirmed earlier that a
+          // manual refresh always unsticks the UI — this does it
+          // automatically so they don't have to.
+          const stuckMs = stuckSinceRef.current ? Date.now() - stuckSinceRef.current : 0;
+          if (stuckMs > 15000) {
+            log.warn('[Editor] stuck > 15s with completed data — hard reload');
+            window.location.reload();
+          }
         }
       } catch (err) {
-        log.warn('raw generation probe threw', { error: err instanceof Error ? err.message : String(err) });
+        log.warn('[Editor] raw probe threw', { error: err instanceof Error ? err.message : String(err) });
       }
     };
-    void probe(); // fire once immediately
+    void probe();
     const iv = setInterval(probe, 2000);
     return () => { cancelled = true; clearInterval(iv); };
   }, [state?.project, state?.generation, projectId, user, refetchEditor, queryClient]);

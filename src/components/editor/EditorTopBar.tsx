@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Download, Share2, History, Loader2, Menu, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -60,6 +60,17 @@ export default function EditorTopBar({
 
   const exporting = exportState.status === 'submitting' || exportState.status === 'rendering';
   const exportDone = exportState.status === 'done' && exportState.url;
+
+  // Track which export URLs we've already auto-downloaded so a re-render
+  // of EditorTopBar (e.g. after a state change) doesn't re-fire the
+  // browser save dialog. The export URL changes between exports, so
+  // queueing a fresh export with new edits will fire a new download
+  // exactly once. Also track whether the CURRENT export was kicked off
+  // by a user gesture in this session — Safari/Chrome allow programmatic
+  // anchor-clicks when the tab has had a recent user gesture, which the
+  // Export-button click satisfies.
+  const autoDownloadedRef = useRef<string | null>(null);
+  const exportTriggeredByUserRef = useRef(false);
 
   /** Save the exported MP4. Three paths by platform:
    *
@@ -134,8 +145,39 @@ export default function EditorTopBar({
       void downloadVideo(exportState.url, `${title}.mp4`);
       return;
     }
+    // Mark that THIS session's export was user-initiated so the
+    // auto-download effect below is allowed to fire the file save
+    // without bouncing off Safari's user-gesture gate.
+    exportTriggeredByUserRef.current = true;
+    autoDownloadedRef.current = null;
     startExport('master');
   };
+
+  // Auto-download the exported MP4 the moment the job completes — no
+  // second click required. Chrome/Firefox always honour programmatic
+  // anchor-downloads; Safari is stricter but accepts them when the
+  // tab has had a recent user gesture, which our Export button click
+  // provides. iOS is the exception: `navigator.share({ files })`
+  // REQUIRES a live user gesture, so on iPhone/iPad we intentionally
+  // skip the auto-fire and leave the button as "Save / Download" for
+  // the user to tap — that's the only way iOS will let us open the
+  // share sheet for Save-to-Photos.
+  useEffect(() => {
+    if (!exportDone || !exportState.url) return;
+    if (autoDownloadedRef.current === exportState.url) return;
+    if (!exportTriggeredByUserRef.current) return;
+
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !('MSStream' in window);
+    if (isIOS) return; // iOS needs the second tap for Save-to-Photos.
+
+    autoDownloadedRef.current = exportState.url;
+    const title = (project?.title ?? 'motionmax').replace(/[^a-z0-9-_]+/gi, '_').slice(0, 60);
+    void downloadVideo(exportState.url, `${title}.mp4`);
+    // Clear the gesture flag so a stale completed state from another
+    // event source (e.g. realtime) doesn't re-fire downloads.
+    exportTriggeredByUserRef.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exportDone, exportState.url]);
 
   return (
     <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 border-b border-white/10 bg-[#0A0D0F]/80 backdrop-blur-md h-[54px] col-span-full overflow-hidden">

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Menu, Play } from "lucide-react";
 import { LANDING_FEATURES } from "@/config/landingContent";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useNavigate } from "react-router-dom";
 import { trackEvent, useScrollDepthTracker } from "@/hooks/useAnalytics";
 import { useForceDarkMode } from "@/hooks/useForceDarkMode";
@@ -22,6 +23,7 @@ import BeforeAfterComparison from "@/components/landing/BeforeAfterComparison";
 export default function Landing() {
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [demoModalOpen, setDemoModalOpen] = useState(false);
   const menuToggleRef = useRef<HTMLButtonElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
@@ -165,9 +167,20 @@ export default function Landing() {
                     onClick={() => {
                       setMobileMenuOpen(false);
                       menuToggleRef.current?.focus();
+                      // Wait for AnimatePresence close (~200ms) before
+                      // scrolling — otherwise scrollIntoView fires while
+                      // the menu is still collapsing, the page still has
+                      // the menu height, and the landing position is off.
+                      // Also manually subtract the fixed header height so
+                      // the section title isn't hidden behind the topbar.
                       setTimeout(() => {
-                        document.querySelector(href)?.scrollIntoView({ behavior: "smooth" });
-                      }, 50);
+                        const target = document.querySelector(href) as HTMLElement | null;
+                        if (!target) return;
+                        const headerEl = document.querySelector("header");
+                        const headerHeight = headerEl ? headerEl.getBoundingClientRect().height : 80;
+                        const top = target.getBoundingClientRect().top + window.scrollY - headerHeight - 12;
+                        window.scrollTo({ top, behavior: "smooth" });
+                      }, 250);
                     }}
                     className="py-2.5 text-left text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                   >
@@ -233,7 +246,10 @@ export default function Landing() {
                 size="lg"
                 variant="outline"
                 className="gap-2 min-w-[140px] border-white/20 text-white/80 hover:bg-white/10 hover:text-white"
-                onClick={() => document.querySelector("#demo")?.scrollIntoView({ behavior: "smooth" })}
+                onClick={() => {
+                  trackEvent("watch_demo_click", { location: "hero" });
+                  setDemoModalOpen(true);
+                }}
               >
                 <Play className="h-4 w-4" />
                 Watch Demo
@@ -460,6 +476,43 @@ export default function Landing() {
 
       {/* Footer */}
       <LandingFooter />
+
+      {/* Watch Demo modal — replaces the old scroll-to-#demo (which had
+          no target anchor). Shows a short explainer of what MotionMax
+          does; swap the <iframe> src for a real demo video once ready. */}
+      <Dialog open={demoModalOpen} onOpenChange={setDemoModalOpen}>
+        <DialogContent className="max-w-[min(92vw,880px)] w-full p-0 overflow-hidden bg-[#0A0D0F] border-white/10">
+          <DialogHeader className="px-6 pt-5 pb-3 border-b border-white/10">
+            <DialogTitle className="font-serif text-[20px] text-white">
+              <span className="text-[#14C8CC]">Motion</span><span className="text-[#E4C875]">Max</span>
+              <span className="text-white/60 font-sans text-[15px] ml-2">— 90-second demo</span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="aspect-video w-full bg-black grid place-items-center">
+            {/* Placeholder until a real demo MP4 is recorded.
+                Swap the <div> block below for an <iframe> or <video>
+                pointing at the final asset. */}
+            <div className="text-center px-6 py-10">
+              <div className="h-14 w-14 mx-auto rounded-full border border-white/20 grid place-items-center mb-4">
+                <Play className="h-6 w-6 text-white/70" />
+              </div>
+              <p className="font-serif text-[18px] text-white mb-1">Demo video coming soon</p>
+              <p className="font-mono text-[11px] tracking-wider uppercase text-white/50">
+                Sign up free — make your first video in under 90 seconds
+              </p>
+              <Button
+                className="mt-5 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
+                onClick={() => {
+                  setDemoModalOpen(false);
+                  handleCta("Demo Modal CTA");
+                }}
+              >
+                Try for Free
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

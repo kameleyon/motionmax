@@ -6,6 +6,7 @@ import RightRail from './RightRail';
 import NotificationsPopover from './NotificationsPopover';
 import HelpPopover from './HelpPopover';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
+import motionmaxLogo from '@/assets/motionmax-logo.png';
 
 /** Responsive dashboard shell.
  *
@@ -72,6 +73,21 @@ export default function DashboardLayout() {
               <path d="M3 12h18M3 6h18M3 18h18" />
             </svg>
           </button>
+          {/* Mobile-only MotionMax brand — sits next to the hamburger so
+              the user always knows where they are. Hidden on md+ since
+              the sidebar already carries the brand at that size. */}
+          <a
+            href="/dashboard-new"
+            className="md:hidden flex items-center gap-1.5 shrink-0"
+            style={{ textDecoration: 'none' }}
+            aria-label="MotionMax home"
+          >
+            <img src={motionmaxLogo} alt="MotionMax" className="h-6 w-auto" />
+            <span className="font-serif text-[16px] font-medium tracking-tight leading-none">
+              <span className="text-[#14C8CC]">Motion</span>
+              <span className="text-[#E4C875]">Max</span>
+            </span>
+          </a>
           <div className="hidden md:flex items-center gap-2 text-[13px] text-[#8A9198]">
             <span>Workspace</span>
             <span className="text-[#5A6268]">/</span>

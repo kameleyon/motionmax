@@ -296,9 +296,11 @@ export async function handleFinalizePhase(
       const musicUrl = await generateLyriaMusic({
         prompt: projectContent ?? "",
         durationSec: approxDurationSec,
-        apiKey,
+        apiKey, // unused by direct-to-Google path, kept for compat
         genre: music.genre as LyriaMusicGenre | undefined,
         intensity: music.intensity,
+        projectId,
+        label: "music",
       });
 
       const augmented = finalScenesWithMeta.map((s: any, i: number) =>
@@ -332,9 +334,11 @@ export async function handleFinalizePhase(
         const sfxUrl = await generateLyriaMusic({
           prompt: sfxPrompt,
           durationSec: sfxDurationSec,
-          apiKey,
+          apiKey, // unused by direct-to-Google path, kept for compat
           // No genre — we want pure ambient. intensity low so it sits under.
           intensity: 15,
+          projectId,
+          label: "sfx",
         });
         await supabase
           .from("generations")

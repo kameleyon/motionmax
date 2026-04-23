@@ -201,7 +201,11 @@ export async function generateKlingV3Video(
   return pollHyperealJob(jobId, apiKey, model, pollUrl);
 }
 
-// ── Kling V3.0 Pro I2V (active, end-to-end) ──────────────────────
+// ── Kling V2.6 Pro I2V (active, end-to-end) ──────────────────────
+// (Function historically named generateKlingV3ProVideo — kept for
+// import compatibility while swapping the underlying model from
+// kling-3-0-pro-i2v → kling-2-6-i2v-pro for cost savings. Same
+// end_image support, same input shape, cheaper per scene.)
 
 /** Spec-documented max prompt length for kling-3-0-pro-i2v. We truncate
  *  at 2400 chars (under the 2500 ceiling) at a sentence boundary when
@@ -227,11 +231,11 @@ function truncateKlingPrompt(input: string): string {
 }
 
 /**
- * Generate video using Kling V3.0 Pro I2V.
+ * Generate video using Kling V2.6 Pro I2V (kling-2-6-i2v-pro).
  * Superior subject consistency + texture preservation vs V3.0 Std / V2.6.
  * Native start + end frame support.
  *
- * Model: kling-3-0-pro-i2v (57 credits)
+ * Model: kling-2-6-i2v-pro (35 credits for 10s, 18 credits for 5s)
  * Duration: 3 / 5 / 10 / 15 seconds (clamped to nearest valid value; default 5)
  * cfg_scale: 0.0–1.0 (clamped; default 0.5)
  * Pricing (without sound): $0.34 / $0.56 / $1.12 / $1.68 at 3/5/10/15s
@@ -253,16 +257,16 @@ export async function generateKlingV3ProVideo(
   negativePrompt: string = "blurry, low quality, watermark, text, UI elements",
   cfgScale: number = 0.5,
 ): Promise<string> {
-  const model = "kling-3-0-pro-i2v";
+  const model = "kling-2-6-i2v-pro";
 
-  // Duration: spec allows 3 / 5 / 10 / 15 only. Pick the nearest valid
-  // value for any other input.
-  const validDurations = [3, 5, 10, 15];
+  // Duration: Kling V2.6 Pro spec allows 5 or 10 only. Pick the
+  // nearest valid value for any other input.
+  const validDurations = [5, 10];
   const clampedDuration = validDurations.reduce((prev, curr) =>
     Math.abs(curr - duration) < Math.abs(prev - duration) ? curr : prev
   );
   if (clampedDuration !== duration) {
-    console.warn(`[Hypereal] Kling V3 Pro duration ${duration}s invalid — clamped to ${clampedDuration}s`);
+    console.warn(`[Hypereal] Kling V2.6 Pro duration ${duration}s invalid — clamped to ${clampedDuration}s`);
   }
 
   // cfg_scale: spec range 0.0–1.0. Clamp defensively (also catches NaN).
@@ -270,7 +274,7 @@ export async function generateKlingV3ProVideo(
     ? Math.min(1, Math.max(0, cfgScale))
     : 0.5;
   if (clampedCfgScale !== cfgScale) {
-    console.warn(`[Hypereal] Kling V3 Pro cfg_scale ${cfgScale} out of range — clamped to ${clampedCfgScale}`);
+    console.warn(`[Hypereal] Kling V2.6 Pro cfg_scale ${cfgScale} out of range — clamped to ${clampedCfgScale}`);
   }
 
   // Prompt: spec max 2500 chars. Truncate at 2400 to leave a safety
@@ -279,10 +283,10 @@ export async function generateKlingV3ProVideo(
   // block + character bible get appended.
   const clampedPrompt = truncateKlingPrompt(prompt);
   if (clampedPrompt.length < prompt.length) {
-    console.warn(`[Hypereal] Kling V3 Pro prompt truncated ${prompt.length} → ${clampedPrompt.length} chars (spec max 2500)`);
+    console.warn(`[Hypereal] Kling V2.6 Pro prompt truncated ${prompt.length} → ${clampedPrompt.length} chars (spec max 2500)`);
   }
 
-  console.log(`[Hypereal] Starting Kling V3.0 Pro I2V — ${clampedDuration}s${endImageUrl ? " (start→end)" : ""} cfg_scale=${clampedCfgScale}`);
+  console.log(`[Hypereal] Starting Kling V2.6 Pro I2V — ${clampedDuration}s${endImageUrl ? " (start→end)" : ""} cfg_scale=${clampedCfgScale}`);
   console.log(`[Hypereal] IMAGE: ${imageUrl.substring(0, 80)}...`);
   if (endImageUrl) console.log(`[Hypereal] END IMAGE: ${endImageUrl.substring(0, 80)}...`);
 
@@ -305,7 +309,7 @@ export async function generateKlingV3ProVideo(
 
   const requestBody = { model, input: inputPayload };
   const bodyJson = JSON.stringify(requestBody);
-  console.log(`[Hypereal] Kling V3 Pro body (${bodyJson.length} chars): ${truncate(bodyJson)}`);
+  console.log(`[Hypereal] Kling V2.6 Pro body (${bodyJson.length} chars): ${truncate(bodyJson)}`);
 
   const response = await hyperealFetch(HYPEREAL_VIDEO_URL, {
     method: "POST",
@@ -318,17 +322,17 @@ export async function generateKlingV3ProVideo(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Hypereal Kling V3 Pro API Error: ${response.status} - ${errorText}`);
+    throw new Error(`Hypereal Kling V2.6 Pro API Error: ${response.status} - ${errorText}`);
   }
 
   const data = await response.json() as any;
   const jobId = data.jobId;
   const pollUrl = data.pollUrl || null;
 
-  console.log(`[Hypereal] Kling V3 Pro job created: ${jobId} (credits: ${data.creditsUsed})`);
+  console.log(`[Hypereal] Kling V2.6 Pro job created: ${jobId} (credits: ${data.creditsUsed})`);
 
   if (!jobId) {
-    throw new Error(`No jobId from Kling V3 Pro — response: ${JSON.stringify(data)}`);
+    throw new Error(`No jobId from Kling V2.6 Pro — response: ${JSON.stringify(data)}`);
   }
 
   return pollHyperealJob(jobId, apiKey, model, pollUrl);

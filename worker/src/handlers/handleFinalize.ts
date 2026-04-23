@@ -24,7 +24,7 @@ const PRICING = {
   hyperealImage: 0.04,            // Hypereal image gen
   replicateImage: 0.05,           // Replicate image gen
   // Video (per 10s clip)
-  hyperealVideo: 0.10,            // Kling I2V via Hypereal
+  hyperealVideo: 0.70,            // Kling V2.6 Pro I2V via Hypereal (10s, no sound)
   // ASR (per minute)
   hyperealAsr: 0.01,              // Hypereal audio-asr
 };

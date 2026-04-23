@@ -1,13 +1,13 @@
 /**
- * Cinematic video handler — Kling V3.0 Pro I2V (active, end-to-end).
+ * Cinematic video handler — Kling V2.6 Pro I2V (active, end-to-end).
  *
  * Flow:
  *   - All images are generated FIRST (in parallel batches by the frontend)
- *   - ALL scenes use Kling V3.0 Pro I2V with native `end_image` for
+ *   - ALL scenes use Kling V2.6 Pro I2V with native `end_image` for
  *     seamless start→end frame transitions between scenes.
  *   - Camera motion varies per scene (rotated from 7 movement types)
  *
- * Active: kling-3-0-pro-i2v via Hypereal (10s, 57 credits / $1.12).
+ * Active: kling-2-6-i2v-pro via Hypereal (10s, 35 credits / $0.70 — cheaper than V3.0).
  * Valid durations: 3 / 5 / 10 / 15. Superior subject consistency and
  * texture preservation vs V2.6 Pro. Used for first-time generation
  * AND per-scene regenerations — no provider split.
@@ -15,7 +15,7 @@
  * Previously active (rolled back): V2.6 Pro (lower fidelity), Grok
  * Video I2V (status-lookup failures on Hypereal), V2.5 Turbo.
  *
- * Commented-out alternatives kept for quick rollback: Grok, Kling V3
+ * Commented-out alternatives kept for quick rollback: Grok, Kling V3.0 Pro
  * Std, Kling V2.6, Kling V2.5 Turbo, Veo 3.1, PixVerse V6.
  */
 
@@ -29,7 +29,7 @@ import {
   // generateKlingV3Video,        // V3.0 Std — skipped; Pro variant below is used instead
   // generateVeo31Video,          // Veo 3.1 — doesn't follow prompts, generates unwanted audio/lip sync
   // generateKlingV26Video,       // Kling V2.6 Pro — retired, superseded by V3.0 Pro
-  generateKlingV3ProVideo,        // Active model — Kling V3.0 Pro I2V (57 credits, premium fidelity)
+  generateKlingV3ProVideo,        // Active model — Kling V2.6 Pro I2V (35 credits — cheaper). Function name kept for import compatibility.
   // generateGrokVideo,           // Grok Video I2V — status-lookup failures on Hypereal, rolled back
 } from "../services/hypereal.js";
 
@@ -249,7 +249,7 @@ export async function handleCinematicVideo(
 
   const cameraName = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("\u2014")[0].trim();
   console.log(
-    `[CinematicVideo] Scene ${sceneIndex}: Kling V3.0 Pro I2V${regenerate ? " (regen)" : ""}, ` +
+    `[CinematicVideo] Scene ${sceneIndex}: Kling V2.6 Pro I2V${regenerate ? " (regen)" : ""}, ` +
     `camera=${cameraName}, prompt=${finalPrompt.length} chars`
   );
 
@@ -258,14 +258,18 @@ export async function handleCinematicVideo(
   let provider: string;
   const negPrompt = "blurry, low quality, watermark, text, UI elements, slow motion, sluggish, nudity, naked, exposed body, extra limbs, body contortion, distorted anatomy, lip sync, talking, mouth movement, speaking";
 
-  // Kling V3.0 Pro I2V (active, end-to-end) — superior subject
-  // consistency + texture preservation vs V2.6 Pro. Used for BOTH the
-  // first-time 15-scene batch AND per-scene regenerations. Cost:
-  // 57 credits / $1.12 for 10s. Native end_image for seamless
+  // Kling V2.6 Pro I2V (active, end-to-end) — used for BOTH the
+  // first-time batch AND per-scene regenerations. Cost: 35 credits
+  // / $0.70 for 10s, 18 credits / $0.35 for 5s — significantly
+  // cheaper than V3.0 Pro's 57 credits. Native end_image for seamless
   // transitions when we have the next scene's image; final scene
   // passes undefined so the model renders a natural conclusion.
   // sound=false — we mux audio separately at export time.
-  provider = "Kling V3.0 Pro I2V";
+  //
+  // Function name `generateKlingV3ProVideo` is historical; under the
+  // hood it now calls kling-2-6-i2v-pro. Renamed in logs only to
+  // avoid touching every import site.
+  provider = "Kling V2.6 Pro I2V";
   videoUrl = await generateKlingV3ProVideo(
     imageUrl,
     finalPrompt,

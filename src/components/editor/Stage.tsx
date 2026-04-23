@@ -88,12 +88,6 @@ export default function Stage({
   // narration's end event drives scene auto-advance so the composite
   // "scene duration" = audio duration, matching the timeline widths.
   const audioRef = useRef<HTMLAudioElement>(null);
-  // Ref flag set while we imperatively swap src on a scene transition.
-  // The browser fires a spurious `pause` event during a src change,
-  // which would otherwise flip the external `playing` prop to false
-  // and stall the run at the end of every scene. The onPause handler
-  // below checks this flag and no-ops during the swap window.
-  const swappingRef = useRef(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // REC timecode ticks while rendering.
@@ -110,93 +104,92 @@ export default function Stage({
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
 
-  // Play/pause sync when the Timeline button flips. Video is muted
-  // (Kling clips are silent) and the <audio> carries the narration.
+  // ── Unified playback effect — ported from PublicShare's share-page
+  // player (which plays every scene end-to-end non-stop). Re-runs
+  // whenever `playing` flips or the selected scene changes. Sets up
+  // video + audio srcs, attaches end listeners, calls play() on both.
+  // Advances scenes via scene-end events so the user hits Play once
+  // and the whole project plays through. On last-scene end, stops.
   useEffect(() => {
-    const v = videoRef.current;
-    const a = audioRef.current;
-    if (playing) {
-      const vp = v?.play(); if (vp && typeof vp.catch === 'function') vp.catch(() => {});
-      const ap = a?.play(); if (ap && typeof ap.catch === 'function') ap.catch(() => {});
-    } else {
-      v?.pause();
-      a?.pause();
+    if (!playing) {
+      videoRef.current?.pause();
+      audioRef.current?.pause();
+      return;
     }
-  }, [playing]);
-
-  // Scene transition: swap src imperatively on the SAME elements so the
-  // user-gesture autoplay authorisation persists across scenes. Using
-  // React's `key=` to remount would create fresh elements that the
-  // browser treats as un-authorised, which is why Play used to only
-  // work on scene 1.
-  useEffect(() => {
-    const v = videoRef.current;
-    const a = audioRef.current;
     const scene = state.scenes[selectedSceneIndex];
     if (!scene) return;
+    const video = videoRef.current;
+    const audio = audioRef.current;
+    if (!video) return;
 
-    // Suppress the spurious pause events we're about to trigger by
-    // swapping src. Cleared on the next tick after the src is set.
-    swappingRef.current = true;
-
-    if (v) {
-      const nextSrc = scene.videoUrl ?? '';
-      if (v.src !== nextSrc) { v.src = nextSrc; v.load(); }
-      else { v.currentTime = 0; }
-    }
-    if (a) {
-      const nextSrc = scene.audioUrl ?? '';
-      if (a.src !== nextSrc) { a.src = nextSrc; a.load(); }
-      else { a.currentTime = 0; }
+    // Prime the video element with this scene's source.
+    if (scene.videoUrl) {
+      video.muted = true;
+      video.src = scene.videoUrl;
+      video.currentTime = 0;
+      video.playsInline = true;
+      video.load();
     }
 
-    if (playing) {
-      const vp = v?.play(); if (vp && typeof vp.catch === 'function') vp.catch(() => {});
-      const ap = a?.play(); if (ap && typeof ap.catch === 'function') ap.catch(() => {});
+    // Prime the audio element with this scene's narration (if any).
+    if (audio && scene.audioUrl) {
+      audio.src = scene.audioUrl;
+      audio.currentTime = 0;
+      audio.load();
+    } else if (audio) {
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
     }
 
-    // Open the pause-event window on the next macrotask. By the time
-    // the browser fires its real "user pressed pause" event, the flag
-    // is false and onPlayingChange(false) gets through normally.
-    const t = setTimeout(() => { swappingRef.current = false; }, 50);
-    return () => clearTimeout(t);
+    const handleEnded = () => {
+      if (selectedSceneIndex < state.scenes.length - 1) {
+        onAdvanceScene?.();
+      } else {
+        onPlayingChange?.(false);
+      }
+    };
+
+    // When the video itself ends but audio is still playing, loop the
+    // visual so the frame doesn't freeze black while narration finishes.
+    const handleVideoEndedInner = () => {
+      if (audio && scene.audioUrl && !audio.ended) {
+        video.currentTime = 0;
+        const vp = video.play();
+        if (vp && typeof vp.catch === 'function') vp.catch(() => {});
+        return;
+      }
+      handleEnded();
+    };
+
+    // Prefer audio as the "end of scene" signal when narration exists
+    // (it's the canonical scene length). Fall back to video end.
+    const useAudioAsBoundary = !!(audio && scene.audioUrl);
+    if (useAudioAsBoundary) audio.addEventListener('ended', handleEnded);
+    video.addEventListener('ended', handleVideoEndedInner);
+
+    (async () => {
+      try {
+        const p = video.play();
+        if (p) await p;
+        if (audio && scene.audioUrl) {
+          const ap = audio.play();
+          if (ap) await ap;
+        }
+      } catch {
+        // Autoplay blocked — user needs a gesture. Reset external state.
+        onPlayingChange?.(false);
+      }
+    })();
+
+    return () => {
+      if (useAudioAsBoundary) audio.removeEventListener('ended', handleEnded);
+      video.removeEventListener('ended', handleVideoEndedInner);
+      video.pause();
+      audio?.pause();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSceneIndex, state.scenes]);
-
-  // Narration audio drives scene boundaries because it's the canonical
-  // length (Kling clips are 10s regardless of how long the voiceover
-  // runs). When audio ends, advance if there's another scene; on the
-  // final scene's audio end, stop playback.
-  const isLastScene = selectedSceneIndex >= state.scenes.length - 1;
-  const handleAudioEnded = () => {
-    if (isLastScene || !onAdvanceScene) {
-      onPlayingChange?.(false);
-      return;
-    }
-    // Keep `playing` true — the scene-change useEffect above will fire
-    // `play()` on the next scene's audio + video automatically.
-    onAdvanceScene();
-  };
-
-  // If the video itself ends but audio is still playing, loop the
-  // video so the frame doesn't freeze on black before the narration
-  // finishes. Only scene transitions are driven by audio end.
-  const handleVideoEnded = () => {
-    const v = videoRef.current;
-    const a = audioRef.current;
-    // If there's no audio track, fall back to the video's end event.
-    if (!a || !a.src) {
-      if (isLastScene || !onAdvanceScene) onPlayingChange?.(false);
-      else onAdvanceScene();
-      return;
-    }
-    // Loop the visual while narration finishes.
-    if (v && !a.ended) {
-      v.currentTime = 0;
-      const vp = v.play();
-      if (vp && typeof vp.catch === 'function') vp.catch(() => {});
-    }
-  };
+  }, [playing, selectedSceneIndex, state.scenes]);
 
   const aspectCss = state.aspect === '16:9' ? '16/9' : '9/16';
   const frameMaxW = state.aspect === '16:9' ? '92%' : '48%';
@@ -297,26 +290,21 @@ export default function Stage({
             authorisation across scenes). */}
         {state.phase === 'ready' && sceneToShow?.videoUrl ? (
           <>
+            {/* Video + audio elements persist for the session. The
+                unified playback effect above attaches per-scene
+                listeners imperatively, so there's no onEnded / onPause
+                JSX binding here — it would race with the effect's
+                own addEventListener cleanup. */}
             <video
               ref={videoRef}
               className="w-full h-full object-cover"
               muted
               playsInline
               preload="auto"
-              onEnded={handleVideoEnded}
             />
             <audio
               ref={audioRef}
               preload="auto"
-              onPlay={() => onPlayingChange?.(true)}
-              onPause={() => {
-                // Ignore the pause event that fires during a scene-
-                // transition src swap — that's what used to halt
-                // playback after each scene.
-                if (swappingRef.current) return;
-                onPlayingChange?.(false);
-              }}
-              onEnded={handleAudioEnded}
             />
           </>
         ) : sceneToShow?.imageUrl ? (

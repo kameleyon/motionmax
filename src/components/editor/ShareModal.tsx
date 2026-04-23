@@ -98,7 +98,7 @@ export default function ShareModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[#10151A] border-white/10 text-[#ECEAE4] max-w-md p-0 overflow-hidden">
+      <DialogContent className="bg-[#10151A] border-white/10 text-[#ECEAE4] w-[calc(100%-2rem)] max-w-md p-0 overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
           <div>
             <div className="font-serif text-[16px] font-medium text-[#ECEAE4]">Share this video</div>
@@ -116,22 +116,26 @@ export default function ShareModal({
           </button>
         </div>
 
-        <div className="p-5 flex flex-col gap-4">
+        <div className="p-5 flex flex-col gap-4 min-w-0">
           {loading && !url ? (
             <div className="flex items-center gap-2 px-3 py-3 rounded-lg border border-white/5 bg-[#1B2228]">
               <Loader2 className="w-4 h-4 animate-spin text-[#14C8CC]" />
               <span className="text-[12.5px] text-[#8A9198]">Generating link…</span>
             </div>
           ) : url ? (
-            <div className="flex items-stretch gap-2">
+            // flex + min-w-0 on BOTH children so the long URL actually
+            // truncates instead of pushing the Copy button off-screen.
+            // The link chip is flex-1 min-w-0 (it shrinks); Copy is
+            // shrink-0 (always visible, always tappable).
+            <div className="flex items-stretch gap-2 w-full min-w-0">
               <div className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2 rounded-lg border border-white/5 bg-[#1B2228] overflow-hidden">
                 <LinkIcon className="w-3.5 h-3.5 text-[#14C8CC] shrink-0" />
-                <span className="font-mono text-[11.5px] text-[#ECEAE4] truncate">{url}</span>
+                <span className="font-mono text-[11.5px] text-[#ECEAE4] truncate min-w-0 flex-1">{url}</span>
               </div>
               <button
                 type="button"
                 onClick={handleCopy}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#14C8CC]/10 border border-[#14C8CC]/30 text-[#14C8CC] text-[12px] hover:bg-[#14C8CC]/20 transition-colors shrink-0"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#14C8CC]/10 border border-[#14C8CC]/30 text-[#14C8CC] text-[12px] hover:bg-[#14C8CC]/20 transition-colors shrink-0 whitespace-nowrap"
               >
                 {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                 {copied ? 'Copied' : 'Copy'}

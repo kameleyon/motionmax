@@ -11,23 +11,62 @@ import { useActiveJobs } from './useActiveJobs';
  *    editing   — same as ready with edit affordances (Phase 5 full).
  *  Aspect ratio always follows `state.aspect`. */
 
-const PROGRESS_MESSAGES: Array<[number, string]> = [
-  [0,  'Warming up the pipeline…'],
-  [10, 'Drafting shot list from your script…'],
-  [25, 'Generating scenes…'],
-  [41, 'Voicing narration…'],
-  [66, 'Rendering video with Kling V3.0 Pro…'],
-  [86, 'Aligning lip-sync keyframes…'],
-  [93, 'Final color grade…'],
-  [99, 'Encoding…'],
-];
+// ── Rotating verbose status banks (ported verbatim from the legacy
+// VideoPlayer.tsx GENERATION_MESSAGES so users get the same fun
+// personality during the awaiting/rendering window). Each phase has
+// a pool; useRotatingMessage() cycles through them every 4s so the
+// copy never sits static long enough to feel frozen.
+const GENERATION_MESSAGES: Record<'analysis' | 'scripting' | 'visuals' | 'rendering', string[]> = {
+  analysis: [
+    'Reading between the lines of your idea…',
+    'Decoding your creative vision…',
+    'Mapping out the blueprint for something epic…',
+    'Analyzing the DNA of your concept…',
+    'Understanding your story at a deeper level…',
+  ],
+  scripting: [
+    'The AI screenwriter is in the zone…',
+    'Crafting dialogue that hits different…',
+    'Writing scenes that would make Spielberg proud…',
+    'Building your narrative arc scene by scene…',
+    'Cooking up a script with all the right ingredients…',
+    'Weaving your story into a visual tapestry…',
+  ],
+  visuals: [
+    'Painting your scenes with digital brushstrokes…',
+    'Bringing your imagination to life, one frame at a time…',
+    'The AI artist is having a creative breakthrough…',
+    'Rendering visuals that pop off the screen…',
+    'Creating eye candy for every scene…',
+    'Turning words into stunning imagery…',
+    'Each image is a small work of art…',
+  ],
+  rendering: [
+    'Stitching it all together into pure gold…',
+    'Your video is in the final stretch…',
+    'Almost ready for its world premiere…',
+    'Adding the final sparkle to your creation…',
+    'The finish line is in sight…',
+  ],
+};
 
-function messageForProgress(pct: number): string {
-  let msg = PROGRESS_MESSAGES[0][1];
-  for (const [threshold, text] of PROGRESS_MESSAGES) {
-    if (pct >= threshold) msg = text;
-  }
-  return msg;
+function phaseForProgress(pct: number): 'analysis' | 'scripting' | 'visuals' | 'rendering' {
+  if (pct < 5)  return 'analysis';
+  if (pct < 30) return 'scripting';
+  if (pct < 85) return 'visuals';
+  return 'rendering';
+}
+
+/** Rotate through a string[] at `intervalMs` cadence so the verbose
+ *  status line feels alive. Seeded with a random start index so
+ *  repeat visits show different copy on the first tick. */
+function useRotatingMessage(messages: string[], intervalMs = 4000): string {
+  const [index, setIndex] = useState(() => Math.floor(Math.random() * messages.length));
+  useEffect(() => {
+    const t = setInterval(() => setIndex((i) => (i + 1) % messages.length), intervalMs);
+    return () => clearInterval(t);
+  }, [messages, intervalMs]);
+  return messages[index] ?? messages[0] ?? '';
 }
 
 function formatElapsed(startedAt: string | null): string {
@@ -535,37 +574,20 @@ export default function Stage({
           </div>
         )}
 
-        {/* Rendering overlay */}
-        {state.phase === 'rendering' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-[8%] bg-black/35 backdrop-blur-[2px]">
-            <LoadingRing size={state.aspect === '9:16' ? 52 : 72} />
-            <div className="font-serif text-[18px] sm:text-[22px] font-medium text-[#ECEAE4] text-center">
-              Rendering your video…
-            </div>
-            <div className="w-[60%] max-w-[420px] h-[3px] rounded-full bg-white/10 overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-[#14C8CC] to-[#0FA6AE] rounded-full transition-[width] duration-500"
-                style={{ width: `${state.progress}%` }}
-              />
-            </div>
-            <div className="font-mono text-[12px] tracking-[0.12em] text-[#14C8CC]">
-              {state.progress}%
-            </div>
-            <div className="font-serif italic text-[13px] text-[#8A9198] text-center max-w-[80%]">
-              {messageForProgress(state.progress)}
-            </div>
-            {/* ETA breakdown — order-of-magnitude estimate so users
-                don't think the page is frozen at 30%. Cinematic is
-                the heaviest (Kling I2V per scene); explainer +
-                smartflow are image-only and finish faster. */}
-            <div className="font-mono text-[10px] tracking-[0.12em] text-[#5A6268] text-center mt-1 max-w-[90%]">
-              {state.project?.project_type === 'cinematic'
-                ? 'Script ~30s · images ~3min · audio ~2min · video ~5min'
-                : state.project?.project_type === 'smartflow'
-                  ? 'Script ~20s · image ~30s · audio ~30s'
-                  : 'Script ~30s · images ~2min · audio ~2min'}
-            </div>
-          </div>
+        {/* Rendering / awaiting-generation overlay. Shown when:
+              • state.phase === 'rendering' (generation row exists,
+                worker is progressing), OR
+              • project exists but no generation row yet (kickoff in
+                flight — treat as phase 'starting' at 2%).
+            The user lands in the real editor shell and watches the
+            project build itself in place; as scenes / audio / music
+            land, the ScenesColumn + Timeline light up live. */}
+        {(state.phase === 'rendering' || (state.phase === 'idle' && !!state.project)) && (
+          <ProcessingOverlay
+            progress={state.phase === 'idle' ? 2 : state.progress}
+            projectType={state.project?.project_type ?? 'doc2video'}
+            aspect={state.aspect}
+          />
         )}
 
         {/* Error overlay */}
@@ -599,6 +621,53 @@ export default function Stage({
           <span className="sm:hidden">⚠ AI-generated · may not reflect reality</span>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Processing overlay for both the kickoff window (no generation row
+ *  yet) AND the active-rendering phase. Ring + "Creating your
+ *  content…" heading + teal progress bar + percent + rotating verbose
+ *  status underneath. Phase-aware: pulls from one of four message
+ *  banks based on progress, so copy naturally follows script →
+ *  imagery → voice → final stretch without us wiring each phase
+ *  explicitly. */
+function ProcessingOverlay({
+  progress,
+  projectType,
+  aspect,
+}: {
+  progress: number;
+  projectType: string | null;
+  aspect: '16:9' | '9:16';
+}) {
+  const phase = phaseForProgress(progress);
+  const rotating = useRotatingMessage(GENERATION_MESSAGES[phase]);
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-[8%] bg-black/35 backdrop-blur-[2px]">
+      <LoadingRing size={aspect === '9:16' ? 52 : 72} />
+      <div className="font-serif text-[18px] sm:text-[22px] font-medium text-[#ECEAE4] text-center">
+        Creating your content…
+      </div>
+      <div className="w-[60%] max-w-[420px] h-[3px] rounded-full bg-white/10 overflow-hidden">
+        <div
+          className="h-full bg-gradient-to-r from-[#14C8CC] to-[#0FA6AE] rounded-full transition-[width] duration-500"
+          style={{ width: `${Math.max(2, Math.min(99, progress))}%` }}
+        />
+      </div>
+      <div className="font-mono text-[12px] tracking-[0.12em] text-[#14C8CC]">
+        {Math.max(2, Math.min(99, progress))}%
+      </div>
+      <div className="font-serif italic text-[13px] text-[#8A9198] text-center max-w-[80%] min-h-[20px]">
+        {rotating}
+      </div>
+      <div className="font-mono text-[10px] tracking-[0.12em] text-[#5A6268] text-center mt-1 max-w-[90%]">
+        {projectType === 'cinematic'
+          ? 'Script ~30s · images ~3min · audio ~2min · video ~5min'
+          : projectType === 'smartflow'
+            ? 'Script ~20s · image ~30s · audio ~30s'
+            : 'Script ~30s · images ~2min · audio ~2min'}
+      </div>
     </div>
   );
 }

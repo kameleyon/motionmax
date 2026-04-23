@@ -22,7 +22,7 @@ export default function Editor() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const { state, isLoading, isError } = useEditorState(projectId ?? null);
+  const { state, isLoading, isError, refetch: refetchEditor } = useEditorState(projectId ?? null);
 
   // The UNIFIED pipeline orchestrator — this is the one SmartFlow /
   // Explainer / Cinematic have always used via the legacy workspaces.
@@ -163,6 +163,20 @@ export default function Editor() {
     setParams(next, { replace: true });
   };
 
+  // Aggressive refetch while stuck on the awaiting screen — 1s polling
+  // until the generation row appears, then useEditorState's normal 3s
+  // poll takes over. This closes the realtime-race gap: if Supabase
+  // realtime drops the INSERT event for the generations row (common
+  // when the channel is still handshaking at kickoff time), we still
+  // pick it up within a second via direct refetch. Once the user can
+  // see the editor, we stop the fast poll.
+  useEffect(() => {
+    const waiting = !!state?.project && !state?.generation;
+    if (!waiting) return;
+    const iv = setInterval(() => { void refetchEditor(); }, 1000);
+    return () => clearInterval(iv);
+  }, [state?.project, state?.generation, refetchEditor]);
+
   const [playing, setPlaying] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   // Which Inspector tab should open when the user clicks a timeline
@@ -206,91 +220,41 @@ export default function Editor() {
     );
   }
 
-  // Kickoff-in-flight state. Project row exists, generation row does
-  // NOT. We show a dedicated full-screen loader with explicit status
-  // messages so the user doesn't sit on a black editor frame wondering
-  // if anything is happening. Flips to the normal editor the moment
-  // the worker writes the generation row (useEditorState realtime).
-  if (awaitingGeneration || kickoffState === 'error') {
-    const modeLabel = state.project.project_type === 'cinematic'
-      ? 'Cinematic'
-      : state.project.project_type === 'smartflow' ? 'Smart Flow' : 'Explainer';
+  // Kickoff ERROR state — only case where we take over the full screen
+  // now. The awaiting-generation UI lives INSIDE the stage frame via
+  // Stage.tsx's rendering overlay, so users land on the real editor
+  // shell immediately (topbar + scenes column + stage + timeline +
+  // inspector) and watch the project build itself in place.
+  if (kickoffState === 'error') {
     return (
       <div className="h-screen grid place-items-center bg-[#0A0D0F] text-[#ECEAE4]">
         <div className="text-center max-w-[420px] px-6">
-          {kickoffState === 'error' ? (
-            <>
-              <div className="font-serif text-[22px] text-[#E66666] mb-2">Couldn't start generation</div>
-              <p className="text-[13px] text-[#8A9198] mb-4">
-                The script job failed to queue — this is usually a credits or auth issue. Check the toast for details.
-              </p>
-              <button
-                type="button"
-                onClick={() => navigate('/dashboard-new')}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#14C8CC]/10 border border-[#14C8CC]/30 text-[#14C8CC] text-[13px] hover:bg-[#14C8CC]/20"
-              >
-                Back to Studio
-              </button>
-            </>
-          ) : (
-            <>
-              <div className="flex flex-col items-center gap-5">
-                <svg viewBox="0 0 50 50" width="72" height="72" aria-hidden="true">
-                  <circle cx="25" cy="25" r="20" fill="none" stroke="rgba(20,200,204,.12)" strokeWidth="3" />
-                  <circle
-                    cx="25" cy="25" r="20" fill="none"
-                    stroke="url(#kSg)" strokeWidth="3" strokeLinecap="round" strokeDasharray="50 200"
-                    transform="rotate(-90 25 25)"
-                  >
-                    <animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="1.2s" repeatCount="indefinite" />
-                  </circle>
-                  <defs>
-                    <linearGradient id="kSg" x1="0" x2="1" y1="0" y2="1">
-                      <stop offset="0%" stopColor="#14C8CC" />
-                      <stop offset="100%" stopColor="#0FA6AE" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-                <div className="font-serif text-[22px] font-medium text-[#ECEAE4]">
-                  Starting your {modeLabel} generation…
-                </div>
-                <div className="font-serif italic text-[13px] text-[#8A9198]">
-                  Working on your script. It may take{' '}
-                  {state.project.project_type === 'cinematic'
-                    ? '8–12 minutes'
-                    : state.project.project_type === 'smartflow'
-                      ? '60–90 seconds'
-                      : '4–6 minutes'}
-                  {' '}to finish everything. Feel free to leave this tab open — we'll keep working.
-                </div>
-                <div className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mt-2">
-                  {state.project.project_type === 'cinematic'
-                    ? 'Script ~30s · images ~3min · audio ~2min · video ~5min'
-                    : state.project.project_type === 'smartflow'
-                      ? 'Script ~20s · image ~30s · audio ~30s'
-                      : 'Script ~30s · images ~2min · audio ~2min'}
-                </div>
-                {/* Retry affordance — if the kickoff hasn't fired in
-                    the current session (idle) or we think it died,
-                    offer a manual start. Critical for reload / stale
-                    tab scenarios where the autostart flag has been
-                    stripped but no generation row exists yet. */}
-                {kickoffState === 'idle' && (
-                  <button
-                    type="button"
-                    onClick={retryStartGeneration}
-                    className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#14C8CC]/10 border border-[#14C8CC]/30 text-[#14C8CC] text-[13px] hover:bg-[#14C8CC]/20"
-                  >
-                    Start generation
-                  </button>
-                )}
-              </div>
-            </>
-          )}
+          <div className="font-serif text-[22px] text-[#E66666] mb-2">Couldn't start generation</div>
+          <p className="text-[13px] text-[#8A9198] mb-4">
+            The script job failed to queue — this is usually a credits or auth issue. Check the toast for details.
+          </p>
+          <div className="flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={retryStartGeneration}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-[#14C8CC] to-[#0FA6AE] text-[#0A0D0F] text-[13px] font-semibold hover:brightness-105"
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard-new')}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#14C8CC]/10 border border-[#14C8CC]/30 text-[#14C8CC] text-[13px] hover:bg-[#14C8CC]/20"
+            >
+              Back to Studio
+            </button>
+          </div>
         </div>
       </div>
     );
   }
+  // Suppress the unused ref now that the awaiting takeover is gone.
+  void awaitingGeneration;
 
   const advanceScene = () => {
     const next = Math.min(state.scenes.length - 1, selectedSceneIndex + 1);

@@ -115,6 +115,16 @@ export function useEditorState(projectId: string | null): {
   const query = useQuery({
     queryKey: ['editor-state', projectId, user?.id],
     enabled: !!user && !!projectId,
+    // Belt-and-suspenders on top of realtime. Supabase realtime can
+    // drop INSERT events when the channel is mid-subscription — which
+    // is exactly the race that keeps users stuck on "Starting your
+    // generation…" after a fresh autostart: the generation row is
+    // inserted ~3s after the channel subscribes, and if the event
+    // arrives first the client was still handshaking and misses it.
+    // Polling every 3s guarantees the new generation row is picked up
+    // within one cycle regardless of realtime state. Matches the
+    // cadence useActiveJobs already uses.
+    refetchInterval: 3000,
     queryFn: async (): Promise<EditorState> => {
       const { data: project, error: projErr } = await supabase
         .from('projects')

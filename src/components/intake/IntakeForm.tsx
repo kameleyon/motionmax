@@ -21,6 +21,8 @@ import {
   type CaptionStyle,
 } from '@/components/workspace/CaptionStyleSelector';
 import { uploadStyleReference } from '@/lib/uploadStyleReference';
+import { processAttachments } from '@/lib/attachmentProcessor';
+import type { SourceAttachment } from '@/components/workspace/SourceInput';
 import {
   FEATURES, MODE_LABEL, BASE_COST, ADDON_COST,
   type ProjectMode, type IntakeAspect, type IntakeDuration,
@@ -120,6 +122,12 @@ export default function IntakeForm({
   const navigate = useNavigate();
 
   const [prompt, setPrompt] = useState(initialPrompt);
+  // Source attachments for the prompt — Add source / File / URL
+  // buttons populate this, processAttachments() concatenates them
+  // to the prompt text on submit so the worker sees the full source
+  // material. Same SourceAttachment shape the legacy workspaces use.
+  const [sourceAttachments, setSourceAttachments] = useState<SourceAttachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [aspect, setAspect] = useState<IntakeAspect>(aspectFromFormat(initialFormat));
   const [duration, setDuration] = useState<IntakeDuration>('<3min');
   const [language, setLanguage] = useState(initialLanguage);
@@ -276,6 +284,24 @@ export default function IntakeForm({
       const title = prompt.trim().slice(0, 80);
       const length = features.duration && duration === '>3min' ? 'presentation' : 'short';
 
+      // Read + concat attached sources BEFORE the project row is
+      // inserted — processAttachments inlines text files, uploads
+      // images to Supabase storage, and tags links / youtube / github
+      // / gdrive URLs with [FETCH_URL] / [YOUTUBE_URL] / [GITHUB_URL]
+      // etc. so the worker knows to fetch them during script gen.
+      // The worker's buildSmartFlow / buildDoc2Video / buildCinematic
+      // prompts include the full content block as the user's input,
+      // so these sections land directly in the LLM prompt.
+      let enrichedContent = prompt.trim();
+      try {
+        const attached = await processAttachments(sourceAttachments);
+        if (attached) enrichedContent += attached;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        toast.error(`Couldn't attach sources: ${msg}`);
+        return;
+      }
+
       // characterImages was previously DROPPED on insert — the
       // workspace had to re-attach them on first load. Worker
       // generateVideo.ts:119 reads payload.characterImages from the
@@ -285,7 +311,7 @@ export default function IntakeForm({
       const projectInsert: Record<string, unknown> = {
         user_id: user.id,
         title,
-        content: prompt.trim(),
+        content: enrichedContent,
         project_type: mode,
         format: formatFromAspect(aspect),
         length,
@@ -388,13 +414,97 @@ export default function IntakeForm({
             className="w-full min-h-[100px] bg-transparent border-0 outline-none text-[#ECEAE4] font-serif text-[15px] sm:text-[16px] leading-[1.5] resize-y p-4"
           />
           <div className="flex items-center gap-2 flex-wrap px-3 py-2.5 border-t border-white/5">
-            <button type="button" className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.1em] uppercase text-[#8A9198] px-2 py-1 border border-dashed border-white/10 rounded-md hover:text-[#ECEAE4]">
+            {/* Hidden file input — the visible File button triggers it.
+                Accepts text / markdown / pdf / images. Non-text files
+                are passed to processAttachments() which handles them
+                per-type at submit (images → Supabase storage upload,
+                text files → inline content). */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".txt,.md,.csv,.json,.rtf,.html,.pdf,image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                if (files.length === 0) return;
+                (async () => {
+                  const added: SourceAttachment[] = [];
+                  for (const f of files) {
+                    const isImage = f.type.startsWith('image/');
+                    const isText = !isImage && /text|json|xml|csv|rtf|html/i.test(f.type || '');
+                    let value = '';
+                    if (isImage) {
+                      // Stash a blob: URL; processAttachments uploads
+                      // to Supabase storage at submit time.
+                      value = URL.createObjectURL(f);
+                    } else if (isText) {
+                      try {
+                        value = await f.text();
+                      } catch {
+                        value = '';
+                      }
+                    } else {
+                      value = 'data:' + (f.type || 'application/octet-stream');
+                    }
+                    added.push({
+                      id: `${Date.now()}-${f.name}`,
+                      type: isImage ? 'image' : 'file',
+                      name: f.name,
+                      value,
+                    });
+                  }
+                  setSourceAttachments((prev) => [...prev, ...added]);
+                  toast.success(`${added.length} source${added.length === 1 ? '' : 's'} attached.`);
+                })();
+                e.target.value = '';
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                // "Add source" shows the file picker — same flow as
+                // the File button. Kept as a separate affordance
+                // because the visual treatment (dashed border) signals
+                // "primary add action" vs the specific-type buttons.
+                fileInputRef.current?.click();
+              }}
+              className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.1em] uppercase text-[#8A9198] px-2 py-1 border border-dashed border-white/10 rounded-md hover:text-[#ECEAE4]"
+            >
               + Add source
             </button>
-            <button type="button" className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.1em] uppercase text-[#8A9198] px-2 py-1 border border-white/5 rounded-md hover:text-[#ECEAE4]">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.1em] uppercase text-[#8A9198] px-2 py-1 border border-white/5 rounded-md hover:text-[#ECEAE4]"
+            >
               <Paperclip className="w-3 h-3" /> File
             </button>
-            <button type="button" className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.1em] uppercase text-[#8A9198] px-2 py-1 border border-white/5 rounded-md hover:text-[#ECEAE4]">
+            <button
+              type="button"
+              onClick={() => {
+                const raw = window.prompt('Paste a URL, YouTube link, or GitHub repo link:');
+                const url = raw?.trim();
+                if (!url) return;
+                try {
+                  const u = new URL(url);
+                  const host = u.host.toLowerCase();
+                  const kind: SourceAttachment['type'] =
+                    host.includes('youtube.com') || host === 'youtu.be' ? 'youtube'
+                    : host.includes('github.com') ? 'github'
+                    : host.includes('drive.google.com') ? 'gdrive'
+                    : 'link';
+                  setSourceAttachments((prev) => [
+                    ...prev,
+                    { id: `${Date.now()}-url`, type: kind, name: u.host, value: url },
+                  ]);
+                  toast.success(`${kind === 'link' ? 'URL' : kind === 'youtube' ? 'YouTube link' : kind === 'github' ? 'GitHub repo' : 'Drive link'} attached.`);
+                } catch {
+                  toast.error('That doesn\'t look like a valid URL.');
+                }
+              }}
+              className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.1em] uppercase text-[#8A9198] px-2 py-1 border border-white/5 rounded-md hover:text-[#ECEAE4]"
+            >
               <LinkIcon className="w-3 h-3" /> URL
             </button>
             <div className="flex-1" />
@@ -406,6 +516,29 @@ export default function IntakeForm({
               <Sparkles className="w-3 h-3" /> Smart prompt
             </button>
           </div>
+          {/* Attached-sources chip list. Remove per-item with the ×. */}
+          {sourceAttachments.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2.5">
+              {sourceAttachments.map((a) => (
+                <span
+                  key={a.id}
+                  className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-wider text-[#ECEAE4] px-2 py-0.5 rounded-md bg-[#1B2228] border border-white/10"
+                  title={`${a.type} · ${a.name}`}
+                >
+                  <span className="uppercase text-[#14C8CC]">{a.type}</span>
+                  <span className="truncate max-w-[180px]">{a.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setSourceAttachments((prev) => prev.filter((x) => x.id !== a.id))}
+                    aria-label={`Remove ${a.name}`}
+                    className="text-[#8A9198] hover:text-[#E66666]"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
         </IntakeField>
       </div>
 

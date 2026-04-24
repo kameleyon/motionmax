@@ -11,6 +11,7 @@ import { CaptionStyleSelector, type CaptionStyle } from '@/components/workspace/
 import { SceneVersionHistory } from '@/components/workspace/SceneVersionHistory';
 import { useSceneVersionCount } from '@/hooks/useSceneVersions';
 import { useActiveJobs } from './useActiveJobs';
+import ConfirmModal from './ConfirmModal';
 import type { EditorState } from '@/hooks/useEditorState';
 import { useSceneRegen } from './useSceneRegen';
 import { supabase } from '@/integrations/supabase/client';
@@ -169,6 +170,25 @@ export default function Inspector({
   // is what was producing the half-French / half-English garbling).
   const [previewLoading, setPreviewLoading] = useState<string | null>(null);
   const [previewPlaying, setPreviewPlaying] = useState<string | null>(null);
+
+  // Themed confirm-modal state. One instance handles both the voice
+  // apply-all and motion re-render-all prompts — we stash the callback
+  // plus the localised copy in state, then render a single <ConfirmModal/>
+  // at the bottom of the tree.
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    confirmLabel: string;
+    footer?: string;
+    onConfirm: () => void;
+  }>({
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Confirm',
+    onConfirm: () => {},
+  });
   const playVoicePreview = async (voiceId: string) => {
     if (previewPlaying === voiceId) { setPreviewPlaying(null); return; }
     if (!user) return;
@@ -630,9 +650,17 @@ export default function Inspector({
               type="button"
               onClick={() => {
                 if (voiceDraft === currentVoice) return;
-                if (window.confirm(`Apply ${prettyVoiceName(voiceDraft)} to all scenes and regenerate every narration? This queues ${state.scenes.length} audio jobs and locks editing while it runs.`)) {
-                  updateProjectVoice(voiceDraft, true);
-                }
+                setConfirmState({
+                  open: true,
+                  title: `Apply ${prettyVoiceName(voiceDraft)} to every scene?`,
+                  message: `This queues ${state.scenes.length} audio jobs and re-renders every narration in the new voice. Editing stays locked until it's done.`,
+                  confirmLabel: 'Apply to all',
+                  footer: 'Editing is locked while this runs',
+                  onConfirm: () => {
+                    setConfirmState((s) => ({ ...s, open: false }));
+                    updateProjectVoice(voiceDraft, true);
+                  },
+                });
               }}
               disabled={busy !== 'idle' || bulkAudioRegenActive || projectLocked || voiceDraft === currentVoice}
               className="w-full mt-3 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-[12.5px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 disabled:opacity-50"
@@ -804,10 +832,18 @@ export default function Inspector({
                     only this scene locks. */}
               <button
                 type="button"
-                onClick={async () => {
-                  if (window.confirm(`Re-render every scene's video with the current motion settings? This queues ${state.scenes.length} video jobs and locks editing while it runs.`)) {
-                    await regenerateAllVideos();
-                  }
+                onClick={() => {
+                  setConfirmState({
+                    open: true,
+                    title: 'Re-render every scene with new motion?',
+                    message: `This queues ${state.scenes.length} video jobs and re-renders every clip with the current motion settings. Editing stays locked until it's done.`,
+                    confirmLabel: 'Re-render all',
+                    footer: 'Editing is locked while this runs',
+                    onConfirm: () => {
+                      setConfirmState((s) => ({ ...s, open: false }));
+                      void regenerateAllVideos();
+                    },
+                  });
                 }}
                 disabled={busy !== 'idle' || projectLocked}
                 className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-[12.5px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -920,6 +956,17 @@ export default function Inspector({
           onVersionRestored={() => { setHistoryOpen(false); }}
         />
       )}
+
+      <ConfirmModal
+        open={confirmState.open}
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmLabel={confirmState.confirmLabel}
+        cancelLabel="Cancel"
+        footer={confirmState.footer}
+        onConfirm={confirmState.onConfirm}
+        onCancel={() => setConfirmState((s) => ({ ...s, open: false }))}
+      />
     </div>
   );
 }

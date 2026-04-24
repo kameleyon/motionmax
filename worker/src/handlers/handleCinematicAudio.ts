@@ -91,7 +91,7 @@ function inferStyleInstruction(voiceover: string): string {
     return "Speak with curiosity and intrigue, inviting the listener to think";
 
   // Default: viral social media energy
-  return "Speak fast-paced with raw social media energy, punchy rapid-fire delivery, dramatic pauses for emphasis, hype moments that hit like a plot twist, enthusiast, energetic and mysterious, witty and fun, showing all kind of emotion matching the context";
+  return "Speak Natural human pace matching the topic and emotion requires, conversational tone with natural pauses and human expression, match the energy of the topic, while remaining clear and very human";
 }
 
 export async function handleCinematicAudio(
@@ -201,7 +201,7 @@ export async function handleCinematicAudio(
         apiKeys: googleApiKeys,
         directives: {
           style: styleInstruction,
-          pacing: "energetic, varied — push forward in hook/action beats, soften into reflective moments",
+          pacing: "natural human conversational tone pace, varied — push forward in hook/action beats, soften into reflective moments",
           accent: undefined, // auto-inferred from narration language
         },
       });

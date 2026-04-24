@@ -57,7 +57,7 @@ function inferStyleInstruction(voiceover: string): string {
     return "Speak with somber reverence, slow and respectful";
   if (lower.includes("victory") || lower.includes("triumph"))
     return "Speak with rising excitement and celebration";
-  return "Speak fast-paced with raw social media energy, punchy rapid-fire delivery, dramatic pauses for emphasis, hype moments that hit like a plot twist, enthusiast, energetic and mysterious, witty and fun, showing all kind of emotion matching the context";
+  return "Speak Natural human pace matching the topic and emotion requires, conversational tone with natural pauses and human expression, match the energy of the topic, while remaining clear and very human";
 }
 
 export async function handleMasterAudio(
@@ -152,7 +152,7 @@ export async function handleMasterAudio(
       apiKeys: googleApiKeys,
       directives: {
         style: inferStyleInstruction(masterText),
-        pacing: "energetic, varied — push forward in hook/action beats, soften into reflective moments",
+        pacing: "natural human conversational tone pace, varied — push forward in hook/action beats, soften into reflective moments",
       },
     });
   } else if (voiceName.startsWith("sm:") || voiceName.startsWith("sm2:")) {

@@ -34,11 +34,18 @@ export default function Inspector({
   selectedSceneIndex,
   focusTab,
   onTabConsumed,
+  generationFullyReady = true,
 }: {
   state: EditorState;
   selectedSceneIndex: number;
   focusTab?: InspectorTab;
   onTabConsumed?: () => void;
+  /** When false, the Inspector is read-only — every edit/regen button
+   *  and textarea is disabled. Set by Editor.tsx when ANY scene is
+   *  missing its required assets (imageUrl + audioUrl for explainer;
+   *  additionally videoUrl for cinematic). Prevents the user from
+   *  editing half-baked state while background jobs are still writing. */
+  generationFullyReady?: boolean;
 }) {
   const [tab, setTab] = useState<InspectorTab>('scene');
   const { user } = useAuth();
@@ -200,8 +207,13 @@ export default function Inspector({
     }
   };
 
-  const disabled = state.phase === 'rendering';
-  const sceneReady = state.phase !== 'rendering' && !!scene;
+  // Inspector locks during render AND during the post-render window
+  // where status='complete' but individual scenes are still finishing
+  // their video jobs. `generationFullyReady === false` means some
+  // scene still needs its imageUrl / audioUrl / videoUrl — don't let
+  // the user edit until every scene is complete.
+  const disabled = state.phase === 'rendering' || !generationFullyReady;
+  const sceneReady = state.phase !== 'rendering' && !!scene && generationFullyReady;
 
   // Smart Flow has no per-scene motion controls — those are baked
   // into the SmartFlow render pipeline. Hide the tab entirely so it
@@ -283,19 +295,36 @@ export default function Inspector({
         </div>
       )}
 
-      {disabled && (
-        <div className="flex-1 flex items-center justify-center p-6">
-          <div className="text-center max-w-[240px]">
-            <Loader2 className="w-5 h-5 animate-spin text-[#14C8CC] mx-auto mb-3" />
-            <div className="font-serif text-[14px] text-[#ECEAE4] mb-1.5">
-              Scenes are rendering
+      {disabled && (() => {
+        // Count scenes still missing their required assets so the copy
+        // is specific ("3 of 15 scenes still finishing"). Figure based
+        // on project_type: cinematic needs videoUrl too.
+        const pt = state.project?.project_type ?? 'doc2video';
+        const isCin = pt === 'cinematic';
+        const pending = state.scenes.filter((s) => {
+          if (!s.imageUrl) return true;
+          if (!s.audioUrl) return true;
+          if (isCin && !s.videoUrl) return true;
+          return false;
+        }).length;
+        const total = state.scenes.length;
+        const isFinalizing = state.phase === 'ready'; // phase ready but locked = video jobs still going
+        return (
+          <div className="flex-1 flex items-center justify-center p-6">
+            <div className="text-center max-w-[260px]">
+              <Loader2 className="w-5 h-5 animate-spin text-[#14C8CC] mx-auto mb-3" />
+              <div className="font-serif text-[14px] text-[#ECEAE4] mb-1.5">
+                {isFinalizing ? 'Finishing your scenes' : 'Scenes are rendering'}
+              </div>
+              <p className="font-mono text-[10.5px] text-[#8A9198] tracking-wider leading-[1.5]">
+                {isFinalizing
+                  ? `${pending} of ${total} scenes still finishing · editing unlocks when every scene is ready.`
+                  : `This panel unlocks when your video finishes rendering — about ${Math.max(1, Math.round((100 - state.progress) / 10))} min remaining.`}
+              </p>
             </div>
-            <p className="font-mono text-[10.5px] text-[#8A9198] tracking-wider leading-[1.5]">
-              This panel unlocks when your video finishes rendering — about {Math.max(1, Math.round((100 - state.progress) / 10))} min remaining.
-            </p>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* SCENE TAB — prompt + image/video/voice actions + cast (read-only).
           Shot + Duration moved to Motion tab per product request. */}

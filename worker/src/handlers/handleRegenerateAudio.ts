@@ -80,7 +80,7 @@ function inferStyleInstruction(voiceover: string): string {
   if (lower.includes("danger") || lower.includes("escape")) return "Speak with urgency and breathless tension";
   if (lower.includes("laugh") || lower.includes("funny")) return "Speak with playful amusement and a hint of laughter";
   if (lower.includes("question") || lower.includes("what if")) return "Speak with curiosity and intrigue, inviting the listener to think";
-  return "Speak with raw social media energy, punchy pacing, dramatic pauses for emphasis, hype moments that hit like a plot twist, enthusiast, energetic and mysterious, witty and fun, showing all kind of emotion matching the context";
+  return "Speak Natural human pace matching the topic and emotion requires, conversational tone with natural pauses and human expression, match the energy of the topic, while remaining clear and very human";
 }
 
 // ── Handler ────────────────────────────────────────────────────────
@@ -160,7 +160,7 @@ export async function handleRegenerateAudio(
       ].filter(Boolean) as string[],
       directives: {
         style: styleInstruction,
-        pacing: "energetic, varied — push forward in hook/action beats, soften into reflective moments",
+        pacing: "natural human conversational tone pace, varied — push forward in hook/action beats, soften into reflective moments",
       },
     });
   } else if ((voiceName.startsWith("sm:") || voiceName.startsWith("sm2:")) && !isHC) {

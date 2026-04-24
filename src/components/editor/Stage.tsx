@@ -611,12 +611,16 @@ export default function Stage({
           background: sceneToShow?.imageUrl ? '#050709' : '#0a0d10',
           boxShadow: '0 40px 120px -40px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.06)',
           transition: 'aspect-ratio .3s ease, width .3s ease, height .3s ease',
-          cursor: state.phase === 'ready' && onAdvanceScene ? 'pointer' : 'default',
+          cursor: pipelineDone && state.phase === 'ready' && onAdvanceScene ? 'pointer' : 'default',
         }}
         onClick={(e) => {
           // Let the native <video> controls handle their own clicks.
           if ((e.target as HTMLElement).tagName === 'VIDEO') return;
-          if (state.phase === 'ready' && onAdvanceScene) onAdvanceScene();
+          // Only advance scenes when generation is FULLY done (all
+          // scene assets landed). During the finalizing window the
+          // frame is decorative — interacting would pause/resume the
+          // global processing overlay.
+          if (pipelineDone && state.phase === 'ready' && onAdvanceScene) onAdvanceScene();
         }}
       >
         {/* Preview: video if ready, else latest image. Video is MUTED
@@ -696,8 +700,14 @@ export default function Stage({
             the current scene's image or video is being re-rendered.
             Animated loading ring + pulsing grid so the user clearly
             sees "work is happening", even though the underlying thumb
-            is unchanged until the worker finishes. */}
-        {state.phase === 'ready' && sceneActive && (
+            is unchanged until the worker finishes.
+            GATED on `pipelineDone`: during initial generation (even
+            after generation.status='complete' if scenes are still
+            finishing their video jobs), the global ProcessingOverlay
+            owns the frame — we don't also layer the per-scene regen
+            overlay on top, or the user sees "Rendering new video…"
+            wording that belongs to user-triggered regens. */}
+        {pipelineDone && state.phase === 'ready' && sceneActive && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-[8%] bg-black/55 backdrop-blur-[2px] animate-in fade-in duration-200">
             {/* Secondary shimmer overlay */}
             <div
@@ -806,10 +816,21 @@ function ProcessingOverlay({
 }) {
   const phase = phaseForProgress(progress);
   const rotating = useRotatingMessage(GENERATION_MESSAGES[phase]);
+  // 9:16 portrait → smaller type + fixed-height lines so wrapping never
+  // pushes siblings around. 16:9 keeps the larger readable size. The
+  // page-jumping user reported on portrait came from the rotating line
+  // swapping between 1 and 2 lines; pinning min/max heights to the
+  // 1-line natural height (and forcing overflow-hidden text-ellipsis)
+  // keeps the overlay's total height stable regardless of copy length.
+  const isPortrait = aspect === '9:16';
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-[8%] bg-black/35 backdrop-blur-[2px]">
-      <LoadingRing size={aspect === '9:16' ? 52 : 72} />
-      <div className="font-serif text-[18px] sm:text-[22px] font-medium text-[#ECEAE4] text-center">
+      <LoadingRing size={isPortrait ? 52 : 72} />
+      <div className={
+        isPortrait
+          ? 'font-serif text-[15px] font-medium text-[#ECEAE4] text-center'
+          : 'font-serif text-[18px] sm:text-[22px] font-medium text-[#ECEAE4] text-center'
+      }>
         Creating your content…
       </div>
       <div className="w-[60%] max-w-[420px] h-[3px] rounded-full bg-white/10 overflow-hidden">
@@ -818,13 +839,36 @@ function ProcessingOverlay({
           style={{ width: `${Math.max(2, Math.min(99, progress))}%` }}
         />
       </div>
-      <div className="font-mono text-[12px] tracking-[0.12em] text-[#14C8CC]">
+      <div className={
+        isPortrait
+          ? 'font-mono text-[11px] tracking-[0.12em] text-[#14C8CC]'
+          : 'font-mono text-[12px] tracking-[0.12em] text-[#14C8CC]'
+      }>
         {Math.max(2, Math.min(99, progress))}%
       </div>
-      <div className="font-serif italic text-[13px] text-[#8A9198] text-center max-w-[80%] min-h-[20px]">
+      {/* Rotating status line. On portrait we clamp to one line with
+          ellipsis + fixed height so phase transitions never reflow the
+          overlay. Landscape keeps the two-line comfort. */}
+      <div
+        className={
+          isPortrait
+            ? 'font-serif italic text-[11px] text-[#8A9198] text-center max-w-[90%] whitespace-nowrap overflow-hidden text-ellipsis'
+            : 'font-serif italic text-[13px] text-[#8A9198] text-center max-w-[80%] min-h-[20px]'
+        }
+        style={isPortrait ? { height: 16, lineHeight: '16px' } : undefined}
+        title={rotating}
+      >
         {rotating}
       </div>
-      <div className="font-mono text-[10px] tracking-[0.12em] text-[#5A6268] text-center mt-1 max-w-[90%]">
+      {/* ETA strip — same treatment: one-line clamp on portrait so the
+          "Script ~30s · images ~2min · audio ~2min" never wraps. */}
+      <div
+        className={
+          isPortrait
+            ? 'font-mono text-[9px] tracking-[0.10em] text-[#5A6268] text-center mt-1 max-w-[96%] whitespace-nowrap overflow-hidden text-ellipsis'
+            : 'font-mono text-[10px] tracking-[0.12em] text-[#5A6268] text-center mt-1 max-w-[90%]'
+        }
+      >
         {projectType === 'cinematic'
           ? 'Script ~30s · images ~3min · audio ~2min · video ~5min'
           : projectType === 'smartflow'

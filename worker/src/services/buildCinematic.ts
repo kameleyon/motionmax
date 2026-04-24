@@ -232,7 +232,7 @@ GOOD: ✓ "Inside a cluttered home kitchen at 2AM, dirty dishes in the sink, dim
 - Write CONTINUOUS, FLOWING narration — the voiceover across all scenes should read as ONE cohesive script, not independent fragments
 - Each scene's voiceover must CONNECT to the previous scene — use transitions, continuation, cause-and-effect, or narrative momentum
 - NEVER restart the narrative in each scene. Scene 5 should feel like the natural continuation of scene 4, not a new beginning
-- ENERGETIC, conversational tone — engaging but coherent
+- Natural human tone, conversational tone — engaging but coherent
 - The FIRST scene hooks the audience. Every scene AFTER that BUILDS on what came before
 - Vary pacing: some scenes push forward, some pause to reflect, some escalate — like a real speaker
 - NO labels, NO stage directions, NO markdown — just raw spoken text

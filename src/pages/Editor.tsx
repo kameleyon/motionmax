@@ -383,6 +383,29 @@ export default function Editor() {
     if (next !== selectedSceneIndex) setManualSelection(next);
   };
 
+  // Strict "every scene is ready" check. Claim_pending_job can let
+  // finalize run when SOME deps fail (20260423210000 migration),
+  // which flips generation.status to 'complete' and phase to 'ready'
+  // before every cinematic_video has finished. We don't want the user
+  // editing / playing while background video jobs are still writing
+  // scene.videoUrl — it causes the per-scene regen overlay to fire on
+  // the stage and lets them kick off edits against half-baked state.
+  // This flag is true ONLY when the pipeline has signaled done AND
+  // every scene has the assets its project_type requires.
+  const projectType = state?.project?.project_type ?? 'doc2video';
+  const isCinematic = projectType === 'cinematic';
+  const scenesAllHaveRequiredAssets = state
+    ? state.scenes.length > 0 && state.scenes.every((s) => {
+        if (!s.imageUrl) return false;
+        if (!s.audioUrl) return false;
+        if (isCinematic && !s.videoUrl) return false;
+        return true;
+      })
+    : false;
+  const generationFullyReady =
+    state?.phase === 'ready' &&
+    scenesAllHaveRequiredAssets;
+
   return (
     <EditorFrame
       state={state}
@@ -407,7 +430,10 @@ export default function Editor() {
           fullscreen={fullscreen}
           onFullscreenChange={setFullscreen}
           pipelineProgress={pipelineState.progress}
-          pipelineDone={pipelineState.step === 'complete' || pipelineState.step === 'error'}
+          // Editor stays in rendering mode until every scene has its
+          // required assets — NOT just when the pipeline hook reports
+          // complete. See `generationFullyReady` derivation above.
+          pipelineDone={generationFullyReady}
         />
       }
       inspector={
@@ -416,6 +442,7 @@ export default function Editor() {
           selectedSceneIndex={selectedSceneIndex}
           focusTab={inspectorFocusTab}
           onTabConsumed={() => setInspectorFocusTab(undefined)}
+          generationFullyReady={generationFullyReady}
         />
       }
       timeline={
@@ -426,6 +453,7 @@ export default function Editor() {
           onSelectVoice={(i) => { setManualSelection(i); setInspectorFocusTab('voice'); }}
           playing={playing}
           onPlayToggle={() => setPlaying((p) => !p)}
+          generationFullyReady={generationFullyReady}
         />
       }
     />

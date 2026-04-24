@@ -30,6 +30,7 @@ export default function Timeline({
   onSelectVoice,
   playing,
   onPlayToggle,
+  generationFullyReady = true,
 }: {
   state: EditorState;
   selectedSceneIndex: number;
@@ -40,6 +41,10 @@ export default function Timeline({
   onSelectVoice?: (index: number) => void;
   playing: boolean;
   onPlayToggle: () => void;
+  /** When false, Play + Prev/Next + track clicks are disabled. Set by
+   *  Editor.tsx when any scene is still missing its required assets
+   *  (imageUrl + audioUrl + optional videoUrl for cinematic). */
+  generationFullyReady?: boolean;
 }) {
   const { tasksForScene, bulkOpActive, bulkOpKind } = useActiveJobs(state.project?.id ?? null);
   const bulkOpLabel =
@@ -91,19 +96,19 @@ export default function Timeline({
       <div className="flex items-center gap-2.5 px-3 py-2 border-b border-white/5 bg-[#10151A]">
         <button
           type="button"
-          title="Previous scene"
+          title={!generationFullyReady ? 'Waiting for all scenes to finish rendering' : 'Previous scene'}
           aria-label="Previous scene"
-          disabled={selectedSceneIndex <= 0}
+          disabled={selectedSceneIndex <= 0 || !generationFullyReady}
           onClick={() => onSelectScene(Math.max(0, selectedSceneIndex - 1))}
-          className="w-7 h-7 grid place-items-center rounded-md text-[#8A9198] hover:bg-[#1B2228] hover:text-[#ECEAE4] disabled:opacity-30"
+          className="w-7 h-7 grid place-items-center rounded-md text-[#8A9198] hover:bg-[#1B2228] hover:text-[#ECEAE4] disabled:opacity-30 disabled:cursor-not-allowed"
         >
           <SkipBack className="w-3.5 h-3.5" />
         </button>
         <button
           type="button"
           onClick={onPlayToggle}
-          disabled={state.phase !== 'ready'}
-          title={playing ? 'Pause' : 'Play'}
+          disabled={state.phase !== 'ready' || !generationFullyReady}
+          title={!generationFullyReady ? 'Waiting for all scenes to finish rendering' : (playing ? 'Pause' : 'Play')}
           aria-label={playing ? 'Pause' : 'Play'}
           className="w-9 h-9 grid place-items-center rounded-full bg-[#ECEAE4] text-[#0A0D0F] hover:brightness-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
         >
@@ -111,11 +116,11 @@ export default function Timeline({
         </button>
         <button
           type="button"
-          title="Next scene"
+          title={!generationFullyReady ? 'Waiting for all scenes to finish rendering' : 'Next scene'}
           aria-label="Next scene"
-          disabled={selectedSceneIndex >= state.scenes.length - 1}
+          disabled={selectedSceneIndex >= state.scenes.length - 1 || !generationFullyReady}
           onClick={() => onSelectScene(Math.min(state.scenes.length - 1, selectedSceneIndex + 1))}
-          className="w-7 h-7 grid place-items-center rounded-md text-[#8A9198] hover:bg-[#1B2228] hover:text-[#ECEAE4] disabled:opacity-30"
+          className="w-7 h-7 grid place-items-center rounded-md text-[#8A9198] hover:bg-[#1B2228] hover:text-[#ECEAE4] disabled:opacity-30 disabled:cursor-not-allowed"
         >
           <SkipForward className="w-3.5 h-3.5" />
         </button>

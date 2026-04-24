@@ -103,6 +103,14 @@ function formatFromAspect(a: IntakeAspect): string {
 
 const MAX_CHAR_IMAGES = 3;
 const MAX_CHAR_IMAGE_BYTES = 5 * 1024 * 1024;
+// Character limits — enforced in the UI so users see the ceiling
+// before they submit. The prompt cap matches buildDoc2Video /
+// buildCinematic's server-side truncation at 15_000 chars. The
+// character-description cap is tighter because that string is
+// injected into EVERY scene's image prompt (15+ injections per run),
+// so a long description balloons the LLM payload fast.
+const MAX_PROMPT_CHARS = 15_000;
+const MAX_CHAR_DESC_CHARS = 2000;
 
 export default function IntakeForm({
   mode,
@@ -158,6 +166,11 @@ export default function IntakeForm({
   const consistency = features.cast;
   const [characterDescription, setCharacterDescription] = useState('');
   const [characterImages, setCharacterImages] = useState<string[]>([]);
+  // Separate from `sourceAttachments` — these apply only to the
+  // character-consistency block (additional text/link references that
+  // describe the lead's look).
+  const [characterAttachments, setCharacterAttachments] = useState<SourceAttachment[]>([]);
+  const charAttachmentInput = useRef<HTMLInputElement>(null);
   const charImageInput = useRef<HTMLInputElement>(null);
 
   const [generating, setGenerating] = useState(false);
@@ -247,6 +260,116 @@ export default function IntakeForm({
     }
   };
 
+  /** Attach an arbitrary file to the Sources list. Handles image
+   *  (blob URL), text (inline contents), other (type placeholder) —
+   *  same logic as the File button's onChange, extracted so the
+   *  paste + drop handlers can reuse it. */
+  const attachFileToSources = async (file: File) => {
+    const isImage = file.type.startsWith('image/');
+    const isText = !isImage && /text|json|xml|csv|rtf|html/i.test(file.type || '');
+    let value = '';
+    if (isImage) value = URL.createObjectURL(file);
+    else if (isText) { try { value = await file.text(); } catch { value = ''; } }
+    else value = 'data:' + (file.type || 'application/octet-stream');
+    setSourceAttachments((prev) => [...prev, {
+      id: `${Date.now()}-${file.name}`,
+      type: isImage ? 'image' : 'file',
+      name: file.name,
+      value,
+    }]);
+  };
+
+  /** Turn a pasted URL string into a typed source chip. Returns true
+   *  if a URL was detected + attached, false otherwise (so the caller
+   *  can let the default paste behaviour insert the text into the
+   *  textarea). */
+  const tryAttachUrl = (raw: string, target: 'sources' | 'character'): boolean => {
+    const url = raw.trim();
+    if (!/^https?:\/\//i.test(url)) return false;
+    try {
+      const u = new URL(url);
+      const host = u.host.toLowerCase();
+      const kind: SourceAttachment['type'] =
+        host.includes('youtube.com') || host === 'youtu.be' ? 'youtube'
+        : host.includes('github.com') ? 'github'
+        : host.includes('drive.google.com') ? 'gdrive'
+        : 'link';
+      if (target === 'sources') {
+        setSourceAttachments((prev) => [...prev, {
+          id: `${Date.now()}-url`, type: kind, name: u.host, value: url,
+        }]);
+        toast.success(`${kind === 'link' ? 'URL' : kind === 'youtube' ? 'YouTube link' : kind === 'github' ? 'GitHub repo' : 'Drive link'} attached.`);
+      } else {
+        setCharacterAttachments((prev) => [...prev, {
+          id: `${Date.now()}-url`, type: kind, name: u.host, value: url,
+        }]);
+        toast.success('Reference link attached.');
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  /** Paste handler used by both textareas. Images on the clipboard
+   *  get attached as references; URL-only paste becomes a chip; plain
+   *  text falls through to the default behaviour. */
+  const handlePasteForSources = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    // Images first
+    const items = Array.from(e.clipboardData?.items ?? []);
+    const imageItem = items.find((it) => it.kind === 'file' && it.type.startsWith('image/'));
+    if (imageItem) {
+      const f = imageItem.getAsFile();
+      if (f) { e.preventDefault(); void attachFileToSources(f); toast.success('Pasted image attached.'); return; }
+    }
+    // URL-only paste → chip
+    const text = e.clipboardData?.getData('text') ?? '';
+    if (text && /^https?:\/\/\S+$/.test(text.trim())) {
+      if (tryAttachUrl(text, 'sources')) { e.preventDefault(); return; }
+    }
+    // else: default textarea paste
+  };
+
+  const handlePasteForCharacter = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(e.clipboardData?.items ?? []);
+    const imageItem = items.find((it) => it.kind === 'file' && it.type.startsWith('image/'));
+    if (imageItem) {
+      // Pasted images go into the reference-image grid (same path as
+      // the file picker).
+      const f = imageItem.getAsFile();
+      if (f) {
+        e.preventDefault();
+        const dt = new DataTransfer();
+        dt.items.add(f);
+        handleCharImageUpload(dt.files);
+        return;
+      }
+    }
+    const text = e.clipboardData?.getData('text') ?? '';
+    if (text && /^https?:\/\/\S+$/.test(text.trim())) {
+      if (tryAttachUrl(text, 'character')) { e.preventDefault(); return; }
+    }
+  };
+
+  /** Drop handler for the Sources textarea. Image files → attach;
+   *  other files → attach. */
+  const handleDropForSources = async (e: React.DragEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    if (files.length === 0) return;
+    e.preventDefault();
+    for (const f of files) await attachFileToSources(f);
+    toast.success(`${files.length} source${files.length === 1 ? '' : 's'} attached.`);
+  };
+
+  const handleDropForCharacter = (e: React.DragEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    if (files.length === 0) return;
+    e.preventDefault();
+    const dt = new DataTransfer();
+    for (const f of files) if (f.type.startsWith('image/')) dt.items.add(f);
+    if (dt.files.length > 0) handleCharImageUpload(dt.files);
+  };
+
   const handleCustomStyleImageUpload = async (file: File | null) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) { toast.error('Please upload an image'); return; }
@@ -308,6 +431,27 @@ export default function IntakeForm({
         return;
       }
 
+      // Append character-block text/link references to the description
+      // so the LLM sees them alongside the user's typed description.
+      // Kept defensive: if the combined description would exceed the
+      // per-scene cap, truncate with a note. processAttachments is
+      // reused for the link-typed chips (YouTube/URL/etc.) so they
+      // get the same [FETCH_URL] / [YOUTUBE_URL] tagging as Sources.
+      let enrichedCharDesc = characterDescription.trim();
+      if (characterAttachments.length > 0) {
+        try {
+          const attachedChar = await processAttachments(characterAttachments);
+          if (attachedChar) enrichedCharDesc = (enrichedCharDesc + attachedChar).trim();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          toast.error(`Couldn't attach character references: ${msg}`);
+          return;
+        }
+        if (enrichedCharDesc.length > MAX_CHAR_DESC_CHARS) {
+          enrichedCharDesc = enrichedCharDesc.slice(0, MAX_CHAR_DESC_CHARS - 30) + "\n[character notes truncated]";
+        }
+      }
+
       // characterImages was previously DROPPED on insert — the
       // workspace had to re-attach them on first load. Worker
       // generateVideo.ts:119 reads payload.characterImages from the
@@ -324,7 +468,7 @@ export default function IntakeForm({
         voice_name: voice,
         voice_inclination: language,
         style: styleId,
-        character_description: characterDescription || null,
+        character_description: enrichedCharDesc || null,
         character_consistency_enabled: consistency,
         character_images: characterImages.length > 0 ? characterImages : null,
         intake_settings: intakeSettings,
@@ -429,8 +573,12 @@ export default function IntakeForm({
         <IntakeField className="p-0 overflow-hidden">
           <textarea
             value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
+            onChange={(e) => setPrompt(e.target.value.slice(0, MAX_PROMPT_CHARS))}
+            onPaste={handlePasteForSources}
+            onDrop={handleDropForSources}
+            onDragOver={(e) => e.preventDefault()}
             rows={4}
+            maxLength={MAX_PROMPT_CHARS}
             placeholder="Describe your video idea, paste text, drop images, or add sources with +"
             className="w-full min-h-[100px] bg-transparent border-0 outline-none text-[#ECEAE4] font-serif text-[15px] sm:text-[16px] leading-[1.5] resize-y p-4"
           />
@@ -529,6 +677,19 @@ export default function IntakeForm({
               <LinkIcon className="w-3 h-3" /> URL
             </button>
             <div className="flex-1" />
+            {/* Character counter. Colors lean to gold/red as the user
+                approaches the MAX so it's obvious before submit. */}
+            <span
+              className={cn(
+                'font-mono text-[10px] tracking-[0.1em] uppercase px-2 py-1',
+                prompt.length > MAX_PROMPT_CHARS * 0.9
+                  ? 'text-[#E4C875]'
+                  : 'text-[#5A6268]',
+              )}
+              aria-label={`${prompt.length} of ${MAX_PROMPT_CHARS} characters used`}
+            >
+              {prompt.length.toLocaleString()} / {MAX_PROMPT_CHARS.toLocaleString()}
+            </span>
             <button
               type="button"
               onClick={() => toast.info('Smart Prompt coming soon.')}
@@ -760,12 +921,17 @@ export default function IntakeForm({
 
             <textarea
               value={characterDescription}
-              onChange={(e) => setCharacterDescription(e.target.value)}
+              onChange={(e) => setCharacterDescription(e.target.value.slice(0, MAX_CHAR_DESC_CHARS))}
+              onPaste={handlePasteForCharacter}
+              onDrop={handleDropForCharacter}
+              onDragOver={(e) => e.preventDefault()}
               rows={3}
-              placeholder="A 30-year-old man with short brown hair, warm brown eyes, a close-cropped beard, wearing a navy sweater. Earnest expression."
+              maxLength={MAX_CHAR_DESC_CHARS}
+              placeholder="A 30-year-old man with short brown hair, warm brown eyes, a close-cropped beard, wearing a navy sweater. Earnest expression. Paste text, drop images, or attach reference links below."
               className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50 placeholder:text-[#5A6268] resize-y"
             />
 
+            {/* Reference-image file input (kept — same 5 MB, image-only cap) */}
             <input
               ref={charImageInput}
               type="file"
@@ -775,6 +941,98 @@ export default function IntakeForm({
               className="hidden"
             />
 
+            {/* Generic attachment input — text / markdown / pdf /
+                images. Mirrors the Sources section so users can attach
+                non-image reference material (character notes, style
+                guide snippets) directly to the character block. */}
+            <input
+              ref={charAttachmentInput}
+              type="file"
+              accept=".txt,.md,.csv,.json,.rtf,.html,.pdf,image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                if (files.length === 0) return;
+                (async () => {
+                  const added: SourceAttachment[] = [];
+                  for (const f of files) {
+                    const isImage = f.type.startsWith('image/');
+                    // Image files go into the reference grid, not the
+                    // attachments list.
+                    if (isImage) {
+                      const dt = new DataTransfer();
+                      dt.items.add(f);
+                      handleCharImageUpload(dt.files);
+                      continue;
+                    }
+                    const isText = /text|json|xml|csv|rtf|html/i.test(f.type || '');
+                    let value = '';
+                    if (isText) { try { value = await f.text(); } catch { value = ''; } }
+                    else value = 'data:' + (f.type || 'application/octet-stream');
+                    added.push({
+                      id: `${Date.now()}-${f.name}`,
+                      type: 'file',
+                      name: f.name,
+                      value,
+                    });
+                  }
+                  if (added.length > 0) {
+                    setCharacterAttachments((prev) => [...prev, ...added]);
+                    toast.success(`${added.length} reference${added.length === 1 ? '' : 's'} attached.`);
+                  }
+                })();
+                e.target.value = '';
+              }}
+            />
+
+            {/* Button row — matches the Sources & Direction layout:
+                + Add source / File / URL, with the char counter on the
+                right. Same hover + border styling so users recognise
+                the affordance immediately. */}
+            <div className="flex items-center gap-2 flex-wrap mt-3 pt-2.5 border-t border-white/5">
+              <button
+                type="button"
+                onClick={() => charAttachmentInput.current?.click()}
+                className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.1em] uppercase text-[#8A9198] px-2 py-1 border border-dashed border-white/10 rounded-md hover:text-[#ECEAE4]"
+              >
+                + Add source
+              </button>
+              <button
+                type="button"
+                onClick={() => charAttachmentInput.current?.click()}
+                className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.1em] uppercase text-[#8A9198] px-2 py-1 border border-white/5 rounded-md hover:text-[#ECEAE4]"
+              >
+                <Paperclip className="w-3 h-3" /> File
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const raw = window.prompt('Paste a URL to a character reference photo or profile:');
+                  if (!raw) return;
+                  if (!tryAttachUrl(raw, 'character')) {
+                    toast.error("That doesn't look like a valid URL.");
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.1em] uppercase text-[#8A9198] px-2 py-1 border border-white/5 rounded-md hover:text-[#ECEAE4]"
+              >
+                <LinkIcon className="w-3 h-3" /> URL
+              </button>
+              <div className="flex-1" />
+              <span
+                className={cn(
+                  'font-mono text-[10px] tracking-[0.1em] uppercase px-2 py-1',
+                  characterDescription.length > MAX_CHAR_DESC_CHARS * 0.9
+                    ? 'text-[#E4C875]'
+                    : 'text-[#5A6268]',
+                )}
+                aria-label={`${characterDescription.length} of ${MAX_CHAR_DESC_CHARS} characters used`}
+              >
+                {characterDescription.length} / {MAX_CHAR_DESC_CHARS}
+              </span>
+            </div>
+
+            {/* Reference image grid (unchanged) */}
             <div className="mt-3 flex flex-wrap gap-2.5">
               {characterImages.map((src, i) => (
                 <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border border-white/10 bg-[#1B2228]">
@@ -800,6 +1058,30 @@ export default function IntakeForm({
                 </button>
               )}
             </div>
+
+            {/* Chip list for text / link references */}
+            {characterAttachments.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 mt-3">
+                {characterAttachments.map((a) => (
+                  <span
+                    key={a.id}
+                    className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-wider text-[#ECEAE4] px-2 py-0.5 rounded-md bg-[#1B2228] border border-white/10"
+                    title={`${a.type} · ${a.name}`}
+                  >
+                    <span className="uppercase text-[#14C8CC]">{a.type}</span>
+                    <span className="truncate max-w-[180px]">{a.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => setCharacterAttachments((prev) => prev.filter((x) => x.id !== a.id))}
+                      aria-label={`Remove ${a.name}`}
+                      className="text-[#8A9198] hover:text-[#E4C875]"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </IntakeField>
         </div>
       )}

@@ -56,7 +56,7 @@ export type SpeakerVoice =
   | "gm:Leda"         | "gm:Aoede"        | "gm:Callirrhoe"
   | "gm:Kore"         | "gm:Vindemiatrix" | "gm:Achernar"
   | "gm:Sulafat"      | "gm:Laomedeia"
-  | "gm:Erinome"      | "gm:Zephyr"
+  | "gm:Erinome"      | "gm:Zephyr"       | "gm:Pulcherrima"
   | "gm:Charon"       | "gm:Orus"         | "gm:Iapetus"
   | "gm:Fenrir"       | "gm:Algenib"      | "gm:Rasalgethi"
   | "gm:Puck"         | "gm:Schedar"      | "gm:Umbriel"
@@ -162,6 +162,7 @@ const geminiFlashSpeakers: SpeakerOption[] = [
   { id: "gm:Kore",          label: "Kore",          description: "Female · Firm, authoritative" },
   { id: "gm:Erinome",       label: "Erinome",       description: "Female · Clear, articulate" },
   { id: "gm:Zephyr",        label: "Zephyr",        description: "Female · Bright, higher pitch" },
+  { id: "gm:Pulcherrima",   label: "Pulcherrima",   description: "Female · Forward, middle pitch" },
   // Male-leaning voices.
   { id: "gm:Charon",        label: "Charon",        description: "Male · Informative, documentary" },
   { id: "gm:Orus",          label: "Orus",          description: "Male · Firm, serious (dramatic)" },

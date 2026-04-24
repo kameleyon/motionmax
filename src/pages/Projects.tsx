@@ -78,6 +78,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { isFlagOn } from "@/lib/featureFlags";
 
 type SortField = "title" | "created_at" | "updated_at";
 type SortOrder = "asc" | "desc";
@@ -551,6 +552,66 @@ export default function Projects() {
   const [shareLoading, setShareLoading] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
   const [downloadingProjectId, setDownloadingProjectId] = useState<string | null>(null);
+  const [regeneratingProjectId, setRegeneratingProjectId] = useState<string | null>(null);
+
+  /** Spawn a fresh project that copies every intake field from the
+   *  source row, then route the user into the new editor with
+   *  autostart=1 so the standard generation pipeline kicks off the
+   *  same way the intake form does. The source row stays untouched —
+   *  this is a "regenerate as a new video" not "overwrite." */
+  const handleRegenerate = useCallback(async (project: Project) => {
+    if (!user?.id) return;
+    setRegeneratingProjectId(project.id);
+    try {
+      // Pull the FULL source row — Project (the trimmed list shape)
+      // doesn't carry content / character / intake fields.
+      const { data: src, error: srcErr } = await supabase
+        .from("projects")
+        .select("*")
+        .eq("id", project.id)
+        .single();
+      if (srcErr || !src) throw new Error(srcErr?.message ?? "Source project not found");
+
+      const cloneInsert = {
+        user_id: user.id,
+        title: `${src.title} (regenerated)`,
+        content: src.content,
+        project_type: src.project_type,
+        format: src.format,
+        length: src.length,
+        voice_name: src.voice_name,
+        voice_inclination: src.voice_inclination,
+        style: src.style,
+        character_description: src.character_description,
+        character_consistency_enabled: src.character_consistency_enabled,
+        character_images: src.character_images,
+        intake_settings: src.intake_settings,
+      };
+
+      const { data, error } = await supabase
+        .from("projects")
+        .insert(cloneInsert as never)
+        .select("id")
+        .single();
+      if (error || !data) throw new Error(error?.message ?? "Insert returned no row");
+
+      toast.success("New project created — kicking off generation…");
+      const editorRoute = isFlagOn("UNIFIED_EDITOR")
+        ? `/app/editor/${data.id}?autostart=1`
+        : `/app/create?project=${data.id}&autostart=1`;
+      navigate(editorRoute);
+      // Invalidate so the dashboard sidebar Recent + Projects grid
+      // both pick the new row up immediately if the user navigates
+      // back without a full refresh.
+      queryClient.invalidateQueries({ queryKey: ["all-projects"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-projects"] });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error("Couldn't start regeneration", { description: msg });
+    } finally {
+      setRegeneratingProjectId(null);
+    }
+  }, [user?.id, navigate, queryClient]);
 
   const handleShare = async (project: Project) => {
     setProjectToShare(project);
@@ -820,8 +881,10 @@ export default function Projects() {
               onDelete={handleDelete}
               onShare={handleShare}
               onDownload={handleDownload}
+              onRegenerate={handleRegenerate}
               onToggleFavorite={handleToggleFavorite}
               downloadingProjectId={downloadingProjectId}
+              regeneratingProjectId={regeneratingProjectId}
             />
             {/* Show More Button for Grid */}
             {hasNextPage && (

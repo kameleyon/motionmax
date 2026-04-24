@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Star, MoreVertical, Eye, Pencil, Share2, Download, Trash2, Clapperboard, Loader2 } from "lucide-react";
+import { Star, MoreVertical, Eye, Pencil, Share2, Download, Trash2, Clapperboard, Loader2, RotateCw } from "lucide-react";
 import { gridThumbnailUrl } from "@/lib/thumbnailUrl";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,8 +35,10 @@ interface ProjectsGridViewProps {
   onDelete: (project: Project) => void;
   onShare: (project: Project) => void;
   onDownload: (project: Project) => void;
+  onRegenerate: (project: Project) => void;
   onToggleFavorite: (project: Project, e?: React.MouseEvent) => void;
   downloadingProjectId?: string | null;
+  regeneratingProjectId?: string | null;
 }
 
 const getProjectIcon = (projectType?: string) => getProjectTypeMeta(projectType).Icon;
@@ -62,8 +64,10 @@ export function ProjectsGridView({
   onDelete,
   onShare,
   onDownload,
+  onRegenerate,
   onToggleFavorite,
   downloadingProjectId,
+  regeneratingProjectId,
 }: ProjectsGridViewProps) {
   return (
     <div className="columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
@@ -126,6 +130,15 @@ export function ProjectsGridView({
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => onShare(project)}>
                           <Share2 className="mr-2 h-4 w-4" />Share
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => onRegenerate(project)}
+                          disabled={regeneratingProjectId === project.id}
+                        >
+                          {regeneratingProjectId === project.id
+                            ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Starting…</>
+                            : <><RotateCw className="mr-2 h-4 w-4" />Regenerate as new</>
+                          }
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => onDownload(project)} disabled={downloadingProjectId === project.id}>
                           {downloadingProjectId === project.id

@@ -10,6 +10,7 @@
 
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
+import { updateSceneField, updateSceneFieldJson } from "../lib/sceneUpdate.js";
 import { generateImage } from "../services/imageGenerator.js";
 import { editImageWithNanoBanana } from "../services/nanoBananaEdit.js";
 import { getStylePrompt } from "../services/prompts.js";
@@ -157,19 +158,31 @@ export async function handleRegenerateImage(
     p_change_type: "image",
   });
 
-  // Patch the scene's imageUrl / imageUrls array
+  // Compute the new imageUrls array from the (possibly stale) in-memory
+  // snapshot — it's fine for this array slot because we only change
+  // index `targetImageIndex` relative to what existed when the job
+  // started, and concurrent jobs wouldn't be writing the same slot.
   const existingUrls: (string | null)[] =
     Array.isArray(scene.imageUrls) && scene.imageUrls.length > 0
       ? [...scene.imageUrls]
       : scene.imageUrl ? [scene.imageUrl] : [];
 
+  let nextImageUrls: (string | null)[];
   if (existingUrls.length > 0) {
     existingUrls[targetImageIndex] = imageUrl;
-    scenes[sceneIndex].imageUrls = existingUrls;
-    if (targetImageIndex === 0) scenes[sceneIndex].imageUrl = imageUrl;
+    nextImageUrls = existingUrls;
   } else {
-    scenes[sceneIndex].imageUrl = imageUrl;
-    scenes[sceneIndex].imageUrls = [imageUrl];
+    nextImageUrls = [imageUrl];
+  }
+
+  // Atomic per-field writes via jsonb_set RPCs. Replaces the legacy
+  // read-modify-write on the whole scenes array — that pattern would
+  // clobber any concurrent scene update (cinematic_video auto-chain,
+  // another regen, master_audio) that landed during Hypereal's 20–60s
+  // generation window. Matches handleCinematicImage's write pattern.
+  await updateSceneFieldJson(generationId, sceneIndex, "imageUrls", nextImageUrls);
+  if (targetImageIndex === 0 || existingUrls.length === 0) {
+    await updateSceneField(generationId, sceneIndex, "imageUrl", imageUrl);
   }
 
   // Clear stale videoUrls invalidated by this image change. LEGACY
@@ -178,20 +191,18 @@ export async function handleRegenerateImage(
   //   - scene N-1: its video's END frame (transition to next scene)
   //                was this image → stale.
   // Both get cleared + both get video regen queued below.
-  if (scenes[sceneIndex]?.videoUrl) {
-    console.log(`[RegenerateImage] Clearing stale videoUrl for scene ${sceneIndex + 1}`);
-    scenes[sceneIndex].videoUrl = null;
-    scenes[sceneIndex].videoPredictionId = null;
-  }
   const prevIndex = sceneIndex - 1;
   const prevHasVideo = prevIndex >= 0 && !!scenes[prevIndex]?.videoUrl;
+  if (scenes[sceneIndex]?.videoUrl) {
+    console.log(`[RegenerateImage] Clearing stale videoUrl for scene ${sceneIndex + 1}`);
+    await updateSceneFieldJson(generationId, sceneIndex, "videoUrl", null);
+    await updateSceneFieldJson(generationId, sceneIndex, "videoPredictionId", null);
+  }
   if (prevHasVideo) {
     console.log(`[RegenerateImage] Clearing stale videoUrl for previous scene ${prevIndex + 1} (its end-frame transition uses this image)`);
-    scenes[prevIndex].videoUrl = null;
-    scenes[prevIndex].videoPredictionId = null;
+    await updateSceneFieldJson(generationId, prevIndex, "videoUrl", null);
+    await updateSceneFieldJson(generationId, prevIndex, "videoPredictionId", null);
   }
-
-  await supabase.from("generations").update({ scenes }).eq("id", generationId);
 
   await writeSystemLog({
     jobId, projectId, userId, generationId,

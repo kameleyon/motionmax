@@ -2,6 +2,10 @@
 *.md
 !README.md
 
+# Design template drops (large standalone HTML mockups, not part of the app)
+MotionMax*.html
+*_standalone_.html
+
 # Migration scripts (contain DB exports with sensitive data)
 scripts/export/
 scripts/export-source-db.mjs

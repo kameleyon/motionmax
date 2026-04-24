@@ -100,19 +100,28 @@ const App = () => (
               <Route path="/pricing" element={<Pricing />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/usage" element={<Usage />} />
-              <Route path="/voice-lab" element={<RouteErrorBoundary routeName="voice-lab"><VoiceLab /></RouteErrorBoundary>} />
             </Route>
 
-            {/* Projects renders its own NEW AppShell (dashboard sidebar
-                + topbar), so it must NOT be nested inside the legacy
-                AppShell wrapper above — that would mount AppSidebar
-                AND the new Sidebar side-by-side. */}
+            {/* Projects + Voice Lab render their own NEW AppShell
+                (dashboard sidebar + topbar), so they must NOT be
+                nested inside the legacy AppShell wrapper above — that
+                would mount AppSidebar AND the new Sidebar side-by-side. */}
             <Route
               path="/projects"
               element={
                 <ProtectedRoute>
                   <RouteErrorBoundary routeName="projects">
                     <Projects />
+                  </RouteErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/voice-lab"
+              element={
+                <ProtectedRoute>
+                  <RouteErrorBoundary routeName="voice-lab">
+                    <VoiceLab />
                   </RouteErrorBoundary>
                 </ProtectedRoute>
               }

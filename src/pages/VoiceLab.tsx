@@ -1,163 +1,708 @@
-﻿import { Helmet } from "react-helmet-async";
-import { createScopedLogger } from "@/lib/logger";
-import { useState, useRef, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { Helmet } from "react-helmet-async";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import {
-  Mic,
-  Upload,
-  Play,
-  Square,
-  Trash2,
-  Loader2,
-  Check,
-  VolumeX,
-  ThumbsUp,
-  Headphones,
-  Pause,
-  AlertCircle
+  Mic, Upload, Play, Pause, Square, Trash2, Loader2, Check,
+  Search, Plus, ArrowLeftRight, Sparkles, ShieldCheck, Clock, X,
 } from "lucide-react";
-import { AppHeader } from "@/components/layout/AppHeader";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { useVoiceCloning, UserVoice } from "@/hooks/useVoiceCloning";
 import { toast } from "sonner";
+import { formatDistanceToNow } from "date-fns";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { useVoiceCloning } from "@/hooks/useVoiceCloning";
 import { useSubscription } from "@/hooks/useSubscription";
 import { PLAN_LIMITS } from "@/lib/planLimits";
-import { formatDistanceToNow } from "date-fns";
-import { cn } from "@/lib/utils";
+import { createScopedLogger } from "@/lib/logger";
+import AppShell from "@/components/dashboard/AppShell";
+import VoiceCard from "@/components/voice-lab/VoiceCard";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
+  getCatalog, LANGUAGES, avatarBackground, type CatalogVoice,
+} from "@/lib/voiceCatalog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { getSampleText } from "@/components/workspace/SpeakerSelector";
 
 const log = createScopedLogger("VoiceLab");
 
+type Tab = "discovery" | "mine" | "clone" | "liked" | "bookmarked";
+
+// localStorage keys — namespaced by user id at runtime so two accounts on
+// the same browser don't share each other's likes/bookmarks/history.
+const lsKey = (userId: string | undefined, slot: string) =>
+  userId ? `motionmax_voicelab_${slot}_${userId}` : `motionmax_voicelab_${slot}_anon`;
+
+interface PlaygroundHistoryItem {
+  text: string;
+  voiceId: string;
+  voiceName: string;
+  audioUrl: string;
+  tonePacing: number;
+  language: string;
+  ts: number;
+}
+
 export default function VoiceLab() {
-  const { voices, voicesLoading, isCloning, cloneVoice, deleteVoice } = useVoiceCloning();
-  
-  // Recording state
+  const { user } = useAuth();
+  const [tab, setTab] = useState<Tab>("discovery");
+  const [language, setLanguage] = useState("en");
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
+  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
+
+  // Liked + bookmarked persisted per-user. We hydrate lazily on mount
+  // so SSR / first-paint never reads from localStorage.
+  const [liked, setLiked] = useState<string[]>([]);
+  const [bookmarked, setBookmarked] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const l = JSON.parse(localStorage.getItem(lsKey(user.id, "liked")) || "[]");
+      const b = JSON.parse(localStorage.getItem(lsKey(user.id, "bookmarked")) || "[]");
+      if (Array.isArray(l)) setLiked(l);
+      if (Array.isArray(b)) setBookmarked(b);
+    } catch { /* ignore */ }
+  }, [user?.id]);
+
+  const persistList = useCallback((slot: "liked" | "bookmarked", list: string[]) => {
+    if (!user?.id) return;
+    try {
+      localStorage.setItem(lsKey(user.id, slot), JSON.stringify(list));
+    } catch { /* localStorage full or disabled — silently degrade */ }
+  }, [user?.id]);
+
+  const toggleLike = (id: string) => {
+    setLiked((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      persistList("liked", next);
+      return next;
+    });
+  };
+  const toggleBookmark = (id: string) => {
+    setBookmarked((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      persistList("bookmarked", next);
+      return next;
+    });
+  };
+
+  // Catalog for the current language. Memoised — getCatalog walks the
+  // SpeakerSelector arrays once per language change.
+  const catalog = useMemo(() => getCatalog(language), [language]);
+
+  // Default selection on language change so the playground always has
+  // a voice loaded. Preserve the user's selection if it's still valid
+  // for the new language (e.g. switching from English to French keeps
+  // Gemini voices selected since they're in both).
+  useEffect(() => {
+    if (selectedVoiceId && catalog.some((v) => v.id === selectedVoiceId)) return;
+    setSelectedVoiceId(catalog[0]?.id ?? null);
+  }, [catalog, selectedVoiceId]);
+
+  // Shared audio element — one preview at a time, no two voices ever
+  // overlap. Pause + clear when a new card is played.
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const stopPreview = useCallback(() => {
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause();
+      previewAudioRef.current.currentTime = 0;
+    }
+    setPlayingVoiceId(null);
+  }, []);
+
+  const playVoicePreview = useCallback(async (voice: CatalogVoice) => {
+    if (playingVoiceId === voice.id) { stopPreview(); return; }
+    stopPreview();
+    if (!user?.id) { toast.error("Sign in to preview voices."); return; }
+
+    const sampleText = getSampleText(voice.name, language);
+    setPlayingVoiceId(voice.id);
+
+    try {
+      const { data: job, error } = await supabase
+        .from("video_generation_jobs")
+        .insert({
+          user_id: user.id,
+          task_type: "voice_preview",
+          payload: { speaker: voice.id, language, text: sampleText },
+          status: "pending",
+        })
+        .select("id")
+        .single();
+      if (error || !job) throw new Error("Failed to queue preview.");
+
+      const MAX_WAIT = 30_000;
+      const start = Date.now();
+      while (Date.now() - start < MAX_WAIT) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const { data: row } = await (supabase
+          .from("video_generation_jobs") as unknown as ReturnType<typeof supabase.from>)
+          .select("status, result")
+          .eq("id", job.id)
+          .single();
+        if (row?.status === "completed" && row?.result?.audioUrl) {
+          const audio = new Audio(row.result.audioUrl as string);
+          previewAudioRef.current = audio;
+          audio.onended = () => setPlayingVoiceId((p) => (p === voice.id ? null : p));
+          audio.onerror = () => setPlayingVoiceId((p) => (p === voice.id ? null : p));
+          audio.play().catch(() => setPlayingVoiceId(null));
+          return;
+        }
+        if (row?.status === "failed") throw new Error("Preview generation failed.");
+      }
+      throw new Error("Preview timed out — try again.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(msg);
+      setPlayingVoiceId(null);
+    }
+  }, [language, playingVoiceId, stopPreview, user?.id]);
+
+  // Counts surfaced in the tab pills + hero counters.
+  const { voices: clonedVoices } = useVoiceCloning();
+  const counts = {
+    discovery: catalog.length,
+    mine: clonedVoices.length,
+    liked: liked.length,
+    bookmarked: bookmarked.length,
+  };
+
+  return (
+    <AppShell breadcrumb="Voice Lab">
+      <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
+
+      <div className="px-3 sm:px-4 md:px-6 lg:px-8 py-5 sm:py-7 max-w-[1480px] mx-auto">
+        {/* Hero */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          className="flex flex-wrap items-end justify-between gap-3"
+        >
+          <div className="min-w-0">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#14C8CC]/10 border border-[#14C8CC]/30 font-mono text-[10px] tracking-[0.16em] uppercase text-[#14C8CC] mb-3">
+              <Mic className="w-3 h-3" />
+              Voice Lab
+            </span>
+            <h1 className="font-serif text-[28px] sm:text-[34px] lg:text-[38px] font-medium tracking-tight text-[#ECEAE4] leading-[1.05]">
+              Voice Lab
+            </h1>
+            <p className="text-[13px] sm:text-[14px] text-[#8A9198] mt-1.5 max-w-prose">
+              Browse studio voices, clone your own, and test before generating.
+            </p>
+          </div>
+          <div className="font-mono text-[10.5px] tracking-[0.14em] uppercase text-[#5A6268] whitespace-nowrap">
+            <span className="text-[#14C8CC]">{liked.length}</span> liked ·{" "}
+            <span className="text-[#14C8CC]">{bookmarked.length}</span> saved
+          </div>
+        </motion.div>
+
+        {/* Tabs — horizontal scroll on phones to avoid wrap. */}
+        <div className="mt-6 -mx-1 overflow-x-auto scrollbar-thin scrollbar-thumb-white/10">
+          <div className="flex items-center gap-1 px-1 min-w-max border-b border-white/8">
+            <TabButton active={tab === "discovery"}  onClick={() => setTab("discovery")}  label="Discovery"  count={counts.discovery} />
+            <TabButton active={tab === "mine"}       onClick={() => setTab("mine")}       label="My Voices"  count={counts.mine} />
+            <TabButton active={tab === "clone"}      onClick={() => setTab("clone")}      label="Cloned"     count="+" />
+            <TabButton active={tab === "liked"}      onClick={() => setTab("liked")}      label="Liked"      count={counts.liked} />
+            <TabButton active={tab === "bookmarked"} onClick={() => setTab("bookmarked")} label="Bookmarked" count={counts.bookmarked} />
+          </div>
+        </div>
+
+        {/* Two-column layout: main + sticky right rail. Below lg the
+            rail stacks underneath. */}
+        <div className="mt-5 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5 xl:gap-7">
+          <div className="min-w-0">
+            {tab === "discovery" && (
+              <DiscoveryTab
+                catalog={catalog}
+                language={language}
+                onLanguageChange={setLanguage}
+                selected={selectedVoiceId}
+                onSelect={setSelectedVoiceId}
+                playing={playingVoiceId}
+                onPlay={playVoicePreview}
+                liked={liked}
+                bookmarked={bookmarked}
+                onLike={toggleLike}
+                onBookmark={toggleBookmark}
+              />
+            )}
+
+            {tab === "mine" && (
+              <MyVoicesTab
+                bookmarkedVoices={catalog.filter((v) => bookmarked.includes(v.id))}
+                onSelect={setSelectedVoiceId}
+                playing={playingVoiceId}
+                onPlay={playVoicePreview}
+                liked={liked}
+                bookmarked={bookmarked}
+                onLike={toggleLike}
+                onBookmark={toggleBookmark}
+                onSwitchTab={setTab}
+              />
+            )}
+
+            {tab === "clone" && <ClonedTab />}
+
+            {tab === "liked" && (
+              <FilteredVoiceGrid
+                voices={catalog.filter((v) => liked.includes(v.id))}
+                emptyText="No liked voices yet. Tap the heart on any card."
+                selected={selectedVoiceId}
+                onSelect={setSelectedVoiceId}
+                playing={playingVoiceId}
+                onPlay={playVoicePreview}
+                liked={liked}
+                bookmarked={bookmarked}
+                onLike={toggleLike}
+                onBookmark={toggleBookmark}
+              />
+            )}
+
+            {tab === "bookmarked" && (
+              <FilteredVoiceGrid
+                voices={catalog.filter((v) => bookmarked.includes(v.id))}
+                emptyText="No bookmarks yet. Tap the bookmark icon on any card."
+                selected={selectedVoiceId}
+                onSelect={setSelectedVoiceId}
+                playing={playingVoiceId}
+                onPlay={playVoicePreview}
+                liked={liked}
+                bookmarked={bookmarked}
+                onLike={toggleLike}
+                onBookmark={toggleBookmark}
+              />
+            )}
+          </div>
+
+          {/* Right rail — sticky on lg+, stacks below on mobile. */}
+          <div className="lg:sticky lg:top-4 lg:self-start">
+            <TestPlayground
+              voice={catalog.find((v) => v.id === selectedVoiceId) ?? catalog[0]}
+              language={language}
+              onSwap={() => setTab("discovery")}
+              userId={user?.id}
+            />
+          </div>
+        </div>
+      </div>
+    </AppShell>
+  );
+}
+
+// ─── Tab button ──────────────────────────────────────────────────────
+
+function TabButton({
+  active, onClick, label, count,
+}: {
+  active: boolean; onClick: () => void; label: string; count: number | string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "relative px-3 sm:px-4 py-2.5 text-[13px] font-medium transition-colors whitespace-nowrap",
+        active ? "text-[#ECEAE4]" : "text-[#5A6268] hover:text-[#ECEAE4]",
+      )}
+    >
+      {label}
+      <span className={cn(
+        "ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full font-mono text-[9.5px]",
+        active ? "bg-[#14C8CC]/20 text-[#14C8CC]" : "bg-white/[0.04] text-[#5A6268]",
+      )}>{count}</span>
+      {active && <span className="absolute inset-x-3 -bottom-px h-[2px] bg-[#14C8CC] rounded-full" />}
+    </button>
+  );
+}
+
+// ─── Discovery tab ───────────────────────────────────────────────────
+
+const FILTER_GROUPS = {
+  Gender: ["Male", "Female"],
+  Age:    ["Young", "Middle Aged", "Old"],
+  Style:  ["Narration", "Documentary", "Casual", "Conversational", "Energetic", "Soft", "Deep", "Professional", "Dramatic", "Mysterious", "Warm", "Bright"],
+};
+const FLAT_FILTERS = Object.values(FILTER_GROUPS).flat();
+
+function DiscoveryTab({
+  catalog, language, onLanguageChange, selected, onSelect, playing, onPlay,
+  liked, bookmarked, onLike, onBookmark,
+}: {
+  catalog: CatalogVoice[];
+  language: string;
+  onLanguageChange: (l: string) => void;
+  selected: string | null;
+  onSelect: (id: string) => void;
+  playing: string | null;
+  onPlay: (v: CatalogVoice) => void;
+  liked: string[];
+  bookmarked: string[];
+  onLike: (id: string) => void;
+  onBookmark: (id: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [active, setActive] = useState<string[]>([]);
+  const [sort, setSort] = useState<"trending" | "az" | "newest">("trending");
+
+  const toggleFilter = (f: string) =>
+    setActive((a) => (a.includes(f) ? a.filter((x) => x !== f) : [...a, f]));
+
+  const filtered = useMemo(() => {
+    const ql = q.trim().toLowerCase();
+    const matchesFilter = (v: CatalogVoice, f: string) =>
+      v.gender === f || v.age === f ||
+      v.tags.some((t) => t.toLowerCase().includes(f.toLowerCase())) ||
+      v.description.toLowerCase().includes(f.toLowerCase());
+
+    const list = catalog.filter((v) => {
+      if (ql && !(
+        v.name.toLowerCase().includes(ql) ||
+        v.tags.some((t) => t.toLowerCase().includes(ql)) ||
+        v.description.toLowerCase().includes(ql)
+      )) return false;
+      if (active.length === 0) return true;
+      // OR semantics within a category, AND across categories — feels
+      // closer to user intent ("Female AND Narration" not "anything
+      // tagged Female or Narration").
+      const byGroup = Object.values(FILTER_GROUPS).map((group) =>
+        group.filter((g) => active.includes(g)),
+      );
+      return byGroup.every((picked) => picked.length === 0 || picked.some((p) => matchesFilter(v, p)));
+    });
+
+    if (sort === "az") list.sort((a, b) => a.name.localeCompare(b.name));
+    // "trending" / "newest" don't have real signals on these voices —
+    // keep the catalog's natural order for both so the page is stable.
+    return list;
+  }, [catalog, q, active, sort]);
+
+  return (
+    <div>
+      {/* Toolbar */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="relative w-full sm:flex-1 sm:min-w-[220px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#5A6268]" />
+          <Input
+            placeholder="Search voices, accent, vibe…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className="h-9 pl-9 pr-3 rounded-lg bg-[#10151A] border border-white/10 text-[13px] text-[#ECEAE4] placeholder:text-[#5A6268] focus-visible:ring-0 focus-visible:border-[#14C8CC]/40"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={language} onValueChange={onLanguageChange}>
+            <SelectTrigger className="h-9 w-[150px] rounded-lg bg-[#10151A] border border-white/10 text-[12.5px] text-[#ECEAE4]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-[#10151A] border-white/10">
+              {LANGUAGES.map((l) => (
+                <SelectItem key={l.code} value={l.code}>
+                  <span className="mr-1.5">{l.flag}</span>{l.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={sort} onValueChange={(v) => setSort(v as typeof sort)}>
+            <SelectTrigger className="h-9 w-[120px] rounded-lg bg-[#10151A] border border-white/10 text-[12.5px] text-[#ECEAE4]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-[#10151A] border-white/10">
+              <SelectItem value="trending">Trending</SelectItem>
+              <SelectItem value="az">A → Z</SelectItem>
+              <SelectItem value="newest">Newest</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Filter chips */}
+      <div className="flex flex-wrap items-center gap-1.5 mt-3">
+        {FLAT_FILTERS.map((f) => (
+          <button
+            key={f}
+            type="button"
+            onClick={() => toggleFilter(f)}
+            className={cn(
+              "h-7 px-3 rounded-full font-mono text-[10px] tracking-[0.12em] uppercase border transition-colors inline-flex items-center gap-1",
+              active.includes(f)
+                ? "bg-[#14C8CC]/10 border-[#14C8CC]/40 text-[#14C8CC]"
+                : "bg-[#10151A] border-white/10 text-[#8A9198] hover:text-[#ECEAE4] hover:border-white/20",
+            )}
+          >
+            {f}
+            {active.includes(f) && <X className="w-2.5 h-2.5" />}
+          </button>
+        ))}
+        {active.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setActive([])}
+            className="h-7 px-3 rounded-full font-mono text-[10px] tracking-[0.12em] uppercase text-[#E4C875] hover:text-white transition-colors"
+          >
+            Clear all
+          </button>
+        )}
+      </div>
+
+      {/* Result count */}
+      <div className="font-mono text-[10.5px] tracking-[0.12em] uppercase text-[#5A6268] mt-3 mb-3">
+        {filtered.length} voices · {active.length ? active.join(" · ") : "all categories"}
+      </div>
+
+      {/* Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+        <AnimatePresence mode="popLayout">
+          {filtered.map((v) => (
+            <motion.div
+              key={v.id}
+              layout
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.18 }}
+            >
+              <VoiceCard
+                voice={v}
+                selected={selected === v.id}
+                playing={playing === v.id}
+                liked={liked.includes(v.id)}
+                bookmarked={bookmarked.includes(v.id)}
+                onSelect={() => onSelect(v.id)}
+                onPlay={() => onPlay(v)}
+                onLike={() => onLike(v.id)}
+                onBookmark={() => onBookmark(v.id)}
+              />
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+      {filtered.length === 0 && (
+        <div className="text-center py-14 text-[#5A6268] font-mono text-[11px] tracking-[0.12em] uppercase">
+          No voices match your filters.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Reused by Liked + Bookmarked tabs — same VoiceCard grid, no toolbar.
+function FilteredVoiceGrid({
+  voices, emptyText, selected, onSelect, playing, onPlay,
+  liked, bookmarked, onLike, onBookmark,
+}: {
+  voices: CatalogVoice[];
+  emptyText: string;
+  selected: string | null;
+  onSelect: (id: string) => void;
+  playing: string | null;
+  onPlay: (v: CatalogVoice) => void;
+  liked: string[];
+  bookmarked: string[];
+  onLike: (id: string) => void;
+  onBookmark: (id: string) => void;
+}) {
+  if (voices.length === 0) {
+    return (
+      <div className="text-center py-16 text-[#5A6268] font-mono text-[11px] tracking-[0.12em] uppercase">
+        {emptyText}
+      </div>
+    );
+  }
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+      {voices.map((v) => (
+        <VoiceCard
+          key={v.id}
+          voice={v}
+          selected={selected === v.id}
+          playing={playing === v.id}
+          liked={liked.includes(v.id)}
+          bookmarked={bookmarked.includes(v.id)}
+          onSelect={() => onSelect(v.id)}
+          onPlay={() => onPlay(v)}
+          onLike={() => onLike(v.id)}
+          onBookmark={() => onBookmark(v.id)}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── My Voices tab ───────────────────────────────────────────────────
+
+function MyVoicesTab({
+  bookmarkedVoices, onSelect, playing, onPlay, liked, bookmarked,
+  onLike, onBookmark, onSwitchTab,
+}: {
+  bookmarkedVoices: CatalogVoice[];
+  onSelect: (id: string) => void;
+  playing: string | null;
+  onPlay: (v: CatalogVoice) => void;
+  liked: string[];
+  bookmarked: string[];
+  onLike: (id: string) => void;
+  onBookmark: (id: string) => void;
+  onSwitchTab: (t: Tab) => void;
+}) {
+  const { voices: clonedVoices, voicesLoading, deleteVoice } = useVoiceCloning();
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3 gap-3">
+        <div className="min-w-0">
+          <div className="text-[15px] font-semibold text-[#ECEAE4]">My Voices</div>
+          <div className="text-[12.5px] text-[#8A9198] mt-0.5">
+            Cloned + saved voices in this workspace.
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => onSwitchTab("clone")}
+          className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-[12.5px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] to-[#0FA6AE] hover:brightness-110 whitespace-nowrap"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Clone new voice
+        </button>
+      </div>
+
+      {voicesLoading ? (
+        <div className="text-[#5A6268] text-[12px] py-10 text-center">Loading…</div>
+      ) : clonedVoices.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-white/10 p-8 text-center">
+          <div className="text-[13px] text-[#ECEAE4] font-medium">No cloned voices yet</div>
+          <div className="text-[12px] text-[#8A9198] mt-1">
+            Head to Cloned to record or upload a sample.
+          </div>
+        </div>
+      ) : (
+        <div className="grid gap-2">
+          {clonedVoices.map((v) => (
+            <div
+              key={v.id}
+              className="flex items-center gap-3 rounded-xl border border-white/8 bg-[#10151A] p-3"
+            >
+              <div
+                className="w-11 h-11 rounded-full grid place-items-center font-serif font-semibold text-[16px] text-white shrink-0"
+                style={{ background: avatarBackground("Multi") }}
+              >
+                {(v.voice_name?.[0] || "?").toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[13.5px] font-medium text-[#ECEAE4] truncate">{v.voice_name}</div>
+                <div className="font-mono text-[10px] tracking-[0.06em] uppercase text-[#5A6268] truncate mt-0.5">
+                  Cloned · {formatDistanceToNow(new Date(v.created_at), { addSuffix: true })}
+                </div>
+              </div>
+              <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#14C8CC]/10 text-[#14C8CC] font-mono text-[9.5px] tracking-[0.12em] uppercase">
+                <Check className="w-3 h-3" /> Ready
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm(`Delete "${v.voice_name}"? This cannot be undone.`)) deleteVoice(v.id);
+                }}
+                className="w-8 h-8 grid place-items-center rounded-md text-[#5A6268] hover:text-red-400 hover:bg-white/5 transition-colors"
+                title="Delete voice"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-7 mb-3">
+        <div className="font-mono text-[10.5px] tracking-[0.14em] uppercase text-[#5A6268]">
+          Bookmarked
+        </div>
+      </div>
+      {bookmarkedVoices.length === 0 ? (
+        <div className="text-[#5A6268] text-[12px] font-mono tracking-[0.08em] uppercase py-6 text-center border border-dashed border-white/8 rounded-xl">
+          No bookmarks yet
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+          {bookmarkedVoices.map((v) => (
+            <VoiceCard
+              key={v.id}
+              voice={v}
+              selected={false}
+              playing={playing === v.id}
+              liked={liked.includes(v.id)}
+              bookmarked={bookmarked.includes(v.id)}
+              onSelect={() => onSelect(v.id)}
+              onPlay={() => onPlay(v)}
+              onLike={() => onLike(v.id)}
+              onBookmark={() => onBookmark(v.id)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Cloned tab — re-skinned recording / upload / consent flow ──────
+
+function ClonedTab() {
+  const { voices, isCloning, cloneVoice, deleteVoice } = useVoiceCloning();
+  const { plan } = useSubscription();
+  const voiceCloneLimit = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS]?.voiceClones ?? 0;
+
   const [isRecording, setIsRecording] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
-  
-  // Upload state
+
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [removeNoise, setRemoveNoise] = useState(true);
-  
-  // Form state
   const [voiceName, setVoiceName] = useState("");
-  
   const [consentAccepted, setConsentAccepted] = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
 
-  // Visualizer state
-  const [audioLevels, setAudioLevels] = useState<number[]>(new Array(20).fill(0));
-  const analyzerRef = useRef<AnalyserNode | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
-
-  // Audio preview
-  const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
-  const [, setIsPlaying] = useState(false);
-  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
-
-  // Modal state for existing voice warning
-  const [showExistingVoiceModal, setShowExistingVoiceModal] = useState(false);
-
-  // Helper to get audio duration from a blob
-  const getAudioDuration = (blob: Blob): Promise<number> => {
-    return new Promise((resolve, reject) => {
-      const audio = new Audio();
-      audio.addEventListener("loadedmetadata", () => {
-        if (isFinite(audio.duration)) {
-          resolve(audio.duration);
-        } else {
-          reject(new Error("Duration not available"));
-        }
-        URL.revokeObjectURL(audio.src);
-      });
-      audio.addEventListener("error", () => {
-        URL.revokeObjectURL(audio.src);
-        reject(new Error("Failed to load audio"));
-      });
-      audio.src = URL.createObjectURL(blob);
-    });
-  };
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-    };
+  useEffect(() => () => {
+    if (timerRef.current) clearInterval(timerRef.current);
   }, []);
 
+  const getAudioDuration = (blob: Blob): Promise<number> => new Promise((resolve, reject) => {
+    const audio = new Audio();
+    audio.addEventListener("loadedmetadata", () => {
+      if (isFinite(audio.duration)) resolve(audio.duration);
+      else reject(new Error("Duration not available"));
+      URL.revokeObjectURL(audio.src);
+    });
+    audio.addEventListener("error", () => { URL.revokeObjectURL(audio.src); reject(new Error("Failed to load audio")); });
+    audio.src = URL.createObjectURL(blob);
+  });
 
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      // Set up audio analyzer for visualization
-      const audioContext = new AudioContext();
-      const source = audioContext.createMediaStreamSource(stream);
-      const analyzer = audioContext.createAnalyser();
-      analyzer.fftSize = 64;
-      source.connect(analyzer);
-      analyzerRef.current = analyzer;
-
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
       chunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
-        }
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      recorder.onstop = () => {
+        setRecordedBlob(new Blob(chunksRef.current, { type: "audio/webm" }));
+        stream.getTracks().forEach((t) => t.stop());
       };
-
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        setRecordedBlob(blob);
-        stream.getTracks().forEach(track => track.stop());
-        if (animationFrameRef.current) {
-          cancelAnimationFrame(animationFrameRef.current);
-        }
-      };
-
-      mediaRecorder.start(100);
+      recorder.start(100);
       setIsRecording(true);
       setRecordingDuration(0);
-
-      // Start timer
-      timerRef.current = window.setInterval(() => {
-        setRecordingDuration(prev => prev + 1);
-      }, 1000);
-
-      // Start visualizer
-      const updateLevels = () => {
-        if (analyzerRef.current) {
-          const dataArray = new Uint8Array(analyzerRef.current.frequencyBinCount);
-          analyzerRef.current.getByteFrequencyData(dataArray);
-          const levels = Array.from(dataArray.slice(0, 20)).map(v => v / 255);
-          setAudioLevels(levels);
-        }
-        animationFrameRef.current = requestAnimationFrame(updateLevels);
-      };
-      updateLevels();
-
-    } catch (error) {
-      log.error("Failed to start recording:", error);
-      toast.error("Microphone access denied", {
-        description: "Please allow microphone access in your browser settings to record audio.",
-      });
+      timerRef.current = window.setInterval(() => setRecordingDuration((d) => d + 1), 1000);
+    } catch (err) {
+      log.error("Mic access failed:", err);
+      toast.error("Microphone access denied", { description: "Allow mic access in your browser settings." });
     }
   };
 
@@ -165,77 +710,38 @@ export default function VoiceLab() {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-      setAudioLevels(new Array(20).fill(0));
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     }
   };
 
   const handleFileUpload = async (file: File) => {
-    const validAudioTypes = [
-      "audio/mpeg", "audio/wav", "audio/mp3", "audio/m4a", "audio/x-m4a",
-      "video/mp4", "audio/mp4" // MP4 can contain audio
-    ];
-    const validExtensions = ['.mp3', '.wav', '.m4a', '.mp4'];
-    const hasValidType = validAudioTypes.includes(file.type);
-    const hasValidExtension = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
-    
-    if (!(file && (hasValidType || hasValidExtension))) {
-      toast.error("Invalid file type", {
-        description: "Please upload an MP3, WAV, M4A, or MP4 file.",
-      });
+    const validExt = [".mp3", ".wav", ".m4a", ".mp4"];
+    if (!validExt.some((ext) => file.name.toLowerCase().endsWith(ext))) {
+      toast.error("Invalid file type", { description: "MP3, WAV, M4A, or MP4 only." });
       return;
     }
-
     if (file.size > 20 * 1024 * 1024) {
-      toast.error("File too large", { description: "Maximum audio file size is 20 MB." });
+      toast.error("File too large", { description: "Maximum 20 MB." });
       return;
     }
-
-    // Validate minimum duration (10 seconds) for uploaded files
     try {
-      const duration = await getAudioDuration(file);
-      if (duration < 10) {
-        toast.error("Audio too short", {
-          description: "Uploaded audio must be at least 10 seconds long for voice cloning.",
-        });
-        return;
-      }
-    } catch {
-      // If we can't determine duration client-side, allow and let backend validate
-      log.warn("Could not validate upload duration client-side, proceeding");
-    }
-
+      const dur = await getAudioDuration(file);
+      if (dur < 10) { toast.error("Audio too short", { description: "10 seconds minimum." }); return; }
+    } catch { /* let backend validate */ }
     setUploadedFile(file);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    handleFileUpload(file);
   };
 
   const handleClone = async () => {
     const audioBlob = recordedBlob || uploadedFile;
     if (!audioBlob || !voiceName.trim()) return;
-
-    // Validate minimum audio duration (10 seconds)
-    try {
-      const audioDuration = await getAudioDuration(audioBlob);
-      if (audioDuration < 10) {
-        toast.error("Audio too short", {
-          description: "Audio must be at least 10 seconds long for voice cloning.",
-        });
-        return;
-      }
-    } catch {
-      // If we can't determine duration, proceed anyway
-      log.warn("Could not determine audio duration, proceeding");
+    if (voices.length >= voiceCloneLimit && voiceCloneLimit > 0) {
+      setShowLimitModal(true);
+      return;
     }
-
+    try {
+      const dur = await getAudioDuration(audioBlob);
+      if (dur < 10) { toast.error("Audio too short", { description: "10 seconds minimum." }); return; }
+    } catch { /* skip */ }
     await cloneVoice({
       file: audioBlob,
       name: voiceName.trim(),
@@ -243,473 +749,496 @@ export default function VoiceLab() {
       removeNoise,
       consentGiven: consentAccepted,
     });
-
-    // Reset form
     setVoiceName("");
     setRecordedBlob(null);
     setUploadedFile(null);
     setRecordingDuration(0);
+    setConsentAccepted(false);
   };
 
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  const playPreview = (url: string, voiceId: string) => {
-    if (audioPreviewRef.current) {
-      audioPreviewRef.current.pause();
-      if (playingVoiceId === voiceId) {
-        setIsPlaying(false);
-        setPlayingVoiceId(null);
-        return;
-      }
-    }
-    const audio = new Audio(url);
-    audioPreviewRef.current = audio;
-    audio.onended = () => {
-      setIsPlaying(false);
-      setPlayingVoiceId(null);
-    };
-    audio.play();
-    setIsPlaying(true);
-    setPlayingVoiceId(voiceId);
-  };
+  const fmt = (s: number) =>
+    `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
   const hasAudio = !!recordedBlob || !!uploadedFile;
-  const { plan } = useSubscription();
-  const voiceCloneLimit = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS]?.voiceClones ?? 0;
-  const hasExistingVoice = voices.length >= voiceCloneLimit;
-  const canClone = hasAudio && voiceName.trim().length > 0 && !isCloning && !hasExistingVoice && consentAccepted;
-  const isReady = hasAudio;
-
-  // Show modal when user has existing voice and tries to add audio
-  useEffect(() => {
-    if (hasAudio && voices.length >= voiceCloneLimit && voiceCloneLimit > 0) {
-      setShowExistingVoiceModal(true);
-    }
-  }, [hasAudio, voices.length, voiceCloneLimit]);
-
-  // Scroll to My Voices section when modal action is taken
-  const scrollToMyVoices = () => {
-    const myVoicesSection = document.getElementById("my-voices-section");
-    if (myVoicesSection) {
-      myVoicesSection.scrollIntoView({ behavior: "smooth" });
-    }
-    setShowExistingVoiceModal(false);
-  };
+  const step = !hasAudio ? 0 : !voiceName.trim() || !consentAccepted ? 1 : 2;
+  const canClone = hasAudio && voiceName.trim().length > 0 && consentAccepted && !isCloning;
 
   return (
-    <div className="min-h-screen flex flex-col w-full bg-background">
-      <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
-      <AppHeader />
+    <div>
+      {/* Hero pill */}
+      <div className="rounded-xl border border-[#14C8CC]/20 bg-gradient-to-br from-[#10151A] to-[#0A0D0F] p-5 sm:p-6 relative overflow-hidden">
+        <div
+          className="absolute inset-0 pointer-events-none opacity-30"
+          style={{
+            background: "radial-gradient(60% 80% at 80% 0%, rgba(20,200,204,.15), transparent 70%)",
+          }}
+        />
+        <span className="relative inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#14C8CC]/10 border border-[#14C8CC]/30 font-mono text-[10px] tracking-[0.16em] uppercase text-[#14C8CC]">
+          <Sparkles className="w-3 h-3" /> Instant voice clone
+        </span>
+        <h2 className="relative font-serif text-[22px] sm:text-[26px] font-medium text-[#ECEAE4] mt-3 leading-tight">
+          Clone your voice in minutes
+        </h2>
+        <p className="relative text-[13px] text-[#8A9198] mt-1.5">
+          Upload 30 seconds of clean audio or record live — we'll train a high-fidelity replica.
+        </p>
+      </div>
 
-          {/* Content */}
-          <div className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-            <div className="max-w-4xl mx-auto space-y-8">
-              {/* Hero */}
-              <div className="text-center space-y-3">
-                <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                  <Mic className="h-3.5 w-3.5" />
-                  Voice Lab
-                </span>
-                <h1 className="type-h2 tracking-tight text-foreground">
-                  Clone Your Voice
-                </h1>
-                <p className="text-sm text-muted-foreground/70">
-                  Create your digital twin with AI voice cloning
-                </p>
-              </div>
+      {/* Tip cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+        <TipCard icon={<ShieldCheck className="w-4 h-4" />} title="Quiet room"
+          body="No echo, no fan, no background music. A closet works great." />
+        <TipCard icon={<Clock className="w-4 h-4" />} title="30+ seconds"
+          body="2–5 minutes of varied tone gets best results. Read naturally." />
+        <TipCard icon={<Mic className="w-4 h-4" />} title="Use a real mic"
+          body="Phone mic works. Laptop mic less so. AirPods are okay." />
+      </div>
 
-              {/* Tips Section */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-                <div className="flex flex-col items-start gap-2">
-                  <VolumeX className="h-5 w-5 text-muted-foreground" />
-                  <h3 className="font-medium text-sm">Avoid noisy environments</h3>
-                  <p className="text-xs text-muted-foreground">Background sounds interfere with recording quality results.</p>
-                </div>
-                <div className="flex flex-col items-start gap-2">
-                  <ThumbsUp className="h-5 w-5 text-muted-foreground" />
-                  <h3 className="font-medium text-sm">Check microphone quality</h3>
-                  <p className="text-xs text-muted-foreground">Try external units or headphone mics for better audio capture.</p>
-                </div>
-                <div className="flex flex-col items-start gap-2">
-                  <Headphones className="h-5 w-5 text-muted-foreground" />
-                  <h3 className="font-medium text-sm">Use consistent equipment</h3>
-                  <p className="text-xs text-muted-foreground">Don't change recording equipment between samples.</p>
-                </div>
-              </div>
+      {/* 3-step indicator */}
+      <div className="flex items-center gap-2 sm:gap-3 mt-5 mb-4 font-mono text-[10px] sm:text-[10.5px] tracking-[0.12em] uppercase overflow-x-auto">
+        <span className={cn("whitespace-nowrap", step >= 0 ? "text-[#14C8CC]" : "text-[#5A6268]")}>① Record / Upload</span>
+        <span className="flex-shrink-0 w-5 sm:w-6 h-px bg-white/10" />
+        <span className={cn("whitespace-nowrap", step >= 1 ? "text-[#14C8CC]" : "text-[#5A6268]")}>② Name &amp; consent</span>
+        <span className="flex-shrink-0 w-5 sm:w-6 h-px bg-white/10" />
+        <span className={cn("whitespace-nowrap", step >= 2 ? "text-[#14C8CC]" : "text-[#5A6268]")}>③ Train</span>
+      </div>
 
-              {/* Main Upload/Record Area */}
-              <div className="space-y-6">
-                {/* Upload Zone */}
+      {/* Drop / record */}
+      <div
+        onClick={() => fileInputRef.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFileUpload(f); }}
+        className={cn(
+          "rounded-xl border-2 border-dashed p-8 sm:p-10 text-center cursor-pointer transition-all",
+          isDragging ? "border-[#14C8CC] bg-[#14C8CC]/5" : "border-white/10 hover:border-white/20",
+        )}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".mp3,.wav,.m4a,.mp4,audio/mpeg,audio/wav,audio/m4a,audio/x-m4a,video/mp4,audio/mp4"
+          className="hidden"
+          onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
+        />
+        <Upload className="w-7 h-7 text-[#8A9198] mx-auto" />
+        <div className="mt-3 text-[14px] font-medium text-[#ECEAE4]">Drop audio files here</div>
+        <div className="text-[12px] text-[#8A9198] mt-1">WAV, MP3, M4A · up to 20 MB</div>
+        <div className="font-mono text-[10px] tracking-[0.18em] uppercase text-[#5A6268] my-3">Or</div>
+        <button
+          type="button"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); if (isRecording) stopRecording(); else startRecording(); }}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-[12.5px] font-semibold border transition-colors",
+            isRecording
+              ? "border-[#E4C875] text-[#E4C875] bg-[#E4C875]/10"
+              : "border-white/15 text-[#ECEAE4] hover:border-white/25 hover:bg-white/5",
+          )}
+        >
+          {isRecording ? <Square className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+          {isRecording ? `Stop · ${fmt(recordingDuration)}` : "Record live · 0:30 minimum"}
+        </button>
+        {hasAudio && (
+          <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[#14C8CC]/10 text-[#14C8CC] font-mono text-[10.5px] tracking-[0.12em] uppercase">
+            <Check className="w-3 h-3" />
+            {recordedBlob ? `Recorded · ${fmt(recordingDuration)}` : `${uploadedFile?.name}`}
+          </div>
+        )}
+      </div>
+
+      {/* Sample read */}
+      <div className="mt-4 rounded-xl border border-white/8 bg-[#10151A] p-4">
+        <div className="font-mono text-[10.5px] tracking-[0.14em] uppercase text-[#5A6268] mb-2">
+          Suggested read · phonetically diverse
+        </div>
+        <p className="font-serif italic text-[14px] sm:text-[14.5px] text-[#ECEAE4] leading-relaxed">
+          "The quick brown fox jumps over the lazy dog. She sells seashells by the seashore.
+          How vexingly quick daft zebras jump. Pack my box with five dozen liquor jugs —
+          and wonder if Wednesday's weather will hold up through next Thursday morning."
+        </p>
+        <div className="font-mono text-[10px] tracking-[0.06em] text-[#5A6268] mt-2.5">
+          ~28 seconds at natural pace
+        </div>
+      </div>
+
+      {/* Name + consent */}
+      <div className="mt-4 rounded-xl border border-white/8 bg-[#10151A] p-4 grid gap-3">
+        <div>
+          <label className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-1.5 block">
+            Voice name
+          </label>
+          <Input
+            value={voiceName}
+            onChange={(e) => setVoiceName(e.target.value)}
+            placeholder="e.g. My Narrator Voice"
+            className="h-9 bg-[#0A0D0F] border border-white/10 text-[13px] text-[#ECEAE4] focus-visible:ring-0 focus-visible:border-[#14C8CC]/40"
+          />
+        </div>
+        <label className="flex items-start gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={removeNoise}
+            onChange={(e) => setRemoveNoise(e.target.checked)}
+            className="mt-0.5 accent-[#14C8CC]"
+          />
+          <span className="text-[12.5px] text-[#ECEAE4]">
+            Remove background noise <span className="text-[#5A6268]">(recommended)</span>
+          </span>
+        </label>
+        <label className="flex items-start gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={consentAccepted}
+            onChange={(e) => setConsentAccepted(e.target.checked)}
+            className="mt-0.5 accent-[#14C8CC]"
+          />
+          <span className="text-[12px] text-[#8A9198] leading-relaxed">
+            I confirm this voice belongs to me or I have explicit consent from the owner to clone it for use in my projects.
+          </span>
+        </label>
+        <button
+          type="button"
+          onClick={handleClone}
+          disabled={!canClone}
+          className="mt-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-lg text-[13px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] to-[#0FA6AE] hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {isCloning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+          {isCloning ? "Training your voice…" : "Train this voice"}
+        </button>
+      </div>
+
+      {/* Existing cloned voices list */}
+      {voices.length > 0 && (
+        <div className="mt-7" id="my-voices-section">
+          <div className="font-mono text-[10.5px] tracking-[0.14em] uppercase text-[#5A6268] mb-2.5">
+            Your cloned voices
+          </div>
+          <div className="grid gap-2">
+            {voices.map((v) => (
+              <div key={v.id} className="flex items-center gap-3 rounded-xl border border-white/8 bg-[#10151A] p-3">
                 <div
-                  className={cn(
-                    "border-2 border-dashed rounded-2xl p-8 md:p-12 text-center transition-all cursor-pointer",
-                    isDragging ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground/50",
-                  )}
-                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                  onDragLeave={() => setIsDragging(false)}
-                  onDrop={handleDrop}
-                  onClick={() => fileInputRef.current?.click()}
+                  className="w-10 h-10 rounded-full grid place-items-center font-serif font-semibold text-[15px] text-white shrink-0"
+                  style={{ background: avatarBackground("Multi") }}
                 >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".mp3,.wav,.m4a,.mp4,audio/mpeg,audio/wav,audio/m4a,audio/x-m4a,video/mp4,audio/mp4"
-                    className="hidden"
-                    onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
-                  />
-                  
-                  <div className="space-y-4">
-                    <div className="mx-auto w-12 h-12 flex items-center justify-center">
-                      <Upload className="h-6 w-6 text-muted-foreground" />
-                    </div>
-                    <div className="space-y-1">
-                      <p className="font-medium">Click to upload, or drag and drop</p>
-                      <p className="text-sm text-muted-foreground">MP3, WAV, M4A, or MP4 files up to 10MB</p>
-                    </div>
-                    
-                    <div className="flex items-center justify-center">
-                      <Badge variant="secondary" className="bg-muted text-muted-foreground">or</Badge>
-                    </div>
-                    
-                    {/* Record Button - inside zone but with stopPropagation */}
-                    <Button
-                      variant="outline"
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        if (isRecording) { stopRecording(); } else { startRecording(); }
-                      }}
-                      className={cn(
-                        "gap-2",
-                        isRecording && "border-primary text-primary"
-                      )}
-                    >
-                      {isRecording ? (
-                        <>
-                          <Square className="h-4 w-4" />
-                          Stop Recording ({formatDuration(recordingDuration)})
-                        </>
-                      ) : (
-                        <>
-                          <Mic className="h-4 w-4" />
-                          Record audio
-                        </>
-                      )}
-                    </Button>
+                  {(v.voice_name?.[0] || "?").toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-medium text-[#ECEAE4] truncate">{v.voice_name}</div>
+                  <div className="font-mono text-[10px] tracking-[0.06em] uppercase text-[#5A6268] truncate mt-0.5">
+                    Trained {formatDistanceToNow(new Date(v.created_at), { addSuffix: true })}
                   </div>
                 </div>
-
-                {/* Recording Visualizer (shows when recording) */}
-                {isRecording && (
-                  <motion.div 
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    className="h-16 bg-muted/30 rounded-xl flex items-center justify-center gap-1 px-4"
-                  >
-                    {audioLevels.map((level, i) => (
-                      <motion.div
-                        key={i}
-                        className="w-1.5 bg-primary rounded-full"
-                        animate={{ 
-                          height: Math.max(4, level * 48) 
-                        }}
-                        transition={{ duration: 0.05 }}
-                      />
-                    ))}
-                  </motion.div>
-                )}
-
-                {/* Uploaded/Recorded Files List */}
-                <AnimatePresence>
-                  {(uploadedFile || recordedBlob) && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="space-y-4"
-                    >
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">
-                            {uploadedFile ? uploadedFile.name : "Recording.webm"}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {uploadedFile 
-                              ? `${(uploadedFile.size / 1024 / 1024).toFixed(2)} MB`
-                              : formatDuration(recordingDuration)
-                            }
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8"
-                            onClick={() => {
-                              // Preview functionality for uploaded file
-                              if (uploadedFile) {
-                                const url = URL.createObjectURL(uploadedFile);
-                                playPreview(url, "preview");
-                              } else if (recordedBlob) {
-                                const url = URL.createObjectURL(recordedBlob);
-                                playPreview(url, "preview");
-                              }
-                            }}
-                          >
-                            {playingVoiceId === "preview" ? (
-                              <Pause className="h-4 w-4" />
-                            ) : (
-                              <Play className="h-4 w-4" />
-                            )}
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            onClick={() => {
-                              setUploadedFile(null);
-                              setRecordedBlob(null);
-                              setRecordingDuration(0);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-
-                      {/* Remove noise checkbox */}
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          id="remove-noise"
-                          checked={removeNoise}
-                          onCheckedChange={(checked) => setRemoveNoise(checked as boolean)}
-                        />
-                        <label htmlFor="remove-noise" className="text-sm font-medium cursor-pointer">
-                          Remove background noise from audio
-                        </label>
-                      </div>
-
-                      {/* Ready indicator */}
-                      <div className="flex items-center gap-2 text-primary">
-                        <Check className="h-4 w-4" />
-                        <div>
-                          <p className="text-sm font-medium">Ready</p>
-                          <p className="text-xs text-muted-foreground">Continue to add recordings for a better clone</p>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                {/* 10 seconds required note */}
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <div className="h-4 w-4 rounded-full border border-muted-foreground/50" />
-                  <span>10 seconds of audio required</span>
-                </div>
-
-                {/* Voice name input and Clone button */}
-                {isReady && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="space-y-4 pt-4 border-t border-border"
-                  >
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Voice Name</label>
-                      <Input
-                        placeholder="e.g., My Professional Voice"
-                        value={voiceName}
-                        onChange={(e) => setVoiceName(e.target.value)}
-                        disabled={isCloning}
-                        className="bg-muted/30"
-                      />
-                    </div>
-
-                    {/* Consent Disclaimer */}
-                    <div className="flex items-start gap-3 p-4 bg-muted/30 rounded-xl border border-border/50">
-                      <Checkbox
-                        id="voice-consent"
-                        checked={consentAccepted}
-                        onCheckedChange={(checked) => setConsentAccepted(checked === true)}
-                        disabled={isCloning}
-                        className="mt-0.5"
-                      />
-                      <label htmlFor="voice-consent" className="text-sm text-muted-foreground leading-relaxed cursor-pointer">
-                        I hereby confirm that I have all necessary rights or consents to upload and clone these voice samples and that I will not use the platform-generated content for any illegal, fraudulent, or harmful purpose. I reaffirm my obligation to abide by MotionMax's{" "}
-                        <a href="/terms" className="text-primary underline hover:no-underline">Terms of Service</a>,{" "}
-                        <a href="/privacy" className="text-primary underline hover:no-underline">Privacy Policy</a>, and{" "}
-                        <a href="/acceptable-use" className="text-primary underline hover:no-underline">Acceptable Use Policy</a>.
-                      </label>
-                    </div>
-
-                    <div className="flex flex-col gap-2">
-                      {hasExistingVoice && (
-                        <p className="text-sm text-destructive">
-                          You've reached your plan's limit of {voiceCloneLimit} cloned voice(s). Delete one to create a new one.
-                        </p>
-                      )}
-                      <div className="flex justify-end">
-                        <Button
-                          size="lg"
-                          disabled={!canClone}
-                          onClick={handleClone}
-                          className="px-8"
-                        >
-                          {isCloning ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Cloning...
-                            </>
-                          ) : (
-                            "Next"
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
+                <span className="px-2 py-0.5 rounded-md bg-[#14C8CC]/10 text-[#14C8CC] font-mono text-[9.5px] tracking-[0.12em] uppercase">Ready</span>
+                <button
+                  type="button"
+                  onClick={() => { if (confirm(`Delete "${v.voice_name}"?`)) deleteVoice(v.id); }}
+                  className="w-8 h-8 grid place-items-center rounded-md text-[#5A6268] hover:text-red-400 hover:bg-white/5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
               </div>
-
-              {/* My Voices Section */}
-              {!voicesLoading && voices.length === 0 && (
-                <Card className="border-border/50">
-                  <CardContent className="flex flex-col items-center justify-center py-12 text-center space-y-3">
-                    <div className="h-12 w-12 rounded-full bg-muted/50 flex items-center justify-center">
-                      <Mic className="h-6 w-6 text-muted-foreground" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-foreground">No cloned voices yet</p>
-                      <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                        Upload a voice sample above to create your first custom voice clone. It only takes a minute.
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-              {voices.length > 0 && (
-                <Card id="my-voices-section" className="border-border/50">
-                  <CardHeader>
-                    <CardTitle className="text-lg">My Voices</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <AnimatePresence>
-                        {voices.map((voice) => (
-                          <VoiceCard
-                            key={voice.id}
-                            voice={voice}
-                            isPlaying={playingVoiceId === voice.id}
-                            onPlay={() => playPreview(voice.sample_url, voice.id)}
-                            onDelete={() => deleteVoice(voice.id)}
-                          />
-                        ))}
-                      </AnimatePresence>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {voicesLoading && (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              )}
-            </div>
+            ))}
           </div>
+        </div>
+      )}
 
-        {/* Existing Voice Warning Modal */}
-        <Dialog open={showExistingVoiceModal} onOpenChange={setShowExistingVoiceModal}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <AlertCircle className="h-5 w-5 text-primary" />
-                Voice Limit Reached
-              </DialogTitle>
-              <DialogDescription className="pt-2">
-                You have reached your plan's voice clone limit ({voiceCloneLimit}). Delete an existing voice to create a new one.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex justify-end gap-3 pt-4">
-              <Button 
-                variant="outline" 
-                onClick={() => setShowExistingVoiceModal(false)}
-              >
-                Cancel
-              </Button>
-              <Button onClick={scrollToMyVoices}>
-                Go to My Voices
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+      {/* Plan-limit modal */}
+      <Dialog open={showLimitModal} onOpenChange={setShowLimitModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Voice clone limit reached</DialogTitle>
+            <DialogDescription>
+              Your current plan allows {voiceCloneLimit} cloned voice{voiceCloneLimit === 1 ? "" : "s"}.
+              Delete an existing voice or upgrade your plan to add more.
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-interface VoiceCardProps {
-  voice: UserVoice;
-  isPlaying: boolean;
-  onPlay: () => void;
-  onDelete: () => void;
+function TipCard({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
+  return (
+    <div className="rounded-xl border border-white/8 bg-[#10151A] p-3.5">
+      <div className="w-7 h-7 rounded-md grid place-items-center bg-[#14C8CC]/10 text-[#14C8CC] mb-2">
+        {icon}
+      </div>
+      <div className="text-[13px] font-semibold text-[#ECEAE4]">{title}</div>
+      <div className="text-[12px] text-[#8A9198] mt-1 leading-relaxed">{body}</div>
+    </div>
+  );
 }
 
-function VoiceCard({ voice, isPlaying, onPlay, onDelete }: VoiceCardProps) {
-  // Safely format the creation date
-  const getCreatedTimeAgo = () => {
+// ─── Test Playground (right rail) ────────────────────────────────────
+
+const SAMPLE_PROMPT =
+  "In a future where every story can be told in any voice — yours included — we built a tool that takes nothing but a thought, and gives it sound.";
+
+function TestPlayground({
+  voice, language, onSwap, userId,
+}: {
+  voice: CatalogVoice | undefined;
+  language: string;
+  onSwap: () => void;
+  userId: string | undefined;
+}) {
+  const [text, setText] = useState(SAMPLE_PROMPT);
+  const [tonePacing, setTonePacing] = useState(45);
+  const [generating, setGenerating] = useState(false);
+  const [history, setHistory] = useState<PlaygroundHistoryItem[]>([]);
+  const [playingHistoryIdx, setPlayingHistoryIdx] = useState<number | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const charLimit = 1000;
+  const cost = Math.max(1, Math.ceil(text.length / 10));
+
+  // Hydrate history from localStorage on mount.
+  useEffect(() => {
+    if (!userId) return;
     try {
-      if (!voice.created_at) return "recently";
-      const date = new Date(voice.created_at);
-      if (isNaN(date.getTime())) return "recently";
-      return formatDistanceToNow(date, { addSuffix: true });
-    } catch {
-      return "recently";
+      const raw = localStorage.getItem(lsKey(userId, "playground_history"));
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) setHistory(parsed.slice(0, 10));
+      }
+    } catch { /* ignore */ }
+  }, [userId]);
+
+  const persistHistory = useCallback((items: PlaygroundHistoryItem[]) => {
+    if (!userId) return;
+    try {
+      localStorage.setItem(lsKey(userId, "playground_history"), JSON.stringify(items.slice(0, 10)));
+    } catch { /* ignore */ }
+  }, [userId]);
+
+  const stopHistoryAudio = useCallback(() => {
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
+    setPlayingHistoryIdx(null);
+  }, []);
+
+  const playHistory = (idx: number) => {
+    if (playingHistoryIdx === idx) { stopHistoryAudio(); return; }
+    stopHistoryAudio();
+    const item = history[idx];
+    if (!item) return;
+    const audio = new Audio(item.audioUrl);
+    audioRef.current = audio;
+    setPlayingHistoryIdx(idx);
+    audio.onended = () => setPlayingHistoryIdx((p) => (p === idx ? null : p));
+    audio.onerror = () => setPlayingHistoryIdx((p) => (p === idx ? null : p));
+    audio.play().catch(() => setPlayingHistoryIdx(null));
+  };
+
+  const generate = async () => {
+    if (!voice) return;
+    if (!userId) { toast.error("Sign in to generate previews."); return; }
+    if (text.trim().length < 2) { toast.error("Type at least a couple of words."); return; }
+
+    setGenerating(true);
+    try {
+      const { data: job, error } = await supabase
+        .from("video_generation_jobs")
+        .insert({
+          user_id: userId,
+          task_type: "voice_preview",
+          payload: { speaker: voice.id, language, text: text.slice(0, charLimit), tonePacing },
+          status: "pending",
+        })
+        .select("id")
+        .single();
+      if (error || !job) throw new Error("Failed to queue preview.");
+
+      const MAX_WAIT = 30_000;
+      const start = Date.now();
+      while (Date.now() - start < MAX_WAIT) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const { data: row } = await (supabase
+          .from("video_generation_jobs") as unknown as ReturnType<typeof supabase.from>)
+          .select("status, result")
+          .eq("id", job.id)
+          .single();
+        if (row?.status === "completed" && row?.result?.audioUrl) {
+          const url = row.result.audioUrl as string;
+          const item: PlaygroundHistoryItem = {
+            text: text.slice(0, 80),
+            voiceId: voice.id,
+            voiceName: voice.name,
+            audioUrl: url,
+            tonePacing,
+            language,
+            ts: Date.now(),
+          };
+          setHistory((prev) => {
+            const next = [item, ...prev].slice(0, 10);
+            persistHistory(next);
+            return next;
+          });
+          stopHistoryAudio();
+          const audio = new Audio(url);
+          audioRef.current = audio;
+          setPlayingHistoryIdx(0);
+          audio.onended = () => setPlayingHistoryIdx((p) => (p === 0 ? null : p));
+          audio.play().catch(() => setPlayingHistoryIdx(null));
+          return;
+        }
+        if (row?.status === "failed") throw new Error("Preview generation failed.");
+      }
+      throw new Error("Preview timed out — try again.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(msg);
+    } finally {
+      setGenerating(false);
     }
   };
 
+  if (!voice) {
+    return (
+      <div className="rounded-xl border border-white/8 bg-[#10151A] p-5 text-center text-[#5A6268] text-[12px]">
+        No voices available for this language.
+      </div>
+    );
+  }
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      className="group flex items-center gap-3 p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors"
-    >
-      <Button
-        size="icon"
-        variant="ghost"
-        className="shrink-0 h-10 w-10 rounded-full bg-primary/10 hover:bg-primary/20"
-        onClick={onPlay}
-      >
-        {isPlaying ? (
-          <Pause className="h-4 w-4 text-primary" />
-        ) : (
-          <Play className="h-4 w-4 text-primary" />
-        )}
-      </Button>
-      
-      <div className="flex-1 min-w-0">
-        <p className="font-medium truncate">{voice.voice_name}</p>
-        <p className="text-xs text-muted-foreground">
-          Created {getCreatedTimeAgo()}
-        </p>
+    <div className="rounded-xl border border-white/8 bg-[#10151A] p-4 sm:p-5 max-h-[calc(100vh-7rem)] overflow-y-auto">
+      <div className="flex items-center justify-between mb-3">
+        <div className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#ECEAE4] inline-flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#14C8CC] animate-pulse" />
+          Test playground
+        </div>
+        <div className="font-mono text-[9.5px] tracking-[0.1em] text-[#14C8CC]">● LIVE</div>
       </div>
 
-      <Badge variant="secondary" className="bg-primary/10 text-primary border-0">
-        Active
-      </Badge>
+      {/* Selected voice card */}
+      <div className="rounded-lg border border-white/8 bg-[#0A0D0F] p-3 flex items-center gap-2.5">
+        <div
+          className="w-9 h-9 rounded-full grid place-items-center font-serif font-semibold text-[14px] text-white shrink-0"
+          style={{ background: avatarBackground(voice.accent) }}
+        >
+          {voice.initial}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[13px] font-medium text-[#ECEAE4] truncate">{voice.name}</div>
+          <div className="font-mono text-[10px] tracking-[0.06em] uppercase text-[#5A6268] truncate mt-0.5">
+            {voice.gender} · {voice.accent} · {voice.tags[0] ?? "voice"}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onSwap}
+          className="font-mono text-[9.5px] tracking-[0.12em] uppercase text-[#5A6268] hover:text-[#ECEAE4] inline-flex items-center gap-1 px-2 py-1 rounded-md hover:bg-white/5 transition-colors"
+        >
+          <ArrowLeftRight className="w-2.5 h-2.5" /> Swap
+        </button>
+      </div>
 
-      <Button
-        size="icon"
-        variant="ghost"
-        className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-        onClick={onDelete}
+      {/* Text */}
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value.slice(0, charLimit))}
+        placeholder="Type something to test this voice…"
+        className="mt-3 w-full min-h-[110px] p-3 rounded-lg bg-[#0A0D0F] border border-white/10 text-[13px] text-[#ECEAE4] placeholder:text-[#5A6268] focus:outline-none focus:border-[#14C8CC]/40 resize-y"
+      />
+      <div className="flex items-center justify-between mt-1.5">
+        <button
+          type="button"
+          onClick={() => setText(SAMPLE_PROMPT)}
+          className="font-mono text-[9.5px] tracking-[0.1em] uppercase text-[#5A6268] hover:text-[#ECEAE4] px-2 py-1 rounded border border-dashed border-white/10 hover:border-white/20 transition-colors"
+        >
+          + Example
+        </button>
+        <span className="font-mono text-[10px] text-[#5A6268]">{text.length} / {charLimit}</span>
+      </div>
+
+      {/* Tone & pacing — single horizontal slider matching Image 158. */}
+      <div className="mt-4 rounded-lg border border-white/8 bg-[#0A0D0F] p-3.5">
+        <div className="flex items-baseline justify-between mb-2">
+          <span className="text-[12.5px] font-semibold text-[#ECEAE4]">Tone &amp; pacing</span>
+          <span className="font-mono text-[9.5px] tracking-[0.16em] uppercase text-[#E4C875]">
+            {tonePacingLabel(tonePacing)}
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={tonePacing}
+            onChange={(e) => setTonePacing(+e.target.value)}
+            className="flex-1 accent-[#14C8CC]"
+          />
+          <span className="font-mono text-[11px] text-[#8A9198] tabular-nums w-10 text-right">{tonePacing}%</span>
+        </div>
+      </div>
+
+      {/* Generate */}
+      <button
+        type="button"
+        onClick={generate}
+        disabled={generating || text.trim().length < 2}
+        className="mt-4 w-full inline-flex items-center justify-center gap-1.5 h-10 rounded-lg text-[13px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] to-[#0FA6AE] hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
       >
-        <Trash2 className="h-4 w-4" />
-      </Button>
-    </motion.div>
+        {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+        {generating ? "Generating…" : "Generate preview"}
+      </button>
+      <div className="font-mono text-[9.5px] tracking-[0.12em] uppercase text-[#5A6268] text-center mt-1.5">
+        ~{cost} cr · ≈12 seconds
+      </div>
+
+      {/* History */}
+      {history.length > 0 && (
+        <>
+          <div className="flex items-center justify-between mt-5 mb-2">
+            <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#ECEAE4]">Recent generations</span>
+            <button
+              type="button"
+              onClick={() => { setHistory([]); persistHistory([]); }}
+              className="font-mono text-[9.5px] tracking-[0.1em] uppercase text-[#5A6268] hover:text-[#ECEAE4]"
+            >
+              Clear
+            </button>
+          </div>
+          <div className="grid gap-1.5">
+            {history.map((h, i) => (
+              <div key={`${h.ts}-${i}`} className="flex items-center gap-2.5 rounded-lg bg-[#0A0D0F] border border-white/8 p-2">
+                <button
+                  type="button"
+                  onClick={() => playHistory(i)}
+                  className={cn(
+                    "w-7 h-7 shrink-0 rounded-full grid place-items-center transition-colors",
+                    playingHistoryIdx === i ? "bg-[#14C8CC] text-[#0A0D0F]" : "bg-white/5 text-[#ECEAE4] hover:bg-white/10",
+                  )}
+                >
+                  {playingHistoryIdx === i ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3 translate-x-px" />}
+                </button>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11.5px] text-[#ECEAE4] truncate">"{h.text}…"</div>
+                  <div className="font-mono text-[9.5px] tracking-[0.06em] text-[#5A6268] truncate mt-0.5">
+                    {h.voiceName} · tone {h.tonePacing}%
+                  </div>
+                </div>
+                <span className="font-mono text-[9.5px] text-[#5A6268] shrink-0">
+                  {formatDistanceToNow(new Date(h.ts), { addSuffix: false })}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
+
+/** Pacing buckets shown alongside the percentage so the slider has
+ *  semantic anchor points (just a number is hard to map to a vibe). */
+function tonePacingLabel(p: number): string {
+  if (p <= 20) return "Slow";
+  if (p <= 40) return "Measured";
+  if (p <= 60) return "Natural";
+  if (p <= 80) return "Brisk";
+  return "Energetic";
+}
+

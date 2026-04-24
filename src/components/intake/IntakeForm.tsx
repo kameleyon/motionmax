@@ -219,8 +219,9 @@ export default function IntakeForm({
     ];
     if (features.duration && duration === '>3min') items.push({ label: 'Duration · > 3 min', v: ADDON_COST.durationLong });
     if (features.lipSync && lipSync) items.push({ label: 'Lip sync', v: ADDON_COST.lipSync });
-    if (features.music && music) items.push({ label: `Music · ${musicGenre}`, v: ADDON_COST.music });
-    if (features.sfx && music && sfx) items.push({ label: 'SFX & foley', v: ADDON_COST.sfx });
+    // Music + SFX cost lines disabled while Lyria is unreliable.
+    // if (features.music && music) items.push({ label: `Music · ${musicGenre}`, v: ADDON_COST.music });
+    // if (features.sfx && music && sfx) items.push({ label: 'SFX & foley', v: ADDON_COST.sfx });
     return items;
   }, [mode, features, duration, lipSync, music, musicGenre, sfx]);
 
@@ -273,9 +274,14 @@ export default function IntakeForm({
         ...(features.camera ? { camera } : {}),
         ...(features.colorGrade ? { grade } : {}),
         ...(features.lipSync && lipSync ? { lipSync: { on: true, strength: lipStrength } } : {}),
-        ...(features.music && music ? {
-          music: { on: true, genre: musicGenre, intensity: musicIntensity, sfx: features.sfx && sfx },
-        } : {}),
+        // ── MUSIC + SFX TEMPORARILY DISABLED ──
+        // Lyria generation is not reliable yet (Hypereal + Google
+        // direct both had issues). Leaving the toggle state here but
+        // forcing `music.on` false so no Lyria call fires downstream.
+        // Re-enable by restoring this spread once Lyria is stable:
+        //   ...(features.music && music ? {
+        //     music: { on: true, genre: musicGenre, intensity: musicIntensity, sfx: features.sfx && sfx },
+        //   } : {}),
         ...(features.characterAppearance && characterDescription ? { characterAppearance: characterDescription } : {}),
         captionStyle: caption,
         ...(brand.trim() ? { brandName: brand.trim() } : {}),
@@ -646,7 +652,34 @@ export default function IntakeForm({
         </div>
       </div>
 
-      {/* Audio & Realism */}
+      {/* Audio & Realism — Music + SFX commented out while Lyria is
+          unstable. Lip sync section kept but hidden unless standalone
+          by dropping the `features.music` half of the gate. Uncomment
+          the original block below to restore. */}
+      {features.lipSync && (
+        <div>
+          <IntakeLabel><span className="text-[#14C8CC]">★</span> Audio & realism · NEW</IntakeLabel>
+          <div className="grid gap-3">
+            <FeatureToggle
+              icon={<AudioLines className="w-4 h-4" />}
+              title="Lip Sync"
+              subtitle="Align character mouth shapes to the narration line by line."
+              cost={ADDON_COST.lipSync}
+              on={lipSync}
+              onToggle={setLipSync}
+            >
+              <IntakeLabel>Lip sync strength</IntakeLabel>
+              <IntakeSlider
+                value={lipStrength}
+                onChange={setLipStrength}
+                fmt={(v) => v < 40 ? 'Subtle' : v < 70 ? 'Natural' : 'Exaggerated'}
+              />
+            </FeatureToggle>
+          </div>
+        </div>
+      )}
+      {/*
+      ── ORIGINAL AUDIO & REALISM BLOCK (music + sfx disabled) ──
       {(features.lipSync || features.music) && (
         <div>
           <IntakeLabel><span className="text-[#14C8CC]">★</span> Audio & realism · NEW</IntakeLabel>
@@ -661,14 +694,9 @@ export default function IntakeForm({
                 onToggle={setLipSync}
               >
                 <IntakeLabel>Lip sync strength</IntakeLabel>
-                <IntakeSlider
-                  value={lipStrength}
-                  onChange={setLipStrength}
-                  fmt={(v) => v < 40 ? 'Subtle' : v < 70 ? 'Natural' : 'Exaggerated'}
-                />
+                <IntakeSlider value={lipStrength} onChange={setLipStrength} fmt={(v) => v < 40 ? 'Subtle' : v < 70 ? 'Natural' : 'Exaggerated'} />
               </FeatureToggle>
             )}
-
             {features.music && (
               <FeatureToggle
                 icon={<Music className="w-4 h-4" />}
@@ -682,9 +710,7 @@ export default function IntakeForm({
                   <div>
                     <IntakeLabel>Music genre</IntakeLabel>
                     <div className="flex gap-1.5 flex-wrap">
-                      {MUSIC_GENRES.map((g) => (
-                        <Pill key={g} on={g === musicGenre} onClick={() => setMusicGenre(g)}>{g}</Pill>
-                      ))}
+                      {MUSIC_GENRES.map((g) => (<Pill key={g} on={g === musicGenre} onClick={() => setMusicGenre(g)}>{g}</Pill>))}
                     </div>
                   </div>
                   <div>
@@ -693,20 +719,8 @@ export default function IntakeForm({
                   </div>
                   {features.sfx && (
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={sfx}
-                        onClick={() => setSfx(!sfx)}
-                        className={cn(
-                          'relative w-9 h-5 rounded-full transition-colors shrink-0 border',
-                          sfx ? 'bg-[#14C8CC] border-transparent' : 'bg-[#1B2228] border-white/10',
-                        )}
-                      >
-                        <span className={cn(
-                          'absolute top-[1px] w-4 h-4 rounded-full transition-all',
-                          sfx ? 'left-[18px] bg-[#0A0D0F]' : 'left-[1px] bg-[#8A9198]',
-                        )} />
+                      <button type="button" role="switch" aria-checked={sfx} onClick={() => setSfx(!sfx)} className={cn('relative w-9 h-5 rounded-full transition-colors shrink-0 border', sfx ? 'bg-[#14C8CC] border-transparent' : 'bg-[#1B2228] border-white/10')}>
+                        <span className={cn('absolute top-[1px] w-4 h-4 rounded-full transition-all', sfx ? 'left-[18px] bg-[#0A0D0F]' : 'left-[1px] bg-[#8A9198]')} />
                       </button>
                       <div className="text-[12.5px] text-[#ECEAE4]">Add ambient SFX & foley</div>
                       <span className="ml-auto font-mono text-[9px] text-[#5A6268] tracking-wider uppercase">+{ADDON_COST.sfx} cr</span>
@@ -718,6 +732,7 @@ export default function IntakeForm({
           </div>
         </div>
       )}
+      */}
 
       {/* Character consistency — ALWAYS ON for cinematic + explainer (folded
           into base cost). Renders a read-only "on" pill + the char

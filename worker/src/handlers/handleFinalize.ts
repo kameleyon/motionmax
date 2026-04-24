@@ -282,21 +282,30 @@ export async function handleFinalizePhase(
   // where the corresponding flag is true. Today the export concat
   // doesn't mix music yet, so the toggles are forward-compat — but
   // the data is there in scene._meta and editor reads/writes it.
+  // ── Music + SFX TEMPORARILY DISABLED ──
+  // Lyria generation is not reliable yet on either Hypereal or
+  // Google direct; both surfaces have produced empty/invalid audio
+  // responses. Forcing the entire block off until the provider
+  // situation is resolved. The intake form ALSO forces music.on=false
+  // so even if a stale intake row has music enabled, this guard
+  // catches it. Re-enable by setting MUSIC_SFX_DISABLED = false.
+  const MUSIC_SFX_DISABLED = true;
   try {
     const intake = intakeSettings as
       | { music?: { on?: boolean; genre?: string; intensity?: number; sfx?: boolean } }
       | null;
     const music = intake?.music;
     const apiKey = (process.env.HYPEREAL_API_KEY || "").trim();
+    void apiKey;
 
     // ── Music bed (Lyria 3 Pro) ──
-    if (music?.on && lyriaIsConfigured()) {
+    if (!MUSIC_SFX_DISABLED && music?.on && lyriaIsConfigured()) {
       const approxDurationSec = Math.min(120, Math.max(20, finalScenes.length * 10));
       console.log(`[Finalize] Music on — calling Lyria 3 Pro for ~${approxDurationSec}s track`);
       const musicUrl = await generateLyriaMusic({
         prompt: projectContent ?? "",
         durationSec: approxDurationSec,
-        apiKey, // unused by direct-to-Google path, kept for compat
+        apiKey,
         genre: music.genre as LyriaMusicGenre | undefined,
         intensity: music.intensity,
         projectId,
@@ -316,12 +325,8 @@ export async function handleFinalizePhase(
     }
 
     // ── SFX bed (Lyria 3 Pro with ambient/foley prompt) ──
-    // Separate try inside the outer try so a SFX failure doesn't abort
-    // music (they're independent additives). Prompt is deliberately
-    // ambient — no melody, no percussion — so it rides under both
-    // the music bed and narration without competing.
     try {
-      if (music?.sfx && lyriaIsConfigured()) {
+      if (!MUSIC_SFX_DISABLED && music?.sfx && lyriaIsConfigured()) {
         const sfxDurationSec = Math.min(120, Math.max(20, finalScenes.length * 10));
         const sfxPrompt = [
           "Ambient atmospheric bed, subtle room tone and environmental foley.",
@@ -334,8 +339,7 @@ export async function handleFinalizePhase(
         const sfxUrl = await generateLyriaMusic({
           prompt: sfxPrompt,
           durationSec: sfxDurationSec,
-          apiKey, // unused by direct-to-Google path, kept for compat
-          // No genre — we want pure ambient. intensity low so it sits under.
+          apiKey,
           intensity: 15,
           projectId,
           label: "sfx",

@@ -68,8 +68,12 @@ export default function Timeline({
     });
   }, [state.scenes]);
 
+  // Preserved for when the music/SFX UI is re-enabled — currently
+  // disabled while Lyria is unreliable. Void-ref prevents the lint
+  // unused-var warning without deleting the derivations.
   const hasMusic = !!state.intake.music?.on;
   const hasSfx = !!state.intake.music?.sfx;
+  void hasMusic; void hasSfx;
   const hasCaptions = state.intake.captionStyle && state.intake.captionStyle !== 'none';
 
   // Give every scene at least ~110 px on the timeline. A 15-scene
@@ -143,8 +147,10 @@ export default function Timeline({
             <TrackLabel>VIDEO</TrackLabel>
             <TrackLabel>VOICE</TrackLabel>
             <TrackLabel dim={!hasCaptions}>CAPTIONS</TrackLabel>
-            <TrackLabel dim={!hasMusic}>MUSIC</TrackLabel>
-            <TrackLabel dim={!hasSfx}>SFX</TrackLabel>
+            {/* MUSIC + SFX labels hidden while the feature is paused.
+                Re-enable alongside the matching TrackRail rows below.
+                <TrackLabel dim={!hasMusic}>MUSIC</TrackLabel>
+                <TrackLabel dim={!hasSfx}>SFX</TrackLabel> */}
           </div>
         </div>
 
@@ -305,11 +311,15 @@ export default function Timeline({
                 )}
               </TrackRail>
 
-              {/* MUSIC track. "Generating…" only while the generation
-                  is still rendering. Once generation.status === 'complete'
-                  and music_url is still null, the user opted out OR Lyria
-                  failed — either way it's "Off" / "Failed" now, not
-                  "Generating forever". */}
+              {/* MUSIC + SFX tracks — temporarily disabled while Lyria
+                  generation is unreliable. Intake form no longer lets
+                  users opt in; worker forces the block off. Leaving the
+                  code preserved below so we can re-enable when Lyria
+                  is stable by uncommenting and removing the null
+                  renders. */}
+              {null}
+              {null}
+              {/*
               <TrackRail>
                 {hasMusic ? (
                   <div
@@ -336,11 +346,6 @@ export default function Timeline({
                 )}
               </TrackRail>
 
-              {/* SFX track. Same Ready/Failed/Generating/Off lifecycle
-                  as music — a single Lyria-generated ambient bed lives
-                  on generations.sfx_url. Rendered as one band across
-                  the whole timeline (not per-scene) since it's a
-                  continuous ambient layer. */}
               <TrackRail>
                 {hasSfx ? (
                   <div
@@ -366,6 +371,7 @@ export default function Timeline({
                   </div>
                 )}
               </TrackRail>
+              */}
             </div>
           </div>
         </div>

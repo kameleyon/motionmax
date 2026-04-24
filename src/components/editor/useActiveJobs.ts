@@ -15,6 +15,7 @@ export type ActiveTask =
   | 'cinematic_video'
   | 'cinematic_image'
   | 'cinematic_audio'
+  | 'master_audio'
   | 'export_video';
 
 export interface ActiveJob {
@@ -49,6 +50,7 @@ function isActiveTask(t: string): t is ActiveTask {
   return [
     'regenerate_image', 'regenerate_audio',
     'cinematic_video', 'cinematic_image', 'cinematic_audio',
+    'master_audio',
     'export_video',
   ].includes(t);
 }

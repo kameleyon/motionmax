@@ -560,17 +560,31 @@ export default function Inspector({
             </section>
           )}
 
-          {/* Save & Regenerate — runs if the user edited the text OR
-              just hits it again with the same text to retry TTS. */}
-          <button
-            type="button"
-            onClick={() => regenerateAudio(selectedSceneIndex, voiceoverDirty ? voiceoverDraft : undefined)}
-            disabled={busy !== 'idle' || audioRegenActive || voiceoverDraft.trim().length < 2}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-[12.5px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {(busy === 'regen' || audioRegenActive) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCw className="w-3.5 h-3.5" />}
-            {audioRegenActive ? 'Generating audio…' : (voiceoverDirty ? 'Save & Regenerate audio' : 'Regenerate audio')}
-          </button>
+          {/* Save & Regenerate — for doc2video + cinematic this
+              re-renders the FULL master audio track (one continuous
+              take across every scene); smartflow stays single-scene.
+              Button copy clarifies the scope so users don't expect a
+              scene-only regen on master-audio projects. */}
+          {(() => {
+            const pt = (state.project as { project_type?: string } | null)?.project_type;
+            const isMasterAudio = pt === 'doc2video' || pt === 'cinematic';
+            const idleLabel = isMasterAudio
+              ? (voiceoverDirty ? 'Save & Regenerate full audio' : 'Regenerate full audio')
+              : (voiceoverDirty ? 'Save & Regenerate audio' : 'Regenerate audio');
+            const runningLabel = isMasterAudio ? 'Regenerating full track…' : 'Generating audio…';
+            return (
+              <button
+                type="button"
+                onClick={() => regenerateAudio(selectedSceneIndex, voiceoverDirty ? voiceoverDraft : undefined)}
+                disabled={busy !== 'idle' || audioRegenActive || voiceoverDraft.trim().length < 2}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-[12.5px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={isMasterAudio ? 'Re-renders the entire narration track for all scenes at once.' : undefined}
+              >
+                {(busy === 'regen' || audioRegenActive) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCw className="w-3.5 h-3.5" />}
+                {(busy === 'regen' || audioRegenActive) ? runningLabel : idleLabel}
+              </button>
+            );
+          })()}
 
           {/* Voice picker */}
           <section>

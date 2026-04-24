@@ -250,9 +250,6 @@ export function useSceneRegen(state: EditorState | null) {
     if (!debounceFire(`audio:${index}`)) return;
     setBusy('regen');
     try {
-      // Always decide which narration text to send. Worker's
-      // handleRegenerateAudio throws if `newVoiceover` is missing —
-      // that's why previous calls looked like "nothing was sent".
       const scene = state.scenes[index];
       const voiceover = (typeof nextVoiceover === 'string' && nextVoiceover.trim().length > 0)
         ? nextVoiceover
@@ -261,10 +258,48 @@ export function useSceneRegen(state: EditorState | null) {
         toast.error('This scene has no narration text to render.');
         return;
       }
+      // Persist the edited voiceover to scenes[] BEFORE queuing any job
+      // so master_audio (which reads ALL voiceovers and concatenates)
+      // picks up the new text when it runs.
       if (typeof nextVoiceover === 'string' && nextVoiceover.trim() !== (scene?.voiceover ?? '').trim()) {
         const ok = await updateSceneVoiceover(index, nextVoiceover);
         if (!ok) return;
       }
+
+      // Branch by project type:
+      //   smartflow  → single-scene audio, regenerate_audio job
+      //   doc2video  → one continuous master track, master_audio job
+      //   cinematic  → same, master_audio job
+      // Master-audio projects share ONE URL across every scene, so a
+      // single-scene regen here would fork that scene's audio from the
+      // master (editor would play mismatched timing on other scenes).
+      // Re-rendering the whole track keeps everything in sync and is
+      // still only 1 Gemini Flash TTS call.
+      const projectType = (state.project as { project_type?: string }).project_type;
+      const isMasterAudio = projectType === 'doc2video' || projectType === 'cinematic';
+
+      if (isMasterAudio) {
+        const { error } = await supabase
+          .from('video_generation_jobs')
+          .insert({
+            user_id: user.id,
+            project_id: state.project.id,
+            task_type: 'master_audio',
+            payload: {
+              phase: 'master_audio',
+              generationId: state.generation.id,
+              projectId: state.project.id,
+              language: state.project.voice_inclination ?? 'en',
+            } as unknown as never,
+            status: 'pending',
+          });
+        if (error) throw new Error(error.message);
+        toast.success('Full audio track queued for regeneration.');
+        scheduleRefresh(state.project.id);
+        return;
+      }
+
+      // Smartflow legacy path — single-scene regeneration
       const { error } = await supabase
         .from('video_generation_jobs')
         .insert({

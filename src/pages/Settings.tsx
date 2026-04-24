@@ -22,7 +22,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { getPasswordStrength, PasswordStrengthMeter } from "@/components/ui/password-strength";
-import { AppHeader } from "@/components/layout/AppHeader";
+import AppShell from "@/components/dashboard/AppShell";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -215,19 +215,17 @@ export default function Settings() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col w-full bg-background">
+    <AppShell breadcrumb="Settings">
       <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
-      <AppHeader />
 
-      <div className="flex-1 overflow-auto">
-        <div className="mx-auto max-w-4xl px-4 sm:px-6 py-6 sm:py-10">
+      <div className="px-3 sm:px-4 md:px-6 lg:px-8 py-5 sm:py-7 max-w-[960px] mx-auto">
               <motion.div
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
+                transition={{ duration: 0.35 }}
               >
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">Settings</h1>
-                <p className="mt-1 text-sm text-muted-foreground">Manage your account and preferences</p>
+                <h1 className="font-serif text-[28px] sm:text-[34px] font-medium tracking-tight text-[#ECEAE4] leading-[1.05]">Settings</h1>
+                <p className="text-[13px] sm:text-[14px] text-[#8A9198] mt-1.5">Manage your account and preferences.</p>
 
                 <Tabs defaultValue="account" className="mt-6 sm:mt-8">
                   <TabsList className="grid w-full grid-cols-3 rounded-xl bg-muted/50 p-1">
@@ -465,7 +463,6 @@ export default function Settings() {
                   </TabsContent>
                 </Tabs>
               </motion.div>
-        </div>
       </div>
 
       {/* Delete Account Confirmation */}
@@ -515,6 +512,6 @@ export default function Settings() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </AppShell>
   );
 }

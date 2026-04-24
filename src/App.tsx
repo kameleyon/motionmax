@@ -98,14 +98,13 @@ const App = () => (
               <Route path="/app" element={<RouteErrorBoundary routeName="dashboard"><Dashboard /></RouteErrorBoundary>} />
               <Route path="/app/create" element={<RouteErrorBoundary routeName="create"><CreateWorkspace /></RouteErrorBoundary>} />
               <Route path="/pricing" element={<Pricing />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/usage" element={<Usage />} />
             </Route>
 
-            {/* Projects + Voice Lab render their own NEW AppShell
-                (dashboard sidebar + topbar), so they must NOT be
-                nested inside the legacy AppShell wrapper above — that
-                would mount AppSidebar AND the new Sidebar side-by-side. */}
+            {/* Projects + Voice Lab + Settings + Usage render their own
+                NEW AppShell (dashboard sidebar + topbar), so they must
+                NOT be nested inside the legacy AppShell wrapper above
+                — that would mount AppSidebar AND the new Sidebar side
+                by side. */}
             <Route
               path="/projects"
               element={
@@ -122,6 +121,26 @@ const App = () => (
                 <ProtectedRoute>
                   <RouteErrorBoundary routeName="voice-lab">
                     <VoiceLab />
+                  </RouteErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <RouteErrorBoundary routeName="settings">
+                    <Settings />
+                  </RouteErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/usage"
+              element={
+                <ProtectedRoute>
+                  <RouteErrorBoundary routeName="usage">
+                    <Usage />
                   </RouteErrorBoundary>
                 </ProtectedRoute>
               }

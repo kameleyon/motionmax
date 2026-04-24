@@ -5,9 +5,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
-import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
-import { Settings as SettingsIcon, History, Shield, Sun, Moon, LogOut, Video } from 'lucide-react';
+import { Settings as SettingsIcon, History, Shield, LogOut, Video } from 'lucide-react';
 import motionmaxLogo from '@/assets/motionmax-logo.png';
 import {
   CommandDialog,
@@ -36,7 +35,6 @@ export default function Sidebar() {
   const queryClient = useQueryClient();
   const { user, signOut } = useAuth();
   const { isAdmin } = useAdminAuth();
-  const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -297,11 +295,6 @@ export default function Sidebar() {
               <span>Admin</span>
             </a>
           )}
-          <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="w-full flex items-center gap-2.5 px-3 py-2 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors" style={{ textDecoration: 'none' }}>
-            <Sun className="w-4 h-4 opacity-85 dark:hidden" />
-            <Moon className="hidden w-4 h-4 opacity-85 dark:block" />
-            <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
-          </button>
           <div className="bg-white/5 h-px my-1 mx-3" />
           <button onClick={handleSignOut} className="w-full flex items-center gap-2.5 px-3 py-2 my-px rounded-lg text-[13.5px] text-[#E4C875] hover:bg-[#E4C875]/10 cursor-pointer transition-colors" style={{ textDecoration: 'none' }}>
             <LogOut className="w-4 h-4 opacity-85" />
@@ -406,15 +399,6 @@ export default function Sidebar() {
                 <span>Admin</span>
               </DropdownMenuItem>
             )}
-            <DropdownMenuSeparator className="bg-white/10" />
-            <DropdownMenuItem
-              className="cursor-pointer rounded-lg text-[#ECEAE4] focus:bg-white/5 focus:text-[#ECEAE4]"
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            >
-              <Sun className="mr-2 h-4 w-4 text-[#8A9198] dark:hidden" />
-              <Moon className="mr-2 hidden h-4 w-4 text-[#8A9198] dark:block" />
-              <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
-            </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-white/10" />
             <DropdownMenuItem
               className="cursor-pointer rounded-lg text-[#E4C875] focus:bg-[#E4C875]/10 focus:text-[#E4C875]"

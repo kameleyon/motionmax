@@ -36,7 +36,7 @@ import { getCreditsRequired } from "@/lib/planLimits";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfMonth, endOfMonth, subMonths, isSameMonth } from "date-fns";
 import { toast } from "sonner";
-import { AppHeader } from "@/components/layout/AppHeader";
+import AppShell from "@/components/dashboard/AppShell";
 import {
   Table,
   TableBody,
@@ -227,29 +227,31 @@ export default function Usage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col w-full bg-background">
+    <AppShell breadcrumb="Usage & Billing">
       <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
-      <AppHeader
-        actions={
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            className="rounded-full h-8 w-8 sm:h-9 sm:w-9"
-          >
-            <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-          </Button>
-        }
-      />
 
-          {/* Main Content */}
-          <div className="flex-1 overflow-auto">
-          <div className="mx-auto max-w-4xl px-4 sm:px-6 py-6 sm:py-10">
+      <div className="px-3 sm:px-4 md:px-6 lg:px-8 py-5 sm:py-7 max-w-[960px] mx-auto">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="min-w-0">
+              <h1 className="font-serif text-[28px] sm:text-[34px] font-medium tracking-tight text-[#ECEAE4] leading-[1.05]">Usage &amp; Billing</h1>
+              <p className="text-[13px] sm:text-[14px] text-[#8A9198] mt-1.5">Track credits, generations, and your active subscription.</p>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="rounded-full h-9 w-9 shrink-0 text-[#8A9198] hover:text-[#ECEAE4] hover:bg-white/5"
+              title="Refresh"
+            >
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+            </Button>
+          </div>
+
           <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
+          transition={{ duration: 0.35 }}
         >
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">Usage & Billing</h1>
           <p className="mt-1 text-sm text-muted-foreground">Monitor your usage and manage your subscription</p>
@@ -674,8 +676,7 @@ export default function Usage() {
             </CardContent>
           </Card>
         </motion.div>
-          </div>
-          </div>
-    </div>
+      </div>
+    </AppShell>
   );
 }

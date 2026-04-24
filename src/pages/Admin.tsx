@@ -93,15 +93,15 @@ export default function Admin() {
   }, []);
 
   useEffect(() => {
-    if (!loading && !isAdmin) navigate("/app", { replace: true });
+    if (!loading && !isAdmin) navigate("/dashboard-new", { replace: true });
   }, [isAdmin, loading, navigate]);
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex min-h-screen items-center justify-center bg-[#0A0D0F] text-[#ECEAE4]">
         <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Verifying admin access...</p>
+          <Loader2 className="h-8 w-8 animate-spin text-[#14C8CC]" />
+          <p className="text-[#8A9198] text-sm">Verifying admin access…</p>
         </div>
       </div>
     );
@@ -109,11 +109,11 @@ export default function Admin() {
 
   if (!isAdmin) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex min-h-screen items-center justify-center bg-[#0A0D0F] text-[#ECEAE4]">
         <div className="flex flex-col items-center gap-4 text-center">
-          <AlertTriangle className="h-12 w-12 text-destructive" />
-          <h1 className="type-h1">Access Denied</h1>
-          <p className="text-muted-foreground">You don't have permission to access this page.</p>
+          <AlertTriangle className="h-12 w-12 text-[#E4C875]" />
+          <h1 className="font-serif text-3xl text-[#ECEAE4]">Access denied</h1>
+          <p className="text-[#8A9198] text-sm">You don't have permission to access this page.</p>
         </div>
       </div>
     );
@@ -122,25 +122,35 @@ export default function Admin() {
   const activeLabel = NAV_GROUPS.flatMap(g => g.items).find(i => i.id === activeTab)?.label || "Overview";
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-[#0A0D0F] text-[#ECEAE4] flex flex-col">
       <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
-      {/* ── 1.3 Header with Back to App ── */}
-      <header className="border-b bg-card sticky top-0 z-50">
+      {/* Header — dark palette + Dashboard button now jumps to the
+          new dashboard (was /app legacy). */}
+      <header className="border-b border-white/8 bg-[#10151A]/80 backdrop-blur-md sticky top-0 z-50">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate("/app")} className="gap-1.5 text-muted-foreground">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate("/dashboard-new")}
+              className="gap-1.5 text-[#8A9198] hover:text-[#ECEAE4] hover:bg-white/5"
+            >
               <ChevronLeft className="h-4 w-4" />
               <span className="hidden sm:inline">Dashboard</span>
             </Button>
-            <div className="h-5 w-px bg-border hidden sm:block" />
+            <div className="h-5 w-px bg-white/10 hidden sm:block" />
             <div className="flex items-center gap-2">
-              <Shield className="h-4 w-4 text-primary" />
-              <span className="text-sm font-medium">Admin</span>
+              <Shield className="h-4 w-4 text-[#14C8CC]" />
+              <span className="text-sm font-medium text-[#ECEAE4]">Admin</span>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="hidden sm:block text-xs text-muted-foreground">{user?.email?.split("@")[0]}</span>
-            <button onClick={() => supabase.auth.signOut().then(() => navigate("/auth"))} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label="Logout">
+            <span className="hidden sm:block font-mono text-[10px] tracking-[0.12em] uppercase text-[#5A6268]">{user?.email?.split("@")[0]}</span>
+            <button
+              onClick={() => supabase.auth.signOut().then(() => navigate("/auth"))}
+              className="p-1.5 rounded-lg text-[#8A9198] hover:text-[#E4C875] hover:bg-white/5 transition-colors"
+              aria-label="Logout"
+            >
               <LogOut className="h-4 w-4" />
             </button>
           </div>
@@ -148,12 +158,12 @@ export default function Admin() {
       </header>
 
       <div className="flex flex-1 min-h-0">
-        {/* ── 1.1 Sidebar (desktop) — grouped sections ── */}
-        <aside className="hidden md:flex w-56 flex-col border-r bg-card/50 overflow-y-auto shrink-0">
+        {/* Sidebar (desktop) */}
+        <aside className="hidden md:flex w-56 flex-col border-r border-white/8 bg-[#10151A]/60 overflow-y-auto shrink-0">
           <nav className="p-3 space-y-4">
             {NAV_GROUPS.map(group => (
               <div key={group.title}>
-                <p className="type-label px-2 mb-1.5">{group.title}</p>
+                <p className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#5A6268] px-2 mb-1.5">{group.title}</p>
                 <div className="space-y-0.5">
                   {group.items.map(item => {
                     const Icon = item.icon;
@@ -164,8 +174,10 @@ export default function Admin() {
                         onClick={() => setActiveTab(item.id)}
                         aria-current={isActive ? "page" : undefined}
                         className={cn(
-                          "flex items-center gap-2.5 w-full rounded-lg px-2.5 py-2 text-sm transition-colors",
-                          isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                          "flex items-center gap-2.5 w-full rounded-lg px-2.5 py-2 text-[13px] transition-colors",
+                          isActive
+                            ? "bg-[#14C8CC]/10 text-[#14C8CC]"
+                            : "text-[#8A9198] hover:text-[#ECEAE4] hover:bg-white/5",
                         )}
                       >
                         <Icon className="h-4 w-4 shrink-0" />
@@ -179,21 +191,33 @@ export default function Admin() {
           </nav>
         </aside>
 
-        {/* ── 1.1 Mobile nav (collapsible dropdown) ── */}
+        {/* Mobile nav */}
         <div className="md:hidden flex flex-col w-full">
-          <button onClick={() => setMobileNavOpen(!mobileNavOpen)} className="flex items-center justify-between w-full px-4 py-3 text-sm border-b bg-card/50">
+          <button
+            onClick={() => setMobileNavOpen(!mobileNavOpen)}
+            className="flex items-center justify-between w-full px-4 py-3 text-[13px] border-b border-white/8 bg-[#10151A]/60 text-[#ECEAE4]"
+          >
             <span className="font-medium">{activeLabel}</span>
-            <ChevronDown className={cn("h-4 w-4 transition-transform", mobileNavOpen && "rotate-180")} />
+            <ChevronDown className={cn("h-4 w-4 text-[#8A9198] transition-transform", mobileNavOpen && "rotate-180")} />
           </button>
           {mobileNavOpen && (
-            <div className="px-3 pb-3 space-y-3 border-b bg-card/50">
+            <div className="px-3 pb-3 space-y-3 border-b border-white/8 bg-[#10151A]/60">
               {NAV_GROUPS.map(group => (
                 <div key={group.title}>
-                  <p className="type-label px-2 pt-2 mb-1">{group.title}</p>
+                  <p className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#5A6268] px-2 pt-2 mb-1">{group.title}</p>
                   {group.items.map(item => {
                     const Icon = item.icon;
                     return (
-                      <button key={item.id} onClick={() => { setActiveTab(item.id); setMobileNavOpen(false); }} className={cn("flex items-center gap-2 w-full rounded-lg px-2.5 py-2 text-sm", activeTab === item.id ? "bg-primary/10 text-primary" : "text-muted-foreground")}>
+                      <button
+                        key={item.id}
+                        onClick={() => { setActiveTab(item.id); setMobileNavOpen(false); }}
+                        className={cn(
+                          "flex items-center gap-2 w-full rounded-lg px-2.5 py-2 text-[13px]",
+                          activeTab === item.id
+                            ? "bg-[#14C8CC]/10 text-[#14C8CC]"
+                            : "text-[#8A9198]",
+                        )}
+                      >
                         <Icon className="h-3.5 w-3.5" />
                         {item.label}
                       </button>
@@ -204,13 +228,11 @@ export default function Admin() {
             </div>
           )}
 
-          {/* Mobile main content */}
           <main className="flex-1 overflow-y-auto p-4">
             <AdminContent tab={activeTab} />
           </main>
         </div>
 
-        {/* ── Desktop main content ── */}
         <main className="hidden md:block flex-1 overflow-y-auto p-4 sm:p-6">
           <AdminContent tab={activeTab} />
         </main>
@@ -229,7 +251,7 @@ export default function Admin() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => navigate("/app", { replace: true })}>Go Back</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => navigate("/dashboard-new", { replace: true })}>Go Back</AlertDialogCancel>
             <AlertDialogAction onClick={() => { sessionStorage.setItem("admin_production_confirmed", "true"); setShowProdConfirm(false); }}>
               I Understand, Continue
             </AlertDialogAction>

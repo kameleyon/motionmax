@@ -90,16 +90,33 @@ const App = () => (
             {/* Public share page - no auth required */}
             <Route path="/share/:token" element={<PublicShare />} />
 
-            {/* All authenticated app routes share AppShell (SidebarProvider + AppSidebar) */}
+            {/* Legacy authenticated app routes share AppShell
+                (SidebarProvider + AppSidebar). Routes that own the
+                NEW dashboard chrome (Projects, dashboard-new) live
+                outside this wrapper to avoid stacking two sidebars. */}
             <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
               <Route path="/app" element={<RouteErrorBoundary routeName="dashboard"><Dashboard /></RouteErrorBoundary>} />
               <Route path="/app/create" element={<RouteErrorBoundary routeName="create"><CreateWorkspace /></RouteErrorBoundary>} />
               <Route path="/pricing" element={<Pricing />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/usage" element={<Usage />} />
-              <Route path="/projects" element={<RouteErrorBoundary routeName="projects"><Projects /></RouteErrorBoundary>} />
               <Route path="/voice-lab" element={<RouteErrorBoundary routeName="voice-lab"><VoiceLab /></RouteErrorBoundary>} />
             </Route>
+
+            {/* Projects renders its own NEW AppShell (dashboard sidebar
+                + topbar), so it must NOT be nested inside the legacy
+                AppShell wrapper above — that would mount AppSidebar
+                AND the new Sidebar side-by-side. */}
+            <Route
+              path="/projects"
+              element={
+                <ProtectedRoute>
+                  <RouteErrorBoundary routeName="projects">
+                    <Projects />
+                  </RouteErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
             <Route path="/admin" element={<AdminRoute><RouteErrorBoundary routeName="admin"><Admin /></RouteErrorBoundary></AdminRoute>} />
 
             {/* New dashboard preview — outside AppShell so its own

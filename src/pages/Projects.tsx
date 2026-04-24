@@ -118,12 +118,12 @@ export default function Projects() {
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [projectTypeFilter, setProjectTypeFilter] = useState<string>("all");
-  // Format/status/captions filter chips. Multiple status chips can be
-  // active at once (OR semantics); format is a single-toggle (16:9 vs
-  // 9:16 are mutually exclusive); hasCaptions is a single-toggle.
+  // Format/status filter chips. Status chips support multi-select
+  // (OR semantics); format is mutually exclusive (16:9 vs 9:16).
+  // Removed RENDERING (rarely useful as a snapshot) and HAS CAPTIONS
+  // (captions metadata isn't reliably present on every project yet).
   const [formatFilter, setFormatFilter] = useState<'all' | 'landscape' | 'portrait'>('all');
   const [statusFilters, setStatusFilters] = useState<Set<string>>(new Set());
-  const [hasCaptionsOnly, setHasCaptionsOnly] = useState(false);
   
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -157,7 +157,7 @@ export default function Projects() {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ["all-projects", user?.id, debouncedSearch, sortField, sortOrder, projectTypeFilter, formatFilter, Array.from(statusFilters).sort().join(','), hasCaptionsOnly],
+    queryKey: ["all-projects", user?.id, debouncedSearch, sortField, sortOrder, projectTypeFilter, formatFilter, Array.from(statusFilters).sort().join(',')],
     queryFn: async ({ pageParam = 0 }) => {
       if (!user?.id) return { projects: [], nextCursor: null };
 
@@ -167,7 +167,7 @@ export default function Projects() {
       // Step 1: Fetch projects (no generation join — cleaner, faster)
       let q = supabase
         .from("projects")
-        .select("*, thumbnail_url, intake_settings")
+        .select("*, thumbnail_url")
         .eq("user_id", user.id)
         .order("is_favorite", { ascending: false })
         .order(sortField, { ascending: sortOrder === "asc" })
@@ -290,16 +290,8 @@ export default function Projects() {
       thumbnailUrl: refreshedThumbnails.get(p.id) ?? p.thumbnailUrl,
     }));
     // Hide projects that are pending delete (awaiting the undo timeout)
-    const visible = pendingDeleteIds.size === 0 ? base : base.filter(p => !pendingDeleteIds.has(p.id));
-    // Captions filter is client-side because it lives inside the
-    // projects.intake_settings JSON blob — server filtering on a
-    // nested jsonb key is messier than a quick post-filter.
-    if (!hasCaptionsOnly) return visible;
-    return visible.filter(p => {
-      const settings = (p as unknown as { intake_settings?: { captions?: { on?: boolean } } }).intake_settings;
-      return settings?.captions?.on === true;
-    });
-  }, [allProjects, refreshedThumbnails, pendingDeleteIds, hasCaptionsOnly]);
+    return pendingDeleteIds.size === 0 ? base : base.filter(p => !pendingDeleteIds.has(p.id));
+  }, [allProjects, refreshedThumbnails, pendingDeleteIds]);
 
   // Stats strip — projects count, minutes generated, credits used in
   // the last 30 days. Standalone query so it doesn't refetch when the
@@ -675,33 +667,36 @@ export default function Projects() {
       <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
       <div className="px-3 sm:px-4 md:px-6 lg:px-8 py-5 sm:py-7 max-w-[1480px] mx-auto">
 
-        {/* Hero strip — title left, mini stats right.
-            Stats values use serif so they pop next to the mono labels;
-            on mobile the strip wraps under the title. */}
+        {/* Hero — title + tagline; stats sit beside on lg+, stack
+            beneath on mobile/tablet so CREDITS USED · 30D doesn't get
+            chopped at the right edge. */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 lg:gap-6"
         >
-          <div>
-            <h1 className="font-serif text-[30px] sm:text-[38px] font-medium tracking-tight text-[#ECEAE4] leading-[1.05]">
-              All projects
-            </h1>
-            <p className="text-[13px] sm:text-[14px] text-[#8A9198] mt-1.5">
-              Manage, organize, and access your video library.
-            </p>
-          </div>
-          <div className="flex items-end gap-7 sm:gap-10 shrink-0">
+          <h1 className="font-serif text-[28px] sm:text-[34px] lg:text-[38px] font-medium tracking-tight text-[#ECEAE4] leading-[1.05]">
+            All projects
+          </h1>
+          <p className="text-[13px] sm:text-[14px] text-[#8A9198] mt-1.5">
+            Manage, organize, and access your video library.
+          </p>
+
+          {/* Stats — 3-up grid on mobile (centered, compact), inline
+              row from sm up. Using grid keeps each cell the same width
+              so values don't drift around as numbers change. */}
+          <div className="mt-5 grid grid-cols-3 gap-3 sm:flex sm:flex-wrap sm:gap-x-9 sm:gap-y-3 sm:mt-6">
             <Stat label="Projects" value={String(stats?.projectCount ?? '—')} />
-            <Stat label="Minutes generated" value={stats ? stats.minutes.toFixed(1) : '—'} />
-            <Stat label="Credits used · 30D" value={stats ? stats.creditsUsed.toLocaleString() : '—'} />
+            <Stat label="Minutes" subLabel="generated" value={stats ? stats.minutes.toFixed(1) : '—'} />
+            <Stat label="Credits" subLabel="used · 30D" value={stats ? stats.creditsUsed.toLocaleString() : '—'} />
           </div>
         </motion.div>
 
-        {/* Toolbar */}
-        <div className="flex flex-wrap items-center gap-2 mt-6">
-          <div className="relative flex-1 min-w-[220px]">
+        {/* Toolbar — search owns its own row on mobile; the dropdowns
+            and view toggle drop onto a second row so nothing wraps mid
+            control. Above sm everything sits on one line again. */}
+        <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="relative w-full sm:flex-1 sm:min-w-[220px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#5A6268]" />
             <Input
               placeholder="Search by name, prompt, or caption…"
@@ -711,87 +706,86 @@ export default function Projects() {
             />
           </div>
 
-          <Select value={projectTypeFilter} onValueChange={setProjectTypeFilter}>
-            <SelectTrigger className="h-9 w-[130px] rounded-lg bg-[#10151A] border-white/10 text-[12.5px] text-[#ECEAE4]">
-              <SelectValue placeholder="All types" />
-            </SelectTrigger>
-            <SelectContent className="bg-[#10151A] border-white/10">
-              <SelectItem value="all">All types</SelectItem>
-              <SelectItem value="doc2video"><div className="flex items-center gap-2"><Video className="h-3.5 w-3.5" />Doc2Video</div></SelectItem>
-              <SelectItem value="smartflow"><div className="flex items-center gap-2"><Wallpaper className="h-3.5 w-3.5" />SmartFlow</div></SelectItem>
-              <SelectItem value="cinematic"><div className="flex items-center gap-2"><Wand2 className="h-3.5 w-3.5" />Cinematic</div></SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Select value={projectTypeFilter} onValueChange={setProjectTypeFilter}>
+              <SelectTrigger className="h-9 flex-1 sm:flex-none sm:w-[130px] rounded-lg bg-[#10151A] border border-white/10 text-[12.5px] text-[#ECEAE4]">
+                <SelectValue placeholder="All types" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#10151A] border-white/10">
+                <SelectItem value="all">All types</SelectItem>
+                <SelectItem value="doc2video"><div className="flex items-center gap-2"><Video className="h-3.5 w-3.5" />Doc2Video</div></SelectItem>
+                <SelectItem value="smartflow"><div className="flex items-center gap-2"><Wallpaper className="h-3.5 w-3.5" />SmartFlow</div></SelectItem>
+                <SelectItem value="cinematic"><div className="flex items-center gap-2"><Wand2 className="h-3.5 w-3.5" />Cinematic</div></SelectItem>
+              </SelectContent>
+            </Select>
 
-          <Select value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
-            <SelectTrigger className="h-9 w-[120px] rounded-lg bg-[#10151A] border-white/10 text-[12.5px] text-[#ECEAE4]">
-              <SelectValue placeholder="Sort by" />
-            </SelectTrigger>
-            <SelectContent className="bg-[#10151A] border-white/10">
-              <SelectItem value="updated_at">Updated</SelectItem>
-              <SelectItem value="created_at">Created</SelectItem>
-              <SelectItem value="title">Title</SelectItem>
-            </SelectContent>
-          </Select>
+            <Select value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
+              <SelectTrigger className="h-9 flex-1 sm:flex-none sm:w-[120px] rounded-lg bg-[#10151A] border border-white/10 text-[12.5px] text-[#ECEAE4]">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#10151A] border-white/10">
+                <SelectItem value="updated_at">Updated</SelectItem>
+                <SelectItem value="created_at">Created</SelectItem>
+                <SelectItem value="title">Title</SelectItem>
+              </SelectContent>
+            </Select>
 
-          <button
-            type="button"
-            onClick={() => setSortOrder((o) => (o === "asc" ? "desc" : "asc"))}
-            className="h-9 w-9 rounded-lg bg-[#10151A] border border-white/10 grid place-items-center text-[#8A9198] hover:text-[#ECEAE4] hover:border-white/20 transition-colors"
-            title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
-          >
-            <SortIcon className="h-3.5 w-3.5" />
-          </button>
-
-          <div className="flex-1 hidden md:block" />
-
-          {/* View toggle — pill on the far right */}
-          <div className="inline-flex rounded-lg border border-white/10 bg-[#10151A] p-[2px] gap-[2px]">
             <button
               type="button"
-              onClick={() => setViewMode('grid')}
-              className={cn(
-                "h-7 w-9 rounded-md grid place-items-center transition-colors",
-                viewMode === 'grid' ? 'bg-white/10 text-[#ECEAE4]' : 'text-[#5A6268] hover:text-[#ECEAE4]',
-              )}
-              aria-label="Grid view"
+              onClick={() => setSortOrder((o) => (o === "asc" ? "desc" : "asc"))}
+              className="h-9 w-9 shrink-0 rounded-lg bg-[#10151A] border border-white/10 grid place-items-center text-[#8A9198] hover:text-[#ECEAE4] hover:border-white/20 transition-colors"
+              title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
             >
-              <LayoutGrid className="h-3.5 w-3.5" />
+              <SortIcon className="h-3.5 w-3.5" />
             </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('list')}
-              className={cn(
-                "h-7 w-9 rounded-md grid place-items-center transition-colors",
-                viewMode === 'list' ? 'bg-white/10 text-[#ECEAE4]' : 'text-[#5A6268] hover:text-[#ECEAE4]',
-              )}
-              aria-label="List view"
-            >
-              <LayoutList className="h-3.5 w-3.5" />
-            </button>
+
+            <div className="flex-1 hidden sm:block" />
+
+            <div className="inline-flex shrink-0 rounded-lg border border-white/10 bg-[#10151A] p-[2px] gap-[2px]">
+              <button
+                type="button"
+                onClick={() => setViewMode('grid')}
+                className={cn(
+                  "h-7 w-9 rounded-md grid place-items-center transition-colors",
+                  viewMode === 'grid' ? 'bg-white/10 text-[#ECEAE4]' : 'text-[#5A6268] hover:text-[#ECEAE4]',
+                )}
+                aria-label="Grid view"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={cn(
+                  "h-7 w-9 rounded-md grid place-items-center transition-colors",
+                  viewMode === 'list' ? 'bg-white/10 text-[#ECEAE4]' : 'text-[#5A6268] hover:text-[#ECEAE4]',
+                )}
+                aria-label="List view"
+              >
+                <LayoutList className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
 
           {selectedIds.size > 0 && (
-            <Button variant="destructive" onClick={handleBulkDelete} className="h-9 gap-2">
+            <Button variant="destructive" onClick={handleBulkDelete} className="h-9 gap-2 w-full sm:w-auto">
               <Trash2 className="h-3.5 w-3.5" />
               Delete ({selectedIds.size})
             </Button>
           )}
         </div>
 
-        {/* Filter chips. 16:9 / 9:16 are mutually exclusive (single-toggle).
-            Status chips are multi-select. + HAS CAPTIONS is single-toggle.
-            Removed the legacy "+ WITH VOICE" chip (every project has voice
-            so it's a no-op filter) and "+ WITH MUSIC" (the music feature
-            is currently disabled in the pipeline). */}
+        {/* Filter chips. 16:9 / 9:16 are mutually exclusive; status
+            chips support multi-select. Trimmed Rendering + Has-captions
+            chips per design feedback — Rendering rarely matches at the
+            time the user looks (status flips quickly), and captions
+            metadata isn't reliably present on every project yet. */}
         <div className="flex flex-wrap items-center gap-1.5 mt-3 mb-6">
           <Chip active={formatFilter === 'landscape'} onClick={() => setFormatFilter(formatFilter === 'landscape' ? 'all' : 'landscape')}>16:9</Chip>
           <Chip active={formatFilter === 'portrait'} onClick={() => setFormatFilter(formatFilter === 'portrait' ? 'all' : 'portrait')}>9:16</Chip>
           <ChipDot active={statusFilters.has('complete')} dot="#14C8CC" onClick={() => toggleStatus('complete')}>Published</ChipDot>
-          <ChipDot active={statusFilters.has('processing')} dot="#14C8CC" pulse onClick={() => toggleStatus('processing')}>Rendering</ChipDot>
           <ChipDot active={statusFilters.has('draft')} dot="#5A6268" onClick={() => toggleStatus('draft')}>Draft</ChipDot>
           <ChipDot active={statusFilters.has('failed')} dot="#E4C875" onClick={() => toggleStatus('failed')}>Failed</ChipDot>
-          <Chip active={hasCaptionsOnly} onClick={() => setHasCaptionsOnly(v => !v)}>+ Has captions</Chip>
         </div>
 
         {/* Content */}
@@ -1117,15 +1111,17 @@ export default function Projects() {
 }
 
 /** Stat block used in the All-projects hero strip — mono uppercase
- *  label above a serif numeric value. Mirrors the look in image 153
- *  but drops the heavy uppercase headline weight. */
-function Stat({ label, value }: { label: string; value: string }) {
+ *  label above a serif numeric value. `subLabel` lets longer labels
+ *  wrap onto two short lines on mobile (e.g. MINUTES / GENERATED)
+ *  instead of overflowing or shrinking type to fit. */
+function Stat({ label, subLabel, value }: { label: string; subLabel?: string; value: string }) {
   return (
-    <div className="flex flex-col items-end leading-none">
-      <span className="font-mono text-[9.5px] tracking-[0.18em] uppercase text-[#5A6268] mb-1.5 whitespace-nowrap">
+    <div className="flex flex-col items-start sm:items-end leading-none">
+      <span className="font-mono text-[9.5px] tracking-[0.16em] uppercase text-[#5A6268] mb-1.5 whitespace-nowrap leading-[1.3]">
         {label}
+        {subLabel && <span className="block sm:inline sm:ml-1">{subLabel}</span>}
       </span>
-      <span className="font-serif text-[20px] sm:text-[24px] font-medium text-[#ECEAE4]">
+      <span className="font-serif text-[18px] sm:text-[22px] lg:text-[24px] font-medium text-[#ECEAE4]">
         {value}
       </span>
     </div>

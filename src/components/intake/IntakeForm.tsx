@@ -111,6 +111,15 @@ const MAX_CHAR_IMAGE_BYTES = 5 * 1024 * 1024;
 // so a long description balloons the LLM payload fast.
 const MAX_PROMPT_CHARS = 15_000;
 const MAX_CHAR_DESC_CHARS = 2000;
+// Auto-attach thresholds — match the legacy workspace SourceInput
+// behaviour. Pasted text longer than AUTO_ATTACH_THRESHOLD becomes a
+// "text" chip (so the textarea stays clean and the raw paste is
+// preserved verbatim for processAttachments to inline at submit);
+// each chip caps at MAX_ATTACHMENT_CHARS total.
+const AUTO_ATTACH_THRESHOLD = 5_000;
+const MAX_ATTACHMENT_CHARS = 500_000;
+const YOUTUBE_REGEX = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)[\w-]+/i;
+const URL_REGEX = /^https?:\/\/[^\s]+$/i;
 
 export default function IntakeForm({
   mode,
@@ -311,31 +320,83 @@ export default function IntakeForm({
     }
   };
 
-  /** Paste handler used by both textareas. Images on the clipboard
-   *  get attached as references; URL-only paste becomes a chip; plain
-   *  text falls through to the default behaviour. */
+  /** Paste handler used by the Sources textarea. Matches the legacy
+   *  workspace SourceInput behaviour:
+   *    1. Clipboard image       → image chip
+   *    2. YouTube URL(s)        → youtube chip(s) (multiple allowed
+   *                               separated by newlines/commas)
+   *    3. Plain URL             → link chip (auto-typed by host)
+   *    4. Long text > 5_000ch   → text chip (preview + (Nk chars))
+   *    5. Short text            → default textarea paste
+   *  Critical: step 4 is what the user's 10k-word pastes need —
+   *  without it the textarea swallows everything and the attachments
+   *  list never gets a chip. */
   const handlePasteForSources = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    // Images first
     const items = Array.from(e.clipboardData?.items ?? []);
+
+    // 1. Image
     const imageItem = items.find((it) => it.kind === 'file' && it.type.startsWith('image/'));
     if (imageItem) {
       const f = imageItem.getAsFile();
-      if (f) { e.preventDefault(); void attachFileToSources(f); toast.success('Pasted image attached.'); return; }
+      if (f) {
+        e.preventDefault();
+        void attachFileToSources(f);
+        toast.success('Pasted image attached.');
+        return;
+      }
     }
-    // URL-only paste → chip
-    const text = e.clipboardData?.getData('text') ?? '';
-    if (text && /^https?:\/\/\S+$/.test(text.trim())) {
+
+    const text = e.clipboardData?.getData('text/plain') ?? '';
+    if (!text) return;
+
+    // 2. YouTube URL(s)
+    if (YOUTUBE_REGEX.test(text.trim())) {
+      e.preventDefault();
+      const urls = text.trim().split(/[\n,]+/).filter((u) => YOUTUBE_REGEX.test(u.trim()));
+      for (const url of urls) {
+        setSourceAttachments((prev) => [...prev, {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          type: 'youtube',
+          name: url.trim().length > 40 ? url.trim().slice(0, 40) + '…' : url.trim(),
+          value: url.trim(),
+        }]);
+      }
+      toast.success(`${urls.length} YouTube link${urls.length === 1 ? '' : 's'} attached.`);
+      return;
+    }
+
+    // 3. Plain URL
+    if (URL_REGEX.test(text.trim())) {
       if (tryAttachUrl(text, 'sources')) { e.preventDefault(); return; }
     }
-    // else: default textarea paste
+
+    // 4. Long text → auto-attach as a text chip
+    if (text.length > AUTO_ATTACH_THRESHOLD) {
+      e.preventDefault();
+      const preview = text.substring(0, 60).replace(/\n/g, ' ') + '…';
+      const clipped = text.substring(0, MAX_ATTACHMENT_CHARS);
+      setSourceAttachments((prev) => [...prev, {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: 'text',
+        name: `${preview} (${(clipped.length / 1000).toFixed(0)}K chars)`,
+        value: clipped,
+      }]);
+      toast.success(`Pasted ${(clipped.length / 1000).toFixed(0)}K of text attached.`);
+      return;
+    }
+
+    // 5. Short text → default textarea paste
   };
 
+  /** Same ladder for the Character textarea — images flow into the
+   *  reference grid instead of the attachments list, long text goes
+   *  into characterAttachments so it augments the description. */
   const handlePasteForCharacter = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const items = Array.from(e.clipboardData?.items ?? []);
+
+    // 1. Image → character reference grid
     const imageItem = items.find((it) => it.kind === 'file' && it.type.startsWith('image/'));
     if (imageItem) {
-      // Pasted images go into the reference-image grid (same path as
-      // the file picker).
       const f = imageItem.getAsFile();
       if (f) {
         e.preventDefault();
@@ -345,10 +406,31 @@ export default function IntakeForm({
         return;
       }
     }
-    const text = e.clipboardData?.getData('text') ?? '';
-    if (text && /^https?:\/\/\S+$/.test(text.trim())) {
+
+    const text = e.clipboardData?.getData('text/plain') ?? '';
+    if (!text) return;
+
+    // 2. URL → reference link chip
+    if (URL_REGEX.test(text.trim()) || YOUTUBE_REGEX.test(text.trim())) {
       if (tryAttachUrl(text, 'character')) { e.preventDefault(); return; }
     }
+
+    // 3. Long text → attach as a text chip under the character block
+    if (text.length > AUTO_ATTACH_THRESHOLD) {
+      e.preventDefault();
+      const preview = text.substring(0, 60).replace(/\n/g, ' ') + '…';
+      const clipped = text.substring(0, MAX_ATTACHMENT_CHARS);
+      setCharacterAttachments((prev) => [...prev, {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: 'text',
+        name: `${preview} (${(clipped.length / 1000).toFixed(0)}K chars)`,
+        value: clipped,
+      }]);
+      toast.success(`Pasted ${(clipped.length / 1000).toFixed(0)}K of reference text attached.`);
+      return;
+    }
+
+    // 4. Short text → default textarea paste
   };
 
   /** Drop handler for the Sources textarea. Image files → attach;

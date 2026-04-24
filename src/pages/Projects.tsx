@@ -195,7 +195,12 @@ export default function Projects() {
 
       if (!projectsData?.length) return { projects: [], nextCursor: null };
 
-      // Step 2: For projects missing thumbnail_url, fetch from completed generations
+      // Step 2: For projects missing thumbnail_url, derive one from
+      // any generation that already has at least one scene with an
+      // imageUrl. We used to require status='complete' which left
+      // generating/processing rows with a blank navy card for the
+      // entire 3-5 minute pipeline run — we have a usable preview
+      // image as soon as scene 0's image lands, so use it.
       const missingIds = projectsData.filter(p => !p.thumbnail_url).map(p => p.id);
       const thumbnailMap: Record<string, string | null> = {};
 
@@ -204,7 +209,6 @@ export default function Projects() {
           .from("generations")
           .select("project_id, scenes")
           .in("project_id", missingIds)
-          .eq("status", "complete")
           .order("created_at", { ascending: false });
 
         if (generations) {

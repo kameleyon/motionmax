@@ -190,7 +190,7 @@ Every visualPrompt MUST be rich, detailed, and cinematic. Be CREATIVE. Think lik
 5. **ATMOSPHERE & MOOD:** Set emotional tone — "Tense, claustrophobic framing", "Expansive, hopeful wide shot."
 6. **SPECIAL EFFECTS:** Include relevant VFX per the section above — particles, weather, energy, environmental FX.
 7. **CHARACTER IN EVERY SCENE:** Include the FULL character description (appearance, clothing, features) in EVERY visualPrompt. Do NOT just say "the protagonist" — describe them EVERY time.
-8. **STYLE CONSISTENCY:** Every visualPrompt must match the art style: ${styleDesc}. Include style-specific terms in every prompt.
+8. **STYLE CONSISTENCY:** Every visualPrompt must FIT the art style described in the VISUAL STYLE section below — but DO NOT copy the full style description into the visualPrompt itself. The image renderer appends the full style block automatically; embedding it again duplicates text and clutters the Editor's prompt UI. Just describe the scene-specific content (subject, action, framing, lighting, mood) in plain language.
 9. **TEXT & LANGUAGE:** Any text, titles, signs, or written content visible in the scene MUST be in the SAME language as the voiceover.${p.language ? ` All visible text must be in ${p.language === "fr" ? "French" : p.language === "ht" ? "Haitian Creole" : "English"}.` : ""}
 10. **SCENE TRANSITIONS (CRITICAL):** Each scene's video will morph into the NEXT scene's image. Design your visualPrompts so the END state of each scene transitions naturally into the START state of the next scene. Think about visual continuity — matching colors, compositions, or motions that bridge scenes.
 

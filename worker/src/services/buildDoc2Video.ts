@@ -80,6 +80,9 @@ All image prompts must adhere to this style:
 - QUALITY: Ultra-detailed, 8K resolution, dramatic lighting
 - CAMERA WORK: Use varied angles (Close-up, Wide shot, Low angle, Over-shoulder) to keep the video dynamic
 
+CRITICAL — DO NOT COPY THE ART STYLE TEXT INTO THE PER-SCENE visualPrompt FIELD.
+The image renderer automatically appends the full ART STYLE block to every prompt at render time. If you embed it again in visualPrompt, it duplicates and clutters the Editor's prompt UI for the user. Each scene's visualPrompt should describe ONLY the scene-specific content (subject, action, setting, framing) — keep it under ~80 words. Never start a visualPrompt with "STYLE:", "ART STYLE:", "Handcrafted Digital Clay", "Cinematic 3D Animation", or any other style preamble.
+
 === TIMING REQUIREMENTS (CRITICAL - STRICT ENFORCEMENT) ===
 - Target duration: ${cfg.targetDuration} seconds
 - Create EXACTLY ${cfg.count} scenes. NOT ${cfg.count - 1}, NOT ${cfg.count + 1}. EXACTLY ${cfg.count}. If you return fewer or more scenes, the ENTIRE generation will be REJECTED and restarted from scratch

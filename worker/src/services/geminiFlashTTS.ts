@@ -217,10 +217,23 @@ export async function generateGeminiFlashTTS(
 
         const data = await res.json() as any;
         const candidate = data?.candidates?.[0];
-        if (candidate?.finishReason === "OTHER" || candidate?.finishReason === "SAFETY") {
-          lastError = `Gemini Flash TTS blocked by safety filter (finishReason=${candidate.finishReason})`;
+        // SAFETY = genuine content block, never retriable.
+        // OTHER  = Gemini's grab-bag status: transient model hiccup,
+        //          content-filter ambiguity, or occasionally a
+        //          successful-but-malformed response. Retrying with a
+        //          different key + backoff usually works on the next
+        //          attempt — treating OTHER as permanent was causing
+        //          full generations to fail on recoverable errors.
+        if (candidate?.finishReason === "SAFETY") {
+          lastError = `Gemini Flash TTS blocked by safety filter (finishReason=SAFETY)`;
           console.warn(`[GeminiFlashTTS] Scene ${opts.sceneNumber}: ${lastError}`);
           return { url: null, error: lastError };
+        }
+        if (candidate?.finishReason === "OTHER") {
+          lastError = `Gemini Flash TTS finishReason=OTHER (transient — retrying)`;
+          console.warn(`[GeminiFlashTTS] Scene ${opts.sceneNumber} attempt ${attempt}/${MAX_ATTEMPTS}: ${lastError}`);
+          if (attempt < MAX_ATTEMPTS) { await sleep(1500 * attempt); continue; }
+          return { url: null, error: `Gemini Flash TTS: finishReason=OTHER across ${MAX_ATTEMPTS} attempts` };
         }
 
         const b64 = candidate?.content?.parts?.[0]?.inlineData?.data;

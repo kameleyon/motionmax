@@ -5,7 +5,7 @@ import { trackEvent } from "@/hooks/useAnalytics";
 import { toSafeMessage } from "@/lib/appErrors";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -707,7 +707,7 @@ export default function Projects() {
               placeholder="Search by name, prompt, or caption…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-9 pl-9 pr-3 rounded-lg bg-[#10151A] border-white/10 text-[13px] text-[#ECEAE4] placeholder:text-[#5A6268] focus-visible:ring-0 focus-visible:border-[#14C8CC]/40"
+              className="h-9 pl-9 pr-3 rounded-lg bg-[#10151A] border border-white/10 text-[13px] text-[#ECEAE4] placeholder:text-[#5A6268] focus-visible:ring-0 focus-visible:border-[#14C8CC]/40"
             />
           </div>
 

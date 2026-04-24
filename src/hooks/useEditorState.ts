@@ -44,9 +44,24 @@ export interface EditorScene {
 
 export type EditorPhase = 'rendering' | 'ready' | 'editing' | 'error' | 'idle';
 
-function classifySceneStatus(raw: Record<string, unknown>): EditorScene['status'] {
+function classifySceneStatus(
+  raw: Record<string, unknown>,
+  opts: { genComplete?: boolean; isCinematic?: boolean } = {},
+): EditorScene['status'] {
   const hasError = Boolean((raw._meta as Record<string, unknown> | undefined)?.error);
   if (hasError) return 'fail';
+
+  // If the generation finalized but this scene is missing an asset
+  // its project_type requires, treat it as a FAIL so the Inspector
+  // surfaces the regen buttons in an obvious way. Previously these
+  // scenes rendered as 'audio' (teal badge) which looked normal and
+  // hid the fact that the image never landed.
+  if (opts.genComplete) {
+    if (!raw.imageUrl) return 'fail';
+    if (!raw.audioUrl) return 'fail';
+    if (opts.isCinematic && !raw.videoUrl) return 'fail';
+  }
+
   if (raw.videoUrl) return 'done';
   if ((raw._meta as Record<string, unknown> | undefined)?.rendering) return 'render';
   if (raw.imageUrl) return 'image';
@@ -54,9 +69,16 @@ function classifySceneStatus(raw: Record<string, unknown>): EditorScene['status'
   return 'queue';
 }
 
-/** Coerce the jsonb `scenes` array into typed EditorScene objects. */
-export function normalizeScenes(raw: unknown): EditorScene[] {
+/** Coerce the jsonb `scenes` array into typed EditorScene objects.
+ *  Pass generation status + project type so scenes missing required
+ *  assets after completion get promoted to 'fail' status. */
+export function normalizeScenes(
+  raw: unknown,
+  opts: { genStatus?: string | null; projectType?: string | null } = {},
+): EditorScene[] {
   if (!Array.isArray(raw)) return [];
+  const genComplete = (opts.genStatus ?? '').toLowerCase() === 'complete';
+  const isCinematic = opts.projectType === 'cinematic';
   return raw.map((row, i): EditorScene => {
     const r = (row as Record<string, unknown>) || {};
     const meta = (r._meta as Record<string, unknown>) || {};
@@ -74,7 +96,7 @@ export function normalizeScenes(raw: unknown): EditorScene[] {
       audioDurationMs: typeof meta.audioDurationMs === 'number' ? meta.audioDurationMs : undefined,
       estDurationMs: typeof meta.estDurationMs === 'number' ? meta.estDurationMs : 10_000,
       waveformPeaks: Array.isArray(meta.waveformPeaks) ? (meta.waveformPeaks as number[]) : undefined,
-      status: classifySceneStatus(r),
+      status: classifySceneStatus(r, { genComplete, isCinematic }),
       meta,
     };
   });
@@ -246,7 +268,10 @@ export function useEditorState(projectId: string | null): {
         }
       }
 
-      const scenes = normalizeScenes(rawScenes);
+      const scenes = normalizeScenes(rawScenes, {
+        genStatus: generation?.status,
+        projectType: (project as { project_type?: string })?.project_type,
+      });
       // Start from the real `intake_settings` column when present,
       // then merge in `scenes[0]._meta.intakeOverrides` — our silent
       // fallback store used when the prod DB hasn't run the

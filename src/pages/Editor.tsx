@@ -383,28 +383,15 @@ export default function Editor() {
     if (next !== selectedSceneIndex) setManualSelection(next);
   };
 
-  // Strict "every scene is ready" check. Claim_pending_job can let
-  // finalize run when SOME deps fail (20260423210000 migration),
-  // which flips generation.status to 'complete' and phase to 'ready'
-  // before every cinematic_video has finished. We don't want the user
-  // editing / playing while background video jobs are still writing
-  // scene.videoUrl — it causes the per-scene regen overlay to fire on
-  // the stage and lets them kick off edits against half-baked state.
-  // This flag is true ONLY when the pipeline has signaled done AND
-  // every scene has the assets its project_type requires.
-  const projectType = state?.project?.project_type ?? 'doc2video';
-  const isCinematic = projectType === 'cinematic';
-  const scenesAllHaveRequiredAssets = state
-    ? state.scenes.length > 0 && state.scenes.every((s) => {
-        if (!s.imageUrl) return false;
-        if (!s.audioUrl) return false;
-        if (isCinematic && !s.videoUrl) return false;
-        return true;
-      })
-    : false;
-  const generationFullyReady =
-    state?.phase === 'ready' &&
-    scenesAllHaveRequiredAssets;
+  // Unlock trigger: once generation.status flips to 'complete' the
+  // editor is fully interactive — even if SOME scenes are missing
+  // assets due to upstream job failures. Those broken scenes show up
+  // with status='fail' (see classifySceneStatus in useEditorState) so
+  // the user can retry them per-scene from the Inspector instead of
+  // being frozen out of the whole project. The stricter
+  // "every-scene-perfect" check was too brittle: one failed image
+  // locked the entire editor with no recovery path.
+  const generationFullyReady = state?.phase === 'ready';
 
   return (
     <EditorFrame

@@ -36,6 +36,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import AppShell from "@/components/dashboard/AppShell";
 import {
   Table,
   TableBody,
@@ -77,7 +78,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { AppHeader } from "@/components/layout/AppHeader";
 
 type SortField = "title" | "created_at" | "updated_at";
 type SortOrder = "asc" | "desc";
@@ -114,10 +114,16 @@ export default function Projects() {
   const { refreshThumbnails } = useRefreshThumbnails();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [sortField, setSortField] = useState<SortField>("created_at");
+  const [sortField, setSortField] = useState<SortField>("updated_at");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [projectTypeFilter, setProjectTypeFilter] = useState<string>("all");
+  // Format/status/captions filter chips. Multiple status chips can be
+  // active at once (OR semantics); format is a single-toggle (16:9 vs
+  // 9:16 are mutually exclusive); hasCaptions is a single-toggle.
+  const [formatFilter, setFormatFilter] = useState<'all' | 'landscape' | 'portrait'>('all');
+  const [statusFilters, setStatusFilters] = useState<Set<string>>(new Set());
+  const [hasCaptionsOnly, setHasCaptionsOnly] = useState(false);
   
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -151,17 +157,17 @@ export default function Projects() {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ["all-projects", user?.id, debouncedSearch, sortField, sortOrder, projectTypeFilter],
+    queryKey: ["all-projects", user?.id, debouncedSearch, sortField, sortOrder, projectTypeFilter, formatFilter, Array.from(statusFilters).sort().join(','), hasCaptionsOnly],
     queryFn: async ({ pageParam = 0 }) => {
       if (!user?.id) return { projects: [], nextCursor: null };
-      
+
       const from = pageParam * ITEMS_PER_PAGE;
       const to = from + ITEMS_PER_PAGE - 1;
 
       // Step 1: Fetch projects (no generation join — cleaner, faster)
       let q = supabase
         .from("projects")
-        .select("*, thumbnail_url")
+        .select("*, thumbnail_url, intake_settings")
         .eq("user_id", user.id)
         .order("is_favorite", { ascending: false })
         .order(sortField, { ascending: sortOrder === "asc" })
@@ -173,6 +179,14 @@ export default function Projects() {
 
       if (projectTypeFilter !== "all") {
         q = q.eq("project_type", projectTypeFilter);
+      }
+
+      if (formatFilter !== 'all') {
+        q = q.eq("format", formatFilter);
+      }
+
+      if (statusFilters.size > 0) {
+        q = q.in("status", Array.from(statusFilters));
       }
 
       const { data: projectsData, error } = await q;
@@ -276,8 +290,76 @@ export default function Projects() {
       thumbnailUrl: refreshedThumbnails.get(p.id) ?? p.thumbnailUrl,
     }));
     // Hide projects that are pending delete (awaiting the undo timeout)
-    return pendingDeleteIds.size === 0 ? base : base.filter(p => !pendingDeleteIds.has(p.id));
-  }, [allProjects, refreshedThumbnails, pendingDeleteIds]);
+    const visible = pendingDeleteIds.size === 0 ? base : base.filter(p => !pendingDeleteIds.has(p.id));
+    // Captions filter is client-side because it lives inside the
+    // projects.intake_settings JSON blob — server filtering on a
+    // nested jsonb key is messier than a quick post-filter.
+    if (!hasCaptionsOnly) return visible;
+    return visible.filter(p => {
+      const settings = (p as unknown as { intake_settings?: { captions?: { on?: boolean } } }).intake_settings;
+      return settings?.captions?.on === true;
+    });
+  }, [allProjects, refreshedThumbnails, pendingDeleteIds, hasCaptionsOnly]);
+
+  // Stats strip — projects count, minutes generated, credits used in
+  // the last 30 days. Standalone query so it doesn't refetch when the
+  // user types in the search field. ~3 round-trips on mount; cached
+  // for 60s after that. We intentionally compute minutes from
+  // generations.scenes audio durations instead of a stored column —
+  // we don't currently persist a video_duration field.
+  const { data: stats } = useQuery({
+    queryKey: ['projects-stats', user?.id],
+    enabled: !!user?.id,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const userId = user!.id;
+
+      // 1) project count
+      const { count: projectCount } = await supabase
+        .from('projects')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId);
+
+      // 2) minutes generated — sum audioDurationMs across every scene
+      // in the user's completed generations. Bounded to 100 most-recent
+      // completed generations so we don't pull the entire history.
+      const { data: gens } = await supabase
+        .from('generations')
+        .select('scenes')
+        .eq('user_id', userId)
+        .eq('status', 'complete')
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      let totalMs = 0;
+      for (const g of gens ?? []) {
+        const scenes = (g.scenes as Array<Record<string, unknown>> | null) ?? [];
+        for (const s of scenes) {
+          const meta = (s._meta as Record<string, unknown> | undefined) ?? {};
+          const ms = typeof meta.audioDurationMs === 'number'
+            ? meta.audioDurationMs
+            : typeof meta.estDurationMs === 'number' ? meta.estDurationMs : 10_000;
+          totalMs += ms;
+        }
+      }
+
+      // 3) credits used last 30d (transaction_type='usage', amount<0)
+      const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: txns } = await supabase
+        .from('credit_transactions')
+        .select('amount')
+        .eq('user_id', userId)
+        .eq('transaction_type', 'usage')
+        .gte('created_at', since);
+      const creditsUsed = (txns ?? []).reduce((acc, t) => acc + Math.abs(t.amount as number), 0);
+
+      return {
+        projectCount: projectCount ?? 0,
+        minutes: totalMs / 60_000,
+        creditsUsed,
+      };
+    },
+  });
 
   // Mutations – delete child records first to satisfy foreign key constraints
   const deleteProjectMutation = useMutation({
@@ -579,103 +661,137 @@ export default function Projects() {
 
   const SortIcon = sortOrder === "asc" ? SortAsc : SortDesc;
 
-  return (
-    <div className="min-h-screen flex flex-col w-full bg-background">
-      <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
-      <AppHeader />
+  // Toggle helper for the multi-select status chip group.
+  const toggleStatus = (s: string) =>
+    setStatusFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
 
-          <div className="flex-1 overflow-auto">
-          <div className="mx-auto max-w-4xl px-4 sm:px-6 py-6 sm:py-10">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-          >
-            <h1 className="type-h2 tracking-tight text-foreground">All Projects</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Manage, organize, and access all your video creations</p>
-          </motion.div>
+  return (
+    <AppShell breadcrumb="All projects">
+      <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
+      <div className="px-3 sm:px-4 md:px-6 lg:px-8 py-5 sm:py-7 max-w-[1480px] mx-auto">
+
+        {/* Hero strip — title left, mini stats right.
+            Stats values use serif so they pop next to the mono labels;
+            on mobile the strip wraps under the title. */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 lg:gap-6"
+        >
+          <div>
+            <h1 className="font-serif text-[30px] sm:text-[38px] font-medium tracking-tight text-[#ECEAE4] leading-[1.05]">
+              All projects
+            </h1>
+            <p className="text-[13px] sm:text-[14px] text-[#8A9198] mt-1.5">
+              Manage, organize, and access your video library.
+            </p>
+          </div>
+          <div className="flex items-end gap-7 sm:gap-10 shrink-0">
+            <Stat label="Projects" value={String(stats?.projectCount ?? '—')} />
+            <Stat label="Minutes generated" value={stats ? stats.minutes.toFixed(1) : '—'} />
+            <Stat label="Credits used · 30D" value={stats ? stats.creditsUsed.toLocaleString() : '—'} />
+          </div>
+        </motion.div>
 
         {/* Toolbar */}
-        <div className="flex flex-col lg:flex-row gap-4 mt-6 mb-6 overflow-x-auto py-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <div className="flex flex-wrap items-center gap-2 mt-6">
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#5A6268]" />
             <Input
-              placeholder="Search projects..."
+              placeholder="Search by name, prompt, or caption…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 bg-muted/50 border-border/50"
+              className="h-9 pl-9 pr-3 rounded-lg bg-[#10151A] border-white/10 text-[13px] text-[#ECEAE4] placeholder:text-[#5A6268] focus-visible:ring-0 focus-visible:border-[#14C8CC]/40"
             />
           </div>
-          <div className="flex gap-2">
-            <Select value={projectTypeFilter} onValueChange={setProjectTypeFilter}>
-              <SelectTrigger className="w-[150px] bg-card border-border/50">
-                <SelectValue placeholder="All types" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="doc2video">
-                  <div className="flex items-center gap-2">
-                    <Video className="h-4 w-4" />
-                    Doc2Video
-                  </div>
-                </SelectItem>
-                <SelectItem value="smartflow">
-                  <div className="flex items-center gap-2">
-                    <Wallpaper className="h-4 w-4" />
-                    SmartFlow
-                  </div>
-                </SelectItem>
-                <SelectItem value="cinematic">
-                  <div className="flex items-center gap-2">
-                    <Wand2 className="h-4 w-4" />
-                    Cinematic
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
-              <SelectTrigger className="w-[140px] bg-card border-border/50">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="title">Title</SelectItem>
-                <SelectItem value="created_at">Created</SelectItem>
-                <SelectItem value="updated_at">Updated</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setSortOrder((o) => (o === "asc" ? "desc" : "asc"))}
-              className="border-border/50"
+
+          <Select value={projectTypeFilter} onValueChange={setProjectTypeFilter}>
+            <SelectTrigger className="h-9 w-[130px] rounded-lg bg-[#10151A] border-white/10 text-[12.5px] text-[#ECEAE4]">
+              <SelectValue placeholder="All types" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#10151A] border-white/10">
+              <SelectItem value="all">All types</SelectItem>
+              <SelectItem value="doc2video"><div className="flex items-center gap-2"><Video className="h-3.5 w-3.5" />Doc2Video</div></SelectItem>
+              <SelectItem value="smartflow"><div className="flex items-center gap-2"><Wallpaper className="h-3.5 w-3.5" />SmartFlow</div></SelectItem>
+              <SelectItem value="cinematic"><div className="flex items-center gap-2"><Wand2 className="h-3.5 w-3.5" />Cinematic</div></SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
+            <SelectTrigger className="h-9 w-[120px] rounded-lg bg-[#10151A] border-white/10 text-[12.5px] text-[#ECEAE4]">
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#10151A] border-white/10">
+              <SelectItem value="updated_at">Updated</SelectItem>
+              <SelectItem value="created_at">Created</SelectItem>
+              <SelectItem value="title">Title</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <button
+            type="button"
+            onClick={() => setSortOrder((o) => (o === "asc" ? "desc" : "asc"))}
+            className="h-9 w-9 rounded-lg bg-[#10151A] border border-white/10 grid place-items-center text-[#8A9198] hover:text-[#ECEAE4] hover:border-white/20 transition-colors"
+            title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+          >
+            <SortIcon className="h-3.5 w-3.5" />
+          </button>
+
+          <div className="flex-1 hidden md:block" />
+
+          {/* View toggle — pill on the far right */}
+          <div className="inline-flex rounded-lg border border-white/10 bg-[#10151A] p-[2px] gap-[2px]">
+            <button
+              type="button"
+              onClick={() => setViewMode('grid')}
+              className={cn(
+                "h-7 w-9 rounded-md grid place-items-center transition-colors",
+                viewMode === 'grid' ? 'bg-white/10 text-[#ECEAE4]' : 'text-[#5A6268] hover:text-[#ECEAE4]',
+              )}
+              aria-label="Grid view"
             >
-              <SortIcon className="h-4 w-4" />
-            </Button>
-            <div className="flex border border-border/50 rounded-lg overflow-hidden">
-              <Button
-                variant={viewMode === "list" ? "secondary" : "ghost"}
-                size="icon"
-                onClick={() => setViewMode("list")}
-                className="rounded-none border-0"
-              >
-                <LayoutList className="h-4 w-4" />
-              </Button>
-              <Button
-                variant={viewMode === "grid" ? "secondary" : "ghost"}
-                size="icon"
-                onClick={() => setViewMode("grid")}
-                className="rounded-none border-0"
-              >
-                <LayoutGrid className="h-4 w-4" />
-              </Button>
-            </div>
-            {selectedIds.size > 0 && (
-              <Button variant="destructive" onClick={handleBulkDelete} className="gap-2">
-                <Trash2 className="h-4 w-4" />
-                Delete ({selectedIds.size})
-              </Button>
-            )}
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={cn(
+                "h-7 w-9 rounded-md grid place-items-center transition-colors",
+                viewMode === 'list' ? 'bg-white/10 text-[#ECEAE4]' : 'text-[#5A6268] hover:text-[#ECEAE4]',
+              )}
+              aria-label="List view"
+            >
+              <LayoutList className="h-3.5 w-3.5" />
+            </button>
           </div>
+
+          {selectedIds.size > 0 && (
+            <Button variant="destructive" onClick={handleBulkDelete} className="h-9 gap-2">
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete ({selectedIds.size})
+            </Button>
+          )}
+        </div>
+
+        {/* Filter chips. 16:9 / 9:16 are mutually exclusive (single-toggle).
+            Status chips are multi-select. + HAS CAPTIONS is single-toggle.
+            Removed the legacy "+ WITH VOICE" chip (every project has voice
+            so it's a no-op filter) and "+ WITH MUSIC" (the music feature
+            is currently disabled in the pipeline). */}
+        <div className="flex flex-wrap items-center gap-1.5 mt-3 mb-6">
+          <Chip active={formatFilter === 'landscape'} onClick={() => setFormatFilter(formatFilter === 'landscape' ? 'all' : 'landscape')}>16:9</Chip>
+          <Chip active={formatFilter === 'portrait'} onClick={() => setFormatFilter(formatFilter === 'portrait' ? 'all' : 'portrait')}>9:16</Chip>
+          <ChipDot active={statusFilters.has('complete')} dot="#14C8CC" onClick={() => toggleStatus('complete')}>Published</ChipDot>
+          <ChipDot active={statusFilters.has('processing')} dot="#14C8CC" pulse onClick={() => toggleStatus('processing')}>Rendering</ChipDot>
+          <ChipDot active={statusFilters.has('draft')} dot="#5A6268" onClick={() => toggleStatus('draft')}>Draft</ChipDot>
+          <ChipDot active={statusFilters.has('failed')} dot="#E4C875" onClick={() => toggleStatus('failed')}>Failed</ChipDot>
+          <Chip active={hasCaptionsOnly} onClick={() => setHasCaptionsOnly(v => !v)}>+ Has captions</Chip>
         </div>
 
         {/* Content */}
@@ -883,29 +999,12 @@ export default function Projects() {
           </div>
         )}
 
-        {/* Footer Stats */}
-        <div className="mt-6 flex items-center justify-between text-sm text-muted-foreground">
-          <span className="text-xs sm:text-sm">
-            {projectsWithThumbnails.length} project{projectsWithThumbnails.length !== 1 ? "s" : ""} loaded
-            {selectedIds.size > 0 && ` • ${selectedIds.size} selected`}
-          </span>
-          {projectsWithThumbnails.length > 0 && (
-            <div className="flex items-center gap-3 sm:gap-4">
-              <div className="flex items-center gap-1 sm:gap-1.5" title="Explainers">
-                <Video className="h-3.5 w-3.5" />
-                <span className="text-xs sm:text-sm">{projectsWithThumbnails.filter(p => p.project_type === "doc2video" || !p.project_type).length}</span>
-                <span className="hidden sm:inline text-xs sm:text-sm">explainers</span>
-              </div>
-              <div className="flex items-center gap-1 sm:gap-1.5" title="SmartFlow">
-                <Wallpaper className="h-3.5 w-3.5" />
-                <span className="text-xs sm:text-sm">{projectsWithThumbnails.filter(p => p.project_type === "smartflow").length}</span>
-                <span className="hidden sm:inline text-xs sm:text-sm">smartflow</span>
-              </div>
-            </div>
-          )}
+        {/* Footer count */}
+        <div className="mt-6 font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268]">
+          {projectsWithThumbnails.length} project{projectsWithThumbnails.length !== 1 ? "s" : ""} loaded
+          {selectedIds.size > 0 && ` · ${selectedIds.size} selected`}
         </div>
-        </div>
-        </div>
+      </div>
       {/* Dialogs */}
 
       {/* Delete Dialog */}
@@ -1013,6 +1112,70 @@ export default function Projects() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </AppShell>
+  );
+}
+
+/** Stat block used in the All-projects hero strip — mono uppercase
+ *  label above a serif numeric value. Mirrors the look in image 153
+ *  but drops the heavy uppercase headline weight. */
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col items-end leading-none">
+      <span className="font-mono text-[9.5px] tracking-[0.18em] uppercase text-[#5A6268] mb-1.5 whitespace-nowrap">
+        {label}
+      </span>
+      <span className="font-serif text-[20px] sm:text-[24px] font-medium text-[#ECEAE4]">
+        {value}
+      </span>
     </div>
+  );
+}
+
+/** Filter chip — neutral pill, glows teal when active. */
+function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "h-7 px-3 rounded-full font-mono text-[10px] tracking-[0.14em] uppercase border transition-colors",
+        active
+          ? "bg-[#14C8CC]/10 border-[#14C8CC]/40 text-[#14C8CC]"
+          : "bg-[#10151A] border-white/10 text-[#8A9198] hover:text-[#ECEAE4] hover:border-white/20",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Status chip — same as Chip but with a coloured dot prefix
+ *  matching the Editor's scene-status legend. `pulse` adds a heartbeat
+ *  to flag actively-rendering items. */
+function ChipDot({ active, dot, pulse, onClick, children }: {
+  active: boolean;
+  dot: string;
+  pulse?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "h-7 inline-flex items-center gap-1.5 px-3 rounded-full font-mono text-[10px] tracking-[0.14em] uppercase border transition-colors",
+        active
+          ? "bg-white/[0.04] border-white/20 text-[#ECEAE4]"
+          : "bg-[#10151A] border-white/10 text-[#8A9198] hover:text-[#ECEAE4] hover:border-white/20",
+      )}
+    >
+      <span
+        className={cn("w-1.5 h-1.5 rounded-full", pulse && "animate-pulse")}
+        style={{ background: dot }}
+      />
+      {children}
+    </button>
   );
 }

@@ -54,6 +54,11 @@ export interface AudioConfig {
   voiceGender?: string;           // "male" | "female"
   speakerName?: string;           // "Nova" | "Atlas" | "Marcus" etc. — for Qwen3 speaker mapping
   customVoiceId?: string;         // set when voice_type === "custom"
+  /** Which provider hosts the cloned voice — 'fish' for new Fish IVC
+   *  clones (uses /v1/tts with s2-pro), 'elevenlabs' for legacy clones
+   *  that haven't been backfilled. Defaults to 'elevenlabs' for
+   *  back-compat with rows that don't have the column populated. */
+  customVoiceProvider?: "fish" | "elevenlabs";
   forceHaitianCreole?: boolean;   // from presenter_focus
   language?: string;              // "en" | "fr" | "ht" — explicit language selection
 }
@@ -85,6 +90,7 @@ export async function generateSceneAudio(
     replicateApiKey,
     voiceGender = "female",
     customVoiceId,
+    customVoiceProvider = "elevenlabs",
     forceHaitianCreole = false,
   } = config;
 
@@ -106,6 +112,24 @@ export async function generateSceneAudio(
   }
   if (isES && config.language !== "es") {
     console.log(`[TTS] Scene ${scene.number}: Auto-detected Spanish from voiceover text`);
+  }
+
+  // ========== CASE 0: Cloned voice hosted on Fish ==========
+  // Fish s2-pro speaks 80+ languages natively — no Gemini-to-STS hop
+  // needed even for HC. One round trip, full sentence-level prosody,
+  // higher fidelity than the older ElevenLabs path. Falls through to
+  // the legacy paths if customVoiceProvider is undefined or fish key
+  // is missing so existing ElevenLabs clones keep working.
+  if (customVoiceId && customVoiceProvider === "fish" && fishAudioApiKey) {
+    console.log(`[TTS] Scene ${scene.number}: Cloned voice → Fish s2-pro (${customVoiceId.slice(0, 8)}…)`);
+    const result = await generateFishAudioTTS(
+      voiceoverText, scene.number, fishAudioApiKey, projectId, customVoiceId,
+    );
+    if (result.url) {
+      console.log(`✅ Scene ${scene.number}: Fish s2-pro (clone)`);
+      return { ...result, provider: "Fish s2-pro (clone)" };
+    }
+    return { url: null, error: `Fish clone TTS failed: ${result.error}` };
   }
 
   // ========== CASE 1: Haitian Creole + Cloned Voice ==========

@@ -61,35 +61,57 @@ export function useVoiceCloning() {
     return filePath;
   };
 
-  // Clone voice mutation
+  // Clone voice mutation — Fish Audio Instant Voice Cloning.
+  // Flow: upload sample to storage → invoke clone-voice-fish edge fn
+  // (which queues a worker job) → poll the job until complete → read
+  // the new voice id from result.voiceId. The worker handles ffmpeg
+  // transcoding (WebM → MP3) and the actual Fish API call so we don't
+  // need ffmpeg in the browser or the edge runtime.
   const cloneVoiceMutation = useMutation({
     mutationFn: async ({ file, name, description, removeNoise, consentGiven }: { file: Blob; name: string; description?: string; removeNoise?: boolean; consentGiven: boolean }) => {
       setIsCloning(true);
 
-      // Upload audio file first - returns storage path (not URL)
       const storagePath = await uploadAudio(file, `${name.replace(/\s+/g, "_")}.mp3`);
 
-      // Call clone-voice edge function with storage path and consent flag
-      const { data, error } = await supabase.functions.invoke("clone-voice", {
-        body: { storagePath, voiceName: name, description, removeNoise: removeNoise ?? true, consent_given: consentGiven },
+      const { data: queued, error: queueError } = await supabase.functions.invoke("clone-voice-fish", {
+        body: { storagePath, voiceName: name, description, consentGiven, removeNoise: removeNoise ?? true },
       });
 
-      if (error) {
-        // Try to extract a meaningful error message
-        const errorBody = error.context?.body;
+      if (queueError) {
+        const errorBody = queueError.context?.body;
         if (errorBody) {
           try {
             const parsed = JSON.parse(errorBody);
-            throw new Error(parsed.error || "Failed to clone voice");
+            throw new Error(parsed.error || "Failed to queue voice clone");
           } catch {
-            throw new Error(error.message || "Failed to clone voice");
+            throw new Error(queueError.message || "Failed to queue voice clone");
           }
         }
-        throw new Error(error.message || "Failed to clone voice");
+        throw new Error(queueError.message || "Failed to queue voice clone");
       }
-      if (!data.success) throw new Error(data.error || "Failed to clone voice");
+      if (!queued?.success || !queued?.jobId) {
+        throw new Error(queued?.error || "Voice clone queue returned no job id");
+      }
 
-      return data;
+      // Poll the job. Cloning typically takes 8–15s for a 30s sample
+      // (download + ffmpeg transcode + Fish IVC training).
+      const MAX_WAIT_MS = 90_000;
+      const start = Date.now();
+      while (Date.now() - start < MAX_WAIT_MS) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const { data: row } = await (supabase
+          .from("video_generation_jobs") as unknown as ReturnType<typeof supabase.from>)
+          .select("status, result, error_message")
+          .eq("id", queued.jobId)
+          .single();
+        if (row?.status === "completed") {
+          return { success: true, voiceId: row.result?.voiceId, voiceName: name };
+        }
+        if (row?.status === "failed") {
+          throw new Error(row.error_message || "Voice clone failed");
+        }
+      }
+      throw new Error("Voice clone timed out — try again with a shorter sample.");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user-voices"] });
@@ -104,11 +126,13 @@ export function useVoiceCloning() {
     },
   });
 
-  // Delete voice mutation - also deletes from ElevenLabs
+  // Delete voice mutation — provider-aware: the delete-voice-fish
+  // edge function inspects the row's `provider` column and routes to
+  // Fish or ElevenLabs accordingly, so legacy ElevenLabs clones keep
+  // deleting cleanly while new Fish clones go through the right API.
   const deleteVoiceMutation = useMutation({
     mutationFn: async (voiceId: string) => {
-      // Call delete-voice edge function to delete from both ElevenLabs and DB
-      const { data, error } = await supabase.functions.invoke("delete-voice", {
+      const { data, error } = await supabase.functions.invoke("delete-voice-fish", {
         body: { voiceId },
       });
 

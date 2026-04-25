@@ -397,10 +397,28 @@ export async function generateFishAudioTTS(
   try {
     const MAX_ATTEMPTS = 5;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      // s2-pro is Fish's current top-tier TTS (80+ languages, 100ms TTFB,
+      // higher fidelity than the older s2 / s1 models). Quality knobs:
+      //   - sample_rate 44100 (CD quality, Fish default)
+      //   - mp3_bitrate 192 (high quality, doubles the 128 default)
+      //   - prosody.normalize_loudness: true → consistent volume across
+      //     scenes (eliminates the per-scene loudness drift we used to
+      //     get when stitching multiple TTS calls together)
       const res = await fetch("https://api.fish.audio/v1/tts", {
         method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", model: "s2" },
-        body: JSON.stringify({ text, reference_id: referenceId, format: "mp3", normalize: true, latency: "normal" }),
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", model: "s2-pro" },
+        body: JSON.stringify({
+          text,
+          reference_id: referenceId,
+          format: "mp3",
+          sample_rate: 44100,
+          mp3_bitrate: 192,
+          normalize: true,
+          prosody: { speed: 1, normalize_loudness: true },
+          temperature: 0.7,
+          top_p: 0.7,
+          latency: "normal",
+        }),
       });
       if (!res.ok) {
         const errBody = await res.text().catch(() => "");

@@ -331,6 +331,16 @@ async function processJob(job: Job) {
         const { handleVoicePreview } = await import("./handlers/handleVoicePreview.js");
         const previewResult = await handleVoicePreview(job.id, job.payload as any, job.user_id);
         finalPayload = { ...finalPayload, ...previewResult };
+      } else if (job.task_type === 'clone_voice' as any) {
+        // Fish Audio Instant Voice Cloning — receives a sample path,
+        // transcodes to MP3 via ffmpeg, POSTs to /model with
+        // enhance_audio_quality=true, persists the new voice id to
+        // user_voices with provider='fish'. Browser polls this job
+        // for the result.voiceId.
+        if (!job.user_id) throw new Error("clone_voice job is missing user_id");
+        const { handleCloneVoice } = await import("./handlers/handleCloneVoice.js");
+        const cloneResult = await handleCloneVoice(job.id, job.payload as any, job.user_id);
+        finalPayload = { ...finalPayload, ...cloneResult };
       } else if (job.task_type === 'cinematic_video' as any) {
         const result = await handleCinematicVideo(job.id, job.payload as any, job.user_id);
         finalPayload = { ...finalPayload, ...result };

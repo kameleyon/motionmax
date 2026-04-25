@@ -21,7 +21,7 @@ import os from "os";
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField, updateSceneFieldJson } from "../lib/sceneUpdate.js";
-import { generateGeminiFlashTTS } from "../services/geminiFlashTTS.js";
+import { generateGeminiFlashTTS, generateGeminiFlashTTSChunked } from "../services/geminiFlashTTS.js";
 import { generateSmallestTTS } from "../services/smallestTTS.js";
 import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
 import { isHaitianCreole } from "../services/audioWavUtils.js";
@@ -66,6 +66,39 @@ export async function handleMasterAudio(
   userId?: string
 ): Promise<{ success: boolean; masterAudioUrl: string; masterAudioDurationMs: number; provider: string }> {
   const { generationId, projectId } = payload;
+
+  // Server-side dedup: refuse to run if an OLDER pending/processing
+  // master_audio job for this same project is still in flight. The
+  // client also guards against this but races + multi-tab clicks +
+  // rage-clicks can sneak duplicates through; this is the belt to
+  // their suspenders. Without it, two concurrent master_audio jobs
+  // burn the Gemini Tier-1 TPM and one of them 429s.
+  const { data: olderJobs } = await supabase
+    .from("video_generation_jobs")
+    .select("id, created_at, status")
+    .eq("project_id", projectId)
+    .eq("task_type", "master_audio")
+    .in("status", ["pending", "processing"])
+    .neq("id", jobId)
+    .order("created_at", { ascending: true });
+
+  const hasOlderInFlight = (olderJobs ?? []).some(
+    (j: { created_at: string; id: string }) =>
+      new Date(j.created_at).getTime() < Date.now() - 1000, // older by more than 1s
+  );
+
+  if (hasOlderInFlight) {
+    await writeSystemLog({
+      jobId, projectId, userId, generationId,
+      category: "system_info",
+      eventType: "master_audio_skipped_duplicate",
+      message: `Master audio skipped — an older job is still in flight for this project`,
+    });
+    // Throwing puts this job into 'failed' state via the worker's
+    // outer catch, which is the right outcome — the older job will
+    // produce the audio; this one would have duplicated work.
+    throw new Error("Duplicate master_audio job — an older one is already in flight for this project");
+  }
 
   await writeSystemLog({
     jobId, projectId, userId, generationId,
@@ -115,7 +148,39 @@ export async function handleMasterAudio(
     { url: null };
 
   // ── Route to the right TTS provider by voice prefix ──
-  if (isHC) {
+
+  // Cloned-voice short-circuit: project's voice_type === "custom" with
+  // a voice_id means the user picked their own clone in intake. Skip
+  // the prefix-based routing entirely and go through the audio router
+  // so Fish s2-pro (or legacy ElevenLabs) handles the whole take.
+  const customVoiceFromProject =
+    generation.projects?.voice_type === "custom" && generation.projects?.voice_id
+      ? generation.projects.voice_id as string
+      : null;
+
+  if (customVoiceFromProject) {
+    const { resolveCustomVoiceProvider } = await import("../services/customVoiceProvider.js");
+    const provider = await resolveCustomVoiceProvider(customVoiceFromProject);
+    const config: AudioConfig = {
+      projectId,
+      googleApiKeys: [
+        process.env.GOOGLE_TTS_API_KEY_3,
+        process.env.GOOGLE_TTS_API_KEY_2,
+        process.env.GOOGLE_TTS_API_KEY,
+      ].filter(Boolean) as string[],
+      elevenLabsApiKey: process.env.ELEVENLABS_API_KEY,
+      lemonfoxApiKey: process.env.LEMONFOX_API_KEY,
+      fishAudioApiKey: process.env.FISH_AUDIO_API_KEY,
+      replicateApiKey: process.env.REPLICATE_API_KEY || "",
+      customVoiceId: customVoiceFromProject,
+      customVoiceProvider: provider,
+      language: resolvedLanguage,
+    };
+    result = await generateSceneAudio(
+      { number: 1, voiceover: masterText, duration: Math.ceil(masterText.split(/\s+/).length / 2.5) },
+      config,
+    );
+  } else if (isHC) {
     const googleApiKeys = [
       process.env.GOOGLE_TTS_API_KEY_3,
       process.env.GOOGLE_TTS_API_KEY_2,
@@ -143,8 +208,14 @@ export async function handleMasterAudio(
       process.env.GOOGLE_TTS_API_KEY_2,
       process.env.GOOGLE_TTS_API_KEY,
     ].filter(Boolean) as string[];
-    result = await generateGeminiFlashTTS({
-      text: masterText,
+    // Chunked TTS: Gemini's 32k token context window can't fit a
+    // multi-minute master in a single request. We split at sentence
+    // boundaries (~120s per chunk), call in parallel with concurrency
+    // cap 3 to stay under Tier 1 TPM, then concat the raw PCM bytes
+    // (cheap byte-append since every chunk is 24kHz/mono/16-bit) into
+    // one master WAV. Per-chunk failures retry independently.
+    result = await generateGeminiFlashTTSChunked({
+      masterText,
       sceneNumber: 0, // 0 = master, not a scene
       projectId,
       voiceName,

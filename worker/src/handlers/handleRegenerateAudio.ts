@@ -201,7 +201,11 @@ export async function handleRegenerateAudio(
       forceHaitianCreole: isHC,
     };
 
-    if (voiceId) config.customVoiceId = voiceId;
+    if (voiceId) {
+      config.customVoiceId = voiceId;
+      const { resolveCustomVoiceProvider } = await import("../services/customVoiceProvider.js");
+      config.customVoiceProvider = await resolveCustomVoiceProvider(voiceId);
+    }
 
     audioResult = await generateSceneAudio(
       { number: scene.number || sceneIndex + 1, voiceover: newVoiceover, duration: scene.duration || 10 },

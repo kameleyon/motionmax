@@ -45,6 +45,22 @@ export function useSceneRegen(state: EditorState | null) {
     intervals.forEach((ms) => setTimeout(invalidate, ms));
   }, [queryClient]);
 
+  /** True when a master_audio job is already pending or processing for
+   *  this project. Used to short-circuit duplicate apply-to-all clicks
+   *  before they reach the worker — doing it client-side gives us a
+   *  fast toast instead of a silent worker dedup. The worker has its
+   *  own dedup as the safety net for races. */
+  const isMasterAudioInFlight = useCallback(async (projectId: string): Promise<boolean> => {
+    const { data } = await supabase
+      .from('video_generation_jobs')
+      .select('id')
+      .eq('project_id', projectId)
+      .eq('task_type', 'master_audio')
+      .in('status', ['pending', 'processing'])
+      .limit(1);
+    return !!(data && data.length > 0);
+  }, []);
+
   const updateScenePrompt = useCallback(async (index: number, nextPrompt: string) => {
     if (!state?.generation) { toast.error('No generation loaded.'); return false; }
     const scenes = (state.generation.scenes as Array<Record<string, unknown>> | null) ?? [];
@@ -279,6 +295,14 @@ export function useSceneRegen(state: EditorState | null) {
       const isMasterAudio = projectType === 'doc2video' || projectType === 'cinematic';
 
       if (isMasterAudio) {
+        // Dedup: refuse if there's already a master_audio in flight
+        // for this project. Two concurrent renders both burn Gemini
+        // TPM and the second one 429s; better to skip + tell the user.
+        if (await isMasterAudioInFlight(state.project.id)) {
+          toast.info('Voice render already in progress — wait for the current one to finish.');
+          return;
+        }
+
         const { error } = await supabase
           .from('video_generation_jobs')
           .insert({
@@ -348,6 +372,15 @@ export function useSceneRegen(state: EditorState | null) {
         const isMasterAudio = projectType === 'doc2video' || projectType === 'cinematic';
 
         if (isMasterAudio) {
+          // Dedup: refuse if there's already a master_audio in flight
+          // for this project. Apply-to-all rage-clicks were queueing
+          // 2-3 master_audio jobs back-to-back; each consumed Gemini
+          // Tier-1 TPM and the later ones 429'd.
+          if (await isMasterAudioInFlight(state.project.id)) {
+            toast.info('Voice render already in progress — wait for the current one to finish.');
+            return;
+          }
+
           const { error: jobErr } = await supabase
             .from('video_generation_jobs')
             .insert({

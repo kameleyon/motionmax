@@ -170,6 +170,8 @@ export async function handleCinematicAudio(
 
     if (generation.projects?.voice_type === "custom" && generation.projects?.voice_id) {
       config.customVoiceId = generation.projects.voice_id;
+      const { resolveCustomVoiceProvider } = await import("../services/customVoiceProvider.js");
+      config.customVoiceProvider = await resolveCustomVoiceProvider(generation.projects.voice_id);
     }
 
     result = await generateSceneAudio(

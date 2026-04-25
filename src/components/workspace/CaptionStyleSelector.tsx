@@ -141,7 +141,11 @@ const bouncePhysics = { type: "spring" as const, stiffness: 1500, damping: 20, m
 
 const styleAnimations: Record<CaptionStyle, Variants> = {
   none: { hidden: { opacity: 0 }, visible: { opacity: 0 } },
-  cleanPop: { hidden: { opacity: 0, scale: 0.6, filter: "blur(6px)" }, visible: { opacity: 1, scale: 1, filter: "blur(0px)", transition: snapPhysics } },
+  // Spring physics overshoot the filter property into negative blur
+  // values (blur(-0.21px) — invalid CSS, console errors). Per-property
+  // transition: keep the spring on scale/opacity, but tween the filter
+  // so it never overshoots.
+  cleanPop: { hidden: { opacity: 0, scale: 0.6, filter: "blur(6px)" }, visible: { opacity: 1, scale: 1, filter: "blur(0px)", transition: { ...snapPhysics, filter: { duration: 0.18, ease: "easeOut" } } } },
   toxicBounce: { hidden: { opacity: 0, scale: 0.1, rotate: -15 }, visible: { opacity: 1, scale: 1, rotate: 0, transition: bouncePhysics } },
   proShortForm: { hidden: { opacity: 0, scale: 0.4, y: 10 }, visible: { opacity: 1, scale: 1, y: 0, transition: snapPhysics } },
   orangeBox: { hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", stiffness: 400, damping: 15 } } },

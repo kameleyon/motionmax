@@ -97,8 +97,11 @@ const App = () => (
             <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
               <Route path="/app" element={<RouteErrorBoundary routeName="dashboard"><Dashboard /></RouteErrorBoundary>} />
               <Route path="/app/create" element={<RouteErrorBoundary routeName="create"><CreateWorkspace /></RouteErrorBoundary>} />
-              <Route path="/pricing" element={<Pricing />} />
             </Route>
+
+            {/* Pricing renders its own NEW AppShell — must NOT nest
+                inside the legacy AppShell wrapper above. */}
+            <Route path="/pricing" element={<Pricing />} />
 
             {/* Projects + Voice Lab + Settings + Usage render their own
                 NEW AppShell (dashboard sidebar + topbar), so they must

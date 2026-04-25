@@ -1,322 +1,233 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { motion } from "framer-motion";
-import PageSeo from "@/components/PageSeo";
 import { useNavigate } from "react-router-dom";
-import { ShieldCheck, Lock, CreditCard, RefreshCcw } from "lucide-react";
-import { AppHeader } from "@/components/layout/AppHeader";
+import { Check, X, Loader2 } from "lucide-react";
+import AppShell from "@/components/dashboard/AppShell";
+import { Button } from "@/components/ui/button";
 import { useSubscription } from "@/hooks/useSubscription";
-import { yearlyDiscountPercent } from "@/config/products";
-import { BillingToggle } from "@/components/pricing/BillingToggle";
-import { PLANS, CREDIT_PACKAGES } from "@/config/pricingPlans";
 import { useAuth } from "@/hooks/useAuth";
+import { PLAN_PRICES } from "@/config/products";
+import { STRIPE_PLANS } from "@/config/stripeProducts";
 import { toast } from "sonner";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { cn } from "@/lib/utils";
 
-import PlanCardGrid from "@/components/pricing/PlanCardGrid";
-import CreditBreakdownTable from "@/components/pricing/CreditBreakdownTable";
-import RoiCalculator from "@/components/pricing/RoiCalculator";
-import CreditTopUp from "@/components/pricing/CreditTopUp";
-import EnterpriseContactModal from "@/components/pricing/EnterpriseContactModal";
+/** Pricing — mirrors the landing-page 3-up plan grid (Free / Creator
+ *  / Studio) inside the dashboard chrome. Same visual language as
+ *  Voice Lab / Projects: dark card, teal accents on the popular plan,
+ *  serif headline, mono uppercase labels. CTAs hit real Stripe
+ *  checkout via useSubscription.createCheckout. */
 
-function getCheckoutErrorMessage(error: unknown): string {
-  const msg = (error instanceof Error ? error.message : String(error)).toLowerCase();
-  if (msg.includes("rate") || msg.includes("too many"))
-    return "Too many attempts. Please wait a moment before trying again.";
-  if (msg.includes("already") || msg.includes("active sub") || msg.includes("existing"))
-    return "You may already have an active subscription. Visit your billing portal to manage it.";
-  if (msg.includes("network") || msg.includes("failed to fetch") || msg.includes("connection"))
-    return "Connection error. Check your internet connection and try again.";
-  return "Unable to start checkout. Please try again or contact support@motionmax.io.";
+interface Plan {
+  id: "free" | "creator" | "studio";
+  name: string;
+  price: string;
+  blurb: string;
+  features: { text: string; included: boolean }[];
+  cta: string;
+  popular?: boolean;
+  accent: "neutral" | "teal" | "gold";
+  /** Null for Free — clicking it routes to /auth or no-ops if already
+   *  signed in. */
+  priceId: string | null;
 }
+
+const PLANS: Plan[] = [
+  {
+    id: "free",
+    name: "Free",
+    price: "$0",
+    blurb: "Perfect for trying out the platform.",
+    features: [
+      { text: "150 one-time credits", included: true },
+      { text: "720p video export", included: true },
+      { text: "Landscape format", included: true },
+      { text: "3 Smart Flow videos", included: true },
+      { text: "Voice cloning", included: false },
+    ],
+    cta: "Get started free",
+    accent: "neutral",
+    priceId: null,
+  },
+  {
+    id: "creator",
+    name: "Creator",
+    price: PLAN_PRICES.creator.monthly,
+    blurb: "For content creators and small teams.",
+    features: [
+      { text: "500 credits/month", included: true },
+      { text: "1080p video export", included: true },
+      { text: "Portrait & landscape", included: true },
+      { text: "1 voice clone", included: true },
+      { text: "20 Smart Flow videos", included: true },
+    ],
+    cta: "Start with Creator",
+    popular: true,
+    accent: "teal",
+    priceId: STRIPE_PLANS.creator.monthly.priceId,
+  },
+  {
+    id: "studio",
+    name: "Studio",
+    price: PLAN_PRICES.studio.monthly,
+    blurb: "For professionals and agencies.",
+    features: [
+      { text: "2,500 credits/month", included: true },
+      { text: "4K video export", included: true },
+      { text: "5 voice clones", included: true },
+      { text: "Brand kit", included: true },
+      { text: "Priority rendering", included: true },
+      { text: "Character consistency", included: true },
+      { text: "Unlimited Smart Flow", included: true },
+    ],
+    cta: "Start with Studio",
+    accent: "gold",
+    priceId: STRIPE_PLANS.studio.monthly.priceId,
+  },
+];
 
 export default function Pricing() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { plan: currentPlan, createCheckout, openCustomerPortal } = useSubscription();
-  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
-  const [loadingCredits, setLoadingCredits] = useState<number | null>(null);
-  const [showDowngradeDialog, setShowDowngradeDialog] = useState(false);
-  const [showEnterpriseModal, setShowEnterpriseModal] = useState(false);
-  const [billingInterval, setBillingInterval] = useState<"monthly" | "yearly">("monthly");
+  const { createCheckout } = useSubscription();
+  const [pendingPlan, setPendingPlan] = useState<string | null>(null);
 
-  const handleDowngrade = async () => {
-    try {
-      setLoadingPlan("free");
-      setShowDowngradeDialog(false);
-      await openCustomerPortal();
-    } catch (error) {
-      toast.error("Error", { description: error instanceof Error ? error.message : "Failed to open billing portal" });
-    } finally {
-      setLoadingPlan(null);
-    }
-  };
-
-  const handleSubscribe = async (planId: string, priceId: string | null) => {
-    if (!priceId) return;
-
-    if (!user) {
-      toast.error("Sign in required", { description: "Please sign in to subscribe to a plan" });
-      navigate("/auth");
+  const handleCta = async (plan: Plan) => {
+    if (!plan.priceId) {
+      if (!user) navigate("/auth");
+      else toast.info("You're already on the platform — start creating!");
       return;
     }
-
-    try {
-      setLoadingPlan(planId);
-      await createCheckout(priceId, "subscription");
-    } catch (error) {
-      toast.error("Error", { description: getCheckoutErrorMessage(error) });
-    } finally {
-      setLoadingPlan(null);
-    }
-  };
-
-  const handleBuyCredits = async (credits: number, priceId: string) => {
     if (!user) {
-      toast.error("Sign in required", { description: "Please sign in to purchase credits" });
-      navigate("/auth");
+      navigate(`/auth?next=/pricing&plan=${plan.id}`);
       return;
     }
-
+    setPendingPlan(plan.id);
     try {
-      setLoadingCredits(credits);
-      await createCheckout(priceId, "payment");
-    } catch (error) {
-      toast.error("Error", { description: getCheckoutErrorMessage(error) });
+      const url = await createCheckout(plan.priceId, "subscription");
+      if (url) window.location.href = url;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error("Couldn't start checkout", { description: msg });
     } finally {
-      setLoadingCredits(null);
+      setPendingPlan(null);
     }
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <PageSeo
-        title="MotionMax Pricing — AI Video Plans & Credits"
-        description="Choose the right MotionMax plan. Free tier available. Credit-based pricing for AI cinematic videos, explainers, and more."
-        canonical="https://motionmax.io/pricing"
-        breadcrumbs={[
-          { name: "Home", item: "https://motionmax.io" },
-          { name: "Pricing", item: "https://motionmax.io/pricing" },
-        ]}
-      />
-      <Helmet>
-        <script type="application/ld+json">{JSON.stringify({
-          "@context": "https://schema.org",
-          "@type": "Product",
-          "name": "MotionMax AI Video Creator",
-          "description": "AI-powered video creation platform with voice cloning, cinematic generation, and professional export.",
-          "url": "https://motionmax.io/pricing",
-          "brand": { "@type": "Brand", "name": "MotionMax" },
-          "offers": [
-            {
-              "@type": "Offer",
-              "name": "Creator Plan",
-              "price": "29",
-              "priceCurrency": "USD",
-              "priceSpecification": {
-                "@type": "UnitPriceSpecification",
-                "price": "29",
-                "priceCurrency": "USD",
-                "billingDuration": "P1M"
-              },
-              "availability": "https://schema.org/InStock",
-              "url": "https://motionmax.io/pricing"
-            },
-            {
-              "@type": "Offer",
-              "name": "Studio Plan",
-              "price": "99",
-              "priceCurrency": "USD",
-              "priceSpecification": {
-                "@type": "UnitPriceSpecification",
-                "price": "99",
-                "priceCurrency": "USD",
-                "billingDuration": "P1M"
-              },
-              "availability": "https://schema.org/InStock",
-              "url": "https://motionmax.io/pricing"
-            }
-          ]
-        })}</script>
-      </Helmet>
-      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-2 focus:bg-background focus:text-foreground">Skip to content</a>
-      <AppHeader className="z-50 backdrop-blur-md" />
+    <AppShell breadcrumb="Pricing">
+      <Helmet><title>Pricing · MotionMax</title></Helmet>
 
-      {/* Main Content */}
-      <main id="main-content" className="mx-auto max-w-7xl px-4 sm:px-6 py-8 sm:py-12">
+      <div className="px-3 sm:px-4 md:px-6 lg:px-8 py-8 sm:py-12 max-w-[1100px] mx-auto">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
+          transition={{ duration: 0.35 }}
+          className="text-center"
         >
-          {/* Hero */}
-          <div className="text-center mb-8 sm:mb-12">
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-foreground">
-              Choose Your Plan
-            </h1>
-            <p className="mt-2 sm:mt-3 text-sm sm:text-base text-muted-foreground max-w-2xl mx-auto">
-              Start free and scale as you grow. All plans include core features with images and narration.
-            </p>
-
-            {/* Billing Toggle */}
-            <div className="flex justify-center mt-6">
-              <BillingToggle
-                value={billingInterval}
-                onChange={setBillingInterval}
-                discountPercent={yearlyDiscountPercent()}
-              />
-            </div>
-
-            {/* Money-Back Guarantee */}
-            <div className="flex items-center justify-center gap-2 mt-4">
-              <ShieldCheck className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
-              <span className="text-xs font-medium text-cyan-600 dark:text-cyan-400">
-                7-Day Money-Back Guarantee — No questions asked
-              </span>
-            </div>
-          </div>
-
-          {/* Pricing Cards */}
-          <PlanCardGrid
-            plans={PLANS}
-            currentPlan={currentPlan}
-            billingInterval={billingInterval}
-            loadingPlan={loadingPlan}
-            onSubscribe={handleSubscribe}
-            onDowngrade={() => setShowDowngradeDialog(true)}
-            onEnterprise={() => setShowEnterpriseModal(true)}
-          />
-
-          {/* Trust badges */}
-          <div className="flex flex-wrap items-center justify-center gap-6 mt-6 mb-2">
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <ShieldCheck className="h-4 w-4 text-cyan-500" />
-              7-Day Money-Back Guarantee
-            </span>
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Lock className="h-4 w-4 text-cyan-500" />
-              SSL / TLS encrypted
-            </span>
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <CreditCard className="h-4 w-4 text-cyan-500" />
-              Powered by Stripe
-            </span>
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <RefreshCcw className="h-4 w-4 text-cyan-500" />
-              Cancel anytime
-            </span>
-          </div>
-
-          {/* Credit Breakdown Table */}
-          <CreditBreakdownTable />
-
-          {/* ROI Calculator */}
-          <RoiCalculator />
-
-          {/* Credit Top-Up Packs */}
-          <CreditTopUp
-            packages={CREDIT_PACKAGES}
-            currentPlan={currentPlan}
-            loadingCredits={loadingCredits}
-            onBuyCredits={handleBuyCredits}
-          />
-
-          {/* FAQ Section */}
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
-            className="mt-16 sm:mt-20"
-          >
-            <h2 className="type-h2 text-center text-foreground mb-8">Frequently Asked Questions</h2>
-            <div className="max-w-2xl mx-auto divide-y divide-border/50">
-              {[
-                {
-                  q: "What are credits?",
-                  a: `Credits are the currency used to generate videos on MotionMax. Each video generation costs a set number of credits depending on the length and type — for example, a short explainer costs 150 credits and a short cinematic costs 750. New accounts receive 150 one-time credits to get started with no credit card required.`,
-                },
-                {
-                  q: "Can I cancel anytime?",
-                  a: "Yes — you can cancel your subscription at any time from the billing portal. You'll keep your plan benefits until the end of your current billing period. No cancellation fees.",
-                },
-                {
-                  q: "Do unused credits roll over?",
-                  a: "Monthly subscription credits reset each billing cycle and do not roll over. However, credits purchased as top-up packs never expire and remain in your account until used.",
-                },
-                {
-                  q: "Is there a free trial?",
-                  a: "Yes — every new account starts with 10 free credits, no credit card required. You can upgrade to a paid plan at any time to get more credits and unlock premium features.",
-                },
-                {
-                  q: "What happens if I run out of credits?",
-                  a: "Video generation will be paused until you purchase additional credits or your plan renews. You can top up anytime with credit packs from the Pricing page.",
-                },
-              ].map(({ q, a }) => (
-                <details key={q} className="group py-4">
-                  <summary className="flex cursor-pointer items-center justify-between gap-4 text-sm font-medium text-foreground list-none">
-                    {q}
-                    <span className="text-muted-foreground transition-transform group-open:rotate-180">▾</span>
-                  </summary>
-                  <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{a}</p>
-                </details>
-              ))}
-            </div>
-          </motion.section>
-
-          {/* Support Link */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.7 }}
-            className="text-center mt-10 sm:mt-14"
-          >
-            <p className="text-sm text-muted-foreground">
-              Have questions?{" "}
-              <a href="mailto:support@motionmax.io" className="text-primary hover:underline">
-                Contact support
-              </a>
-            </p>
-          </motion.div>
+          <h1 className="font-serif text-[32px] sm:text-[40px] font-medium tracking-tight text-[#ECEAE4] leading-[1.05]">
+            Simple, transparent pricing
+          </h1>
+          <p className="text-[14px] sm:text-[15px] text-[#8A9198] mt-3">
+            Start free. Upgrade when you're ready. No hidden fees.
+          </p>
         </motion.div>
-      </main>
 
-      {/* Downgrade Confirmation Dialog */}
-      <AlertDialog open={showDowngradeDialog} onOpenChange={setShowDowngradeDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Downgrade to Free Plan?</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2">
-              <p>
-                When you downgrade, you'll keep your remaining credits and access until your current billing period ends or credits run out, whichever comes first.
-              </p>
-              <p className="font-medium text-foreground">
-                No refunds will be provided for unused subscription time.
-              </p>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDowngrade}>
-              Proceed to Billing Portal
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 mt-10 sm:mt-12">
+          {PLANS.map((plan, i) => (
+            <PlanCard
+              key={plan.id}
+              plan={plan}
+              pending={pendingPlan === plan.id}
+              onCta={() => handleCta(plan)}
+              delay={i * 0.05}
+            />
+          ))}
+        </div>
 
-      {/* Enterprise Contact Modal */}
-      <EnterpriseContactModal
-        open={showEnterpriseModal}
-        onOpenChange={setShowEnterpriseModal}
-      />
-    </div>
+        <p className="text-center text-[12px] text-[#5A6268] mt-8">
+          All plans include a 7-day money-back guarantee. Annual billing saves 20%.
+        </p>
+      </div>
+    </AppShell>
+  );
+}
+
+function PlanCard({
+  plan, pending, onCta, delay,
+}: {
+  plan: Plan;
+  pending: boolean;
+  onCta: () => void;
+  delay: number;
+}) {
+  // Per-accent border + glow tokens. Teal = popular Creator card,
+  // gold = Studio, neutral = Free. Same hue family as the rest of
+  // the app so the page reads native to the editor chrome.
+  const accentBorder =
+    plan.accent === "teal"
+      ? "border-[#14C8CC]/40 shadow-[0_18px_50px_-22px_rgba(20,200,204,0.45)]"
+      : plan.accent === "gold"
+        ? "border-[#E4C875]/30"
+        : "border-white/8";
+
+  const ctaClass =
+    plan.accent === "teal"
+      ? "bg-gradient-to-r from-[#14C8CC] to-[#0FA6AE] text-[#0A0D0F] hover:brightness-110"
+      : plan.accent === "gold"
+        ? "bg-transparent border border-[#E4C875]/40 text-[#E4C875] hover:bg-[#E4C875]/10"
+        : "bg-transparent border border-white/15 text-[#ECEAE4] hover:bg-white/5";
+
+  const checkColor =
+    plan.accent === "gold" ? "text-[#E4C875]" : "text-[#14C8CC]";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay }}
+      className={cn(
+        "relative rounded-2xl bg-[#10151A] border p-6 sm:p-7 flex flex-col",
+        accentBorder,
+      )}
+    >
+      {plan.popular && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-[#14C8CC] text-[#0A0D0F] font-mono text-[10px] tracking-[0.12em] uppercase font-semibold">
+          Most popular
+        </div>
+      )}
+
+      <h3 className="font-serif text-[20px] font-medium text-[#ECEAE4]">{plan.name}</h3>
+
+      <div className="mt-2 flex items-baseline gap-1">
+        <span className="font-serif text-[36px] font-medium text-[#ECEAE4] leading-none">{plan.price}</span>
+        <span className="text-[13px] text-[#8A9198]">/month</span>
+      </div>
+
+      <p className="text-[13px] text-[#8A9198] mt-2.5">{plan.blurb}</p>
+
+      <ul className="mt-5 space-y-2 flex-1">
+        {plan.features.map((f, i) => (
+          <li key={i} className="flex items-start gap-2 text-[13px]">
+            {f.included ? (
+              <Check className={cn("w-4 h-4 shrink-0 mt-[1px]", checkColor)} />
+            ) : (
+              <X className="w-4 h-4 shrink-0 mt-[1px] text-[#5A6268]" />
+            )}
+            <span className={f.included ? "text-[#ECEAE4]" : "text-[#5A6268]"}>{f.text}</span>
+          </li>
+        ))}
+      </ul>
+
+      <Button
+        type="button"
+        onClick={onCta}
+        disabled={pending}
+        className={cn("w-full mt-6 h-10 rounded-full font-semibold text-[12.5px] disabled:opacity-50", ctaClass)}
+      >
+        {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : null}
+        {pending ? "Opening checkout…" : plan.cta}
+      </Button>
+    </motion.div>
   );
 }

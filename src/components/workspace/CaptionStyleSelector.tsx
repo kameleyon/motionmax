@@ -75,7 +75,7 @@ const captionStyles: { id: CaptionStyle; label: string }[] = [
 export const previewStyles: Record<CaptionStyle, string> = {
   none: "",
   // Pro styles
-  cleanPop: "[font-family:'Chango',cursive] font-normal font-black text-white uppercase tracking-wide [filter:drop-shadow(0px_2px_3px_rgba(0,0,0,0.6))]",
+  cleanPop: "[font-family:'Luckiest_Guy',cursive] font-normal text-white uppercase tracking-wide [filter:drop-shadow(0px_2px_3px_rgba(0,0,0,0.6))]",
   toxicBounce: "[font-family:'Bangers',cursive] text-[#39FF14] uppercase tracking-wider [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill] [filter:drop-shadow(0px_3px_0px_#000)]",
   proShortForm: "[font-family:'Oswald',sans-serif] font-bold text-white uppercase tracking-wider [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill] [filter:drop-shadow(0px_2px_2px_rgba(0,0,0,0.5))]",
   // Reference visuals
@@ -197,7 +197,15 @@ const CaptionPreviewRow = memo(function CaptionPreviewRow({ styleId }: { styleId
               animate="visible"
               exit="hidden"
               className={cn(
-                "inline-block text-[11px] leading-tight", styleId === "cleanPop" && word.length <= 4 ? "text-[16px] -mt-1" : "", styleId === "cleanPop" && word.length > 4 ? "text-[10px]" : "",
+                // Base preview size bumped from 11px → 15px so all
+                // caption styles read at a glance in the dropdown.
+                // Display fonts (Luckiest Guy / Bangers / Chango)
+                // get an extra bump because they're built to be
+                // chunky at large sizes — looks anemic small.
+                "inline-block leading-tight text-[15px]",
+                (styleId === "cleanPop" || styleId === "toxicBounce" || styleId === "comicBurst" || styleId === "thickStroke" || styleId === "heavyDropShadow")
+                  ? (word.length <= 4 ? "text-[22px]" : "text-[18px]")
+                  : "",
                 css,
                 !isSingle && !isAccum && i === idx ? "opacity-100" : "",
                 !isSingle && !isAccum && i < idx ? "opacity-60" : "",

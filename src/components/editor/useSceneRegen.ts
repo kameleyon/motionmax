@@ -340,38 +340,63 @@ export function useSceneRegen(state: EditorState | null) {
       if (projErr) throw new Error(projErr.message);
 
       if (regenAll) {
-        // Queue a regenerate_audio per scene. `newVoiceover` must be
-        // the scene's CURRENT narration text — worker throws without
-        // it. Scenes with empty voiceover are skipped (nothing to TTS).
-        const inserts = state.scenes
-          .map((s, i) => ({ scene: s, index: i }))
-          .filter(({ scene }) => (scene.voiceover ?? '').trim().length > 0)
-          .map(({ scene, index: i }) => ({
-            user_id: user.id,
-            project_id: state.project!.id,
-            task_type: 'regenerate_audio' as const,
-            payload: {
-              generationId: state.generation!.id,
-              projectId: state.project!.id,
-              sceneIndex: i,
-              newVoiceover: scene.voiceover ?? '',
-              language: state.project!.voice_inclination ?? 'en',
-              // Tag every insert so useActiveJobs.bulkOpActive flips
-              // on. Per-scene regens stay un-tagged so they don't lock
-              // the rest of the project.
-              _bulk: 'voice-apply-all',
-            } as unknown as never,
-            status: 'pending',
-          }));
-        if (inserts.length === 0) {
-          toast.info('No scenes with narration to re-render.');
-        } else {
+        // Cinematic + doc2video → ONE master_audio job (single Gemini
+        // TTS call, slice into N segments). Smartflow keeps the
+        // legacy per-scene fan-out for now since it doesn't have
+        // master-audio infrastructure yet.
+        const projectType = (state.project as { project_type?: string }).project_type;
+        const isMasterAudio = projectType === 'doc2video' || projectType === 'cinematic';
+
+        if (isMasterAudio) {
           const { error: jobErr } = await supabase
             .from('video_generation_jobs')
-            .insert(inserts);
+            .insert({
+              user_id: user.id,
+              project_id: state.project.id,
+              task_type: 'master_audio',
+              payload: {
+                phase: 'master_audio',
+                generationId: state.generation.id,
+                projectId: state.project.id,
+                language: state.project.voice_inclination ?? 'en',
+                // Tag so useActiveJobs.bulkOpActive flips on and
+                // BulkOpModal locks the editor while it runs.
+                _bulk: 'voice-apply-all',
+              } as unknown as never,
+              status: 'pending',
+            });
           if (jobErr) throw new Error(jobErr.message);
-          toast.success(`Voice switched to ${voice}. Re-rendering ${inserts.length} scenes…`);
-          scheduleRefresh(state.project!.id);
+          toast.success(`Voice switched to ${voice}. Re-rendering full audio track…`);
+          scheduleRefresh(state.project.id);
+        } else {
+          // Smartflow legacy path — per-scene regen fan-out.
+          const inserts = state.scenes
+            .map((s, i) => ({ scene: s, index: i }))
+            .filter(({ scene }) => (scene.voiceover ?? '').trim().length > 0)
+            .map(({ scene, index: i }) => ({
+              user_id: user.id,
+              project_id: state.project!.id,
+              task_type: 'regenerate_audio' as const,
+              payload: {
+                generationId: state.generation!.id,
+                projectId: state.project!.id,
+                sceneIndex: i,
+                newVoiceover: scene.voiceover ?? '',
+                language: state.project!.voice_inclination ?? 'en',
+                _bulk: 'voice-apply-all',
+              } as unknown as never,
+              status: 'pending',
+            }));
+          if (inserts.length === 0) {
+            toast.info('No scenes with narration to re-render.');
+          } else {
+            const { error: jobErr } = await supabase
+              .from('video_generation_jobs')
+              .insert(inserts);
+            if (jobErr) throw new Error(jobErr.message);
+            toast.success(`Voice switched to ${voice}. Re-rendering ${inserts.length} scenes…`);
+            scheduleRefresh(state.project!.id);
+          }
         }
       } else {
         toast.success(`Voice switched to ${voice}. New scenes will use it.`);

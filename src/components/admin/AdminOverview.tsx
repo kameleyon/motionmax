@@ -113,83 +113,89 @@ export function AdminOverview() {
 
   const statCards = [
     {
-      title: "Total Users",
+      title: "Total users",
       value: stats?.totalUsers || 0,
       description: "Registered accounts",
       icon: Users,
-      color: "text-primary",
-      bgColor: "bg-primary/10",
+      color: "text-[#14C8CC]",
+      bgColor: "bg-[#14C8CC]/10",
       trend: trends?.usersThisWeek,
       trendLabel: "this week",
     },
     {
-      title: "Active Subscribers",
+      title: "Active subscribers",
       value: stats?.subscriberCount || 0,
       description: "Paid subscriptions",
       icon: CreditCard,
-      color: "text-secondary",
-      bgColor: "bg-primary/10",
+      color: "text-[#14C8CC]",
+      bgColor: "bg-[#14C8CC]/10",
     },
     {
-      title: "Total Generations",
+      title: "Total generations",
       value: stats?.totalGenerations || 0,
       description: `${stats?.activeGenerations || 0} active`,
       icon: Activity,
-      color: "text-primary",
-      bgColor: "bg-primary/10",
+      color: "text-[#14C8CC]",
+      bgColor: "bg-[#14C8CC]/10",
       trend: trends?.generationsThisWeek,
       trendLabel: "this week",
     },
     {
-      title: "Active Flags",
+      title: "Active flags",
       value: stats?.activeFlags || 0,
       description: "Unresolved issues",
       icon: Flag,
-      color: stats?.activeFlags ? "text-warning" : "text-muted-foreground",
-      bgColor: stats?.activeFlags ? "bg-warning/10" : "bg-muted",
+      color: stats?.activeFlags ? "text-[#E4C875]" : "text-[#5A6268]",
+      bgColor: stats?.activeFlags ? "bg-[#E4C875]/10" : "bg-white/5",
     },
     {
-      title: "Credit Purchases",
+      title: "Credit purchases",
       value: stats?.creditPurchases || 0,
       description: "Total transactions",
       icon: Coins,
-      color: "text-[hsl(var(--gold))]",
-      bgColor: "bg-[hsl(var(--gold))]/10",
+      color: "text-[#E4C875]",
+      bgColor: "bg-[#E4C875]/10",
     },
     {
       title: "Archived",
       value: stats?.archivedGenerations || 0,
       description: "Deleted by users",
       icon: Archive,
-      color: "text-muted-foreground",
-      bgColor: "bg-muted",
+      color: "text-[#5A6268]",
+      bgColor: "bg-white/5",
     },
   ];
+
+  // Themed Card wrapper — keeps the Card primitive but flips the
+  // visual tokens to the dashboard palette so admin reads the same
+  // language as Editor / Projects / Voice Lab.
+  const cardClass = "shadow-none bg-[#10151A] border-white/8";
+  const labelClass = "font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium";
+  const valueClass = "font-serif text-[26px] font-medium text-[#ECEAE4] leading-none mt-2";
+  const descClass = "text-[12px] text-[#8A9198] mt-1.5";
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="type-h2 text-foreground">Dashboard Overview</h2>
-        <p className="text-sm text-muted-foreground">Real-time platform statistics</p>
+        <h2 className="font-serif text-[28px] sm:text-[32px] font-medium tracking-tight text-[#ECEAE4] leading-[1.05]">Dashboard overview</h2>
+        <p className="text-[13px] text-[#8A9198] mt-1.5">Real-time platform statistics.</p>
       </div>
 
-      {/* 2.3 — Consistent grid: sm:grid-cols-2 lg:grid-cols-3 */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {statCards.map((stat) => (
-          <Card key={stat.title} className="shadow-sm">
+          <Card key={stat.title} className={cardClass}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
+              <CardTitle className={labelClass}>{stat.title}</CardTitle>
               <div className={`p-2 rounded-lg ${stat.bgColor}`}>
                 <stat.icon className={`h-4 w-4 ${stat.color}`} />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-semibold">{stat.value.toLocaleString()}</div>
-              <div className="flex items-center justify-between mt-1">
-                <CardDescription>{stat.description}</CardDescription>
-                {/* 2.1 — Trend indicator */}
+              <div className={valueClass}>{stat.value.toLocaleString()}</div>
+              <div className="flex items-center justify-between">
+                <CardDescription className={descClass}>{stat.description}</CardDescription>
                 {stat.trend !== undefined && stat.trend > 0 && (
-                  <span className="flex items-center gap-0.5 text-xs text-primary">
+                  <span className="flex items-center gap-0.5 font-mono text-[10px] tracking-wider text-[#14C8CC] mt-1.5">
                     <ArrowUpRight className="h-3 w-3" />
                     +{stat.trend} {stat.trendLabel}
                   </span>
@@ -200,23 +206,22 @@ export function AdminOverview() {
         ))}
       </div>
 
-      {/* Financial Overview — 2.3 consistent grid */}
       <div>
-        <h3 className="type-h3 text-foreground mb-4">Financial Overview</h3>
+        <h3 className="font-serif text-[20px] sm:text-[22px] font-medium text-[#ECEAE4] mb-4">Financial overview</h3>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Card className="shadow-sm border-primary/20">
+          <Card className={cardClass}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-              <div className="p-2 rounded-lg bg-primary/10">
-                <TrendingUp className="h-4 w-4 text-primary" />
+              <CardTitle className={labelClass}>Total revenue</CardTitle>
+              <div className="p-2 rounded-lg bg-[#14C8CC]/10">
+                <TrendingUp className="h-4 w-4 text-[#14C8CC]" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-semibold text-primary">{formatCurrency(stats?.revenue?.total || 0)}</div>
-              <div className="flex items-center justify-between mt-1">
-                <CardDescription>All-time earnings</CardDescription>
+              <div className="font-serif text-[26px] font-medium text-[#14C8CC] leading-none mt-2">{formatCurrency(stats?.revenue?.total || 0)}</div>
+              <div className="flex items-center justify-between">
+                <CardDescription className={descClass}>All-time earnings</CardDescription>
                 {trends && trends.revenueThisWeek > 0 && (
-                  <span className="flex items-center gap-0.5 text-xs text-primary">
+                  <span className="flex items-center gap-0.5 font-mono text-[10px] tracking-wider text-[#14C8CC] mt-1.5">
                     <ArrowUpRight className="h-3 w-3" />
                     +${trends.revenueThisWeek.toFixed(0)} this week
                   </span>
@@ -225,91 +230,90 @@ export function AdminOverview() {
             </CardContent>
           </Card>
 
-          <Card className="shadow-sm border-destructive/20">
+          <Card className={cardClass}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Spent</CardTitle>
-              <div className="p-2 rounded-lg bg-destructive/10">
-                <TrendingDown className="h-4 w-4 text-destructive" />
+              <CardTitle className={labelClass}>Total spent</CardTitle>
+              <div className="p-2 rounded-lg bg-[#E4C875]/10">
+                <TrendingDown className="h-4 w-4 text-[#E4C875]" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-semibold text-destructive">{formatCurrency(stats?.costs?.total || 0)}</div>
-              <CardDescription>API costs</CardDescription>
+              <div className="font-serif text-[26px] font-medium text-[#E4C875] leading-none mt-2">{formatCurrency(stats?.costs?.total || 0)}</div>
+              <CardDescription className={descClass}>API costs</CardDescription>
             </CardContent>
           </Card>
 
-          <Card className="shadow-sm">
+          <Card className={cardClass}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Net Profit</CardTitle>
-              <div className={`p-2 rounded-lg ${profitMargin >= 0 ? "bg-primary/10" : "bg-destructive/10"}`}>
-                <DollarSign className={`h-4 w-4 ${profitColor}`} />
+              <CardTitle className={labelClass}>Net profit</CardTitle>
+              <div className={`p-2 rounded-lg ${profitMargin >= 0 ? "bg-[#14C8CC]/10" : "bg-[#E4C875]/10"}`}>
+                <DollarSign className={`h-4 w-4 ${profitMargin >= 0 ? "text-[#14C8CC]" : "text-[#E4C875]"}`} />
               </div>
             </CardHeader>
             <CardContent>
-              <div className={`text-2xl font-semibold ${profitColor}`}>
+              <div className={`font-serif text-[26px] font-medium leading-none mt-2 ${profitMargin >= 0 ? "text-[#14C8CC]" : "text-[#E4C875]"}`}>
                 {profitMargin >= 0 ? "+" : ""}{formatCurrency(profitMargin)}
               </div>
-              <CardDescription>Revenue - Costs</CardDescription>
+              <CardDescription className={descClass}>Revenue − Costs</CardDescription>
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {/* Revenue & Cost Breakdown */}
       <div className="grid gap-4 sm:grid-cols-2">
-        <Card>
+        <Card className={cardClass}>
           <CardHeader>
-            <CardTitle className="type-h4 flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-primary" />
-              Revenue Breakdown
+            <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4] flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-[#14C8CC]" />
+              Revenue breakdown
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Subscriptions</span>
-                <span className="text-sm font-medium text-primary">{formatCurrency(stats?.revenue?.subscriptions || 0)}</span>
+                <span className="text-[13px] text-[#8A9198]">Subscriptions</span>
+                <span className="text-[13px] font-medium text-[#14C8CC]">{formatCurrency(stats?.revenue?.subscriptions || 0)}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Credit Packs</span>
-                <span className="text-sm font-medium text-primary">{formatCurrency(stats?.revenue?.creditPacks || 0)}</span>
+                <span className="text-[13px] text-[#8A9198]">Credit packs</span>
+                <span className="text-[13px] font-medium text-[#14C8CC]">{formatCurrency(stats?.revenue?.creditPacks || 0)}</span>
               </div>
-              <div className="border-t pt-3 flex justify-between items-center">
-                <span className="text-sm font-medium">Total Revenue</span>
-                <span className="text-sm font-semibold text-primary">{formatCurrency(stats?.revenue?.total || 0)}</span>
+              <div className="border-t border-white/8 pt-3 flex justify-between items-center">
+                <span className="text-[13px] font-medium text-[#ECEAE4]">Total revenue</span>
+                <span className="text-[13px] font-semibold text-[#14C8CC]">{formatCurrency(stats?.revenue?.total || 0)}</span>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={cardClass}>
           <CardHeader>
-            <CardTitle className="type-h4 flex items-center gap-2">
-              <TrendingDown className="h-4 w-4 text-destructive" />
-              Cost Breakdown
+            <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4] flex items-center gap-2">
+              <TrendingDown className="h-4 w-4 text-[#E4C875]" />
+              Cost breakdown
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">OpenRouter (LLM)</span>
-                <span className="text-sm font-medium">{formatCurrency(stats?.costs?.openrouter || 0)}</span>
+                <span className="text-[13px] text-[#8A9198]">OpenRouter (LLM)</span>
+                <span className="text-[13px] font-medium text-[#ECEAE4]">{formatCurrency(stats?.costs?.openrouter || 0)}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Hypereal (Images/Video)</span>
-                <span className="text-sm font-medium">{formatCurrency(stats?.costs?.hypereal || 0)}</span>
+                <span className="text-[13px] text-[#8A9198]">Hypereal (images/video)</span>
+                <span className="text-[13px] font-medium text-[#ECEAE4]">{formatCurrency(stats?.costs?.hypereal || 0)}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Replicate (TTS)</span>
-                <span className="text-sm font-medium">{formatCurrency(stats?.costs?.replicate || 0)}</span>
+                <span className="text-[13px] text-[#8A9198]">Replicate (TTS)</span>
+                <span className="text-[13px] font-medium text-[#ECEAE4]">{formatCurrency(stats?.costs?.replicate || 0)}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Google TTS</span>
-                <span className="text-sm font-medium">{formatCurrency(stats?.costs?.googleTts || 0)}</span>
+                <span className="text-[13px] text-[#8A9198]">Google TTS</span>
+                <span className="text-[13px] font-medium text-[#ECEAE4]">{formatCurrency(stats?.costs?.googleTts || 0)}</span>
               </div>
-              <div className="border-t pt-3 flex justify-between items-center">
-                <span className="text-sm font-medium">Total Spent</span>
-                <span className="text-sm font-semibold text-destructive">{formatCurrency(stats?.costs?.total || 0)}</span>
+              <div className="border-t border-white/8 pt-3 flex justify-between items-center">
+                <span className="text-[13px] font-medium text-[#ECEAE4]">Total spent</span>
+                <span className="text-[13px] font-semibold text-[#E4C875]">{formatCurrency(stats?.costs?.total || 0)}</span>
               </div>
             </div>
           </CardContent>

@@ -99,15 +99,22 @@ export default function BulkOpModal({
   const { bulkOpActive, bulkOpKind, bulkOpProgress, bulkOpJobCount } =
     useActiveJobs(projectId ?? null);
 
-  // Track when the op started so we can show an elapsed counter. We
-  // reset it whenever the kind changes (different op started).
+  // Track when the op started so we can show an elapsed counter. Reset
+  // whenever the kind changes (different op started).
   const [startedAt, setStartedAt] = useState<number | null>(null);
-  // Tick every second so the elapsed time updates smoothly.
+  // Tick every second so the elapsed time updates.
   const [, tick] = useState(0);
+  // Sticky open + monotonic display progress. Reasons:
+  //   1. Hold the modal at "Done" for ~1.2s after the last job flips
+  //      so users see completion instead of an instant disappear.
+  //   2. Monotonic guard: bulkOpProgress can briefly drop when a new
+  //      job in the batch comes in at 0% and pulls the average down
+  //      — never let the displayed bar go backwards.
+  const [forceShow, setForceShow] = useState(false);
+  const [shownProgress, setShownProgress] = useState(0);
 
   useEffect(() => {
     if (bulkOpActive && !startedAt) setStartedAt(Date.now());
-    if (!bulkOpActive) setStartedAt(null);
   }, [bulkOpActive, startedAt]);
 
   useEffect(() => {
@@ -116,26 +123,65 @@ export default function BulkOpModal({
     return () => clearInterval(i);
   }, [bulkOpActive]);
 
-  if (!bulkOpActive || !bulkOpKind) return null;
+  // Monotonic progress
+  useEffect(() => {
+    if (!bulkOpActive) return;
+    setShownProgress((prev) => Math.max(prev, bulkOpProgress));
+  }, [bulkOpActive, bulkOpProgress]);
+
+  // Hold at 100% briefly after the bulk batch goes idle so the user
+  // sees completion instead of a sudden disappear.
+  useEffect(() => {
+    if (bulkOpActive) {
+      setForceShow(true);
+      return;
+    }
+    if (!forceShow) return;
+    setShownProgress(100);
+    const t = setTimeout(() => {
+      setForceShow(false);
+      setStartedAt(null);
+      setShownProgress(0);
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [bulkOpActive, forceShow]);
+
+  // Block Esc + body scroll while the modal is mounted. Backdrop has
+  // no onClick handler — clicks are absorbed but never close it.
+  useEffect(() => {
+    if (!forceShow) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') e.preventDefault(); };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener('keydown', onKey, true);
+    };
+  }, [forceShow]);
+
+  if (!forceShow || !bulkOpKind) return null;
 
   const title = TITLE_BY_KIND[bulkOpKind] ?? 'Project re-rendering';
-  // Display floor: the worker may not write progress at 0–5% range
-  // (especially for parallel batches that are still pending), so we
-  // show at least 2% so the bar isn't a stuck zero.
-  const displayProgress = Math.max(2, Math.min(99, bulkOpProgress));
+  // Voice/audio operations don't have meaningful per-scene progress
+  // (it's one Gemini call we can't peek into). Show the spinner +
+  // status copy without a % bar — eliminates the "stuck at 2%"
+  // confusion. Keep the bar for export + motion-apply-all where the
+  // worker writes real per-job progress we can average.
+  const showPercent = bulkOpKind === 'export' || bulkOpKind === 'motion-apply-all';
+  const displayProgress = Math.max(0, Math.min(100, shownProgress));
   const message = messageForProgress(bulkOpKind, displayProgress);
+  const isFinishing = !bulkOpActive;
 
   return (
     <div
-      className="fixed inset-0 z-[10000] grid place-items-center bg-black/80 backdrop-blur-md"
+      className="fixed inset-0 z-[10000] grid place-items-center bg-black/85 backdrop-blur-md"
       role="dialog"
+      aria-modal="true"
       aria-live="polite"
       aria-label={title}
     >
-      <div
-        className="relative w-[min(92vw,520px)] rounded-2xl border border-white/10 bg-gradient-to-b from-[#10151A] to-[#0A0D0F] p-7 sm:p-9 text-center shadow-[0_40px_120px_-30px_rgba(20,200,204,.45)]"
-      >
-        {/* Subtle grid texture so the modal feels like the editor */}
+      <div className="relative w-[min(92vw,520px)] rounded-2xl border border-white/10 bg-gradient-to-b from-[#10151A] to-[#0A0D0F] p-7 sm:p-9 text-center shadow-[0_40px_120px_-30px_rgba(20,200,204,.45)]">
         <div
           className="absolute inset-0 pointer-events-none rounded-2xl opacity-[0.05]"
           style={{
@@ -143,7 +189,6 @@ export default function BulkOpModal({
             backgroundSize: '22px 22px',
           }}
         />
-        {/* Aurora glow underlay */}
         <div
           className="absolute inset-0 pointer-events-none rounded-2xl"
           style={{
@@ -153,7 +198,6 @@ export default function BulkOpModal({
         />
 
         <div className="relative flex flex-col items-center gap-4">
-          {/* REC pill */}
           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#E4C875]/10 border border-[#E4C875]/30 font-mono text-[9px] tracking-[0.16em] uppercase text-[#E4C875]">
             <span className="w-1.5 h-1.5 rounded-full bg-[#E4C875] animate-pulse" />
             REC · {startedAt ? formatElapsed(startedAt) : '00:00'}
@@ -165,28 +209,27 @@ export default function BulkOpModal({
             {title}
           </div>
 
-          {/* Progress bar */}
-          <div className="w-full max-w-[420px] mt-1">
-            <div className="h-[3px] rounded-full bg-white/8 overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-[#14C8CC] to-[#0FA6AE] rounded-full transition-[width] duration-700"
-                style={{ width: `${displayProgress}%` }}
-              />
+          {showPercent && (
+            <div className="w-full max-w-[420px] mt-1">
+              <div className="h-[3px] rounded-full bg-white/[0.08] overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-[#14C8CC] to-[#0FA6AE] rounded-full transition-[width] duration-700"
+                  style={{ width: `${displayProgress}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between mt-2 font-mono text-[11px] tracking-[0.14em] uppercase">
+                <span className="text-[#14C8CC]">{displayProgress}%</span>
+                {bulkOpJobCount > 1 && (
+                  <span className="text-[#5A6268]">{bulkOpJobCount} parallel jobs</span>
+                )}
+              </div>
             </div>
-            <div className="flex items-center justify-between mt-2 font-mono text-[11px] tracking-[0.14em] uppercase">
-              <span className="text-[#14C8CC]">{displayProgress}%</span>
-              {bulkOpJobCount > 1 && (
-                <span className="text-[#5A6268]">{bulkOpJobCount} parallel jobs</span>
-              )}
-            </div>
-          </div>
+          )}
 
-          {/* Verbose status — rotates as progress climbs */}
           <div className="font-serif italic text-[13px] sm:text-[14px] text-[#8A9198] text-center max-w-[90%] min-h-[40px] leading-[1.55]">
-            {message}
+            {isFinishing ? 'Wrapping up — saving the new audio…' : message}
           </div>
 
-          {/* Footer note */}
           <div className="font-mono text-[9.5px] tracking-[0.14em] uppercase text-[#5A6268] mt-1">
             {bulkOpKind === 'export'
               ? 'Your file will download as soon as encoding finishes'

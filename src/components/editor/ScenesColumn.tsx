@@ -39,7 +39,12 @@ export default function ScenesColumn({
   selectedSceneIndex: number;
   onSelect: (index: number) => void;
 }) {
-  const { tasksForScene } = useActiveJobs(state.project?.id ?? null);
+  const { tasksForScene, bulkOpActive } = useActiveJobs(state.project?.id ?? null);
+  // Lock scene-card clicks while a project-wide op (export, voice
+  // apply-all, motion apply-all, master_audio regen) is in flight so
+  // users can't navigate around mid-operation. Per-scene loaders still
+  // animate; only the click is suppressed.
+  const projectLocked = bulkOpActive || state.phase !== 'ready';
 
   return (
     <div className="flex flex-col h-full">
@@ -77,12 +82,14 @@ export default function ScenesColumn({
               <button
                 key={i}
                 type="button"
-                onClick={() => onSelect(i)}
+                onClick={() => { if (!projectLocked) onSelect(i); }}
+                disabled={projectLocked && !isActive}
                 className={
                   'w-full grid grid-cols-[24px_44px_1fr] gap-2 items-center px-2.5 py-2 border-b border-white/5 text-left transition-colors relative ' +
                   (isActive
                     ? 'bg-[#151B20]'
-                    : 'hover:bg-[#151B20]/60')
+                    : 'hover:bg-[#151B20]/60') +
+                  (projectLocked && !isActive ? ' opacity-50 cursor-not-allowed' : '')
                 }
               >
                 {isActive && (

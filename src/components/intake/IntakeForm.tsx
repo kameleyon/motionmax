@@ -147,6 +147,11 @@ export default function IntakeForm({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [aspect, setAspect] = useState<IntakeAspect>(aspectFromFormat(initialFormat));
   const [duration, setDuration] = useState<IntakeDuration>('<3min');
+  // Cinematic mode caps at <3 min — kicking back to short whenever the
+  // user switches into cinematic with a stale long-form selection.
+  useEffect(() => {
+    if (mode === 'cinematic' && duration === '>3min') setDuration('<3min');
+  }, [mode, duration]);
   const [language, setLanguage] = useState(initialLanguage);
   const [voice, setVoice] = useState<SpeakerVoice>(
     (initialVoice as SpeakerVoice) || getDefaultSpeaker(initialLanguage),
@@ -834,21 +839,32 @@ export default function IntakeForm({
           <div>
             <IntakeLabel>Duration</IntakeLabel>
             <div className="inline-flex rounded-lg border border-white/5 bg-[#151B20] p-1 gap-1">
-              {([['<3min', '< 3 min'], ['>3min', '> 3 min']] as Array<[IntakeDuration, string]>).map(([v, t]) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setDuration(v)}
-                  className={cn(
-                    'px-3 py-1.5 rounded-md font-mono text-[11px] tracking-wider transition-colors',
-                    v === duration
-                      ? 'bg-[#14C8CC]/10 text-[#14C8CC]'
-                      : 'text-[#8A9198] hover:text-[#ECEAE4]',
-                  )}
-                >
-                  {t}
-                </button>
-              ))}
+              {([['<3min', '< 3 min'], ['>3min', '> 3 min']] as Array<[IntakeDuration, string]>).map(([v, t]) => {
+                // Cinematic per-scene Kling renders are expensive — a >3min
+                // run can mean 30+ video clips and tens of dollars. Disable
+                // the long option for cinematic and let users pick it for
+                // the cheaper doc2video / smartflow modes.
+                const isLongCinematic = mode === 'cinematic' && v === '>3min';
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => { if (!isLongCinematic) setDuration(v); }}
+                    disabled={isLongCinematic}
+                    title={isLongCinematic ? 'Long-form (>3 min) is not available for cinematic projects.' : undefined}
+                    className={cn(
+                      'px-3 py-1.5 rounded-md font-mono text-[11px] tracking-wider transition-colors',
+                      isLongCinematic
+                        ? 'text-[#5A6268] opacity-40 cursor-not-allowed'
+                        : v === duration
+                          ? 'bg-[#14C8CC]/10 text-[#14C8CC]'
+                          : 'text-[#8A9198] hover:text-[#ECEAE4]',
+                    )}
+                  >
+                    {t}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}

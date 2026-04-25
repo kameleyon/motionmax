@@ -228,30 +228,30 @@ export default function Settings() {
                 <p className="text-[13px] sm:text-[14px] text-[#8A9198] mt-1.5">Manage your account and preferences.</p>
 
                 <Tabs defaultValue="account" className="mt-6 sm:mt-8">
-                  <TabsList className="grid w-full grid-cols-3 rounded-xl bg-muted/50 p-1">
-                    <TabsTrigger value="account" className="gap-2 rounded-lg data-[state=active]:bg-background">
+                  <TabsList className="grid w-full grid-cols-3 rounded-xl bg-[#10151A] border border-white/8 p-1">
+                    <TabsTrigger value="account" className="gap-2 rounded-lg text-[#8A9198] data-[state=active]:bg-[#14C8CC]/10 data-[state=active]:text-[#14C8CC] data-[state=active]:shadow-none">
                       <User className="h-4 w-4" />
                       <span className="hidden sm:inline">Account</span>
                     </TabsTrigger>
-                    <TabsTrigger value="security" className="gap-2 rounded-lg data-[state=active]:bg-background">
+                    <TabsTrigger value="security" className="gap-2 rounded-lg text-[#8A9198] data-[state=active]:bg-[#14C8CC]/10 data-[state=active]:text-[#14C8CC] data-[state=active]:shadow-none">
                       <Shield className="h-4 w-4" />
                       <span className="hidden sm:inline">Security</span>
                     </TabsTrigger>
-                    <TabsTrigger value="activity" className="gap-2 rounded-lg data-[state=active]:bg-background" onClick={fetchActivityLogs}>
+                    <TabsTrigger value="activity" className="gap-2 rounded-lg text-[#8A9198] data-[state=active]:bg-[#14C8CC]/10 data-[state=active]:text-[#14C8CC] data-[state=active]:shadow-none" onClick={fetchActivityLogs}>
                       <Activity className="h-4 w-4" />
                       <span className="hidden sm:inline">Activity</span>
                     </TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="account" className="mt-6">
-                    <Card className="border-border/50 bg-card/50">
+                    <Card className="bg-[#10151A] border-white/8 shadow-none">
                       <CardHeader>
-                        <CardTitle>Account Information</CardTitle>
-                        <CardDescription>Update your account details</CardDescription>
+                        <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Account information</CardTitle>
+                        <CardDescription className="text-[#8A9198] text-[12.5px]">Update your account details.</CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-6">
                         <div className="space-y-2">
-                          <Label>Display Name</Label>
+                          <Label className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Display name</Label>
                           <Input
                             placeholder="Enter your display name"
                             value={displayName}
@@ -264,13 +264,13 @@ export default function Settings() {
                           Save Changes
                         </Button>
 
-                        <div className="border-t border-border/50 pt-6 mt-6">
-                          <Label>Current Email</Label>
-                          <Input value={user?.email || ""} disabled className="bg-muted/50 mt-2" />
-                          <p className="text-xs text-muted-foreground mt-1">To change your email, enter a new one below</p>
+                        <div className="border-t border-white/8 pt-6 mt-6">
+                          <Label className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Current email</Label>
+                          <Input value={user?.email || ""} disabled className="bg-[#0A0D0F] border border-white/8 text-[#ECEAE4] mt-2" />
+                          <p className="text-[11.5px] text-[#5A6268] mt-1.5">To change your email, enter a new one below.</p>
                         </div>
                         <div className="space-y-2">
-                          <Label>New Email Address</Label>
+                          <Label className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">New email address</Label>
                           <Input
                             type="email"
                             placeholder="Enter new email address"
@@ -292,14 +292,14 @@ export default function Settings() {
                     </Card>
 
                     {/* Danger Zone */}
-                    <Card className="mt-6 border-destructive/50 bg-destructive/5">
+                    <Card className="mt-6 bg-[#10151A] border-[#E4C875]/30 shadow-none">
                       <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-destructive">
+                        <CardTitle className="font-serif text-[18px] font-medium text-[#E4C875] flex items-center gap-2">
                           <AlertTriangle className="h-5 w-5" />
-                          Danger Zone
+                          Danger zone
                         </CardTitle>
-                        <CardDescription>
-                          Irreversible actions that permanently affect your account
+                        <CardDescription className="text-[#8A9198] text-[12.5px]">
+                          Irreversible actions that permanently affect your account.
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
@@ -348,13 +348,13 @@ export default function Settings() {
                   </TabsContent>
 
                   <TabsContent value="security" className="mt-6">
-                    <Card className="border-border/50 bg-card/50 mb-4">
+                    <Card className="bg-[#10151A] border-white/8 shadow-none mb-4">
                       <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                          <FileText className="h-5 w-5" />
-                          Policy Consent
+                        <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4] flex items-center gap-2">
+                          <FileText className="h-5 w-5 text-[#14C8CC]" />
+                          Policy consent
                         </CardTitle>
-                        <CardDescription>Privacy Policy and Terms of Service acceptance on record</CardDescription>
+                        <CardDescription className="text-[#8A9198] text-[12.5px]">Privacy Policy and Terms of Service acceptance on record.</CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-3 text-sm">
                         {acceptedPolicyVersion ? (
@@ -387,14 +387,14 @@ export default function Settings() {
                       </CardContent>
                     </Card>
 
-                    <Card className="border-border/50 bg-card/50">
+                    <Card className="bg-[#10151A] border-white/8 shadow-none">
                       <CardHeader>
-                        <CardTitle>Security Settings</CardTitle>
-                        <CardDescription>Manage your account security</CardDescription>
+                        <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Security settings</CardTitle>
+                        <CardDescription className="text-[#8A9198] text-[12.5px]">Manage your account security.</CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-6">
                         <div className="space-y-4">
-                          <Label>Change Password</Label>
+                          <Label className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Change password</Label>
                           <p className="text-sm text-muted-foreground">
                             Enter a new password to update your account security. Password must be at least 8 characters with a mix of character types.
                           </p>
@@ -411,13 +411,13 @@ export default function Settings() {
                   </TabsContent>
 
                   <TabsContent value="activity" className="mt-6">
-                    <Card className="border-border/50 bg-card/50">
+                    <Card className="bg-[#10151A] border-white/8 shadow-none">
                       <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                          <Activity className="h-5 w-5" />
-                          Account Activity
+                        <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4] flex items-center gap-2">
+                          <Activity className="h-5 w-5 text-[#14C8CC]" />
+                          Account activity
                         </CardTitle>
-                        <CardDescription>
+                        <CardDescription className="text-[#8A9198] text-[12.5px]">
                           Recent security events for your account. Logs are retained for 90 days.
                         </CardDescription>
                       </CardHeader>

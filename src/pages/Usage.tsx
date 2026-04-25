@@ -253,9 +253,6 @@ export default function Usage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
         >
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">Usage & Billing</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Monitor your usage and manage your subscription</p>
-
           {/* Post-payment success banner */}
           {showSuccessBanner && (
             <div className="mt-6 flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/10 px-4 py-4 shadow-sm">
@@ -283,23 +280,23 @@ export default function Usage() {
           )}
 
           {/* Current Plan */}
-          <Card className="mt-6 sm:mt-8 border-border/50 bg-gradient-to-br from-primary/10 to-transparent shadow-sm">
+          <Card className="mt-6 sm:mt-8 bg-[#10151A] border-white/8 shadow-none">
             <CardContent className="flex flex-col items-start justify-between gap-4 p-4 sm:p-6 sm:flex-row sm:items-center">
               <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/20">
-                  <PlanIcon className="h-6 w-6 text-primary" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#14C8CC]/10">
+                  <PlanIcon className="h-6 w-6 text-[#14C8CC]" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="text-xl sm:text-2xl font-bold text-foreground">
-                      {isLoadingSub ? <span className="inline-block h-4 w-16 rounded bg-muted animate-pulse" /> : planInfo.label}
+                    <p className="font-serif text-[20px] sm:text-[24px] font-medium text-[#ECEAE4] leading-none">
+                      {isLoadingSub ? <span className="inline-block h-4 w-16 rounded bg-white/10 animate-pulse" /> : planInfo.label}
                     </p>
-                    <Badge variant="secondary" className="text-xs">Current</Badge>
+                    <Badge className="text-[9.5px] tracking-[0.12em] uppercase font-mono bg-[#14C8CC]/10 text-[#14C8CC] border-[#14C8CC]/30">Current</Badge>
                     {cancelAtPeriodEnd && (
-                      <Badge className="text-xs bg-primary/20 text-primary">Cancels Soon</Badge>
+                      <Badge className="text-[9.5px] tracking-[0.12em] uppercase font-mono bg-[#E4C875]/10 text-[#E4C875] border-[#E4C875]/30">Cancels soon</Badge>
                     )}
                   </div>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-[12.5px] text-[#8A9198] mt-1">
                     {subscribed ? `Renews on ${renewalDate}` : `Resets on ${renewalDate}`}
                   </p>
                 </div>
@@ -334,69 +331,69 @@ export default function Usage() {
 
           {/* Usage Stats */}
           <div className="mt-4 sm:mt-6 grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2">
-            <Card className="border-border/50 bg-card/50 shadow-sm">
+            <Card className="bg-[#10151A] border-white/8 shadow-none">
               <CardHeader className="pb-2 px-4 sm:px-6 pt-4 sm:pt-6">
-                <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
-                  <Coins className="h-4 w-4 text-primary" />
-                  Credits Used This Cycle
+                <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium flex items-center gap-2">
+                  <Coins className="h-3.5 w-3.5 text-[#14C8CC]" />
+                  Credits used this cycle
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
                 <div className="flex items-end justify-between">
-                  <span className="text-2xl sm:text-3xl font-bold">
-                    {isLoadingCreditsUsed ? "..." : creditsUsedThisCycle}
+                  <span className="font-serif text-[28px] sm:text-[32px] font-medium text-[#ECEAE4] leading-none">
+                    {isLoadingCreditsUsed ? "…" : creditsUsedThisCycle}
                   </span>
-                  <span className="text-sm text-muted-foreground">
+                  <span className="text-[12px] text-[#8A9198]">
                     / {creditsLimit === Infinity ? "∞" : creditsLimit}
                   </span>
                 </div>
-                <Progress value={Math.min(creditsPercentage, 100)} className="mt-3 h-2" />
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {creditsLimit === Infinity 
-                    ? "Unlimited credits with your plan" 
+                <Progress value={Math.min(creditsPercentage, 100)} className="mt-3 h-1.5 [&>div]:bg-[#14C8CC]" />
+                <p className="mt-2.5 text-[11.5px] text-[#5A6268]">
+                  {creditsLimit === Infinity
+                    ? "Unlimited credits with your plan"
                     : `${Math.max(0, creditsLimit - creditsUsedThisCycle)} plan credits remaining this cycle`}
                 </p>
               </CardContent>
             </Card>
 
-            <Card className="border-border/50 bg-card/50 shadow-sm">
+            <Card className="bg-[#10151A] border-white/8 shadow-none">
               <CardHeader className="pb-2 px-4 sm:px-6 pt-4 sm:pt-6">
-                <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
-                  <Coins className="h-4 w-4 text-primary" />
-                  Credits Available
+                <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium flex items-center gap-2">
+                  <Coins className="h-3.5 w-3.5 text-[#14C8CC]" />
+                  Credits available
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
                 <div className="flex items-end justify-between">
-                  <span className="text-2xl sm:text-3xl font-bold">
-                    {isLoadingSub ? <span className="inline-block h-6 w-12 rounded bg-muted animate-pulse" /> : creditsBalance}
+                  <span className="font-serif text-[28px] sm:text-[32px] font-medium text-[#ECEAE4] leading-none">
+                    {isLoadingSub ? <span className="inline-block h-6 w-12 rounded bg-white/10 animate-pulse" /> : creditsBalance}
                   </span>
-                  <span className="text-sm text-muted-foreground">credits</span>
+                  <span className="text-[12px] text-[#8A9198]">credits</span>
                 </div>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="mt-3 w-full gap-2 text-xs"
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 w-full gap-2 text-[11.5px] bg-transparent border-white/10 text-[#ECEAE4] hover:bg-white/5 hover:text-[#ECEAE4] hover:border-white/20"
                   onClick={() => navigate("/pricing")}
                 >
                   <Plus className="h-3 w-3" />
-                  Buy Credits
+                  Buy credits
                 </Button>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Credits never expire and stack with your plan
+                <p className="mt-2.5 text-[11.5px] text-[#5A6268]">
+                  Credits never expire and stack with your plan.
                 </p>
               </CardContent>
             </Card>
           </div>
 
           {/* Billing Section */}
-          <Card className="mt-4 sm:mt-6 border-border/50 bg-card/50 shadow-sm">
+          <Card className="mt-4 sm:mt-6 bg-[#10151A] border-white/8 shadow-none">
             <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
-              <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-                <CreditCard className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-                Billing & Payment
+              <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4] flex items-center gap-2">
+                <CreditCard className="h-4 w-4 sm:h-5 sm:w-5 text-[#14C8CC]" />
+                Billing &amp; payment
               </CardTitle>
-              <CardDescription className="text-xs sm:text-sm">Manage your payment methods and billing</CardDescription>
+              <CardDescription className="text-[12.5px] text-[#8A9198]">Manage your payment methods and billing.</CardDescription>
             </CardHeader>
             <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
               {subscribed ? (

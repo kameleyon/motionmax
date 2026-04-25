@@ -16,6 +16,7 @@ import {
 import type { EditorState } from '@/hooks/useEditorState';
 import { useExport, PRESET_MAP, type ExportPreset } from './useExport';
 import ShareModal from './ShareModal';
+import { useActiveJobs } from './useActiveJobs';
 
 type SubView = 'edit' | 'script' | 'storyboard';
 
@@ -47,6 +48,11 @@ export default function EditorTopBar({
   const [shareOpen, setShareOpen] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const { exportState, startExport } = useExport(state);
+  // Project-wide lock: any bulk op in flight (export, voice apply-all,
+  // motion apply-all, master_audio regen) freezes the topbar actions
+  // so users can't kick another job while the current one is mid-air.
+  const { bulkOpActive } = useActiveJobs(state.project?.id ?? null);
+  const projectLocked = bulkOpActive || state.phase !== 'ready';
 
   /** Spawn a fresh project copying every intake field from the
    *  current one, then route into the new editor with autostart=1.
@@ -290,7 +296,7 @@ export default function EditorTopBar({
         title="Share"
         aria-label="Share"
         onClick={() => setShareOpen(true)}
-        disabled={state.phase !== 'ready' || !project}
+        disabled={projectLocked || !project}
         className="hidden md:inline-flex w-8 h-8 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       >
         <Share2 className="w-4 h-4" />
@@ -299,13 +305,14 @@ export default function EditorTopBar({
       {/* Regenerate — spawns a NEW project copying every intake
           field from the current one. Source project is left alone.
           Disabled while a regen is mid-flight to avoid double-clicks
-          spawning two clones. */}
+          spawning two clones, AND during a bulk op so users don't
+          spam clones while editing is locked. */}
       <button
         type="button"
         title="Regenerate as a new project"
         aria-label="Regenerate as a new project"
         onClick={handleRegenerate}
-        disabled={regenerating || !project}
+        disabled={regenerating || projectLocked || !project}
         className="hidden md:inline-flex w-8 h-8 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {regenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCw className="w-4 h-4" />}
@@ -316,7 +323,7 @@ export default function EditorTopBar({
         <button
           type="button"
           onClick={handleDefaultExport}
-          disabled={exporting || state.phase !== 'ready'}
+          disabled={exporting || projectLocked}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {exporting
@@ -332,7 +339,7 @@ export default function EditorTopBar({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              disabled={exporting || state.phase !== 'ready'}
+              disabled={exporting || projectLocked}
               className="px-1.5 border-l border-[#0A0D0F]/20 bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] text-[#0A0D0F] hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label="Export preset"
             >

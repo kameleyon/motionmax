@@ -181,6 +181,38 @@ export async function handleCinematicAudio(
   } else {
     const voiceName = generation.projects?.voice_name || "Nova";
 
+    // ── Cloned voice short-circuit ──────────────────────────────────
+    // If the project has a custom voice (Fish or ElevenLabs clone),
+    // route straight through the audio router — its CASE 0 branch
+    // handles Fish s2-pro reference_id rendering. Without this guard
+    // the rest of this function tries to match voice_name against the
+    // built-in roster (Adam/River/Pierre/etc) and rejects custom names
+    // like "DavidFrench" or "MyClonedVoice" with "voice not supported".
+    if (generation.projects?.voice_type === "custom" && generation.projects?.voice_id) {
+      const { resolveCustomVoiceProvider } = await import("../services/customVoiceProvider.js");
+      const customVoiceProvider = await resolveCustomVoiceProvider(generation.projects.voice_id);
+      const googleApiKeys = [
+        process.env.GOOGLE_TTS_API_KEY_3,
+        process.env.GOOGLE_TTS_API_KEY_2,
+        process.env.GOOGLE_TTS_API_KEY,
+      ].filter(Boolean) as string[];
+      const config: AudioConfig = {
+        projectId,
+        googleApiKeys,
+        elevenLabsApiKey: process.env.ELEVENLABS_API_KEY,
+        lemonfoxApiKey: process.env.LEMONFOX_API_KEY,
+        fishAudioApiKey: process.env.FISH_AUDIO_API_KEY,
+        replicateApiKey: process.env.REPLICATE_API_KEY || "",
+        customVoiceId: generation.projects.voice_id,
+        customVoiceProvider,
+        language: resolvedLanguage,
+      };
+      result = await generateSceneAudio(
+        { number: sceneIndex + 1, voiceover, duration: scene.duration || 10 },
+        config,
+      );
+    } else
+
     // ── Gemini 3.1 Flash TTS (gm:*) — French / Spanish / Italian / German / Dutch ──
     // Google's multilingual voices. NO cross-provider fallback — if the
     // call fails, the scene fails. Style directives are inferred from the

@@ -16,6 +16,7 @@ import type { EditorState } from '@/hooks/useEditorState';
 import { useSceneRegen } from './useSceneRegen';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useUserClones } from '@/hooks/useUserClones';
 
 type InspectorTab = 'scene' | 'voice' | 'captions' | 'motion';
 

@@ -137,7 +137,7 @@ export function ProjectsGridView({
                         >
                           {regeneratingProjectId === project.id
                             ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Starting…</>
-                            : <><RotateCw className="mr-2 h-4 w-4" />Regenerate as new</>
+                            : <><RotateCw className="mr-2 h-4 w-4" />Regenerate</>
                           }
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => onDownload(project)} disabled={downloadingProjectId === project.id}>

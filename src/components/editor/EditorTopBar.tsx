@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Share2, Loader2, Menu, ChevronDown, SlidersHorizontal } from 'lucide-react';
+import { ArrowLeft, Download, Share2, Loader2, Menu, ChevronDown, SlidersHorizontal, RotateCw } from 'lucide-react';
 import NotificationsPopover from '@/components/dashboard/NotificationsPopover';
 import HelpPopover from '@/components/dashboard/HelpPopover';
+import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { isFlagOn } from '@/lib/featureFlags';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,8 +43,55 @@ export default function EditorTopBar({
   onOpenInspectorDrawer?: () => void;
 }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [shareOpen, setShareOpen] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const { exportState, startExport } = useExport(state);
+
+  /** Spawn a fresh project copying every intake field from the
+   *  current one, then route into the new editor with autostart=1.
+   *  Source project is untouched. Same flow as the All Projects
+   *  card menu's "Regenerate" — extracted here so users editing a
+   *  project can trigger it without leaving for the projects page. */
+  const handleRegenerate = async () => {
+    if (!user?.id || !state.project?.id) return;
+    setRegenerating(true);
+    try {
+      const { data: src, error: srcErr } = await supabase
+        .from('projects').select('*').eq('id', state.project.id).single();
+      if (srcErr || !src) throw new Error(srcErr?.message ?? 'Source project not found');
+
+      const cloneInsert = {
+        user_id: user.id,
+        title: `${src.title} (regenerated)`,
+        content: src.content,
+        project_type: src.project_type,
+        format: src.format,
+        length: src.length,
+        voice_name: src.voice_name,
+        voice_inclination: src.voice_inclination,
+        style: src.style,
+        character_description: src.character_description,
+        character_consistency_enabled: src.character_consistency_enabled,
+        character_images: src.character_images,
+        intake_settings: src.intake_settings,
+      };
+      const { data, error } = await supabase
+        .from('projects').insert(cloneInsert as never).select('id').single();
+      if (error || !data) throw new Error(error?.message ?? 'Insert returned no row');
+
+      toast.success('New project created — kicking off generation…');
+      const editorRoute = isFlagOn('UNIFIED_EDITOR')
+        ? `/app/editor/${data.id}?autostart=1`
+        : `/app/create?project=${data.id}&autostart=1`;
+      navigate(editorRoute);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error("Couldn't start regeneration", { description: msg });
+    } finally {
+      setRegenerating(false);
+    }
+  };
 
   const project = state.project;
   const sceneCount = state.scenes.length;
@@ -243,6 +294,21 @@ export default function EditorTopBar({
         className="hidden md:inline-flex w-8 h-8 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       >
         <Share2 className="w-4 h-4" />
+      </button>
+
+      {/* Regenerate — spawns a NEW project copying every intake
+          field from the current one. Source project is left alone.
+          Disabled while a regen is mid-flight to avoid double-clicks
+          spawning two clones. */}
+      <button
+        type="button"
+        title="Regenerate as a new project"
+        aria-label="Regenerate as a new project"
+        onClick={handleRegenerate}
+        disabled={regenerating || !project}
+        className="hidden md:inline-flex w-8 h-8 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {regenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCw className="w-4 h-4" />}
       </button>
 
       {/* Export primary + preset dropdown */}

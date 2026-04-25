@@ -179,7 +179,7 @@ export function AdminGenerations() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
         <div>
-          <h2 className="text-2xl font-bold">Generation Analytics</h2>
+          <h2 className="font-serif text-[26px] font-medium">Generation Analytics</h2>
           <p className="text-muted-foreground">Monitor video generation activity and performance</p>
         </div>
 
@@ -203,37 +203,37 @@ export function AdminGenerations() {
       <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total</CardTitle>
+            <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Total</CardTitle>
             <div className="p-2 rounded-lg bg-primary/10 shadow-sm">
               <Activity className="h-4 w-4 text-primary" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data?.total || 0}</div>
+            <div className="font-serif text-[26px] font-medium">{data?.total || 0}</div>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Completed</CardTitle>
+            <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Completed</CardTitle>
             <div className="p-2 rounded-lg bg-primary/10 shadow-sm">
               <CheckCircle className="h-4 w-4 text-primary" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-primary">{data?.byStatus?.complete || 0}</div>
+            <div className="font-serif text-[26px] font-medium text-primary">{data?.byStatus?.complete || 0}</div>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Processing</CardTitle>
+            <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Processing</CardTitle>
             <div className="p-2 rounded-lg bg-primary/10 shadow-sm">
               <Clock className="h-4 w-4 text-secondary" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-secondary">
+            <div className="font-serif text-[26px] font-medium text-secondary">
               {(data?.byStatus?.processing || 0) + (data?.byStatus?.pending || 0)}
             </div>
           </CardContent>
@@ -241,25 +241,25 @@ export function AdminGenerations() {
 
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Failed</CardTitle>
+            <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Failed</CardTitle>
             <div className="p-2 rounded-lg bg-muted shadow-sm">
               <XCircle className="h-4 w-4 text-muted-foreground" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-muted-foreground">{data?.byStatus?.error || 0}</div>
+            <div className="font-serif text-[26px] font-medium text-muted-foreground">{data?.byStatus?.error || 0}</div>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm col-span-2 sm:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Deleted</CardTitle>
+            <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Deleted</CardTitle>
             <div className="p-2 rounded-lg bg-muted shadow-sm">
               <Trash2 className="h-4 w-4 text-muted-foreground" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-muted-foreground">{data?.byStatus?.deleted || 0}</div>
+            <div className="font-serif text-[26px] font-medium text-muted-foreground">{data?.byStatus?.deleted || 0}</div>
           </CardContent>
         </Card>
       </div>
@@ -268,7 +268,7 @@ export function AdminGenerations() {
         {/* Daily Chart - Elegant thin bars with rounded corners */}
         <Card className="lg:col-span-2 shadow-sm">
           <CardHeader>
-            <CardTitle>Generations Over Time</CardTitle>
+            <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Generations Over Time</CardTitle>
           </CardHeader>
           <CardContent>
             {data?.byDay && data.byDay.length > 0 ? (
@@ -335,7 +335,7 @@ export function AdminGenerations() {
         {/* Status Distribution */}
         <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle>Status Distribution</CardTitle>
+            <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Status Distribution</CardTitle>
           </CardHeader>
           <CardContent>
             {pieData.length > 0 ? (
@@ -380,12 +380,12 @@ export function AdminGenerations() {
       {/* Success Rate - Teal themed */}
       <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle>Performance Metrics</CardTitle>
+          <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Performance Metrics</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 grid-cols-3">
             <div className="text-center p-4 rounded-lg bg-card border border-primary/20 shadow-sm">
-              <div className="text-2xl sm:text-3xl font-bold text-primary">
+              <div className="text-2xl sm:font-serif text-[28px] font-medium text-primary">
                 {data?.total
                   ? (((data.byStatus?.complete || 0) / (data.total - (data.byStatus?.deleted || 0))) * 100).toFixed(1)
                   : 0
@@ -394,7 +394,7 @@ export function AdminGenerations() {
               <p className="text-xs sm:text-sm text-muted-foreground mt-1">Success Rate</p>
             </div>
             <div className="text-center p-4 rounded-lg bg-card border shadow-sm">
-              <div className="text-2xl sm:text-3xl font-bold text-muted-foreground">
+              <div className="text-2xl sm:font-serif text-[28px] font-medium text-muted-foreground">
                 {data?.total
                   ? (((data.byStatus?.error || 0) / (data.total - (data.byStatus?.deleted || 0))) * 100).toFixed(1)
                   : 0
@@ -403,7 +403,7 @@ export function AdminGenerations() {
               <p className="text-xs sm:text-sm text-muted-foreground mt-1">Failure Rate</p>
             </div>
             <div className="text-center p-4 rounded-lg bg-card border border-border shadow-sm">
-              <div className="text-2xl sm:text-3xl font-bold text-muted-foreground">
+              <div className="text-2xl sm:font-serif text-[28px] font-medium text-muted-foreground">
                 {data?.total
                   ? (((data.byStatus?.deleted || 0) / data.total) * 100).toFixed(1)
                   : 0
@@ -419,7 +419,7 @@ export function AdminGenerations() {
       <Card className="shadow-sm">
         <CardHeader>
           <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
-            <CardTitle>Individual Jobs</CardTitle>
+            <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Individual Jobs</CardTitle>
             <div className="flex gap-2 flex-wrap">
               {["all", "complete", "processing", "pending", "error"].map(s => (
                 <button

@@ -7,6 +7,7 @@ import {
   CaptionStyleSelector,
   type CaptionStyle,
   previewStyles,
+  PREVIEW_FONT_FAMILY,
 } from '@/components/workspace/CaptionStyleSelector';
 import { IntakeField, IntakeLabel } from './primitives';
 import type { IntakeAspect, ProjectMode } from './types';
@@ -371,7 +372,10 @@ export default function IntakeRail({
             {captionStyle === 'none' ? (
               <span className="text-[11.5px] text-[#5A6268] italic">No captions</span>
             ) : (
-              <span className={captionCss + ' text-[14px]'}>Your idea in motion</span>
+              <span
+                className={captionCss + ' text-[14px]'}
+                style={{ fontFamily: PREVIEW_FONT_FAMILY[captionStyle] || undefined }}
+              >Your idea in motion</span>
             )}
           </div>
           <div className="mt-1.5">

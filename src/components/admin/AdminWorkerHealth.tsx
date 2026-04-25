@@ -254,7 +254,7 @@ export function AdminWorkerHealth() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold">Worker Health</h2>
+        <h2 className="font-serif text-[26px] font-medium">Worker Health</h2>
         <p className="text-muted-foreground">Monitor worker status and performance</p>
       </div>
 
@@ -265,7 +265,7 @@ export function AdminWorkerHealth() {
             <div className="flex items-center gap-3">
               {getHealthIcon(health.status)}
               <div>
-                <CardTitle>Worker Status</CardTitle>
+                <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Worker Status</CardTitle>
                 <CardDescription>
                   Last heartbeat: {formatDistanceToNow(new Date(health.lastHeartbeat), { addSuffix: true })}
                 </CardDescription>
@@ -280,21 +280,21 @@ export function AdminWorkerHealth() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <div className="text-sm text-muted-foreground mb-1">Uptime</div>
-              <div className="text-2xl font-bold">{formatDuration(health.uptime)}</div>
+              <div className="font-serif text-[26px] font-medium">{formatDuration(health.uptime)}</div>
             </div>
             <div>
               <div className="text-sm text-muted-foreground mb-1">Active Jobs</div>
-              <div className="text-2xl font-bold text-primary">
+              <div className="font-serif text-[26px] font-medium text-primary">
                 {health.activeJobs} / {health.maxConcurrency}
               </div>
             </div>
             <div>
               <div className="text-sm text-muted-foreground mb-1">Jobs Processed (24h)</div>
-              <div className="text-2xl font-bold">{health.jobsProcessed24h}</div>
+              <div className="font-serif text-[26px] font-medium">{health.jobsProcessed24h}</div>
             </div>
             <div>
               <div className="text-sm text-muted-foreground mb-1">Avg Job Duration</div>
-              <div className="text-2xl font-bold">{formatDuration(health.avgJobDuration)}</div>
+              <div className="font-serif text-[26px] font-medium">{formatDuration(health.avgJobDuration)}</div>
             </div>
           </div>
         </CardContent>
@@ -308,7 +308,7 @@ export function AdminWorkerHealth() {
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <HardDrive className="h-5 w-5 text-primary" />
-                  <CardTitle>Memory Usage</CardTitle>
+                  <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Memory Usage</CardTitle>
                 </div>
               </CardHeader>
               <CardContent>
@@ -331,7 +331,7 @@ export function AdminWorkerHealth() {
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <Cpu className="h-5 w-5 text-primary" />
-                  <CardTitle>CPU Usage</CardTitle>
+                  <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">CPU Usage</CardTitle>
                 </div>
               </CardHeader>
               <CardContent>
@@ -356,7 +356,7 @@ export function AdminWorkerHealth() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <Server className="h-5 w-5 text-primary" />
-            <CardTitle>Job Concurrency</CardTitle>
+            <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Job Concurrency</CardTitle>
           </div>
           <CardDescription>
             Active job slots vs maximum capacity
@@ -387,7 +387,7 @@ export function AdminWorkerHealth() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <Clock className="h-5 w-5 text-primary" />
-            <CardTitle>Error Rate (24h)</CardTitle>
+            <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Error Rate (24h)</CardTitle>
           </div>
         </CardHeader>
         <CardContent>
@@ -454,7 +454,7 @@ function ThroughputChart() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="type-h4">Job Throughput (24h)</CardTitle>
+        <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Job Throughput (24h)</CardTitle>
         <CardDescription>Completed vs failed jobs by hour</CardDescription>
       </CardHeader>
       <CardContent>

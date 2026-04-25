@@ -26,7 +26,7 @@ import type { SourceAttachment } from '@/components/workspace/SourceInput';
 import {
   FEATURES, MODE_LABEL, BASE_COST, ADDON_COST,
   type ProjectMode, type IntakeAspect, type IntakeDuration,
-  type MusicGenre, type CameraMotion, type ColorGrade,
+  type MusicGenre, type CameraMotion, type ColorGrade, type SceneTransition,
   type IntakeSettings,
 } from './types';
 import { IntakeField, IntakeLabel, IntakeSlider, Pill } from './primitives';
@@ -91,6 +91,7 @@ const LANGUAGES: Array<{ code: string; label: string; flag: string }> = [
 
 const MUSIC_GENRES: MusicGenre[] = ['Cinematic', 'Electronic', 'Acoustic', 'Ambient', 'Hip-hop', 'Jazz', 'Orchestral'];
 const CAMERA_MOTIONS: CameraMotion[] = ['Default', 'Static', 'Dolly', 'Handheld', 'Drone', 'Crane', 'Whip Pan'];
+const SCENE_TRANSITIONS: SceneTransition[] = ['Default', 'Cut', 'Dissolve', 'Whip', 'Black'];
 const COLOR_GRADES: ColorGrade[] = ['Kodak 250D', 'Bleach Bypass', 'Teal & Orange', 'Warm Film', 'Cool Noir', 'Desaturated'];
 
 // Default format = portrait (9:16) per product call.
@@ -166,6 +167,7 @@ export default function IntakeForm({
 
   const [tone, setTone] = useState(45);
   const [camera, setCamera] = useState<CameraMotion>('Default');
+  const [transition, setTransition] = useState<SceneTransition>('Default');
   const [grade, setGrade] = useState<ColorGrade>('Kodak 250D');
 
   const [lipSync, setLipSync] = useState(false);
@@ -482,6 +484,7 @@ export default function IntakeForm({
         visualStyle: styleId,
         tone,
         ...(features.camera ? { camera } : {}),
+        ...(features.transition ? { transition } : {}),
         ...(features.colorGrade ? { grade } : {}),
         ...(features.lipSync && lipSync ? { lipSync: { on: true, strength: lipStrength } } : {}),
         // ── MUSIC + SFX TEMPORARILY DISABLED ──
@@ -1301,6 +1304,22 @@ export default function IntakeForm({
                   <Pill key={c} on={c === camera} onClick={() => setCamera(c)}>{c}</Pill>
                 ))}
               </div>
+            </IntakeField>
+          )}
+
+          {features.transition && (
+            <IntakeField>
+              <div className="text-[12.5px] font-medium text-[#ECEAE4] mb-2.5 flex items-center gap-1.5">
+                <Camera className="w-3.5 h-3.5" /> Transition
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {SCENE_TRANSITIONS.map((t) => (
+                  <Pill key={t} on={t === transition} onClick={() => setTransition(t)}>{t}</Pill>
+                ))}
+              </div>
+              <p className="text-[11px] text-[#5A6268] mt-2 leading-[1.45]">
+                Applied to every scene boundary. "Default" uses the current fade-in/out behaviour.
+              </p>
             </IntakeField>
           )}
 

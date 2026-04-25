@@ -96,7 +96,7 @@ export function AdminRevenue() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
         <div>
-          <h2 className="text-2xl font-bold">Revenue Analytics</h2>
+          <h2 className="font-serif text-[26px] font-medium">Revenue Analytics</h2>
           <p className="text-muted-foreground">Track earnings and subscription performance</p>
         </div>
 
@@ -120,13 +120,13 @@ export function AdminRevenue() {
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+            <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Total Revenue</CardTitle>
             <div className="p-2 rounded-lg bg-primary/10 shadow-sm">
               <DollarSign className="h-4 w-4 text-primary" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${data?.totalRevenue?.toFixed(2) || "0.00"}</div>
+            <div className="font-serif text-[26px] font-medium">${data?.totalRevenue?.toFixed(2) || "0.00"}</div>
             <p className="text-xs text-muted-foreground">
               {data?.chargeCount || 0} charges
             </p>
@@ -135,7 +135,7 @@ export function AdminRevenue() {
 
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Monthly Recurring</CardTitle>
+            <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Monthly Recurring</CardTitle>
             <div className="p-2 rounded-lg bg-primary/10 shadow-sm">
               <TrendingUp className="h-4 w-4 text-primary" />
             </div>
@@ -148,26 +148,26 @@ export function AdminRevenue() {
 
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Subs</CardTitle>
+            <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Active Subs</CardTitle>
             <div className="p-2 rounded-lg bg-primary/10 shadow-sm">
               <CreditCard className="h-4 w-4 text-secondary" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data?.activeSubscriptions || 0}</div>
+            <div className="font-serif text-[26px] font-medium">{data?.activeSubscriptions || 0}</div>
             <p className="text-xs text-muted-foreground">Currently active</p>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg Per Charge</CardTitle>
+            <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Avg Per Charge</CardTitle>
             <div className="p-2 rounded-lg bg-[hsl(var(--gold))]/10 shadow-sm">
               <DollarSign className="h-4 w-4 text-[hsl(var(--gold))]" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="font-serif text-[26px] font-medium">
               ${data?.chargeCount
                 ? (data.totalRevenue / data.chargeCount).toFixed(2)
                 : "0.00"
@@ -181,7 +181,7 @@ export function AdminRevenue() {
       {/* Revenue Chart */}
       <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle>Revenue Over Time</CardTitle>
+          <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Revenue Over Time</CardTitle>
         </CardHeader>
         <CardContent>
           {data?.revenueByDay && data.revenueByDay.length > 0 ? (
@@ -272,7 +272,7 @@ function PlanBreakdown() {
   if (isError) {
     return (
       <Card className="shadow-sm">
-        <CardHeader><CardTitle className="type-h4">Active Subscriptions by Plan</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Active Subscriptions by Plan</CardTitle></CardHeader>
         <CardContent><p className="text-sm text-muted-foreground">Failed to load plan breakdown.</p></CardContent>
       </Card>
     );
@@ -283,7 +283,7 @@ function PlanBreakdown() {
   return (
     <Card className="shadow-sm">
       <CardHeader>
-        <CardTitle className="type-h4">Active Subscriptions by Plan</CardTitle>
+        <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Active Subscriptions by Plan</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="h-[200px]">

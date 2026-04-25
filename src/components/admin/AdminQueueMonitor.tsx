@@ -220,7 +220,7 @@ export function AdminQueueMonitor() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold">Queue Monitor</h2>
+        <h2 className="font-serif text-[26px] font-medium">Queue Monitor</h2>
         <p className="text-muted-foreground">Real-time job queue and processing status</p>
       </div>
 
@@ -228,72 +228,72 @@ export function AdminQueueMonitor() {
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-6">
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending</CardTitle>
+            <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Pending</CardTitle>
             <div className="p-2 rounded-lg bg-muted shadow-sm">
               <Clock className="h-4 w-4 text-muted-foreground" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.pending}</div>
+            <div className="font-serif text-[26px] font-medium">{stats.pending}</div>
             <CardDescription className="text-xs">In queue</CardDescription>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Processing</CardTitle>
+            <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Processing</CardTitle>
             <div className="p-2 rounded-lg bg-primary/10 shadow-sm">
               <Play className="h-4 w-4 text-primary" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-primary">{stats.processing}</div>
+            <div className="font-serif text-[26px] font-medium text-primary">{stats.processing}</div>
             <CardDescription className="text-xs">Active now</CardDescription>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Completed</CardTitle>
+            <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Completed</CardTitle>
             <div className="p-2 rounded-lg bg-primary/10 shadow-sm">
               <CheckCircle className="h-4 w-4 text-primary" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-primary">{stats.completed_24h}</div>
+            <div className="font-serif text-[26px] font-medium text-primary">{stats.completed_24h}</div>
             <CardDescription className="text-xs">Last 24h</CardDescription>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Failed</CardTitle>
+            <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Failed</CardTitle>
             <div className="p-2 rounded-lg bg-muted shadow-sm">
               <XCircle className="h-4 w-4 text-muted-foreground" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-muted-foreground">{stats.failed_24h}</div>
+            <div className="font-serif text-[26px] font-medium text-muted-foreground">{stats.failed_24h}</div>
             <CardDescription className="text-xs">Last 24h</CardDescription>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg Time</CardTitle>
+            <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Avg Time</CardTitle>
             <div className="p-2 rounded-lg bg-primary/10 shadow-sm">
               <Activity className="h-4 w-4 text-primary" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatDuration(stats.avgProcessingTime)}</div>
+            <div className="font-serif text-[26px] font-medium">{formatDuration(stats.avgProcessingTime)}</div>
             <CardDescription className="text-xs">Per job</CardDescription>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Est. Wait</CardTitle>
+            <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Est. Wait</CardTitle>
             <div className={`p-2 rounded-lg shadow-sm ${hasHighLoad ? "bg-destructive/10" : "bg-muted"}`}>
               {hasHighLoad ? (
                 <AlertTriangle className="h-4 w-4 text-destructive" />
@@ -303,7 +303,7 @@ export function AdminQueueMonitor() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${hasHighLoad ? "text-destructive" : ""}`}>
+            <div className={`font-serif text-[26px] font-medium ${hasHighLoad ? "text-destructive" : ""}`}>
               {formatDuration(stats.estimatedWaitTime)}
             </div>
             <CardDescription className="text-xs">For new jobs</CardDescription>
@@ -314,7 +314,7 @@ export function AdminQueueMonitor() {
       {/* Active Jobs List */}
       <Card>
         <CardHeader>
-          <CardTitle>Active Jobs</CardTitle>
+          <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Active Jobs</CardTitle>
           <CardDescription>
             Currently processing and queued jobs ({jobs.length} total)
           </CardDescription>
@@ -419,7 +419,7 @@ export function AdminQueueMonitor() {
       {/* Success Rate Card */}
       <Card>
         <CardHeader>
-          <CardTitle>Success Rate (24h)</CardTitle>
+          <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Success Rate (24h)</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-4">
@@ -446,11 +446,11 @@ export function AdminQueueMonitor() {
               </div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-primary">{stats.completed_24h}</div>
+              <div className="font-serif text-[26px] font-medium text-primary">{stats.completed_24h}</div>
               <div className="text-xs text-muted-foreground">Completed</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-muted-foreground">{stats.failed_24h}</div>
+              <div className="font-serif text-[26px] font-medium text-muted-foreground">{stats.failed_24h}</div>
               <div className="text-xs text-muted-foreground">Failed</div>
             </div>
           </div>

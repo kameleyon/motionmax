@@ -107,20 +107,28 @@ export interface StyleDirectives {
   raw?: string;
 }
 
-function buildDirectivePrompt(text: string, directives?: StyleDirectives): string {
-  if (!directives) return text;
+// Hard delivery guardrails prepended to every Gemini TTS request.
+// The model sometimes drifts toward intimate/whisper/dramatic delivery
+// even when the script is plain — pinning these guardrails to the
+// system prompt slot keeps it on-brand: confident host, not theatre.
+// Applied to both initial generation and per-scene regeneration.
+const NEGATIVE_DELIVERY = "Delivery rules: no whisper, no ASMR, no dramatic theatrical delivery, no breathy intimate tone, no emphatic shouting. Read it like a confident host having a real conversation.";
 
-  if (directives.raw && directives.raw.trim()) {
-    return `[${directives.raw.trim()}]\n${text}`;
+function buildDirectivePrompt(text: string, directives?: StyleDirectives): string {
+  if (!directives) {
+    return `[${NEGATIVE_DELIVERY}]\n${text}`;
   }
 
-  const parts: string[] = [];
+  if (directives.raw && directives.raw.trim()) {
+    return `[${NEGATIVE_DELIVERY} ${directives.raw.trim()}]\n${text}`;
+  }
+
+  const parts: string[] = [NEGATIVE_DELIVERY];
   if (directives.style?.trim())  parts.push(`Style: ${directives.style.trim()}`);
   if (directives.pacing?.trim()) parts.push(`Pacing: ${directives.pacing.trim()}`);
   if (directives.accent?.trim()) parts.push(`Accent: ${directives.accent.trim()}`);
 
-  if (parts.length === 0) return text;
-  return `[${parts.join(". ")}.]\n${text}`;
+  return `[${parts.join(" ")}]\n${text}`;
 }
 
 export interface GeminiFlashTTSOptions {

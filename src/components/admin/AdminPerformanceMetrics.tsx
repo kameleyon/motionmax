@@ -270,7 +270,7 @@ export function AdminPerformanceMetrics() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
         <div>
-          <h2 className="text-2xl font-bold">Performance Metrics</h2>
+          <h2 className="font-serif text-[26px] font-medium">Performance Metrics</h2>
           <p className="text-muted-foreground">Generation performance and cost analytics</p>
         </div>
 

@@ -166,7 +166,7 @@ export function AdminFlags() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
         <div>
-          <h2 className="text-2xl font-bold">User Flags</h2>
+          <h2 className="font-serif text-[26px] font-medium">User Flags</h2>
           <p className="text-muted-foreground">
             {data?.total || 0} {includeResolved ? "total" : "active"} flags
           </p>
@@ -239,7 +239,7 @@ export function AdminFlags() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{count}</div>
+                <div className="font-serif text-[26px] font-medium">{count}</div>
                 <p className="text-xs text-muted-foreground">Active</p>
               </CardContent>
             </Card>

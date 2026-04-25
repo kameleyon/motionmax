@@ -26,13 +26,17 @@ export type FeatureSet = {
   cast: boolean;
   characterAppearance: boolean;
   camera: boolean;
+  /** Doc2video / explainer scene transition picker. Cinematic uses
+   *  the per-scene transition baked into video clips, so it doesn't
+   *  surface this in intake. */
+  transition: boolean;
   colorGrade: boolean;
 };
 
 export const FEATURES: Record<ProjectMode, FeatureSet> = {
-  cinematic: { duration: true,  lipSync: true,  music: true, sfx: true,  cast: true,  characterAppearance: true,  camera: true,  colorGrade: true },
-  doc2video: { duration: true,  lipSync: false, music: true, sfx: true,  cast: true,  characterAppearance: true,  camera: false, colorGrade: true },
-  smartflow: { duration: false, lipSync: false, music: true, sfx: false, cast: false, characterAppearance: false, camera: false, colorGrade: false },
+  cinematic: { duration: true,  lipSync: true,  music: true, sfx: true,  cast: true,  characterAppearance: true,  camera: true,  transition: false, colorGrade: true },
+  doc2video: { duration: true,  lipSync: false, music: true, sfx: true,  cast: true,  characterAppearance: true,  camera: false, transition: true,  colorGrade: true },
+  smartflow: { duration: false, lipSync: false, music: true, sfx: false, cast: false, characterAppearance: false, camera: false, transition: false, colorGrade: false },
 };
 
 /** Aspect ratios the form offers. 1:1 was removed per product call. */
@@ -66,6 +70,11 @@ export type MusicGenre = 'Cinematic' | 'Electronic' | 'Acoustic' | 'Ambient' | '
 
 export type CameraMotion = 'Default' | 'Static' | 'Dolly' | 'Handheld' | 'Drone' | 'Crane' | 'Whip Pan';
 
+/** Doc2video explainer transition between scenes at export. "Default"
+ *  = the legacy fade-in/out behaviour (no explicit override sent to
+ *  the worker). Other options force a specific concat behaviour. */
+export type SceneTransition = 'Default' | 'Cut' | 'Dissolve' | 'Whip' | 'Black';
+
 export type ColorGrade =
   | 'Kodak 250D' | 'Bleach Bypass' | 'Teal & Orange'
   | 'Warm Film'  | 'Cool Noir'    | 'Desaturated';
@@ -83,6 +92,7 @@ export type IntakeSettings = {
   visualStyle: string;
   tone: number;              // 0–100 (calm → frenetic)
   camera?: CameraMotion;
+  transition?: SceneTransition;
   grade?: ColorGrade;
   lipSync?: { on: boolean; strength: number };
   music?: { on: boolean; genre: MusicGenre; intensity: number; sfx: boolean; uploadUrl?: string | null };

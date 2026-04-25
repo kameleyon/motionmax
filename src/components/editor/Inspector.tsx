@@ -261,10 +261,10 @@ export default function Inspector({
     const ok = await updateSceneMeta(selectedSceneIndex, { motion: intakeCamera });
     if (ok) toast.success(`Camera motion reset to "${intakeCamera}" (project default).`);
   };
-  const clearSceneTransition = async () => {
-    const ok = await updateSceneMeta(selectedSceneIndex, { transition: defaultTransition });
-    if (ok) toast.success(`Transition reset to "${defaultTransition}".`);
-  };
+  // clearSceneTransition removed — transition is now project-wide (every
+  // scene gets the same value via updateAllScenesMeta), so per-scene
+  // reset doesn't apply. defaultTransition kept for type-default reads.
+  void defaultTransition;
 
   return (
     <div className="flex flex-col h-full relative">
@@ -870,40 +870,23 @@ export default function Inspector({
 
           {isExplainer && (
             <section>
-              <div className="flex items-baseline justify-between mb-2 gap-3">
-                <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Transition to next scene</h5>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={clearSceneTransition}
-                    disabled={busy !== 'idle' || sceneLocked || projectLocked}
-                    className="font-mono text-[9.5px] tracking-wider uppercase text-[#8A9198] hover:text-[#ECEAE4] transition-colors disabled:opacity-40"
-                    title={`Reset this scene to the default (${defaultTransition})`}
-                  >
-                    Clear
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const ok = await updateAllScenesMeta({ transition });
-                      if (ok) toast.success(`Transition "${transition}" applied to all ${state.scenes.length} scenes.`);
-                    }}
-                    disabled={busy !== 'idle' || projectLocked}
-                    className="font-mono text-[9.5px] tracking-wider uppercase text-[#14C8CC] hover:text-[#ECEAE4] transition-colors disabled:opacity-40"
-                    title="Use this transition on every scene boundary"
-                  >
-                    Apply to all
-                  </button>
-                </div>
-              </div>
+              <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium mb-2">Transition</h5>
               <div className="inline-flex rounded-lg border border-white/5 bg-[#1B2228] p-[2px] gap-[2px] w-full">
                 {TRANSITION_OPTIONS.map((t) => (
                   <button
                     key={t}
                     type="button"
-                    onClick={() => updateSceneMeta(selectedSceneIndex, { transition: t })}
+                    onClick={async () => {
+                      // Transition is project-wide — picking a value here
+                      // applies it to every scene at once. Removes the
+                      // separate "Apply to all" button + inconsistent
+                      // per-scene state that was confusing users.
+                      const ok = await updateAllScenesMeta({ transition: t });
+                      if (ok) toast.success(`Transition "${t}" applied to all scenes.`);
+                    }}
+                    disabled={busy !== 'idle' || projectLocked}
                     className={cn(
-                      'flex-1 px-2 py-1.5 font-mono text-[10.5px] tracking-wider rounded-md transition-colors',
+                      'flex-1 px-2 py-1.5 font-mono text-[10.5px] tracking-wider rounded-md transition-colors disabled:opacity-40',
                       t === transition ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'text-[#8A9198] hover:text-[#ECEAE4]',
                     )}
                   >
@@ -912,7 +895,7 @@ export default function Inspector({
                 ))}
               </div>
               <p className="text-[11.5px] text-[#8A9198] leading-[1.5] mt-2">
-                Applied when the video is exported. "Cut" is instant; "Dissolve" / "Whip" / "Black" cross-fade at the scene boundary. "Clear" reverts this scene to the default ({defaultTransition}).
+                Applied to every scene boundary at export. "Cut" is instant; "Dissolve" / "Whip" / "Black" cross-fade between scenes.
               </p>
             </section>
           )}

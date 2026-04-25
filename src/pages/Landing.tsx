@@ -119,7 +119,13 @@ export default function Landing() {
               variant="ghost"
               size="icon"
               className="md:hidden rounded-full h-11 w-11"
-              onClick={() => setMobileMenuOpen((prev) => !prev)}
+              onClick={() => {
+                console.log("[Landing] Hamburger clicked. mobileMenuOpen was:", mobileMenuOpen);
+                setMobileMenuOpen((prev) => {
+                  console.log("[Landing] Hamburger toggle: setting mobileMenuOpen ->", !prev);
+                  return !prev;
+                });
+              }}
               aria-label="Toggle menu"
               aria-expanded={mobileMenuOpen}
             >
@@ -165,6 +171,7 @@ export default function Landing() {
                   <button
                     key={href}
                     onClick={() => {
+                      console.log("[Landing] Mobile nav item clicked:", { href, label });
                       setMobileMenuOpen(false);
                       menuToggleRef.current?.focus();
                       // Wait for AnimatePresence close (~200ms) before
@@ -175,10 +182,15 @@ export default function Landing() {
                       // the section title isn't hidden behind the topbar.
                       setTimeout(() => {
                         const target = document.querySelector(href) as HTMLElement | null;
-                        if (!target) return;
+                        console.log("[Landing] Scroll target lookup:", { href, found: !!target });
+                        if (!target) {
+                          console.warn("[Landing] No element matches selector — skipping scroll", href);
+                          return;
+                        }
                         const headerEl = document.querySelector("header");
                         const headerHeight = headerEl ? headerEl.getBoundingClientRect().height : 80;
                         const top = target.getBoundingClientRect().top + window.scrollY - headerHeight - 12;
+                        console.log("[Landing] Smooth scrolling to", { href, top, headerHeight });
                         window.scrollTo({ top, behavior: "smooth" });
                       }, 250);
                     }}
@@ -247,8 +259,14 @@ export default function Landing() {
                 variant="outline"
                 className="gap-2 min-w-[140px] border-white/20 text-white/80 hover:bg-white/10 hover:text-white"
                 onClick={() => {
-                  trackEvent("watch_demo_click", { location: "hero" });
+                  console.log("[Landing] Watch Demo clicked. demoModalOpen was:", demoModalOpen);
+                  try {
+                    trackEvent("watch_demo_click", { location: "hero" });
+                  } catch (err) {
+                    console.error("[Landing] trackEvent failed for Watch Demo:", err);
+                  }
                   setDemoModalOpen(true);
+                  console.log("[Landing] setDemoModalOpen(true) called — modal should mount this render");
                 }}
               >
                 <Play className="h-4 w-4" />

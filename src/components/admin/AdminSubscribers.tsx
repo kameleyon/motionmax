@@ -162,7 +162,7 @@ export function AdminSubscribers() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
         <div>
-          <h2 className="text-2xl font-bold">Subscribers</h2>
+          <h2 className="font-serif text-[26px] font-medium">Subscribers</h2>
           <p className="text-muted-foreground">
             {data?.total || 0} total users
           </p>

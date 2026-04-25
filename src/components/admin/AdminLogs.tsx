@@ -232,7 +232,7 @@ export function AdminLogs() {
         <div className="flex items-center gap-3">
           <Terminal className="h-6 w-6 text-primary" />
           <div>
-            <h2 className="text-2xl font-bold">Live System Logs</h2>
+            <h2 className="font-serif text-[26px] font-medium">Live System Logs</h2>
             <p className="text-muted-foreground text-sm">
               {filteredLogs.length} entries • {isPaused ? "Paused" : "Streaming"}
             </p>

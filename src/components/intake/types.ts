@@ -64,7 +64,7 @@ export const ADDON_COST = {
 
 export type MusicGenre = 'Cinematic' | 'Electronic' | 'Acoustic' | 'Ambient' | 'Hip-hop' | 'Jazz' | 'Orchestral';
 
-export type CameraMotion = 'Static' | 'Dolly' | 'Handheld' | 'Drone' | 'Crane' | 'Whip Pan';
+export type CameraMotion = 'Default' | 'Static' | 'Dolly' | 'Handheld' | 'Drone' | 'Crane' | 'Whip Pan';
 
 export type ColorGrade =
   | 'Kodak 250D' | 'Bleach Bypass' | 'Teal & Orange'

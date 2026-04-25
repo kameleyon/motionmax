@@ -9,6 +9,8 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { useAuth } from "@/hooks/useAuth";
 import { PLAN_PRICES } from "@/config/products";
 import { STRIPE_PLANS } from "@/config/stripeProducts";
+import { CREDIT_PACKAGES } from "@/config/pricingPlans";
+import { Coins } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -148,8 +150,107 @@ export default function Pricing() {
         <p className="text-center text-[12px] text-[#5A6268] mt-8">
           All plans include a 7-day money-back guarantee. Annual billing saves 20%.
         </p>
+
+        {/* Credit top-up packs — for users who want to add credits
+            without changing subscription tier. Same Stripe checkout
+            flow, different priceId. */}
+        <div className="mt-16 sm:mt-20">
+          <div className="text-center">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#E4C875]/10 border border-[#E4C875]/30 font-mono text-[10px] tracking-[0.16em] uppercase text-[#E4C875]">
+              <Coins className="w-3 h-3" />
+              Top up
+            </span>
+            <h2 className="font-serif text-[24px] sm:text-[28px] font-medium tracking-tight text-[#ECEAE4] mt-3">
+              One-time credit packs
+            </h2>
+            <p className="text-[13px] sm:text-[14px] text-[#8A9198] mt-2">
+              Need more credits this cycle? Stack a pack on top of your plan. Credits never expire.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mt-8">
+            {CREDIT_PACKAGES.map((pack, i) => (
+              <CreditPackCard
+                key={pack.credits}
+                credits={pack.credits}
+                price={pack.price}
+                perCredit={pack.perCredit}
+                priceId={pack.priceId}
+                pending={pendingPlan === `pack-${pack.credits}`}
+                onCta={async () => {
+                  if (!user) {
+                    navigate(`/auth?next=/pricing`);
+                    return;
+                  }
+                  setPendingPlan(`pack-${pack.credits}`);
+                  try {
+                    const url = await createCheckout(pack.priceId, "payment");
+                    if (url) window.location.href = url;
+                  } catch (err) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    toast.error("Couldn't start checkout", { description: msg });
+                  } finally {
+                    setPendingPlan(null);
+                  }
+                }}
+                highlight={i === 1}
+                delay={i * 0.05}
+              />
+            ))}
+          </div>
+        </div>
       </div>
     </AppShell>
+  );
+}
+
+function CreditPackCard({
+  credits, price, perCredit, pending, onCta, highlight, delay,
+}: {
+  credits: number;
+  price: string;
+  perCredit: string;
+  priceId: string;
+  pending: boolean;
+  onCta: () => void;
+  highlight: boolean;
+  delay: number;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay }}
+      className={cn(
+        "rounded-xl bg-[#10151A] border p-5 flex flex-col",
+        highlight ? "border-[#E4C875]/40" : "border-white/8",
+      )}
+    >
+      <div className="flex items-baseline gap-1">
+        <span className="font-serif text-[28px] font-medium text-[#ECEAE4] leading-none">
+          {credits.toLocaleString()}
+        </span>
+        <span className="text-[12px] text-[#8A9198]">credits</span>
+      </div>
+      <div className="font-mono text-[10px] tracking-[0.12em] uppercase text-[#5A6268] mt-2">
+        {perCredit} / credit
+      </div>
+      <div className="font-serif text-[20px] font-medium text-[#ECEAE4] mt-4">{price}</div>
+      <Button
+        type="button"
+        onClick={onCta}
+        disabled={pending}
+        className={cn(
+          "w-full mt-4 h-9 rounded-full font-semibold text-[12px] disabled:opacity-50",
+          highlight
+            ? "bg-[#E4C875] text-[#0A0D0F] hover:brightness-110"
+            : "bg-transparent border border-white/15 text-[#ECEAE4] hover:bg-white/5",
+        )}
+      >
+        {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : null}
+        {pending ? "Opening checkout…" : "Buy pack"}
+      </Button>
+    </motion.div>
   );
 }
 

@@ -120,7 +120,10 @@ export async function handleCinematicVideo(
   const format = project?.format || "landscape";
   const styleId = project?.style || "realistic";
   // Intake settings shape: { camera?: string, grade?: string, lipSync?, music?, ... }
-  const userCameraOverride = typeof intake.camera === "string" ? intake.camera : null;
+  // "Default" = let the AI pick (rotates per scene via getCameraMotion).
+  // Anything else is a hard override the user explicitly chose.
+  const rawCamera = typeof intake.camera === "string" ? intake.camera : null;
+  const userCameraOverride = rawCamera && rawCamera !== "Default" ? rawCamera : null;
   const userColorGrade = typeof intake.grade === "string" ? intake.grade : null;
   const { getStylePrompt: getStyle } = await import("../services/prompts.js");
   const styleDesc = getStyle(styleId);

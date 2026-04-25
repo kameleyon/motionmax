@@ -90,7 +90,7 @@ const LANGUAGES: Array<{ code: string; label: string; flag: string }> = [
 ];
 
 const MUSIC_GENRES: MusicGenre[] = ['Cinematic', 'Electronic', 'Acoustic', 'Ambient', 'Hip-hop', 'Jazz', 'Orchestral'];
-const CAMERA_MOTIONS: CameraMotion[] = ['Static', 'Dolly', 'Handheld', 'Drone', 'Crane', 'Whip Pan'];
+const CAMERA_MOTIONS: CameraMotion[] = ['Default', 'Static', 'Dolly', 'Handheld', 'Drone', 'Crane', 'Whip Pan'];
 const COLOR_GRADES: ColorGrade[] = ['Kodak 250D', 'Bleach Bypass', 'Teal & Orange', 'Warm Film', 'Cool Noir', 'Desaturated'];
 
 // Default format = portrait (9:16) per product call.
@@ -165,7 +165,7 @@ export default function IntakeForm({
   const [uploadingStyle, setUploadingStyle] = useState(false);
 
   const [tone, setTone] = useState(45);
-  const [camera, setCamera] = useState<CameraMotion>('Dolly');
+  const [camera, setCamera] = useState<CameraMotion>('Default');
   const [grade, setGrade] = useState<ColorGrade>('Kodak 250D');
 
   const [lipSync, setLipSync] = useState(false);

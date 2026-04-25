@@ -53,7 +53,7 @@ const CATEGORY_CONFIG: Record<
 };
 
 export function AdminLogs() {
-  const { callAdminApi } = useAdminAuth();
+  const { callAdminApi, isAdmin } = useAdminAuth();
   const [logs, setLogs] = useState<UnifiedLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

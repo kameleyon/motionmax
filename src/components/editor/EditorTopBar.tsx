@@ -67,6 +67,10 @@ export default function EditorTopBar({
         .from('projects').select('*').eq('id', state.project.id).single();
       if (srcErr || !src) throw new Error(srcErr?.message ?? 'Source project not found');
 
+      // Cast through `unknown` because character_images / intake_settings
+      // exist as DB columns but were added after the generated types were
+      // last regenerated; the row type is missing them.
+      const srcAny = src as unknown as Record<string, unknown>;
       const cloneInsert = {
         user_id: user.id,
         title: `${src.title} (regenerated)`,
@@ -79,8 +83,8 @@ export default function EditorTopBar({
         style: src.style,
         character_description: src.character_description,
         character_consistency_enabled: src.character_consistency_enabled,
-        character_images: src.character_images,
-        intake_settings: src.intake_settings,
+        character_images: srcAny.character_images ?? null,
+        intake_settings: srcAny.intake_settings ?? {},
       };
       const { data, error } = await supabase
         .from('projects').insert(cloneInsert as never).select('id').single();

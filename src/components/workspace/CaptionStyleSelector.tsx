@@ -70,35 +70,67 @@ const captionStyles: { id: CaptionStyle; label: string }[] = [
 
 /**
  * Pro-quality preview CSS using paint-order + -webkit-text-stroke
- * for sharp outlines (not jagged text-shadow).
+ * for sharp outlines (not jagged text-shadow). The font-family is
+ * applied via inline style (see PREVIEW_FONT_FAMILY) instead of a
+ * Tailwind arbitrary value because Tailwind's JIT silently drops
+ * comma-containing bracket values like `[font-family:'X',cursive]`
+ * in production builds — every preview was falling back to system
+ * sans because of it.
  */
 export const previewStyles: Record<CaptionStyle, string> = {
   none: "",
-  // Pro styles
-  cleanPop: "[font-family:'Luckiest_Guy',cursive] font-normal text-white uppercase tracking-wide [filter:drop-shadow(0px_2px_3px_rgba(0,0,0,0.6))]",
-  toxicBounce: "[font-family:'Bangers',cursive] text-[#39FF14] uppercase tracking-wider [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill] [filter:drop-shadow(0px_3px_0px_#000)]",
-  proShortForm: "[font-family:'Oswald',sans-serif] font-bold text-white uppercase tracking-wider [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill] [filter:drop-shadow(0px_2px_2px_rgba(0,0,0,0.5))]",
-  // Reference visuals
-  orangeBox: "[font-family:'Comfortaa',cursive] font-bold text-white bg-[#FF5722] px-1.5 py-0.5 rounded-sm uppercase tracking-wider",
-  yellowSlanted: "[font-family:'Montserrat',sans-serif] font-black italic text-[#FFEB3B] uppercase [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill]",
-  redSlantedBox: "[font-family:'Montserrat',sans-serif] font-black italic text-white bg-[#E53935] px-2 py-1 uppercase skew-x-[-8deg] rounded-md",
-  cyanOutline: "[font-family:'Montserrat',sans-serif] font-black text-[#00BCD4] uppercase [-webkit-text-stroke:1px_#fff] [paint-order:stroke_fill]",
-  motionBlur: "[font-family:'Montserrat',sans-serif] font-black text-white uppercase drop-shadow-lg",
-  yellowSmall: "[font-family:'Montserrat',sans-serif] font-bold text-[#FFEB3B] uppercase drop-shadow-md",
-  // Trending
-  thickStroke: "[font-family:'Flavors',cursive] font-black text-white uppercase [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill]",
-  karaokePop: "[font-family:'Rubik_Mono_One',sans-serif] text-white uppercase tracking-[0.15em]",
-  neonTeal: "[font-family:'Poppins',sans-serif] font-bold text-[#00E5FF] uppercase [text-shadow:_0_0_8px_#00E5FF,_0_0_16px_#00E5FF]",
-  goldLuxury: "[font-family:'Pangolin',cursive] text-[#e3c774] text-base [text-shadow:_1px_1px_2px_#8B6508]",
-  bouncyPill: "[font-family:'Montserrat',sans-serif] font-bold text-gray-900 bg-white px-2 py-0.5 rounded-full",
-  glitch: "[font-family:'Montserrat',sans-serif] font-black text-white uppercase [text-shadow:_2px_0_#f00,_-2px_0_#00f]",
-  comicBurst: "[font-family:'Bangers',cursive] text-[#FFEB3B] uppercase [text-shadow:_2px_2px_0_#E53935,_-1px_-1px_0_#E53935]",
-  redTag: "[font-family:'Poppins',sans-serif] font-bold text-white bg-red-600 px-3 py-1 rounded",
-  blackBox: "[font-family:'Special_Elite',cursive] text-white bg-black/80 px-2 py-0.5",
-  typewriter: "font-mono font-bold text-green-400 bg-black/50 px-1",
-  cinematicFade: "[font-family:'Vina_Sans',sans-serif] font-light text-white tracking-[0.15em] uppercase",
-  retroTerminal: "font-mono font-bold text-[#39FF14]",
-  heavyDropShadow: "[font-family:'Bebas_Neue',sans-serif] text-white tracking-wider [text-shadow:_3px_3px_0_#000]",
+  cleanPop: "font-normal text-white uppercase tracking-wide [filter:drop-shadow(0px_2px_3px_rgba(0,0,0,0.6))]",
+  toxicBounce: "text-[#39FF14] uppercase tracking-wider [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill] [filter:drop-shadow(0px_3px_0px_#000)]",
+  proShortForm: "font-bold text-white uppercase tracking-wider [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill] [filter:drop-shadow(0px_2px_2px_rgba(0,0,0,0.5))]",
+  orangeBox: "font-bold text-white bg-[#FF5722] px-1.5 py-0.5 rounded-sm uppercase tracking-wider",
+  yellowSlanted: "font-black italic text-[#FFEB3B] uppercase [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill]",
+  redSlantedBox: "font-black italic text-white bg-[#E53935] px-2 py-1 uppercase skew-x-[-8deg] rounded-md",
+  cyanOutline: "font-black text-[#00BCD4] uppercase [-webkit-text-stroke:1px_#fff] [paint-order:stroke_fill]",
+  motionBlur: "font-black text-white uppercase drop-shadow-lg",
+  yellowSmall: "font-bold text-[#FFEB3B] uppercase drop-shadow-md",
+  thickStroke: "font-black text-white uppercase [-webkit-text-stroke:2px_#000] [paint-order:stroke_fill]",
+  karaokePop: "text-white uppercase tracking-[0.15em]",
+  neonTeal: "font-bold text-[#00E5FF] uppercase [text-shadow:_0_0_8px_#00E5FF,_0_0_16px_#00E5FF]",
+  goldLuxury: "text-[#e3c774] text-base [text-shadow:_1px_1px_2px_#8B6508]",
+  bouncyPill: "font-bold text-gray-900 bg-white px-2 py-0.5 rounded-full",
+  glitch: "font-black text-white uppercase [text-shadow:_2px_0_#f00,_-2px_0_#00f]",
+  comicBurst: "text-[#FFEB3B] uppercase [text-shadow:_2px_2px_0_#E53935,_-1px_-1px_0_#E53935]",
+  redTag: "font-bold text-white bg-red-600 px-3 py-1 rounded",
+  blackBox: "text-white bg-black/80 px-2 py-0.5",
+  typewriter: "font-bold text-green-400 bg-black/50 px-1",
+  cinematicFade: "font-light text-white tracking-[0.15em] uppercase",
+  retroTerminal: "font-bold text-[#39FF14]",
+  heavyDropShadow: "text-white tracking-wider [text-shadow:_3px_3px_0_#000]",
+};
+
+/** Font-family per style — applied via inline style for guaranteed
+ *  rendering (see previewStyles header for why). Each value is a
+ *  proper CSS font-family list with quoted family names + a generic
+ *  fallback. The named fonts are loaded in index.html via Google Fonts. */
+export const PREVIEW_FONT_FAMILY: Record<CaptionStyle, string> = {
+  none: "",
+  cleanPop: "'Luckiest Guy', cursive",
+  toxicBounce: "'Bangers', cursive",
+  proShortForm: "'Oswald', sans-serif",
+  orangeBox: "'Comfortaa', cursive",
+  yellowSlanted: "'Montserrat', sans-serif",
+  redSlantedBox: "'Montserrat', sans-serif",
+  cyanOutline: "'Montserrat', sans-serif",
+  motionBlur: "'Montserrat', sans-serif",
+  yellowSmall: "'Montserrat', sans-serif",
+  thickStroke: "'Flavors', cursive",
+  karaokePop: "'Rubik Mono One', sans-serif",
+  neonTeal: "'Poppins', sans-serif",
+  goldLuxury: "'Pangolin', cursive",
+  bouncyPill: "'Montserrat', sans-serif",
+  glitch: "'Montserrat', sans-serif",
+  comicBurst: "'Bangers', cursive",
+  redTag: "'Poppins', sans-serif",
+  blackBox: "'Special Elite', cursive",
+  typewriter: "ui-monospace, 'Courier New', monospace",
+  cinematicFade: "'Vina Sans', sans-serif",
+  retroTerminal: "ui-monospace, 'Courier New', monospace",
+  heavyDropShadow: "'Bebas Neue', sans-serif",
 };
 
 // ── Animation per style ──
@@ -170,6 +202,7 @@ const CaptionPreviewRow = memo(function CaptionPreviewRow({ styleId }: { styleId
   }, [idx, cycle]);
 
   const css = previewStyles[styleId];
+  const fontFamily = PREVIEW_FONT_FAMILY[styleId];
   const variants = styleAnimations[styleId];
   const isSingle = SINGLE_WORD_STYLES.has(styleId);
   const isAccum = ACCUMULATE_STYLES.has(styleId);
@@ -210,7 +243,10 @@ const CaptionPreviewRow = memo(function CaptionPreviewRow({ styleId }: { styleId
                 !isSingle && !isAccum && i === idx ? "opacity-100" : "",
                 !isSingle && !isAccum && i < idx ? "opacity-60" : "",
               )}
-              style={wordColor ? { color: wordColor } : undefined}
+              style={{
+                fontFamily: fontFamily || undefined,
+                ...(wordColor ? { color: wordColor } : {}),
+              }}
             >
               {word}
             </motion.span>

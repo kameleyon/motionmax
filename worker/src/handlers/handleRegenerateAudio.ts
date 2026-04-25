@@ -142,6 +142,37 @@ export async function handleRegenerateAudio(
 
   console.log(`[RegenerateAudio] Resolved voice → speaker=${voiceName}, gender=${gender}, language=${lang}, isHC=${isHC}`);
 
+  // ── Cloned voice short-circuit ────────────────────────────────────
+  // If the project has a custom voice (Fish or ElevenLabs clone),
+  // skip the voice_name routing entirely and hand the scene to the
+  // audio router — its CASE 0 branch handles Fish s2-pro reference_id
+  // rendering. Without this, custom voices with non-standard names
+  // (e.g. "DavidFrench") fall through to the rejection branch below.
+  if (project?.voice_type === "custom" && project?.voice_id) {
+    const { resolveCustomVoiceProvider } = await import("../services/customVoiceProvider.js");
+    const customVoiceProvider = await resolveCustomVoiceProvider(project.voice_id);
+    const googleApiKeys = [
+      process.env.GOOGLE_TTS_API_KEY_3,
+      process.env.GOOGLE_TTS_API_KEY_2,
+      process.env.GOOGLE_TTS_API_KEY,
+    ].filter(Boolean) as string[];
+    const config: AudioConfig = {
+      projectId,
+      googleApiKeys,
+      elevenLabsApiKey: process.env.ELEVENLABS_API_KEY,
+      lemonfoxApiKey: process.env.LEMONFOX_API_KEY,
+      fishAudioApiKey: process.env.FISH_AUDIO_API_KEY,
+      replicateApiKey: process.env.REPLICATE_API_KEY || "",
+      customVoiceId: project.voice_id,
+      customVoiceProvider,
+      language: lang,
+      forceHaitianCreole: isHC,
+    };
+    audioResult = await generateSceneAudio(
+      { number: scene.number || sceneIndex + 1, voiceover: newVoiceover, duration: scene.duration || 10 },
+      config,
+    );
+  } else
   // ── Gemini 3.1 Flash TTS (gm:*) — FR/ES/IT/DE/NL with style directives ──
   // No fallback — if the API fails the scene fails and we surface the error.
   if (voiceName.startsWith("gm:") && !isHC) {

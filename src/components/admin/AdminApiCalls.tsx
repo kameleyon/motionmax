@@ -177,7 +177,7 @@ export function AdminApiCalls() {
 
   return (
     <div className="space-y-4">
-      <Card className="bg-card border shadow-sm">
+      <Card className="bg-[#10151A] border-white/8 shadow-none bg-card border shadow-sm">
         <CardHeader className="py-3 px-4">
           <div className="flex flex-col gap-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

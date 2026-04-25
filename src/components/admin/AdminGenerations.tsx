@@ -201,7 +201,7 @@ export function AdminGenerations() {
 
       {/* Stats Cards - Teal themed */}
       <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
-        <Card className="shadow-sm">
+        <Card className="bg-[#10151A] border-white/8 shadow-none shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Total</CardTitle>
             <div className="p-2 rounded-lg bg-primary/10 shadow-sm">
@@ -213,7 +213,7 @@ export function AdminGenerations() {
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm">
+        <Card className="bg-[#10151A] border-white/8 shadow-none shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Completed</CardTitle>
             <div className="p-2 rounded-lg bg-primary/10 shadow-sm">
@@ -225,7 +225,7 @@ export function AdminGenerations() {
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm">
+        <Card className="bg-[#10151A] border-white/8 shadow-none shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Processing</CardTitle>
             <div className="p-2 rounded-lg bg-primary/10 shadow-sm">
@@ -239,7 +239,7 @@ export function AdminGenerations() {
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm">
+        <Card className="bg-[#10151A] border-white/8 shadow-none shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Failed</CardTitle>
             <div className="p-2 rounded-lg bg-muted shadow-sm">
@@ -251,7 +251,7 @@ export function AdminGenerations() {
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm col-span-2 sm:col-span-1">
+        <Card className="bg-[#10151A] border-white/8 shadow-none shadow-sm col-span-2 sm:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Deleted</CardTitle>
             <div className="p-2 rounded-lg bg-muted shadow-sm">
@@ -266,7 +266,7 @@ export function AdminGenerations() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Daily Chart - Elegant thin bars with rounded corners */}
-        <Card className="lg:col-span-2 shadow-sm">
+        <Card className="bg-[#10151A] border-white/8 shadow-none lg:col-span-2 shadow-sm">
           <CardHeader>
             <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Generations Over Time</CardTitle>
           </CardHeader>
@@ -333,7 +333,7 @@ export function AdminGenerations() {
         </Card>
 
         {/* Status Distribution */}
-        <Card className="shadow-sm">
+        <Card className="bg-[#10151A] border-white/8 shadow-none shadow-sm">
           <CardHeader>
             <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Status Distribution</CardTitle>
           </CardHeader>
@@ -378,7 +378,7 @@ export function AdminGenerations() {
       </div>
 
       {/* Success Rate - Teal themed */}
-      <Card className="shadow-sm">
+      <Card className="bg-[#10151A] border-white/8 shadow-none shadow-sm">
         <CardHeader>
           <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Performance Metrics</CardTitle>
         </CardHeader>
@@ -416,7 +416,7 @@ export function AdminGenerations() {
       </Card>
 
       {/* Individual Generations List */}
-      <Card className="shadow-sm">
+      <Card className="bg-[#10151A] border-white/8 shadow-none shadow-sm">
         <CardHeader>
           <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
             <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Individual Jobs</CardTitle>

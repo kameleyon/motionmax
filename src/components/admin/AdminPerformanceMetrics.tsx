@@ -289,7 +289,7 @@ export function AdminPerformanceMetrics() {
       </div>
 
       {/* Average Time by Type */}
-      <Card>
+      <Card className="bg-[#10151A] border-white/8 shadow-none">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Zap className="h-5 w-5 text-primary" />
@@ -334,7 +334,7 @@ export function AdminPerformanceMetrics() {
       </Card>
 
       {/* Success Rate by Type */}
-      <Card>
+      <Card className="bg-[#10151A] border-white/8 shadow-none">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-primary" />
@@ -367,7 +367,7 @@ export function AdminPerformanceMetrics() {
       </Card>
 
       {/* Cost per Operation Breakdown */}
-      <Card>
+      <Card className="bg-[#10151A] border-white/8 shadow-none">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <DollarSign className="h-5 w-5 text-primary" />
@@ -424,7 +424,7 @@ export function AdminPerformanceMetrics() {
       </Card>
 
       {/* Provider Cost Distribution */}
-      <Card>
+      <Card className="bg-[#10151A] border-white/8 shadow-none">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <DollarSign className="h-5 w-5 text-primary" />
@@ -455,7 +455,7 @@ export function AdminPerformanceMetrics() {
       </Card>
 
       {/* Error Rate Trends */}
-      <Card>
+      <Card className="bg-[#10151A] border-white/8 shadow-none">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingDown className="h-5 w-5 text-destructive" />

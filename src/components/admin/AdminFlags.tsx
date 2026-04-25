@@ -248,7 +248,7 @@ export function AdminFlags() {
       </div>
 
       {/* Flags Table */}
-      <Card className="shadow-sm overflow-hidden">
+      <Card className="bg-[#10151A] border-white/8 shadow-none shadow-sm overflow-hidden">
         <CardHeader>
           <CardTitle className="text-lg">Flag History</CardTitle>
         </CardHeader>

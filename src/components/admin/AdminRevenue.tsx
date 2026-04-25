@@ -118,7 +118,7 @@ export function AdminRevenue() {
 
       {/* Stats Cards - All teal themed */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-        <Card className="shadow-sm">
+        <Card className="bg-[#10151A] border-white/8 shadow-none shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Total Revenue</CardTitle>
             <div className="p-2 rounded-lg bg-primary/10 shadow-sm">
@@ -133,7 +133,7 @@ export function AdminRevenue() {
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm">
+        <Card className="bg-[#10151A] border-white/8 shadow-none shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Monthly Recurring</CardTitle>
             <div className="p-2 rounded-lg bg-primary/10 shadow-sm">
@@ -146,7 +146,7 @@ export function AdminRevenue() {
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm">
+        <Card className="bg-[#10151A] border-white/8 shadow-none shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Active Subs</CardTitle>
             <div className="p-2 rounded-lg bg-primary/10 shadow-sm">
@@ -159,7 +159,7 @@ export function AdminRevenue() {
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm">
+        <Card className="bg-[#10151A] border-white/8 shadow-none shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Avg Per Charge</CardTitle>
             <div className="p-2 rounded-lg bg-[hsl(var(--gold))]/10 shadow-sm">
@@ -179,7 +179,7 @@ export function AdminRevenue() {
       </div>
 
       {/* Revenue Chart */}
-      <Card className="shadow-sm">
+      <Card className="bg-[#10151A] border-white/8 shadow-none shadow-sm">
         <CardHeader>
           <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Revenue Over Time</CardTitle>
         </CardHeader>
@@ -262,7 +262,7 @@ function PlanBreakdown() {
 
   if (isLoading) {
     return (
-      <Card className="shadow-sm">
+      <Card className="bg-[#10151A] border-white/8 shadow-none shadow-sm">
         <CardHeader><Skeleton className="h-5 w-48" /></CardHeader>
         <CardContent><Skeleton className="h-[200px] w-full" /></CardContent>
       </Card>
@@ -271,7 +271,7 @@ function PlanBreakdown() {
 
   if (isError) {
     return (
-      <Card className="shadow-sm">
+      <Card className="bg-[#10151A] border-white/8 shadow-none shadow-sm">
         <CardHeader><CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Active Subscriptions by Plan</CardTitle></CardHeader>
         <CardContent><p className="text-sm text-muted-foreground">Failed to load plan breakdown.</p></CardContent>
       </Card>
@@ -281,7 +281,7 @@ function PlanBreakdown() {
   if (!plans || plans.length === 0) return null;
 
   return (
-    <Card className="shadow-sm">
+    <Card className="bg-[#10151A] border-white/8 shadow-none shadow-sm">
       <CardHeader>
         <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Active Subscriptions by Plan</CardTitle>
       </CardHeader>

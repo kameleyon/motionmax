@@ -304,7 +304,7 @@ export function AdminWorkerHealth() {
       {(health.memoryUsage > 0 || health.cpuUsage > 0) && (
         <div className="grid gap-4 lg:grid-cols-2">
           {health.memoryUsage > 0 && (
-            <Card>
+            <Card className="bg-[#10151A] border-white/8 shadow-none">
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <HardDrive className="h-5 w-5 text-primary" />
@@ -327,7 +327,7 @@ export function AdminWorkerHealth() {
           )}
 
           {health.cpuUsage > 0 && (
-            <Card>
+            <Card className="bg-[#10151A] border-white/8 shadow-none">
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <Cpu className="h-5 w-5 text-primary" />
@@ -352,7 +352,7 @@ export function AdminWorkerHealth() {
       )}
 
       {/* Concurrency */}
-      <Card>
+      <Card className="bg-[#10151A] border-white/8 shadow-none">
         <CardHeader>
           <div className="flex items-center gap-2">
             <Server className="h-5 w-5 text-primary" />
@@ -452,7 +452,7 @@ function ThroughputChart() {
   if (!chartData || chartData.length === 0) return null;
 
   return (
-    <Card>
+    <Card className="bg-[#10151A] border-white/8 shadow-none">
       <CardHeader>
         <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Job Throughput (24h)</CardTitle>
         <CardDescription>Completed vs failed jobs by hour</CardDescription>

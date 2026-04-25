@@ -104,7 +104,14 @@ The image renderer automatically appends the full ART STYLE block to every promp
 - Each scene's voiceover must CONNECT to the previous scene — use transitions, continuation, cause-and-effect, or narrative momentum
 - NEVER restart the narrative in each scene. Scene 5 should feel like the natural continuation of scene 4, not a new beginning
 - Natural human tone, conversational tone — engaging but coherent
-- DELIVERY GUARDRAILS (hard "do-not"): No whisper, no ASMR, no dramatic theatrical delivery, no breathy intimate tone, no emphatic shouting. Speak like a confident host having a real conversation — not like a stage actor or a meditation app. Avoid paralinguistic tags that imply whisper / sigh / gasp / dramatic pause; if you need emphasis, get it from word choice and rhythm, not vocal theatrics.
+- DELIVERY GUARDRAILS (hard "do-not", read these twice):
+  • NO whisper, NO ASMR, NO breathy intimate tone, NO emphatic shouting
+  • NO dramatic theatrical delivery, NO movie-trailer narration, NO documentary-narrator gravitas
+  • NO suspenseful pacing, NO ominous build-up, NO mysterious hush, NO "let me tell you a secret" energy
+  • NO performative sighs, NO pregnant pauses, NO "..." cliffhanger beats, NO whispered punchlines
+- IGNORE THE TOPIC'S VIBE when choosing tone. Even if the content is about tarot, the occult, trauma, fate, the supernatural — read it like you're explaining it to a friend over coffee, not like you're hosting a paranormal podcast or narrating a Netflix true-crime intro. The topic might be heavy; the DELIVERY is light, friendly, casual, conversational.
+- Reference voice: a smart girlfriend explaining a topic over brunch — confident, curious, warm, occasionally funny, never solemn. Not a wise mystic. Not a horror narrator. Not a yoga teacher.
+- Avoid paralinguistic tags entirely: no [sigh], [whisper], [gasp], [chuckle], [dramatic pause], [ominous]. If you need emphasis, get it from word choice and rhythm, not vocal theatrics.
 - The FIRST scene hooks the audience. Every scene AFTER that BUILDS on what came before
 - Vary pacing: some scenes push forward, some pause to reflect, some escalate — like a real speaker
 - NO labels, NO stage directions, NO markdown — just raw spoken text

@@ -108,11 +108,23 @@ export interface StyleDirectives {
 }
 
 // Hard delivery guardrails prepended to every Gemini TTS request.
-// The model sometimes drifts toward intimate/whisper/dramatic delivery
-// even when the script is plain — pinning these guardrails to the
-// system prompt slot keeps it on-brand: confident host, not theatre.
-// Applied to both initial generation and per-scene regeneration.
-const NEGATIVE_DELIVERY = "Delivery rules: no whisper, no ASMR, no dramatic theatrical delivery, no breathy intimate tone, no emphatic shouting. Read it like a confident host having a real conversation.";
+// The model reads the script's topic ("tarot", "fate", "the devil", any
+// occult/heavy subject) and overweights it — drifts toward suspenseful
+// movie-trailer delivery even when the writing is plain. These rules
+// pin the delivery to "smart friend over coffee" regardless of subject.
+// Applied to initial generation, per-scene regen, AND master_audio.
+const NEGATIVE_DELIVERY =
+  "Delivery rules — read these literally and ignore the topic's vibe: " +
+  "NO whisper, NO ASMR, NO breathy intimate tone, NO suspenseful pacing, " +
+  "NO ominous build-up, NO mysterious hush, NO dramatic theatrical delivery, " +
+  "NO movie-trailer narration, NO documentary-narrator gravitas, " +
+  "NO 'let me tell you a secret' energy, NO performative sighs, " +
+  "NO pregnant pauses, NO whispered punchlines. " +
+  "Read it like a smart girlfriend explaining the topic to a friend over " +
+  "brunch — confident, curious, casual, warm, occasionally funny, NEVER solemn. " +
+  "Even if the script mentions heavy / dark / supernatural / occult subjects, " +
+  "the DELIVERY stays light and conversational. Don't match the topic's mood — " +
+  "match a normal coffee-shop conversation.";
 
 function buildDirectivePrompt(text: string, directives?: StyleDirectives): string {
   if (!directives) {
@@ -189,11 +201,19 @@ export async function generateGeminiFlashTTS(
     // Up to 5 total attempts: round-robin the available keys, with
     // backoff on 429 / 5xx per Google's docs ("Occasional text token
     // returns may trigger 500 errors — implement retry logic").
+    //
+    // Randomize the STARTING key index per call so no single key
+    // gets hammered first across all jobs. Without this, KEY_3 (or
+    // whatever's at index 0) eats every job's first attempt and is
+    // permanently at-quota — every job logs an attempt-1 429 until
+    // it rotates onto a fresher key. Starting at a random offset
+    // distributes load evenly across keys instead.
     const MAX_ATTEMPTS = 5;
     let lastError = "";
+    const startOffset = Math.floor(Math.random() * apiKeys.length);
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      const apiKey = apiKeys[(attempt - 1) % apiKeys.length];
+      const apiKey = apiKeys[(startOffset + attempt - 1) % apiKeys.length];
       try {
         const res = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`,

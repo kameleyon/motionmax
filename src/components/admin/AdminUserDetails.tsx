@@ -169,7 +169,7 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
   return (
     <div className="space-y-6">
       {/* User Status & Actions */}
-      <Card>
+      <Card className="bg-[#10151A] border-white/8 shadow-none">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -219,7 +219,7 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
 
       {/* User Info - Two Column Layout */}
       <div className="grid gap-4 md:grid-cols-2">
-        <Card>
+        <Card className="bg-[#10151A] border-white/8 shadow-none">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
               <Mail className="h-3.5 w-3.5" />
@@ -252,7 +252,7 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-[#10151A] border-white/8 shadow-none">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
               <CreditCard className="h-3.5 w-3.5" />
@@ -290,7 +290,7 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
 
       {/* Compact Stats Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Card className="p-3">
+        <Card className="bg-[#10151A] border-white/8 shadow-none p-3">
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
             <Coins className="h-3.5 w-3.5" />
             <span className="text-xs uppercase tracking-wide">Credits</span>
@@ -301,7 +301,7 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
           </div>
         </Card>
 
-        <Card className="p-3">
+        <Card className="bg-[#10151A] border-white/8 shadow-none p-3">
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
             <DollarSign className="h-3.5 w-3.5" />
             <span className="text-xs uppercase tracking-wide">Cost</span>
@@ -310,7 +310,7 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
           <div className="text-xs text-muted-foreground mt-0.5">Total generation</div>
         </Card>
 
-        <Card className="p-3">
+        <Card className="bg-[#10151A] border-white/8 shadow-none p-3">
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
             <Activity className="h-3.5 w-3.5" />
             <span className="text-xs uppercase tracking-wide">Activity</span>
@@ -321,7 +321,7 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
           </div>
         </Card>
 
-        <Card className="p-3">
+        <Card className="bg-[#10151A] border-white/8 shadow-none p-3">
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
             <Flag className="h-3.5 w-3.5" />
             <span className="text-xs uppercase tracking-wide">Flags</span>
@@ -338,7 +338,7 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
 
       {/* Worker System Logs */}
       {data.recentUserLogs && data.recentUserLogs.length > 0 && (
-        <Card>
+        <Card className="bg-[#10151A] border-white/8 shadow-none">
           <AccordionItem value="logs" className="border-0">
           <AccordionTrigger className="px-6 py-4 text-sm font-medium hover:no-underline">
             Worker System Logs ({data.recentUserLogs.length})
@@ -379,7 +379,7 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
 
       {/* Recent Transactions */}
       {data.recentTransactions && data.recentTransactions.length > 0 && (
-        <Card>
+        <Card className="bg-[#10151A] border-white/8 shadow-none">
           <AccordionItem value="transactions" className="border-0">
           <AccordionTrigger className="px-6 py-4 text-sm font-medium hover:no-underline">
             Recent Transactions ({data.recentTransactions.length})
@@ -422,7 +422,7 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
 
       {/* User Flags — expanded by default (most actionable) */}
       {data.flags && data.flags.length > 0 && (
-        <Card>
+        <Card className="bg-[#10151A] border-white/8 shadow-none">
           <AccordionItem value="flags" className="border-0">
           <AccordionTrigger className="px-6 py-4 text-sm font-medium hover:no-underline">
             User Flags ({data.flags.length})

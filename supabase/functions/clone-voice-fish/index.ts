@@ -90,14 +90,18 @@ export async function handler(req: Request): Promise<Response> {
       });
     }
 
-    // Enforce plan voice-clone limit. Pull the user's current plan
-    // from the subscriptions row; default to "free".
+    // Enforce plan voice-clone limit. The subscriptions table column
+    // is `plan_name` (was reading `plan` previously which is undefined
+    // → every user got bucketed as "free" → 0 voice limit → 402).
+    // Manual / enterprise rows still use plan_name='studio' so the
+    // existing PLAN_VOICE_LIMITS map covers them.
     const { data: sub } = await supabase
       .from("subscriptions")
-      .select("plan")
+      .select("plan_name, status")
       .eq("user_id", user.id)
       .maybeSingle();
-    const plan = (sub?.plan as string | undefined)?.toLowerCase() ?? "free";
+    const planRaw = (sub?.plan_name as string | undefined) ?? "free";
+    const plan = planRaw.toLowerCase();
     const limit = PLAN_VOICE_LIMITS[plan] ?? 0;
 
     const { count: currentCount } = await supabase

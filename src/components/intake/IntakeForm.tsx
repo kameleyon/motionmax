@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { isFlagOn } from '@/lib/featureFlags';
+import { useUserClones, resolveVoiceForProject } from "@/hooks/useUserClones";
 import {
   getDefaultSpeaker,
   getSpeakersForLanguage,
@@ -210,7 +211,13 @@ export default function IntakeForm({
   };
 
   const speakersForLang = useMemo(() => getSpeakersForLanguage(language), [language]);
+  // User's cloned voices — surfaced at the TOP of the voice select.
+  // The reset-on-language-change guard below treats clone:* picker IDs
+  // as always valid (clones speak any language via Fish s2-pro).
+  const { data: userClones = [] } = useUserClones();
   useEffect(() => {
+    const isClone = typeof voice === "string" && voice.startsWith("clone:");
+    if (isClone) return;
     if (!speakersForLang.some((s) => s.id === voice)) setVoice(getDefaultSpeaker(language));
   }, [language, speakersForLang, voice]);
 
@@ -548,6 +555,12 @@ export default function IntakeForm({
       // job; the kickoff includes them, but the project row didn't,
       // so any flow that re-loaded the project (refresh, share) lost
       // the references entirely. Now they ride along on the row.
+      // Resolve the picker selection: if the user picked a cloned
+      // voice (id prefixed with `clone:`), this returns voice_type
+      // 'custom' + the external Fish/ElevenLabs id so the audio
+      // router routes through the right TTS provider.
+      const resolvedVoice = resolveVoiceForProject(voice as string, userClones);
+
       const projectInsert: Record<string, unknown> = {
         user_id: user.id,
         title,
@@ -555,7 +568,9 @@ export default function IntakeForm({
         project_type: mode,
         format: formatFromAspect(aspect),
         length,
-        voice_name: voice,
+        voice_name: resolvedVoice.voice_name,
+        voice_type: resolvedVoice.voice_type,
+        voice_id: resolvedVoice.voice_id,
         voice_inclination: language,
         style: styleId,
         character_description: enrichedCharDesc || null,
@@ -892,9 +907,22 @@ export default function IntakeForm({
             onChange={(e) => setVoice(e.target.value as SpeakerVoice)}
             className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50"
           >
-            {speakersForLang.map((s) => (
-              <option key={s.id} value={s.id}>{s.label} · {s.description}</option>
-            ))}
+            {/* User's cloned voices — pinned to the top so they're
+                discoverable. Empty optgroup is omitted. */}
+            {userClones.length > 0 && (
+              <optgroup label="✨ Your cloned voices">
+                {userClones.map((c) => (
+                  <option key={c.pickerId} value={c.pickerId}>
+                    {c.name} · {c.description}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            <optgroup label="Studio voices">
+              {speakersForLang.map((s) => (
+                <option key={s.id} value={s.id}>{s.label} · {s.description}</option>
+              ))}
+            </optgroup>
           </select>
         </div>
         <div>

@@ -163,6 +163,11 @@ export default function Inspector({
 
   const language = state.project?.voice_inclination ?? 'en';
   const voiceOptions = getSpeakersForLanguage(language);
+  // User's cloned voices — surfaced at the top of the picker so the
+  // user can swap a project to use their own clone after the fact.
+  // The Apply-to-all button + per-scene Regenerate Audio path resolves
+  // a clone:* picker id to the right voice_type/voice_id at write time.
+  const { data: userClones = [] } = useUserClones();
 
   // Voice preview — uses the shared `getSampleText` helper so the
   // preview is always localised (Gemini voices especially need pure
@@ -621,9 +626,18 @@ export default function Inspector({
                 onChange={(e) => setVoiceDraft(e.target.value as SpeakerVoice)}
                 className="flex-1 min-w-0 w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-[12.5px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50 overflow-hidden text-ellipsis whitespace-nowrap"
               >
-                {voiceOptions.map((v) => (
-                  <option key={v.id} value={v.id}>{v.label} · {v.description}</option>
-                ))}
+                {userClones.length > 0 && (
+                  <optgroup label="✨ Your cloned voices">
+                    {userClones.map((c) => (
+                      <option key={c.pickerId} value={c.pickerId}>{c.name} · {c.description}</option>
+                    ))}
+                  </optgroup>
+                )}
+                <optgroup label="Studio voices">
+                  {voiceOptions.map((v) => (
+                    <option key={v.id} value={v.id}>{v.label} · {v.description}</option>
+                  ))}
+                </optgroup>
               </select>
               <button
                 type="button"

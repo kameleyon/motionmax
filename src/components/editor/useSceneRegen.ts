@@ -357,9 +357,38 @@ export function useSceneRegen(state: EditorState | null) {
     if (!user || !state?.project || !state?.generation) return;
     setBusy('regen');
     try {
+      // Detect cloned-voice picker IDs (`clone:<external_id>`) and
+      // write the project columns the audio router expects:
+      //   - voice_name → friendly display name
+      //   - voice_type → 'custom' so handleCinematicAudio /
+      //     handleMasterAudio resolve customVoiceId + customVoiceProvider
+      //   - voice_id   → external Fish/ElevenLabs id used as reference_id
+      // For built-in voices the existing behaviour is preserved.
+      let voiceUpdate: Record<string, string | null> = { voice_name: voice };
+      if (voice.startsWith('clone:')) {
+        const externalId = voice.slice('clone:'.length);
+        const { data: clone } = await supabase
+          .from('user_voices')
+          .select('voice_name, voice_id')
+          .eq('user_id', user.id)
+          .eq('voice_id', externalId)
+          .maybeSingle();
+        if (!clone) throw new Error('Could not find that cloned voice in your library.');
+        voiceUpdate = {
+          voice_name: clone.voice_name as string,
+          voice_type: 'custom',
+          voice_id: clone.voice_id as string,
+        };
+      } else {
+        // Switching from a custom voice back to a built-in — clear the
+        // custom flag/id so the router doesn't keep routing through Fish.
+        voiceUpdate.voice_type = null;
+        voiceUpdate.voice_id = null;
+      }
+
       const { error: projErr } = await supabase
         .from('projects')
-        .update({ voice_name: voice })
+        .update(voiceUpdate as never)
         .eq('id', state.project.id);
       if (projErr) throw new Error(projErr.message);
 

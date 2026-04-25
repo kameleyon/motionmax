@@ -160,6 +160,66 @@ function repairUnescapedQuotes(json: string): string {
   return result;
 }
 
+/** Repair "Bad escaped character" failures.
+ *
+ *  LLMs occasionally produce strings like:
+ *    "title": "Vini Jr: Twòn an ak Orizo a — Lavni \é Lejand"
+ *  where `\é` is an invalid JSON escape (only \" \\ \/ \b \f \n \r \t \uXXXX
+ *  are legal). They also sometimes inline literal control characters
+ *  (raw \n, \t, \r) inside string values, which JSON.parse rejects.
+ *
+ *  This walker tracks "am I inside a string?" via state, and when inside
+ *  a string:
+ *    - A backslash NOT followed by a valid escape char gets doubled
+ *      (`\é` → `\\é`, which JSON.parse decodes back to literal `\é`)
+ *    - Raw control chars (\n, \r, \t) get escaped (\n → \\n etc.)
+ *  Outside strings, content passes through unchanged. */
+function repairBadEscapes(json: string): string {
+  const VALID_ESCAPE_NEXT = new Set(['"', "\\", "/", "b", "f", "n", "r", "t", "u"]);
+  let result = "";
+  let inString = false;
+  for (let i = 0; i < json.length; i++) {
+    const ch = json[i];
+    if (!inString) {
+      if (ch === '"') {
+        inString = true;
+        result += ch;
+        continue;
+      }
+      result += ch;
+      continue;
+    }
+    // We're inside a string value.
+    if (ch === "\\") {
+      const next = json[i + 1];
+      if (next !== undefined && VALID_ESCAPE_NEXT.has(next)) {
+        // Valid escape — pass both chars through verbatim.
+        result += ch + next;
+        i++;
+        continue;
+      }
+      // Invalid escape — double the backslash so JSON.parse sees a
+      // literal `\` followed by the next char (which then continues
+      // the string normally).
+      result += "\\\\";
+      continue;
+    }
+    if (ch === '"') {
+      inString = false;
+      result += ch;
+      continue;
+    }
+    // Escape raw control characters that aren't legal inside JSON
+    // strings. Anything else (including unicode/accented chars) is
+    // passed through.
+    if (ch === "\n") { result += "\\n"; continue; }
+    if (ch === "\r") { result += "\\r"; continue; }
+    if (ch === "\t") { result += "\\t"; continue; }
+    result += ch;
+  }
+  return result;
+}
+
 /** Return the top-level keys of an object (up to 12) for debug logging. */
 function getTopLevelKeys(value: unknown): string[] {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -281,15 +341,32 @@ export function extractJsonFromLLMResponse(raw: string, label: string): unknown 
         });
         return result;
       } catch (thirdError) {
-        console.error(
-          `[JSON_EXTRACT] ${label}: all parse attempts failed.`,
-          `\nFirst error: ${(firstError as Error).message}`,
-          `\nSecond error: ${(secondError as Error).message}`,
-          `\nThird error: ${(thirdError as Error).message}`,
-          `\nRaw content (first 800 chars): ${raw.substring(0, 800)}`,
-          `\nRaw content (last 300 chars): ${raw.substring(Math.max(0, raw.length - 300))}`,
-        );
-        throw new Error(`Failed to parse ${label}: invalid JSON from LLM`);
+        // Step 7: Repair "Bad escaped character" — LLM emitted a `\`
+        // not followed by a valid JSON escape (e.g. `\é`, `\g`, `\.`).
+        // Sanitize by walking the string, when INSIDE a JSON string
+        // value, doubling any `\` that doesn't precede one of
+        // ["\\/bfnrtu]. Also escapes literal control chars (\n, \t,
+        // \r) that the LLM occasionally inlines unescaped.
+        try {
+          const escapeRepaired = repairBadEscapes(fixedContent);
+          const result = JSON.parse(escapeRepaired);
+          console.log(`[JSON_EXTRACT] ${label}: recovered via escape repair`, {
+            repairedLength: escapeRepaired.length,
+            topLevelKeys: getTopLevelKeys(result),
+          });
+          return result;
+        } catch (fourthError) {
+          console.error(
+            `[JSON_EXTRACT] ${label}: all parse attempts failed.`,
+            `\nFirst error: ${(firstError as Error).message}`,
+            `\nSecond error: ${(secondError as Error).message}`,
+            `\nThird error: ${(thirdError as Error).message}`,
+            `\nFourth error: ${(fourthError as Error).message}`,
+            `\nRaw content (first 800 chars): ${raw.substring(0, 800)}`,
+            `\nRaw content (last 300 chars): ${raw.substring(Math.max(0, raw.length - 300))}`,
+          );
+          throw new Error(`Failed to parse ${label}: invalid JSON from LLM`);
+        }
       }
     }
   }

@@ -734,7 +734,10 @@ export default function Projects() {
 
   return (
     <AppShell breadcrumb="All projects">
-      <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
+      <Helmet>
+        <title>Projects · MotionMax</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
       <div className="px-3 sm:px-4 md:px-6 lg:px-8 py-5 sm:py-7 max-w-[1480px] mx-auto">
 
         {/* Hero — title + tagline; stats sit beside on lg+, stack

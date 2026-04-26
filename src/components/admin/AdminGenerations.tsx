@@ -189,7 +189,7 @@ export function AdminGenerations() {
               key={option.value}
               onClick={() => setPeriod(option.value)}
               className={cn(
-                "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                "px-4 py-2.5 text-[13px] font-medium rounded-md transition-colors min-h-[36px]",
                 period === option.value ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -426,7 +426,7 @@ export function AdminGenerations() {
                   key={s}
                   onClick={() => { setListStatus(s); setListPage(0); }}
                   className={cn(
-                    "px-2.5 py-1 text-xs font-medium rounded-md border transition-colors",
+                    "px-3 py-2 text-[12px] font-medium rounded-md border transition-colors min-h-[36px]",
                     listStatus === s ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"
                   )}
                 >
@@ -443,10 +443,10 @@ export function AdminGenerations() {
                 value={listSearchInput}
                 onChange={e => setListSearchInput(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") { setListSearch(listSearchInput); setListPage(0); } }}
-                className="pl-8 h-8 text-xs"
+                className="pl-8 h-11 sm:h-8 text-base sm:text-xs"
               />
             </div>
-            <Button size="sm" variant="outline" className="h-8" onClick={() => { setListSearch(listSearchInput); setListPage(0); }}>
+            <Button size="sm" variant="outline" className="h-11 sm:h-8" onClick={() => { setListSearch(listSearchInput); setListPage(0); }}>
               Search
             </Button>
           </div>

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 /** Project-theme replacement for window.confirm() on the bulk-apply
  *  buttons (voice apply-all, motion re-render-all). Matches BulkOpModal's
@@ -43,6 +43,29 @@ export default function ConfirmModal({
     return () => { document.body.style.overflow = prev; };
   }, [open]);
 
+  // Focus trap so Tab cycles within the modal (WCAG 2.1.2). The Cancel
+  // button gets initial focus (less destructive default than Confirm).
+  const cancelRef = useRef<HTMLButtonElement | null>(null);
+  const confirmRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    cancelRef.current?.focus();
+    const handleTab = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      const a = cancelRef.current;
+      const b = confirmRef.current;
+      if (!a || !b) return;
+      const active = document.activeElement;
+      if (e.shiftKey) {
+        if (active === a) { e.preventDefault(); b.focus(); }
+      } else {
+        if (active === b) { e.preventDefault(); a.focus(); }
+      }
+    };
+    document.addEventListener('keydown', handleTab);
+    return () => document.removeEventListener('keydown', handleTab);
+  }, [open]);
+
   if (!open) return null;
 
   return (
@@ -52,7 +75,7 @@ export default function ConfirmModal({
       aria-modal="true"
       aria-label={title}
     >
-      <div className="relative w-[min(92vw,520px)] rounded-2xl border border-white/10 bg-gradient-to-b from-[#10151A] to-[#0A0D0F] p-7 sm:p-9 text-center shadow-[0_40px_120px_-30px_rgba(20,200,204,.45)]">
+      <div className="relative w-[min(92vw,520px)] max-h-[90dvh] overflow-y-auto rounded-2xl border border-white/10 bg-gradient-to-b from-[#10151A] to-[#0A0D0F] p-7 sm:p-9 text-center shadow-[0_40px_120px_-30px_rgba(20,200,204,.45)]">
         <div
           className="absolute inset-0 pointer-events-none rounded-2xl opacity-[0.05]"
           style={{
@@ -84,17 +107,18 @@ export default function ConfirmModal({
 
           <div className="flex items-center justify-center gap-3 mt-2">
             <button
+              ref={cancelRef}
               type="button"
               onClick={onCancel}
-              className="min-w-[120px] px-5 py-2.5 rounded-full text-[12.5px] font-semibold text-[#ECEAE4] border border-white/15 bg-white/[0.03] hover:bg-white/[0.08] hover:border-white/25 transition-colors"
+              className="min-w-[120px] px-5 py-3 rounded-full text-[12.5px] font-semibold text-[#ECEAE4] border border-white/15 bg-white/[0.03] hover:bg-white/[0.08] hover:border-white/25 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A0D0F]"
             >
               {cancelLabel}
             </button>
             <button
+              ref={confirmRef}
               type="button"
               onClick={onConfirm}
-              autoFocus
-              className="min-w-[120px] px-5 py-2.5 rounded-full text-[12.5px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 shadow-[0_8px_24px_-8px_rgba(20,200,204,.6)]"
+              className="min-w-[120px] px-5 py-3 rounded-full text-[12.5px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 shadow-[0_8px_24px_-8px_rgba(20,200,204,.6)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A0D0F]"
             >
               {confirmLabel}
             </button>

@@ -1,5 +1,5 @@
 import { Helmet } from "react-helmet-async";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { Button } from "@/components/ui/button";
@@ -12,16 +12,18 @@ import {
   AlertTriangle, Cable, Film, LogOut, Activity, Server, TrendingUp,
   ChevronLeft, ChevronDown,
 } from "lucide-react";
-import { AdminOverview } from "@/components/admin/AdminOverview";
-import { AdminSubscribers } from "@/components/admin/AdminSubscribers";
-import { AdminRevenue } from "@/components/admin/AdminRevenue";
-import { AdminGenerations } from "@/components/admin/AdminGenerations";
-import { AdminFlags } from "@/components/admin/AdminFlags";
-import { AdminLogs } from "@/components/admin/AdminLogs";
-import { AdminApiCalls } from "@/components/admin/AdminApiCalls";
-import { AdminQueueMonitor } from "@/components/admin/AdminQueueMonitor";
-import { AdminWorkerHealth } from "@/components/admin/AdminWorkerHealth";
-import { AdminPerformanceMetrics } from "@/components/admin/AdminPerformanceMetrics";
+// Heavy admin tabs — lazy-loaded so the initial admin route is light.
+// Each tab only fetches when the user navigates into it.
+const AdminOverview = lazy(() => import("@/components/admin/AdminOverview").then(m => ({ default: m.AdminOverview })));
+const AdminSubscribers = lazy(() => import("@/components/admin/AdminSubscribers").then(m => ({ default: m.AdminSubscribers })));
+const AdminRevenue = lazy(() => import("@/components/admin/AdminRevenue").then(m => ({ default: m.AdminRevenue })));
+const AdminGenerations = lazy(() => import("@/components/admin/AdminGenerations").then(m => ({ default: m.AdminGenerations })));
+const AdminFlags = lazy(() => import("@/components/admin/AdminFlags").then(m => ({ default: m.AdminFlags })));
+const AdminLogs = lazy(() => import("@/components/admin/AdminLogs").then(m => ({ default: m.AdminLogs })));
+const AdminApiCalls = lazy(() => import("@/components/admin/AdminApiCalls").then(m => ({ default: m.AdminApiCalls })));
+const AdminQueueMonitor = lazy(() => import("@/components/admin/AdminQueueMonitor").then(m => ({ default: m.AdminQueueMonitor })));
+const AdminWorkerHealth = lazy(() => import("@/components/admin/AdminWorkerHealth").then(m => ({ default: m.AdminWorkerHealth })));
+const AdminPerformanceMetrics = lazy(() => import("@/components/admin/AdminPerformanceMetrics").then(m => ({ default: m.AdminPerformanceMetrics })));
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -61,19 +63,26 @@ const NAV_GROUPS = [
 ];
 
 function AdminContent({ tab }: { tab: string }) {
+  const fallback = (
+    <div className="flex items-center justify-center py-16">
+      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-label="Loading admin tab" />
+    </div>
+  );
+  let inner: React.ReactNode;
   switch (tab) {
-    case "overview": return <AdminOverview />;
-    case "subscribers": return <AdminSubscribers />;
-    case "revenue": return <AdminRevenue />;
-    case "generations": return <AdminGenerations />;
-    case "queue": return <AdminQueueMonitor />;
-    case "worker": return <AdminWorkerHealth />;
-    case "performance": return <AdminPerformanceMetrics />;
-    case "api-calls": return <AdminApiCalls />;
-    case "flags": return <AdminFlags />;
-    case "logs": return <AdminLogs />;
-    default: return <AdminOverview />;
+    case "overview": inner = <AdminOverview />; break;
+    case "subscribers": inner = <AdminSubscribers />; break;
+    case "revenue": inner = <AdminRevenue />; break;
+    case "generations": inner = <AdminGenerations />; break;
+    case "queue": inner = <AdminQueueMonitor />; break;
+    case "worker": inner = <AdminWorkerHealth />; break;
+    case "performance": inner = <AdminPerformanceMetrics />; break;
+    case "api-calls": inner = <AdminApiCalls />; break;
+    case "flags": inner = <AdminFlags />; break;
+    case "logs": inner = <AdminLogs />; break;
+    default: inner = <AdminOverview />;
   }
+  return <Suspense fallback={fallback}>{inner}</Suspense>;
 }
 
 export default function Admin() {
@@ -123,7 +132,10 @@ export default function Admin() {
 
   return (
     <div className="min-h-screen bg-[#0A0D0F] text-[#ECEAE4] flex flex-col">
-      <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
+      <Helmet>
+        <title>Admin · MotionMax</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
       {/* Header — dark palette + Dashboard button now jumps to the
           new dashboard (was /app legacy). */}
       <header className="border-b border-white/8 bg-[#10151A]/80 backdrop-blur-md sticky top-0 z-50">

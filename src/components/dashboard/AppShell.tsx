@@ -58,7 +58,7 @@ export default function AppShell({
         <div className="flex items-center gap-2 px-3 sm:px-4 md:px-7 py-3 border-b border-white/10 bg-[#0A0D0F]/70 backdrop-blur-md shrink-0 h-[64px]">
           <button
             onClick={() => setDrawerOpen(true)}
-            className="md:hidden w-[30px] h-[30px] rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors"
+            className="md:hidden w-11 h-11 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors"
             aria-label="Open sidebar"
             title="Menu"
           >

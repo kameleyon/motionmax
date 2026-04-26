@@ -200,7 +200,10 @@ export default function Dashboard() {
 
   return (
     <div className="flex h-screen flex-col bg-background overflow-hidden relative">
-      <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
+      <Helmet>
+        <title>Studio · MotionMax</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
       {/* Header */}
       <AppHeader className="relative border-primary/20" />
 

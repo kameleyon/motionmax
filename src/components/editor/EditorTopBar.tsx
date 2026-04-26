@@ -240,7 +240,7 @@ export default function EditorTopBar({
   }, [exportDone, exportState.url]);
 
   return (
-    <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 border-b border-white/10 bg-[#0A0D0F]/80 backdrop-blur-md h-[54px] col-span-full overflow-hidden">
+    <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 border-b border-white/10 bg-[#0A0D0F]/80 backdrop-blur-md h-16 sm:h-[54px] col-span-full overflow-hidden">
       {/* Mobile hamburger — opens the main nav menu (Studio / Projects /
           Voices / Settings / Log Out). Scenes are NOT in here: on
           mobile, users advance scenes by tapping the stage. */}
@@ -249,7 +249,7 @@ export default function EditorTopBar({
         onClick={onOpenMenuDrawer}
         aria-label="Open menu"
         title="Menu"
-        className="lg:hidden w-8 h-8 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4]"
+        className="lg:hidden w-11 h-11 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4]"
       >
         <Menu className="w-4 h-4" />
       </button>
@@ -260,7 +260,7 @@ export default function EditorTopBar({
         onClick={() => navigate('/dashboard-new')}
         aria-label="Back to dashboard"
         title="Back to Studio"
-        className="w-8 h-8 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors shrink-0"
+        className="w-11 h-11 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors shrink-0"
       >
         <ArrowLeft className="w-4 h-4" />
       </button>
@@ -307,7 +307,7 @@ export default function EditorTopBar({
         aria-label="Share"
         onClick={() => setShareOpen(true)}
         disabled={projectLocked || !project}
-        className="hidden md:inline-flex w-8 h-8 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        className="hidden md:inline-flex w-11 h-11 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       >
         <Share2 className="w-4 h-4" />
       </button>
@@ -323,7 +323,7 @@ export default function EditorTopBar({
         aria-label="Regenerate as a new project"
         onClick={handleRegenerate}
         disabled={regenerating || projectLocked || !project}
-        className="hidden md:inline-flex w-8 h-8 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        className="hidden md:inline-flex w-11 h-11 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {regenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCw className="w-4 h-4" />}
       </button>
@@ -350,10 +350,10 @@ export default function EditorTopBar({
             <button
               type="button"
               disabled={exporting || projectLocked}
-              className="px-1.5 border-l border-[#0A0D0F]/20 bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] text-[#0A0D0F] hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
-              aria-label="Export preset"
+              className="min-w-[36px] px-3 border-l border-[#0A0D0F]/20 bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] text-[#0A0D0F] hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Choose export preset"
             >
-              <ChevronDown className="w-3 h-3" />
+              <ChevronDown className="w-4 h-4" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent
@@ -386,7 +386,7 @@ export default function EditorTopBar({
         type="button"
         onClick={onOpenInspectorDrawer}
         aria-label="Open inspector"
-        className="lg:hidden w-8 h-8 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4]"
+        className="lg:hidden w-11 h-11 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4]"
         title="Edit scene"
       >
         <SlidersHorizontal className="w-4 h-4" />

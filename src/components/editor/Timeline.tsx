@@ -100,7 +100,7 @@ function Timeline({
           aria-label="Previous scene"
           disabled={selectedSceneIndex <= 0 || !generationFullyReady}
           onClick={() => onSelectScene(Math.max(0, selectedSceneIndex - 1))}
-          className="w-7 h-7 grid place-items-center rounded-md text-[#8A9198] hover:bg-[#1B2228] hover:text-[#ECEAE4] disabled:opacity-30 disabled:cursor-not-allowed"
+          className="w-11 h-11 sm:w-7 sm:h-7 grid place-items-center rounded-md text-[#8A9198] hover:bg-[#1B2228] hover:text-[#ECEAE4] disabled:opacity-30 disabled:cursor-not-allowed"
         >
           <SkipBack className="w-3.5 h-3.5" />
         </button>
@@ -110,7 +110,7 @@ function Timeline({
           disabled={state.phase !== 'ready' || !generationFullyReady}
           title={!generationFullyReady ? 'Waiting for all scenes to finish rendering' : (playing ? 'Pause' : 'Play')}
           aria-label={playing ? 'Pause' : 'Play'}
-          className="w-9 h-9 grid place-items-center rounded-full bg-[#ECEAE4] text-[#0A0D0F] hover:brightness-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          className="w-12 h-12 sm:w-9 sm:h-9 grid place-items-center rounded-full bg-[#ECEAE4] text-[#0A0D0F] hover:brightness-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {playing ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
         </button>
@@ -120,7 +120,7 @@ function Timeline({
           aria-label="Next scene"
           disabled={selectedSceneIndex >= state.scenes.length - 1 || !generationFullyReady}
           onClick={() => onSelectScene(Math.min(state.scenes.length - 1, selectedSceneIndex + 1))}
-          className="w-7 h-7 grid place-items-center rounded-md text-[#8A9198] hover:bg-[#1B2228] hover:text-[#ECEAE4] disabled:opacity-30 disabled:cursor-not-allowed"
+          className="w-11 h-11 sm:w-7 sm:h-7 grid place-items-center rounded-md text-[#8A9198] hover:bg-[#1B2228] hover:text-[#ECEAE4] disabled:opacity-30 disabled:cursor-not-allowed"
         >
           <SkipForward className="w-3.5 h-3.5" />
         </button>
@@ -164,7 +164,7 @@ function Timeline({
             every track live INSIDE this container at 100% width of
             that wider strip, which is how their percentage-based
             offsets stay aligned. */}
-        <div className="flex-1 overflow-x-auto overflow-y-auto">
+        <div className="flex-1 overflow-x-auto overflow-y-hidden">
           <div style={{ minWidth: tracksMinPx }}>
             {/* Ruler */}
             <div className="relative h-4 bg-[#10151A] border-b border-white/5 font-mono text-[9px] text-[#5A6268] tracking-[0.08em]">
@@ -259,7 +259,12 @@ function Timeline({
                 {state.scenes.map((scene, i) => {
                   const offsetPct = (sceneOffsets[i] / totalMs) * 100;
                   const widthPct = (sceneDurationMs(scene) / totalMs) * 100;
-                  const peaks = scene.waveformPeaks ?? Array.from({ length: 40 }, (_, k) =>
+                  // Cap peaks proportional to clip width so a 50-scene
+                  // project doesn't render 2000 DOM nodes. ~4 px/peak
+                  // is the densest a screenshot reads as a waveform.
+                  const widthPx = Math.max(8, (widthPct / 100) * tracksMinPx);
+                  const peakCount = Math.min(40, Math.max(4, Math.floor(widthPx / 4)));
+                  const peaks = scene.waveformPeaks ?? Array.from({ length: peakCount }, (_, k) =>
                     20 + Math.abs(Math.sin((k + i * 3) * 0.31) + Math.cos((k + i * 2) * 0.77) * 0.6) * 60,
                   );
                   const isActive = i === selectedSceneIndex;
@@ -278,7 +283,7 @@ function Timeline({
                       }
                       style={{ left: `${offsetPct}%`, width: `${widthPct}%` }}
                     >
-                      {peaks.slice(0, 40).map((h, k) => (
+                      {peaks.slice(0, peakCount).map((h, k) => (
                         <span
                           key={k}
                           className={`flex-1 rounded-[1px] ${isActive ? 'bg-[#14C8CC]' : 'bg-[#14C8CC]/55'}`}

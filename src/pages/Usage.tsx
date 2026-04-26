@@ -228,7 +228,10 @@ export default function Usage() {
 
   return (
     <AppShell breadcrumb="Usage & Billing">
-      <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
+      <Helmet>
+        <title>Usage &amp; Billing · MotionMax</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
 
       <div className="px-3 sm:px-4 md:px-6 lg:px-8 py-5 sm:py-7 max-w-[960px] mx-auto">
           <div className="flex items-start justify-between gap-3 mb-4">

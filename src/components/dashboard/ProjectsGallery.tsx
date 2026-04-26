@@ -255,7 +255,7 @@ export default function ProjectsGallery() {
         >
           <div className="relative aspect-[4/3] sm:aspect-[4/3] bg-black overflow-hidden group">
             {recentProject.thumbnail_url ? (
-              <img src={recentProject.thumbnail_url} alt={recentProject.title ?? ''} className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+              <img src={recentProject.thumbnail_url} alt={recentProject.title ?? ''} loading="lazy" decoding="async" width={640} height={360} className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
             ) : (
               <div className="absolute inset-0" style={{ background: generateGradient(recentProject.id) }} />
             )}
@@ -344,7 +344,7 @@ export default function ProjectsGallery() {
             >
               <div className="relative aspect-[4/5] overflow-hidden bg-black">
                 {proj.thumbnail_url ? (
-                  <img src={proj.thumbnail_url} alt={proj.title ?? ''} className="absolute inset-0 w-full h-full object-cover opacity-75 group-hover:opacity-95 transition-opacity" />
+                  <img src={proj.thumbnail_url} alt={proj.title ?? ''} loading="lazy" decoding="async" width={512} height={640} className="absolute inset-0 w-full h-full object-cover opacity-75 group-hover:opacity-95 transition-opacity" />
                 ) : (
                   <div className="absolute inset-0" style={{ background: generateGradient(proj.id) }} />
                 )}

@@ -194,7 +194,7 @@ export default function Hero() {
                 type="button"
                 onClick={() => setMode(m.id)}
                 className={
-                  'flex-1 sm:flex-initial px-1.5 sm:px-3 py-1.5 text-[11px] sm:text-[12px] rounded-md inline-flex items-center justify-center gap-1 sm:gap-1.5 font-sans font-medium transition-colors whitespace-nowrap ' +
+                  'flex-1 sm:flex-initial px-2 sm:px-3 py-2.5 text-[12px] rounded-md inline-flex items-center justify-center gap-1 sm:gap-1.5 font-sans font-medium transition-colors whitespace-nowrap min-h-[36px] ' +
                   (mode === m.id
                     ? 'bg-[#10151A] text-[#ECEAE4] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'
                     : 'text-[#8A9198] hover:text-[#ECEAE4]')
@@ -219,7 +219,7 @@ export default function Hero() {
                   aria-expanded={langMenuOpen}
                   aria-controls="hero-lang-menu"
                   aria-label={`Language: ${LANGUAGE_LABEL[language]}`}
-                  className="font-mono text-[10.5px] text-[#8A9198] px-2.5 py-1 rounded-md border border-white/5 tracking-wider inline-flex items-center gap-1.5 hover:text-[#ECEAE4] hover:border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F]"
+                  className="font-mono text-[12px] text-[#8A9198] px-3 py-2 rounded-md border border-white/5 tracking-wider inline-flex items-center gap-1.5 min-h-[36px] hover:text-[#ECEAE4] hover:border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F]"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="opacity-70" aria-hidden="true">
                     <circle cx="12" cy="12" r="9" />
@@ -261,7 +261,7 @@ export default function Hero() {
                   aria-expanded={voiceMenuOpen}
                   aria-controls="hero-voice-menu"
                   aria-label={`Voice: ${prettyVoiceLabel(voice, currentSpeaker?.label ?? 'Voice')}`}
-                  className="font-mono text-[10.5px] text-[#8A9198] px-2.5 py-1 rounded-md border border-white/5 tracking-wider inline-flex items-center gap-1.5 hover:text-[#ECEAE4] hover:border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F]"
+                  className="font-mono text-[12px] text-[#8A9198] px-3 py-2 rounded-md border border-white/5 tracking-wider inline-flex items-center gap-1.5 min-h-[36px] hover:text-[#ECEAE4] hover:border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F]"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="opacity-70" aria-hidden="true">
                     <rect x="9" y="3" width="6" height="13" rx="3" />
@@ -304,7 +304,7 @@ export default function Hero() {
                   aria-expanded={aspectMenuOpen}
                   aria-controls="hero-aspect-menu"
                   aria-label={`Aspect ratio: ${aspect}`}
-                  className="font-mono text-[10.5px] text-[#8A9198] px-2.5 py-1 rounded-md border border-white/5 tracking-wider inline-flex items-center gap-1.5 hover:text-[#ECEAE4] hover:border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F]"
+                  className="font-mono text-[12px] text-[#8A9198] px-3 py-2 rounded-md border border-white/5 tracking-wider inline-flex items-center gap-1.5 min-h-[36px] hover:text-[#ECEAE4] hover:border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F]"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="opacity-70" aria-hidden="true">
                     <rect x="6" y="4" width="12" height="16" rx="2" />
@@ -341,7 +341,7 @@ export default function Hero() {
             onClick={(e) => { if (!canSubmit) e.preventDefault(); }}
             aria-disabled={!canSubmit}
             className={
-              'w-full justify-center inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold transition-all ' +
+              'w-full justify-center inline-flex items-center gap-2 px-4 py-3 min-h-[44px] rounded-lg text-[14px] font-semibold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A0D0F] ' +
               (canSubmit
                 ? 'text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 shadow-[0_10px_30px_-14px_rgba(20,200,204,0.55)]'
                 : 'text-[#5A6268] bg-[#1B2228] border border-white/5 cursor-not-allowed')
@@ -362,7 +362,7 @@ export default function Hero() {
             type="button"
             key={s}
             onClick={() => setPrompt(s)}
-            className="text-[11px] text-[#8A9198] px-2.5 py-1.5 rounded-full border border-white/5 cursor-pointer transition-colors bg-black/15 hover:text-[#ECEAE4] hover:border-white/10"
+            className="text-[12px] text-[#8A9198] px-3 py-2 rounded-full border border-white/5 cursor-pointer transition-colors bg-black/15 hover:text-[#ECEAE4] hover:border-white/10 min-h-[36px] flex items-center"
           >
             <span className="font-mono text-[10px] text-[#5A6268] mr-1.5 tracking-wider">TRY</span>
             {s}

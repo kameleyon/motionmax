@@ -519,7 +519,10 @@ function Stage({
   // the bottom always has clear vertical space beneath it — was
   // overlapping on short mobile viewports.
   const frameMaxW = isFullscreen ? '100%' : (state.aspect === '16:9' ? '92%' : '94%');
-  const frameMaxH = isFullscreen ? '100%' : (state.aspect === '16:9' ? '86%' : '84%');
+  // On portrait mobile we keep frameMaxH 78% (was 84%) so the
+  // AI-disclaimer pinned bottom-1.5 doesn't overlap the video edge on
+  // iPhone SE 375x667 landscape. Landscape stays at 86%.
+  const frameMaxH = isFullscreen ? '100%' : (state.aspect === '16:9' ? '86%' : '78%');
   const frameW    = isFullscreen ? '100%' : (state.aspect === '16:9' ? '82%' : 'auto');
   const frameH    = isFullscreen ? '100%' : (state.aspect === '16:9' ? 'auto' : '84%');
 
@@ -696,7 +699,11 @@ function Stage({
         {state.phase === 'ready' && captionText && (
           <div
             className="absolute left-0 right-0 pointer-events-none flex justify-center"
-            style={{ bottom: '25%' }}
+            // bottom 30% (was 25%) so the caption doesn't sit behind the
+            // iOS Safari bottom URL bar on phones. env safe-area-inset
+            // padding keeps the caption above the home-indicator on
+            // iPhones with no physical home button.
+            style={{ bottom: '30%', paddingBottom: 'env(safe-area-inset-bottom)' }}
           >
             <div className="max-w-[80%] px-3 py-1.5 rounded-md bg-black/70 border border-white/5 backdrop-blur-[1px]">
               <span className="font-sans font-bold text-[13px] sm:text-[15px] text-[#ECEAE4] tracking-tight leading-tight">

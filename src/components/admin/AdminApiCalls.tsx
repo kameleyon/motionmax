@@ -192,7 +192,7 @@ export function AdminApiCalls() {
               </CardTitle>
               <div className="flex items-center gap-2 flex-wrap">
                 <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-                  <SelectTrigger className="w-[120px] h-8 text-xs">
+                  <SelectTrigger className="w-[120px] h-11 sm:h-8 text-base sm:text-xs">
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent>
@@ -207,7 +207,7 @@ export function AdminApiCalls() {
                   </SelectContent>
                 </Select>
                 <Select value={providerFilter} onValueChange={(v) => { setProviderFilter(v); setPage(1); }}>
-                  <SelectTrigger className="w-[130px] h-8 text-xs">
+                  <SelectTrigger className="w-[130px] h-11 sm:h-8 text-base sm:text-xs">
                     <SelectValue placeholder="Provider" />
                   </SelectTrigger>
                   <SelectContent>
@@ -225,7 +225,7 @@ export function AdminApiCalls() {
                   size="sm"
                   onClick={() => refetch()}
                   disabled={isFetching}
-                  className="h-8 text-xs"
+                  className="h-11 sm:h-8 text-base sm:text-xs"
                 >
                   <RefreshCw className={`h-3 w-3 mr-1 ${isFetching ? "animate-spin" : ""}`} />
                   Refresh
@@ -241,7 +241,7 @@ export function AdminApiCalls() {
                   value={userSearch}
                   onChange={(e) => setUserSearch(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleUserSearch()}
-                  className="h-8 pl-8 pr-8 text-xs"
+                  className="h-11 sm:h-8 pl-8 pr-8 text-base sm:text-xs"
                 />
                 {userSearch && (
                   <button onClick={clearUserSearch} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
@@ -249,7 +249,7 @@ export function AdminApiCalls() {
                   </button>
                 )}
               </div>
-              <Button variant="outline" size="sm" onClick={handleUserSearch} className="h-8 text-xs">
+              <Button variant="outline" size="sm" onClick={handleUserSearch} className="h-11 sm:h-8 text-base sm:text-xs">
                 Search
               </Button>
               {activeUserSearch && (
@@ -274,15 +274,20 @@ export function AdminApiCalls() {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
+                  {/* Hide secondary columns on mobile — full detail
+                      lives in the expanded row. The visible columns
+                      (chevron, status, provider, total, created) cover
+                      what an admin scans for at a glance; the rest is
+                      one tap away. */}
                   <TableRow className="text-xs">
                     <TableHead className="py-2 px-2 w-8"></TableHead>
                     <TableHead className="py-2 px-2">Status</TableHead>
-                    <TableHead className="py-2 px-2">User</TableHead>
+                    <TableHead className="py-2 px-2 hidden md:table-cell">User</TableHead>
                     <TableHead className="py-2 px-2">Provider / Model</TableHead>
-                    <TableHead className="py-2 px-2 text-right">Queued</TableHead>
-                    <TableHead className="py-2 px-2 text-right">Running</TableHead>
+                    <TableHead className="py-2 px-2 text-right hidden lg:table-cell">Queued</TableHead>
+                    <TableHead className="py-2 px-2 text-right hidden lg:table-cell">Running</TableHead>
                     <TableHead className="py-2 px-2 text-right">Total</TableHead>
-                    <TableHead className="py-2 px-2 text-right">Cost</TableHead>
+                    <TableHead className="py-2 px-2 text-right hidden md:table-cell">Cost</TableHead>
                     <TableHead className="py-2 px-2 text-right">Created</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -304,7 +309,7 @@ export function AdminApiCalls() {
                         <TableCell className="py-2 px-2">
                           {getStatusBadge(log.status)}
                         </TableCell>
-                        <TableCell className="py-2 px-2">
+                        <TableCell className="py-2 px-2 hidden md:table-cell">
                           <button
                             onClick={(e) => { e.stopPropagation(); setUserSearch(log.user_display || log.user_id.slice(0, 8)); setActiveUserSearch(log.user_display || log.user_id.slice(0, 8)); setPage(1); }}
                             className="text-primary hover:underline font-medium truncate max-w-[120px] block"
@@ -323,16 +328,16 @@ export function AdminApiCalls() {
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell className="py-2 px-2 text-right text-muted-foreground">
+                        <TableCell className="py-2 px-2 text-right text-muted-foreground hidden lg:table-cell">
                           {formatDuration(log.queue_time_ms)}
                         </TableCell>
-                        <TableCell className="py-2 px-2 text-right text-muted-foreground">
+                        <TableCell className="py-2 px-2 text-right text-muted-foreground hidden lg:table-cell">
                           {formatDuration(log.running_time_ms)}
                         </TableCell>
                         <TableCell className="py-2 px-2 text-right font-medium">
                           {formatDuration(log.total_duration_ms)}
                         </TableCell>
-                        <TableCell className="py-2 px-2 text-right">
+                        <TableCell className="py-2 px-2 text-right hidden md:table-cell">
                           <span className={log.cost && log.cost > 0 ? "text-primary font-medium" : "text-muted-foreground"}>
                             {formatCost(log.cost)}
                           </span>

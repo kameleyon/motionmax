@@ -46,7 +46,10 @@ export default function IntakeFrame({
 
   return (
     <RailCtx.Provider value={bridge}>
-      <div className="flex h-[100dvh] relative bg-[#0A0D0F] text-[#ECEAE4] font-sans overflow-hidden">
+      <div
+        className="flex h-[100dvh] relative bg-[#0A0D0F] text-[#ECEAE4] font-sans overflow-hidden"
+        style={{ overscrollBehaviorY: 'contain' }}
+      >
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-3 focus:py-2 focus:bg-[#14C8CC] focus:text-[#0A0D0F] focus:rounded-md focus:font-semibold focus:text-[13px]"

@@ -1,7 +1,14 @@
 import { useSearchParams } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import type { ProjectMode } from '@/components/intake/types';
 import IntakeFrame from '@/components/intake/IntakeFrame';
 import IntakeForm from '@/components/intake/IntakeForm';
+
+const MODE_TITLE: Record<ProjectMode, string> = {
+  cinematic: 'Cinematic',
+  doc2video: 'Explainer',
+  smartflow: 'Smart Flow',
+};
 
 /** URL-shaped modes → canonical ProjectMode. Anything we don't recognise
  *  falls back to cinematic so the page never renders a blank state when a
@@ -20,14 +27,20 @@ export default function CreateNew() {
   const mode = modeFromParam(params.get('mode'));
 
   return (
-    <IntakeFrame mode={mode}>
-      <IntakeForm
-        mode={mode}
-        initialPrompt={params.get('prompt') ?? ''}
-        initialLanguage={params.get('lang') ?? 'en'}
-        initialFormat={params.get('format') ?? 'landscape'}
-        initialVoice={params.get('voice') ?? ''}
-      />
-    </IntakeFrame>
+    <>
+      <Helmet>
+        <title>Create {MODE_TITLE[mode]} · MotionMax</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
+      <IntakeFrame mode={mode}>
+        <IntakeForm
+          mode={mode}
+          initialPrompt={params.get('prompt') ?? ''}
+          initialLanguage={params.get('lang') ?? 'en'}
+          initialFormat={params.get('format') ?? 'portrait'}
+          initialVoice={params.get('voice') ?? ''}
+        />
+      </IntakeFrame>
+    </>
   );
 }

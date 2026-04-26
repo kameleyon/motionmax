@@ -307,6 +307,13 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+  /* Hide the filmic grain SVG noise overlay — its mix-blend-overlay +
+     decorative motion serves no purpose for users who opted out of
+     animation. The mobile composite cost goes away too. */
+  [data-filmic-grain="true"],
+  .filmic-grain-overlay {
+    display: none !important;
+  }
 }
 
 @layer components {

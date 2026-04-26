@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
@@ -416,7 +417,15 @@ export default function Editor() {
   // locked the entire editor with no recovery path.
   const generationFullyReady = state?.phase === 'ready';
 
+  const projectTitle = state?.project?.title?.trim();
+  const pageTitle = projectTitle ? `${projectTitle} · Editor · MotionMax` : 'Editor · MotionMax';
+
   return (
+    <>
+    <Helmet>
+      <title>{pageTitle}</title>
+      <meta name="robots" content="noindex, nofollow" />
+    </Helmet>
     <EditorFrame
       state={state}
       subView={subView}
@@ -467,5 +476,6 @@ export default function Editor() {
         />
       }
     />
+    </>
   );
 }

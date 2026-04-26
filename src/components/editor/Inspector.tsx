@@ -283,7 +283,7 @@ function Inspector({
             onClick={() => setTab(t)}
             disabled={disabled}
             className={cn(
-              'flex-1 py-3 font-mono text-[10.5px] tracking-[0.12em] uppercase transition-colors',
+              'flex-1 py-4 sm:py-3 font-mono text-[10.5px] tracking-[0.12em] uppercase transition-colors min-h-[44px] sm:min-h-0',
               t === tab ? 'text-[#ECEAE4] border-b-2 border-[#14C8CC]' : 'text-[#5A6268] hover:text-[#ECEAE4]',
               disabled && 'opacity-40 cursor-not-allowed',
             )}
@@ -362,7 +362,7 @@ function Inspector({
               value={promptDraft}
               onChange={(e) => setPromptDraft(e.target.value)}
               rows={5}
-              className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-[12.5px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 resize-y leading-[1.45]"
+              className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-base sm:text-[12.5px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 resize-y leading-[1.45]"
             />
             <div className="grid grid-cols-2 gap-2 mt-2.5">
               <button
@@ -398,7 +398,7 @@ function Inspector({
               value={imageEdit}
               onChange={(e) => setImageEdit(e.target.value)}
               placeholder="Describe the edit (e.g. add a lens flare, darker sky…)"
-              className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-[12px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 placeholder:text-[#5A6268]"
+              className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-base sm:text-[12px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 placeholder:text-[#5A6268]"
             />
             <div className="grid grid-cols-3 gap-2 mt-2">
               <button
@@ -535,7 +535,7 @@ function Inspector({
                 disabled={audioRegenActive}
                 style={{ minHeight: '220px' }}
                 className={cn(
-                  'w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2.5 text-[12.5px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 resize-y leading-[1.6]',
+                  'w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2.5 text-base sm:text-[12.5px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 resize-y leading-[1.6]',
                   audioRegenActive && 'opacity-50 cursor-not-allowed',
                 )}
               />
@@ -625,7 +625,7 @@ function Inspector({
               <select
                 value={voiceDraft}
                 onChange={(e) => setVoiceDraft(e.target.value as SpeakerVoice)}
-                className="flex-1 min-w-0 w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-[12.5px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 overflow-hidden text-ellipsis whitespace-nowrap"
+                className="flex-1 min-w-0 w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-base sm:text-[12.5px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 overflow-hidden text-ellipsis whitespace-nowrap"
               >
                 {userClones.length > 0 && (
                   <optgroup label="✨ Your cloned voices">
@@ -645,7 +645,7 @@ function Inspector({
                 onClick={() => playVoicePreview(voiceDraft)}
                 disabled={previewLoading !== null && previewLoading !== voiceDraft}
                 title={previewPlaying === voiceDraft ? 'Stop preview' : 'Listen to this voice'}
-                className="w-9 h-9 rounded-full border border-[#14C8CC]/30 text-[#14C8CC] grid place-items-center hover:bg-[#14C8CC]/10 transition-colors disabled:opacity-40 shrink-0"
+                className="w-11 h-11 rounded-full border border-[#14C8CC]/30 text-[#14C8CC] grid place-items-center hover:bg-[#14C8CC]/10 transition-colors disabled:opacity-40 shrink-0"
               >
                 {previewLoading === voiceDraft
                   ? <Loader2 className="w-3.5 h-3.5 animate-spin" />

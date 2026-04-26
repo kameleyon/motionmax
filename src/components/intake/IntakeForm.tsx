@@ -896,7 +896,7 @@ export default function IntakeForm({
             id="intake-language"
             value={language}
             onChange={(e) => setLanguage(e.target.value)}
-            className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50"
+            className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-base sm:text-[13px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50"
           >
             {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.flag} {l.label}</option>)}
           </select>
@@ -907,7 +907,7 @@ export default function IntakeForm({
             id="intake-voice"
             value={voice}
             onChange={(e) => setVoice(e.target.value as SpeakerVoice)}
-            className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50"
+            className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-base sm:text-[13px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50"
           >
             {/* User's cloned voices — pinned to the top so they're
                 discoverable. Empty optgroup is omitted. */}
@@ -940,7 +940,7 @@ export default function IntakeForm({
             value={brand}
             onChange={(e) => setBrand(e.target.value)}
             placeholder="Your brand (optional)"
-            className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 placeholder:text-[#5A6268]"
+            className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-base sm:text-[13px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 placeholder:text-[#5A6268]"
           />
         </div>
       </div>
@@ -1061,7 +1061,7 @@ export default function IntakeForm({
               maxLength={MAX_CHAR_DESC_CHARS}
               placeholder="A 30-year-old man with short brown hair, warm brown eyes, a close-cropped beard, wearing a navy sweater. Earnest expression. Paste text, drop images, or attach reference links below."
               aria-label="Character description"
-              className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 placeholder:text-[#5A6268] resize-y"
+              className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2.5 text-base sm:text-[13px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 placeholder:text-[#5A6268] resize-y"
             />
 
             {/* Reference-image file input (kept — same 5 MB, image-only cap) */}
@@ -1173,7 +1173,7 @@ export default function IntakeForm({
                   <button
                     type="button"
                     onClick={() => setCharacterImages((p) => p.filter((_, j) => j !== i))}
-                    className="absolute top-1 right-1 p-0.5 rounded-full bg-black/70 hover:bg-black text-white"
+                    className="absolute top-1 right-1 p-1.5 rounded-full bg-black/70 hover:bg-black text-white"
                     aria-label="Remove reference"
                   >
                     <X className="w-3 h-3" />
@@ -1227,7 +1227,7 @@ export default function IntakeForm({
             type="button"
             onClick={() => scrollBy('left')}
             className={cn(
-              'absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full grid place-items-center border border-white/10 bg-[#0A0D0F]/90 backdrop-blur-sm text-[#ECEAE4] hover:bg-[#151B20] transition-opacity',
+              'absolute left-0 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full grid place-items-center border border-white/10 bg-[#0A0D0F]/90 backdrop-blur-sm text-[#ECEAE4] hover:bg-[#151B20] transition-opacity',
               canLeft ? 'opacity-100' : 'opacity-0 pointer-events-none',
             )}
             aria-label="Scroll styles left"
@@ -1238,7 +1238,7 @@ export default function IntakeForm({
             type="button"
             onClick={() => scrollBy('right')}
             className={cn(
-              'absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full grid place-items-center border border-white/10 bg-[#0A0D0F]/90 backdrop-blur-sm text-[#ECEAE4] hover:bg-[#151B20] transition-opacity',
+              'absolute right-0 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full grid place-items-center border border-white/10 bg-[#0A0D0F]/90 backdrop-blur-sm text-[#ECEAE4] hover:bg-[#151B20] transition-opacity',
               canRight ? 'opacity-100' : 'opacity-0 pointer-events-none',
             )}
             aria-label="Scroll styles right"
@@ -1299,7 +1299,7 @@ export default function IntakeForm({
               value={customStyle}
               onChange={(e) => setCustomStyle(e.target.value)}
               placeholder="Describe your custom visual style…"
-              className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 placeholder:text-[#5A6268]"
+              className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-base sm:text-[13px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 placeholder:text-[#5A6268]"
             />
             {customStyleImage ? (
               <div className="relative inline-block">

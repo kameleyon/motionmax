@@ -181,7 +181,7 @@ export default function BulkOpModal({
       aria-live="polite"
       aria-label={title}
     >
-      <div className="relative w-[min(92vw,520px)] rounded-2xl border border-white/10 bg-gradient-to-b from-[#10151A] to-[#0A0D0F] p-7 sm:p-9 text-center shadow-[0_40px_120px_-30px_rgba(20,200,204,.45)]">
+      <div className="relative w-[min(92vw,520px)] max-h-[90dvh] overflow-y-auto rounded-2xl border border-white/10 bg-gradient-to-b from-[#10151A] to-[#0A0D0F] p-7 sm:p-9 text-center shadow-[0_40px_120px_-30px_rgba(20,200,204,.45)]">
         <div
           className="absolute inset-0 pointer-events-none rounded-2xl opacity-[0.05]"
           style={{

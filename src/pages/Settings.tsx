@@ -216,7 +216,10 @@ export default function Settings() {
 
   return (
     <AppShell breadcrumb="Settings">
-      <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
+      <Helmet>
+        <title>Settings · MotionMax</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
 
       <div className="px-3 sm:px-4 md:px-6 lg:px-8 py-5 sm:py-7 max-w-[960px] mx-auto">
               <motion.div

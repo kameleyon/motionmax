@@ -126,14 +126,22 @@ export default function ShareModal({
             // The link chip is flex-1 min-w-0 (it shrinks); Copy is
             // shrink-0 (always visible, always tappable).
             <div className="flex items-stretch gap-2 w-full min-w-0">
-              <div className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2 rounded-lg border border-white/5 bg-[#1B2228] overflow-hidden">
+              <div className="flex-1 min-w-0 flex items-center gap-2 px-3 py-3 rounded-lg border border-white/5 bg-[#1B2228] overflow-hidden">
                 <LinkIcon className="w-3.5 h-3.5 text-[#14C8CC] shrink-0" />
-                <span className="font-mono text-[11.5px] text-[#ECEAE4] truncate min-w-0 flex-1">{url}</span>
+                {/* readOnly input so users can long-press / triple-click
+                    select on mobile when the URL is too long to fit. */}
+                <input
+                  type="text"
+                  readOnly
+                  value={url}
+                  aria-label="Share link"
+                  className="font-mono text-[16px] sm:text-[11.5px] text-[#ECEAE4] truncate min-w-0 flex-1 bg-transparent border-0 outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#1B2228] rounded-sm"
+                />
               </div>
               <button
                 type="button"
                 onClick={handleCopy}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#14C8CC]/10 border border-[#14C8CC]/30 text-[#14C8CC] text-[12px] hover:bg-[#14C8CC]/20 transition-colors shrink-0 whitespace-nowrap"
+                className="inline-flex items-center gap-1.5 px-4 py-3 rounded-lg bg-[#14C8CC]/10 border border-[#14C8CC]/30 text-[#14C8CC] text-[13px] hover:bg-[#14C8CC]/20 transition-colors shrink-0 whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#10151A]"
               >
                 {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                 {copied ? 'Copied' : 'Copy'}
@@ -148,7 +156,7 @@ export default function ShareModal({
                 type="button"
                 onClick={handleRevoke}
                 disabled={loading}
-                className="uppercase text-[#E4C875] hover:text-[#F2D47B] disabled:opacity-50"
+                className="uppercase text-[#E4C875] hover:text-[#F2D47B] disabled:opacity-50 px-2 py-1.5 -my-1.5 -mx-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E4C875]/60"
               >
                 Revoke
               </button>

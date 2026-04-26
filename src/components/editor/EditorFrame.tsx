@@ -127,11 +127,29 @@ export default function EditorFrame({
   }, []);
 
   // Lock body scroll while fullscreen so phantom scrollbars never show.
+  // On iOS Safari, overflow:hidden alone does not stop the rubber-band
+  // bounce — we also pin position:fixed + width:100% to defeat that.
+  // Restore both on exit so non-fullscreen scrolling still works.
   useEffect(() => {
     if (!fullscreen) return;
-    const prev = document.body.style.overflow;
+    const prev = {
+      overflow: document.body.style.overflow,
+      position: document.body.style.position,
+      width: document.body.style.width,
+      top: document.body.style.top,
+    };
+    const scrollY = window.scrollY;
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.style.top = `-${scrollY}px`;
+    return () => {
+      document.body.style.overflow = prev.overflow;
+      document.body.style.position = prev.position;
+      document.body.style.width = prev.width;
+      document.body.style.top = prev.top;
+      window.scrollTo(0, scrollY);
+    };
   }, [fullscreen]);
 
   // Fullscreen branch — only the stage renders, in a fixed
@@ -154,7 +172,10 @@ export default function EditorFrame({
   ) : null;
 
   return (
-    <div className="flex h-[100dvh] bg-[#0A0D0F] text-[#ECEAE4] font-sans overflow-hidden">
+    <div
+      className="flex h-[100dvh] bg-[#0A0D0F] text-[#ECEAE4] font-sans overflow-hidden"
+      style={{ overscrollBehaviorY: 'contain' }}
+    >
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-3 focus:py-2 focus:bg-[#14C8CC] focus:text-[#0A0D0F] focus:rounded-md focus:font-semibold focus:text-[13px]"
@@ -338,7 +359,7 @@ export default function EditorFrame({
       <Sheet open={inspectorDrawerOpen} onOpenChange={setInspectorDrawerOpen}>
         <SheetContent
           side="right"
-          className="w-[320px] p-0 bg-[#10151A] border-white/10 lg:hidden [&>button]:text-[#ECEAE4] [&>button]:top-2 [&>button]:right-2 [&>button]:z-20"
+          className="w-[88vw] max-w-[360px] p-0 bg-[#10151A] border-white/10 lg:hidden [&>button]:text-[#ECEAE4] [&>button]:top-2 [&>button]:right-2 [&>button]:z-20"
         >
           <div className="h-full overflow-y-auto pt-12">{inspector}</div>
         </SheetContent>

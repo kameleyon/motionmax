@@ -127,6 +127,7 @@ export default function Landing() {
               aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
               aria-expanded={mobileMenuOpen}
               aria-controls="landing-mobile-menu"
+              style={{ touchAction: "manipulation" }}
               className="md:hidden inline-flex items-center justify-center h-11 w-11 rounded-full text-white/90 hover:bg-white/10 active:bg-white/15 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F]"
             >
               {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -247,23 +248,25 @@ export default function Landing() {
               Cinematic visuals. Natural voiceover.<br className="hidden sm:block" />Seamless transitions. <span className="text-primary">From one idea.</span>
             </p>
             
-            {/* Mobile-first CTA pair. flex-col on phones so the buttons
-                stack full-width (no cramping at 320px); flex-row from sm:
-                up so they sit side-by-side. Each button has a min 44px
-                touch target via size="lg" (h-11 base) and stretches to
-                fill the column so the tap target is large and obvious. */}
+            {/* Mobile-first CTA pair. We render native <button> elements
+                here (rather than shadcn <Button>) so click handlers are
+                attached directly to the DOM node — no Radix Slot wrapper,
+                no asChild forwarding chain, nothing that can intercept
+                or swallow taps on iOS Safari. touch-action: manipulation
+                disables the iOS 300 ms double-tap-zoom delay so taps
+                fire instantly. flex-col stacks full-width <sm; sm: rows
+                them side-by-side. */}
             <div className="mt-10 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-center gap-3 max-w-[420px] sm:max-w-none mx-auto">
-              <Button
-                size="lg"
-                className="w-full sm:w-auto min-w-[160px] h-12"
+              <button
+                type="button"
                 onClick={() => handleCta("Try for Free")}
+                style={{ touchAction: "manipulation" }}
+                className="w-full sm:w-auto min-w-[160px] h-12 rounded-md bg-primary px-6 text-[15px] font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 active:bg-primary/80 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A0D0F]"
               >
                 Try for Free
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="w-full sm:w-auto gap-2 min-w-[160px] h-12 border-white/30 text-white hover:bg-white/10 hover:text-white"
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   try {
                     trackEvent("watch_demo_click", { location: "hero" });
@@ -273,10 +276,12 @@ export default function Landing() {
                   setDemoModalOpen(true);
                 }}
                 aria-haspopup="dialog"
+                style={{ touchAction: "manipulation" }}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 min-w-[160px] h-12 rounded-md border border-white/30 px-6 text-[15px] font-semibold text-white hover:bg-white/10 active:bg-white/15 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A0D0F]"
               >
                 <Play className="h-4 w-4" aria-hidden="true" />
                 Watch Demo
-              </Button>
+              </button>
             </div>
 
             {/* Trust / urgency row */}

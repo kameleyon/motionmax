@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import Sidebar from '@/components/dashboard/Sidebar';
 import NotificationsPopover from '@/components/dashboard/NotificationsPopover';
 import HelpPopover from '@/components/dashboard/HelpPopover';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { type ProjectMode, MODE_LABEL } from './types';
 
 /** Everything the form on the left column needs to drive the right rail
@@ -75,6 +75,8 @@ export default function IntakeFrame({
             side="left"
             className="w-[280px] p-0 bg-[#10151A] border-white/10 md:hidden [&>button]:text-[#ECEAE4]"
           >
+            <SheetTitle className="sr-only">Navigation menu</SheetTitle>
+            <SheetDescription className="sr-only">Workspace navigation and account controls.</SheetDescription>
             {/* Scroll the whole drawer so the profile footer (Log Out)
                 remains reachable on short viewports. Overrides the
                 aside's desktop `overflow-hidden`. */}
@@ -89,8 +91,10 @@ export default function IntakeFrame({
               breadcrumb condensed to just the mode. */}
           <div className="flex items-center gap-2 px-3 sm:px-4 md:px-7 py-3 border-b border-white/10 bg-[#0A0D0F]/70 backdrop-blur-md shrink-0 h-[54px]">
             <button
+              type="button"
               onClick={() => setDrawerOpen(true)}
-              className="md:hidden w-[30px] h-[30px] rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors"
+              className="md:hidden w-11 h-11 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors"
+              style={{ touchAction: 'manipulation' }}
               aria-label="Open sidebar"
               title="Menu"
             >
@@ -174,6 +178,8 @@ export default function IntakeFrame({
             className="lg:hidden bg-[#10151A] border-white/10 max-h-[85dvh] overflow-y-auto p-4 sm:p-5 [&>button]:text-[#ECEAE4]"
             style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}
           >
+            <SheetTitle className="sr-only">Project summary and Generate</SheetTitle>
+            <SheetDescription className="sr-only">Review your project preview, total cost, and generate the video.</SheetDescription>
             <div className="flex flex-col gap-4">
               {railContent}
             </div>

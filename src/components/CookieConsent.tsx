@@ -81,10 +81,10 @@ export function CookieConsent() {
               <a href="/privacy" className="text-primary hover:underline">Privacy policy</a>
             </p>
             <div className="flex items-center gap-2 pt-1">
-              <Button size="sm" onClick={handleAccept} className="h-10 text-xs px-3">
+              <Button size="sm" onClick={handleAccept} className="min-h-[44px] text-xs px-4">
                 Accept
               </Button>
-              <Button size="sm" variant="ghost" onClick={handleReject} className="h-10 text-xs px-3 text-muted-foreground">
+              <Button size="sm" variant="ghost" onClick={handleReject} className="min-h-[44px] text-xs px-4 text-muted-foreground">
                 Reject
               </Button>
             </div>

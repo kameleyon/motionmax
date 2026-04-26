@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -173,6 +173,8 @@ function SidebarMobileSheet({
         style={{ "--sidebar-width": SIDEBAR_WIDTH_MOBILE } as React.CSSProperties}
         side={side}
       >
+        <SheetTitle className="sr-only">Sidebar</SheetTitle>
+        <SheetDescription className="sr-only">Application navigation.</SheetDescription>
         <div
           className="flex h-full w-full flex-col"
           onTouchStart={swipeHandlers.onTouchStart}

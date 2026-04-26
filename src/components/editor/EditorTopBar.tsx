@@ -333,7 +333,8 @@ export default function EditorTopBar({
           type="button"
           onClick={handleDefaultExport}
           disabled={exporting || projectLocked}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ touchAction: 'manipulation' }}
+          className="inline-flex items-center gap-1.5 px-3 min-h-[44px] text-[12px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {exporting
             ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -349,7 +350,8 @@ export default function EditorTopBar({
             <button
               type="button"
               disabled={exporting || projectLocked}
-              className="min-w-[36px] px-3 border-l border-[#0A0D0F]/20 bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] text-[#0A0D0F] hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ touchAction: 'manipulation' }}
+              className="min-w-[44px] min-h-[44px] px-3 border-l border-[#0A0D0F]/20 bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] text-[#0A0D0F] hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label="Choose export preset"
             >
               <ChevronDown className="w-4 h-4" />

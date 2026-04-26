@@ -94,7 +94,9 @@ export default function NotificationsPopover() {
     <Popover open={open} onOpenChange={handleOpen}>
       <PopoverTrigger asChild>
         <button
-          className="relative w-[30px] h-[30px] rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors"
+          type="button"
+          className="relative w-11 h-11 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors"
+          style={{ touchAction: 'manipulation' }}
           title="Notifications"
           aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
         >

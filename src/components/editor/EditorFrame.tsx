@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { WifiOff, GripVertical, GripHorizontal } from 'lucide-react';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import MiniSidebar from './MiniSidebar';
 import EditorTopBar, { type SubView } from './EditorTopBar';
 import BulkOpModal from './BulkOpModal';
@@ -343,6 +343,8 @@ export default function EditorFrame({
           className="w-[280px] p-0 bg-[#10151A] border-white/10 lg:hidden [&>button]:text-[#ECEAE4]"
           style={{ height: '100dvh' }}
         >
+          <SheetTitle className="sr-only">Navigation menu</SheetTitle>
+          <SheetDescription className="sr-only">Workspace navigation and account controls.</SheetDescription>
           <div
             className="h-full overflow-y-auto [&_aside]:flex [&_aside]:w-full [&_aside]:border-r-0 [&_aside]:h-auto [&_aside]:min-h-full [&_aside]:overflow-visible [&_aside_nav]:overflow-visible"
             style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
@@ -363,6 +365,8 @@ export default function EditorFrame({
           side="right"
           className="w-[88vw] max-w-[360px] p-0 bg-[#10151A] border-white/10 lg:hidden [&>button]:text-[#ECEAE4] [&>button]:top-2 [&>button]:right-2 [&>button]:z-20"
         >
+          <SheetTitle className="sr-only">Scene inspector</SheetTitle>
+          <SheetDescription className="sr-only">Edit scene image, voice, captions, and motion settings.</SheetDescription>
           <div className="h-full overflow-y-auto pt-12">{inspector}</div>
         </SheetContent>
       </Sheet>

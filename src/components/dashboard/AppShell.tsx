@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import Sidebar from './Sidebar';
 import NotificationsPopover from './NotificationsPopover';
 import HelpPopover from './HelpPopover';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import motionmaxLogo from '@/assets/motionmax-logo.webp';
 
 /** Shared app shell — sidebar + topbar + scrollable main column.
@@ -47,6 +47,8 @@ export default function AppShell({
           className="w-[280px] p-0 bg-[#10151A] border-white/10 md:hidden [&>button]:text-[#ECEAE4]"
           style={{ height: '100dvh' }}
         >
+          <SheetTitle className="sr-only">Navigation menu</SheetTitle>
+          <SheetDescription className="sr-only">Workspace navigation and account controls.</SheetDescription>
           <div
             className="h-full overflow-y-auto [&_aside]:flex [&_aside]:w-full [&_aside]:border-r-0 [&_aside]:h-auto [&_aside]:min-h-full [&_aside]:overflow-visible [&_aside_nav]:overflow-visible"
             style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}

@@ -194,7 +194,19 @@ export function useVideoExport() {
             status: "pending",
           });
 
-        if (insertError) throw new Error(insertError);
+        if (insertError) {
+          // Multi-tab race: the dedupe partial unique index
+          // (uq_video_jobs_project_task_active) rejects a second
+          // concurrent export_video insert for the same project.
+          // Surface a friendly message instead of a raw "duplicate
+          // key value violates unique constraint" error.
+          if (/duplicate key|unique constraint|already exists/i.test(insertError)) {
+            isExportingRef.current = false;
+            setState({ status: "error", progress: 0, error: "An export is already running for this project — please switch to the other tab." });
+            return;
+          }
+          throw new Error(insertError);
+        }
         const job = jobRows![0];
         activeJobIdRef.current = (job as Record<string, unknown>).id as string;
 

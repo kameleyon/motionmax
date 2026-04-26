@@ -9,7 +9,9 @@ export default function HelpPopover() {
     <Popover>
       <PopoverTrigger asChild>
         <button
-          className="w-[30px] h-[30px] rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors"
+          type="button"
+          className="w-11 h-11 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors"
+          style={{ touchAction: 'manipulation' }}
           title="Help & shortcuts"
           aria-label="Help"
         >

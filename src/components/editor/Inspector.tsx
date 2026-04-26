@@ -823,7 +823,7 @@ function Inspector({
                       type="button"
                       onClick={() => updateSceneMeta(selectedSceneIndex, { motion: m })}
                       className={cn(
-                        'flex-1 px-2 py-2 font-mono text-[11.5px] tracking-wider rounded-md transition-colors min-h-[36px]',
+                        'flex-1 px-1 py-2 font-mono text-[10px] tracking-tight rounded-md transition-colors min-h-[36px] whitespace-nowrap',
                         m === motion ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'text-[#8A9198] hover:text-[#ECEAE4]',
                       )}
                     >
@@ -850,9 +850,9 @@ function Inspector({
                 onClick={() => {
                   setConfirmState({
                     open: true,
-                    title: 'Re-render every scene with new motion?',
-                    message: `This queues ${state.scenes.length} video jobs and re-renders every clip with the current motion settings. Editing stays locked until it's done.`,
-                    confirmLabel: 'Re-render all',
+                    title: 'Apply new motion to every scene?',
+                    message: `This queues ${state.scenes.length} video jobs and applies the current motion settings to every clip. Editing stays locked until it's done.`,
+                    confirmLabel: 'Apply to all',
                     footer: 'Editing is locked while this runs',
                     onConfirm: () => {
                       setConfirmState((s) => ({ ...s, open: false }));
@@ -867,8 +867,8 @@ function Inspector({
                   ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   : <RotateCw className="w-3.5 h-3.5" />}
                 {projectLocked && bulkOpKind === 'motion-apply-all'
-                  ? `Re-rendering all (${state.scenes.length})…`
-                  : `Re-render all videos with new motion`}
+                  ? `Applying motion (${state.scenes.length})…`
+                  : `Apply new motion to video`}
               </button>
               <button
                 type="button"

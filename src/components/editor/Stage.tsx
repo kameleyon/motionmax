@@ -588,7 +588,7 @@ function Stage({
           className={
             isFullscreen
               ? 'inline-flex items-center gap-1.5 px-2.5 h-8 bg-[#10151A]/80 border border-white/15 rounded-md text-[#ECEAE4] hover:bg-[#1B2228] backdrop-blur-sm font-mono text-[10.5px] tracking-[0.12em] uppercase'
-              : 'w-11 h-11 grid place-items-center bg-[#10151A]/80 border border-white/5 rounded-md text-[#8A9198] hover:text-[#ECEAE4]'
+              : 'w-7 h-7 grid place-items-center bg-[#10151A]/80 border border-white/5 rounded-md text-[#8A9198] hover:text-[#ECEAE4]'
           }
         >
           {isFullscreen ? (
@@ -597,7 +597,7 @@ function Stage({
               Exit
             </>
           ) : (
-            <Maximize2 className="w-4 h-4" />
+            <Maximize2 className="w-3.5 h-3.5" />
           )}
         </button>
       </div>

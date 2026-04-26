@@ -13,6 +13,7 @@
  *   - Ken Burns motion on image-based scenes
  */
 import path from "path";
+import fs from "fs";
 import { runFfmpeg, probeDuration, getExactAudioDuration, X264_MEM_FLAGS } from "./ffmpegCmd.js";
 import { streamToFile, removeFiles } from "./storageHelpers.js";
 import { concatFiles } from "./concatScenes.js";
@@ -215,7 +216,7 @@ async function tryAiVideo(
   sceneIndex: number,
   tempDir: string,
   config: ExportConfig
-): Promise<string | null> {
+): Promise<{ path: string; sourceUrl: string } | null> {
   if (!config.aiVideo || !isAiVideoAvailable()) return null;
 
   try {
@@ -243,7 +244,9 @@ async function tryAiVideo(
     const aiVidPath = path.join(tempDir, `scene_${sceneIndex}_ai_raw.mp4`);
     await streamToFile(result.url, aiVidPath, "video");
     console.log(`[SceneEncoder] Scene ${sceneIndex}: ✅ AI video downloaded (${result.provider})`);
-    return aiVidPath;
+    // Return the source URL too so the caller can pass it to
+    // muxVideoAudio for one-shot re-download on probe failure.
+    return { path: aiVidPath, sourceUrl: result.url };
   } catch (err) {
     console.warn(
       `[SceneEncoder] Scene ${sceneIndex}: AI video exception — ${(err as Error).message}. Falling back to Ken Burns.`
@@ -270,13 +273,19 @@ async function imageAudioToClip(
   const audioDur = await getExactAudioDuration(audioPath);
   console.log(`[SceneEncoder] Scene ${sceneIndex} imageAudio: ${audioDur.toFixed(2)}s`);
 
-  // Try AI video first (returns local path to downloaded video, or null)
-  const aiVidPath = await tryAiVideo(imageUrl, prompt, sceneIndex, tempDir, config);
+  // Try AI video first (returns { path, sourceUrl } or null)
+  const aiVid = await tryAiVideo(imageUrl, prompt, sceneIndex, tempDir, config);
 
-  if (aiVidPath) {
-    // AI video succeeded — mux with audio (stretch to match audio duration)
-    await muxVideoAudio(aiVidPath, audioPath, outputPath, tempDir, sceneIndex, config);
-    removeFiles(aiVidPath);
+  if (aiVid) {
+    // AI video succeeded — mux with audio (stretch to match audio duration).
+    // Pass the AI video's source URL so muxVideoAudio can re-fetch on
+    // probe failure. The audio path here is local-derived from
+    // scene.audioUrl upstream; we don't re-thread it because
+    // imageAudioToClip's audioPath was already validated by streamToFile.
+    await muxVideoAudio(aiVid.path, audioPath, outputPath, tempDir, sceneIndex, config, {
+      video: aiVid.sourceUrl,
+    });
+    removeFiles(aiVid.path);
     return audioDur;
   }
 
@@ -307,6 +316,87 @@ async function imageAudioToClip(
   return audioDur;
 }
 
+/** Probe video + audio durations with a single retry on failure.
+ *
+ *  Defense against the "ffprobe: Command failed" symptom: a download
+ *  can satisfy the magic-byte + size validators in streamToFile but
+ *  still be unparseable by ffprobe (truncated stream, missing moov
+ *  atom, etc.). On the first probe failure we log file sizes, unlink
+ *  the bad file(s), re-fetch each via a fresh signed URL, then retry
+ *  the probe. A second failure surfaces a clear error including the
+ *  file size and source URL — at that point the source media is
+ *  genuinely broken and the user needs to know. */
+async function probeWithRetry(
+  videoPath: string,
+  audioPath: string,
+  sceneIndex: number,
+  sourceUrls?: { video?: string; audio?: string },
+): Promise<[number, number]> {
+  try {
+    return await Promise.all([
+      probeDuration(videoPath),
+      getExactAudioDuration(audioPath),
+    ]);
+  } catch (firstErr) {
+    const firstMsg = (firstErr as Error).message;
+    // Best-effort size logging so the operator can correlate "scene N
+    // failed" with the actual on-disk state.
+    const [vidStat, audStat] = await Promise.all([
+      fs.promises.stat(videoPath).catch(() => null),
+      fs.promises.stat(audioPath).catch(() => null),
+    ]);
+    console.warn(
+      `[SceneEncoder] Scene ${sceneIndex}: probe failed (${firstMsg}). ` +
+      `video=${vidStat?.size ?? "missing"}B audio=${audStat?.size ?? "missing"}B. ` +
+      `Re-downloading and retrying once...`,
+    );
+
+    // Without a source URL we can't re-fetch — re-throw with the
+    // additional size context so the user sees the actual file state.
+    if (!sourceUrls?.video && !sourceUrls?.audio) {
+      throw new Error(
+        `Scene ${sceneIndex} probe failed and no source URL available to retry: ` +
+        `video=${vidStat?.size ?? "missing"}B audio=${audStat?.size ?? "missing"}B — ${firstMsg}`,
+      );
+    }
+
+    // Re-fetch the file(s) for which we have a source URL. Unlink
+    // first so streamToFile writes fresh bytes (no stale handle, no
+    // append). resolveFetchUrl inside streamToFile will mint a fresh
+    // signed URL automatically.
+    const refetches: Promise<void>[] = [];
+    if (sourceUrls?.video) {
+      try { await fs.promises.unlink(videoPath); } catch { /* ignore */ }
+      refetches.push(streamToFile(sourceUrls.video, videoPath, "video"));
+    }
+    if (sourceUrls?.audio) {
+      try { await fs.promises.unlink(audioPath); } catch { /* ignore */ }
+      refetches.push(streamToFile(sourceUrls.audio, audioPath, "audio"));
+    }
+    await Promise.all(refetches);
+
+    try {
+      const result = await Promise.all([
+        probeDuration(videoPath),
+        getExactAudioDuration(audioPath),
+      ]);
+      console.log(`[SceneEncoder] Scene ${sceneIndex}: probe succeeded after re-download retry`);
+      return result;
+    } catch (secondErr) {
+      const [vidStat2, audStat2] = await Promise.all([
+        fs.promises.stat(videoPath).catch(() => null),
+        fs.promises.stat(audioPath).catch(() => null),
+      ]);
+      throw new Error(
+        `Scene ${sceneIndex} probe failed after retry: ` +
+        `video=${vidStat2?.size ?? "missing"}B audio=${audStat2?.size ?? "missing"}B ` +
+        `videoUrl=${sourceUrls?.video ?? "n/a"} audioUrl=${sourceUrls?.audio ?? "n/a"} ` +
+        `— ${(secondErr as Error).message}`,
+      );
+    }
+  }
+}
+
 /** Mux video + audio with duration matching.
  *
  *  AUDIO IS KING — the voiceover is never cut, sped up, or modified.
@@ -326,12 +416,22 @@ async function muxVideoAudio(
   outputPath: string,
   tempDir: string,
   sceneIndex: number,
-  config: ExportConfig
+  config: ExportConfig,
+  /** Optional source URLs — if provided, a probe failure will trigger
+   *  ONE re-download with a fresh signed URL before bailing. This
+   *  catches the case where the file passes the magic-byte + size
+   *  validators in streamToFile but ffprobe still can't parse it
+   *  (e.g. truncated stream, missing moov atom). One retry is enough:
+   *  if a freshly-signed URL also produces an unprobable file, the
+   *  source media is genuinely broken and the user should know. */
+  sourceUrls?: { video?: string; audio?: string },
 ): Promise<void> {
-  const [videoDur, audioDur] = await Promise.all([
-    probeDuration(videoPath),
-    getExactAudioDuration(audioPath),
-  ]);
+  const [videoDur, audioDur] = await probeWithRetry(
+    videoPath,
+    audioPath,
+    sceneIndex,
+    sourceUrls,
+  );
 
   // AUDIO IS KING — video duration must EXACTLY match audio duration.
   const clipDuration = audioDur;
@@ -437,7 +537,14 @@ export async function processScene(
         streamToFile(scene.videoUrl, vidPath, "video"),
         streamToFile(scene.audioUrl, audPath, "audio"),
       ]);
-      await muxVideoAudio(vidPath, audPath, localPath, tempDir, i, config);
+      // Pass source URLs so muxVideoAudio can re-fetch on probe failure.
+      // This is the path that produced the "ffprobe: Command failed"
+      // symptom — a downloaded MP4 that passed magic-byte+size checks
+      // but had a truncated tail / missing moov atom.
+      await muxVideoAudio(vidPath, audPath, localPath, tempDir, i, config, {
+        video: scene.videoUrl,
+        audio: scene.audioUrl,
+      });
       removeFiles(vidPath, audPath);
       return { index: i, path: localPath };
     }

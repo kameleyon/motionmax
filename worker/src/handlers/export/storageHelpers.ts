@@ -114,7 +114,17 @@ async function makeFreshSignedUrl(url: string): Promise<string | null> {
   return null;
 }
 
-/** Fetch a URL to disk. Handles 400/403 fallback to signed URL. */
+/** Hard floor for any download we accept. A real MP4 ftyp+moov is ~3KB
+ *  minimum, MP3 audio is ≥256B for any non-silent clip, PNG/JPEG are
+ *  ≥256B for any non-trivial image. 1KB catches the common-case empty
+ *  body / truncated stream while staying under any plausibly-real file. */
+const MIN_DOWNLOAD_BYTES = 1024;
+
+/** Fetch a URL to disk. Handles 400/403 fallback to signed URL.
+ *  After streaming, verifies the file is at least MIN_DOWNLOAD_BYTES —
+ *  catches the case where the server returned 200 but the body was
+ *  empty or the stream was truncated mid-flight. The caller's retry
+ *  path (in streamToFile) will re-download with a fresh signed URL. */
 async function fetchToDisk(url: string, destPath: string): Promise<void> {
   let response = await fetch(url);
 
@@ -136,6 +146,19 @@ async function fetchToDisk(url: string, destPath: string): Promise<void> {
   if (!response.body) throw new Error(`No response body for ${url}`);
   const dest = fs.createWriteStream(destPath);
   await pipeline(response.body, dest);
+
+  // Post-stream size check — a 200 with an empty body, or a truncated
+  // stream that ended early, will produce a 0-byte / partial file. The
+  // magic-byte validator can't catch this because a tiny file with a
+  // valid `ftyp` header still passes magic-byte checks while being
+  // unparseable by ffprobe. Throw clearly so streamToFile's retry path
+  // picks up a fresh signed URL.
+  const stat = await fs.promises.stat(destPath);
+  if (stat.size < MIN_DOWNLOAD_BYTES) {
+    throw new Error(
+      `Download truncated for ${url}: got ${stat.size} bytes (need ≥${MIN_DOWNLOAD_BYTES})`,
+    );
+  }
 }
 
 /** Stream a URL directly to disk without buffering in Node.js heap.
@@ -163,6 +186,7 @@ export async function streamToFile(
 
   try {
     await validateMedia(destPath, expectedKind);
+    await assertSaneSize(destPath, expectedKind, url);
     return;
   } catch (firstErr) {
     if (!(firstErr instanceof MediaValidationError)) throw firstErr;
@@ -184,6 +208,7 @@ export async function streamToFile(
 
     try {
       await validateMedia(destPath, expectedKind);
+      await assertSaneSize(destPath, expectedKind, url);
       console.log(`[StorageHelpers] ${expectedKind} validation passed after retry`);
     } catch (secondErr) {
       if (!(secondErr instanceof MediaValidationError)) throw secondErr;
@@ -191,6 +216,42 @@ export async function streamToFile(
         `${expectedKind} download still corrupted after retry (${secondErr.reason}): ${url} — ${secondErr.diagnostic ?? secondErr.message}`,
       );
     }
+  }
+}
+
+/** Per-kind minimum file sizes. The magic-byte validator only checks
+ *  the FIRST few bytes — a file with a valid `ftyp`/RIFF/PNG header
+ *  and a truncated tail still passes magic-byte validation but fails
+ *  ffprobe (no moov atom) or downstream decode. These thresholds are
+ *  conservative floors below which the file is provably broken:
+ *    - video: 8KB (real MP4 ftyp+moov+at-least-one-frame is ≥8KB)
+ *    - audio: 1KB (any non-silent clip is ≥1KB)
+ *    - image: 256B (smallest real PNG/JPEG with content) */
+const MIN_VALID_BYTES: Record<MediaKind, number> = {
+  video: 8 * 1024,
+  audio: 1024,
+  image: 256,
+};
+
+async function assertSaneSize(
+  destPath: string,
+  kind: MediaKind,
+  sourceUrl: string,
+): Promise<void> {
+  const min = MIN_VALID_BYTES[kind];
+  const stat = await fs.promises.stat(destPath);
+  if (stat.size < min) {
+    // Throw as MediaValidationError so streamToFile's retry path
+    // catches it the same way as a magic-byte failure. Reason
+    // "too_small" matches the existing union — magic bytes were OK
+    // but body is below the per-kind sane minimum (e.g. truncated tail).
+    throw new MediaValidationError(
+      `${kind} file ${destPath} is ${stat.size} bytes (need ≥${min}) from ${sourceUrl}`,
+      kind,
+      "too_small",
+      destPath,
+      `size=${stat.size} min=${min} url=${sourceUrl}`,
+    );
   }
 }
 

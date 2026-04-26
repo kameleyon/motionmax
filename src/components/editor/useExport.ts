@@ -48,6 +48,63 @@ export function useExport(state: EditorState | null) {
     }
   }, []);
 
+  // Rehydrate exportState from the most-recent completed export job
+  // for this project. Without this, a remount of the Editor (or a
+  // fresh visit to /app/editor/:id) drops the in-memory `exportState`
+  // back to `idle` and the Download button silently re-runs the
+  // entire export pipeline, burning credits and time. We only seed
+  // when the local state is still `idle` so we never clobber an
+  // in-flight export that just kicked off.
+  useEffect(() => {
+    const projectId = state?.project?.id;
+    if (!projectId || !user?.id) return;
+    let cancelled = false;
+    (async () => {
+      // Only seed an idle state — never overwrite an in-flight export.
+      // This is checked again at write-time below in case the user
+      // clicked Export between the project_id resolving and the query
+      // returning.
+      if (exportState.status !== 'idle') return;
+
+      // RLS already restricts these rows to the owner, but we add
+      // .eq('user_id', user.id) belt-and-braces so a leaked project_id
+      // can never surface another user's exports.
+      const { data: row, error } = await supabase
+        .from('video_generation_jobs')
+        .select('result, payload, status')
+        .eq('project_id', projectId)
+        .eq('user_id', user.id)
+        .eq('task_type', 'export_video')
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (cancelled || error || !row) return;
+
+      // Match the URL-extraction shape used by the polling code
+      // (handleRow inside startExport): prefer result.url, then
+      // result.finalUrl, then payload.finalUrl/url. As the worker
+      // migrates fully to result.url-only, this stays correct.
+      const result = (row.result ?? {}) as { finalUrl?: string; url?: string };
+      const payload = (row.payload ?? {}) as { finalUrl?: string; url?: string };
+      const finalUrl = result.url ?? result.finalUrl ?? payload.finalUrl ?? payload.url;
+      if (!finalUrl) return;
+
+      setExportState((prev) =>
+        prev.status === 'idle'
+          ? { status: 'done', progress: 100, url: finalUrl }
+          : prev,
+      );
+    })();
+    return () => { cancelled = true; };
+    // We intentionally only re-run when the project or user changes.
+    // exportState.status is read inside the effect but excluded so the
+    // effect doesn't re-fire every time status moves through
+    // submitting → rendering → done — that would race with an
+    // in-flight export. The status-check inside the body is enough.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state?.project?.id, user?.id]);
+
   const cancelPolling = useCallback(() => {
     if (pollIntervalRef.current) {
       clearInterval(pollIntervalRef.current);

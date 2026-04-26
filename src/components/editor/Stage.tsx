@@ -792,9 +792,11 @@ function Stage({
           </div>
         )}
 
-        {/* REC timecode during render */}
+        {/* REC timecode during render — offset 80 px from left so it
+            stacks horizontally next to the aspect chip (z-[4] at top-3
+            left-3) instead of overlapping it during the rendering phase. */}
         {state.phase === 'rendering' && (
-          <div className="absolute top-3 left-3 font-mono text-[10px] text-white/50 tracking-[0.12em]">
+          <div className="absolute top-3 left-[80px] font-mono text-[10px] text-white/50 tracking-[0.12em]">
             REC · {formatElapsed(state.generation?.started_at ?? null)}
           </div>
         )}

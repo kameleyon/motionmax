@@ -757,6 +757,11 @@ export default function IntakeForm({
             <button
               type="button"
               onClick={() => {
+                // TODO[polish]: replace with themed inline input dialog
+                // (see roadmap MED — window.prompt non-styleable + leaks
+                // typed values to the browser's prompt history). The
+                // URL constructor below validates the host so a paste
+                // of secrets is at least never persisted by us.
                 const raw = window.prompt('Paste a URL, YouTube link, or GitHub repo link:');
                 const url = raw?.trim();
                 if (!url) return;
@@ -818,7 +823,7 @@ export default function IntakeForm({
                     type="button"
                     onClick={() => setSourceAttachments((prev) => prev.filter((x) => x.id !== a.id))}
                     aria-label={`Remove ${a.name}`}
-                    className="text-[#8A9198] hover:text-[#E4C875]"
+                    className="text-[#8A9198] hover:text-[#E4C875] px-1.5 py-1 -my-1 -mx-1 rounded-md text-[14px] leading-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60"
                   >
                     ×
                   </button>

@@ -90,7 +90,7 @@ export default function MiniSidebar() {
   return (
     <aside className="w-[64px] bg-[#10151A] border-r border-white/5 flex flex-col items-center py-4 gap-4 overflow-hidden shrink-0">
       {/* Logo */}
-      <Link to="/dashboard-new" className="shrink-0" style={{ textDecoration: 'none' }} aria-label="Home">
+      <Link to="/dashboard-new" className="shrink-0 no-underline" aria-label="Home">
         <img src={motionmaxLogo} alt="MotionMax" className="w-8 h-8 object-contain" />
       </Link>
 
@@ -102,7 +102,6 @@ export default function MiniSidebar() {
             to={item.to}
             title={item.label}
             aria-label={item.label}
-            style={{ textDecoration: 'none' }}
             className={
               'w-10 h-10 rounded-lg grid place-items-center transition-colors relative ' +
               (item.active

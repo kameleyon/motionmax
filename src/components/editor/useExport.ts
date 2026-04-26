@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { createScopedLogger } from '@/lib/logger';
 import type { EditorState } from '@/hooks/useEditorState';
+
+const log = createScopedLogger('useExport');
 
 export type ExportPreset = 'master' | 'youtube' | 'tiktok' | 'reels';
 
@@ -128,12 +131,22 @@ export function useExport(state: EditorState | null) {
       // Single shared row-handler used by both realtime payloads AND the
       // 30s sanity-poll backstop, so one progress / done / failed code
       // path keeps the two in lockstep.
-      type JobRow = { status?: string; progress?: number; payload?: { finalUrl?: string; url?: string } | null; error_message?: string | null };
+      type JobRow = {
+        status?: string;
+        progress?: number;
+        result?: { finalUrl?: string; url?: string } | null;
+        payload?: { finalUrl?: string; url?: string } | null;
+        error_message?: string | null;
+      };
       const handleRow = (row: JobRow) => {
         if (!row || !jobIdRef.current) return;
         const rowProgress = typeof row.progress === 'number' ? row.progress : null;
+        // Worker is migrating from `payload.finalUrl` to `result.url`.
+        // Prefer `result.url` first so when the next worker iteration
+        // normalises to result-only this code keeps working.
+        const result = (row.result ?? {}) as { finalUrl?: string; url?: string };
         const payload = (row.payload ?? {}) as { finalUrl?: string; url?: string };
-        const finalUrl = payload.finalUrl ?? payload.url;
+        const finalUrl = result.url ?? result.finalUrl ?? payload.finalUrl ?? payload.url;
 
         if (row.status === 'completed' && finalUrl) {
           cancelPolling();
@@ -142,7 +155,7 @@ export function useExport(state: EditorState | null) {
         } else if (row.status === 'failed') {
           cancelPolling();
           const workerError = row.error_message || 'Export failed';
-          console.error('[Export] Job failed:', workerError, row);
+          log.error('Job failed', { error: workerError, jobId: jobIdRef.current, status: row.status });
           setExportState({ status: 'error', progress: 0, error: workerError });
           toast.error(`Export failed: ${workerError}`, { duration: 8000 });
         } else {
@@ -184,11 +197,16 @@ export function useExport(state: EditorState | null) {
       // wrote, transient WS drop, etc.). Single SELECT per 30 s instead
       // of every 3 s — 10x reduction in DB load per export.
       pollIntervalRef.current = setInterval(async () => {
-        if (!jobIdRef.current) return;
+        if (!jobIdRef.current || !user?.id) return;
+        // Belt-and-suspenders user_id guard — RLS already enforces this
+        // but if a job id ever leaks (Sentry breadcrumb, logs, etc.)
+        // explicitly scoping to the caller's user_id makes any
+        // cross-user read attempt error rather than silently 404.
         const { data: row } = await supabase
           .from('video_generation_jobs')
-          .select('status, progress, payload, error_message')
+          .select('status, progress, payload, result, error_message')
           .eq('id', jobIdRef.current)
+          .eq('user_id', user.id)
           .single();
         if (row) handleRow(row as JobRow);
       }, 30_000);

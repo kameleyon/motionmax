@@ -314,6 +314,18 @@
   .filmic-grain-overlay {
     display: none !important;
   }
+
+  /* CSS animation-duration override does NOT apply to inline SVG
+     animations (animate, animateTransform, animateMotion) — those use
+     the SMIL `dur` attribute which CSS can't reach. Hide the elements
+     so reduced-motion users get a static spinner instead of one that
+     keeps rotating. The parent ring/icon still shows; only the motion
+     stops. */
+  animateTransform,
+  animateMotion,
+  animate {
+    display: none !important;
+  }
 }
 
 @layer components {

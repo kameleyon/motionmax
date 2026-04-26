@@ -326,8 +326,7 @@ export default function IntakeRail({
         </div>
         <a
           href="/pricing"
-          className="mt-2 block text-center font-mono text-[10px] tracking-wider uppercase text-[#14C8CC] hover:text-[#ECEAE4] transition-colors"
-          style={{ textDecoration: 'none' }}
+          className="mt-2 block text-center font-mono text-[10px] tracking-wider uppercase text-[#14C8CC] hover:text-[#ECEAE4] transition-colors no-underline"
         >
           Top up →
         </a>

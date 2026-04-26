@@ -581,7 +581,7 @@ function Inspector({
                 controls
                 preload="none"
                 src={scene.audioUrl}
-                className="w-full h-9 [&::-webkit-media-controls-panel]:bg-[#1B2228]"
+                className="w-full sm:h-9 [&::-webkit-media-controls-panel]:bg-[#1B2228]"
               />
             </section>
           )}
@@ -823,7 +823,7 @@ function Inspector({
                       type="button"
                       onClick={() => updateSceneMeta(selectedSceneIndex, { motion: m })}
                       className={cn(
-                        'flex-1 px-2 py-1.5 font-mono text-[10.5px] tracking-wider rounded-md transition-colors',
+                        'flex-1 px-2 py-2 font-mono text-[11.5px] tracking-wider rounded-md transition-colors min-h-[36px]',
                         m === motion ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'text-[#8A9198] hover:text-[#ECEAE4]',
                       )}
                     >
@@ -901,7 +901,7 @@ function Inspector({
                     }}
                     disabled={busy !== 'idle' || projectLocked}
                     className={cn(
-                      'flex-1 px-2 py-1.5 font-mono text-[10.5px] tracking-wider rounded-md transition-colors disabled:opacity-40',
+                      'flex-1 px-2 py-2 font-mono text-[11.5px] tracking-wider rounded-md transition-colors disabled:opacity-40 min-h-[36px]',
                       t === transition ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'text-[#8A9198] hover:text-[#ECEAE4]',
                     )}
                   >
@@ -933,7 +933,7 @@ function Inspector({
             panel; other scenes remain freely editable thanks to the
             timeline's per-clip lock + Inspector being scene-scoped. */}
       {(projectLocked || sceneLocked) && (
-        <div className="absolute inset-0 z-10 bg-[#0A0D0F]/65 backdrop-blur-[1px] grid place-items-center pointer-events-auto">
+        <div className="absolute inset-0 z-10 bg-[#0A0D0F]/65 backdrop-blur-[1px] grid place-items-center pointer-events-auto pt-[44px] sm:pt-0">
           <div className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-[#10151A]/95 border border-[#14C8CC]/40 shadow-lg">
             <Loader2 className="w-3.5 h-3.5 animate-spin text-[#14C8CC]" />
             <span className="font-mono text-[11px] tracking-wider uppercase text-[#14C8CC]">

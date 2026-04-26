@@ -346,7 +346,6 @@ export default function Hero() {
                 ? 'text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 shadow-[0_10px_30px_-14px_rgba(20,200,204,0.55)]'
                 : 'text-[#5A6268] bg-[#1B2228] border border-white/5 cursor-not-allowed')
             }
-            style={{ textDecoration: 'none' }}
           >
             Direct
             <kbd className={`font-mono text-[10px] px-1 py-px rounded ml-1 ${canSubmit ? 'bg-[#0A0D0F]/35' : 'bg-white/5'}`}>⏎</kbd>

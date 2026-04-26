@@ -100,8 +100,25 @@ export function AdminFlags() {
       await callAdminApi("resolve_flag", { flagId, resolutionNotes });
       toast.success("Flag resolved", { description: "The flag has been marked as resolved." });
       setResolutionNotes("");
-      fetchFlags();
+      // Refresh-in-place: patch the row's resolved_at locally so the
+      // admin doesn't get bounced back to page 1 mid-batch. Also bump
+      // the global counts (resolved_at column shifts the active total).
+      setFlags((prev) =>
+        prev.map((f) =>
+          f.id === flagId
+            ? { ...f, resolved_at: new Date().toISOString() }
+            : f,
+        ),
+      );
       fetchGlobalCounts();
+      // If the user is hiding resolved (default view), drop the row
+      // from the visible list after a beat so the toast still gets a
+      // chance to render before the row disappears.
+      if (!includeResolved) {
+        setTimeout(() => {
+          setFlags((prev) => prev.filter((f) => f.id !== flagId));
+        }, 600);
+      }
     } catch (err) {
       toast.error("Failed to resolve flag", { description: err instanceof Error ? err.message : "Please try again." });
     } finally {

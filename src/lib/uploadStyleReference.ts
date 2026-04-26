@@ -7,7 +7,18 @@ import { supabase } from "@/integrations/supabase/client";
  * the downstream generation request to fail with an opaque error.
  */
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+// Map MIME types to safe filename extensions. We derive the storage
+// extension from `file.type` (which Supabase storage validates against
+// the allowlist) rather than from `file.name`, because user-controlled
+// filenames like `evil.png/.svg` can produce paths with embedded
+// slashes that subvert per-user folder boundaries.
+const MIME_EXT: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/gif": "gif",
+};
+const ALLOWED_TYPES = Object.keys(MIME_EXT);
 
 export async function uploadStyleReference(file: File): Promise<string> {
   if (file.size > MAX_FILE_SIZE) {
@@ -20,7 +31,10 @@ export async function uploadStyleReference(file: File): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
-  const ext = file.name.split(".").pop() || "png";
+  // Extension is derived from MIME type, not the user-supplied filename.
+  // Storage path is uuid-only (no filename component) so even if MIME
+  // were spoofed the path stays inside the user's namespace.
+  const ext = MIME_EXT[file.type];
   const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
 
   const { error } = await supabase.storage

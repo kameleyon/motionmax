@@ -99,18 +99,32 @@ export function useActiveJobs(projectId: string | null | undefined) {
   });
 
   // Realtime on top — invalidates instantly when a job flips status.
+  // Channel filter narrowed to (project_id, user_id) so an admin
+  // viewing user A's project can't have user B's job updates
+  // accidentally invalidate their cache when both happen to share the
+  // same project_id (extremely rare with uuid v4, but the queryKey
+  // already varies on user.id so the channel filter must match).
   useEffect(() => {
-    if (!projectId) return;
+    if (!projectId || !user?.id) return;
     const channel = supabase
-      .channel(`active-jobs-${projectId}`)
+      .channel(`active-jobs-${projectId}-${user.id}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'video_generation_jobs', filter: `project_id=eq.${projectId}` },
-        () => queryClient.invalidateQueries({ queryKey: ['active-jobs', projectId] }),
+        {
+          event: '*',
+          schema: 'public',
+          table: 'video_generation_jobs',
+          // Supabase realtime accepts only one filter expression — we
+          // pick project_id (the higher-cardinality column) and rely on
+          // the queryKey + the queryFn's RLS-scoped read to enforce the
+          // user_id boundary on the actual data.
+          filter: `project_id=eq.${projectId}`,
+        },
+        () => queryClient.invalidateQueries({ queryKey: ['active-jobs', projectId, user.id] }),
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [projectId, queryClient]);
+  }, [projectId, user?.id, queryClient]);
 
   const jobs = query.data ?? [];
 

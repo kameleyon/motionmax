@@ -221,15 +221,13 @@ export default function ProjectsGallery() {
         <div className="flex items-center justify-center gap-2 mt-5">
           <a
             href="/app/create/new?mode=cinematic"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 transition-all shadow-[0_10px_30px_-14px_rgba(20,200,204,0.55)]"
-            style={{ textDecoration: 'none' }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 transition-all shadow-[0_10px_30px_-14px_rgba(20,200,204,0.55)] no-underline"
           >
             Start a cinematic
           </a>
           <a
             href="/app/create/new?mode=doc2video"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-medium text-[#ECEAE4] border border-white/10 hover:bg-white/5 transition-colors"
-            style={{ textDecoration: 'none' }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-medium text-[#ECEAE4] border border-white/10 hover:bg-white/5 transition-colors no-underline"
           >
             Explainer
           </a>
@@ -249,9 +247,8 @@ export default function ProjectsGallery() {
 
       {recentProject && (
         <a
-          className="border border-white/5 rounded-2xl bg-[#10151A] overflow-hidden grid grid-cols-1 sm:grid-cols-[200px_1fr] md:grid-cols-[240px_1fr] gap-0 text-inherit hover:border-white/10 transition-colors"
+          className="border border-white/5 rounded-2xl bg-[#10151A] overflow-hidden grid grid-cols-1 sm:grid-cols-[200px_1fr] md:grid-cols-[240px_1fr] gap-0 text-inherit hover:border-white/10 transition-colors no-underline"
           href={`/app/create?project=${recentProject.id}`}
-          style={{ textDecoration: 'none' }}
         >
           <div className="relative aspect-[4/3] sm:aspect-[4/3] bg-black overflow-hidden group">
             {recentProject.thumbnail_url ? (
@@ -315,8 +312,9 @@ export default function ProjectsGallery() {
             <button
               key={pill.id}
               onClick={() => setFilter(pill.id)}
+              aria-pressed={filter === pill.id}
               className={
-                `px-3 py-1.5 text-[12px] rounded-md font-medium transition-colors shrink-0 ` +
+                `px-4 py-2 text-[13px] min-h-[36px] rounded-md font-medium transition-colors shrink-0 ` +
                 (filter === pill.id
                   ? 'bg-[#10151A] text-[#ECEAE4] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'
                   : 'text-[#8A9198] hover:text-[#ECEAE4]')
@@ -338,9 +336,8 @@ export default function ProjectsGallery() {
           {galleryProjects.map((proj) => (
             <a
               key={proj.id}
-              className="relative rounded-xl overflow-hidden border border-white/5 bg-[#10151A] flex flex-col hover:-translate-y-0.5 hover:border-white/10 transition-all group"
+              className="relative rounded-xl overflow-hidden border border-white/5 bg-[#10151A] flex flex-col hover:-translate-y-0.5 hover:border-white/10 transition-all group no-underline"
               href={`/app/create?project=${proj.id}`}
-              style={{ textDecoration: 'none' }}
             >
               <div className="relative aspect-[4/5] overflow-hidden bg-black">
                 {proj.thumbnail_url ? (
@@ -348,10 +345,10 @@ export default function ProjectsGallery() {
                 ) : (
                   <div className="absolute inset-0" style={{ background: generateGradient(proj.id) }} />
                 )}
-                <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[9.5px] font-mono tracking-wider text-white/85 bg-black/55 backdrop-blur-sm border border-white/10">
+                <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[8.5px] sm:text-[9.5px] font-mono tracking-wider text-white/85 bg-black/55 backdrop-blur-sm border border-white/10">
                   {prettyProjectType(proj.project_type).toUpperCase()}
                 </div>
-                <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded text-[9.5px] font-mono tracking-widest text-white bg-black/60">
+                <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded text-[8.5px] sm:text-[9.5px] font-mono tracking-widest text-white bg-black/60">
                   {proj.length || '—'}
                 </div>
               </div>

@@ -60,16 +60,14 @@ export default function HelpPopover() {
         <div className="px-4 py-3 flex flex-col gap-1.5">
           <a
             href="/voice-lab"
-            className="flex items-center gap-2 text-[12.5px] text-[#ECEAE4] hover:text-[#14C8CC] transition-colors"
-            style={{ textDecoration: 'none' }}
+            className="flex items-center gap-2 text-[12.5px] text-[#ECEAE4] hover:text-[#14C8CC] transition-colors no-underline"
           >
             <BookOpen className="w-3.5 h-3.5 text-[#8A9198]" />
             Voice Lab — clone or manage your voices
           </a>
           <a
             href="mailto:support@motionmax.io?subject=MotionMax%20support"
-            className="flex items-center gap-2 text-[12.5px] text-[#ECEAE4] hover:text-[#14C8CC] transition-colors"
-            style={{ textDecoration: 'none' }}
+            className="flex items-center gap-2 text-[12.5px] text-[#ECEAE4] hover:text-[#14C8CC] transition-colors no-underline"
           >
             <LifeBuoy className="w-3.5 h-3.5 text-[#8A9198]" />
             Contact support

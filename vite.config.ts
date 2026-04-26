@@ -108,7 +108,11 @@ export default defineConfig(({ mode }) => ({
           "react-vendor": ["react", "react-dom", "react-router-dom"],
           "ui-vendor": ["framer-motion", "@tanstack/react-query"],
           "supabase": ["@supabase/supabase-js"],
-          "recharts": ["recharts"],
+          // recharts intentionally NOT in manualChunks — it ships only
+          // with the lazy-loaded admin tab chunks (AdminGenerations,
+          // AdminPerformanceMetrics, AdminQueueMonitor, AdminWorkerHealth,
+          // AdminRevenue) so non-admin users never download its ~120 KB
+          // gzipped weight.
         },
       },
     },

@@ -399,8 +399,7 @@ export default function RightRail() {
           </span>
           <a
             href="/pricing"
-            className="font-mono text-[10.5px] tracking-wider uppercase text-[#14C8CC] hover:text-[#ECEAE4] transition-colors"
-            style={{ textDecoration: 'none' }}
+            className="font-mono text-[10.5px] tracking-wider uppercase text-[#14C8CC] hover:text-[#ECEAE4] transition-colors no-underline"
           >
             Top up →
           </a>
@@ -429,7 +428,6 @@ export default function RightRail() {
                   key={item.id}
                   href={item.project_id ? `/app/create?project=${item.project_id}` : '#'}
                   className={`flex items-center gap-2.5 py-2.5 hover:bg-white/5 rounded-md px-2 -mx-2 transition-colors ${i > 0 ? 'border-t border-white/5' : ''}`}
-                  style={{ textDecoration: 'none' }}
                 >
                   <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
                   <span className="flex-1 min-w-0 text-[12.5px] text-[#ECEAE4] whitespace-nowrap overflow-hidden text-ellipsis">
@@ -454,8 +452,7 @@ export default function RightRail() {
           </h4>
           <a
             href="/voice-lab"
-            className="font-mono text-[10px] tracking-widest uppercase text-[#14C8CC] hover:text-[#ECEAE4] transition-colors"
-            style={{ textDecoration: 'none' }}
+            className="font-mono text-[10px] tracking-widest uppercase text-[#14C8CC] hover:text-[#ECEAE4] transition-colors no-underline"
           >
             Manage →
           </a>
@@ -464,7 +461,7 @@ export default function RightRail() {
           {usedVoices.length === 0 ? (
             <div className="text-[12.5px] text-[#5A6268] py-2">
               You haven't used any voices yet.{' '}
-              <a href="/app/create/new?mode=cinematic" className="text-[#14C8CC] hover:underline" style={{ textDecoration: 'none' }}>
+              <a href="/app/create/new?mode=cinematic" className="text-[#14C8CC] hover:underline no-underline">
                 Start a project →
               </a>
             </div>

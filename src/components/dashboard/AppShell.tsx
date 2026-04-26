@@ -11,15 +11,22 @@ import motionmaxLogo from '@/assets/motionmax-logo.webp';
  *  pass their content as children + customise the breadcrumb label. */
 export default function AppShell({
   breadcrumb = 'Studio',
+  topBanner,
   children,
 }: {
   breadcrumb?: string;
+  /** Optional full-width announcement bar rendered above the sidebar
+   *  and topbar (e.g. the new-dashboard rollout banner). Page passes
+   *  it in so AppShell stays generic and reusable. */
+  topBanner?: ReactNode;
   children: ReactNode;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
-    <div className="flex h-[100dvh] relative bg-[#0A0D0F] text-[#ECEAE4] font-sans overflow-hidden">
+    <div className="flex flex-col h-[100dvh] bg-[#0A0D0F] text-[#ECEAE4] font-sans overflow-hidden">
+      {topBanner ? <div className="shrink-0">{topBanner}</div> : null}
+      <div className="flex flex-1 relative overflow-hidden">
       {/* Skip-to-content for keyboard / screen-reader users so they bypass
           the sidebar nav. WCAG 2.1 AA bypass-blocks. */}
       <a
@@ -95,6 +102,7 @@ export default function AppShell({
           {children}
         </div>
       </main>
+      </div>
     </div>
   );
 }

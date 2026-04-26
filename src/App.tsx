@@ -2,7 +2,7 @@
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -95,7 +95,12 @@ const App = () => (
                 NEW dashboard chrome (Projects, dashboard-new) live
                 outside this wrapper to avoid stacking two sidebars. */}
             <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
-              <Route path="/app" element={<RouteErrorBoundary routeName="dashboard"><Dashboard /></RouteErrorBoundary>} />
+              {/* Legacy dashboard moved to /app/legacy as backup.
+                  /app now bounces to the new /dashboard-new (the gold
+                  banner there gives users a one-click escape hatch
+                  back here until 2026-05-03). */}
+              <Route path="/app" element={<Navigate to="/dashboard-new" replace />} />
+              <Route path="/app/legacy" element={<RouteErrorBoundary routeName="dashboard-legacy"><Dashboard /></RouteErrorBoundary>} />
               <Route path="/app/create" element={<RouteErrorBoundary routeName="create"><CreateWorkspace /></RouteErrorBoundary>} />
             </Route>
 

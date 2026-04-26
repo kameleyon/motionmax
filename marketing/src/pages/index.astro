@@ -481,67 +481,27 @@ const faqJsonLd = {
     </div>
   </div>
 
-  <!-- Scripts — wrapped in DOMContentLoaded so handlers attach reliably
-       regardless of where this <script> sits in the parse order. Without
-       this, if the script ever runs before the buttons exist (cache,
-       async-loaded HTML, edge-case prefetch), the listeners silently
-       fail to attach and mobile users see "broken" buttons. -->
-  <script is:inline>
-    function initLanding() {
-      // Mobile menu
-      const menuBtn = document.getElementById("menu-btn");
-      const mobileMenu = document.getElementById("mobile-menu");
-      const iconMenu = document.getElementById("icon-menu");
-      const iconX = document.getElementById("icon-x");
-      if (menuBtn && mobileMenu) {
-        menuBtn.addEventListener("click", () => {
-          const open = mobileMenu.classList.toggle("hidden") === false;
-          menuBtn.setAttribute("aria-expanded", String(open));
-          iconMenu?.classList.toggle("hidden", open);
-          iconX?.classList.toggle("hidden", !open);
-        });
-        mobileMenu.querySelectorAll("a").forEach((a) => {
-          a.addEventListener("click", () => {
-            mobileMenu.classList.add("hidden");
-            menuBtn.setAttribute("aria-expanded", "false");
-            iconMenu?.classList.remove("hidden");
-            iconX?.classList.add("hidden");
-          });
-        });
-      }
+  <!-- Landing-page interactivity (mobile menu + Watch Demo modal).
 
-      // Demo modal
-      const demoBtn = document.getElementById("demo-btn");
-      const demoModal = document.getElementById("demo-modal");
-      const demoBackdrop = document.getElementById("demo-backdrop");
-      const demoClose = document.getElementById("demo-close");
-      const demoIframe = document.getElementById("demo-iframe");
+       ROOT CAUSE of repeated "buttons don't work on iPhone" reports:
+       the site CSP in vercel.json is
 
-      function openDemo() {
-        if (!demoModal || !demoIframe) return;
-        demoIframe.src = demoIframe.dataset.src;
-        demoModal.classList.remove("hidden");
-        demoModal.classList.add("flex");
-        document.body.style.overflow = "hidden";
-      }
-      function closeDemo() {
-        if (!demoModal || !demoIframe) return;
-        demoModal.classList.add("hidden");
-        demoModal.classList.remove("flex");
-        demoIframe.src = "";
-        document.body.style.overflow = "";
-      }
-      demoBtn?.addEventListener("click", openDemo);
-      demoClose?.addEventListener("click", closeDemo);
-      demoBackdrop?.addEventListener("click", closeDemo);
-      document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDemo(); });
-    }
+           script-src 'self' https://js.stripe.com https://www.googletagmanager.com
 
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", initLanding);
-    } else {
-      initLanding();
-    }
+       with NO 'unsafe-inline', no nonce, no hash. Any inline <script>
+       (including `<script is:inline>` AND a small <script> that Astro
+       hoist-bundles INLINE because the chunk is tiny) is blocked at
+       runtime — listeners never attach, the buttons appear dead.
+       The previous "fixes" (44×44, touch-action, DOMContentLoaded
+       wrapper) all lived inside that blocked inline script, which is
+       why three rounds of touching them changed nothing in production.
+
+       The fix: import a real module file. Astro emits it as a hashed
+       /_astro/*.js asset that's same-origin and therefore allowed by
+       the CSP `'self'` source. Do NOT add `is:inline`. Do NOT collapse
+       this into an inline body — the CSP will eat it. -->
+  <script>
+    import "../scripts/landing.ts";
   </script>
 
   <div style="display:none">

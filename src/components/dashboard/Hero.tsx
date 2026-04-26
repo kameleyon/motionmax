@@ -194,13 +194,13 @@ export default function Hero() {
                 type="button"
                 onClick={() => setMode(m.id)}
                 className={
-                  'flex-1 sm:flex-initial px-2 sm:px-3 py-2.5 text-[12px] rounded-md inline-flex items-center justify-center gap-1 sm:gap-1.5 font-sans font-medium transition-colors whitespace-nowrap min-h-[36px] ' +
+                  'flex-1 sm:flex-initial min-w-0 px-1.5 sm:px-3 py-2.5 text-[11px] sm:text-[12px] rounded-md inline-flex items-center justify-center gap-0.5 sm:gap-1.5 font-sans font-medium transition-colors whitespace-nowrap min-h-[36px] ' +
                   (mode === m.id
                     ? 'bg-[#10151A] text-[#ECEAE4] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'
                     : 'text-[#8A9198] hover:text-[#ECEAE4]')
                 }
               >
-                <span className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full ${mode === m.id ? 'bg-[#14C8CC]' : 'bg-[#5A6268]'}`} />
+                <span className={`hidden sm:inline-flex w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full ${mode === m.id ? 'bg-[#14C8CC]' : 'bg-[#5A6268]'}`} />
                 {m.label}
               </button>
             ))}

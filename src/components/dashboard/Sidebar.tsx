@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Settings as SettingsIcon, History, Shield, LogOut, Video } from 'lucide-react';
-import motionmaxLogo from '@/assets/motionmax-logo.png';
+import motionmaxLogo from '@/assets/motionmax-logo.webp';
 import {
   CommandDialog,
   CommandEmpty,

@@ -286,10 +286,16 @@ export default function EditorTopBar({
       {void subView}
       {void onSubViewChange}
 
-      {/* Rendering status pill */}
+      {/* Rendering status pill — aria-live=polite so screen readers
+          announce progress without interrupting other speech. */}
       {state.phase === 'rendering' && (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-mono text-[10px] tracking-[0.1em] uppercase border border-[#14C8CC]/30 text-[#14C8CC] bg-[#14C8CC]/10 shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#14C8CC] animate-pulse" />
+        <span
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-mono text-[10px] tracking-[0.1em] uppercase border border-[#14C8CC]/30 text-[#14C8CC] bg-[#14C8CC]/10 shrink-0"
+        >
+          <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-[#14C8CC] animate-pulse" />
           Rendering · {state.progress}%
         </span>
       )}

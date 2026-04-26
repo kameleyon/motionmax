@@ -197,9 +197,13 @@ export function AdminApiCalls() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="success">Success</SelectItem>
-                    <SelectItem value="error">Failed</SelectItem>
-                    {/* "started" removed: worker never writes this status, always empty results */}
+                    {/* api_call_logs.status enum is pending|running|succeeded|failed
+                        per migration 20260201171933 — sending success/error matched
+                        zero rows. Labels stay friendly; values match the enum. */}
+                    <SelectItem value="succeeded">Success</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                    <SelectItem value="running">Running</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={providerFilter} onValueChange={(v) => { setProviderFilter(v); setPage(1); }}>

@@ -376,32 +376,35 @@ export function AdminQueueMonitor() {
                         const adminId = user?.id;
                         if (!adminId) { toast.error("Admin session missing"); return; }
 
-                        const { error: cancelError } = await supabase
-                          .from("video_generation_jobs")
-                          .update({ status: "failed", error_message: "Cancelled by admin" })
-                          .eq("id", job.id);
+                        // Single SECURITY DEFINER RPC, gated on is_admin().
+                        // Atomically: cancels job, refunds credits via the
+                        // privileged increment_user_credits path, and writes
+                        // an admin_logs entry. Replaces the old client-side
+                        // sequence which silently 403'd on the credit refund
+                        // because increment_user_credits was REVOKED from
+                        // authenticated per migration 20260320210000.
+                        // See migration 20260425600000_admin_cancel_job_with_refund.
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const { data, error: rpcError } = await (supabase.rpc as any)(
+                          "admin_cancel_job_with_refund",
+                          {
+                            p_job_id: job.id,
+                            p_refund_credits: 1,
+                            p_reason: "Cancelled by admin",
+                          },
+                        );
 
-                        if (cancelError) {
-                          toast.error("Failed to cancel job");
+                        if (rpcError) {
+                          toast.error(`Cancel failed: ${rpcError.message}`);
                           return;
                         }
 
-                        // Refund 1 credit to the job owner (best-effort; deducted at dispatch)
-                        await supabase.rpc("increment_user_credits", {
-                          p_user_id: job.user_id,
-                          p_credits: 1,
-                        });
-
-                        // Audit trail
-                        await supabase.from("admin_logs").insert({
-                          admin_id: adminId,
-                          action: "cancel_job",
-                          target_type: "video_generation_job",
-                          target_id: job.id,
-                          details: { user_id: job.user_id, previous_status: job.status },
-                        });
-
-                        toast.success("Job cancelled and credit refunded");
+                        const result = (data ?? {}) as { cancelled?: boolean; refunded?: number; reason?: string };
+                        if (!result.cancelled) {
+                          toast.info(result.reason || "Job already terminal — no refund issued");
+                        } else {
+                          toast.success(`Job cancelled — ${result.refunded ?? 0} credit refunded`);
+                        }
                         fetchQueueData();
                       }}
                       aria-label="Cancel job"

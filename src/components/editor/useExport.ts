@@ -28,17 +28,35 @@ const PRESET_MAP: Record<ExportPreset, { format: 'landscape' | 'portrait'; label
 export function useExport(state: EditorState | null) {
   const { user } = useAuth();
   const [exportState, setExportState] = useState<ExportState>({ status: 'idle', progress: 0 });
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Sanity-poll backstop: a 30s heartbeat that catches any updates the
+  // realtime channel misses (network blips, stale subscriptions). The
+  // primary signal is the postgres_changes channel set up below.
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const deadlineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const jobIdRef = useRef<string | null>(null);
 
   useEffect(() => () => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    if (deadlineTimerRef.current) clearTimeout(deadlineTimerRef.current);
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
   }, []);
 
   const cancelPolling = useCallback(() => {
     if (pollIntervalRef.current) {
       clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
+    }
+    if (deadlineTimerRef.current) {
+      clearTimeout(deadlineTimerRef.current);
+      deadlineTimerRef.current = null;
+    }
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
     }
     jobIdRef.current = null;
   }, []);
@@ -107,24 +125,13 @@ export function useExport(state: EditorState | null) {
       setExportState({ status: 'rendering', progress: 5 });
       toast.info(`Exporting ${presetCfg.label}…`);
 
-      // Poll every 3s until complete / failed / timeout (25 min).
-      const deadline = Date.now() + 25 * 60_000;
-      pollIntervalRef.current = setInterval(async () => {
-        if (!jobIdRef.current) return;
-        if (Date.now() > deadline) {
-          cancelPolling();
-          setExportState({ status: 'error', progress: 0, error: 'Export timed out' });
-          toast.error('Export timed out. Try again.');
-          return;
-        }
-        const { data: row } = await supabase
-          .from('video_generation_jobs')
-          .select('status, progress, payload, error_message')
-          .eq('id', jobIdRef.current)
-          .single();
-        if (!row) return;
-
-        const rowProgress = typeof row.progress === 'number' ? row.progress : exportState.progress;
+      // Single shared row-handler used by both realtime payloads AND the
+      // 30s sanity-poll backstop, so one progress / done / failed code
+      // path keeps the two in lockstep.
+      type JobRow = { status?: string; progress?: number; payload?: { finalUrl?: string; url?: string } | null; error_message?: string | null };
+      const handleRow = (row: JobRow) => {
+        if (!row || !jobIdRef.current) return;
+        const rowProgress = typeof row.progress === 'number' ? row.progress : null;
         const payload = (row.payload ?? {}) as { finalUrl?: string; url?: string };
         const finalUrl = payload.finalUrl ?? payload.url;
 
@@ -133,25 +140,74 @@ export function useExport(state: EditorState | null) {
           setExportState({ status: 'done', progress: 100, url: finalUrl });
           toast.success('Export ready. Download is in the topbar.');
         } else if (row.status === 'failed') {
-          // Surface the actual worker-side error instead of a generic
-          // "Export failed" — previously this masked whatever killed
-          // the job (missing ffmpeg arg, bad scene URL, etc.) and made
-          // the bar freeze at whatever % it last reported.
           cancelPolling();
           const workerError = row.error_message || 'Export failed';
           console.error('[Export] Job failed:', workerError, row);
           setExportState({ status: 'error', progress: 0, error: workerError });
           toast.error(`Export failed: ${workerError}`, { duration: 8000 });
         } else {
-          setExportState((prev) => ({ ...prev, status: 'rendering', progress: Math.max(prev.progress, rowProgress) }));
+          setExportState((prev) => ({
+            ...prev,
+            status: 'rendering',
+            progress: Math.max(prev.progress, rowProgress ?? prev.progress),
+          }));
         }
-      }, 3000);
+      };
+
+      // Realtime channel — primary signal. Replaces the previous 3s
+      // setInterval that was producing ~500 SELECTs per export job and
+      // hammering Postgres on multi-tab sessions. We listen to UPDATE
+      // events on the specific job row so the channel is naturally
+      // narrow.
+      const ch = supabase
+        .channel(`export-${job.id}`)
+        .on(
+          // Supabase realtime overload signature; the lib accepts the
+          // string literal but TS narrows poorly here.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          'postgres_changes' as any,
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'video_generation_jobs',
+            filter: `id=eq.${job.id}`,
+          },
+          (payload: { new?: JobRow }) => {
+            if (payload?.new) handleRow(payload.new);
+          },
+        )
+        .subscribe();
+      channelRef.current = ch;
+
+      // 30s sanity-poll backstop — catches the rare case where realtime
+      // misses an UPDATE (subscription not yet attached when worker
+      // wrote, transient WS drop, etc.). Single SELECT per 30 s instead
+      // of every 3 s — 10x reduction in DB load per export.
+      pollIntervalRef.current = setInterval(async () => {
+        if (!jobIdRef.current) return;
+        const { data: row } = await supabase
+          .from('video_generation_jobs')
+          .select('status, progress, payload, error_message')
+          .eq('id', jobIdRef.current)
+          .single();
+        if (row) handleRow(row as JobRow);
+      }, 30_000);
+
+      // 25-min hard deadline — same wall-clock cap as before, just
+      // implemented as one timeout instead of being checked on every
+      // poll tick.
+      deadlineTimerRef.current = setTimeout(() => {
+        if (!jobIdRef.current) return;
+        cancelPolling();
+        setExportState({ status: 'error', progress: 0, error: 'Export timed out' });
+        toast.error('Export timed out. Try again.');
+      }, 25 * 60_000);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setExportState({ status: 'error', progress: 0, error: msg });
       toast.error(`Couldn't queue export: ${msg}`);
     }
-  }, [user, state, cancelPolling, exportState.progress]);
+  }, [user, state, cancelPolling]);
 
   return {
     exportState,

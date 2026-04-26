@@ -17,6 +17,21 @@ export default {
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],
       },
+      // Named z-index tokens. The new template previously had wildly
+      // diverging arbitrary values (z-[2], z-[4], z-[200], z-[9998],
+      // z-[9999], z-[10000]) which produced unpredictable stacking —
+      // most notably the Stage chrome punching through the mobile
+      // Inspector drawer. These tokens give every layer a single
+      // canonical place in the stack so the bug class can't recur.
+      // Use via Tailwind utilities:  z-stage / z-overlay / z-drawer /
+      // z-modal / z-fullscreen.
+      zIndex: {
+        stage:      "5",
+        overlay:    "10",
+        drawer:     "50",
+        modal:      "60",
+        fullscreen: "100",
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

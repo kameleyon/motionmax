@@ -1,13 +1,29 @@
 import type { ReactNode } from 'react';
 
 /** Small uppercase-mono section label. All intake sections use it so the
- *  visual rhythm matches the design bundle. */
-export function IntakeLabel({ children }: { children: ReactNode }) {
-  return (
-    <div className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#5A6268] mb-2 flex items-center gap-1.5">
-      {children}
-    </div>
-  );
+ *  visual rhythm matches the design bundle.
+ *
+ *  Renders as a real <label> when `htmlFor` is provided so the visible
+ *  label binds to the input as the accessible name (WCAG 2.1 AA: form
+ *  fields must have programmatic labels, not visually-adjacent <div>s).
+ *  Pass `htmlFor` and the matching `id` on the form control. */
+export function IntakeLabel({
+  children,
+  htmlFor,
+}: {
+  children: ReactNode;
+  htmlFor?: string;
+}) {
+  const className =
+    'font-mono text-[10px] tracking-[0.16em] uppercase text-[#5A6268] mb-2 flex items-center gap-1.5';
+  if (htmlFor) {
+    return (
+      <label htmlFor={htmlFor} className={className}>
+        {children}
+      </label>
+    );
+  }
+  return <div className={className}>{children}</div>;
 }
 
 /** Card-style field wrapper. */

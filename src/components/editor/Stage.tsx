@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Maximize2, Minimize2 } from 'lucide-react';
 import type { EditorState, EditorScene } from '@/hooks/useEditorState';
 import { useActiveJobs } from './useActiveJobs';
@@ -100,7 +100,7 @@ function LoadingRing({ size = 72 }: { size?: number }) {
   );
 }
 
-export default function Stage({
+function Stage({
   state,
   selectedSceneIndex,
   onAdvanceScene,
@@ -560,8 +560,18 @@ export default function Stage({
       )}
 
       {/* Quality + fullscreen — quality pill hidden in fullscreen,
-          but the Exit button stays so the user can leave. */}
-      <div className="absolute top-3 right-3 z-[9999] flex gap-1.5">
+          but the Exit button stays so the user can leave.
+          z-index lives inside the stage stacking context (z-[5]) so the
+          mobile Inspector Sheet (Radix default z-50) renders above it.
+          When fullscreen takes over the viewport, we promote to z-[9999]
+          so it floats above any leftover layers. */}
+      <div
+        className={
+          isFullscreen
+            ? 'absolute top-3 right-3 z-fullscreen flex gap-1.5'
+            : 'absolute top-3 right-3 z-stage flex gap-1.5'
+        }
+      >
         {!isFullscreen && (
           <span className="font-mono text-[10px] tracking-[0.1em] text-[#8A9198] px-2 py-1 bg-[#10151A]/80 border border-white/5 rounded-md backdrop-blur-sm">
             1080p · 24fps
@@ -575,7 +585,7 @@ export default function Stage({
           className={
             isFullscreen
               ? 'inline-flex items-center gap-1.5 px-2.5 h-8 bg-[#10151A]/80 border border-white/15 rounded-md text-[#ECEAE4] hover:bg-[#1B2228] backdrop-blur-sm font-mono text-[10.5px] tracking-[0.12em] uppercase'
-              : 'w-7 h-7 grid place-items-center bg-[#10151A]/80 border border-white/5 rounded-md text-[#8A9198] hover:text-[#ECEAE4]'
+              : 'w-11 h-11 grid place-items-center bg-[#10151A]/80 border border-white/5 rounded-md text-[#8A9198] hover:text-[#ECEAE4]'
           }
         >
           {isFullscreen ? (
@@ -584,7 +594,7 @@ export default function Stage({
               Exit
             </>
           ) : (
-            <Maximize2 className="w-3.5 h-3.5" />
+            <Maximize2 className="w-4 h-4" />
           )}
         </button>
       </div>
@@ -824,7 +834,13 @@ function ProcessingOverlay({
   // keeps the overlay's total height stable regardless of copy length.
   const isPortrait = aspect === '9:16';
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-[8%] bg-black/35 backdrop-blur-[2px]">
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      aria-label="Generation in progress"
+      className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-[8%] bg-black/35 backdrop-blur-[2px]"
+    >
       <LoadingRing size={isPortrait ? 52 : 72} />
       <div className={
         isPortrait
@@ -878,3 +894,8 @@ function ProcessingOverlay({
     </div>
   );
 }
+
+/** Memoized so the editor's 3s state-poll doesn't re-render the
+ *  Stage tree on every tick. Default shallow compare bails out when
+ *  upstream Editor stabilises its props. */
+export default memo(Stage);

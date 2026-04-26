@@ -46,10 +46,17 @@ export default function IntakeFrame({
 
   return (
     <RailCtx.Provider value={bridge}>
-      <div className="flex h-screen relative bg-[#0A0D0F] text-[#ECEAE4] font-sans overflow-hidden">
+      <div className="flex h-[100dvh] relative bg-[#0A0D0F] text-[#ECEAE4] font-sans overflow-hidden">
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-3 focus:py-2 focus:bg-[#14C8CC] focus:text-[#0A0D0F] focus:rounded-md focus:font-semibold focus:text-[13px]"
+        >
+          Skip to main content
+        </a>
+
         {/* filmic grain */}
         <div
-          className="fixed inset-0 pointer-events-none z-[200] opacity-5 mix-blend-overlay"
+          className="fixed inset-0 pointer-events-none z-overlay opacity-5 mix-blend-overlay"
           style={{
             backgroundImage:
               "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1.2 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
@@ -107,7 +114,7 @@ export default function IntakeFrame({
             <HelpPopover />
           </div>
 
-          <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-white/10">
+          <div id="main-content" className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-white/10 pb-[72px] lg:pb-0">
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 sm:gap-5 lg:gap-6 px-3 sm:px-4 md:px-6 lg:px-8 py-5 sm:py-7 max-w-[1380px] mx-auto">
               <div className="col-main flex flex-col min-w-0">
                 {children}
@@ -121,13 +128,46 @@ export default function IntakeFrame({
               </aside>
             </div>
           </div>
+
+          {/* Mobile-only sticky bottom CTA — shows the running cost and
+              opens the rail drawer. Without this, mobile users have no
+              visible Generate CTA and no credit-balance affordance because
+              the right rail is hidden until lg:. The chip pads safe-area
+              for iPhones with home indicators. */}
+          <div
+            className="lg:hidden fixed inset-x-0 bottom-0 z-[60] bg-[#10151A]/95 backdrop-blur-md border-t border-white/10"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          >
+            <button
+              type="button"
+              onClick={() => setMobileRailOpen(true)}
+              aria-label="Open project summary and Generate"
+              aria-haspopup="dialog"
+              aria-expanded={mobileRailOpen}
+              className="w-full min-h-[56px] flex items-center justify-between gap-3 px-4 py-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F]"
+            >
+              <span className="flex items-center gap-2 min-w-0">
+                <span className="font-mono text-[10px] tracking-widest uppercase text-[#8A9198]">Total</span>
+                <span className="font-mono text-[14px] text-[#ECEAE4] tabular-nums">
+                  {totalCost} cr
+                </span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-[#14C8CC] text-[#0A0D0F] font-semibold text-[13px] tracking-wide">
+                View · Generate
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                  <path d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
+              </span>
+            </button>
+          </div>
         </main>
 
         {/* Mobile right-rail bottom sheet */}
         <Sheet open={mobileRailOpen} onOpenChange={setMobileRailOpen}>
           <SheetContent
             side="bottom"
-            className="lg:hidden bg-[#10151A] border-white/10 max-h-[85vh] overflow-y-auto p-4 sm:p-5 [&>button]:text-[#ECEAE4]"
+            className="lg:hidden bg-[#10151A] border-white/10 max-h-[85dvh] overflow-y-auto p-4 sm:p-5 [&>button]:text-[#ECEAE4]"
+            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}
           >
             <div className="flex flex-col gap-4">
               {railContent}

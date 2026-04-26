@@ -191,20 +191,28 @@ export function useEditorState(projectId: string | null): {
     // up without waiting on realtime.
     refetchInterval: (query) => {
       const data = query.state.data as EditorState | undefined;
-      if (data?.hydratedFromPipeline) return 10_000;
+      // Once the pipeline is fully hydrated AND the project is in a
+      // terminal phase (`ready` / failed), stop polling entirely —
+      // realtime + an explicit visibilitychange refetch (set up by
+      // React Query's `refetchOnWindowFocus`) cover any drift. This
+      // replaces the previous "always poll forever, even on backgrounded
+      // tabs" behaviour which produced ~1200 SELECTs/hour per tab.
+      if (data?.hydratedFromPipeline) {
+        if (data.phase === 'ready') return false;       // stop entirely
+        return 10_000;                                  // slow heartbeat
+      }
       return 3000;
     },
-    // Keep polling even when the tab is backgrounded. Users commonly
-    // switch tabs during a 3-5 min cinematic render; if refetch only
-    // fires in foreground, the query can serve stale null for the
-    // entire duration and the page looks frozen when they switch back.
-    refetchIntervalInBackground: true,
-    // staleTime: 0 guarantees every refetch hits the network instead
-    // of returning the cached (possibly null) generation. Without
-    // this, React Query can decide a 3s-old result is still "fresh"
-    // and skip re-running queryFn, trapping the UI in the awaiting
-    // state long after the worker has written the row.
-    staleTime: 0,
+    // Pause polling on backgrounded tabs to stop the unbounded SELECT
+    // amplification on multi-tab sessions. Realtime + the on-focus
+    // refetch (default true in React Query) reconcile state when the
+    // user comes back; users no longer pay for an idle tab.
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    // staleTime 1500 ms collapses duplicate refetches inside a single
+    // visible tick (sibling components mounting simultaneously, etc.)
+    // without sacrificing the originally intended freshness.
+    staleTime: 1500,
     queryFn: async (): Promise<EditorState> => {
       const { data: project, error: projErr } = await supabase
         .from('projects')

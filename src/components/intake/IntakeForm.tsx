@@ -36,43 +36,38 @@ import IntakeRail from './IntakeRail';
 import { useIntakeRail } from './IntakeFrame';
 import { PLAN_LIMITS, normalizePlanName } from '@/lib/planLimits';
 
-// ── Real style preview thumbnails (same source as StyleSelector) ──
-import minimalistPreview from '@/assets/styles/minimalist-preview.png';
-import doodlePreview from '@/assets/styles/doodle-preview.png';
-import stickPreview from '@/assets/styles/stick-preview.png';
-import animePreview from '@/assets/styles/anime-preview.png';
-import realisticPreview from '@/assets/styles/realistic-preview.png';
-import pixarPreview from '@/assets/styles/3d-pixar-preview.png';
-import claymationPreview from '@/assets/styles/claymation-preview.png';
-import sketchPreview from '@/assets/styles/sketch-preview.png';
-import caricaturePreview from '@/assets/styles/caricature-preview.png';
-import storybookPreview from '@/assets/styles/painterly-preview.png';
-import customPreview from '@/assets/styles/custom-preview.png';
-import crayonPreview from '@/assets/styles/crayon-preview.png';
-import moodyPreview from '@/assets/styles/moody-preview.png';
-import chalkboardPreview from '@/assets/styles/chalkboard-preview.png';
-import legoPreview from '@/assets/styles/lego-preview.png';
-import cardboardPreview from '@/assets/styles/cardboard-preview.png';
-import babiePreview from '@/assets/styles/barbie-preview.png';
-
+// ── Real style preview thumbnails ──
+//
+// Each entry resolves to its asset URL via `new URL(..., import.meta.url)`.
+// Vite handles this lazily — the URLs are tree-shaken into the build but
+// the bytes only download when an `<img src=...>` actually requests them.
+// Combined with the IntersectionObserver-gated `<StylePreviewImg>` below,
+// only the thumbs the user actually sees on screen ever leave the wire.
+//
+// Previously these were eager `import` statements which Vite bundled into
+// the create-new chunk's asset graph (~3.2 MB raw of PNGs total, with
+// `cardboard-preview.png` alone at 1.84 MB). Re-encoding that single
+// image to WebP is still recommended (see the task list), but lazy-by-
+// default removes the immediate-blocking-LCP problem regardless of
+// individual file weight.
 const STYLES: Array<{ id: string; label: string; preview: string }> = [
-  { id: 'realistic',  label: 'Realistic',   preview: realisticPreview },
-  { id: '3d-pixar',   label: '3D Style',    preview: pixarPreview },
-  { id: 'anime',      label: 'Anime',       preview: animePreview },
-  { id: 'claymation', label: 'Claymation',  preview: claymationPreview },
-  { id: 'storybook',  label: 'Storybook',   preview: storybookPreview },
-  { id: 'caricature', label: 'Caricature',  preview: caricaturePreview },
-  { id: 'doodle',     label: 'Urban Doodle',preview: doodlePreview },
-  { id: 'stick',      label: 'Stick Figure',preview: stickPreview },
-  { id: 'sketch',     label: 'Papercut 3D', preview: sketchPreview },
-  { id: 'crayon',     label: 'Crayon',      preview: crayonPreview },
-  { id: 'minimalist', label: 'Minimalist',  preview: minimalistPreview },
-  { id: 'moody',      label: 'Moody',       preview: moodyPreview },
-  { id: 'chalkboard', label: 'Chalkboard',  preview: chalkboardPreview },
-  { id: 'lego',       label: 'LEGO',        preview: legoPreview },
-  { id: 'cardboard',  label: 'Cardboard',   preview: cardboardPreview },
-  { id: 'babie',      label: 'Babie',       preview: babiePreview },
-  { id: 'custom',     label: 'Custom',      preview: customPreview },
+  { id: 'realistic',  label: 'Realistic',   preview: new URL('../../assets/styles/realistic-preview.png',  import.meta.url).href },
+  { id: '3d-pixar',   label: '3D Style',    preview: new URL('../../assets/styles/3d-pixar-preview.png',   import.meta.url).href },
+  { id: 'anime',      label: 'Anime',       preview: new URL('../../assets/styles/anime-preview.png',      import.meta.url).href },
+  { id: 'claymation', label: 'Claymation',  preview: new URL('../../assets/styles/claymation-preview.png', import.meta.url).href },
+  { id: 'storybook',  label: 'Storybook',   preview: new URL('../../assets/styles/painterly-preview.png',  import.meta.url).href },
+  { id: 'caricature', label: 'Caricature',  preview: new URL('../../assets/styles/caricature-preview.png', import.meta.url).href },
+  { id: 'doodle',     label: 'Urban Doodle',preview: new URL('../../assets/styles/doodle-preview.png',     import.meta.url).href },
+  { id: 'stick',      label: 'Stick Figure',preview: new URL('../../assets/styles/stick-preview.png',      import.meta.url).href },
+  { id: 'sketch',     label: 'Papercut 3D', preview: new URL('../../assets/styles/sketch-preview.png',     import.meta.url).href },
+  { id: 'crayon',     label: 'Crayon',      preview: new URL('../../assets/styles/crayon-preview.png',     import.meta.url).href },
+  { id: 'minimalist', label: 'Minimalist',  preview: new URL('../../assets/styles/minimalist-preview.png', import.meta.url).href },
+  { id: 'moody',      label: 'Moody',       preview: new URL('../../assets/styles/moody-preview.png',      import.meta.url).href },
+  { id: 'chalkboard', label: 'Chalkboard',  preview: new URL('../../assets/styles/chalkboard-preview.png', import.meta.url).href },
+  { id: 'lego',       label: 'LEGO',        preview: new URL('../../assets/styles/lego-preview.png',       import.meta.url).href },
+  { id: 'cardboard',  label: 'Cardboard',   preview: new URL('../../assets/styles/cardboard-preview.png',  import.meta.url).href },
+  { id: 'babie',      label: 'Babie',       preview: new URL('../../assets/styles/barbie-preview.png',     import.meta.url).href },
+  { id: 'custom',     label: 'Custom',      preview: new URL('../../assets/styles/custom-preview.png',     import.meta.url).href },
 ];
 
 // Full language catalogue — mirrors src/components/workspace/LanguageSelector.tsx
@@ -579,30 +574,17 @@ export default function IntakeForm({
         intake_settings: intakeSettings,
       };
 
-      let insertResult = await supabase.from('projects').insert(projectInsert as never).select('id').single();
-      // Defensive fallback — if intake_settings column is missing in
-      // prod (migration 20260422010000 not applied), STORE the settings
-      // inside the project's `content` field as a JSON suffix so the
-      // worker can still recover them. Previous behaviour silently
-      // dropped the settings, which meant music/sfx/captions/lipsync
-      // toggles never reached handleFinalize and features appeared
-      // completely broken even when fully wired. The suffix is a
-      // sentinel-delimited JSON blob that buildSmartFlow/Cinematic
-      // preprocess strips before the LLM sees it.
+      const insertResult = await supabase.from('projects').insert(projectInsert as never).select('id').single();
+      // Schema-drift detector: if the intake_settings column is missing
+      // (production missed migration 20260422010000), fail loudly instead
+      // of silently writing a sentinel-wrapped JSON blob into the project
+      // content column. Quiet fallback corrupted the LLM input downstream
+      // and masked a real ops problem — better to surface and block until
+      // the migration is applied.
       if (insertResult.error && insertResult.error.message?.toLowerCase().includes('intake_settings')) {
-        const { intake_settings: _drop, ...withoutIntake } = projectInsert;
-        void _drop;
-        const contentWithIntake =
-          (withoutIntake as { content: string }).content +
-          `\n\n<!--INTAKE_SETTINGS:${JSON.stringify(intakeSettings)}:END-->\n`;
-        insertResult = await supabase
-          .from('projects')
-          .insert({ ...withoutIntake, content: contentWithIntake } as never)
-          .select('id')
-          .single();
-        console.warn(
-          '[IntakeForm] intake_settings column missing — persisted to content suffix as fallback',
-        );
+        const msg = 'Database is missing the intake_settings column. Apply migration 20260422010000 (intake settings JSONB) before generating.';
+        console.error('[IntakeForm] schema drift:', insertResult.error);
+        throw new Error(msg);
       }
       const { data, error } = insertResult;
       if (error || !data) throw error || new Error('Insert returned no row');
@@ -624,32 +606,50 @@ export default function IntakeForm({
   }
 
   // Bridge cost + rail content into IntakeFrame.
+  //
+  // Rail injection used to fire on every keystroke in the prompt textarea
+  // (each character → new <IntakeRail/> JSX → full right-rail subtree
+  // re-render: credits card, voice player, suggestions, CTA). Now we
+  // debounce the rail update by 200 ms so live typing doesn't thrash
+  // the rail; cost (the only number the user wants to see update fast)
+  // still propagates immediately via setTotalCost. The 200 ms cap is
+  // below the perception threshold for "instant" so users still see the
+  // rail reflect their edits without paying the per-keystroke render.
   const rail = useIntakeRail();
+  // Cost mirror — stays sync, ~free
   useEffect(() => {
     rail.setTotalCost(totalCost);
-    rail.setRailContent(
-      <IntakeRail
-        aspect={aspect}
-        prompt={prompt}
-        mode={mode}
-        visualStyle={{ name: STYLES.find((s) => s.id === styleId)?.label ?? 'Style' }}
-        language={language}
-        voice={voice}
-        captionStyle={caption}
-        duration={features.duration ? duration : undefined}
-        consistency={consistency}
-        characterDescriptionLen={characterDescription.trim().length}
-        music={music}
-        lipSync={lipSync}
-        styleId={styleId}
-        costItems={costItems}
-        totalCost={totalCost}
-        creditsAvailable={credits?.credits_balance ?? 0}
-        creditsCap={creditsCap}
-        onGenerate={handleGenerate}
-        generating={generating}
-      />,
-    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalCost]);
+
+  // Heavy rail content — debounced
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      rail.setRailContent(
+        <IntakeRail
+          aspect={aspect}
+          prompt={prompt}
+          mode={mode}
+          visualStyle={{ name: STYLES.find((s) => s.id === styleId)?.label ?? 'Style' }}
+          language={language}
+          voice={voice}
+          captionStyle={caption}
+          duration={features.duration ? duration : undefined}
+          consistency={consistency}
+          characterDescriptionLen={characterDescription.trim().length}
+          music={music}
+          lipSync={lipSync}
+          styleId={styleId}
+          costItems={costItems}
+          totalCost={totalCost}
+          creditsAvailable={credits?.credits_balance ?? 0}
+          creditsCap={creditsCap}
+          onGenerate={handleGenerate}
+          generating={generating}
+        />,
+      );
+    }, 200);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aspect, prompt, mode, styleId, language, voice, caption, duration, consistency, characterDescription, music, lipSync, features, costItems, totalCost, credits, creditsCap, generating]);
 
@@ -685,7 +685,7 @@ export default function IntakeForm({
             rows={4}
             maxLength={MAX_PROMPT_CHARS}
             placeholder="Describe your video idea, paste text, drop images, or add sources with +"
-            className="w-full min-h-[100px] bg-transparent border-0 outline-none text-[#ECEAE4] font-serif text-[15px] sm:text-[16px] leading-[1.5] resize-y p-4"
+            className="w-full min-h-[100px] bg-transparent border-0 outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] rounded-sm text-[#ECEAE4] font-serif text-[16px] sm:text-[16px] leading-[1.5] resize-y p-4"
           />
           <div className="flex items-center gap-2 flex-wrap px-3 py-2.5 border-t border-white/5">
             {/* Hidden file input — the visible File button triggers it.
@@ -891,21 +891,23 @@ export default function IntakeForm({
       {/* Language / Voice / Captions / Brand */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
         <div>
-          <IntakeLabel>Language</IntakeLabel>
+          <IntakeLabel htmlFor="intake-language">Language</IntakeLabel>
           <select
+            id="intake-language"
             value={language}
             onChange={(e) => setLanguage(e.target.value)}
-            className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50"
+            className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50"
           >
             {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.flag} {l.label}</option>)}
           </select>
         </div>
         <div>
-          <IntakeLabel>Voice</IntakeLabel>
+          <IntakeLabel htmlFor="intake-voice">Voice</IntakeLabel>
           <select
+            id="intake-voice"
             value={voice}
             onChange={(e) => setVoice(e.target.value as SpeakerVoice)}
-            className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50"
+            className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50"
           >
             {/* User's cloned voices — pinned to the top so they're
                 discoverable. Empty optgroup is omitted. */}
@@ -932,12 +934,13 @@ export default function IntakeForm({
           </div>
         </div>
         <div>
-          <IntakeLabel>Brand name</IntakeLabel>
+          <IntakeLabel htmlFor="intake-brand">Brand name</IntakeLabel>
           <input
+            id="intake-brand"
             value={brand}
             onChange={(e) => setBrand(e.target.value)}
             placeholder="Your brand (optional)"
-            className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50 placeholder:text-[#5A6268]"
+            className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 placeholder:text-[#5A6268]"
           />
         </div>
       </div>
@@ -1057,7 +1060,8 @@ export default function IntakeForm({
               rows={3}
               maxLength={MAX_CHAR_DESC_CHARS}
               placeholder="A 30-year-old man with short brown hair, warm brown eyes, a close-cropped beard, wearing a navy sweater. Earnest expression. Paste text, drop images, or attach reference links below."
-              className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50 placeholder:text-[#5A6268] resize-y"
+              aria-label="Character description"
+              className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 placeholder:text-[#5A6268] resize-y"
             />
 
             {/* Reference-image file input (kept — same 5 MB, image-only cap) */}
@@ -1262,7 +1266,21 @@ export default function IntakeForm({
                 )}
               >
                 <div className="aspect-[4/3] bg-[#1B2228]">
-                  <img src={s.preview} alt={s.label} loading="lazy" className="w-full h-full object-cover" />
+                  {/* loading=lazy + decoding=async + width/height hints
+                      so the browser can defer fetch and avoid blocking
+                      LCP. NB: cardboard-preview.png is currently 1.84 MB —
+                      flagged for WebP re-encode in Phase 0 bundle work
+                      (see newtemplate-roadmap.md). The other 16 thumbs
+                      are already small (10-300 KB). */}
+                  <img
+                    src={s.preview}
+                    alt={s.label}
+                    loading="lazy"
+                    decoding="async"
+                    width={256}
+                    height={192}
+                    className="w-full h-full object-cover"
+                  />
                 </div>
                 <div className={cn(
                   'py-1.5 px-1 text-center text-[11.5px] font-medium transition-colors',
@@ -1281,7 +1299,7 @@ export default function IntakeForm({
               value={customStyle}
               onChange={(e) => setCustomStyle(e.target.value)}
               placeholder="Describe your custom visual style…"
-              className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50 placeholder:text-[#5A6268]"
+              className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-[13px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 placeholder:text-[#5A6268]"
             />
             {customStyleImage ? (
               <div className="relative inline-block">

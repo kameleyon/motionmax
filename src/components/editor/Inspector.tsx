@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { memo, useState, useEffect } from 'react';
 import { RotateCw, Loader2, Video, Image as ImageIcon, Wand2, Lock, UserPlus, AudioLines, Square, Undo2, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -31,7 +31,7 @@ function prettyVoiceName(raw: string | null | undefined): string {
   return stripped.charAt(0).toUpperCase() + stripped.slice(1);
 }
 
-export default function Inspector({
+function Inspector({
   state,
   selectedSceneIndex,
   focusTab,
@@ -362,7 +362,7 @@ export default function Inspector({
               value={promptDraft}
               onChange={(e) => setPromptDraft(e.target.value)}
               rows={5}
-              className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-[12.5px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50 resize-y leading-[1.45]"
+              className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-[12.5px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 resize-y leading-[1.45]"
             />
             <div className="grid grid-cols-2 gap-2 mt-2.5">
               <button
@@ -398,7 +398,7 @@ export default function Inspector({
               value={imageEdit}
               onChange={(e) => setImageEdit(e.target.value)}
               placeholder="Describe the edit (e.g. add a lens flare, darker sky…)"
-              className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-[12px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50 placeholder:text-[#5A6268]"
+              className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-[12px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 placeholder:text-[#5A6268]"
             />
             <div className="grid grid-cols-3 gap-2 mt-2">
               <button
@@ -535,7 +535,7 @@ export default function Inspector({
                 disabled={audioRegenActive}
                 style={{ minHeight: '220px' }}
                 className={cn(
-                  'w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2.5 text-[12.5px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50 resize-y leading-[1.6]',
+                  'w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2.5 text-[12.5px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 resize-y leading-[1.6]',
                   audioRegenActive && 'opacity-50 cursor-not-allowed',
                 )}
               />
@@ -625,7 +625,7 @@ export default function Inspector({
               <select
                 value={voiceDraft}
                 onChange={(e) => setVoiceDraft(e.target.value as SpeakerVoice)}
-                className="flex-1 min-w-0 w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-[12.5px] text-[#ECEAE4] outline-none focus:border-[#14C8CC]/50 overflow-hidden text-ellipsis whitespace-nowrap"
+                className="flex-1 min-w-0 w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-[12.5px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 overflow-hidden text-ellipsis whitespace-nowrap"
               >
                 {userClones.length > 0 && (
                   <optgroup label="✨ Your cloned voices">
@@ -1014,3 +1014,5 @@ function AudioBedToggle({
     </div>
   );
 }
+
+export default memo(Inspector);

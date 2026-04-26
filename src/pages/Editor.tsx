@@ -188,8 +188,20 @@ export default function Editor() {
     const waiting = !!state?.project && !state?.generation && !!projectId && !!user;
     if (!waiting) return;
     let cancelled = false;
+    let attempts = 0;
+    // Bounded backoff probe — was a forever-running 2s interval that ran
+    // on top of the 3s React Query poll AND the realtime subscription,
+    // which produced 90 redundant SELECTs/min while waiting on a
+    // generation row. We now: probe immediately, then back off
+    // (2s, 4s, 8s, 12s, 12s...) for at most ~60s total. Realtime +
+    // useEditorState handles anything that arrives later.
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const MAX_PROBES = 8; // ~60s of bounded probing
+    const delayFor = (n: number) => Math.min(2000 * Math.pow(1.5, n), 12_000);
+
     const probe = async () => {
       if (cancelled) return;
+      attempts += 1;
       try {
         const [projRes, genRes] = await Promise.all([
           supabase
@@ -211,24 +223,35 @@ export default function Editor() {
         const projStatus = (projRes.data as { status?: string } | null)?.status;
         const genRow = genRes.data;
 
-        log.info('[Editor] raw probe tick', {
-          projectStatus: projStatus ?? 'none',
-          generationFound: !!genRow,
-          generationStatus: genRow ? (genRow as { status?: string }).status : 'n/a',
-        });
+        // Dev-only verbose log; in prod we let the realtime channel +
+        // React Query refetchInterval log their own status.
+        if (import.meta.env.DEV) {
+          log.debug('[Editor] kickoff probe', {
+            attempt: attempts,
+            projectStatus: projStatus ?? 'none',
+            generationFound: !!genRow,
+          });
+        }
 
         if (genRow || projStatus === 'complete') {
           await queryClient.resetQueries({ queryKey: ['editor-state', projectId] });
           await queryClient.resetQueries({ queryKey: ['active-jobs', projectId] });
           void refetchEditor();
+          return; // stop probing — generation is in flight or done
         }
       } catch (err) {
-        log.warn('[Editor] raw probe threw', { error: err instanceof Error ? err.message : String(err) });
+        log.warn('[Editor] kickoff probe threw', { error: err instanceof Error ? err.message : String(err) });
+      }
+      if (attempts < MAX_PROBES && !cancelled) {
+        timer = setTimeout(probe, delayFor(attempts));
       }
     };
+
     void probe();
-    const iv = setInterval(probe, 2000);
-    return () => { cancelled = true; clearInterval(iv); };
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [state?.project, state?.generation, projectId, user, refetchEditor, queryClient]);
 
   // Manual "Refresh" action exposed on the overlay. Full nuke + refetch.

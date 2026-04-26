@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { Play, Pause, SkipBack, SkipForward, Lock } from 'lucide-react';
 import type { EditorScene, EditorState } from '@/hooks/useEditorState';
 import { useActiveJobs } from './useActiveJobs';
@@ -23,7 +23,7 @@ function sceneDurationMs(scene: EditorScene): number {
   return scene.audioDurationMs ?? scene.estDurationMs ?? 10_000;
 }
 
-export default function Timeline({
+function Timeline({
   state,
   selectedSceneIndex,
   onSelectScene,
@@ -406,3 +406,5 @@ function TrackRail({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
+export default memo(Timeline);

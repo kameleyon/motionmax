@@ -12,7 +12,7 @@ import FeatureCard from "@/components/landing/FeatureCard";
 import TrustIndicators from "@/components/landing/TrustIndicators";
 import { Testimonials } from "@/components/landing/Testimonials";
 import FaqSection from "@/components/landing/FaqSection";
-import motionmaxLogo from "@/assets/motionmax-logo.png";
+import motionmaxLogo from "@/assets/motionmax-logo.webp";
 import styles from "./Landing.module.css";
 import LandingPricing from "@/components/landing/LandingPricing";
 import LandingCta from "@/components/landing/LandingCta";
@@ -114,23 +114,23 @@ export default function Landing() {
           </nav>
           
           <div className="flex items-center gap-3">
-            <Button
+            {/* Mobile hamburger — md:hidden + 44px touch target.
+                The button is rendered as a native <button> so the click
+                isn't swallowed by Radix Slot/asChild props in some
+                shadcn Button variants. Force visible-on-mobile via
+                inline-flex so it never collapses to display:none in a
+                squeezed flex row. */}
+            <button
               ref={menuToggleRef}
-              variant="ghost"
-              size="icon"
-              className="md:hidden rounded-full h-11 w-11"
-              onClick={() => {
-                console.log("[Landing] Hamburger clicked. mobileMenuOpen was:", mobileMenuOpen);
-                setMobileMenuOpen((prev) => {
-                  console.log("[Landing] Hamburger toggle: setting mobileMenuOpen ->", !prev);
-                  return !prev;
-                });
-              }}
-              aria-label="Toggle menu"
+              type="button"
+              onClick={() => setMobileMenuOpen((prev) => !prev)}
+              aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
               aria-expanded={mobileMenuOpen}
+              aria-controls="landing-mobile-menu"
+              className="md:hidden inline-flex items-center justify-center h-11 w-11 rounded-full text-white/90 hover:bg-white/10 active:bg-white/15 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F]"
             >
-              {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            </Button>
+              {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </button>
             <Button
               variant="ghost"
               className="hidden md:flex text-sm font-medium text-muted-foreground hover:text-foreground"
@@ -151,6 +151,7 @@ export default function Landing() {
           {mobileMenuOpen && (
             <motion.nav
               ref={mobileMenuRef}
+              id="landing-mobile-menu"
               role="dialog"
               aria-modal="true"
               aria-labelledby="mobile-menu-heading"
@@ -246,10 +247,15 @@ export default function Landing() {
               Cinematic visuals. Natural voiceover.<br className="hidden sm:block" />Seamless transitions. <span className="text-primary">From one idea.</span>
             </p>
             
-            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+            {/* Mobile-first CTA pair. flex-col on phones so the buttons
+                stack full-width (no cramping at 320px); flex-row from sm:
+                up so they sit side-by-side. Each button has a min 44px
+                touch target via size="lg" (h-11 base) and stretches to
+                fill the column so the tap target is large and obvious. */}
+            <div className="mt-10 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-center gap-3 max-w-[420px] sm:max-w-none mx-auto">
               <Button
                 size="lg"
-                className="min-w-[140px]"
+                className="w-full sm:w-auto min-w-[160px] h-12"
                 onClick={() => handleCta("Try for Free")}
               >
                 Try for Free
@@ -257,19 +263,18 @@ export default function Landing() {
               <Button
                 size="lg"
                 variant="outline"
-                className="gap-2 min-w-[140px] border-white/20 text-white/80 hover:bg-white/10 hover:text-white"
+                className="w-full sm:w-auto gap-2 min-w-[160px] h-12 border-white/30 text-white hover:bg-white/10 hover:text-white"
                 onClick={() => {
-                  console.log("[Landing] Watch Demo clicked. demoModalOpen was:", demoModalOpen);
                   try {
                     trackEvent("watch_demo_click", { location: "hero" });
-                  } catch (err) {
-                    console.error("[Landing] trackEvent failed for Watch Demo:", err);
+                  } catch {
+                    /* analytics is best-effort; never block the modal */
                   }
                   setDemoModalOpen(true);
-                  console.log("[Landing] setDemoModalOpen(true) called — modal should mount this render");
                 }}
+                aria-haspopup="dialog"
               >
-                <Play className="h-4 w-4" />
+                <Play className="h-4 w-4" aria-hidden="true" />
                 Watch Demo
               </Button>
             </div>

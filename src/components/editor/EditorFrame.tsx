@@ -139,7 +139,7 @@ export default function EditorFrame({
   // inspector / timeline. The stage handles its own Exit button.
   if (fullscreen) {
     return (
-      <div className="fixed inset-0 z-[9998] bg-black overflow-hidden">
+      <div className="fixed inset-0 z-fullscreen bg-black overflow-hidden">
         {stage}
         <BulkOpModal projectId={state.project?.id} />
       </div>
@@ -154,10 +154,17 @@ export default function EditorFrame({
   ) : null;
 
   return (
-    <div className="flex h-screen bg-[#0A0D0F] text-[#ECEAE4] font-sans overflow-hidden">
+    <div className="flex h-[100dvh] bg-[#0A0D0F] text-[#ECEAE4] font-sans overflow-hidden">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-3 focus:py-2 focus:bg-[#14C8CC] focus:text-[#0A0D0F] focus:rounded-md focus:font-semibold focus:text-[13px]"
+      >
+        Skip to main content
+      </a>
+
       {/* Filmic grain */}
       <div
-        className="fixed inset-0 pointer-events-none z-[200] opacity-5 mix-blend-overlay"
+        className="fixed inset-0 pointer-events-none z-overlay opacity-5 mix-blend-overlay"
         style={{
           backgroundImage:
             "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1.2 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
@@ -171,6 +178,7 @@ export default function EditorFrame({
       </div>
 
       <main
+        id="main-content"
         className="flex flex-col flex-1 min-w-0 overflow-hidden"
       >
         {offlineBanner}

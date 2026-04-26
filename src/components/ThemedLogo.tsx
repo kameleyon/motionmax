@@ -1,5 +1,5 @@
 import { forwardRef, HTMLAttributes } from "react";
-import motionmaxLogo from "@/assets/motionmax-logo.png";
+import motionmaxLogo from "@/assets/motionmax-logo.webp";
 
 interface ThemedLogoProps extends HTMLAttributes<HTMLImageElement> {
   className?: string;

@@ -1,7 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Sun, Moon, LogOut, Settings as SettingsIcon, History, Shield } from 'lucide-react';
-import { useTheme } from 'next-themes';
+import { LogOut, Settings as SettingsIcon, History, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
@@ -13,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import motionmaxLogo from '@/assets/motionmax-logo.png';
+import motionmaxLogo from '@/assets/motionmax-logo.webp';
 
 /** Icon-only 64px sidebar used by the unified Editor. Matches the
  *  design bundle's .side.mini — logo, 5 nav items (Studio / Projects
@@ -61,7 +60,6 @@ const NAV_ITEMS: Array<{
 export default function MiniSidebar() {
   const { user, signOut } = useAuth();
   const { isAdmin } = useAdminAuth();
-  const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
 
   const { data: profile } = useQuery({
@@ -164,15 +162,10 @@ export default function MiniSidebar() {
               <span>Admin</span>
             </DropdownMenuItem>
           )}
-          <DropdownMenuSeparator className="bg-white/10" />
-          <DropdownMenuItem
-            className="cursor-pointer rounded-lg text-[#ECEAE4] focus:bg-white/5 focus:text-[#ECEAE4]"
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          >
-            <Sun className="mr-2 h-4 w-4 text-[#8A9198] dark:hidden" />
-            <Moon className="mr-2 hidden h-4 w-4 text-[#8A9198] dark:block" />
-            <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
-          </DropdownMenuItem>
+          {/* Theme toggle removed — MotionMax is dark-only by design
+              (aqua + gold palette). The light-mode CSS isn't styled and
+              shipping the toggle confused users into thinking we
+              supported a broken light theme. */}
           <DropdownMenuSeparator className="bg-white/10" />
           <DropdownMenuItem
             className="cursor-pointer rounded-lg text-[#E4C875] focus:bg-[#E4C875]/10 focus:text-[#E4C875]"

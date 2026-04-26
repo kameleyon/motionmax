@@ -47,7 +47,7 @@ export default function ConfirmModal({
 
   return (
     <div
-      className="fixed inset-0 z-[10000] grid place-items-center bg-black/80 backdrop-blur-md"
+      className="fixed inset-0 z-modal grid place-items-center bg-black/80 backdrop-blur-md"
       role="dialog"
       aria-modal="true"
       aria-label={title}

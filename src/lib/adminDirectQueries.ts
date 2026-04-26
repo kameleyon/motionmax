@@ -112,13 +112,32 @@ export async function fetchDashboardStats() {
 export async function fetchSubscribersList(params: { page?: number; limit?: number; search?: string }) {
   const { page = 1, limit = 20, search = "" } = params;
 
+  // If the search term looks like an email, resolve to a user_id first via
+  // the admin email RPC and pin the query to that id. The UI placeholder
+  // says "Search email or name" but display_name only is wrong.
+  let emailResolvedUserId: string | null = null;
+  if (search.includes("@")) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: resolved } = await (supabase.rpc as any)(
+      "admin_get_user_id_by_email",
+      { email_param: search.trim() },
+    );
+    emailResolvedUserId = (resolved as string) || null;
+    // No match → return empty page (do not fall through to display_name).
+    if (!emailResolvedUserId) {
+      return { users: [], total: 0, page, limit, totalPages: 0 };
+    }
+  }
+
   // Step 1: Fetch paginated profiles (server-side)
   let profileQuery = supabase
     .from("profiles")
     .select("*", { count: "exact" })
     .order("created_at", { ascending: false });
 
-  if (search) {
+  if (emailResolvedUserId) {
+    profileQuery = profileQuery.eq("user_id", emailResolvedUserId);
+  } else if (search) {
     profileQuery = profileQuery.ilike("display_name", `%${search}%`);
   }
 
@@ -210,7 +229,12 @@ export async function fetchGenerationList(params: { page?: number; limit?: numbe
   if (params.status && params.status !== "all") query = query.eq("status", params.status);
   if (params.search) {
     const s = params.search.trim();
-    query = query.or(`id.ilike.%${s}%,user_id.ilike.%${s}%,project_id.ilike.%${s}%`);
+    // The id / user_id / project_id columns are uuid; Postgres rejects
+    // ilike against uuid without an explicit text cast, which previously
+    // threw and cleared the table on every keystroke. Cast each side.
+    query = query.or(
+      `id::text.ilike.%${s}%,user_id::text.ilike.%${s}%,project_id::text.ilike.%${s}%`,
+    );
   }
 
   const { data, error, count } = await query;
@@ -269,12 +293,45 @@ export async function fetchAdminLogs(params: { page?: number; limit?: number }) 
 
 // ── Flags ──────────────────────────────────────────────────────────
 
-export async function fetchFlagsList() {
-  const { data } = await supabase
+export async function fetchFlagsList(params: { page?: number; limit?: number; includeResolved?: boolean } = {}) {
+  const { page = 1, limit = 50, includeResolved = false } = params;
+  const from = (page - 1) * limit;
+
+  let query = supabase
     .from("user_flags")
-    .select("*")
+    .select("*", { count: "exact" })
     .order("created_at", { ascending: false });
-  return { flags: data || [] };
+
+  if (!includeResolved) query = query.is("resolved_at", null);
+
+  const { data: flags, count } = await query.range(from, from + limit - 1);
+
+  // Enrich with userName via profiles join.
+  const userIds = (flags ?? []).map(f => f.user_id);
+  let userNameMap: Record<string, string> = {};
+  if (userIds.length) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("user_id, display_name")
+      .in("user_id", userIds);
+    userNameMap = Object.fromEntries(
+      (profiles ?? []).map(p => [p.user_id, p.display_name ?? ""]),
+    );
+  }
+
+  const enriched = (flags ?? []).map(f => ({
+    ...f,
+    userName: userNameMap[f.user_id] ?? "",
+  }));
+
+  const total = count ?? 0;
+  return {
+    flags: enriched,
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
+  };
 }
 
 export async function createFlag(params: { user_id: string; reason: string; flag_type?: string }) {
@@ -312,24 +369,73 @@ export async function resolveFlag(params: { flagId: string }) {
 
 // ── API Calls ──────────────────────────────────────────────────────
 
-export async function fetchApiCallsList(params: { page?: number; limit?: number }) {
-  const { page = 1, limit = 50 } = params;
+export async function fetchApiCallsList(params: {
+  page?: number;
+  limit?: number;
+  status?: string;
+  provider?: string;
+  user_search?: string;
+}) {
+  const { page = 1, limit = 50, status, provider, user_search } = params;
   const from = (page - 1) * limit;
 
-  const { data, count } = await supabase
+  // If the user_search looks like an email, resolve via the admin RPC
+  // and constrain by user_id; otherwise fall back to ILIKE on user_id::text.
+  let userIdFilter: string | null = null;
+  if (user_search?.includes("@")) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: resolved } = await (supabase.rpc as any)(
+      "admin_get_user_id_by_email",
+      { email_param: user_search.trim() },
+    );
+    userIdFilter = (resolved as string) || null;
+    if (!userIdFilter) {
+      return {
+        logs: [],
+        calls: [],
+        total: 0,
+        page,
+        limit,
+        totalPages: 0,
+      };
+    }
+  }
+
+  let query = supabase
     .from("api_call_logs")
     .select("*", { count: "exact" })
-    .order("created_at", { ascending: false })
-    .range(from, from + limit - 1);
+    .order("created_at", { ascending: false });
 
-  return { calls: data || [], total: count || 0, page, limit };
+  if (status && status !== "all") query = query.eq("status", status);
+  if (provider && provider !== "all") query = query.eq("provider", provider);
+  if (userIdFilter) {
+    query = query.eq("user_id", userIdFilter);
+  } else if (user_search) {
+    query = query.ilike("user_id::text", `%${user_search.trim()}%`);
+  }
+
+  const { data, count } = await query.range(from, from + limit - 1);
+
+  const total = count ?? 0;
+  // Return both `logs` (what the UI reads) and `calls` (legacy alias) so
+  // anything still consuming the old shape keeps working.
+  return {
+    logs: data ?? [],
+    calls: data ?? [],
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
+  };
 }
 
-export async function fetchApiCallDetail(params: { id: string }) {
+export async function fetchApiCallDetail(params: { id?: string; callId?: string }) {
+  const id = params.id ?? params.callId;
+  if (!id) throw new Error("api_call_detail: id is required");
   const { data, error } = await supabase
     .from("api_call_logs")
     .select("*")
-    .eq("id", params.id)
+    .eq("id", id)
     .single();
   if (error) throw new Error(error.message);
   return data;
@@ -510,15 +616,15 @@ export async function adminDirectQuery(action: string, params?: Record<string, u
     case "generation_stats": return fetchGenerationStats(params as { startDate?: string; endDate?: string });
     case "generation_list": return fetchGenerationList(params as { page?: number; limit?: number; status?: string; search?: string });
     case "admin_logs": return fetchAdminLogs(params as { page?: number; limit?: number });
-    case "flags_list": return fetchFlagsList();
+    case "flags_list": return fetchFlagsList(params as { page?: number; limit?: number; includeResolved?: boolean });
     case "create_flag": return createFlag({
       user_id: (params?.userId ?? params?.user_id) as string,
       reason: params?.reason as string,
       flag_type: (params?.flagType ?? params?.flag_type) as string | undefined,
     });
     case "resolve_flag": return resolveFlag(params as { flagId: string });
-    case "api_calls_list": return fetchApiCallsList(params as { page?: number; limit?: number });
-    case "api_call_detail": return fetchApiCallDetail(params as { id: string });
+    case "api_calls_list": return fetchApiCallsList(params as { page?: number; limit?: number; status?: string; provider?: string; user_search?: string });
+    case "api_call_detail": return fetchApiCallDetail(params as { id?: string; callId?: string });
     case "revenue_stats": return fetchRevenueStats(params as { startDate?: string; endDate?: string });
     case "user_details": return fetchUserDetails(params as { userId?: string; targetUserId?: string });
     default: throw new Error(`Unknown admin action: ${action}`);

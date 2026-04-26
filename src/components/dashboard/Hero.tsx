@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -66,6 +66,43 @@ export default function Hero() {
       setVoice(getDefaultSpeaker(language));
     }
   }, [language, speakersForLang, voice]);
+
+  // Keyboard / outside-click dismissal for the three menus. Without
+  // this, opened menus trapped focus and could only be closed by
+  // selecting an item, which fails WCAG 2.1.2 (no keyboard trap) and
+  // 2.1.4 (consistent dismissal). Escape closes the open menu and
+  // returns focus to its trigger; an outside click closes silently.
+  const langTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const voiceTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const aspectTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const langMenuRef = useRef<HTMLDivElement | null>(null);
+  const voiceMenuRef = useRef<HTMLDivElement | null>(null);
+  const aspectMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!langMenuOpen && !voiceMenuOpen && !aspectMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (langMenuOpen)   { setLangMenuOpen(false);   langTriggerRef.current?.focus(); }
+      if (voiceMenuOpen)  { setVoiceMenuOpen(false);  voiceTriggerRef.current?.focus(); }
+      if (aspectMenuOpen) { setAspectMenuOpen(false); aspectTriggerRef.current?.focus(); }
+    };
+    const onClick = (e: MouseEvent) => {
+      const t = e.target as Node;
+      const inLang   = !!langMenuRef.current?.contains(t)   || !!langTriggerRef.current?.contains(t);
+      const inVoice  = !!voiceMenuRef.current?.contains(t)  || !!voiceTriggerRef.current?.contains(t);
+      const inAspect = !!aspectMenuRef.current?.contains(t) || !!aspectTriggerRef.current?.contains(t);
+      if (langMenuOpen   && !inLang)   setLangMenuOpen(false);
+      if (voiceMenuOpen  && !inVoice)  setVoiceMenuOpen(false);
+      if (aspectMenuOpen && !inAspect) setAspectMenuOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onClick);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onClick);
+    };
+  }, [langMenuOpen, voiceMenuOpen, aspectMenuOpen]);
 
   const { data: profile } = useQuery({
     queryKey: ['hero-profile', user?.id],
@@ -142,7 +179,7 @@ export default function Hero() {
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="w-full bg-transparent border-0 outline-none resize-none text-[#ECEAE4] font-serif text-[16px] sm:text-[19px] md:text-[22px] leading-[1.35] min-h-[80px] sm:min-h-[96px] placeholder:text-[#5A6268]"
+          className="w-full bg-transparent border-0 outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] rounded-sm resize-none text-[#ECEAE4] font-serif text-[16px] sm:text-[19px] md:text-[22px] leading-[1.35] min-h-[80px] sm:min-h-[96px] placeholder:text-[#5A6268]"
           placeholder="A three-minute documentary about the origin of 35mm film, golden-hour Kodak factory, warm serif captions, narrated in my voice…"
         />
 
@@ -175,24 +212,37 @@ export default function Hero() {
               {/* Language */}
               <div className="relative">
                 <button
+                  ref={langTriggerRef}
                   type="button"
                   onClick={() => { setLangMenuOpen((v) => !v); setAspectMenuOpen(false); setVoiceMenuOpen(false); }}
-                  className="font-mono text-[10.5px] text-[#8A9198] px-2.5 py-1 rounded-md border border-white/5 tracking-wider inline-flex items-center gap-1.5 hover:text-[#ECEAE4] hover:border-white/10"
+                  aria-haspopup="listbox"
+                  aria-expanded={langMenuOpen}
+                  aria-controls="hero-lang-menu"
+                  aria-label={`Language: ${LANGUAGE_LABEL[language]}`}
+                  className="font-mono text-[10.5px] text-[#8A9198] px-2.5 py-1 rounded-md border border-white/5 tracking-wider inline-flex items-center gap-1.5 hover:text-[#ECEAE4] hover:border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F]"
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="opacity-70">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="opacity-70" aria-hidden="true">
                     <circle cx="12" cy="12" r="9" />
                     <path d="M3 12h18M12 3a15 15 0 0 1 0 18" />
                   </svg>
                   {LANGUAGE_LABEL[language]}
                 </button>
                 {langMenuOpen && (
-                  <div className="absolute z-20 top-full left-0 mt-1 bg-[#10151A] border border-white/10 rounded-lg p-1 min-w-[140px] shadow-xl">
+                  <div
+                    ref={langMenuRef}
+                    id="hero-lang-menu"
+                    role="listbox"
+                    aria-label="Language"
+                    className="absolute z-20 top-full left-0 mt-1 bg-[#10151A] border border-white/10 rounded-lg p-1 min-w-[140px] shadow-xl"
+                  >
                     {(Object.entries(LANGUAGE_LABEL) as [Language, string][]).map(([code, label]) => (
                       <button
                         key={code}
                         type="button"
-                        onClick={() => { setLanguage(code); setLangMenuOpen(false); }}
-                        className={`w-full text-left px-2.5 py-1.5 text-[12px] rounded-md transition-colors ${language === code ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'text-[#ECEAE4] hover:bg-white/5'}`}
+                        role="option"
+                        aria-selected={language === code}
+                        onClick={() => { setLanguage(code); setLangMenuOpen(false); langTriggerRef.current?.focus(); }}
+                        className={`w-full text-left px-2.5 py-1.5 text-[12px] rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 ${language === code ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'text-[#ECEAE4] hover:bg-white/5'}`}
                       >
                         {label}
                       </button>
@@ -204,24 +254,37 @@ export default function Hero() {
               {/* Speaker */}
               <div className="relative">
                 <button
+                  ref={voiceTriggerRef}
                   type="button"
                   onClick={() => { setVoiceMenuOpen((v) => !v); setLangMenuOpen(false); setAspectMenuOpen(false); }}
-                  className="font-mono text-[10.5px] text-[#8A9198] px-2.5 py-1 rounded-md border border-white/5 tracking-wider inline-flex items-center gap-1.5 hover:text-[#ECEAE4] hover:border-white/10"
+                  aria-haspopup="listbox"
+                  aria-expanded={voiceMenuOpen}
+                  aria-controls="hero-voice-menu"
+                  aria-label={`Voice: ${prettyVoiceLabel(voice, currentSpeaker?.label ?? 'Voice')}`}
+                  className="font-mono text-[10.5px] text-[#8A9198] px-2.5 py-1 rounded-md border border-white/5 tracking-wider inline-flex items-center gap-1.5 hover:text-[#ECEAE4] hover:border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F]"
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="opacity-70">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="opacity-70" aria-hidden="true">
                     <rect x="9" y="3" width="6" height="13" rx="3" />
                     <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
                   </svg>
                   {prettyVoiceLabel(voice, currentSpeaker?.label ?? 'Voice')}
                 </button>
                 {voiceMenuOpen && (
-                  <div className="absolute z-20 top-full left-0 mt-1 bg-[#10151A] border border-white/10 rounded-lg p-1 min-w-[180px] max-h-[240px] overflow-y-auto shadow-xl">
+                  <div
+                    ref={voiceMenuRef}
+                    id="hero-voice-menu"
+                    role="listbox"
+                    aria-label="Voice"
+                    className="absolute z-20 top-full left-0 mt-1 bg-[#10151A] border border-white/10 rounded-lg p-1 min-w-[180px] max-h-[240px] overflow-y-auto shadow-xl"
+                  >
                     {speakersForLang.map((s) => (
                       <button
                         key={s.id}
                         type="button"
-                        onClick={() => { setVoice(s.id); setVoiceMenuOpen(false); }}
-                        className={`w-full text-left px-2.5 py-1.5 text-[12px] rounded-md transition-colors flex items-center gap-2 ${voice === s.id ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'text-[#ECEAE4] hover:bg-white/5'}`}
+                        role="option"
+                        aria-selected={voice === s.id}
+                        onClick={() => { setVoice(s.id); setVoiceMenuOpen(false); voiceTriggerRef.current?.focus(); }}
+                        className={`w-full text-left px-2.5 py-1.5 text-[12px] rounded-md transition-colors flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 ${voice === s.id ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'text-[#ECEAE4] hover:bg-white/5'}`}
                       >
                         <span className="font-medium">{s.label}</span>
                         <span className="text-[#5A6268] text-[10.5px] ml-auto">{s.description}</span>
@@ -234,23 +297,36 @@ export default function Hero() {
               {/* Aspect ratio */}
               <div className="relative">
                 <button
+                  ref={aspectTriggerRef}
                   type="button"
                   onClick={() => { setAspectMenuOpen((v) => !v); setLangMenuOpen(false); setVoiceMenuOpen(false); }}
-                  className="font-mono text-[10.5px] text-[#8A9198] px-2.5 py-1 rounded-md border border-white/5 tracking-wider inline-flex items-center gap-1.5 hover:text-[#ECEAE4] hover:border-white/10"
+                  aria-haspopup="listbox"
+                  aria-expanded={aspectMenuOpen}
+                  aria-controls="hero-aspect-menu"
+                  aria-label={`Aspect ratio: ${aspect}`}
+                  className="font-mono text-[10.5px] text-[#8A9198] px-2.5 py-1 rounded-md border border-white/5 tracking-wider inline-flex items-center gap-1.5 hover:text-[#ECEAE4] hover:border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F]"
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="opacity-70">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="opacity-70" aria-hidden="true">
                     <rect x="6" y="4" width="12" height="16" rx="2" />
                   </svg>
                   {aspect}
                 </button>
                 {aspectMenuOpen && (
-                  <div className="absolute z-20 top-full left-0 mt-1 bg-[#10151A] border border-white/10 rounded-lg p-1 min-w-[100px] shadow-xl">
+                  <div
+                    ref={aspectMenuRef}
+                    id="hero-aspect-menu"
+                    role="listbox"
+                    aria-label="Aspect ratio"
+                    className="absolute z-20 top-full left-0 mt-1 bg-[#10151A] border border-white/10 rounded-lg p-1 min-w-[100px] shadow-xl"
+                  >
                     {(['16:9', '9:16'] as AspectRatio[]).map((a) => (
                       <button
                         key={a}
                         type="button"
-                        onClick={() => { setAspect(a); setAspectMenuOpen(false); }}
-                        className={`w-full text-left px-2.5 py-1.5 text-[12px] rounded-md transition-colors ${aspect === a ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'text-[#ECEAE4] hover:bg-white/5'}`}
+                        role="option"
+                        aria-selected={aspect === a}
+                        onClick={() => { setAspect(a); setAspectMenuOpen(false); aspectTriggerRef.current?.focus(); }}
+                        className={`w-full text-left px-2.5 py-1.5 text-[12px] rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 ${aspect === a ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'text-[#ECEAE4] hover:bg-white/5'}`}
                       >
                         {a}
                       </button>

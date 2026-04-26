@@ -3,7 +3,7 @@ import Sidebar from './Sidebar';
 import NotificationsPopover from './NotificationsPopover';
 import HelpPopover from './HelpPopover';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
-import motionmaxLogo from '@/assets/motionmax-logo.png';
+import motionmaxLogo from '@/assets/motionmax-logo.webp';
 
 /** Shared app shell — sidebar + topbar + scrollable main column.
  *  Both DashboardLayout (home) and the All-projects page mount this so
@@ -19,9 +19,18 @@ export default function AppShell({
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
-    <div className="flex h-screen relative bg-[#0A0D0F] text-[#ECEAE4] font-sans overflow-hidden">
+    <div className="flex h-[100dvh] relative bg-[#0A0D0F] text-[#ECEAE4] font-sans overflow-hidden">
+      {/* Skip-to-content for keyboard / screen-reader users so they bypass
+          the sidebar nav. WCAG 2.1 AA bypass-blocks. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-3 focus:py-2 focus:bg-[#14C8CC] focus:text-[#0A0D0F] focus:rounded-md focus:font-semibold focus:text-[13px]"
+      >
+        Skip to main content
+      </a>
+
       <div
-        className="fixed inset-0 pointer-events-none z-[200] opacity-5 mix-blend-overlay"
+        className="fixed inset-0 pointer-events-none z-overlay opacity-5 mix-blend-overlay"
         style={{
           backgroundImage:
             "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1.2 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
@@ -79,7 +88,7 @@ export default function AppShell({
           <HelpPopover />
         </div>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-white/10">
+        <div id="main-content" className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-white/10">
           {children}
         </div>
       </main>

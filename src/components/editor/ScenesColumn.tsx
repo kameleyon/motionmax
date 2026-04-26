@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Plus, Loader2 } from 'lucide-react';
 import type { EditorScene, EditorState } from '@/hooks/useEditorState';
 import { useActiveJobs } from './useActiveJobs';
@@ -30,7 +31,7 @@ function formatSceneDuration(scene: EditorScene): string {
   return `0:${s.toString().padStart(2, '0')}`;
 }
 
-export default function ScenesColumn({
+function ScenesColumn({
   state,
   selectedSceneIndex,
   onSelect,
@@ -151,3 +152,5 @@ export default function ScenesColumn({
     </div>
   );
 }
+
+export default memo(ScenesColumn);

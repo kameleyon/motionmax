@@ -91,10 +91,17 @@ export default defineConfig(({ mode }) => ({
     dedupe: ["react", "react-dom"],
   },
   build: {
-    // Only generate source maps when SENTRY_AUTH_TOKEN is present so they can be
-    // uploaded and deleted. Without the token the Sentry plugin is skipped and
-    // .map files would otherwise land in dist/ and ship to prod.
-    sourcemap: mode === "production" && !!process.env.SENTRY_AUTH_TOKEN,
+    // Source-map policy:
+    //   - In production builds, ALWAYS use 'hidden' so the .map files exist
+    //     for Sentry to upload but are NOT referenced by the JS via a
+    //     //# sourceMappingURL comment, so even if the post-upload delete
+    //     fails partway, browsers won't auto-discover the maps.
+    //   - In dev, full source maps for debugging.
+    //   - The Sentry plugin still picks up the maps from dist/ via its
+    //     glob and uploads them; filesToDeleteAfterUpload then strips them.
+    //   This belt-and-suspenders prevents source ever leaking to prod
+    //   if the upload-then-delete pipeline glitches.
+    sourcemap: mode === "production" ? (process.env.SENTRY_AUTH_TOKEN ? "hidden" : false) : true,
     rollupOptions: {
       output: {
         manualChunks: {

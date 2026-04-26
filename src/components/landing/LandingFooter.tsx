@@ -1,4 +1,4 @@
-import motionmaxLogo from "@/assets/motionmax-logo.png";
+import motionmaxLogo from "@/assets/motionmax-logo.webp";
 
 const footerLinks = {
   product: [

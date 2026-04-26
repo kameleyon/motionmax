@@ -29,7 +29,7 @@ const NAV_ITEMS: Array<{
     to: '/dashboard-new',
     label: 'Studio',
     icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
         <path d="M3 12l9-8 9 8" />
         <path d="M5 10v10h14V10" />
       </svg>
@@ -39,7 +39,7 @@ const NAV_ITEMS: Array<{
     to: '/projects',
     label: 'Projects',
     icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
         <rect x="3" y="5" width="18" height="14" rx="2" />
         <path d="M10 9l5 3-5 3V9z" fill="currentColor" />
       </svg>
@@ -50,7 +50,7 @@ const NAV_ITEMS: Array<{
     to: '/voice-lab',
     label: 'Voices',
     icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
         <path d="M8 4v16M16 4v16M4 8h4M16 8h4M4 16h4M16 16h4" />
       </svg>
     ),

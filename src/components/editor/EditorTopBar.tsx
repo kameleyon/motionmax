@@ -281,10 +281,9 @@ export default function EditorTopBar({
       </span>
 
       {/* Sub-view toggle removed until Script + Storyboard views are
-          built. Single Edit view is the default; re-enable this when
-          the other two have actual content to render. */}
-      {void subView}
-      {void onSubViewChange}
+          built. Single Edit view is the default; the subView /
+          onSubViewChange props are still on the component signature so
+          the caller plumbing stays intact when those two views ship. */}
 
       {/* Rendering status pill — aria-live=polite so screen readers
           announce progress without interrupting other speech. */}

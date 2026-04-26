@@ -579,7 +579,7 @@ function Inspector({
               <audio
                 key={scene.audioUrl}
                 controls
-                preload="none"
+                preload="metadata"
                 src={scene.audioUrl}
                 className="w-full sm:h-9 [&::-webkit-media-controls-panel]:bg-[#1B2228]"
               />

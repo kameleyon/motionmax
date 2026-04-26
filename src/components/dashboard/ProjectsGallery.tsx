@@ -212,7 +212,7 @@ export default function ProjectsGallery() {
     return (
       <div className="mt-9 border border-white/5 rounded-2xl bg-[#10151A] p-12 text-center">
         <div className="mx-auto w-14 h-14 rounded-full grid place-items-center bg-gradient-to-br from-[#14C8CC]/20 to-[#0FA6AE]/10 border border-[#14C8CC]/20 mb-4">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#14C8CC" strokeWidth="1.6"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M10 9l5 3-5 3V9z" fill="#14C8CC" /></svg>
+          <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#14C8CC" strokeWidth="1.6"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M10 9l5 3-5 3V9z" fill="#14C8CC" /></svg>
         </div>
         <h3 className="font-serif font-medium text-[20px] tracking-tight m-0">No projects yet</h3>
         <p className="text-[13px] text-[#8A9198] mt-2 max-w-[42ch] mx-auto">
@@ -257,7 +257,7 @@ export default function ProjectsGallery() {
               <div className="absolute inset-0" style={{ background: generateGradient(recentProject.id) }} />
             )}
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-[#0A0D0F]/50 border border-white/30 grid place-items-center backdrop-blur-sm group-hover:scale-105 transition-transform">
-              <svg width="16" height="16" viewBox="0 0 24 24"><path d="M8 5l12 7-12 7V5z" fill="#fff" /></svg>
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24"><path d="M8 5l12 7-12 7V5z" fill="#fff" /></svg>
             </div>
           </div>
           <div className="p-4 sm:p-[24px_28px] flex flex-col gap-2 sm:gap-2.5">

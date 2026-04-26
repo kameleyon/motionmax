@@ -32,7 +32,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
-import { getCreditsRequired } from "@/lib/planLimits";
+import { getCreditsRequired, PLAN_LIMITS, type PlanTier } from "@/lib/planLimits";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfMonth, endOfMonth, subMonths, isSameMonth } from "date-fns";
 import { toast } from "sonner";
@@ -53,13 +53,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-// Plan limits configuration
-const planLimits: Record<string, { credits: number; label: string; color: string; icon: LucideIcon }> = {
-  free: { credits: 5, label: "Free", color: "bg-muted", icon: Sparkles },
-  starter: { credits: 30, label: "Starter", color: "bg-primary/20", icon: Zap },
-  creator: { credits: 100, label: "Creator", color: "bg-primary/30", icon: Crown },
-  professional: { credits: 300, label: "Professional", color: "bg-primary/40", icon: Gem },
-  enterprise: { credits: Infinity, label: "Enterprise", color: "bg-primary/50", icon: Building2 },
+/** Per-plan display chrome (label / color / icon).
+ *  Credit-per-month values come from the canonical PLAN_LIMITS in
+ *  src/lib/planLimits.ts — DO NOT duplicate them here, that's how
+ *  this page used to show "Free 5 credits" for Studio members
+ *  (the local table had no `studio` key so the lookup fell back
+ *  to free). */
+const planDisplay: Record<PlanTier, { label: string; color: string; icon: LucideIcon }> = {
+  free: { label: "Free", color: "bg-muted", icon: Sparkles },
+  creator: { label: "Creator", color: "bg-primary/30", icon: Crown },
+  studio: { label: "Studio", color: "bg-primary/40", icon: Gem },
+  enterprise: { label: "Enterprise", color: "bg-primary/50", icon: Building2 },
 };
 
 /** Compute the credit cost for a generation based on project type + length */
@@ -199,9 +203,18 @@ export default function Usage() {
     setVisibleCount(ITEMS_PER_PAGE);
   }, [selectedMonth]);
 
-  const planInfo = planLimits[plan as keyof typeof planLimits] || planLimits.free;
+  // `plan` from useSubscription is already normalized to PlanTier
+  // (free | creator | studio | enterprise). PLAN_LIMITS owns the
+  // monthly credit cap; planDisplay owns the display chrome. Both
+  // tables include every PlanTier so this lookup never silently
+  // falls back to "free" for a paid plan again.
+  const planTier: PlanTier = (plan as PlanTier);
+  const planInfo = planDisplay[planTier] ?? planDisplay.free;
   const PlanIcon = planInfo.icon;
-  const creditsLimit = planInfo.credits;
+  const planLimitsForPlan = PLAN_LIMITS[planTier] ?? PLAN_LIMITS.free;
+  const creditsLimit = planLimitsForPlan.creditsPerMonth >= 999999
+    ? Infinity
+    : planLimitsForPlan.creditsPerMonth;
   const creditsPercentage = creditsLimit === Infinity ? 0 : (creditsUsedThisCycle / creditsLimit) * 100;
 
   // Calculate renewal date

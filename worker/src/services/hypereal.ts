@@ -201,11 +201,12 @@ export async function generateKlingV3Video(
   return pollHyperealJob(jobId, apiKey, model, pollUrl);
 }
 
-// ── Kling V2.6 Pro I2V (active, end-to-end) ──────────────────────
-// (Function historically named generateKlingV3ProVideo — kept for
-// import compatibility while swapping the underlying model from
-// kling-3-0-pro-i2v → kling-2-6-i2v-pro for cost savings. Same
-// end_image support, same input shape, cheaper per scene.)
+// ── Kling V3.0 Pro I2V (active, end-to-end) ──────────────────────
+// Restored to V3.0 Pro after a temporary V2.6 Pro cost rollback.
+// V3.0 Pro delivers stronger subject consistency + texture fidelity
+// at the price of more credits per scene. Function name and call sites
+// stay the same (`generateKlingV3ProVideo`) — only the model string
+// flips from kling-2-6-i2v-pro → kling-3-0-pro-i2v.
 
 /** Spec-documented max prompt length for kling-3-0-pro-i2v. We truncate
  *  at 2400 chars (under the 2500 ceiling) at a sentence boundary when
@@ -231,14 +232,13 @@ function truncateKlingPrompt(input: string): string {
 }
 
 /**
- * Generate video using Kling V2.6 Pro I2V (kling-2-6-i2v-pro).
- * Superior subject consistency + texture preservation vs V3.0 Std / V2.6.
+ * Generate video using Kling V3.0 Pro I2V (kling-3-0-pro-i2v).
+ * Superior subject consistency + texture preservation vs V3.0 Std / V2.6 Pro.
  * Native start + end frame support.
  *
- * Model: kling-2-6-i2v-pro (35 credits for 10s, 18 credits for 5s)
- * Duration: 3 / 5 / 10 / 15 seconds (clamped to nearest valid value; default 5)
+ * Model: kling-3-0-pro-i2v
+ * Duration: 5 or 10 seconds (clamped to nearest valid value; default 5)
  * cfg_scale: 0.0–1.0 (clamped; default 0.5)
- * Pricing (without sound): $0.34 / $0.56 / $1.12 / $1.68 at 3/5/10/15s
  *
  * Request body shape (matches Hypereal spec verbatim):
  *   { model, input: { prompt, image, end_image?, negative_prompt,
@@ -257,16 +257,16 @@ export async function generateKlingV3ProVideo(
   negativePrompt: string = "blurry, low quality, watermark, text, UI elements",
   cfgScale: number = 0.5,
 ): Promise<string> {
-  const model = "kling-2-6-i2v-pro";
+  const model = "kling-3-0-pro-i2v";
 
-  // Duration: Kling V2.6 Pro spec allows 5 or 10 only. Pick the
+  // Duration: Kling V3.0 Pro spec allows 5 or 10 only. Pick the
   // nearest valid value for any other input.
   const validDurations = [5, 10];
   const clampedDuration = validDurations.reduce((prev, curr) =>
     Math.abs(curr - duration) < Math.abs(prev - duration) ? curr : prev
   );
   if (clampedDuration !== duration) {
-    console.warn(`[Hypereal] Kling V2.6 Pro duration ${duration}s invalid — clamped to ${clampedDuration}s`);
+    console.warn(`[Hypereal] Kling V3.0 Pro duration ${duration}s invalid — clamped to ${clampedDuration}s`);
   }
 
   // cfg_scale: spec range 0.0–1.0. Clamp defensively (also catches NaN).
@@ -274,7 +274,7 @@ export async function generateKlingV3ProVideo(
     ? Math.min(1, Math.max(0, cfgScale))
     : 0.5;
   if (clampedCfgScale !== cfgScale) {
-    console.warn(`[Hypereal] Kling V2.6 Pro cfg_scale ${cfgScale} out of range — clamped to ${clampedCfgScale}`);
+    console.warn(`[Hypereal] Kling V3.0 Pro cfg_scale ${cfgScale} out of range — clamped to ${clampedCfgScale}`);
   }
 
   // Prompt: spec max 2500 chars. Truncate at 2400 to leave a safety

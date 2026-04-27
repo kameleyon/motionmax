@@ -185,6 +185,15 @@ export async function handleRegenerateImage(
     await updateSceneField(generationId, sceneIndex, "imageUrl", imageUrl);
   }
 
+  // Opportunistic thumbnail — see handleCinematicImage for the rationale.
+  // First-image-wins via "WHERE thumbnail_url IS NULL" guard so we never
+  // overwrite an existing thumbnail when a user regenerates a later scene.
+  await supabase
+    .from("projects")
+    .update({ thumbnail_url: imageUrl } as never)
+    .eq("id", projectId)
+    .is("thumbnail_url", null);
+
   // Clear stale videoUrls invalidated by this image change. LEGACY
   // logic (useCinematicRegeneration.applyImageEdit / regenerateImage):
   //   - scene N:   its video's FIRST frame was this image → stale.

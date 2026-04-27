@@ -143,7 +143,7 @@ export async function handleCinematicAudio(
     message: `Generating cinematic audio for scene ${sceneIndex + 1}`,
   });
 
-  let result: { url: string | null; durationSeconds?: number; provider?: string; error?: string };
+  let result: { url: string | null; durationSeconds?: number; provider?: string; error?: string } = { url: null };
 
   if (isHC) {
     // ── Haitian Creole: use legacy Gemini TTS path ──
@@ -404,17 +404,66 @@ export async function handleCinematicAudio(
           config,
         );
       } else {
-        const errMsg =
-          `Voice "${voiceName}" is no longer supported. ` +
-          `Please reselect a voice (Adam, River, Carlos, Isabella, Jacques, Camille, ` +
-          `Pierre, Marie, or any Smallest/Gemini voice) on this project and regenerate.`;
-        console.warn(`[CinematicAudio] Scene ${sceneIndex}: ${errMsg}`);
-        await updateSceneProgress(jobId, sceneIndex, "failed", {
-          message: `Scene ${sceneIndex + 1} audio generation failed`,
-          error: errMsg,
-        });
-        clearSceneProgress(jobId);
-        throw new Error(`Audio generation failed: ${errMsg}`);
+        // Last-chance fallback: legacy projects whose voice_name was set
+        // to the FRIENDLY name of a user clone (e.g. "Jomama") but whose
+        // voice_type/voice_id columns were never populated correctly
+        // (older write paths before resolveVoiceForProject's throw guard).
+        // Look up the user's voice library by name and re-route through
+        // the clone path instead of failing the generation.
+        const userId = generation.projects?.user_id ?? generation.user_id;
+        if (userId) {
+          const { data: cloneRow } = await supabase
+            .from("user_voices")
+            .select("voice_id, voice_name, provider")
+            .eq("user_id", userId)
+            .eq("voice_name", voiceName)
+            .maybeSingle();
+          if (cloneRow && (cloneRow as { voice_id?: string }).voice_id) {
+            const externalId = (cloneRow as { voice_id: string }).voice_id;
+            const provider = (cloneRow as { provider?: string }).provider === "elevenlabs" ? "elevenlabs" : "fish";
+            console.log(`[CinematicAudio] Scene ${sceneIndex}: legacy clone shape — voice_name="${voiceName}" → resolved to ${provider} clone ${externalId.slice(0, 8)}…`);
+            // Heal the project row so future scenes / regens take the
+            // fast-path clone branch instead of falling here again.
+            await supabase
+              .from("projects")
+              .update({ voice_type: "custom", voice_id: externalId } as never)
+              .eq("id", projectId);
+            const googleApiKeys = [
+              process.env.GOOGLE_TTS_API_KEY_3,
+              process.env.GOOGLE_TTS_API_KEY_2,
+              process.env.GOOGLE_TTS_API_KEY,
+            ].filter(Boolean) as string[];
+            const config: AudioConfig = {
+              projectId,
+              googleApiKeys,
+              elevenLabsApiKey: process.env.ELEVENLABS_API_KEY,
+              lemonfoxApiKey: process.env.LEMONFOX_API_KEY,
+              fishAudioApiKey: process.env.FISH_AUDIO_API_KEY,
+              replicateApiKey: process.env.REPLICATE_API_KEY || "",
+              customVoiceId: externalId,
+              customVoiceProvider: provider,
+              language: resolvedLanguage,
+            };
+            result = await generateSceneAudio(
+              { number: sceneIndex + 1, voiceover, duration: scene.duration || 10 },
+              config,
+            );
+          }
+        }
+
+        if (!result || !result.url) {
+          const errMsg =
+            `Voice "${voiceName}" is no longer supported. ` +
+            `Please reselect a voice (Adam, River, Carlos, Isabella, Jacques, Camille, ` +
+            `Pierre, Marie, or any Smallest/Gemini voice) on this project and regenerate.`;
+          console.warn(`[CinematicAudio] Scene ${sceneIndex}: ${errMsg}`);
+          await updateSceneProgress(jobId, sceneIndex, "failed", {
+            message: `Scene ${sceneIndex + 1} audio generation failed`,
+            error: errMsg,
+          });
+          clearSceneProgress(jobId);
+          throw new Error(`Audio generation failed: ${errMsg}`);
+        }
       }
     }
   }

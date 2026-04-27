@@ -103,6 +103,20 @@ export async function handleCinematicImage(
   // Atomic update: only set this scene's imageUrl without overwriting other scenes
   await updateSceneField(generationId, sceneIndex, "imageUrl", imageUrl);
 
+  // Opportunistic thumbnail: as soon as ANY scene image is ready, write
+  // it to projects.thumbnail_url IF the project doesn't already have one.
+  // The "WHERE thumbnail_url IS NULL" guard means scene 0's image wins
+  // when it lands first, but a later scene's image still becomes the
+  // thumbnail if scene 0 fails. Failed projects (audio fail, video fail
+  // etc.) used to have no thumbnail because handleFinalize was the only
+  // writer; now any project that gets at least one image rendered shows
+  // up in the dashboard gallery with a real cover.
+  await supabase
+    .from("projects")
+    .update({ thumbnail_url: imageUrl } as never)
+    .eq("id", projectId)
+    .is("thumbnail_url", null);
+
   await updateSceneProgress(jobId, sceneIndex, "complete", {
     message: `Scene ${sceneIndex + 1} cinematic image complete`,
   });

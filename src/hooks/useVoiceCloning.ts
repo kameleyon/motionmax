@@ -114,7 +114,13 @@ export function useVoiceCloning() {
       throw new Error("Voice clone timed out — try again with a shorter sample.");
     },
     onSuccess: () => {
+      // Invalidate BOTH cache keys — useUserClones (consumed by Voice
+      // Lab discovery + intake voice picker + Inspector) keys on
+      // ["user-clones", user.id], while internal hooks use
+      // ["user-voices"]. Without invalidating both, a freshly cloned
+      // voice doesn't show up in the discovery grid until manual refresh.
       queryClient.invalidateQueries({ queryKey: ["user-voices"] });
+      queryClient.invalidateQueries({ queryKey: ["user-clones"] });
       toast.success("Voice cloned successfully!");
     },
     onError: (error: Error) => {
@@ -153,7 +159,13 @@ export function useVoiceCloning() {
       return data;
     },
     onSuccess: () => {
+      // Invalidate BOTH cache keys — useUserClones (consumed by Voice
+      // Lab discovery + intake voice picker + Inspector) keys on
+      // ["user-clones", user.id], while internal hooks use
+      // ["user-voices"]. Without invalidating both, a freshly cloned
+      // voice doesn't show up in the discovery grid until manual refresh.
       queryClient.invalidateQueries({ queryKey: ["user-voices"] });
+      queryClient.invalidateQueries({ queryKey: ["user-clones"] });
       toast.success("Your cloned voice was successfully deleted");
     },
     onError: (error: Error) => {

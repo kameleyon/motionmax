@@ -879,7 +879,7 @@ export async function handler(req: Request): Promise<Response> {
       }
 
       case "api_calls_list": {
-        const { page = 1, limit = 50, status, provider, user_id, user_search } = params || {};
+        const { page = 1, limit = 50, status, provider, user_id, user_search, min_cost } = params || {};
 
         // If user_search is provided, resolve to user_id(s)
         let resolvedUserIds: string[] = [];
@@ -922,6 +922,11 @@ export async function handler(req: Request): Promise<Response> {
           query = query.eq("user_id", user_id);
         } else if (resolvedUserIds.length > 0) {
           query = query.in("user_id", resolvedUserIds);
+        }
+        // Min cost filter — surfaces expensive calls during incident review.
+        // Server-side so pagination still reflects the filtered set.
+        if (typeof min_cost === "number" && min_cost > 0) {
+          query = query.gte("cost", min_cost);
         }
 
         const { data: logs, count, error: logsError } = await query

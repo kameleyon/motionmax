@@ -186,12 +186,21 @@ export default function Admin() {
                         onClick={() => setActiveTab(item.id)}
                         aria-current={isActive ? "page" : undefined}
                         className={cn(
-                          "flex items-center gap-2.5 w-full rounded-lg px-2.5 py-2 text-[13px] transition-colors",
+                          "relative flex items-center gap-2.5 w-full rounded-lg px-2.5 py-2 text-[13px] transition-colors",
                           isActive
                             ? "bg-[#14C8CC]/10 text-[#14C8CC]"
                             : "text-[#8A9198] hover:text-[#ECEAE4] hover:bg-white/5",
                         )}
                       >
+                        {/* Active-section indicator dot — small aqua pip on
+                            the left of the active item, mirrors the dashboard
+                            sidebar's active-link visual. */}
+                        {isActive && (
+                          <span
+                            aria-hidden="true"
+                            className="absolute left-0 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full bg-[#14C8CC]"
+                          />
+                        )}
                         <Icon className="h-4 w-4 shrink-0" />
                         {item.label}
                       </button>

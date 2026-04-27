@@ -239,7 +239,31 @@ export async function fetchGenerationList(params: { page?: number; limit?: numbe
 
   const { data, error, count } = await query;
   if (error) throw error;
-  return { rows: data ?? [], total: count ?? 0, page, limit };
+
+  // Enrich with cost-per-generation summed from api_call_logs. One extra
+  // round-trip for the whole page (~20 rows), client-side aggregation —
+  // cheaper than a per-row RPC and works without a generation_costs table.
+  const rows = data ?? [];
+  const costMap: Record<string, number> = {};
+  if (rows.length > 0) {
+    const ids = rows.map(r => r.id);
+    const { data: costRows } = await supabase
+      .from("api_call_logs")
+      .select("generation_id, cost")
+      .in("generation_id", ids);
+    if (costRows) {
+      for (const r of costRows as { generation_id: string | null; cost: number | null }[]) {
+        if (!r.generation_id) continue;
+        costMap[r.generation_id] = (costMap[r.generation_id] ?? 0) + (r.cost ?? 0);
+      }
+    }
+  }
+  const enriched = rows.map(r => ({
+    ...r,
+    total_cost: costMap[r.id] ?? 0,
+  }));
+
+  return { rows: enriched, total: count ?? 0, page, limit };
 }
 
 // ── Generation Stats ───────────────────────────────────────────────

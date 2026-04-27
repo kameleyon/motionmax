@@ -423,7 +423,7 @@ export function AdminWorkerHealth() {
 }
 
 function ThroughputChart() {
-  const { data: chartData } = useQuery({
+  const { data: chartData, isFetching } = useQuery({
     queryKey: ["worker-throughput-24h"],
     queryFn: async () => {
       const since = subHours(new Date(), 24).toISOString();
@@ -446,7 +446,8 @@ function ThroughputChart() {
       }
       return Object.values(hourly);
     },
-    staleTime: 60000,
+    staleTime: 30000,
+    refetchInterval: 30000,
   });
 
   if (!chartData || chartData.length === 0) return null;
@@ -454,8 +455,22 @@ function ThroughputChart() {
   return (
     <Card className="bg-[#10151A] border-white/8 shadow-none">
       <CardHeader>
-        <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Job Throughput (24h)</CardTitle>
-        <CardDescription>Completed vs failed jobs by hour</CardDescription>
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Job Throughput (24h)</CardTitle>
+            <CardDescription>Completed vs failed jobs by hour</CardDescription>
+          </div>
+          <Badge
+            variant="outline"
+            aria-label={isFetching ? "Refreshing data" : "Live"}
+            className="bg-primary/10 text-primary border-primary/30 gap-1.5 shrink-0"
+          >
+            <span
+              className={`inline-block h-2 w-2 rounded-full bg-primary ${isFetching ? "animate-pulse" : ""}`}
+            />
+            LIVE
+          </Badge>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="h-[200px]">

@@ -289,23 +289,37 @@ export function AdminLogs() {
         </div>
       </div>
 
-      {/* Category Legend */}
-      <div className="flex flex-wrap gap-3 text-xs">
-        <Badge variant="outline-primary" className="gap-1">
-          <Shield className="h-3 w-3" /> Admin
-        </Badge>
-        <Badge variant="outline-success" className="gap-1">
-          <Activity className="h-3 w-3" /> User
-        </Badge>
-        <Badge variant="outline-destructive" className="gap-1">
-          <AlertCircle className="h-3 w-3" /> Error
-        </Badge>
-        <Badge variant="outline-warning" className="gap-1">
-          <AlertTriangle className="h-3 w-3" /> Warning
-        </Badge>
-        <Badge variant="outline-muted" className="gap-1">
-          <Info className="h-3 w-3" /> Info
-        </Badge>
+      {/* Category quick-filter pills with counts. Click toggles into that
+          category; click again (or click All) to clear. Mirrors the Select
+          dropdown above, but pills give a one-tap glance at distribution. */}
+      <div className="flex flex-wrap gap-2 text-[13px] sm:text-xs">
+        {[
+          { key: "all",            label: "All",      icon: null,           variant: "outline-primary"     },
+          { key: "admin_action",   label: "Admin",    icon: Shield,         variant: "outline-primary"     },
+          { key: "user_activity",  label: "User",     icon: Activity,       variant: "outline-success"     },
+          { key: "system_error",   label: "Errors",   icon: AlertCircle,    variant: "outline-destructive" },
+          { key: "system_warning", label: "Warnings", icon: AlertTriangle,  variant: "outline-warning"     },
+          { key: "system_info",    label: "Info",     icon: Info,           variant: "outline-muted"       },
+        ].map(({ key, label, icon: Icon, variant }) => {
+          const count = key === "all" ? logs.length : getCategoryCount(key);
+          const active = categoryFilter === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setCategoryFilter(key)}
+              aria-pressed={active}
+              className={`min-h-[32px] focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-full transition-all ${
+                active ? "ring-2 ring-primary/60 scale-[1.02]" : "opacity-80 hover:opacity-100"
+              }`}
+            >
+              <Badge variant={variant as never} className="gap-1 cursor-pointer pointer-events-none">
+                {Icon && <Icon className="h-3 w-3" />}
+                {label} ({count})
+              </Badge>
+            </button>
+          );
+        })}
       </div>
 
       {/* Terminal Log Viewer */}
@@ -353,11 +367,12 @@ export function AdminLogs() {
                 onClick={() => setExpandedLog(expandedLog === log.id ? null : log.id)}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpandedLog(expandedLog === log.id ? null : log.id); } }}
               >
-                {/* Main Log Line - BIGGER TEXT */}
-                <div className="flex items-start gap-3 text-base leading-relaxed">
-                  <span className="text-white/75 shrink-0 text-sm">{formatDate(log.created_at)}</span>
-                  <span className="text-white/75 shrink-0 text-sm font-medium">{formatTimestamp(log.created_at)}</span>
-                  <span className={`shrink-0 font-bold text-sm ${getLogColor(log.category)}`}>
+                {/* Main Log Line — bump mobile sizes so 11/12 px IBM Plex Mono
+                    isn't unreadable on phones. <sm: gets bigger, desktop unchanged. */}
+                <div className="flex items-start gap-2 sm:gap-3 text-[15px] sm:text-base leading-relaxed">
+                  <span className="text-white/75 shrink-0 text-[13px] sm:text-sm">{formatDate(log.created_at)}</span>
+                  <span className="text-white/75 shrink-0 text-[13px] sm:text-sm font-medium">{formatTimestamp(log.created_at)}</span>
+                  <span className={`shrink-0 font-bold text-[13px] sm:text-sm ${getLogColor(log.category)}`}>
                     {getLogPrefix(log.category)}
                   </span>
                   <span className="text-white text-wrap font-medium flex-1">{log.message}</span>
@@ -371,17 +386,17 @@ export function AdminLogs() {
                     </pre>
                     <div className="mt-3 pt-2 border-t border-primary/20 space-y-1">
                       {log.generation_id && (
-                        <p className="text-xs text-white/75">
+                        <p className="text-[13px] sm:text-xs text-white/75">
                           <span className="text-primary font-medium">Generation:</span> {log.generation_id}
                         </p>
                       )}
                       {log.project_id && (
-                        <p className="text-xs text-white/75">
+                        <p className="text-[13px] sm:text-xs text-white/75">
                           <span className="text-primary font-medium">Project:</span> {log.project_id}
                         </p>
                       )}
                       {log.user_id && (
-                        <p className="text-xs text-white/75">
+                        <p className="text-[13px] sm:text-xs text-white/75">
                           <span className="text-primary font-medium">User:</span> {log.user_id}
                         </p>
                       )}

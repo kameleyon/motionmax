@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
-  RefreshCw, Filter, CheckCircle, XCircle, Clock, Loader2, Search, X,
+  RefreshCw, CheckCircle, XCircle, Clock, Loader2, Search, X,
   ChevronDown, ChevronRight, AlertTriangle, FileText, Cable,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -63,10 +63,12 @@ export function AdminApiCalls() {
   const [providerFilter, setProviderFilter] = useState<string>("all");
   const [userSearch, setUserSearch] = useState("");
   const [activeUserSearch, setActiveUserSearch] = useState("");
+  const [minCostInput, setMinCostInput] = useState("");
+  const [activeMinCost, setActiveMinCost] = useState<number | null>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ["admin-api-calls", page, statusFilter, providerFilter, activeUserSearch],
+    queryKey: ["admin-api-calls", page, statusFilter, providerFilter, activeUserSearch, activeMinCost],
     queryFn: async () => {
       const result = await callAdminApi("api_calls_list", {
         page,
@@ -74,6 +76,7 @@ export function AdminApiCalls() {
         status: statusFilter === "all" ? undefined : statusFilter,
         provider: providerFilter === "all" ? undefined : providerFilter,
         user_search: activeUserSearch || undefined,
+        min_cost: activeMinCost ?? undefined,
       });
       return result as ApiCallsResponse;
     },
@@ -258,6 +261,40 @@ export function AdminApiCalls() {
                   <button onClick={clearUserSearch}><X className="h-3 w-3" /></button>
                 </Badge>
               )}
+              {/* Min cost filter — surfaces expensive calls during triage. */}
+              <div className="relative w-32">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm pointer-events-none">$</span>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  placeholder="Min cost"
+                  value={minCostInput}
+                  onChange={(e) => setMinCostInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const v = parseFloat(minCostInput);
+                      setActiveMinCost(Number.isFinite(v) && v > 0 ? v : null);
+                      setPage(1);
+                    }
+                  }}
+                  onBlur={() => {
+                    const v = parseFloat(minCostInput);
+                    setActiveMinCost(Number.isFinite(v) && v > 0 ? v : null);
+                    setPage(1);
+                  }}
+                  className="h-11 sm:h-8 pl-6 text-base sm:text-xs"
+                />
+              </div>
+              {activeMinCost !== null && (
+                <Badge variant="secondary" className="text-xs gap-1">
+                  ≥ ${activeMinCost.toFixed(2)}
+                  <button onClick={() => { setMinCostInput(""); setActiveMinCost(null); setPage(1); }}>
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -423,8 +460,41 @@ function ApiCallDetail({
   getProviderColor: (provider: string) => string;
   getCategoryColor: (category: string) => string;
 }) {
+  // Copy-as-JSON: dumps the full expanded blob (call + system_logs +
+  // related_calls) to the clipboard so admins can paste straight into
+  // an incident report or share a snapshot of an API call's pipeline.
+  const handleCopyJson = async () => {
+    try {
+      const blob = {
+        call: log,
+        system_logs: detail?.system_logs ?? [],
+        related_calls: detail?.related_calls ?? [],
+        copied_at: new Date().toISOString(),
+      };
+      await navigator.clipboard.writeText(JSON.stringify(blob, null, 2));
+      const { toast } = await import("sonner");
+      toast.success("API call JSON copied to clipboard");
+    } catch {
+      const { toast } = await import("sonner");
+      toast.error("Copy failed — clipboard permission denied");
+    }
+  };
+
   return (
     <div className="p-4 space-y-4 border-l-2 border-primary/40 ml-2">
+      {/* Detail toolbar — Copy as JSON for incident-report paste-through. */}
+      <div className="flex items-center justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleCopyJson}
+          className="h-8 text-xs gap-1.5"
+          aria-label="Copy full call detail as JSON to clipboard"
+        >
+          <FileText className="h-3.5 w-3.5" />
+          Copy as JSON
+        </Button>
+      </div>
       {/* Call Summary */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="space-y-2">

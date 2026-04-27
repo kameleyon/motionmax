@@ -223,7 +223,38 @@ export function AdminFlags() {
                 </div>
                 <div>
                   <Label className="text-xs">Reason</Label>
-                  <Textarea value={newFlagReason} onChange={(e) => setNewFlagReason(e.target.value)} placeholder="Reason for this flag..." rows={3} className="mt-1" />
+                  {/* Quick-pick templates so admins doing batch triage don't
+                      retype "spam" / "abuse" / "fraud" 50× a day. Picking a
+                      template prepends the canonical reason; the textarea
+                      stays editable for additional details. */}
+                  <div className="flex flex-wrap gap-1.5 mt-1.5 mb-1">
+                    {[
+                      { key: "spam",            label: "Spam" },
+                      { key: "abuse",           label: "Abuse" },
+                      { key: "fraud",           label: "Fraud" },
+                      { key: "harassment",      label: "Harassment" },
+                      { key: "tos_violation",   label: "ToS violation" },
+                      { key: "payment_dispute", label: "Payment dispute" },
+                      { key: "other",           label: "Other" },
+                    ].map((t) => (
+                      <button
+                        key={t.key}
+                        type="button"
+                        onClick={() => {
+                          const prefix = `[${t.key}] `;
+                          setNewFlagReason(
+                            newFlagReason.startsWith(prefix)
+                              ? newFlagReason
+                              : prefix + newFlagReason.replace(/^\[[^\]]+\]\s*/, ""),
+                          );
+                        }}
+                        className="px-2 py-1 rounded-full text-[11px] border border-border bg-background hover:bg-primary/10 hover:border-primary/30 hover:text-primary transition-colors min-h-[26px]"
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                  <Textarea value={newFlagReason} onChange={(e) => setNewFlagReason(e.target.value)} placeholder="Pick a template above or type your own reason..." rows={3} className="mt-1" />
                 </div>
               </div>
               <DialogFooter>

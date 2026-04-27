@@ -19,6 +19,7 @@ interface GenerationRow {
   started_at: string | null;
   completed_at: string | null;
   error_message: string | null;
+  total_cost?: number | null;
 }
 
 interface GenerationListResult {
@@ -467,6 +468,7 @@ export function AdminGenerations() {
                     <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">User</th>
                     <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Status</th>
                     <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Progress</th>
+                    <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Cost</th>
                     <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Created</th>
                     <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Completed</th>
                     <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Error</th>
@@ -483,6 +485,15 @@ export function AdminGenerations() {
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-muted-foreground">{row.progress}%</td>
+                      <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                        {row.total_cost && row.total_cost > 0 ? (
+                          <span className="text-primary font-medium">
+                            {row.total_cost < 0.01 ? `$${row.total_cost.toFixed(4)}` : `$${row.total_cost.toFixed(2)}`}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
                       <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
                         {formatDistanceToNow(new Date(row.created_at), { addSuffix: true })}
                       </td>

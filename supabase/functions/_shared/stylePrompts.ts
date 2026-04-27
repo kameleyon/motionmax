@@ -34,8 +34,23 @@ export const STYLE_PROMPTS: Record<string, string> = {
   babie: `Highly expressive Barbie-style extremely close-up portrait, glamorous fashion doll with exaggerated annoyed / disgusted expression, scrunched nose, curled upper lip, asymmetrical pout, narrowed half-lidded eyes, deeply unimpressed "are you serious?" face, smooth glossy plastic skin, sharp makeup, dramatic lashes, sleek rooted messy disheveled hair with flyaway chaos, cinematic toy, extreme close-up, shallow depth of field, crisp facial definition, high-detail plastic texture, soft but clear lighting, luxury Barbie realism, attitude, annoyed bratty elegance, iconic doll face, unhinged enough to feel alive. Ultra High Definition, HDR, with a Kodak Gold 400 film tones`,
 };
 
-/** Resolve a style key to its full prompt string, or return the raw style as fallback. */
+// Style integrity enforcement — appended to every non-realistic style so
+// the image generator can't slip a photorealistic human onto a stylized
+// scene (the cardboard-with-real-woman bug). Mirrored in
+// worker/src/services/prompts.ts.
+const STYLE_INTEGRITY_SUFFIX = ` STYLE INTEGRITY (CRITICAL — NON-NEGOTIABLE): EVERY subject in the frame, including humans, hands, faces, clothing, hair, animals, and any background figures, MUST be rendered fully in this art style. NO photorealistic humans. NO real-life people. NO live-action photography. NO photographic skin texture. NO mixing of stylized environments with realistic figures. If a person appears in the scene, they are rendered in the same medium as the rest of the image (clay, cardboard, lego brick, doodle, anime, etc. — whatever the style dictates). The image must read as a single cohesive artistic medium with zero hybrid live-action / stylized splits.`;
+
+const REALISTIC_STYLES = new Set<string>(["realistic"]);
+
+export function isRealisticStyle(style: string): boolean {
+  return REALISTIC_STYLES.has(style.toLowerCase());
+}
+
+/** Resolve a style key to its full prompt string, or return the raw style as fallback.
+ *  Non-realistic styles get the STYLE_INTEGRITY_SUFFIX automatically appended. */
 export function resolveStylePrompt(style: string): string {
   const key = style.toLowerCase();
-  return STYLE_PROMPTS[key] ?? STYLE_PROMPTS[style] ?? style;
+  const base = STYLE_PROMPTS[key] ?? STYLE_PROMPTS[style] ?? style;
+  if (isRealisticStyle(key)) return base;
+  return base + STYLE_INTEGRITY_SUFFIX;
 }

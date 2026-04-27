@@ -124,8 +124,11 @@ export async function handleCinematicVideo(
   const rawCamera = typeof intake.camera === "string" ? intake.camera : null;
   const userCameraOverride = rawCamera && rawCamera !== "Default" ? rawCamera : null;
   const userColorGrade = typeof intake.grade === "string" ? intake.grade : null;
-  const { getStylePrompt: getStyle } = await import("../services/prompts.js");
+  const { getStylePrompt: getStyle, getStyleNegativePrompt } = await import("../services/prompts.js");
   const styleDesc = getStyle(styleId);
+  // Style-specific negative tokens (e.g. "no photorealistic humans" for
+  // cardboard/clay/lego/etc). Empty string for realistic style.
+  const styleNegative = getStyleNegativePrompt(styleId, project?.custom_style);
   const userCharacterDesc = project?.character_description || "";
   const characterImages: string[] = (project as any)?.character_images || [];
 
@@ -258,7 +261,11 @@ export async function handleCinematicVideo(
   // ── Generate video ────────────────────────────────────────────────
   let videoUrl: string;
   let provider: string;
-  const negPrompt = "blurry, low quality, watermark, text, UI elements, slow motion, sluggish, nudity, naked, exposed body, extra limbs, body contortion, distorted anatomy, lip sync, talking, mouth movement, speaking";
+  // Base negatives + style-specific anti-realism tokens (when style is
+  // non-realistic). Comma-joined so Kling parses them as one negative
+  // prompt list. Empty styleNegative is filtered out before joining.
+  const baseNegatives = "blurry, low quality, watermark, text, UI elements, slow motion, sluggish, nudity, naked, exposed body, extra limbs, body contortion, distorted anatomy, lip sync, talking, mouth movement, speaking";
+  const negPrompt = [baseNegatives, styleNegative].filter(Boolean).join(", ");
 
   // Kling V3.0 Pro I2V (active, end-to-end) — used for BOTH the
   // first-time batch AND per-scene regenerations. Higher cost vs

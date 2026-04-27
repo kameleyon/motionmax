@@ -80,17 +80,73 @@ const CINEMATIC_STYLE_OVERRIDES: Record<string, string> = {
   moody: `Moody monochrome stylized 3D paper cutout indie illustration in black, white, and grays. The scene is constructed like a shallow diorama, using distinct, physically separated layers of thick paper that cast realistic drop shadows on one another to create tangible depth. Each paper layer features thick clean outlines with hand-inked crosshatching and scratchy pen texture for shading, maintaining a slightly uneven line quality like traditional ink on paper. Cute-but-unsettling eerie character design as the central cutout: oversized head, huge blank empty simple eyes, tiny mouth, minimal to nonose; small body with simplified hands and shape. Cinematic centered framing, quiet tension, utilizing varying shades of flat mid-gray paper stock. Visible tactile paper grain, slightly curled edges, and faint ink smudges on the surfaces. The background is minimal but expressive, creative, and grounded, with simple interior props crafted as separate paper pieces drawn in the same inked style. Overall vibe: moody, not happy, unsettling, melancholic, eerie, 3D pop-up storybook graphic novel, high contrast, high definition, high resolution, no color.`,
 };
 
+// ──────────────── Style Integrity Enforcement ──────────────────────
+
+/**
+ * Suffix appended to every non-realistic style prompt. Forces the
+ * image generator to render EVERY subject (humans included) in the
+ * chosen style — fixes the case where a cardboard / clay / lego /
+ * doodle / etc. scene gets a photorealistic human stitched into the
+ * frame because the style only described the environment.
+ *
+ * Example failure mode caught by this: a "cardboard" image where a
+ * real photographic woman was bending over the cardboard diorama,
+ * because nothing told the model "the human is also cardboard."
+ */
+const STYLE_INTEGRITY_SUFFIX = ` STYLE INTEGRITY (CRITICAL — NON-NEGOTIABLE): EVERY subject in the frame, including humans, hands, faces, clothing, hair, animals, and any background figures, MUST be rendered fully in this art style. NO photorealistic humans. NO real-life people. NO live-action photography. NO photographic skin texture. NO mixing of stylized environments with realistic figures. If a person appears in the scene, they are rendered in the same medium as the rest of the image (clay, cardboard, lego brick, doodle, anime, etc. — whatever the style dictates). The image must read as a single cohesive artistic medium with zero hybrid live-action / stylized splits.`;
+
+/**
+ * Negative-prompt tokens appended to video / image generation requests
+ * for non-realistic styles. Mirrors STYLE_INTEGRITY_SUFFIX from the
+ * negative-side: explicitly tells the model what to suppress.
+ */
+const STYLE_INTEGRITY_NEGATIVES = "photorealistic, realistic human, real person, live action, live-action, photograph, photographic, real skin, naturalistic skin texture, real face, real eyes, photographic portrait, hybrid photo and illustration, mixing realistic person with stylized scene, real human bending over diorama, real hand reaching into miniature";
+
+/** The single style that is INTENDED to be photorealistic; skip the
+ *  integrity suffix for it. Centralized here so future realistic-leaning
+ *  styles (e.g. "documentary", "stock-photo") can be added by name. */
+const REALISTIC_STYLES = new Set<string>(["realistic"]);
+
+/** True iff this style key opts INTO photorealism (so we should NOT
+ *  inject the anti-realism suffix / negative prompt). */
+export function isRealisticStyle(style: string): boolean {
+  return REALISTIC_STYLES.has(style.toLowerCase());
+}
+
 // ──────────────────── Helper Functions ─────────────────────────────
 
 /** Resolve a style key to the full visual-prompt string.
- *  Pass projectType to get cinematic-specific overrides. */
+ *  Pass projectType to get cinematic-specific overrides.
+ *  Non-realistic styles automatically get the STYLE_INTEGRITY suffix
+ *  appended so the image model can't slip in real humans on a
+ *  stylized environment. */
 export function getStylePrompt(style: string, customStyle?: string, projectType?: string): string {
-  if (style === "custom" && customStyle) return customStyle;
-  const key = style.toLowerCase();
-  if (projectType === "cinematic" && CINEMATIC_STYLE_OVERRIDES[key]) {
-    return CINEMATIC_STYLE_OVERRIDES[key];
+  if (style === "custom" && customStyle) {
+    // Custom user-supplied prompt: trust the user. They opted in to
+    // whatever they wrote — no suffix, no nanny.
+    return customStyle;
   }
-  return STYLE_PROMPTS[key] || style;
+  const key = style.toLowerCase();
+  let base: string;
+  if (projectType === "cinematic" && CINEMATIC_STYLE_OVERRIDES[key]) {
+    base = CINEMATIC_STYLE_OVERRIDES[key];
+  } else {
+    base = STYLE_PROMPTS[key] || style;
+  }
+  // Realistic styles want photorealism; everything else needs the
+  // anti-realism enforcement to keep the medium cohesive.
+  if (isRealisticStyle(key)) return base;
+  return base + STYLE_INTEGRITY_SUFFIX;
+}
+
+/** Negative-prompt tokens for video / image generation that vary by
+ *  style. Realistic style returns empty string; every other style
+ *  gets the anti-realism token list. Callers should comma-join their
+ *  base negative prompt with this. */
+export function getStyleNegativePrompt(style: string, customStyle?: string): string {
+  if (style === "custom" && customStyle) return ""; // user-driven; no nanny
+  if (isRealisticStyle(style)) return "";
+  return STYLE_INTEGRITY_NEGATIVES;
 }
 
 /** Return pixel dimensions and aspect-ratio string for a given format. */

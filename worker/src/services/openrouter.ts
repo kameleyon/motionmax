@@ -79,6 +79,8 @@ export async function callOpenRouterLLM(
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
+          "HTTP-Referer": "https://motionmax.io",
+          "X-Title": "MotionMax",
         },
         body: JSON.stringify(requestBody),
         signal: controller.signal,

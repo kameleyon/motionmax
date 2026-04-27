@@ -97,7 +97,7 @@ export async function handleCinematicVideo(
   // break scene rendering.
   const { data: project } = await supabase
     .from("projects")
-    .select("format, style, character_description, voice_inclination, character_images")
+    .select("format, style, custom_style, character_description, voice_inclination, character_images")
     .eq("id", projectId)
     .single();
 

@@ -302,17 +302,55 @@ export async function fetchGenerationStats(params: { startDate?: string; endDate
 
 // ── Admin Logs ─────────────────────────────────────────────────────
 
-export async function fetchAdminLogs(params: { page?: number; limit?: number }) {
-  const { page = 1, limit = 50 } = params;
+export async function fetchAdminLogs(params: {
+  page?: number;
+  limit?: number;
+  category?: string;
+  user_id?: string;
+  since?: string;
+  until?: string;
+}) {
+  const { page = 1, limit = 50, category, user_id, since, until } = params;
   const from = (page - 1) * limit;
 
-  const { data, count } = await supabase
+  let query = supabase
     .from("system_logs")
     .select("*", { count: "exact" })
-    .order("created_at", { ascending: false })
-    .range(from, from + limit - 1);
+    .order("created_at", { ascending: false });
 
+  if (category && category !== "all") query = query.eq("category", category);
+  if (user_id) query = query.eq("user_id", user_id);
+  if (since) query = query.gte("created_at", since);
+  if (until) query = query.lte("created_at", until);
+
+  const { data, count } = await query.range(from, from + limit - 1);
   return { logs: data || [], total: count || 0, page, limit };
+}
+
+// Resolve an email (or display-name substring) to a single user_id. Reuses
+// the same admin-only RPC used by createFlag and api_calls list filtering
+// so all "scope by user" inputs across admin UIs behave identically.
+// Returns null when nothing matches.
+export async function fetchUserIdByEmail(email: string): Promise<string | null> {
+  const trimmed = email.trim();
+  if (!trimmed) return null;
+  // The existing admin_get_user_id_by_email RPC handles exact-email lookup.
+  if (trimmed.includes("@")) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: resolved } = await (supabase.rpc as any)(
+      "admin_get_user_id_by_email",
+      { email_param: trimmed },
+    );
+    return (resolved as string) || null;
+  }
+  // Fallback: substring match on profiles.display_name.
+  const { data: profileMatch } = await supabase
+    .from("profiles")
+    .select("user_id")
+    .ilike("display_name", `%${trimmed}%`)
+    .limit(1)
+    .maybeSingle();
+  return profileMatch?.user_id ?? null;
 }
 
 // ── Flags ──────────────────────────────────────────────────────────
@@ -382,10 +420,12 @@ export async function createFlag(params: { user_id: string; reason: string; flag
   return { success: true };
 }
 
-export async function resolveFlag(params: { flagId: string }) {
+export async function resolveFlag(params: { flagId: string; notes?: string }) {
+  const update: Record<string, unknown> = { resolved_at: new Date().toISOString() };
+  if (params.notes) update.resolution_notes = params.notes;
   const { error } = await supabase
     .from("user_flags")
-    .update({ resolved_at: new Date().toISOString() })
+    .update(update)
     .eq("id", params.flagId);
   if (error) throw new Error(error.message);
   return { success: true };
@@ -399,8 +439,11 @@ export async function fetchApiCallsList(params: {
   status?: string;
   provider?: string;
   user_search?: string;
+  min_cost?: number;
+  since?: string;
+  until?: string;
 }) {
-  const { page = 1, limit = 50, status, provider, user_search } = params;
+  const { page = 1, limit = 50, status, provider, user_search, min_cost, since, until } = params;
   const from = (page - 1) * limit;
 
   // If the user_search looks like an email, resolve via the admin RPC
@@ -437,6 +480,9 @@ export async function fetchApiCallsList(params: {
   } else if (user_search) {
     query = query.ilike("user_id::text", `%${user_search.trim()}%`);
   }
+  if (typeof min_cost === "number" && min_cost > 0) query = query.gte("cost", min_cost);
+  if (since) query = query.gte("created_at", since);
+  if (until) query = query.lte("created_at", until);
 
   const { data, count } = await query.range(from, from + limit - 1);
 
@@ -639,15 +685,16 @@ export async function adminDirectQuery(action: string, params?: Record<string, u
     case "subscribers_list": return fetchSubscribersList(params as { page?: number; limit?: number; search?: string });
     case "generation_stats": return fetchGenerationStats(params as { startDate?: string; endDate?: string });
     case "generation_list": return fetchGenerationList(params as { page?: number; limit?: number; status?: string; search?: string });
-    case "admin_logs": return fetchAdminLogs(params as { page?: number; limit?: number });
+    case "admin_logs": return fetchAdminLogs(params as { page?: number; limit?: number; category?: string; user_id?: string; since?: string; until?: string });
+    case "resolve_user_id_by_email": return fetchUserIdByEmail((params as { email: string }).email);
     case "flags_list": return fetchFlagsList(params as { page?: number; limit?: number; includeResolved?: boolean });
     case "create_flag": return createFlag({
       user_id: (params?.userId ?? params?.user_id) as string,
       reason: params?.reason as string,
       flag_type: (params?.flagType ?? params?.flag_type) as string | undefined,
     });
-    case "resolve_flag": return resolveFlag(params as { flagId: string });
-    case "api_calls_list": return fetchApiCallsList(params as { page?: number; limit?: number; status?: string; provider?: string; user_search?: string });
+    case "resolve_flag": return resolveFlag(params as { flagId: string; notes?: string });
+    case "api_calls_list": return fetchApiCallsList(params as { page?: number; limit?: number; status?: string; provider?: string; user_search?: string; min_cost?: number; since?: string; until?: string });
     case "api_call_detail": return fetchApiCallDetail(params as { id?: string; callId?: string });
     case "revenue_stats": return fetchRevenueStats(params as { startDate?: string; endDate?: string });
     case "user_details": return fetchUserDetails(params as { userId?: string; targetUserId?: string });

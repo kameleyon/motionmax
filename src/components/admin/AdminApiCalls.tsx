@@ -12,7 +12,12 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
+import { exportRowsAsCsv, exportRowsAsJson } from "@/lib/csvExport";
+import { toast } from "sonner";
+import { Download } from "lucide-react";
 
 interface ApiCallLog {
   id: string;
@@ -65,10 +70,15 @@ export function AdminApiCalls() {
   const [activeUserSearch, setActiveUserSearch] = useState("");
   const [minCostInput, setMinCostInput] = useState("");
   const [activeMinCost, setActiveMinCost] = useState<number | null>(null);
+  // Date range — empty string means "no bound on that side". The two
+  // <input type="date"> values get converted to ISO timestamps before
+  // hitting the query so the API contract stays string-based.
+  const [sinceDate, setSinceDate] = useState("");
+  const [untilDate, setUntilDate] = useState("");
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ["admin-api-calls", page, statusFilter, providerFilter, activeUserSearch, activeMinCost],
+    queryKey: ["admin-api-calls", page, statusFilter, providerFilter, activeUserSearch, activeMinCost, sinceDate, untilDate],
     queryFn: async () => {
       const result = await callAdminApi("api_calls_list", {
         page,
@@ -77,6 +87,8 @@ export function AdminApiCalls() {
         provider: providerFilter === "all" ? undefined : providerFilter,
         user_search: activeUserSearch || undefined,
         min_cost: activeMinCost ?? undefined,
+        since: sinceDate ? new Date(sinceDate + "T00:00:00").toISOString() : undefined,
+        until: untilDate ? new Date(untilDate + "T23:59:59.999").toISOString() : undefined,
       });
       return result as ApiCallsResponse;
     },
@@ -233,6 +245,48 @@ export function AdminApiCalls() {
                   <RefreshCw className={`h-3 w-3 mr-1 ${isFetching ? "animate-spin" : ""}`} />
                   Refresh
                 </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" disabled={!data?.logs?.length} className="h-11 sm:h-8 text-base sm:text-xs">
+                      <Download className="h-3 w-3 mr-1" />
+                      Export
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => {
+                        if (!data?.logs?.length) return;
+                        const count = exportRowsAsCsv(
+                          data.logs,
+                          [
+                            { key: "id", label: "Call ID" },
+                            { key: "generation_id", label: "Generation ID" },
+                            { key: "user_id", label: "User ID" },
+                            { key: "user_display", label: "User" },
+                            { key: "provider", label: "Provider" },
+                            { key: "model", label: "Model" },
+                            { key: "status", label: "Status" },
+                            { key: "queue_time_ms", label: "Queue (ms)" },
+                            { key: "running_time_ms", label: "Running (ms)" },
+                            { key: "total_duration_ms", label: "Total (ms)" },
+                            { key: "cost", label: "Cost ($)" },
+                            { key: "error_message", label: "Error" },
+                            { key: "created_at", label: "Created" },
+                          ],
+                          "motionmax-api-calls",
+                        );
+                        toast.success(`Exported ${count} API call${count === 1 ? "" : "s"} as CSV`);
+                      }}
+                    >Export as CSV</DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        if (!data?.logs?.length) return;
+                        const count = exportRowsAsJson(data.logs, "motionmax-api-calls");
+                        toast.success(`Exported ${count} API call${count === 1 ? "" : "s"} as JSON`);
+                      }}
+                    >Export as JSON</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
             {/* User search bar */}
@@ -295,6 +349,34 @@ export function AdminApiCalls() {
                   </button>
                 </Badge>
               )}
+              {/* Date range — native date inputs avoid pulling in
+                  react-day-picker just for this. Mobile-friendly,
+                  zero new deps. */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">From</span>
+                <Input
+                  type="date"
+                  value={sinceDate}
+                  onChange={(e) => { setSinceDate(e.target.value); setPage(1); }}
+                  className="h-11 sm:h-8 w-[140px] text-base sm:text-xs"
+                />
+                <span className="text-xs text-muted-foreground">to</span>
+                <Input
+                  type="date"
+                  value={untilDate}
+                  onChange={(e) => { setUntilDate(e.target.value); setPage(1); }}
+                  className="h-11 sm:h-8 w-[140px] text-base sm:text-xs"
+                />
+                {(sinceDate || untilDate) && (
+                  <button
+                    onClick={() => { setSinceDate(""); setUntilDate(""); setPage(1); }}
+                    aria-label="Clear date range"
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -372,7 +454,28 @@ export function AdminApiCalls() {
                           {formatDuration(log.running_time_ms)}
                         </TableCell>
                         <TableCell className="py-2 px-2 text-right font-medium">
-                          {formatDuration(log.total_duration_ms)}
+                          {/* Cost breakdown tooltip — surfaces queue/running/total split
+                              without expanding the full row. Hover/focus on Total cell. */}
+                          <TooltipProvider delayDuration={150}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="cursor-help underline decoration-dotted decoration-muted-foreground/40 underline-offset-2"
+                                  onClick={(e) => e.stopPropagation()}
+                                  aria-label="Show cost/timing breakdown"
+                                >
+                                  {formatDuration(log.total_duration_ms)}
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent className="text-xs space-y-0.5">
+                                <div><span className="text-muted-foreground">Queue:</span> <span className="font-mono">{formatDuration(log.queue_time_ms)}</span></div>
+                                <div><span className="text-muted-foreground">Running:</span> <span className="font-mono">{formatDuration(log.running_time_ms)}</span></div>
+                                <div><span className="text-muted-foreground">Total:</span> <span className="font-mono font-medium">{formatDuration(log.total_duration_ms)}</span></div>
+                                <div><span className="text-muted-foreground">Cost:</span> <span className="font-mono text-primary">{formatCost(log.cost)}</span></div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </TableCell>
                         <TableCell className="py-2 px-2 text-right hidden md:table-cell">
                           <span className={log.cost && log.cost > 0 ? "text-primary font-medium" : "text-muted-foreground"}>
@@ -609,7 +712,11 @@ function ApiCallDetail({
                   <span className="text-white/90">{sl.message}</span>
                 </div>
                 {sl.details && Object.keys(sl.details).length > 0 && (
-                  <pre className="ml-[120px] mt-1 text-xs text-white/50 whitespace-pre-wrap">
+                  // On <sm: render details below the message (no left indent),
+                  // because the 120px indent pushes content off-screen on
+                  // portrait phones. Desktop keeps the indent for visual
+                  // hierarchy with the timestamp/level prefix.
+                  <pre className="mt-1 text-xs text-white/50 whitespace-pre-wrap break-all sm:ml-[120px]">
                     {JSON.stringify(sl.details, null, 2)}
                   </pre>
                 )}

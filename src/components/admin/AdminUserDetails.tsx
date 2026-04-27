@@ -3,7 +3,10 @@ import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Mail, CreditCard, Activity, Flag, Coins, DollarSign, ShieldAlert, ShieldX, ShieldCheck, RefreshCw } from "lucide-react";
+import { Loader2, Mail, CreditCard, Activity, Flag, Coins, DollarSign, ShieldAlert, ShieldX, ShieldCheck, RefreshCw, LogOut, Archive, Trash2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { AdminLoadingState } from "@/components/ui/admin-loading-state";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { format } from "date-fns";
@@ -75,9 +78,14 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
   const [data, setData] = useState<UserDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [actionDialog, setActionDialog] = useState<{ type: "suspend" | "ban" | "unblock"; open: boolean }>({ type: "suspend", open: false });
+  const [actionDialog, setActionDialog] = useState<{ type: "suspend" | "ban" | "unblock" | "force_signout"; open: boolean }>({ type: "suspend", open: false });
   const [actionReason, setActionReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  // Delete dialogs (separate from suspend/ban flow because both require
+  // typed-confirm "delete <email>" 2-step per Jo's requirement).
+  const [deleteDialog, setDeleteDialog] = useState<{ kind: "soft" | "hard" | null }>({ kind: null });
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const fetchDetails = async () => {
     try {
@@ -107,15 +115,38 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
     setActionLoading(true);
     try {
       if (actionDialog.type === "unblock") {
-        // Resolve all active flags for this user
-        const activeFlags = data?.flags?.filter(f => !f.resolved_at) || [];
-        for (const flag of activeFlags) {
-          await callAdminApi("resolve_flag", {
-            flagId: flag.id,
-            resolutionNotes: actionReason || "Unblocked by admin",
-          });
-        }
+        // Resolve all active flags for this user via single-tx RPC
+        // (admin_resolve_all_flags), avoiding the per-flag loop.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: rpcError } = await (supabase.rpc as any)(
+          "admin_resolve_all_flags",
+          {
+            target_user_id: userId,
+            resolution_notes: actionReason || "Unblocked by admin",
+          },
+        );
+        if (rpcError) throw new Error(rpcError.message);
         toast.success("User unblocked successfully");
+      } else if (actionDialog.type === "force_signout") {
+        // Calls admin-force-signout edge fn — sets banned_until to 2099,
+        // invalidating all current JWTs. Audit-logged server-side.
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
+        const url = `${import.meta.env.VITE_SUPABASE_URL ?? ""}/functions/v1/admin-force-signout`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token ?? ""}`,
+          },
+          body: JSON.stringify({ user_id: userId, reason: actionReason }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || `Force sign-out failed (${res.status})`);
+        }
+        const body = await res.json();
+        toast.success(`User signed out — banned_until ${body.banned_until ?? "set"}`);
       } else {
         await callAdminApi("create_flag", {
           userId: userId,
@@ -125,13 +156,13 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
         });
         toast.success(`User ${actionDialog.type === "ban" ? "banned" : "suspended"} successfully`);
       }
-      
+
       setActionDialog({ type: "suspend", open: false });
       setActionReason("");
       fetchDetails();
       onFlagCreated?.();
-    } catch {
-      toast.error("Action failed, please try again");
+    } catch (err) {
+      toast.error("Action failed", { description: err instanceof Error ? err.message : "Please try again." });
     } finally {
       setActionLoading(false);
     }
@@ -213,6 +244,47 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
                 Unblock User
               </Button>
             )}
+            {/* Force Sign Out — invalidates the user's existing JWT by
+                setting auth.users.banned_until to far future. Available
+                regardless of suspend/ban status; useful when an admin
+                needs to immediately kick someone off without a flag. */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setActionDialog({ type: "force_signout", open: true })}
+              className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
+              title="Invalidate this user's active JWT — they will be signed out everywhere on next request"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              Force Sign Out
+            </Button>
+
+            {/* Soft delete: marks profiles.deleted_at + scrubs PII, but
+                preserves all related data (projects, generations) for
+                recovery. Reversible by clearing deleted_at. */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setDeleteDialog({ kind: "soft" }); setDeleteConfirm(""); }}
+              className="gap-1.5 text-warning border-warning/40 hover:bg-warning/10"
+              title="Mark user as deleted, scrub display name + avatar. Reversible."
+            >
+              <Archive className="h-3.5 w-3.5" />
+              Soft Delete
+            </Button>
+
+            {/* Hard delete: irreversible. auth.admin.deleteUser cascades
+                across all FKs (profiles, projects, generations, etc.). */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setDeleteDialog({ kind: "hard" }); setDeleteConfirm(""); }}
+              className="gap-1.5 text-destructive border-destructive hover:bg-destructive/10"
+              title="Permanently delete user and cascade all data. NOT REVERSIBLE."
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Hard Delete
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -420,12 +492,15 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
         </Card>
       )}
 
-      {/* User Flags — expanded by default (most actionable) */}
+      {/* User Flags — full history (active + resolved) sorted with active
+          first then resolved by created_at desc, so admins can spot patterns
+          across the full lifetime of the account. Includes resolved_at column
+          for resolved rows so the cadence is visible. */}
       {data.flags && data.flags.length > 0 && (
         <Card className="bg-[#10151A] border-white/8 shadow-none">
           <AccordionItem value="flags" className="border-0">
           <AccordionTrigger className="px-6 py-4 text-sm font-medium hover:no-underline">
-            User Flags ({data.flags.length})
+            Flag History ({data.flags.length} total · {data.flags.filter(f => !f.resolved_at).length} active)
           </AccordionTrigger>
           <AccordionContent>
           <CardContent className="pt-0">
@@ -435,11 +510,19 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
                   <TableHead>Type</TableHead>
                   <TableHead>Reason</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Date</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead>Resolved</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.flags.map((flag) => (
+                {[...data.flags]
+                  .sort((a, b) => {
+                    const aActive = !a.resolved_at;
+                    const bActive = !b.resolved_at;
+                    if (aActive !== bActive) return aActive ? -1 : 1;
+                    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+                  })
+                  .map((flag) => (
                   <TableRow key={flag.id}>
                     <TableCell>
                       <Badge variant="secondary" className="font-normal">
@@ -452,8 +535,11 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
                         {flag.resolved_at ? "Resolved" : "Active"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {format(new Date(flag.created_at), "PP")}
+                    <TableCell className="text-muted-foreground text-xs whitespace-nowrap">
+                      {format(new Date(flag.created_at), "PPp")}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs whitespace-nowrap">
+                      {flag.resolved_at ? format(new Date(flag.resolved_at), "PPp") : "—"}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -467,6 +553,89 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
 
       </Accordion>
 
+      {/* Delete dialogs (soft + hard share the same confirm gate but
+          different copy and different backend calls). Confirmation must
+          exactly match the user's email — typo-proof against accidental
+          deletion of the wrong account. */}
+      <Dialog open={deleteDialog.kind !== null} onOpenChange={(open) => !open && setDeleteDialog({ kind: null })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {deleteDialog.kind === "soft" ? <Archive className="h-5 w-5 text-warning" /> : <Trash2 className="h-5 w-5 text-destructive" />}
+              {deleteDialog.kind === "soft" ? "Soft Delete User" : "Permanently Delete User"}
+            </DialogTitle>
+            <DialogDescription>
+              {deleteDialog.kind === "soft" ? (
+                <>This marks <span className="font-mono text-foreground">{data.user.email}</span> as deleted, scrubs their display name and avatar, but preserves all related data. Reversible by an admin manually clearing <span className="font-mono">profiles.deleted_at</span>.</>
+              ) : (
+                <>This <span className="text-destructive font-bold">permanently deletes</span> <span className="font-mono text-foreground">{data.user.email}</span> and cascades across every table referencing this user (projects, generations, transactions, flags, etc.). <span className="text-destructive font-bold">NOT REVERSIBLE.</span></>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Label className="text-xs">
+              To confirm, type the user's email below: <span className="font-mono">{data.user.email}</span>
+            </Label>
+            <Input
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              placeholder={data.user.email}
+              autoComplete="off"
+              spellCheck={false}
+              className="font-mono"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialog({ kind: null })} disabled={deleting}>Cancel</Button>
+            <Button
+              variant={deleteDialog.kind === "hard" ? "destructive" : "default"}
+              disabled={deleting || deleteConfirm.trim().toLowerCase() !== data.user.email.toLowerCase()}
+              onClick={async () => {
+                setDeleting(true);
+                try {
+                  if (deleteDialog.kind === "soft") {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const { data: rowCount, error } = await (supabase.rpc as any)(
+                      "admin_soft_delete_user",
+                      { target_user_id: userId },
+                    );
+                    if (error) throw error;
+                    toast.success(`Soft-deleted ${rowCount} user record`);
+                    setDeleteDialog({ kind: null });
+                    fetchDetails();
+                    onFlagCreated?.();
+                  } else {
+                    // Hard delete via edge function — cascades everything.
+                    const { data: sessionData } = await supabase.auth.getSession();
+                    const token = sessionData.session?.access_token;
+                    const url = `${import.meta.env.VITE_SUPABASE_URL ?? ""}/functions/v1/admin-hard-delete-user`;
+                    const res = await fetch(url, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
+                      body: JSON.stringify({ user_id: userId, confirmation: deleteConfirm.trim() }),
+                    });
+                    if (!res.ok) {
+                      const body = await res.json().catch(() => ({}));
+                      throw new Error(body.error || `Hard delete failed (${res.status})`);
+                    }
+                    toast.success(`User ${data.user.email} permanently deleted`);
+                    setDeleteDialog({ kind: null });
+                    onFlagCreated?.();
+                  }
+                } catch (err) {
+                  toast.error("Delete failed", { description: err instanceof Error ? err.message : "Please try again." });
+                } finally {
+                  setDeleting(false);
+                }
+              }}
+            >
+              {deleting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              {deleteDialog.kind === "soft" ? "Soft Delete" : "Delete Permanently"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Action Dialog */}
       <Dialog open={actionDialog.open} onOpenChange={(open) => setActionDialog(prev => ({ ...prev, open }))}>
         <DialogContent>
@@ -475,11 +644,13 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
               {actionDialog.type === "ban" && "Ban User"}
               {actionDialog.type === "suspend" && "Suspend User"}
               {actionDialog.type === "unblock" && "Unblock User"}
+              {actionDialog.type === "force_signout" && "Force Sign Out"}
             </DialogTitle>
             <DialogDescription>
               {actionDialog.type === "ban" && "This will permanently ban the user from accessing the platform."}
               {actionDialog.type === "suspend" && "This will temporarily suspend the user's access."}
               {actionDialog.type === "unblock" && "This will resolve all active flags and restore the user's access."}
+              {actionDialog.type === "force_signout" && "This will invalidate the user's active JWT by setting banned_until to year 2099. They will be signed out on their next request. Audit-logged."}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -504,6 +675,7 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
               {actionDialog.type === "ban" && "Permanently Ban User"}
               {actionDialog.type === "suspend" && "Suspend User"}
               {actionDialog.type === "unblock" && "Unblock User"}
+              {actionDialog.type === "force_signout" && "Force Sign Out"}
             </Button>
           </DialogFooter>
         </DialogContent>

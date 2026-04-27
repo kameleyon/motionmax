@@ -4,8 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Slider } from "@/components/ui/slider";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
-import { Flag, CheckCircle, AlertTriangle, Ban, RefreshCw, ChevronLeft, ChevronRight, Eye, Loader2 } from "lucide-react";
+import { Flag, CheckCircle, AlertTriangle, Ban, RefreshCw, ChevronLeft, ChevronRight, Eye, Loader2, Settings } from "lucide-react";
 import { AdminLoadingState } from "@/components/ui/admin-loading-state";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
@@ -59,6 +61,14 @@ export function AdminFlags() {
   const [newFlagReason, setNewFlagReason] = useState("");
   const [creating, setCreating] = useState(false);
   const [globalCounts, setGlobalCounts] = useState<Record<string, number>>({});
+  // Bulk resolve: selected flag ids on the current page.
+  const [selectedFlagIds, setSelectedFlagIds] = useState<Set<string>>(new Set());
+  const [bulkResolveOpen, setBulkResolveOpen] = useState(false);
+  const [bulkResolveNotes, setBulkResolveNotes] = useState("");
+  const [bulkResolving, setBulkResolving] = useState(false);
+  // Auto-resolve threshold (in days). null = not loaded yet.
+  const [autoResolveDays, setAutoResolveDays] = useState<number | null>(null);
+  const [savingAutoResolve, setSavingAutoResolve] = useState(false);
 
   const fetchGlobalCounts = useCallback(async () => {
     const types = ["warning", "flagged", "suspended", "banned"] as const;
@@ -136,6 +146,77 @@ export function AdminFlags() {
       </Badge>
     );
   };
+
+  // Bulk resolve all selected flags via parallel resolve_flag RPCs. We
+  // intentionally don't use admin_resolve_all_flags here — that's per-user
+  // (resolves EVERY active flag for one user); admins selecting individual
+  // rows expect only the selected flags to resolve.
+  const handleBulkResolve = async () => {
+    const ids = Array.from(selectedFlagIds);
+    if (ids.length === 0) return;
+    setBulkResolving(true);
+    try {
+      const results = await Promise.allSettled(
+        ids.map((flagId) =>
+          callAdminApi("resolve_flag", { flagId, notes: bulkResolveNotes || "Bulk resolved" }),
+        ),
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed === 0) {
+        toast.success(`Resolved ${ids.length} flag${ids.length === 1 ? "" : "s"}`);
+      } else {
+        toast.warning(`Resolved ${ids.length - failed} of ${ids.length} flags (${failed} failed)`);
+      }
+      setSelectedFlagIds(new Set());
+      setBulkResolveNotes("");
+      setBulkResolveOpen(false);
+      fetchFlags();
+      fetchGlobalCounts();
+    } catch (err) {
+      toast.error("Bulk resolve failed", { description: err instanceof Error ? err.message : "Please try again." });
+    } finally {
+      setBulkResolving(false);
+    }
+  };
+
+  // Read the current auto-resolve threshold from app_settings via the
+  // admin RPC. Falls back to 30 (the default seeded by the migration) on
+  // any error so the slider still renders meaningfully.
+  const fetchAutoResolveDays = useCallback(async () => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await (supabase.rpc as any)("admin_get_app_setting", {
+        setting_key: "flags_auto_resolve_days",
+      });
+      const days = typeof data === "number" ? data : Number(data);
+      setAutoResolveDays(Number.isFinite(days) && days > 0 ? days : 30);
+    } catch {
+      setAutoResolveDays(30);
+    }
+  }, []);
+
+  const handleSaveAutoResolveDays = async (days: number) => {
+    setSavingAutoResolve(true);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: rpcError } = await (supabase.rpc as any)(
+        "admin_set_flags_auto_resolve_days",
+        { days },
+      );
+      if (rpcError) throw rpcError;
+      toast.success(`Auto-resolve threshold set to ${days} days`);
+    } catch (err) {
+      toast.error("Failed to save threshold", { description: err instanceof Error ? err.message : "Please try again." });
+      // Revert by re-fetching the persisted value.
+      fetchAutoResolveDays();
+    } finally {
+      setSavingAutoResolve(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAutoResolveDays();
+  }, [fetchAutoResolveDays]);
 
   const handleCreateFlag = async () => {
     if (!newFlagUserId.trim() || !newFlagReason.trim()) {
@@ -295,10 +376,87 @@ export function AdminFlags() {
         })}
       </div>
 
+      {/* Auto-resolve threshold settings card. The pg_cron job at 03:00 UTC
+          (auto_resolve_stale_flags) reads app_settings.flags_auto_resolve_days
+          and resolves any active flag older than that. Slider writes via
+          admin_set_flags_auto_resolve_days RPC; commit on release to avoid
+          one write per pixel of dragging. */}
+      <Card className="bg-[#10151A] border-white/8 shadow-none shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Settings className="h-4 w-4 text-primary" />
+            Auto-resolve stale flags
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {autoResolveDays === null ? (
+            <p className="text-xs text-muted-foreground">Loading current threshold…</p>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">
+                  Active flags older than this auto-resolve daily at 03:00 UTC.
+                </span>
+                <span className="font-mono text-primary font-medium">{autoResolveDays} day{autoResolveDays === 1 ? "" : "s"}</span>
+              </div>
+              <Slider
+                min={1}
+                max={365}
+                step={1}
+                value={[autoResolveDays]}
+                onValueChange={(v) => setAutoResolveDays(v[0] ?? autoResolveDays)}
+                onValueCommit={(v) => v[0] && handleSaveAutoResolveDays(v[0])}
+                disabled={savingAutoResolve}
+                aria-label="Auto-resolve threshold in days"
+              />
+              <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
+                <span>1d</span>
+                <span>30d</span>
+                <span>90d</span>
+                <span>180d</span>
+                <span>365d</span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Flags Table */}
       <Card className="bg-[#10151A] border-white/8 shadow-none shadow-sm overflow-hidden">
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-3">
           <CardTitle className="text-lg">Flag History</CardTitle>
+          {selectedFlagIds.size > 0 && (
+            <Dialog open={bulkResolveOpen} onOpenChange={setBulkResolveOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="default" className="gap-1.5">
+                  <CheckCircle className="h-3.5 w-3.5" />
+                  Resolve {selectedFlagIds.size} flag{selectedFlagIds.size === 1 ? "" : "s"}
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Bulk Resolve {selectedFlagIds.size} Flag{selectedFlagIds.size === 1 ? "" : "s"}</DialogTitle></DialogHeader>
+                <div className="space-y-3 py-2">
+                  <Label className="text-xs">Resolution Notes (applied to all selected)</Label>
+                  <Textarea
+                    placeholder="e.g. False positives — verified accounts manually."
+                    value={bulkResolveNotes}
+                    onChange={(e) => setBulkResolveNotes(e.target.value)}
+                    rows={3}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Each flag will be marked resolved with these notes. This action is logged in admin_logs.
+                  </p>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setBulkResolveOpen(false)} disabled={bulkResolving}>Cancel</Button>
+                  <Button onClick={handleBulkResolve} disabled={bulkResolving}>
+                    {bulkResolving && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+                    Resolve {selectedFlagIds.size}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
         </CardHeader>
         <CardContent className="p-0 sm:p-6">
           {data?.flags && data.flags.length > 0 ? (
@@ -307,6 +465,27 @@ export function AdminFlags() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10">
+                      {(() => {
+                        const activeIds = data.flags.filter(f => !f.resolved_at).map(f => f.id);
+                        const allSelected = activeIds.length > 0 && activeIds.every(id => selectedFlagIds.has(id));
+                        return (
+                          <Checkbox
+                            checked={allSelected}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedFlagIds(new Set([...selectedFlagIds, ...activeIds]));
+                              } else {
+                                const next = new Set(selectedFlagIds);
+                                activeIds.forEach(id => next.delete(id));
+                                setSelectedFlagIds(next);
+                              }
+                            }}
+                            aria-label="Select all active flags on this page"
+                          />
+                        );
+                      })()}
+                    </TableHead>
                     <TableHead>User</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Reason</TableHead>
@@ -318,6 +497,20 @@ export function AdminFlags() {
                 <TableBody>
                   {data.flags.map((flag) => (
                     <TableRow key={flag.id}>
+                      <TableCell>
+                        {!flag.resolved_at && (
+                          <Checkbox
+                            checked={selectedFlagIds.has(flag.id)}
+                            onCheckedChange={(checked) => {
+                              const next = new Set(selectedFlagIds);
+                              if (checked) next.add(flag.id);
+                              else next.delete(flag.id);
+                              setSelectedFlagIds(next);
+                            }}
+                            aria-label={`Select flag ${flag.id}`}
+                          />
+                        )}
+                      </TableCell>
                       <TableCell>
                         <div>
                           <div className="font-medium">{flag.userName}</div>

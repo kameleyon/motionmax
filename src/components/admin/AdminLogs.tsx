@@ -1,9 +1,13 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import {
   RefreshCw,
   Shield,
@@ -14,6 +18,9 @@ import {
   Pause,
   Play,
   Terminal,
+  Download,
+  X,
+  Radio,
 } from "lucide-react";
 import { AdminLoadingState } from "@/components/ui/admin-loading-state";
 import { format } from "date-fns";
@@ -61,7 +68,13 @@ export function AdminLogs() {
   const [textSearch, setTextSearch] = useState("");
   const [timeRange, setTimeRange] = useState<string>("live");
   const [isPaused, setIsPaused] = useState(false);
-  const [expandedLog, setExpandedLog] = useState<string | null>(null);
+  const [tailMode, setTailMode] = useState(true); // 5s polling on top of realtime
+  const [userScopeInput, setUserScopeInput] = useState("");
+  const [activeUserScope, setActiveUserScope] = useState<{ email: string; userId: string } | null>(null);
+  // URL-synced expansion: ?logId=<uuid> opens that entry on load and updates
+  // when the admin clicks rows so they can share permalinks to specific events.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [expandedLog, setExpandedLog] = useState<string | null>(searchParams.get("logId"));
   const terminalRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
 
@@ -72,6 +85,7 @@ export function AdminLogs() {
         page: 1,
         limit: 200,
         category: categoryFilter,
+        user_id: activeUserScope?.userId,
       })) as LogsResponse;
       setLogs(result.logs || []);
       setError(null);
@@ -80,11 +94,113 @@ export function AdminLogs() {
     } finally {
       setLoading(false);
     }
-  }, [callAdminApi, categoryFilter]);
+  }, [callAdminApi, categoryFilter, activeUserScope]);
 
   useEffect(() => {
     fetchLogs();
   }, [fetchLogs]);
+
+  // Tail mode: 5s safety-net polling on top of realtime. Realtime usually
+  // catches inserts within ms, but if the channel drops (network blip, JWT
+  // refresh) tail mode keeps the view honest without a manual refresh.
+  useEffect(() => {
+    if (!tailMode || isPaused) return;
+    const id = setInterval(() => { fetchLogs(); }, 5000);
+    return () => clearInterval(id);
+  }, [tailMode, isPaused, fetchLogs]);
+
+  // Resolve an email to a user_id and apply as scope filter.
+  const handleApplyUserScope = useCallback(async () => {
+    const email = userScopeInput.trim();
+    if (!email) {
+      setActiveUserScope(null);
+      return;
+    }
+    try {
+      const userId = (await callAdminApi("resolve_user_id_by_email", { email })) as string | null;
+      if (!userId) {
+        toast.error(`No user found matching "${email}"`);
+        return;
+      }
+      setActiveUserScope({ email, userId });
+      toast.success(`Scoped logs to user ${email}`);
+    } catch {
+      toast.error("Failed to resolve user");
+    }
+  }, [callAdminApi, userScopeInput]);
+
+  const handleClearUserScope = () => {
+    setUserScopeInput("");
+    setActiveUserScope(null);
+  };
+
+  // Keep ?logId=<uuid> in sync with expansion. Empty / closed = strip param.
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (expandedLog) {
+      if (next.get("logId") !== expandedLog) {
+        next.set("logId", expandedLog);
+        setSearchParams(next, { replace: true });
+      }
+    } else if (next.has("logId")) {
+      next.delete("logId");
+      setSearchParams(next, { replace: true });
+    }
+  }, [expandedLog, searchParams, setSearchParams]);
+
+  // Export filtered logs as CSV or JSON. Operates on the in-memory
+  // `filteredLogs` snapshot to keep the export consistent with what the
+  // admin sees on screen — no extra query, no race with realtime.
+  const handleExport = useCallback((format: "csv" | "json") => {
+    // filteredLogs is computed below; we capture it inside the closure when
+    // the click happens via a fresh derivation rather than referencing it
+    // up-scope (avoids stale-closure on the timer-driven re-renders).
+    const rows = logs.filter((log) => {
+      if (categoryFilter !== "all" && log.category !== categoryFilter) return false;
+      if (textSearch) {
+        const q = textSearch.toLowerCase();
+        if (!(log.message?.toLowerCase().includes(q) || log.event_type?.toLowerCase().includes(q) || log.user_id?.toLowerCase().includes(q) || log.generation_id?.toLowerCase().includes(q))) return false;
+      }
+      if (timeRange !== "live" && log.created_at) {
+        const logTime = new Date(log.created_at).getTime();
+        const now = Date.now();
+        const ranges: Record<string, number> = { "1h": 3600000, "6h": 21600000, "24h": 86400000, "7d": 604800000 };
+        const maxAge = ranges[timeRange];
+        if (maxAge && now - logTime > maxAge) return false;
+      }
+      return true;
+    });
+    if (rows.length === 0) {
+      toast.error("No logs to export with current filters");
+      return;
+    }
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    const filename = `motionmax-admin-logs-${ts}.${format}`;
+    let blob: Blob;
+    if (format === "json") {
+      blob = new Blob([JSON.stringify(rows, null, 2)], { type: "application/json" });
+    } else {
+      // CSV: simple RFC-4180 escape — wrap fields in quotes, double internal quotes.
+      const cols = ["created_at", "category", "event_type", "message", "user_id", "generation_id", "project_id", "target_type", "target_id"] as const;
+      const esc = (v: unknown) => {
+        if (v === null || v === undefined) return "";
+        const s = typeof v === "object" ? JSON.stringify(v) : String(v);
+        return `"${s.replace(/"/g, '""')}"`;
+      };
+      const header = cols.join(",");
+      const body = rows.map((r) => cols.map((c) => esc((r as unknown as Record<string, unknown>)[c])).join(",")).join("\n");
+      blob = new Blob([header + "\n" + body], { type: "text/csv" });
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${rows.length} log${rows.length === 1 ? "" : "s"} as ${format.toUpperCase()}`);
+  }, [logs, categoryFilter, textSearch, timeRange]);
 
   // Subscribe to realtime updates
   useEffect(() => {
@@ -274,6 +390,18 @@ export function AdminLogs() {
           </Select>
 
           <Button
+            onClick={() => setTailMode(!tailMode)}
+            variant="outline"
+            size="sm"
+            aria-pressed={tailMode}
+            title={tailMode ? "Tail mode ON — auto-poll every 5s" : "Tail mode OFF — manual refresh only"}
+            className={tailMode ? "border-primary text-primary" : "border-border text-muted-foreground"}
+          >
+            <Radio className={`h-4 w-4 mr-1 ${tailMode && !isPaused ? "animate-pulse" : ""}`} />
+            Tail
+          </Button>
+
+          <Button
             onClick={() => setIsPaused(!isPaused)}
             variant="outline"
             size="sm"
@@ -283,10 +411,48 @@ export function AdminLogs() {
             {isPaused ? "Resume" : "Pause"}
           </Button>
 
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" title="Export filtered logs">
+                <Download className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleExport("csv")}>Export as CSV</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport("json")}>Export as JSON</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Button onClick={fetchLogs} variant="outline" size="sm">
             <RefreshCw className="h-4 w-4" />
           </Button>
         </div>
+      </div>
+
+      {/* User scope filter — resolves email -> user_id and pins all queries
+          + realtime to that user. Unscoped = view all users. */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <Input
+          type="text"
+          placeholder="Scope to user (email or display name)…"
+          value={userScopeInput}
+          onChange={(e) => setUserScopeInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleApplyUserScope(); }}
+          className="h-9 w-72 text-xs"
+        />
+        <Button onClick={handleApplyUserScope} variant="outline" size="sm" className="h-9 text-xs">
+          Apply
+        </Button>
+        {activeUserScope && (
+          <Badge variant="secondary" className="text-xs gap-1.5">
+            <span className="font-mono">user_id:</span>
+            <span className="font-mono">{activeUserScope.userId.slice(0, 8)}…</span>
+            <span className="opacity-70">({activeUserScope.email})</span>
+            <button onClick={handleClearUserScope} aria-label="Clear user scope">
+              <X className="h-3 w-3" />
+            </button>
+          </Badge>
+        )}
       </div>
 
       {/* Category quick-filter pills with counts. Click toggles into that

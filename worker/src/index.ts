@@ -97,17 +97,94 @@ function totalActiveJobs(): number {
   return activeExportJobs.size + activeLlmJobs.size;
 }
 
-const _totalSlots = detectOptimalConcurrency();
+const _baselineTotalSlots = detectOptimalConcurrency();
 
 // FFmpeg is memory-heavy: allocate 25% of total slots, min 1.
 // Remaining slots go to LLM/AI tasks (network-bound, can be more concurrent).
-const MAX_EXPORT_SLOTS = process.env.WORKER_EXPORT_CONCURRENCY
+// These are the BASELINE values from env or auto-tune. The runtime override
+// from app_settings.worker_concurrency_override (poll loop further down)
+// can replace `MAX_CONCURRENT_JOBS` at runtime — when set, we re-derive
+// MAX_EXPORT_SLOTS and MAX_LLM_SLOTS proportionally so the 25%/75% split
+// holds at any total. Vars are `let` so the poll can mutate them.
+let MAX_EXPORT_SLOTS = process.env.WORKER_EXPORT_CONCURRENCY
   ? parseInt(process.env.WORKER_EXPORT_CONCURRENCY, 10)
-  : Math.max(1, Math.floor(_totalSlots * 0.25));
-const MAX_LLM_SLOTS = process.env.WORKER_LLM_CONCURRENCY
+  : Math.max(1, Math.floor(_baselineTotalSlots * 0.25));
+let MAX_LLM_SLOTS = process.env.WORKER_LLM_CONCURRENCY
   ? parseInt(process.env.WORKER_LLM_CONCURRENCY, 10)
-  : Math.max(2, _totalSlots - MAX_EXPORT_SLOTS);
-const MAX_CONCURRENT_JOBS = MAX_EXPORT_SLOTS + MAX_LLM_SLOTS;
+  : Math.max(2, _baselineTotalSlots - MAX_EXPORT_SLOTS);
+let MAX_CONCURRENT_JOBS = MAX_EXPORT_SLOTS + MAX_LLM_SLOTS;
+// The override currently in effect (null = no override; using env/auto-tune).
+let currentConcurrencyOverride: number | null = null;
+
+/**
+ * Apply a new total-slot count (or null to revert to env/auto-tune baseline).
+ * In-flight jobs are NEVER killed — we only gate new claims at the new value,
+ * so an admin lowering the cap below current active count just means natural
+ * drain. Raising the cap is immediate.
+ */
+function applyConcurrencyOverride(override: number | null) {
+  if (override === currentConcurrencyOverride) return; // no-op
+
+  const previous = MAX_CONCURRENT_JOBS;
+  if (override !== null && Number.isFinite(override) && override > 0) {
+    // Override path. Hold the same 25/75 export/LLM split — never let either
+    // pool go below 1 / 2 (the original floors).
+    const exportSlots = Math.max(1, Math.floor(override * 0.25));
+    const llmSlots    = Math.max(2, override - exportSlots);
+    MAX_EXPORT_SLOTS = exportSlots;
+    MAX_LLM_SLOTS    = llmSlots;
+    MAX_CONCURRENT_JOBS = exportSlots + llmSlots;
+  } else {
+    // Revert to baseline.
+    const exportSlots = process.env.WORKER_EXPORT_CONCURRENCY
+      ? parseInt(process.env.WORKER_EXPORT_CONCURRENCY, 10)
+      : Math.max(1, Math.floor(_baselineTotalSlots * 0.25));
+    const llmSlots = process.env.WORKER_LLM_CONCURRENCY
+      ? parseInt(process.env.WORKER_LLM_CONCURRENCY, 10)
+      : Math.max(2, _baselineTotalSlots - exportSlots);
+    MAX_EXPORT_SLOTS = exportSlots;
+    MAX_LLM_SLOTS = llmSlots;
+    MAX_CONCURRENT_JOBS = exportSlots + llmSlots;
+  }
+  currentConcurrencyOverride = override;
+  queueDepthAlertThreshold = MAX_CONCURRENT_JOBS * 2;
+
+  wlog.info("Concurrency override applied", {
+    previous,
+    new_total: MAX_CONCURRENT_JOBS,
+    export: MAX_EXPORT_SLOTS,
+    llm: MAX_LLM_SLOTS,
+    override_value: override,
+  });
+}
+
+/**
+ * Poll the app_settings.worker_concurrency_override jsonb value and apply
+ * any change. Runs every 60s. Errors are logged but never throw — concurrency
+ * stays at whatever it was last set to.
+ */
+async function pollConcurrencyOverride(): Promise<void> {
+  try {
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "worker_concurrency_override")
+      .maybeSingle();
+    if (error) {
+      wlog.warn("Concurrency override poll failed", { error: error.message });
+      return;
+    }
+    // value is jsonb — null OR an int. Coerce safely.
+    const raw = (data as { value?: unknown } | null)?.value ?? null;
+    let override: number | null = null;
+    if (raw !== null && typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+      override = Math.max(1, Math.min(64, Math.floor(raw)));
+    }
+    applyConcurrencyOverride(override);
+  } catch (err) {
+    wlog.warn("Concurrency override poll exception", { err: String(err) });
+  }
+}
 
 /* ---- Worker identity ---- */
 // Unique per-process ID stamped onto every claimed job.
@@ -947,6 +1024,13 @@ console.log(`[Worker] ───────────────────�
 if (missingRequired > 0) {
   console.warn(`[Worker] ⚠ ${missingRequired} REQUIRED provider key(s) missing — generations will fail until these are set.`);
 }
+
+// Initial concurrency override read before any polling — picks up admin
+// adjustments made while the worker was offline. Then keep polling every
+// 60s for runtime tweaks.
+pollConcurrencyOverride().then(() => {
+  setInterval(pollConcurrencyOverride, 60_000);
+});
 
 startupDiagnostic().then((hadOrphans) => {
   const startPolling = () => {

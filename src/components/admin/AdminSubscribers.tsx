@@ -6,12 +6,15 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
-import { Search, ChevronLeft, ChevronRight, Eye, AlertTriangle, DollarSign, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Eye, AlertTriangle, DollarSign, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, Download } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AdminUserDetails } from "./AdminUserDetails";
 import { format } from "date-fns";
+import { exportRowsAsCsv, exportRowsAsJson } from "@/lib/csvExport";
+import { toast } from "sonner";
 
 interface CostBreakdown {
   openrouter: number;
@@ -57,6 +60,7 @@ export function AdminSubscribers() {
   const [sortField, setSortField] = useState<string>("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [planFilter, setPlanFilter] = useState<string>("all");
+  const [expandedMobileRow, setExpandedMobileRow] = useState<string | null>(null);
 
   const fetchSubscribers = useCallback(async () => {
     try {
@@ -194,8 +198,55 @@ export function AdminSubscribers() {
       </div>
 
       <Card className="bg-[#10151A] border-white/8 shadow-none shadow-sm overflow-hidden">
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-3">
           <CardTitle className="text-lg">User List</CardTitle>
+          {/* Offline export — keeps the current sort + filter so the file
+              matches what the admin sees on screen. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" disabled={!data?.users.length}>
+                <Download className="h-4 w-4 mr-1" />
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => {
+                  if (!data?.users.length) return;
+                  const count = exportRowsAsCsv(
+                    sortedUsers,
+                    [
+                      { key: "id", label: "User ID" },
+                      { key: "email", label: "Email" },
+                      { key: "displayName", label: "Display Name" },
+                      { key: "plan", label: "Plan" },
+                      { key: "status", label: "Status" },
+                      { key: "creditsBalance", label: "Credits Balance" },
+                      { key: "totalPurchased", label: "Total Purchased" },
+                      { key: "totalUsed", label: "Total Used" },
+                      { key: "generationCount", label: "Generations" },
+                      { key: "flagCount", label: "Flags" },
+                      { key: "createdAt", label: "Created" },
+                      { key: "lastSignIn", label: "Last Sign In" },
+                    ],
+                    "motionmax-subscribers",
+                  );
+                  toast.success(`Exported ${count} subscriber${count === 1 ? "" : "s"} as CSV`);
+                }}
+              >
+                Export as CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  if (!data?.users.length) return;
+                  const count = exportRowsAsJson(sortedUsers, "motionmax-subscribers");
+                  toast.success(`Exported ${count} subscriber${count === 1 ? "" : "s"} as JSON`);
+                }}
+              >
+                Export as JSON
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </CardHeader>
         <CardContent className="p-0 sm:p-6">
           {loading ? (
@@ -346,10 +397,19 @@ export function AdminSubscribers() {
                 </Table>
               </div>
 
-              {/* Mobile/Tablet Card Layout */}
+              {/* Mobile/Tablet Card Layout — tap a row to reveal full
+                  email + UUID without horizontal scroll. The eye button
+                  still opens the full details modal. */}
               <div className="lg:hidden divide-y">
                 {sortedUsers.map((user) => (
-                  <div key={user.id} className="p-3 space-y-1.5 text-xs">
+                  <div
+                    key={user.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setExpandedMobileRow(expandedMobileRow === user.id ? null : user.id)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpandedMobileRow(expandedMobileRow === user.id ? null : user.id); } }}
+                    className="p-3 space-y-1.5 text-xs cursor-pointer hover:bg-muted/30 transition-colors"
+                  >
                     {/* Row 1: Name | Plan + Eye */}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -364,7 +424,7 @@ export function AdminSubscribers() {
                           <div className="text-muted-foreground truncate">{user.email}</div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
                         {getStatusBadge(user)}
                         <Dialog>
                           <DialogTrigger asChild>
@@ -464,6 +524,32 @@ export function AdminSubscribers() {
                         )}
                       </div>
                     </div>
+
+                    {/* Expanded detail — full email + UUID + display name without
+                        truncation. Mirror what the desktop User column already
+                        shows but with horizontal-scroll-safe wrapping. */}
+                    {expandedMobileRow === user.id && (
+                      <div className="mt-1 pt-2 border-t border-border/40 space-y-1.5 font-mono text-[11px]">
+                        <div>
+                          <span className="text-muted-foreground">Email:</span>{" "}
+                          <span className="break-all text-foreground">{user.email}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Display:</span>{" "}
+                          <span className="break-all text-foreground">{user.displayName || "—"}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">UUID:</span>{" "}
+                          <span className="break-all text-foreground">{user.id}</span>
+                        </div>
+                        {user.lastSignIn && (
+                          <div>
+                            <span className="text-muted-foreground">Last sign-in:</span>{" "}
+                            <span className="text-foreground">{format(new Date(user.lastSignIn), "PPp")}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

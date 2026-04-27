@@ -4,7 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Server, Cpu, HardDrive, Clock, CheckCircle, AlertTriangle, XCircle, RefreshCw } from "lucide-react";
+import { Server, Cpu, HardDrive, Clock, CheckCircle, AlertTriangle, XCircle, RefreshCw, Settings, Sparkles } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatDistanceToNow, subHours, format } from "date-fns";
@@ -31,6 +35,17 @@ export function AdminWorkerHealth() {
   const [health, setHealth] = useState<WorkerHealth | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Concurrency override: null = use env / auto-tune; int = explicit override.
+  const [concurrencyOverride, setConcurrencyOverride] = useState<number | null>(null);
+  const [overrideEnabled, setOverrideEnabled] = useState(false);
+  const [savingOverride, setSavingOverride] = useState(false);
+  const [perWorker, setPerWorker] = useState<Array<{
+    worker_id: string;
+    completed: number;
+    failed: number;
+    avgDurationSec: number;
+    lastSeen: string | null;
+  }>>([]);
 
   const fetchWorkerHealth = useCallback(async () => {
     try {
@@ -170,6 +185,88 @@ export function AdminWorkerHealth() {
     const interval = setInterval(fetchWorkerHealth, 15000);
     return () => clearInterval(interval);
   }, [fetchWorkerHealth]);
+
+  // Load the persisted concurrency override on mount.
+  useEffect(() => {
+    (async () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data } = await (supabase.rpc as any)("admin_get_app_setting", {
+          setting_key: "worker_concurrency_override",
+        });
+        if (typeof data === "number" && data > 0) {
+          setConcurrencyOverride(data);
+          setOverrideEnabled(true);
+        } else {
+          setOverrideEnabled(false);
+        }
+      } catch {
+        // Silent — slider just renders empty / null state.
+      }
+    })();
+  }, []);
+
+  // Per-worker latency aggregation. Groups recent completed jobs by
+  // worker_id and computes count + avg duration so admins can spot a
+  // single bad worker that's dragging the aggregate. With one worker
+  // today this shows a single row — purpose is to scale out cleanly.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data } = await supabase
+        .from("video_generation_jobs")
+        .select("worker_id, status, created_at, updated_at")
+        .gte("created_at", since)
+        .not("worker_id", "is", null)
+        .in("status", ["completed", "failed"])
+        .limit(2000);
+      if (cancelled) return;
+      const byWorker: Record<string, { completed: number; failed: number; durationsMs: number[]; lastSeen: string | null }> = {};
+      for (const row of (data ?? []) as Array<{ worker_id: string | null; status: string; created_at: string; updated_at: string | null }>) {
+        if (!row.worker_id) continue;
+        const wid = row.worker_id;
+        if (!byWorker[wid]) byWorker[wid] = { completed: 0, failed: 0, durationsMs: [], lastSeen: null };
+        if (row.status === "completed") byWorker[wid].completed++;
+        else if (row.status === "failed") byWorker[wid].failed++;
+        if (row.created_at && row.updated_at) {
+          const d = new Date(row.updated_at).getTime() - new Date(row.created_at).getTime();
+          if (d > 0 && d < 24 * 60 * 60 * 1000) byWorker[wid].durationsMs.push(d);
+        }
+        if (!byWorker[wid].lastSeen || (row.updated_at && row.updated_at > byWorker[wid].lastSeen!)) {
+          byWorker[wid].lastSeen = row.updated_at;
+        }
+      }
+      const rows = Object.entries(byWorker).map(([worker_id, v]) => ({
+        worker_id,
+        completed: v.completed,
+        failed: v.failed,
+        avgDurationSec: v.durationsMs.length > 0
+          ? v.durationsMs.reduce((a, b) => a + b, 0) / v.durationsMs.length / 1000
+          : 0,
+        lastSeen: v.lastSeen,
+      })).sort((a, b) => b.completed + b.failed - (a.completed + a.failed));
+      setPerWorker(rows);
+    })();
+    return () => { cancelled = true; };
+  }, [health]); // re-aggregate after each main-card refresh
+
+  const handleSaveOverride = async (value: number | null) => {
+    setSavingOverride(true);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: rpcError } = await (supabase.rpc as any)(
+        "admin_set_worker_concurrency_override",
+        { value: value ?? -1 }, // -1 → null (revert) per RPC contract
+      );
+      if (rpcError) throw rpcError;
+      toast.success(value === null ? "Reverted to auto-tune" : `Concurrency override set to ${value}`);
+    } catch (err) {
+      toast.error("Failed to save", { description: err instanceof Error ? err.message : "Please try again." });
+    } finally {
+      setSavingOverride(false);
+    }
+  };
 
   const formatDuration = (seconds: number) => {
     if (seconds < 60) return `${Math.round(seconds)}s`;
@@ -363,24 +460,136 @@ export function AdminWorkerHealth() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">
-                {health.activeJobs} active / {health.maxConcurrency} max
-              </span>
-              <span className="font-medium">
-                {((health.activeJobs / health.maxConcurrency) * 100).toFixed(0)}% capacity
-              </span>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">
+                  {health.activeJobs} active / {health.maxConcurrency} max
+                </span>
+                <span className="font-medium">
+                  {((health.activeJobs / health.maxConcurrency) * 100).toFixed(0)}% capacity
+                </span>
+              </div>
+              <Progress value={(health.activeJobs / health.maxConcurrency) * 100} className="h-3" />
+              {health.activeJobs >= health.maxConcurrency && (
+                <p className="text-xs text-[hsl(var(--warning))] mt-2">
+                  Worker at maximum capacity - new jobs will queue
+                </p>
+              )}
             </div>
-            <Progress value={(health.activeJobs / health.maxConcurrency) * 100} className="h-3" />
-            {health.activeJobs >= health.maxConcurrency && (
-              <p className="text-xs text-[hsl(var(--warning))] mt-2">
-                Worker at maximum capacity - new jobs will queue
-              </p>
-            )}
+
+            {/* Runtime concurrency override. Toggle on enables manual slider;
+                toggle off reverts the worker to env / auto-tune baseline.
+                Worker polls app_settings every 60s to pick this up. */}
+            <div className="pt-3 border-t border-white/8 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Settings className="h-4 w-4 text-primary" />
+                  <Label className="text-sm font-medium">Override concurrency at runtime</Label>
+                </div>
+                <Switch
+                  checked={overrideEnabled}
+                  disabled={savingOverride}
+                  onCheckedChange={(checked) => {
+                    setOverrideEnabled(checked);
+                    if (!checked) {
+                      handleSaveOverride(null);
+                      setConcurrencyOverride(null);
+                    } else if (concurrencyOverride === null) {
+                      setConcurrencyOverride(health.maxConcurrency || 8);
+                    }
+                  }}
+                />
+              </div>
+              {overrideEnabled ? (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Manual cap (1–64). Worker picks up changes within 60s.</span>
+                    <span className="font-mono font-medium text-primary">{concurrencyOverride ?? "—"} slots</span>
+                  </div>
+                  <Slider
+                    min={1}
+                    max={64}
+                    step={1}
+                    value={[concurrencyOverride ?? health.maxConcurrency ?? 8]}
+                    onValueChange={(v) => setConcurrencyOverride(v[0] ?? null)}
+                    onValueCommit={(v) => v[0] && handleSaveOverride(v[0])}
+                    disabled={savingOverride}
+                  />
+                  <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
+                    <span>1</span><span>16</span><span>32</span><span>48</span><span>64</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Sparkles className="h-3 w-3" />
+                  Auto-tune is on. Worker uses env (WORKER_CONCURRENCY) or CPU/RAM detection.
+                </p>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Per-worker latency breakdown — surfaces stats grouped by worker_id
+          so admins can spot a single bad replica. With one worker today,
+          the table has one row; designed to scale to N workers without
+          additional schema changes. */}
+      {perWorker.length > 0 && (
+        <Card className="bg-[#10151A] border-white/8 shadow-none">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Server className="h-5 w-5 text-primary" />
+              <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Per-Worker Latency (24h)</CardTitle>
+            </div>
+            <CardDescription>
+              {perWorker.length === 1
+                ? "Single worker — breakdown will scale automatically to multiple replicas."
+                : `${perWorker.length} workers active in last 24h`}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border bg-muted/30">
+                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Worker ID</th>
+                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">Completed</th>
+                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">Failed</th>
+                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">Error %</th>
+                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">Avg Duration</th>
+                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">Last Seen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {perWorker.map((w) => {
+                    const total = w.completed + w.failed;
+                    const errPct = total > 0 ? (w.failed / total) * 100 : 0;
+                    return (
+                      <tr key={w.worker_id} className="border-b border-border/50 hover:bg-muted/20">
+                        <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground" title={w.worker_id}>
+                          {w.worker_id.slice(0, 24)}…
+                        </td>
+                        <td className="px-3 py-2 text-right text-primary font-medium">{w.completed}</td>
+                        <td className="px-3 py-2 text-right text-destructive">{w.failed}</td>
+                        <td className={`px-3 py-2 text-right ${errPct > 10 ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                          {errPct.toFixed(1)}%
+                        </td>
+                        <td className="px-3 py-2 text-right text-muted-foreground">
+                          {w.avgDurationSec > 0 ? `${w.avgDurationSec.toFixed(1)}s` : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
+                          {w.lastSeen ? formatDistanceToNow(new Date(w.lastSeen), { addSuffix: true }) : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Error Rate */}
       <Card className={health.errorRate > 10 ? "border-destructive/50" : ""}>

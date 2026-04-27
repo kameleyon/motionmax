@@ -26,6 +26,8 @@ const AdminWorkerHealth = lazy(() => import("@/components/admin/AdminWorkerHealt
 const AdminPerformanceMetrics = lazy(() => import("@/components/admin/AdminPerformanceMetrics").then(m => ({ default: m.AdminPerformanceMetrics })));
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { AdminCommandPalette } from "@/components/admin/AdminCommandPalette";
+import { AdminRecentActions } from "@/components/admin/AdminRecentActions";
 
 /* ── 1.1 Sidebar nav groups (replaces 10-tab horizontal bar) ──── */
 
@@ -157,6 +159,7 @@ export default function Admin() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <AdminRecentActions />
             <span className="hidden sm:block font-mono text-[10px] tracking-[0.12em] uppercase text-[#5A6268]">{user?.email?.split("@")[0]}</span>
             <button
               onClick={() => supabase.auth.signOut().then(() => navigate("/auth"))}
@@ -258,6 +261,10 @@ export default function Admin() {
           <AdminContent tab={activeTab} />
         </main>
       </div>
+
+      {/* Cmd+K command palette — global keybind, navigates between
+          admin tabs based on which entity the admin selected. */}
+      <AdminCommandPalette onNavigate={setActiveTab} />
 
       {/* ── 1.4 Styled production confirmation ── */}
       <AlertDialog open={showProdConfirm} onOpenChange={setShowProdConfirm}>

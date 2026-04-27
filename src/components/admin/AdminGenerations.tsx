@@ -4,7 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
-import { Activity, CheckCircle, XCircle, Trash2, Clock, RefreshCw, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { Activity, CheckCircle, XCircle, Trash2, Clock, RefreshCw, ChevronLeft, ChevronRight, Search, RotateCcw, Loader2, Download } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { exportRowsAsCsv, exportRowsAsJson } from "@/lib/csvExport";
 import { AdminLoadingState } from "@/components/ui/admin-loading-state";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
 import { subDays, format, formatDistanceToNow } from "date-fns";
@@ -80,6 +84,9 @@ export function AdminGenerations() {
   const [listSearch, setListSearch] = useState("");
   const [listSearchInput, setListSearchInput] = useState("");
   const [listLoading, setListLoading] = useState(false);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  // Switch between table and timeline view of the same row set.
+  const [listView, setListView] = useState<"table" | "timeline">("table");
 
   const getDateRange = useCallback((p: TimePeriod) => {
     const now = new Date();
@@ -144,6 +151,33 @@ export function AdminGenerations() {
   useEffect(() => {
     fetchGenerationList();
   }, [fetchGenerationList]);
+
+  // Retry a failed generation. Calls admin_retry_user_generation which:
+  //   1. Inserts a fresh pending row copying project_id/user_id/script/scenes
+  //   2. Marks the original archived (status='archived', archived_at=now)
+  //   3. Writes an admin_logs row
+  // Returns the new generation id. We refresh the list immediately so the
+  // archived row drops off and the new pending row appears at the top.
+  const handleRetry = useCallback(async (generationId: string) => {
+    setRetryingId(generationId);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: newId, error } = await (supabase.rpc as any)(
+        "admin_retry_user_generation",
+        { generation_id: generationId },
+      );
+      if (error) throw error;
+      toast.success(`Retry queued`, {
+        description: `New generation: ${(newId as string).slice(0, 8)}…`,
+      });
+      fetchGenerationList();
+      fetchGenerations();
+    } catch (err) {
+      toast.error("Retry failed", { description: err instanceof Error ? err.message : "Please try again." });
+    } finally {
+      setRetryingId(null);
+    }
+  }, [fetchGenerationList, fetchGenerations]);
 
   const periodOptions: { value: TimePeriod; label: string }[] = [
     { value: "7d", label: "7 Days" },
@@ -420,7 +454,44 @@ export function AdminGenerations() {
       <Card className="bg-[#10151A] border-white/8 shadow-none shadow-sm">
         <CardHeader>
           <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
-            <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Individual Jobs</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Individual Jobs</CardTitle>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={!listData?.rows.length} className="h-8 text-xs">
+                    <Download className="h-3 w-3 mr-1" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      if (!listData?.rows.length) return;
+                      const count = exportRowsAsCsv(
+                        listData.rows,
+                        [
+                          { key: "id", label: "Generation ID" },
+                          { key: "user_id", label: "User ID" },
+                          { key: "project_id", label: "Project ID" },
+                          { key: "status", label: "Status" },
+                          { key: "progress", label: "Progress %" },
+                          { key: "total_cost", label: "Cost ($)" },
+                          { key: "created_at", label: "Created" },
+                          { key: "started_at", label: "Started" },
+                          { key: "completed_at", label: "Completed" },
+                          { key: "error_message", label: "Error" },
+                        ],
+                        "motionmax-generations",
+                      );
+                      void count;
+                    }}
+                  >Export as CSV</DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => listData?.rows.length && exportRowsAsJson(listData.rows, "motionmax-generations")}
+                  >Export as JSON</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
             <div className="flex gap-2 flex-wrap">
               {["all", "complete", "processing", "pending", "error"].map(s => (
                 <button
@@ -436,7 +507,7 @@ export function AdminGenerations() {
               ))}
             </div>
           </div>
-          <div className="flex gap-2 mt-2">
+          <div className="flex gap-2 mt-2 items-center">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
               <Input
@@ -450,6 +521,23 @@ export function AdminGenerations() {
             <Button size="sm" variant="outline" className="h-11 sm:h-8" onClick={() => { setListSearch(listSearchInput); setListPage(0); }}>
               Search
             </Button>
+            {/* View mode toggle: table (default) vs Gantt-like timeline. */}
+            <div className="ml-auto inline-flex rounded-md border border-border p-0.5 bg-muted/30">
+              <button
+                onClick={() => setListView("table")}
+                className={cn(
+                  "px-3 py-1 text-[11px] font-medium rounded transition-colors",
+                  listView === "table" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >Table</button>
+              <button
+                onClick={() => setListView("timeline")}
+                className={cn(
+                  "px-3 py-1 text-[11px] font-medium rounded transition-colors",
+                  listView === "timeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >Timeline</button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -459,6 +547,69 @@ export function AdminGenerations() {
             </div>
           ) : !listData?.rows.length ? (
             <p className="text-center text-sm text-muted-foreground py-10">No jobs found</p>
+          ) : listView === "timeline" ? (
+            // Gantt-style timeline. Each row is a generation; the bar
+            // spans created_at → completed_at (or now if still running).
+            // Uses CSS positioning over recharts since we need uniform
+            // row heights regardless of data density and per-bar tooltips.
+            (() => {
+              const rows = listData.rows;
+              const timestamps = rows.flatMap((r) => [
+                new Date(r.created_at).getTime(),
+                r.completed_at ? new Date(r.completed_at).getTime() : Date.now(),
+              ]);
+              const windowStart = Math.min(...timestamps);
+              const windowEnd = Math.max(...timestamps, Date.now());
+              const windowSize = Math.max(1, windowEnd - windowStart);
+              return (
+                <div className="px-3 py-3 space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground px-2">
+                    <span>{format(new Date(windowStart), "MMM d HH:mm")}</span>
+                    <span>{format(new Date(windowEnd), "MMM d HH:mm")}</span>
+                  </div>
+                  <div className="space-y-1 max-h-[480px] overflow-y-auto">
+                    {rows.map((row) => {
+                      const start = new Date(row.created_at).getTime();
+                      const end = row.completed_at ? new Date(row.completed_at).getTime() : Date.now();
+                      const leftPct = ((start - windowStart) / windowSize) * 100;
+                      const widthPct = Math.max(0.5, ((end - start) / windowSize) * 100);
+                      const colorClass =
+                        row.status === "complete" ? "bg-primary/80" :
+                        row.status === "processing" ? "bg-secondary/80" :
+                        row.status === "error" ? "bg-destructive/80" :
+                        "bg-muted-foreground/40";
+                      const durationS = Math.round((end - start) / 1000);
+                      return (
+                        <div
+                          key={row.id}
+                          className="relative h-7 rounded-md bg-muted/30 hover:bg-muted/50 group cursor-pointer"
+                          title={`${row.id.slice(0, 8)}… · ${row.status} · ${durationS}s · created ${format(new Date(row.created_at), "MMM d HH:mm:ss")}`}
+                        >
+                          <div
+                            className={cn("absolute top-1 bottom-1 rounded-sm transition-opacity", colorClass)}
+                            style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                          />
+                          <div className="absolute inset-0 flex items-center px-2 text-[10px] font-mono pointer-events-none">
+                            <span className="text-foreground/90 truncate">
+                              {row.id.slice(0, 8)}… · {row.status}
+                            </span>
+                            <span className="ml-auto text-muted-foreground whitespace-nowrap">
+                              {durationS}s · {row.progress}%
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center gap-3 text-[10px] text-muted-foreground pt-2 px-2">
+                    <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded-sm bg-primary/80" />complete</span>
+                    <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded-sm bg-secondary/80" />processing</span>
+                    <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded-sm bg-destructive/80" />error</span>
+                    <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded-sm bg-muted-foreground/40" />pending</span>
+                  </div>
+                </div>
+              );
+            })()
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
@@ -472,6 +623,7 @@ export function AdminGenerations() {
                     <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Created</th>
                     <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Completed</th>
                     <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Error</th>
+                    <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -502,6 +654,26 @@ export function AdminGenerations() {
                       </td>
                       <td className="px-4 py-2.5 text-destructive max-w-[200px] truncate" title={row.error_message ?? ""}>
                         {row.error_message ?? "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {row.status === "error" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleRetry(row.id)}
+                            disabled={retryingId === row.id}
+                            className="h-7 text-[11px] gap-1"
+                          >
+                            {retryingId === row.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <RotateCcw className="h-3 w-3" />
+                            )}
+                            Retry
+                          </Button>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </td>
                     </tr>
                   ))}

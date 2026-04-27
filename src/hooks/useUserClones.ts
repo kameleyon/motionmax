@@ -57,7 +57,12 @@ export function useUserClones() {
  *    - cloned voice (id starts with `clone:`) → { voice_name: friendlyName,
  *      voice_type: "custom", voice_id: externalId }
  *  Caller passes the loaded UserClone[] so we can resolve the friendly
- *  name + external id from the picker prefix. */
+ *  name + external id from the picker prefix.
+ *
+ *  Throws when a `clone:` value can't be resolved against the loaded
+ *  clones array — protects voice_name from being polluted with the raw
+ *  `clone:<uuid>` picker value (which is what produced the
+ *  "Clone:a10d3253..." display in the Inspector). */
 export function resolveVoiceForProject(
   pickerValue: string,
   clones: UserClone[],
@@ -67,6 +72,12 @@ export function resolveVoiceForProject(
     if (match) {
       return { voice_name: match.name, voice_type: "custom", voice_id: match.externalId };
     }
+    // No match — almost always means the clone library hasn't loaded
+    // yet, or the user's clones changed since the picker rendered.
+    // Refuse to write the raw picker id into voice_name.
+    throw new Error(
+      "Couldn't resolve the selected cloned voice. Refresh the page and try again.",
+    );
   }
   return { voice_name: pickerValue, voice_type: null, voice_id: null };
 }

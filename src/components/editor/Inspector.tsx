@@ -27,6 +27,10 @@ const TRANSITION_OPTIONS: Transition[] = ['Cut', 'Dissolve', 'Whip', 'Black'];
 
 function prettyVoiceName(raw: string | null | undefined): string {
   if (!raw) return '—';
+  // Never leak a raw `clone:<uuid>` picker value into UI labels — the
+  // shared resolveCloneName lookup happens at the call site so we can
+  // see the friendly name. This fallback matches the shared util.
+  if (raw.toLowerCase().startsWith('clone:')) return 'Cloned voice';
   const stripped = raw.replace(/^(sm2?|gm):/i, '');
   return stripped.charAt(0).toUpperCase() + stripped.slice(1);
 }
@@ -158,10 +162,6 @@ function Inspector({
 
   const [imageEdit, setImageEdit] = useState('');
 
-  const currentVoice = (state.project?.voice_name ?? 'Adam') as SpeakerVoice;
-  const [voiceDraft, setVoiceDraft] = useState<SpeakerVoice>(currentVoice);
-  useEffect(() => { setVoiceDraft(currentVoice); }, [currentVoice]);
-
   const language = state.project?.voice_inclination ?? 'en';
   const voiceOptions = getSpeakersForLanguage(language);
   // User's cloned voices — surfaced at the top of the picker so the
@@ -169,6 +169,27 @@ function Inspector({
   // The Apply-to-all button + per-scene Regenerate Audio path resolves
   // a clone:* picker id to the right voice_type/voice_id at write time.
   const { data: userClones = [] } = useUserClones();
+
+  // Project-stored voice can be one of three shapes depending on which
+  // path created it:
+  //   1. friendly clone name "JoJo" (correct, current pipeline)
+  //   2. picker id "clone:<uuid>" (legacy/old projects pre-fix)
+  //   3. built-in voice id like "Adam"
+  // Reconcile to a stable picker value the <select> can match: if the
+  // project voice_name corresponds to a known clone (by name OR by
+  // picker-id form), use the clone's pickerId. Otherwise pass through.
+  const rawProjectVoice = state.project?.voice_name ?? 'Adam';
+  const matchingCloneByName = userClones.find((c) => c.name === rawProjectVoice);
+  const matchingCloneByPickerId = userClones.find((c) => c.pickerId === rawProjectVoice);
+  const matchingClone = matchingCloneByName || matchingCloneByPickerId;
+  const currentVoice = (matchingClone ? matchingClone.pickerId : rawProjectVoice) as SpeakerVoice;
+  // Display label: show the clone's friendly name when applicable so
+  // the "Current:" line never shows the broken "Clone:a10d3253..." form.
+  const currentVoiceLabel = matchingClone
+    ? matchingClone.name
+    : prettyVoiceName(currentVoice);
+  const [voiceDraft, setVoiceDraft] = useState<SpeakerVoice>(currentVoice);
+  useEffect(() => { setVoiceDraft(currentVoice); }, [currentVoice]);
 
   // Voice preview — uses the shared `getSampleText` helper so the
   // preview is always localised (Gemini voices especially need pure
@@ -655,7 +676,7 @@ function Inspector({
               </button>
             </div>
             <div className="font-mono text-[10px] text-[#5A6268] tracking-wider mt-1.5 uppercase">
-              Current: {prettyVoiceName(currentVoice)} · {language.toUpperCase()}
+              Current: {currentVoiceLabel} · {language.toUpperCase()}
             </div>
 
             {/* One-click "Apply to all & regenerate" — flips the project

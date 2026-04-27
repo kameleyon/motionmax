@@ -151,6 +151,30 @@ function toCatalogVoice(opt: SpeakerOption, languageCode: string): CatalogVoice 
   };
 }
 
+/** Promote a user-cloned voice into the same catalog shape as built-in
+ *  speakers so it can ride through the Voice Lab grid + TestPlayground
+ *  without a separate code path. The id stays in `clone:<external_id>`
+ *  form so the worker's voice_preview handler can route to the right
+ *  provider; everything else is cosmetic. */
+export function cloneToCatalogVoice(
+  clone: { pickerId: string; externalId: string; name: string; provider: "fish" | "elevenlabs"; description?: string | null },
+): CatalogVoice {
+  const description = (clone as { description?: string | null }).description
+    || `Your cloned voice · ${clone.provider === "fish" ? "Fish s2-pro" : "ElevenLabs"}`;
+  return {
+    id: clone.pickerId as SpeakerVoice, // "clone:<uuid>" — recognized by handleVoicePreview
+    name: clone.name,
+    initial: (clone.name[0] || "?").toUpperCase(),
+    accent: "Multi", // clones speak any language via Fish s2-pro
+    flag: FLAG_BY_ACCENT["Multi"],
+    gender: "Neutral",
+    age: "Any",
+    tags: ["cloned voice", clone.provider === "fish" ? "fish" : "elevenlabs"],
+    provider: clone.provider, // "fish" | "elevenlabs"
+    description,
+  };
+}
+
 /** Get the full catalog for the given language. De-duplicates by id
  *  because some Gemini voices are spread across multiple language
  *  buckets in SpeakerSelector — we only want each voice once. */

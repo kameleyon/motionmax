@@ -17,8 +17,9 @@ import { createScopedLogger } from "@/lib/logger";
 import AppShell from "@/components/dashboard/AppShell";
 import VoiceCard from "@/components/voice-lab/VoiceCard";
 import {
-  getCatalog, LANGUAGES, avatarBackground, type CatalogVoice,
+  getCatalog, cloneToCatalogVoice, LANGUAGES, avatarBackground, type CatalogVoice,
 } from "@/lib/voiceCatalog";
+import { useUserClones } from "@/hooks/useUserClones";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -91,9 +92,21 @@ export default function VoiceLab() {
     });
   };
 
+  // The user's cloned voices, surfaced in the same catalog as built-in
+  // speakers so the test playground (and discovery grid) can switch to
+  // them. Each clone gets a "clone:<external_id>" id; the worker's
+  // voice_preview handler routes those to Fish or ElevenLabs.
+  const { data: userClones = [] } = useUserClones();
+
   // Catalog for the current language. Memoised — getCatalog walks the
-  // SpeakerSelector arrays once per language change.
-  const catalog = useMemo(() => getCatalog(language), [language]);
+  // SpeakerSelector arrays once per language change. Clones are pinned
+  // to the FRONT of the catalog so they're the first thing the user
+  // sees when they open the playground / discovery grid.
+  const catalog = useMemo(() => {
+    const builtIns = getCatalog(language);
+    const clones = userClones.map((c) => cloneToCatalogVoice(c));
+    return [...clones, ...builtIns];
+  }, [language, userClones]);
 
   // Default selection on language change so the playground always has
   // a voice loaded. Preserve the user's selection if it's still valid

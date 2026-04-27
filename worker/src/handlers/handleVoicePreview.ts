@@ -11,6 +11,7 @@
 import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
 import { generateSmallestTTS } from "../services/smallestTTS.js";
 import { generateGeminiFlashTTS } from "../services/geminiFlashTTS.js";
+import { supabase } from "../lib/supabase.js";
 
 interface VoicePreviewPayload {
   speaker: string;
@@ -44,6 +45,48 @@ export async function handleVoicePreview(
 
   let result: { url: string | null; error?: string };
 
+  // ── Cloned-voice preview (clone:<external_id>) ──
+  // Resolves the user's clone row, then routes through the audio engine
+  // with customVoiceId + customVoiceProvider so Fish s2-pro / ElevenLabs
+  // pick it up as a custom voice. Without this branch, clone:* speakers
+  // fell into the generic else-block and the playground couldn't preview
+  // user-cloned voices at all.
+  if (speaker.startsWith("clone:")) {
+    const externalId = speaker.slice("clone:".length);
+    if (!userId) {
+      throw new Error("Voice preview: clone playback requires sign-in");
+    }
+    const { data: clone, error } = await supabase
+      .from("user_voices")
+      .select("voice_id, voice_name, provider")
+      .eq("user_id", userId)
+      .eq("voice_id", externalId)
+      .maybeSingle();
+    if (error || !clone) {
+      throw new Error(`Voice preview: clone ${externalId} not found in your library`);
+    }
+    const provider = (clone as { provider?: string }).provider === "elevenlabs" ? "elevenlabs" : "fish";
+    const config: AudioConfig = {
+      projectId: "voice-preview",
+      googleApiKeys: [
+        process.env.GOOGLE_TTS_API_KEY_3,
+        process.env.GOOGLE_TTS_API_KEY_2,
+        process.env.GOOGLE_TTS_API_KEY,
+      ].filter(Boolean) as string[],
+      elevenLabsApiKey: process.env.ELEVENLABS_API_KEY,
+      lemonfoxApiKey: process.env.LEMONFOX_API_KEY,
+      fishAudioApiKey: process.env.FISH_AUDIO_API_KEY,
+      replicateApiKey: process.env.REPLICATE_API_KEY || "",
+      voiceGender: "neutral",
+      language,
+      customVoiceId: externalId,
+      customVoiceProvider: provider,
+    };
+    result = await generateSceneAudio(
+      { number: 0, voiceover: previewText, duration: 5 },
+      config,
+    );
+  } else
   // ── Gemini 3.1 Flash TTS preview (gm:*) ──
   // Preview uses the exact style directives the user asked for so the
   // voice sample showcases what the full narration will sound like with

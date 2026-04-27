@@ -212,14 +212,15 @@ GOOD: ✓ "Inside a cluttered home kitchen at 2AM, dirty dishes in the sink, dim
 - ASPECT RATIO: ${p.format} (${dims.width}x${dims.height})
 - QUALITY: Ultra-detailed, cinematic lighting, dramatic composition
 
-=== TIMING REQUIREMENTS (CRITICAL — STRICT) ===
+=== TIMING REQUIREMENTS (CRITICAL) ===
 - You MUST generate EXACTLY ${cfg.min} scenes.
-- Target duration: ~${cfg.target} seconds total
-- EACH scene voiceover MUST be EXACTLY ${targetWords} words. Not 18, not 22, not 25. EXACTLY ${targetWords} words.
-- At ~2.5 words/sec, ${targetWords} words = 11 seconds of audio per scene. This is the TARGET.
-- COUNT YOUR WORDS for every scene. If a voiceover has fewer than ${targetWords - 3} words or more than ${targetWords + 2} words, it is WRONG.
-- Do NOT write short, clipped scenes. Fill the full ${targetWords} words with meaningful, flowing content.
-- Set each scene "duration" to ${cfg.maxPerScene}
+- Target duration: ~${cfg.target} seconds total.
+- EACH scene voiceover targets ~${targetWords} words (≈ ${cfg.maxPerScene}s at 2.5 words/sec). Acceptable range: ${targetWords - 5} to ${targetWords + 8} words.
+- **FINISHING THE SENTENCE BEATS HITTING THE WORD COUNT.** Never cut a sentence mid-thought to hit a number. If you're at ${targetWords} words and still mid-clause, FINISH THE CLAUSE — even if it pushes you to ${targetWords + 8}. A scene that ends with "...the entire vibe of modern life is." (incomplete) is broken; a scene that ends with "...the entire vibe of modern life is shifting." (complete, 1 word over) is correct.
+- EVERY voiceover MUST end with a sentence terminator: . ! or ? — never with "and", "is", "the", "but", a comma, an em dash, or any unfinished clause.
+- Read each voiceover back to yourself: does it sound like a complete thought? If not, extend it (or trim back) to a clean sentence boundary.
+- Do NOT write short, clipped scenes. Aim for the ${targetWords}-word target with flowing, complete sentences.
+- Set each scene "duration" to ${cfg.maxPerScene}.
 
 === NARRATIVE ARC ===
 1. HOOK (Scenes 1-2): Create intrigue (High energy, fast cuts)

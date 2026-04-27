@@ -83,14 +83,15 @@ All image prompts must adhere to this style:
 CRITICAL — DO NOT COPY THE ART STYLE TEXT INTO THE PER-SCENE visualPrompt FIELD.
 The image renderer automatically appends the full ART STYLE block to every prompt at render time. If you embed it again in visualPrompt, it duplicates and clutters the Editor's prompt UI for the user. Each scene's visualPrompt should describe ONLY the scene-specific content (subject, action, setting, framing) — keep it under ~80 words. Never start a visualPrompt with "STYLE:", "ART STYLE:", "Handcrafted Digital Clay", "Cinematic 3D Animation", or any other style preamble.
 
-=== TIMING REQUIREMENTS (CRITICAL - STRICT ENFORCEMENT) ===
-- Target duration: ${cfg.targetDuration} seconds
-- Create EXACTLY ${cfg.count} scenes. NOT ${cfg.count - 1}, NOT ${cfg.count + 1}. EXACTLY ${cfg.count}. If you return fewer or more scenes, the ENTIRE generation will be REJECTED and restarted from scratch
-- EACH scene voiceover MUST be EXACTLY ${targetWords} words. Not 18, not 22, not 25. EXACTLY ${targetWords} words.
-- At ~2.5 words/sec, ${targetWords} words = 11 seconds of audio per scene. This is the TARGET.
-- COUNT YOUR WORDS for every scene. If a voiceover has fewer than ${targetWords - 3} words or more than ${targetWords + 2} words, it is WRONG.
-- Do NOT write short, clipped scenes. Fill the full ${targetWords} words with meaningful, flowing content.
-- Set each scene "duration" to ${cfg.avgSceneDuration}
+=== TIMING REQUIREMENTS (CRITICAL) ===
+- Target duration: ${cfg.targetDuration} seconds.
+- Create EXACTLY ${cfg.count} scenes. NOT ${cfg.count - 1}, NOT ${cfg.count + 1}. EXACTLY ${cfg.count}. If you return fewer or more scenes, the ENTIRE generation will be REJECTED and restarted from scratch.
+- EACH scene voiceover targets ~${targetWords} words (≈ ${cfg.avgSceneDuration}s at 2.5 words/sec). Acceptable range: ${targetWords - 5} to ${targetWords + 8} words.
+- **FINISHING THE SENTENCE BEATS HITTING THE WORD COUNT.** Never cut a sentence mid-thought to hit a number. If you're at ${targetWords} words and still mid-clause, FINISH THE CLAUSE — even if it pushes you to ${targetWords + 8}. A scene ending with "...the entire vibe of modern life is." (incomplete) is broken; a scene ending with "...the entire vibe of modern life is shifting." (complete, 1 word over) is correct.
+- EVERY voiceover MUST end with a sentence terminator: . ! or ? — never with "and", "is", "the", "but", a comma, an em dash, or any unfinished clause.
+- Read each voiceover back to yourself: does it sound like a complete thought? If not, extend it (or trim back) to a clean sentence boundary.
+- Do NOT write short, clipped scenes. Aim for the ${targetWords}-word target with flowing, complete sentences.
+- Set each scene "duration" to ${cfg.avgSceneDuration}.
 
 === NARRATIVE ARC ===
 1. HOOK (Scenes 1-2): Create intrigue (High energy, fast cuts)

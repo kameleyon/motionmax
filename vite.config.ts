@@ -41,6 +41,20 @@ export default defineConfig(({ mode }) => ({
       registerType: "autoUpdate",
       manifest: false, // use existing public/manifest.json
       workbox: {
+        // Stale-version eviction settings. Without these three flags, a
+        // new SW installs but enters "waiting" state — the OLD SW keeps
+        // serving cached app-shell to existing tabs forever, which is
+        // why users had to hard-reload to see new code. Now:
+        //   skipWaiting        → new SW activates immediately on install,
+        //                        no waiting for all tabs to close
+        //   clientsClaim       → new SW takes control of all open tabs
+        //                        as soon as it activates (combined with
+        //                        skipWaiting, no manual hard reload needed)
+        //   cleanupOutdatedCaches → old workbox precache buckets from
+        //                          prior builds are deleted automatically
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024, // 3 MiB — covers herobackground.webp (~116 KB) + other assets
         globPatterns: ["**/*.{js,css,ico,png,webp,svg,woff2}", "app-shell.html"],
         navigateFallback: "app-shell.html",

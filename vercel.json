@@ -35,7 +35,9 @@
     { "source": "/voice-lab/:path*", "destination": "/app-shell.html" },
     { "source": "/share/:path*", "destination": "/app-shell.html" },
     { "source": "/admin", "destination": "/app-shell.html" },
-    { "source": "/admin/:path*", "destination": "/app-shell.html" }
+    { "source": "/admin/:path*", "destination": "/app-shell.html" },
+    { "source": "/lab", "destination": "/app-shell.html" },
+    { "source": "/lab/:path*", "destination": "/app-shell.html" }
   ],
   "headers": [
     {

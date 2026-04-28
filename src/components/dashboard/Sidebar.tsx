@@ -6,7 +6,7 @@ import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { Settings as SettingsIcon, History, Shield, LogOut, Video } from 'lucide-react';
+import { Settings as SettingsIcon, History, Shield, LogOut, Video, FlaskConical } from 'lucide-react';
 import motionmaxLogo from '@/assets/motionmax-logo.webp';
 import {
   CommandDialog,
@@ -292,6 +292,12 @@ export default function Sidebar() {
             <a href="/admin" className="flex items-center gap-2.5 px-3 py-3 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline">
               <Shield className="w-4 h-4 opacity-85" />
               <span>Admin</span>
+            </a>
+          )}
+          {isAdmin && (
+            <a href="/lab/autopost" className="flex items-center gap-2.5 px-3 py-3 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline">
+              <FlaskConical className="w-4 h-4 opacity-85" />
+              <span>Lab</span>
             </a>
           )}
           <div className="bg-white/5 h-px my-1 mx-3" />

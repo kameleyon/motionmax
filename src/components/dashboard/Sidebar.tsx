@@ -266,6 +266,12 @@ export default function Sidebar() {
               Smart Flow
             </a>
           </div>
+          {isAdmin && (
+            <a href="/lab/autopost" className="flex items-center gap-2.5 px-3 py-3 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors mt-1 no-underline">
+              <FlaskConical className="w-4 h-4 opacity-85" />
+              Autopost Lab
+            </a>
+          )}
           <a href="/voice-lab" className="flex items-center gap-2.5 px-3 py-3 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors mt-1 no-underline">
             <svg aria-hidden="true" className="w-4 h-4 opacity-85" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M8 4v16M16 4v16M4 8h4M16 8h4M4 16h4M16 16h4" /></svg>
             Voice Lab
@@ -292,12 +298,6 @@ export default function Sidebar() {
             <a href="/admin" className="flex items-center gap-2.5 px-3 py-3 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline">
               <Shield className="w-4 h-4 opacity-85" />
               <span>Admin</span>
-            </a>
-          )}
-          {isAdmin && (
-            <a href="/lab/autopost" className="flex items-center gap-2.5 px-3 py-3 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline">
-              <FlaskConical className="w-4 h-4 opacity-85" />
-              <span>Lab</span>
             </a>
           )}
           <div className="bg-white/5 h-px my-1 mx-3" />

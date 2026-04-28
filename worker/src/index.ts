@@ -418,6 +418,15 @@ async function processJob(job: Job) {
         const { handleCloneVoice } = await import("./handlers/handleCloneVoice.js");
         const cloneResult = await handleCloneVoice(job.id, job.payload as any, job.user_id);
         finalPayload = { ...finalPayload, ...cloneResult };
+      } else if (job.task_type === 'rename_voice' as any) {
+        // Friendly-name rename for a user's clone. PATCHes Fish's
+        // /model/{id} title + description, then mirrors the change
+        // into user_voices so MotionMax surfaces the new label
+        // everywhere on next refetch.
+        if (!job.user_id) throw new Error("rename_voice job is missing user_id");
+        const { handleRenameVoice } = await import("./handlers/handleRenameVoice.js");
+        const renameResult = await handleRenameVoice(job.id, job.payload as any, job.user_id);
+        finalPayload = { ...finalPayload, ...renameResult };
       } else if (job.task_type === 'cinematic_video' as any) {
         const result = await handleCinematicVideo(job.id, job.payload as any, job.user_id);
         finalPayload = { ...finalPayload, ...result };

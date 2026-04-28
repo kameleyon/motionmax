@@ -63,13 +63,16 @@ export async function handleCloneVoice(
   });
 
   // Fish IVC call — transcode + multipart upload happens inside
-  // cloneVoiceWithFish. ~5–10s for a 30s sample.
+  // cloneVoiceWithFish. ~5–10s for a 30s sample. removeNoise threads
+  // through to Fish's enhance_audio_quality flag — previously hardcoded
+  // true regardless of the UI toggle.
   const { voiceId } = await cloneVoiceWithFish(
     {
       storagePath: payload.storagePath,
       voiceName: payload.voiceName.trim(),
       description: payload.description,
       transcript: payload.transcript,
+      enhanceAudioQuality: payload.removeNoise ?? true,
     },
     apiKey,
   );

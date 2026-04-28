@@ -173,11 +173,61 @@ export function useVoiceCloning() {
     },
   });
 
+  // Rename clone — friendly name + optional description. Queues a
+  // rename_voice worker job (worker PATCHes Fish /model/{id}, then
+  // mirrors into user_voices). Polls the job until complete so the
+  // caller can show in-flight UI state.
+  const renameVoiceMutation = useMutation({
+    mutationFn: async ({ rowId, newName, newDescription }: { rowId: string; newName: string; newDescription?: string | null }) => {
+      if (!user?.id) throw new Error("Not authenticated");
+      const trimmed = newName.trim();
+      if (!trimmed) throw new Error("Name cannot be empty");
+
+      const { data: job, error: queueError } = await supabase
+        .from("video_generation_jobs")
+        .insert({
+          user_id: user.id,
+          task_type: "rename_voice",
+          payload: { rowId, newName: trimmed, newDescription: newDescription ?? undefined },
+          status: "pending",
+        })
+        .select("id")
+        .single();
+      if (queueError || !job) throw new Error(queueError?.message ?? "Failed to queue rename job");
+
+      const MAX_WAIT = 30_000;
+      const start = Date.now();
+      while (Date.now() - start < MAX_WAIT) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const { data: row } = await (supabase
+          .from("video_generation_jobs") as unknown as ReturnType<typeof supabase.from>)
+          .select("status, error_message")
+          .eq("id", job.id)
+          .single();
+        if (row?.status === "completed") return { rowId, newName: trimmed };
+        if (row?.status === "failed") throw new Error(row.error_message ?? "Rename failed");
+      }
+      throw new Error("Rename timed out — try again.");
+    },
+    onSuccess: () => {
+      // Same dual-key invalidation pattern as clone create — keeps
+      // discovery + intake picker + Inspector all in sync without F5.
+      queryClient.invalidateQueries({ queryKey: ["user-voices"] });
+      queryClient.invalidateQueries({ queryKey: ["user-clones"] });
+      toast.success("Voice renamed");
+    },
+    onError: (error: Error) => {
+      toast.error("Rename failed: " + error.message);
+    },
+  });
+
   return {
     voices,
     voicesLoading,
     isCloning,
     cloneVoice: cloneVoiceMutation.mutateAsync,
     deleteVoice: deleteVoiceMutation.mutate,
+    renameVoice: renameVoiceMutation.mutateAsync,
+    isRenaming: renameVoiceMutation.isPending,
   };
 }

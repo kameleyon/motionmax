@@ -86,6 +86,12 @@ export interface CloneOptions {
    *  noticeably. We don't always have this (recordings rarely match an
    *  exact prompt) so it's optional. */
   transcript?: string;
+  /** Maps to Fish's `enhance_audio_quality` param (denoise + loudness
+   *  normalisation). Default true mirrors Fish's own default and is
+   *  almost always strictly better than raw browser audio — but a user
+   *  who wants the gritty character of their voice preserved can flip
+   *  this off via the "Remove background noise" toggle in VoiceLab. */
+  enhanceAudioQuality?: boolean;
 }
 
 /** Clone a voice via Fish Audio Instant Voice Cloning.
@@ -108,8 +114,11 @@ export async function cloneVoiceWithFish(
   form.append("train_mode", "fast");
   // enhance_audio_quality is Fish's built-in noise-reduction +
   // loudness-normalisation pass. There's no separate denoise
-  // parameter; this flag IS the denoise.
-  form.append("enhance_audio_quality", "true");
+  // parameter; this flag IS the denoise. Now driven by the user's
+  // VoiceLab toggle instead of being hardcoded — fixes the bug where
+  // unchecking "Remove background noise" was a no-op.
+  const enhance = opts.enhanceAudioQuality ?? true;
+  form.append("enhance_audio_quality", enhance ? "true" : "false");
   form.append("visibility", "private");
   if (opts.description) form.append("description", opts.description);
   if (opts.transcript) form.append("texts", opts.transcript);
@@ -146,5 +155,33 @@ export async function deleteFishVoice(voiceId: string, apiKey: string): Promise<
   if (!res.ok && res.status !== 404) {
     const body = await res.text().catch(() => "");
     throw new Error(`Fish delete ${res.status}: ${body.slice(0, 200)}`);
+  }
+}
+
+/** Update a Fish-hosted voice's metadata via PATCH /model/{id}. Only
+ *  title + description are exposed in MotionMax's rename UI; the rest
+ *  of the editable fields (visibility, tags, cover_image) stay at
+ *  their creation defaults. JSON body — Fish accepts JSON, form-urlencoded,
+ *  multipart, or msgpack on this endpoint per the API spec. */
+export async function renameFishVoice(
+  voiceId: string,
+  title: string,
+  description: string | null,
+  apiKey: string,
+): Promise<void> {
+  if (!apiKey) throw new Error("FISH_AUDIO_API_KEY not configured");
+  const body: Record<string, string> = { title };
+  if (description !== null && description !== undefined) body.description = description;
+  const res = await fetch(`https://api.fish.audio/model/${encodeURIComponent(voiceId)}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => "");
+    throw new Error(`Fish rename ${res.status}: ${errBody.slice(0, 200)}`);
   }
 }

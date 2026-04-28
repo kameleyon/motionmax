@@ -3,6 +3,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import {
   Mic, Upload, Play, Pause, Square, Trash2, Loader2, Check,
   Search, Plus, ArrowLeftRight, Sparkles, ShieldCheck, Clock, X,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
@@ -566,7 +567,7 @@ function MyVoicesTab({
   onBookmark: (id: string) => void;
   onSwitchTab: (t: Tab) => void;
 }) {
-  const { voices: clonedVoices, voicesLoading, deleteVoice } = useVoiceCloning();
+  const { voices: clonedVoices, voicesLoading, deleteVoice, renameVoice, isRenaming } = useVoiceCloning();
 
   return (
     <div>
@@ -620,6 +621,19 @@ function MyVoicesTab({
               </span>
               <button
                 type="button"
+                onClick={async () => {
+                  const next = window.prompt(`Rename "${v.voice_name}" to:`, v.voice_name);
+                  if (!next || next.trim() === v.voice_name) return;
+                  try { await renameVoice({ rowId: v.id, newName: next }); } catch { /* toast handled in hook */ }
+                }}
+                disabled={isRenaming}
+                className="w-8 h-8 grid place-items-center rounded-md text-[#5A6268] hover:text-[#14C8CC] hover:bg-white/5 transition-colors disabled:opacity-40"
+                title="Rename voice"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   if (confirm(`Delete "${v.voice_name}"? This cannot be undone.`)) deleteVoice(v.id);
                 }}
@@ -667,7 +681,7 @@ function MyVoicesTab({
 // ─── Cloned tab — re-skinned recording / upload / consent flow ──────
 
 function ClonedTab() {
-  const { voices, isCloning, cloneVoice, deleteVoice } = useVoiceCloning();
+  const { voices, isCloning, cloneVoice, deleteVoice, renameVoice, isRenaming } = useVoiceCloning();
   const { plan } = useSubscription();
   const voiceCloneLimit = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS]?.voiceClones ?? 0;
 
@@ -946,6 +960,19 @@ function ClonedTab() {
                   </div>
                 </div>
                 <span className="px-2 py-0.5 rounded-md bg-[#14C8CC]/10 text-[#14C8CC] font-mono text-[9.5px] tracking-[0.12em] uppercase">Ready</span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const next = window.prompt(`Rename "${v.voice_name}" to:`, v.voice_name);
+                    if (!next || next.trim() === v.voice_name) return;
+                    try { await renameVoice({ rowId: v.id, newName: next }); } catch { /* toast handled in hook */ }
+                  }}
+                  disabled={isRenaming}
+                  className="w-8 h-8 grid place-items-center rounded-md text-[#5A6268] hover:text-[#14C8CC] hover:bg-white/5 disabled:opacity-40"
+                  title="Rename voice"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
                 <button
                   type="button"
                   onClick={() => { if (confirm(`Delete "${v.voice_name}"?`)) deleteVoice(v.id); }}

@@ -10,7 +10,8 @@ export interface Job {
     | 'finalize_generation'  // finalize phase (cost recording + status)
     | 'export_video'         // video export (FFmpeg)
     | 'generate_cinematic'   // reserved alias — maps to generate_video handler
-    | 'generate_topics';     // autopost intake — produces 15 topic ideas
+    | 'generate_topics'      // autopost intake — produces 15 topic ideas
+    | 'autopost_email_delivery'; // autopost delivery — email rendered video via Resend
   progress?: number;
   payload: any;
   result?: any;

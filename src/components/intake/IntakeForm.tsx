@@ -149,6 +149,8 @@ export default function IntakeForm({
     topics: [],
     generatedTopics: [],
     platformAccountIds: [],
+    deliveryMethod: 'social',
+    emailRecipients: [],
     termsAgreed: false,
   });
 
@@ -615,8 +617,18 @@ export default function IntakeForm({
           toast.error('Generate topics and select at least one to queue.');
           return;
         }
-        if (scheduleState.platformAccountIds.length === 0) {
-          toast.error('Select at least one platform to publish to.');
+        // Wave E — delivery-method gates. Social still requires at
+        // least one connected platform account; email needs at least
+        // one recipient; library_only has no extra requirement so the
+        // user can schedule with zero side-effects beyond Run History.
+        if (scheduleState.deliveryMethod === 'social'
+            && scheduleState.platformAccountIds.length === 0) {
+          toast.error('Pick at least one platform or change delivery method.');
+          return;
+        }
+        if (scheduleState.deliveryMethod === 'email'
+            && scheduleState.emailRecipients.length === 0) {
+          toast.error('Add at least one email recipient.');
           return;
         }
 
@@ -641,7 +653,13 @@ export default function IntakeForm({
             // it up — keeps the round-trip to "I see something happen"
             // under 90 seconds for the demo.
             next_fire_at: new Date(Date.now() + 60_000).toISOString(),
-            target_account_ids: scheduleState.platformAccountIds,
+            // Only carry the platform IDs when we're actually publishing
+            // to social — email/library_only modes leave it empty.
+            target_account_ids: scheduleState.deliveryMethod === 'social'
+              ? scheduleState.platformAccountIds
+              : [],
+            delivery_method: scheduleState.deliveryMethod,
+            email_recipients: scheduleState.emailRecipients,
             caption_template: enrichedContent.slice(0, 200),
             hashtags: [],
             ai_disclosure: true,

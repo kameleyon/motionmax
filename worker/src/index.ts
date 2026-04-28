@@ -461,6 +461,15 @@ async function processJob(job: Job) {
         const { handleGenerateTopics } = await import("./handlers/handleGenerateTopics.js");
         const result = await handleGenerateTopics(job.id, job.payload as any, job.user_id);
         finalPayload = { ...finalPayload, ...result };
+      } else if (job.task_type === 'autopost_email_delivery' as any) {
+        // Wave E (Autopost delivery modes) — when an autopost render
+        // completes for a schedule with delivery_method='email', the
+        // autopost_on_video_completed trigger queues this job. The
+        // handler signs the rendered video URL and POSTs to Resend.
+        if (!job.user_id) throw new Error("autopost_email_delivery job is missing user_id");
+        const { handleAutopostEmailDelivery } = await import("./handlers/autopost/handleEmailDelivery.js");
+        const result = await handleAutopostEmailDelivery(job.id, job.payload as any, job.user_id);
+        finalPayload = { ...finalPayload, ...result };
       } else {
         await writeSystemLog({
           jobId: job.id,

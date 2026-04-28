@@ -14,7 +14,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Send, Mail, FolderHeart, X as XIcon } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -31,6 +31,9 @@ import { Slider } from "@/components/ui/slider";
 import { supabase } from "@/integrations/supabase/client";
 import type { AutomationSchedule, IntakeSettings } from "./_automationTypes";
 
+type DeliveryMethod = 'social' | 'email' | 'library_only';
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 interface EditAutomationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -44,6 +47,8 @@ interface DraftState {
   hashtags: string;
   resolution: string;
   duration_seconds: number;
+  delivery_method: DeliveryMethod;
+  email_recipients: string[];
 }
 
 function buildDraft(s: AutomationSchedule): DraftState {
@@ -58,6 +63,10 @@ function buildDraft(s: AutomationSchedule): DraftState {
     hashtags: (s.hashtags ?? []).join(", "),
     resolution: s.resolution ?? snap.resolution ?? "1080x1920",
     duration_seconds: s.duration_seconds ?? snap.duration_seconds ?? 30,
+    // Default to 'social' when reading rows authored before Wave E so the
+    // existing behaviour (publish to connected platforms) is preserved.
+    delivery_method: (s.delivery_method ?? 'social') as DeliveryMethod,
+    email_recipients: Array.isArray(s.email_recipients) ? s.email_recipients : [],
   };
 }
 
@@ -74,17 +83,61 @@ export function EditAutomationDialog({
 }: EditAutomationDialogProps) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<DraftState>(() => buildDraft(schedule));
+  const [emailDraft, setEmailDraft] = useState("");
 
   // Re-seed when the source schedule changes or the dialog reopens, so
   // we don't show stale local edits after a realtime update.
   useEffect(() => {
-    if (open) setDraft(buildDraft(schedule));
+    if (open) {
+      setDraft(buildDraft(schedule));
+      setEmailDraft("");
+    }
   }, [open, schedule]);
+
+  function tryAddEmail(raw: string): boolean {
+    const candidate = raw.trim().replace(/[,;]+$/, "");
+    if (!candidate) return false;
+    if (!EMAIL_RE.test(candidate)) {
+      toast.error(`"${candidate}" doesn't look like a valid email.`);
+      return false;
+    }
+    if (draft.email_recipients.includes(candidate)) return false;
+    setDraft((d) => ({ ...d, email_recipients: [...d.email_recipients, candidate] }));
+    return true;
+  }
+  function removeEmail(addr: string) {
+    setDraft((d) => ({
+      ...d,
+      email_recipients: d.email_recipients.filter((e) => e !== addr),
+    }));
+  }
+  function handleEmailKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" || e.key === "," || e.key === ";") {
+      e.preventDefault();
+      if (tryAddEmail(emailDraft)) setEmailDraft("");
+    } else if (e.key === "Backspace" && emailDraft === "" && draft.email_recipients.length > 0) {
+      setDraft((d) => ({
+        ...d,
+        email_recipients: d.email_recipients.slice(0, -1),
+      }));
+    }
+  }
+  function handleEmailBlur() {
+    if (emailDraft.trim() && tryAddEmail(emailDraft)) setEmailDraft("");
+  }
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!draft.name.trim()) throw new Error("Name required");
       if (!draft.prompt_template.trim()) throw new Error("Prompt template required");
+
+      // Wave E validation: email mode requires at least one recipient.
+      // Library-only and social modes have no extra requirement here —
+      // social can be saved with an empty target list (the run will fall
+      // back to library-only at trigger time rather than stalling).
+      if (draft.delivery_method === 'email' && draft.email_recipients.length === 0) {
+        throw new Error("Add at least one email recipient before saving.");
+      }
 
       const hashtags = parseHashtags(draft.hashtags);
       const prevSnap = (schedule.config_snapshot ?? {}) as IntakeSettings;
@@ -97,9 +150,10 @@ export function EditAutomationDialog({
         duration_seconds: draft.duration_seconds,
       };
 
-      // The generated supabase types may not yet include `config_snapshot`
-      // (it's introduced by Wave B1's migration). Cast through unknown so
-      // the update payload type-checks while still being typo-safe.
+      // The generated supabase types may not yet include `config_snapshot`,
+      // `delivery_method`, or `email_recipients` (introduced by Wave B1
+      // / Wave E migrations). Cast through unknown so the update payload
+      // type-checks while still being typo-safe.
       const updatePayload = {
         name: draft.name.trim(),
         prompt_template: draft.prompt_template,
@@ -108,6 +162,12 @@ export function EditAutomationDialog({
         resolution: draft.resolution,
         duration_seconds: draft.duration_seconds,
         config_snapshot: nextSnap,
+        delivery_method: draft.delivery_method,
+        email_recipients: draft.email_recipients,
+        // Clear social targets when the user switches away from social so
+        // a future flip back to social-mode doesn't accidentally use a
+        // stale list. The user re-picks intentionally.
+        ...(draft.delivery_method !== 'social' ? { target_account_ids: [] } : {}),
       } as unknown as Record<string, unknown>;
 
       const { error } = await supabase
@@ -195,6 +255,99 @@ export function EditAutomationDialog({
             <p className="text-[11px] text-[#5A6268]">
               Comma-separated. The leading # is added automatically if missing.
             </p>
+          </div>
+
+          {/* ── Delivery method (Wave E) ── */}
+          <div className="space-y-2">
+            <Label className="text-[12px] text-[#ECEAE4]">Where it goes</Label>
+            <div role="radiogroup" aria-label="Delivery method" className="grid gap-2">
+              {[
+                { value: 'social' as const,       label: 'Publish to social media',       Icon: Send,        hint: 'Post to your connected platforms automatically.' },
+                { value: 'email' as const,        label: 'Email when each video is ready', Icon: Mail,        hint: 'Get a download link per render — no social account needed.' },
+                { value: 'library_only' as const, label: 'Just save to my library',       Icon: FolderHeart, hint: 'Videos appear in Run History only — nothing posted or emailed.' },
+              ].map(({ value, label, Icon, hint }) => {
+                const selected = draft.delivery_method === value;
+                const inputId = `edit-delivery-${value}`;
+                return (
+                  <label
+                    key={value}
+                    htmlFor={inputId}
+                    className={`flex items-start gap-2.5 px-3 py-2 rounded-md border cursor-pointer transition-colors ${
+                      selected
+                        ? 'border-[#11C4D0]/50 bg-[#11C4D0]/[0.06]'
+                        : 'border-white/10 bg-[#0A0D0F] hover:border-white/20'
+                    }`}
+                  >
+                    <input
+                      id={inputId}
+                      type="radio"
+                      name="edit-delivery-method"
+                      value={value}
+                      checked={selected}
+                      onChange={() => setDraft((d) => ({ ...d, delivery_method: value }))}
+                      className="sr-only"
+                    />
+                    <span
+                      aria-hidden
+                      className={`mt-0.5 w-3.5 h-3.5 rounded-full border-2 shrink-0 flex items-center justify-center ${
+                        selected ? 'border-[#11C4D0]' : 'border-white/25'
+                      }`}
+                    >
+                      {selected && <span className="w-1.5 h-1.5 rounded-full bg-[#11C4D0]" />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 text-[12.5px] text-[#ECEAE4]">
+                        <Icon className="w-3.5 h-3.5 text-[#11C4D0] shrink-0" />
+                        <span className="truncate">{label}</span>
+                      </div>
+                      <p className="mt-0.5 text-[11.5px] leading-[1.45] text-[#8A9198]">{hint}</p>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            {draft.delivery_method === 'email' && (
+              <div className="space-y-1.5">
+                <Label className="text-[11.5px] text-[#8A9198]">Email recipients</Label>
+                <div className="flex flex-wrap items-center gap-1.5 px-2.5 py-2 rounded-md bg-[#0A0D0F] border border-white/10 focus-within:border-[#11C4D0]/40">
+                  {draft.email_recipients.map((addr) => (
+                    <span
+                      key={addr}
+                      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#11C4D0]/10 border border-[#11C4D0]/30 text-[#11C4D0] text-[12px]"
+                    >
+                      <Mail className="w-3 h-3" />
+                      <span className="truncate max-w-[180px]">{addr}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeEmail(addr)}
+                        className="hover:text-[#ECEAE4] transition-colors"
+                        aria-label={`Remove ${addr}`}
+                      >
+                        <XIcon className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                  <Input
+                    type="email"
+                    value={emailDraft}
+                    onChange={(e) => setEmailDraft(e.target.value)}
+                    onKeyDown={handleEmailKeyDown}
+                    onBlur={handleEmailBlur}
+                    placeholder={draft.email_recipients.length === 0 ? 'name@example.com' : 'Add another…'}
+                    className="flex-1 min-w-[160px] bg-transparent border-0 px-1 h-7 text-[12.5px] text-[#ECEAE4] focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-[#5A6268]"
+                  />
+                </div>
+                <p className="text-[11px] text-[#5A6268]">Press Enter or comma to add. Backspace removes the last chip.</p>
+              </div>
+            )}
+
+            {draft.delivery_method === 'library_only' && (
+              <div className="rounded-md border border-white/8 bg-white/[0.02] px-3 py-2 text-[11.5px] leading-[1.5] text-[#ECEAE4] flex items-start gap-2">
+                <FolderHeart className="w-3.5 h-3.5 text-[#11C4D0] mt-0.5 shrink-0" />
+                <span>Videos will appear in your Run History only — nothing is published or emailed.</span>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

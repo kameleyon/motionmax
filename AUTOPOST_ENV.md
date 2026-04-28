@@ -89,3 +89,24 @@ both.
 - [ ] Each platform redirect URI registered at the provider matches `{APP_URL}/api/autopost/connect/{platform}/callback`
 - [ ] No env var values appear in client bundles (none of these have a `VITE_` prefix, so they shouldn't — but search the build output to be sure)
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` is marked "Sensitive" in Vercel so it's encrypted at rest
+
+---
+
+## Email delivery (Resend) — Wave E
+
+The `autopost_email_delivery` worker handler sends rendered videos by
+email when a schedule has `delivery_method='email'`. These env vars live
+on the **worker** (Render), NOT Vercel — the email send runs in the
+worker's job loop.
+
+| Variable | Purpose | Notes |
+|---|---|---|
+| `RESEND_API_KEY` | Resend REST API token. | Get from <https://resend.com/api-keys>. Free tier: 3,000 emails / month, 100 / day. |
+| `RESEND_FROM_EMAIL` | Optional friendly sender. | Defaults to `MotionMax <onboarding@resend.dev>` (Resend's testing domain). For production, verify `motionmax.io` at <https://resend.com/domains> and set this to `MotionMax <noreply@motionmax.io>`. |
+
+Worker behaviour when these are missing:
+- `RESEND_API_KEY` unset → the handler throws on first email-mode run.
+  The video itself rendered fine (it's in Run History); only the email
+  side-effect fails. Set the key, then retry by toggling the schedule.
+- `RESEND_FROM_EMAIL` unset → the testing domain is used, which works
+  but lands more emails in spam. Verify a domain before launch.

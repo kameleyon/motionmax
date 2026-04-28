@@ -30,6 +30,10 @@ export interface AutomationSchedule {
   updated_at: string;
   /** Added by Wave B1; absent on rows created before the migration. */
   config_snapshot: Record<string, unknown> | null;
+  /** Wave E — how rendered videos are delivered. Older rows default to 'social'. */
+  delivery_method?: 'social' | 'email' | 'library_only';
+  /** Wave E — recipient list used when delivery_method='email'. */
+  email_recipients?: string[] | null;
 }
 
 /**

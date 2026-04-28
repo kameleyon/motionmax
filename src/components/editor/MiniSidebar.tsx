@@ -79,7 +79,7 @@ export default function MiniSidebar() {
     try {
       await signOut();
       toast.success('Signed out');
-      navigate('/');
+      window.location.href = '/';
     } catch {
       toast.error('Sign out failed. Please try again.');
     }

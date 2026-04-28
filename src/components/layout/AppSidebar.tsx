@@ -211,7 +211,7 @@ export function AppSidebar() {
 
   const handleSignOut = async () => {
     await signOut();
-    navigate("/");
+    window.location.href = "/";
   };
 
   const isActiveRoute = (path: string) => location.pathname === path;

@@ -86,11 +86,11 @@ The image renderer automatically appends the full ART STYLE block to every promp
 === TIMING REQUIREMENTS (CRITICAL) ===
 - Target duration: ${cfg.targetDuration} seconds.
 - Create EXACTLY ${cfg.count} scenes. NOT ${cfg.count - 1}, NOT ${cfg.count + 1}. EXACTLY ${cfg.count}. If you return fewer or more scenes, the ENTIRE generation will be REJECTED and restarted from scratch.
-- EACH scene voiceover targets ~${targetWords} words (≈ ${cfg.avgSceneDuration}s at 2.5 words/sec). Acceptable range: ${targetWords - 5} to ${targetWords + 8} words.
-- **FINISHING THE SENTENCE BEATS HITTING THE WORD COUNT.** Never cut a sentence mid-thought to hit a number. If you're at ${targetWords} words and still mid-clause, FINISH THE CLAUSE — even if it pushes you to ${targetWords + 8}. A scene ending with "...the entire vibe of modern life is." (incomplete) is broken; a scene ending with "...the entire vibe of modern life is shifting." (complete, 1 word over) is correct.
-- EVERY voiceover MUST end with a sentence terminator: . ! or ? — never with "and", "is", "the", "but", a comma, an em dash, or any unfinished clause.
-- Read each voiceover back to yourself: does it sound like a complete thought? If not, extend it (or trim back) to a clean sentence boundary.
-- Do NOT write short, clipped scenes. Aim for the ${targetWords}-word target with flowing, complete sentences.
+- EACH scene voiceover targets ~${targetWords} words (≈ ${cfg.avgSceneDuration}s at 2.5 words/sec). HARD range: ${targetWords - 2} to ${targetWords + 3} words. Anything outside this range desyncs the audio from the visual — the voice ends up describing what's about to be shown or what was just shown, not what's on screen now.
+- **WRITE SENTENCES THAT FIT THE BUDGET.** Plan the sentence length BEFORE writing it. If a thought won't end cleanly within ${targetWords + 3} words, write a SHORTER thought instead — split the longer idea across two scenes. Do NOT extend a scene past ${targetWords + 3} just to finish a long sentence; the audio will overrun the visual and the timing breaks.
+- EVERY voiceover MUST end with a sentence terminator: . ! or ?  — never with "and", "is", "the", "but", a comma, an em dash, or any unfinished clause. If you're approaching the word ceiling and still mid-clause, the sentence you started was too long — rewrite the WHOLE scene with a shorter sentence that lands cleanly under ${targetWords + 3}.
+- Read each voiceover back to yourself: does it sound like a complete thought AND is it within the hard range? If not, rewrite it.
+- Do NOT write short, clipped scenes either. Aim for the ${targetWords}-word target with flowing, complete sentences that fit the budget.
 - Set each scene "duration" to ${cfg.avgSceneDuration}.
 
 === NARRATIVE ARC ===

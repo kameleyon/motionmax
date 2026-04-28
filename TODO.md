@@ -53,11 +53,19 @@ Curated list with links in `SEO_DISTRIBUTION_ROADMAP.md` §1.7 + §2.1 + §2.3. 
   - [ ] Tail mode (auto-refresh every 5s) in AdminLogs
   - [ ] Per-row Cost breakdown tooltip in AdminApiCalls
 
-### Autopost / Automation (full plan + roadmap already written)
-- [ ] Implement `AUTOPOST_PLAN.md` + `AUTOPOST_ROADMAP.md` — scheduled video generation + multi-platform direct posting (YouTube, IG Reels, TikTok)
-- [ ] First milestone: schema + `/lab/autopost` admin-only route (Phases 1–2 in roadmap)
-- [ ] Then: connect 3 platforms (Phases 3–5) — and submit the three review applications same day
-- [ ] Worker handles publishing, NOT edge functions (per `AUTOPOST_PLAN.md` §3 — do not relitigate)
+### Autopost / Automation — soft-launch BUILT (2026-04-28)
+- [x] Phase 1: schema + RLS (4 autopost_* tables + app_settings, admin-gated via is_admin())
+- [x] Phase 2: AdminOnlyRoute + `/lab/autopost/*` route shell (8 pages)
+- [x] Phase 3-5: OAuth Vercel Functions for YouTube, Instagram, TikTok (start + callback + disconnect + manual fire)
+- [x] Phase 6: pg_cron tick + render-completed trigger (autopost_tick() runs every minute)
+- [x] Phase 7: Worker dispatcher (5s poll, atomic claim, retry policy 0/60s/5min, token refresh every 5min)
+- [x] Phase 8-10: Real publishers (YouTube Shorts, IG Reels, TikTok Direct Post) with stub escape hatch via AUTOPOST_STUB_PUBLISHERS=true
+- [x] Phase 11: Wizard + List + Edit + Connect + RunHistory + RunDetail + Dashboard with kill switches, all responsive, all realtime
+- [x] Phase 12: Hardening — per-platform metrics table, daily summary, kill-switch drills, 5 edge cases, run timeout cleanup
+- [ ] **Jo: configure OAuth credentials in Vercel env** (see `AUTOPOST_ENV.md` — GOOGLE_OAUTH_*, META_APP_*, TIKTOK_CLIENT_*, OAUTH_STATE_SECRET)
+- [ ] **Jo: submit Meta App Review + TikTok Audit** (after testing as admin for a week)
+- [ ] **Jo: enable pgsodium column-level encryption via Supabase Vault** before Phase 13 graduation
+- [ ] Phase 13: Graduate `/lab/autopost` → `/autopost` for Studio Pro plan (after week of testing)
 
 ### Native mobile (full plan written, 3–4 month build)
 - [ ] Implement `NATIVE_MOBILE_PLAN.md` — Swift/SwiftUI iOS + Kotlin/Compose Android

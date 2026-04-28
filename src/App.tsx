@@ -7,6 +7,7 @@ import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
+import { AdminOnlyRoute } from "@/components/auth/AdminOnlyRoute";
 import { AppShell } from "@/components/layout/AppShell";
 import { lazy, Suspense } from "react";
 import { GlobalErrorBoundary } from "./components/GlobalErrorBoundary";
@@ -44,6 +45,18 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 
 // Admin page in its own chunk — never loaded for non-admin users
 const Admin = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/Admin"));
+
+// Lab (admin-only soft-launch sandbox) — autopost feature scaffolds.
+// Each page lazy-loads independently so unrelated changes don't grow
+// the main bundle. Gated by <AdminOnlyRoute>; never linked from main nav.
+const LabHome = lazy(() => import("./pages/lab/LabHome"));
+const AutopostHome = lazy(() => import("./pages/lab/autopost/AutopostHome"));
+const Connect = lazy(() => import("./pages/lab/autopost/Connect"));
+const SchedulesList = lazy(() => import("./pages/lab/autopost/SchedulesList"));
+const ScheduleWizard = lazy(() => import("./pages/lab/autopost/ScheduleWizard"));
+const ScheduleEdit = lazy(() => import("./pages/lab/autopost/ScheduleEdit"));
+const RunHistory = lazy(() => import("./pages/lab/autopost/RunHistory"));
+const RunDetail = lazy(() => import("./pages/lab/autopost/RunDetail"));
 
 function PageLoader() {
   return (
@@ -154,6 +167,19 @@ const App = () => (
               }
             />
             <Route path="/admin" element={<AdminRoute><RouteErrorBoundary routeName="admin"><Admin /></RouteErrorBoundary></AdminRoute>} />
+
+            {/* Lab — admin-only soft-launch sandbox. Routes are
+                additive and live behind <AdminOnlyRoute> so non-admins
+                never load the page modules. Not linked from main nav.
+                See AUTOPOST_PLAN.md §5 for the rationale. */}
+            <Route path="/lab" element={<AdminOnlyRoute><RouteErrorBoundary routeName="lab"><LabHome /></RouteErrorBoundary></AdminOnlyRoute>} />
+            <Route path="/lab/autopost" element={<AdminOnlyRoute><RouteErrorBoundary routeName="lab-autopost"><AutopostHome /></RouteErrorBoundary></AdminOnlyRoute>} />
+            <Route path="/lab/autopost/connect" element={<AdminOnlyRoute><RouteErrorBoundary routeName="lab-autopost-connect"><Connect /></RouteErrorBoundary></AdminOnlyRoute>} />
+            <Route path="/lab/autopost/schedules" element={<AdminOnlyRoute><RouteErrorBoundary routeName="lab-autopost-schedules"><SchedulesList /></RouteErrorBoundary></AdminOnlyRoute>} />
+            <Route path="/lab/autopost/schedules/new" element={<AdminOnlyRoute><RouteErrorBoundary routeName="lab-autopost-schedule-new"><ScheduleWizard /></RouteErrorBoundary></AdminOnlyRoute>} />
+            <Route path="/lab/autopost/schedules/:id" element={<AdminOnlyRoute><RouteErrorBoundary routeName="lab-autopost-schedule-edit"><ScheduleEdit /></RouteErrorBoundary></AdminOnlyRoute>} />
+            <Route path="/lab/autopost/runs" element={<AdminOnlyRoute><RouteErrorBoundary routeName="lab-autopost-runs"><RunHistory /></RouteErrorBoundary></AdminOnlyRoute>} />
+            <Route path="/lab/autopost/runs/:id" element={<AdminOnlyRoute><RouteErrorBoundary routeName="lab-autopost-run-detail"><RunDetail /></RouteErrorBoundary></AdminOnlyRoute>} />
 
             {/* New dashboard preview — outside AppShell so its own
                 Sidebar/topbar don't stack with AppSidebar. Still

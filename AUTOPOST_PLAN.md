@@ -513,4 +513,25 @@ Anything below these bars is not "done"; it's "released early."
 
 ---
 
+## 16. Build status (as of 2026-04-28)
+
+(Note: this section was numbered §16 — not §14 — because §14 "Window-closes-today resumption" and §15 "Success criteria" pre-exist. The Wave 4 spec asked for "a new §14 'Phase Complete' section appended"; appending without renumbering the existing §14/§15 puts the new content here.)
+
+Phase 1 (schema + RLS) — DONE. Migrations 20260428120000, 120100, 130000, 140000, 150000, 150100.
+Phase 2 (admin gate + routes) — DONE. /lab/autopost/* mounted under AdminOnlyRoute.
+Phase 3-5 (OAuth) — Vercel Functions built and ready. Env vars required (see AUTOPOST_ENV.md).
+Phase 6 (pg_cron + trigger) — DONE. autopost_tick() runs every minute.
+Phase 7 (worker dispatcher) — DONE. 5s poll, atomic claim, retry policy.
+Phase 8-10 (real publishers) — DONE. AUTOPOST_STUB_PUBLISHERS=true escape hatch available.
+Phase 11 (UI) — DONE. Wizard, list, edit, history, detail, dashboard with kill switches all live.
+Phase 12 (hardening) — DONE. Metrics, daily summary, edge cases, kill-switch drills.
+
+Outstanding manual work owned by Jo:
+- Configure OAuth credentials in Vercel env (see AUTOPOST_ENV.md)
+- Submit Meta App Review + TikTok Audit
+- Fill in pgsodium column-level encryption via Supabase Vault before opening to non-admins
+- Set up SendGrid/Resend if daily-summary email is desired (currently logs only)
+
+---
+
 **End of document.** If you're an AI assistant resuming this work, your first action is `Read` on this file in full, then `Read` on `NATIVE_MOBILE_PLAN.md`, then `git status` + scan for the directories listed in §14.1, then check Supabase migration history. Do not move any handler from `worker/` into a Supabase edge function. Do not link `/lab` from main nav. Do not skip the AI-content disclosure flag on any platform.

@@ -12,6 +12,11 @@ import { handleCinematicVideo } from "./handlers/handleCinematicVideo.js";
 import { handleCinematicAudio } from "./handlers/handleCinematicAudio.js";
 import { handleCinematicImage } from "./handlers/handleCinematicImage.js";
 import { handleUndoRegeneration } from "./handlers/handleUndoRegeneration.js";
+import {
+  startAutopostDispatcher,
+  startTokenRefresher,
+  startAutopostDailySummary,
+} from "./handlers/autopost/index.js";
 import { writeSystemLog } from "./lib/logger.js";
 import { wlog } from "./lib/workerLogger.js";
 import { isTransientError, retryDelayMs } from "./lib/retryClassifier.js";
@@ -1055,3 +1060,15 @@ startupDiagnostic().then((hadOrphans) => {
     startPolling();
   }
 });
+
+/* ---- Autopost: publish dispatcher + OAuth token refresher ----
+ * Both run independently of the main video_generation_jobs poll loop.
+ * They poll their own tables (autopost_publish_jobs, autopost_social_accounts)
+ * and survive the global autopost_enabled kill switch in app_settings.
+ * Wave 2c — stub publishers; Wave 3a swaps in real platform APIs.
+ */
+startAutopostDispatcher();
+startTokenRefresher();
+// Wave 4: daily summary report. Hourly tick, gated to fire at 09:00 UTC.
+// Logs a structured summary entry per active user (no email transport yet).
+startAutopostDailySummary();

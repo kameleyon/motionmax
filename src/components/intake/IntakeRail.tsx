@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Play, Loader2, Square, Info, AlertTriangle, Sparkles, Lightbulb } from 'lucide-react';
+import { Play, Loader2, Square, Info, AlertTriangle, Lightbulb } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -11,12 +11,13 @@ import {
 } from '@/components/workspace/CaptionStyleSelector';
 import { IntakeField, IntakeLabel } from './primitives';
 import type { IntakeAspect, ProjectMode } from './types';
+import ScheduleBlock, { type ScheduleState } from './ScheduleBlock';
 
 /** Tip shown in the Suggestions card. Surfaced when a condition holds —
  *  see `buildSuggestions` below for the rules. */
 type Tip = {
   id: string;
-  icon: 'info' | 'warn' | 'idea' | 'spark';
+  icon: 'info' | 'warn' | 'idea' | 'lightbulb';
   body: string;
 };
 
@@ -65,7 +66,7 @@ function buildSuggestions(args: {
   if (!args.music && args.mode === 'cinematic') {
     tips.push({
       id: 'no-music',
-      icon: 'spark',
+      icon: 'lightbulb',
       body: 'Music lifts cinematic reels a lot. Lyria 3 Pro scores the whole piece for +60 cr — auto-ducks under narration.',
     });
   }
@@ -103,7 +104,7 @@ function buildSuggestions(args: {
   if (tips.length === 0) {
     tips.push({
       id: 'ready',
-      icon: 'spark',
+      icon: 'lightbulb',
       body: 'Looking good. When you hit Create, MotionMax drafts the script, generates scenes, layers audio, and delivers to All Projects.',
     });
   }
@@ -129,13 +130,13 @@ const TIP_ICON: Record<Tip['icon'], typeof Info> = {
   info: Info,
   warn: AlertTriangle,
   idea: Lightbulb,
-  spark: Sparkles,
+  lightbulb: Lightbulb,
 };
 const TIP_COLOR: Record<Tip['icon'], string> = {
   info: 'text-[#14C8CC]',
   warn: 'text-[#E4C875]',
   idea: 'text-[#14C8CC]',
-  spark: 'text-[#14C8CC]',
+  lightbulb: 'text-[#14C8CC]',
 };
 
 /** Right-rail content — credits snapshot, setup recap (voice + caption
@@ -149,6 +150,10 @@ export default function IntakeRail({
   music, lipSync, styleId,
   costItems, totalCost, creditsAvailable, onGenerate, generating,
   creditsCap,
+  isAdmin = false,
+  scheduleState,
+  onScheduleChange,
+  intakeSummary,
 }: {
   aspect: IntakeAspect;
   prompt: string;
@@ -169,6 +174,14 @@ export default function IntakeRail({
   creditsCap: number;
   onGenerate: () => void;
   generating?: boolean;
+  /** Admin gate for the autopost ScheduleBlock — soft-launch
+   *  invisibility for non-admins. */
+  isAdmin?: boolean;
+  /** Schedule state lifted up to <IntakeForm /> so handleGenerate()
+   *  can branch on whether to insert into projects vs autopost_schedules. */
+  scheduleState?: ScheduleState;
+  onScheduleChange?: (s: ScheduleState) => void;
+  intakeSummary?: { prompt: string; styleId: string; aspect: string; voice: string };
 }) {
   const { user } = useAuth();
 
@@ -426,6 +439,18 @@ export default function IntakeRail({
         </ul>
       </IntakeField>
 
+      {/* Schedule block (autopost) — admin-only, soft-launch.
+          Hidden entirely for non-admins so the rail looks identical
+          to the existing one-shot flow. */}
+      {scheduleState && onScheduleChange && intakeSummary && (
+        <ScheduleBlock
+          enabled={scheduleState.enabled}
+          onChange={onScheduleChange}
+          intakeSummary={intakeSummary}
+          isAdmin={isAdmin}
+        />
+      )}
+
       {/* Generate CTA */}
       <button
         type="button"
@@ -436,10 +461,18 @@ export default function IntakeRail({
         {generating
           ? <Loader2 className="w-4 h-4 animate-spin" />
           : <Play className="w-4 h-4 fill-current" />}
-        {generating ? 'Submitting…' : overBudget ? 'Not enough credits' : 'Create Video'}
+        {generating
+          ? 'Submitting…'
+          : overBudget
+            ? 'Not enough credits'
+            : (scheduleState?.enabled && scheduleState?.termsAgreed)
+              ? 'Create Schedule'
+              : 'Create Video'}
       </button>
       <div className="text-center font-mono text-[10px] text-[#5A6268] tracking-[0.1em] uppercase -mt-2">
-        Delivers to All Projects
+        {scheduleState?.enabled && scheduleState?.termsAgreed
+          ? 'Delivers to Autopost'
+          : 'Delivers to All Projects'}
       </div>
     </>
   );

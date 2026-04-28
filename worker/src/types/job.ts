@@ -9,7 +9,8 @@ export interface Job {
     | 'process_images'       // images phase (Hypereal / Replicate)
     | 'finalize_generation'  // finalize phase (cost recording + status)
     | 'export_video'         // video export (FFmpeg)
-    | 'generate_cinematic';  // reserved alias — maps to generate_video handler
+    | 'generate_cinematic'   // reserved alias — maps to generate_video handler
+    | 'generate_topics';     // autopost intake — produces 15 topic ideas
   progress?: number;
   payload: any;
   result?: any;

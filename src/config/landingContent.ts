@@ -1,4 +1,4 @@
-import { Film, Mic, Sparkles, Subtitles, Globe, Pencil, Shield, Users, type LucideIcon } from "lucide-react";
+import { Film, Mic, Wand2, Subtitles, Globe, Pencil, Shield, Users, type LucideIcon } from "lucide-react";
 
 /* ──────────────────────────────────────────────
  * Feature cards shown on the landing page.
@@ -28,7 +28,7 @@ export const LANDING_FEATURES: FeatureItem[] = [
     title: "AI Research & Script",
     description:
       "Claude AI researches your topic for accuracy — verified facts, real appearances, cultural context — then writes the script.",
-    icon: Sparkles,
+    icon: Wand2,
   },
   {
     title: "25+ Caption Styles",

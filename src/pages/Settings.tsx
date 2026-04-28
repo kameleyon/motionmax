@@ -11,6 +11,7 @@ import {
   Clock,
   Activity,
   FileText,
+  Plug,
 } from "lucide-react";
 import { CURRENT_POLICY_VERSION } from "@/lib/policyVersion";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
+import { useAdminAuth } from "@/hooks/useAdminAuth";
+import IntegrationsTab from "@/components/settings/IntegrationsTab";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { getPasswordStrength, PasswordStrengthMeter } from "@/components/ui/password-strength";
@@ -36,6 +39,7 @@ import {
 
 export default function Settings() {
   const { user } = useAuth();
+  const { isAdmin } = useAdminAuth();
   const queryClient = useQueryClient();
   const [displayName, setDisplayName] = useState("");
   const [isSavingName, setIsSavingName] = useState(false);
@@ -231,7 +235,7 @@ export default function Settings() {
                 <p className="text-[13px] sm:text-[14px] text-[#8A9198] mt-1.5">Manage your account and preferences.</p>
 
                 <Tabs defaultValue="account" className="mt-6 sm:mt-8">
-                  <TabsList className="grid w-full grid-cols-3 rounded-xl bg-[#10151A] border border-white/8 p-1">
+                  <TabsList className={`grid w-full ${isAdmin ? "grid-cols-4" : "grid-cols-3"} rounded-xl bg-[#10151A] border border-white/8 p-1`}>
                     <TabsTrigger value="account" className="gap-2 rounded-lg text-[#8A9198] data-[state=active]:bg-[#14C8CC]/10 data-[state=active]:text-[#14C8CC] data-[state=active]:shadow-none">
                       <User className="h-4 w-4" />
                       <span className="hidden sm:inline">Account</span>
@@ -240,6 +244,12 @@ export default function Settings() {
                       <Shield className="h-4 w-4" />
                       <span className="hidden sm:inline">Security</span>
                     </TabsTrigger>
+                    {isAdmin && (
+                      <TabsTrigger value="integrations" className="gap-2 rounded-lg text-[#8A9198] data-[state=active]:bg-[#14C8CC]/10 data-[state=active]:text-[#14C8CC] data-[state=active]:shadow-none">
+                        <Plug className="h-4 w-4" />
+                        <span className="hidden sm:inline">Integrations</span>
+                      </TabsTrigger>
+                    )}
                     <TabsTrigger value="activity" className="gap-2 rounded-lg text-[#8A9198] data-[state=active]:bg-[#14C8CC]/10 data-[state=active]:text-[#14C8CC] data-[state=active]:shadow-none" onClick={fetchActivityLogs}>
                       <Activity className="h-4 w-4" />
                       <span className="hidden sm:inline">Activity</span>
@@ -412,6 +422,12 @@ export default function Settings() {
                       </CardContent>
                     </Card>
                   </TabsContent>
+
+                  {isAdmin && (
+                    <TabsContent value="integrations" className="mt-6">
+                      <IntegrationsTab />
+                    </TabsContent>
+                  )}
 
                   <TabsContent value="activity" className="mt-6">
                     <Card className="bg-[#10151A] border-white/8 shadow-none">

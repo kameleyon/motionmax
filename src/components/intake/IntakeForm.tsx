@@ -4,14 +4,17 @@ import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import {
-  AudioLines, Music, Sparkles, Camera, Palette, Link as LinkIcon, Paperclip,
+  AudioLines, Music, Wand2, Camera, Palette, Link as LinkIcon, Paperclip,
   ChevronLeft, ChevronRight, ImagePlus, X, Upload, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { isFlagOn } from '@/lib/featureFlags';
 import { useUserClones, resolveVoiceForProject } from "@/hooks/useUserClones";
+import { INTERVAL_TO_CRON } from './_scheduleConstants';
+import type { ScheduleState } from './ScheduleBlock';
 import {
   getDefaultSpeaker,
   getSpeakersForLanguage,
@@ -133,7 +136,21 @@ export default function IntakeForm({
 }) {
   const features = FEATURES[mode];
   const { user } = useAuth();
+  const { isAdmin } = useAdminAuth();
   const navigate = useNavigate();
+
+  // ── Autopost schedule state — lifted up from <ScheduleBlock /> so
+  //    handleGenerate() can branch on whether the user is creating a
+  //    one-shot project or a recurring autopost schedule. The block
+  //    itself is rendered inside <IntakeRail /> just above the CTA. ──
+  const [scheduleState, setScheduleState] = useState<ScheduleState>({
+    enabled: false,
+    interval: 'daily',
+    topics: [],
+    generatedTopics: [],
+    platformAccountIds: [],
+    termsAgreed: false,
+  });
 
   const [prompt, setPrompt] = useState(initialPrompt);
   // Source attachments for the prompt — Add source / File / URL
@@ -574,6 +591,89 @@ export default function IntakeForm({
         intake_settings: intakeSettings,
       };
 
+      // ── Autopost branch ──
+      // When the user has the schedule toggle ON, agreed to the terms,
+      // and picked a frequency, we DO NOT create a one-shot project.
+      // Instead we insert into autopost_schedules; pg_cron's
+      // autopost_tick() picks the row up on the next minute, pops a
+      // topic off the queue, and inserts the actual generation job
+      // with task_type='autopost_render'. The shadow-copy
+      // config_snapshot column carries the full IntakeSettings frozen
+      // at create-time so edits to the schedule never retroactively
+      // rewrite already-queued runs.
+      //
+      // Validation gates: must have an interval, at least one topic
+      // queued (prompt-only schedules are too easy to abuse), and at
+      // least one platform account selected so the dispatcher has
+      // somewhere to publish to.
+      if (scheduleState.enabled && scheduleState.termsAgreed) {
+        if (!scheduleState.interval) {
+          toast.error('Pick how often the schedule should run.');
+          return;
+        }
+        if (scheduleState.topics.length === 0) {
+          toast.error('Generate topics and select at least one to queue.');
+          return;
+        }
+        if (scheduleState.platformAccountIds.length === 0) {
+          toast.error('Select at least one platform to publish to.');
+          return;
+        }
+
+        const cronExpr = INTERVAL_TO_CRON[scheduleState.interval];
+        const durationSec = features.duration && duration === '>3min' ? 200 : 30;
+        const resolution = aspect === '16:9' ? '1920x1080' : '1080x1920';
+
+        const scheduleInsert = await supabase
+          .from('autopost_schedules')
+          .insert({
+            user_id: user.id,
+            name: enrichedContent.slice(0, 60) || title,
+            active: true,
+            prompt_template: enrichedContent,
+            topic_pool: scheduleState.topics,
+            motion_preset: features.camera ? camera : null,
+            duration_seconds: durationSec,
+            resolution,
+            cron_expression: cronExpr,
+            timezone: 'UTC',
+            // First fire is one minute out so pg_cron's next tick picks
+            // it up — keeps the round-trip to "I see something happen"
+            // under 90 seconds for the demo.
+            next_fire_at: new Date(Date.now() + 60_000).toISOString(),
+            target_account_ids: scheduleState.platformAccountIds,
+            caption_template: enrichedContent.slice(0, 200),
+            hashtags: [],
+            ai_disclosure: true,
+            // Shadow copy — frozen creative prefs the worker reads on
+            // every queue-pop so schedule edits don't rewrite history.
+            config_snapshot: {
+              intake_settings: intakeSettings,
+              mode,
+              language,
+              voice_name: resolvedVoice.voice_name,
+              voice_type: resolvedVoice.voice_type,
+              voice_id: resolvedVoice.voice_id,
+              format: formatFromAspect(aspect),
+              length,
+              style: styleId,
+              character_description: enrichedCharDesc || null,
+              character_consistency_enabled: consistency,
+              character_images: characterImages.length > 0 ? characterImages : null,
+            },
+          } as never)
+          .select('id')
+          .single();
+
+        if (scheduleInsert.error || !scheduleInsert.data) {
+          throw scheduleInsert.error ?? new Error('Schedule insert returned no row');
+        }
+
+        toast.success('Automation created — first run scheduled.');
+        navigate('/lab/autopost');
+        return;
+      }
+
       const insertResult = await supabase.from('projects').insert(projectInsert as never).select('id').single();
       // Schema-drift detector: if the intake_settings column is missing
       // (production missed migration 20260422010000), fail loudly instead
@@ -646,12 +746,16 @@ export default function IntakeForm({
           creditsCap={creditsCap}
           onGenerate={handleGenerate}
           generating={generating}
+          isAdmin={isAdmin}
+          scheduleState={scheduleState}
+          onScheduleChange={setScheduleState}
+          intakeSummary={{ prompt, styleId, aspect, voice }}
         />,
       );
     }, 200);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aspect, prompt, mode, styleId, language, voice, caption, duration, consistency, characterDescription, music, lipSync, features, costItems, totalCost, credits, creditsCap, generating]);
+  }, [aspect, prompt, mode, styleId, language, voice, caption, duration, consistency, characterDescription, music, lipSync, features, costItems, totalCost, credits, creditsCap, generating, isAdmin, scheduleState]);
 
   const selectedStyle = STYLES.find((s) => s.id === styleId);
 
@@ -805,7 +909,7 @@ export default function IntakeForm({
               onClick={() => toast.info('Smart Prompt coming soon.')}
               className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.1em] uppercase text-[#14C8CC] px-2 py-1 border border-[#14C8CC]/30 rounded-md bg-[#14C8CC]/10 hover:bg-[#14C8CC]/20"
             >
-              <Sparkles className="w-3 h-3" /> Smart prompt
+              <Wand2 className="w-3 h-3" /> Smart prompt
             </button>
           </div>
           {/* Attached-sources chip list. Remove per-item with the ×. */}

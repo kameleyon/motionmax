@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Calendar, ChevronRight, Sparkles } from "lucide-react";
+import { Calendar, ChevronRight, Lightbulb } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { LabLayout } from "./_LabLayout";
@@ -90,7 +90,7 @@ export default function LabHome() {
         {/* Placeholder for future experiments */}
         <div className="hidden sm:flex items-center justify-center rounded-lg border border-dashed border-white/8 bg-[#10151A]/40 p-6 text-center">
           <div className="flex flex-col items-center gap-2 text-[#5A6268]">
-            <Sparkles className="h-5 w-5" />
+            <Lightbulb className="h-5 w-5" />
             <p className="text-[12px]">More experiments will land here.</p>
           </div>
         </div>

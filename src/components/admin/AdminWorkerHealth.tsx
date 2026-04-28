@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Server, Cpu, HardDrive, Clock, CheckCircle, AlertTriangle, XCircle, RefreshCw, Settings, Sparkles } from "lucide-react";
+import { Server, Cpu, HardDrive, Clock, CheckCircle, AlertTriangle, XCircle, RefreshCw, Settings, Lightbulb } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -522,7 +522,7 @@ export function AdminWorkerHealth() {
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                  <Sparkles className="h-3 w-3" />
+                  <Lightbulb className="h-3 w-3" />
                   Auto-tune is on. Worker uses env (WORKER_CONCURRENCY) or CPU/RAM detection.
                 </p>
               )}

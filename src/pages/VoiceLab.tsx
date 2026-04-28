@@ -2,7 +2,7 @@ import { Helmet } from "react-helmet-async";
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import {
   Mic, Upload, Play, Pause, Square, Trash2, Loader2, Check,
-  Search, Plus, ArrowLeftRight, Sparkles, ShieldCheck, Clock, X,
+  Search, Plus, ArrowLeftRight, Wand2, ShieldCheck, Clock, X,
   Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -804,7 +804,7 @@ function ClonedTab() {
           }}
         />
         <span className="relative inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#14C8CC]/10 border border-[#14C8CC]/30 font-mono text-[10px] tracking-[0.16em] uppercase text-[#14C8CC]">
-          <Sparkles className="w-3 h-3" /> Instant voice clone
+          <Wand2 className="w-3 h-3" /> Instant voice clone
         </span>
         <h2 className="relative font-serif text-[22px] sm:text-[26px] font-medium text-[#ECEAE4] mt-3 leading-tight">
           Clone your voice in minutes
@@ -933,7 +933,7 @@ function ClonedTab() {
           disabled={!canClone}
           className="mt-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-lg text-[13px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] to-[#0FA6AE] hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {isCloning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+          {isCloning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
           {isCloning ? "Training your voice…" : "Train this voice"}
         </button>
       </div>

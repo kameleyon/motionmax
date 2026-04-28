@@ -1,33 +1,36 @@
 /**
- * Autopost dashboard.
+ * My Automations dashboard — `/lab/autopost`.
  *
- * Top of the page: 4 KPI cards (runs in last 7d, success rate, next
- * fire, active schedule count). Below them: kill-switch panel with a
- * master toggle and three per-platform toggles, all backed by direct
- * writes to `app_settings` (RLS gates the writes to admins; the
- * dispatcher reads the same keys on every tick). Bottom: quick links.
+ * Replaces the old wizard-based hub with an Autonomux-style stacked card
+ * list. Each schedule renders as an `<AutomationCard>` that owns its own
+ * inline modals (Edit / Generate Topics / Update Schedule), so users
+ * never leave this page to manage day-to-day tasks.
  *
- * Realtime: subscribe to changes on autopost_runs, autopost_schedules,
- * autopost_publish_jobs and app_settings so the dashboard stays in
- * sync without manual refresh. Mirror of the AdminQueueMonitor pattern.
+ * Quick action bar (between header and list):
+ *   - "+ New Automation"  → /app/create/new?mode=cinematic (intake form;
+ *      the "Run on a schedule" toggle inside the intake creates rows
+ *      here when the user hits Generate).
+ *   - Master + per-platform kill switches  (carried over from the old
+ *      dashboard so admins can stop publishing without deleting rows).
+ *   - Run history shortcut  → /lab/autopost/runs.
  *
- * Disabling a switch shows an AlertDialog confirm (high-blast-radius
- * action — turning off autopost stops every active schedule). Enabling
- * is instant — re-enable accidentally and you can just disable again.
+ * Realtime: a single Supabase channel listens to autopost_schedules,
+ * autopost_runs and autopost_publish_jobs; a 300ms debounce coalesces
+ * bursty publish-job updates into one refetch.
  */
 
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ArrowRight, Cable, Calendar, History, ShieldCheck, Plus,
-  CheckCircle2, AlertTriangle, Loader2,
+  Plus, ShieldCheck, History, ArrowRight, CheckCircle2, AlertTriangle, Loader2,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -36,15 +39,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { LabLayout } from "../_LabLayout";
 import { AutopostNav } from "./_AutopostNav";
-import { relativeTime, platformLabel } from "./_autopostUi";
-
-interface DashboardStats {
-  runs7d: number;
-  publishedJobs: number;
-  failedJobs: number;
-  nextFireAt: string | null;
-  activeSchedules: number;
-}
+import { AutomationCard } from "./_AutomationCard";
+import { platformLabel } from "./_autopostUi";
+import type { AutomationSchedule } from "./_automationTypes";
 
 interface KillSwitchState {
   master: boolean;
@@ -62,13 +59,7 @@ const KILL_KEYS = {
 
 type KillKey = keyof typeof KILL_KEYS;
 
-const TILES = [
-  { id: "schedules-new", title: "New schedule", description: "Define a cron, topic pool, and target accounts.", to: "/lab/autopost/schedules/new", icon: Plus },
-  { id: "connect", title: "Connect platforms", description: "Hook up YouTube, Instagram Business, TikTok.", to: "/lab/autopost/connect", icon: Cable },
-  { id: "runs", title: "View history", description: "Per-fire records, generation log, publish state.", to: "/lab/autopost/runs", icon: History },
-] as const;
-
-/** Coerces app_settings.value (Json) into a strict boolean. Empty / wrong-shape rows default to `def`. */
+/** Coerces app_settings.value (Json) into a strict boolean. */
 function readBool(value: unknown, def: boolean): boolean {
   if (value === true) return true;
   if (value === false) return false;
@@ -77,48 +68,41 @@ function readBool(value: unknown, def: boolean): boolean {
   return def;
 }
 
+async function fetchAutomations(): Promise<AutomationSchedule[]> {
+  const { data, error } = await supabase
+    .from("autopost_schedules")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as unknown as AutomationSchedule[];
+}
+
+async function fetchLastRuns(): Promise<Record<string, string>> {
+  const { data, error } = await supabase
+    .from("autopost_runs")
+    .select("schedule_id, fired_at")
+    .order("fired_at", { ascending: false })
+    .limit(500);
+  if (error) return {};
+  const out: Record<string, string> = {};
+  for (const row of (data ?? []) as Array<{ schedule_id: string; fired_at: string }>) {
+    if (!out[row.schedule_id]) out[row.schedule_id] = row.fired_at;
+  }
+  return out;
+}
+
 export default function AutopostHome() {
   const queryClient = useQueryClient();
   const { isAdmin } = useAdminAuth();
 
-  const statsQuery = useQuery<DashboardStats>({
-    queryKey: ["autopost", "home-stats"],
-    queryFn: async () => {
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      const [runsRes, publishedRes, failedRes, schedulesRes] = await Promise.all([
-        supabase
-          .from("autopost_runs")
-          .select("id", { count: "exact", head: true })
-          .gte("fired_at", sevenDaysAgo),
-        supabase
-          .from("autopost_publish_jobs")
-          .select("id", { count: "exact", head: true })
-          .eq("status", "published")
-          .gte("created_at", sevenDaysAgo),
-        supabase
-          .from("autopost_publish_jobs")
-          .select("id", { count: "exact", head: true })
-          .in("status", ["failed", "rejected"])
-          .gte("created_at", sevenDaysAgo),
-        supabase
-          .from("autopost_schedules")
-          .select("next_fire_at, active")
-          .eq("active", true)
-          .order("next_fire_at", { ascending: true }),
-      ]);
+  const automationsQuery = useQuery({
+    queryKey: ["autopost", "schedules-list"],
+    queryFn: fetchAutomations,
+  });
 
-      const activeRows = (schedulesRes.data ?? []) as Array<{ next_fire_at: string | null; active: boolean }>;
-      const nextFireAt = activeRows.find(r => r.next_fire_at)?.next_fire_at ?? null;
-
-      return {
-        runs7d: runsRes.count ?? 0,
-        publishedJobs: publishedRes.count ?? 0,
-        failedJobs: failedRes.count ?? 0,
-        nextFireAt,
-        activeSchedules: activeRows.length,
-      };
-    },
-    staleTime: 10_000,
+  const lastRunsQuery = useQuery({
+    queryKey: ["autopost", "last-runs"],
+    queryFn: fetchLastRuns,
   });
 
   const switchesQuery = useQuery<KillSwitchState>({
@@ -141,18 +125,18 @@ export default function AutopostHome() {
     staleTime: 10_000,
   });
 
-  // Realtime: re-fetch stats on any change to autopost tables; re-fetch
-  // switches when app_settings changes. Coalesce updates into the same
-  // microtask via a debounce so we don't fire 4 refetches for one event.
+  // Realtime — single debounced channel covering all relevant tables.
+  // Mirrors the AdminQueueMonitor / RunHistory pattern.
   useEffect(() => {
     const debouncedRefetch = debounce(() => {
-      queryClient.invalidateQueries({ queryKey: ["autopost", "home-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["autopost", "schedules-list"] });
+      queryClient.invalidateQueries({ queryKey: ["autopost", "last-runs"] });
     }, 300);
     const channel = supabase
       .channel("lab-autopost-home")
+      .on("postgres_changes", { event: "*", schema: "public", table: "autopost_schedules" }, () => debouncedRefetch())
       .on("postgres_changes", { event: "*", schema: "public", table: "autopost_runs" }, () => debouncedRefetch())
       .on("postgres_changes", { event: "*", schema: "public", table: "autopost_publish_jobs" }, () => debouncedRefetch())
-      .on("postgres_changes", { event: "*", schema: "public", table: "autopost_schedules" }, () => debouncedRefetch())
       .on("postgres_changes", { event: "*", schema: "public", table: "app_settings" }, () => {
         queryClient.invalidateQueries({ queryKey: ["autopost", "kill-switches"] });
       })
@@ -162,8 +146,6 @@ export default function AutopostHome() {
     };
   }, [queryClient]);
 
-  // Switch UX: disable shows a confirm; enable is instant. We hold a
-  // pending "ask to disable" target in state; the AlertDialog reads it.
   const [pendingDisable, setPendingDisable] = useState<KillKey | null>(null);
   const [updatingKey, setUpdatingKey] = useState<KillKey | null>(null);
 
@@ -172,7 +154,10 @@ export default function AutopostHome() {
     const dbKey = KILL_KEYS[key];
     const { error } = await supabase
       .from("app_settings")
-      .upsert({ key: dbKey, value: value as never, updated_at: new Date().toISOString() }, { onConflict: "key" });
+      .upsert(
+        { key: dbKey, value: value as never, updated_at: new Date().toISOString() },
+        { onConflict: "key" },
+      );
     setUpdatingKey(null);
     if (error) {
       toast.error(`Could not update ${key}: ${error.message}`);
@@ -190,121 +175,126 @@ export default function AutopostHome() {
     void writeSwitch(key, true);
   };
 
-  const successRate = useMemo(() => {
-    if (!statsQuery.data) return null;
-    const { publishedJobs, failedJobs } = statsQuery.data;
-    const denom = publishedJobs + failedJobs;
-    if (denom === 0) return null;
-    return Math.round((publishedJobs / denom) * 100);
-  }, [statsQuery.data]);
+  const automations = automationsQuery.data ?? [];
+  const lastRuns = lastRunsQuery.data ?? {};
+  const isLoading = automationsQuery.isLoading;
+
+  const hasAutomations = automations.length > 0;
+
+  const newCta = useMemo(
+    () => (
+      <Button
+        asChild
+        className="bg-[#11C4D0] text-[#0A0D0F] hover:bg-[#11C4D0]/90"
+      >
+        <Link to="/app/create/new?mode=cinematic">
+          <Plus className="h-4 w-4 mr-1.5" />
+          New Automation
+        </Link>
+      </Button>
+    ),
+    [],
+  );
 
   return (
     <LabLayout
-      heading="Autopost"
-      title="Autopost · Lab"
-      description="Schedule a content cadence once. MotionMax generates and publishes each video automatically across YouTube Shorts, Instagram Reels, and TikTok."
+      heading="My Automations"
+      title="My Automations · Autopost · Lab"
+      description="Recurring video pipelines. Each automation generates a fresh video on a schedule and publishes it to your connected accounts."
       breadcrumbs={[{ label: "Autopost" }]}
     >
       <AutopostNav />
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <KpiCard
-          label="Runs (7d)"
-          value={statsQuery.isLoading ? "—" : statsQuery.data?.runs7d.toLocaleString() ?? "0"}
-          hint="Schedule fires + manual"
-        />
-        <KpiCard
-          label="Success rate"
-          value={statsQuery.isLoading ? "—" : successRate === null ? "—" : `${successRate}%`}
-          hint={statsQuery.data ? `${statsQuery.data.publishedJobs} published / ${statsQuery.data.failedJobs} failed` : ""}
-        />
-        <KpiCard
-          label="Next fire"
-          value={statsQuery.isLoading ? "—" : statsQuery.data?.nextFireAt ? relativeTime(statsQuery.data.nextFireAt) : "—"}
-          hint={statsQuery.data?.nextFireAt ? new Date(statsQuery.data.nextFireAt).toLocaleString() : "No active schedules"}
-        />
-        <KpiCard
-          label="Active schedules"
-          value={statsQuery.isLoading ? "—" : (statsQuery.data?.activeSchedules ?? 0).toLocaleString()}
-          hint=""
-        />
+      {/* Quick action bar */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+        <div className="flex items-center gap-2">
+          {newCta}
+          <Button
+            asChild
+            variant="outline"
+            className="border-white/10 bg-transparent text-[#ECEAE4] hover:bg-white/5"
+          >
+            <Link to="/lab/autopost/runs">
+              <History className="h-4 w-4 mr-1.5" />
+              Run history
+              <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+            </Link>
+          </Button>
+        </div>
       </div>
 
-      {/* Kill switches */}
-      <Card className="mt-6 bg-[#10151A] border-white/8">
-        <CardHeader className="border-b border-white/8">
+      {/* Compact kill-switch row */}
+      <Card className="bg-[#10151A] border-white/8 mb-6">
+        <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-[#ECEAE4] text-base flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-[#E4C875]" />
-                Kill switches
-              </CardTitle>
-              <CardDescription className="text-[#8A9198] mt-1">
-                Master controls. The dispatcher checks these on every tick — disable a platform and queued publishes for that target are skipped (rescheduled +10min, no retry burned).
-              </CardDescription>
-            </div>
-            <Badge variant="outline" className="self-start border-[#E4C875]/40 bg-[#E4C875]/10 text-[#E4C875]">
+            <CardTitle className="text-[#ECEAE4] text-[13px] font-medium flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-[#E4C875]" />
+              Kill switches
+            </CardTitle>
+            <Badge
+              variant="outline"
+              className="self-start border-[#E4C875]/40 bg-[#E4C875]/10 text-[#E4C875] text-[10px]"
+            >
               admin only
             </Badge>
           </div>
         </CardHeader>
-        <CardContent className="py-5 space-y-3">
-          <KillSwitchRow
-            label="Master autopost"
-            description="Top-level off switch. Off = nothing publishes, regardless of per-platform state."
+        <CardContent className="pt-0 pb-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <CompactSwitch
+            label="Master"
             isActive={switchesQuery.data?.master ?? false}
             isLoading={updatingKey === "master" || switchesQuery.isLoading}
             disabled={!isAdmin}
             onToggle={next => handleSwitchChange("master", next)}
           />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {(["youtube", "instagram", "tiktok"] as const).map(p => (
-              <KillSwitchRow
-                key={p}
-                label={platformLabel(p)}
-                description=""
-                compact
-                isActive={(switchesQuery.data?.[p]) ?? true}
-                isLoading={updatingKey === p || switchesQuery.isLoading}
-                disabled={!isAdmin}
-                onToggle={next => handleSwitchChange(p, next)}
-              />
-            ))}
-          </div>
+          {(["youtube", "instagram", "tiktok"] as const).map(p => (
+            <CompactSwitch
+              key={p}
+              label={platformLabel(p)}
+              isActive={(switchesQuery.data?.[p]) ?? true}
+              isLoading={updatingKey === p || switchesQuery.isLoading}
+              disabled={!isAdmin}
+              onToggle={next => handleSwitchChange(p, next)}
+            />
+          ))}
         </CardContent>
       </Card>
 
-      {/* Quick links */}
-      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-        {TILES.map(t => {
-          const Icon = t.icon;
-          return (
-            <Link
-              key={t.id}
-              to={t.to}
-              className="block rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[#11C4D0]"
-            >
-              <Card className="h-full bg-[#10151A] border-white/8 hover:border-[#11C4D0]/40 transition-colors">
-                <CardHeader className="space-y-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#11C4D0]/10">
-                    <Icon className="h-5 w-5 text-[#11C4D0]" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-[#ECEAE4] text-base">{t.title}</CardTitle>
-                    <CardDescription className="text-[#8A9198] mt-1.5">{t.description}</CardDescription>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <span className="inline-flex items-center gap-1.5 text-[12px] text-[#11C4D0]">
-                    Open <ArrowRight className="h-3.5 w-3.5" />
-                  </span>
-                </CardContent>
-              </Card>
-            </Link>
-          );
-        })}
-      </div>
+      {/* Automation list */}
+      {isLoading ? (
+        <div className="space-y-3">
+          {[0, 1, 2].map(i => (
+            <Skeleton key={i} className="h-32 w-full bg-white/5" />
+          ))}
+        </div>
+      ) : !hasAutomations ? (
+        <Card className="bg-[#10151A] border-white/8">
+          <CardContent className="py-12 sm:py-16">
+            <div className="flex flex-col items-center text-center max-w-md mx-auto space-y-3">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#11C4D0]/10">
+                <Plus className="h-7 w-7 text-[#11C4D0]" />
+              </div>
+              <div className="space-y-1.5">
+                <h2 className="font-serif text-xl text-[#ECEAE4]">No automations yet</h2>
+                <p className="text-[13px] text-[#8A9198] leading-relaxed">
+                  Head to a new project's intake form and toggle "Run on a schedule" at the bottom to create your first one.
+                </p>
+              </div>
+              {newCta}
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {automations.map(s => (
+            <AutomationCard
+              key={s.id}
+              schedule={s}
+              lastRunAt={lastRuns[s.id] ?? null}
+            />
+          ))}
+        </div>
+      )}
 
       <AlertDialog open={!!pendingDisable} onOpenChange={open => !open && setPendingDisable(null)}>
         <AlertDialogContent className="bg-[#10151A] border-white/8 text-[#ECEAE4]">
@@ -314,7 +304,7 @@ export default function AutopostHome() {
             </AlertDialogTitle>
             <AlertDialogDescription className="text-[#8A9198]">
               {pendingDisable === "master"
-                ? "All schedules will stop publishing. Already-rendered runs will sit in 'pending' until you re-enable. Continue?"
+                ? "All automations will stop publishing. Already-rendered runs will sit in 'pending' until you re-enable. Continue?"
                 : "Pending publishes for this platform will be skipped (+10min reschedule) until re-enabled. Continue?"}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -338,59 +328,37 @@ export default function AutopostHome() {
   );
 }
 
-function KpiCard({ label, value, hint }: { label: string; value: string; hint: string }) {
-  return (
-    <Card className="bg-[#10151A] border-white/8">
-      <CardContent className="py-4 sm:py-5 space-y-1">
-        <p className="text-[11px] uppercase tracking-wide text-[#8A9198]">{label}</p>
-        <p className="font-serif text-2xl text-[#ECEAE4]">{value}</p>
-        {hint && <p className="text-[11px] text-[#5A6268] truncate">{hint}</p>}
-      </CardContent>
-    </Card>
-  );
-}
-
-function KillSwitchRow({
+function CompactSwitch({
   label,
-  description,
   isActive,
   isLoading,
   disabled,
   onToggle,
-  compact,
 }: {
   label: string;
-  description: string;
   isActive: boolean;
   isLoading: boolean;
   disabled: boolean;
   onToggle: (next: boolean) => void;
-  compact?: boolean;
 }) {
   return (
-    <div
-      className={`flex items-center justify-between gap-3 rounded-md border border-white/8 px-3 ${compact ? "py-2.5" : "py-3"}`}
-    >
-      <div className="min-w-0 flex items-center gap-2.5">
+    <div className="flex items-center justify-between gap-2 rounded-md border border-white/8 px-3 py-2">
+      <div className="min-w-0 flex items-center gap-2">
         {isLoading ? (
-          <Loader2 className="h-4 w-4 shrink-0 text-[#8A9198] animate-spin" />
+          <Loader2 className="h-3.5 w-3.5 shrink-0 text-[#8A9198] animate-spin" />
         ) : isActive ? (
-          <CheckCircle2 className="h-4 w-4 shrink-0 text-[#7BD389]" />
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#7BD389]" />
         ) : (
-          <AlertTriangle className="h-4 w-4 shrink-0 text-[#F47272]" />
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[#F47272]" />
         )}
-        <div className="min-w-0">
-          <p className="text-[13px] text-[#ECEAE4] truncate">{label}</p>
-          {description && (
-            <p className="text-[11px] text-[#8A9198] mt-0.5 line-clamp-2">{description}</p>
-          )}
-        </div>
+        <span className="text-[12px] text-[#ECEAE4] truncate">{label}</span>
       </div>
       <Switch
         checked={isActive}
         onCheckedChange={onToggle}
         disabled={disabled || isLoading}
         aria-label={`Toggle ${label}`}
+        className="scale-90"
       />
     </div>
   );

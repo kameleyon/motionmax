@@ -1,4 +1,4 @@
-import { Sparkles, Crown, Gem, Building2, type LucideIcon } from "lucide-react";
+import { Zap, Crown, Gem, Building2, type LucideIcon } from "lucide-react";
 import { PLAN_LIMITS } from "@/lib/planLimits";
 import { STRIPE_PLANS, CREDIT_PACKS } from "@/hooks/useSubscription";
 import { PLAN_PRICES, CREDIT_PACK_PRICES } from "@/config/products";
@@ -52,7 +52,7 @@ export const PLANS: PlanDef[] = [
     monthlyPrice: PLAN_PRICES.free.monthly,
     yearlyPrice: PLAN_PRICES.free.yearly,
     description: "Try MotionMax with 150 credits",
-    icon: Sparkles,
+    icon: Zap,
     features: [
       "150 credits (one-time)",
       "All video types accessible",

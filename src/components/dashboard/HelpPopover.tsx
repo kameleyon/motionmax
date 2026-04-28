@@ -1,4 +1,4 @@
-import { HelpCircle, BookOpen, Keyboard, LifeBuoy, Sparkles } from 'lucide-react';
+import { HelpCircle, BookOpen, Keyboard, LifeBuoy, Lightbulb } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 /** Small static popover with the links & shortcuts we actually ship today.
@@ -50,7 +50,7 @@ export default function HelpPopover() {
 
         <div className="px-4 py-3 border-b border-white/5">
           <div className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#5A6268] font-medium mb-2 flex items-center gap-2">
-            <Sparkles className="w-3 h-3" /> What's new
+            <Lightbulb className="w-3 h-3" /> What's new
           </div>
           <ul className="space-y-1 text-[12px] text-[#8A9198] list-disc list-inside marker:text-[#14C8CC]">
             <li>Kling V3.0 Pro I2V for all cinematic renders</li>

@@ -453,6 +453,14 @@ async function processJob(job: Job) {
       } else if (job.task_type === 'undo_regeneration' as any) {
         const result = await handleUndoRegeneration(job.id, job.payload as any, job.user_id);
         finalPayload = { ...finalPayload, ...result };
+      } else if (job.task_type === 'generate_topics' as any) {
+        // Wave B1 (Autopost UI redesign) — produces 15 video topic
+        // ideas for the intake-form ScheduleBlock. The front-end
+        // polls this job (1.5s interval) and reads `result.topics`.
+        if (!job.user_id) throw new Error("generate_topics job is missing user_id");
+        const { handleGenerateTopics } = await import("./handlers/handleGenerateTopics.js");
+        const result = await handleGenerateTopics(job.id, job.payload as any, job.user_id);
+        finalPayload = { ...finalPayload, ...result };
       } else {
         await writeSystemLog({
           jobId: job.id,

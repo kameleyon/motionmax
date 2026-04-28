@@ -7,13 +7,18 @@
  * normal flex row on desktop. Uses `NavLink` so the active tab is
  * styled by react-router, no manual matching.
  *
+ * Post-Wave-B redesign: schedules are now created from the intake form
+ * (toggle "Run on a schedule" on /app/create/new) and managed inline on
+ * the dashboard via cards + modals. Connect lives in /settings under the
+ * Integrations tab. So the nav only needs Dashboard and Runs.
+ *
  * The "Runs" tab is matched as active for both `/lab/autopost/runs`
  * and `/lab/autopost/runs/:id` because the detail view is a child of
  * the runs section conceptually.
  */
 
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, Cable, Calendar, History } from "lucide-react";
+import { LayoutDashboard, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TABS: ReadonlyArray<{
@@ -23,10 +28,8 @@ const TABS: ReadonlyArray<{
   /** end=true means only exact match counts as active; false lets nested routes light it up. */
   end: boolean;
 }> = [
-  { to: "/lab/autopost",           label: "Dashboard", icon: LayoutDashboard, end: true  },
-  { to: "/lab/autopost/connect",   label: "Connect",   icon: Cable,           end: false },
-  { to: "/lab/autopost/schedules", label: "Schedules", icon: Calendar,        end: false },
-  { to: "/lab/autopost/runs",      label: "Runs",      icon: History,         end: false },
+  { to: "/lab/autopost",      label: "Dashboard", icon: LayoutDashboard, end: true  },
+  { to: "/lab/autopost/runs", label: "Runs",      icon: History,         end: false },
 ];
 
 export function AutopostNav() {

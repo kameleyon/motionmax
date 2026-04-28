@@ -51,10 +51,6 @@ const Admin = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/Admin")
 // the main bundle. Gated by <AdminOnlyRoute>; never linked from main nav.
 const LabHome = lazy(() => import("./pages/lab/LabHome"));
 const AutopostHome = lazy(() => import("./pages/lab/autopost/AutopostHome"));
-const Connect = lazy(() => import("./pages/lab/autopost/Connect"));
-const SchedulesList = lazy(() => import("./pages/lab/autopost/SchedulesList"));
-const ScheduleWizard = lazy(() => import("./pages/lab/autopost/ScheduleWizard"));
-const ScheduleEdit = lazy(() => import("./pages/lab/autopost/ScheduleEdit"));
 const RunHistory = lazy(() => import("./pages/lab/autopost/RunHistory"));
 const RunDetail = lazy(() => import("./pages/lab/autopost/RunDetail"));
 
@@ -174,10 +170,13 @@ const App = () => (
                 See AUTOPOST_PLAN.md §5 for the rationale. */}
             <Route path="/lab" element={<AdminOnlyRoute><RouteErrorBoundary routeName="lab"><LabHome /></RouteErrorBoundary></AdminOnlyRoute>} />
             <Route path="/lab/autopost" element={<AdminOnlyRoute><RouteErrorBoundary routeName="lab-autopost"><AutopostHome /></RouteErrorBoundary></AdminOnlyRoute>} />
-            <Route path="/lab/autopost/connect" element={<AdminOnlyRoute><RouteErrorBoundary routeName="lab-autopost-connect"><Connect /></RouteErrorBoundary></AdminOnlyRoute>} />
-            <Route path="/lab/autopost/schedules" element={<AdminOnlyRoute><RouteErrorBoundary routeName="lab-autopost-schedules"><SchedulesList /></RouteErrorBoundary></AdminOnlyRoute>} />
-            <Route path="/lab/autopost/schedules/new" element={<AdminOnlyRoute><RouteErrorBoundary routeName="lab-autopost-schedule-new"><ScheduleWizard /></RouteErrorBoundary></AdminOnlyRoute>} />
-            <Route path="/lab/autopost/schedules/:id" element={<AdminOnlyRoute><RouteErrorBoundary routeName="lab-autopost-schedule-edit"><ScheduleEdit /></RouteErrorBoundary></AdminOnlyRoute>} />
+            {/* Connect moved to Settings → Integrations (Wave B2). */}
+            <Route path="/lab/autopost/connect" element={<Navigate to="/settings?tab=integrations" replace />} />
+            {/* Schedule CRUD now happens inline on /lab/autopost via the
+                AutomationCard modals; redirect any old bookmarks. */}
+            <Route path="/lab/autopost/schedules" element={<Navigate to="/lab/autopost" replace />} />
+            <Route path="/lab/autopost/schedules/new" element={<Navigate to="/lab/autopost" replace />} />
+            <Route path="/lab/autopost/schedules/:id" element={<Navigate to="/lab/autopost" replace />} />
             <Route path="/lab/autopost/runs" element={<AdminOnlyRoute><RouteErrorBoundary routeName="lab-autopost-runs"><RunHistory /></RouteErrorBoundary></AdminOnlyRoute>} />
             <Route path="/lab/autopost/runs/:id" element={<AdminOnlyRoute><RouteErrorBoundary routeName="lab-autopost-run-detail"><RunDetail /></RouteErrorBoundary></AdminOnlyRoute>} />
 

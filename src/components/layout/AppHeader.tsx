@@ -2,7 +2,6 @@ import { cn } from "@/lib/utils";
 import { ThemedLogo } from "@/components/ThemedLogo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 
 interface AppHeaderProps {
@@ -47,7 +46,6 @@ export function AppHeader({ actions, className }: AppHeaderProps) {
           className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
           title="Preview the new dashboard"
         >
-          <Sparkles className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">New Dashboard</span>
         </Link>
         <ThemeToggle />

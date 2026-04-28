@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Sparkles, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 /** Full-width gold strip above the legacy AppShell topbar, inviting
  *  users to switch to the rebuilt dashboard while we're still in beta.
@@ -18,7 +18,6 @@ export default function BetaRebuildBanner() {
       title="Try the rebuilt dashboard"
     >
       <div className="mx-auto max-w-[1480px] px-4 sm:px-6 py-2 flex items-center justify-center gap-2 sm:gap-3 text-center">
-        <Sparkles className="h-3.5 w-3.5 shrink-0" />
         <span className="font-mono text-[9.5px] sm:text-[10px] tracking-[0.18em] uppercase rounded bg-[#0A0D0F]/15 text-[#0A0D0F] px-1.5 py-px font-bold shrink-0">
           Beta · Test mode
         </span>

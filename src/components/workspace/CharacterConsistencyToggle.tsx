@@ -1,6 +1,6 @@
 import { createScopedLogger } from "@/lib/logger";
 import { useState } from "react";
-import { Lock, Users, Sparkles, Crown, Info } from "lucide-react";
+import { Lock, Users, Crown, Info } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -128,7 +128,7 @@ export function CharacterConsistencyToggle({ enabled, onToggle }: CharacterConsi
           <DialogHeader>
             <div className="flex items-center gap-3 mb-2">
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-                <Sparkles className="h-6 w-6 text-primary" />
+                <Crown className="h-6 w-6 text-primary" />
               </div>
               <div>
                 <DialogTitle>Unlock Character Consistency</DialogTitle>

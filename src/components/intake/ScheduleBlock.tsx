@@ -1,0 +1,507 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import {
+  Clock, Wand2, Loader2, RefreshCw, Plug, Youtube, Instagram, Music2,
+} from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
+import {
+  SCHEDULE_INTERVALS, RUNS_PER_MONTH,
+  type ScheduleInterval,
+} from './_scheduleConstants';
+
+/** Persisted state — what the parent <IntakeForm /> reads on submit. */
+export interface ScheduleState {
+  enabled: boolean;
+  interval: ScheduleInterval | null;
+  /** Topics the user has CHECKED — these become the schedule's queue. */
+  topics: string[];
+  /** Last batch the worker generated, for the UI to render the checkbox list. */
+  generatedTopics: string[];
+  /** autopost_social_accounts.id values selected for publishing. */
+  platformAccountIds: string[];
+  termsAgreed: boolean;
+}
+
+export interface ScheduleBlockProps {
+  enabled: boolean;
+  onChange: (s: ScheduleState) => void;
+  /** Read by the topic-generation worker as the seed for ideation. */
+  intakeSummary: { prompt: string; styleId: string; aspect: string; voice: string };
+  /** Whole-block visibility gate — soft launch is admins only. */
+  isAdmin: boolean;
+}
+
+const DRAFT_KEY = 'motionmax.scheduleblock.draft';
+const TOPIC_POLL_MS = 1500;
+const TOPIC_POLL_TIMEOUT_MS = 30_000;
+/** Per-run cost estimate used for the "X credits/month" helper. The
+ *  intake form's full cost calculator is downstream of which mode
+ *  the user picked; we use a conservative single number here so the
+ *  helper is honest without being precise. Wave B2 can replace this
+ *  with a live read from the parent's `totalCost`. */
+const PER_RUN_CREDIT_ESTIMATE = 75;
+
+const PLATFORMS: Array<{ id: 'youtube' | 'instagram' | 'tiktok'; label: string; Icon: typeof Youtube }> = [
+  { id: 'youtube',   label: 'YouTube',   Icon: Youtube },
+  { id: 'instagram', label: 'Instagram', Icon: Instagram },
+  { id: 'tiktok',    label: 'TikTok',    Icon: Music2 },
+];
+
+interface SocialAccountRow {
+  id: string;
+  platform: 'youtube' | 'instagram' | 'tiktok';
+  display_name: string;
+  status: string;
+}
+
+export default function ScheduleBlock({
+  enabled, onChange, intakeSummary, isAdmin,
+}: ScheduleBlockProps) {
+  const { user } = useAuth();
+
+  // ── Block state — kept here, mirrored up via onChange so the parent
+  //    handleGenerate() can read the latest values without prop drilling. ──
+  const [interval, setInterval] = useState<ScheduleInterval | null>('daily');
+  const [generatedTopics, setGeneratedTopics] = useState<string[]>([]);
+  const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set());
+  const [platformAccountIds, setPlatformAccountIds] = useState<Set<string>>(new Set());
+  const [termsAgreed, setTermsAgreed] = useState(false);
+  const [generatingTopics, setGeneratingTopics] = useState(false);
+  // Tracks whether a draft was loaded from localStorage on mount so the
+  // mirror-up effect doesn't fire before hydration finishes — otherwise
+  // the hydrated values would be immediately overwritten by the empty
+  // initial state on the first render after hydration.
+  const hydrated = useRef(false);
+
+  // ── Hydrate from localStorage (OAuth round-trip return path) ──
+  // When the user clicks "Connect" on a platform, we save the form
+  // state, redirect to /api/autopost/connect/{platform}/start, and
+  // expect them to land back on the intake page. On mount we restore
+  // the draft so they don't have to re-type or re-pick anything.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) { hydrated.current = true; return; }
+      const draft = JSON.parse(raw) as Partial<ScheduleState> & { savedAt?: number };
+      // Discard drafts older than 30 minutes so a stale OAuth attempt
+      // doesn't clobber a fresh form a week later.
+      const STALE_MS = 30 * 60 * 1000;
+      if (typeof draft.savedAt === 'number' && Date.now() - draft.savedAt > STALE_MS) {
+        localStorage.removeItem(DRAFT_KEY);
+        hydrated.current = true;
+        return;
+      }
+      if (draft.interval) setInterval(draft.interval);
+      if (Array.isArray(draft.generatedTopics)) setGeneratedTopics(draft.generatedTopics);
+      if (Array.isArray(draft.topics)) setSelectedTopics(new Set(draft.topics));
+      if (Array.isArray(draft.platformAccountIds)) setPlatformAccountIds(new Set(draft.platformAccountIds));
+      if (typeof draft.termsAgreed === 'boolean') setTermsAgreed(draft.termsAgreed);
+      // Once hydrated we DON'T clear the draft — the user might still
+      // round-trip through another platform's OAuth and we want every
+      // hop to start from the latest state.
+    } catch {
+      // Corrupted draft — wipe so we don't keep tripping over it.
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+    } finally {
+      hydrated.current = true;
+    }
+  }, []);
+
+  // ── Mirror state up to the parent on every change ──
+  useEffect(() => {
+    if (!hydrated.current) return;
+    onChange({
+      enabled,
+      interval,
+      topics: Array.from(selectedTopics),
+      generatedTopics,
+      platformAccountIds: Array.from(platformAccountIds),
+      termsAgreed,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, interval, generatedTopics, selectedTopics, platformAccountIds, termsAgreed]);
+
+  // ── Connected accounts query — TanStack as required ──
+  const accountsQuery = useQuery({
+    queryKey: ['autopost-accounts-picker', user?.id],
+    enabled: !!user && enabled && isAdmin,
+    queryFn: async (): Promise<SocialAccountRow[]> => {
+      const { data, error } = await supabase
+        .from('autopost_social_accounts')
+        .select('id, platform, display_name, status')
+        .eq('user_id', user!.id)
+        .order('connected_at', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as SocialAccountRow[];
+    },
+  });
+
+  // Group rows by platform so we can render at most one section per
+  // platform (with N checkboxes for users who connected multiple
+  // accounts to the same platform — common with YouTube channels).
+  const accountsByPlatform = useMemo(() => {
+    const map: Record<string, SocialAccountRow[]> = { youtube: [], instagram: [], tiktok: [] };
+    for (const row of accountsQuery.data ?? []) {
+      if (map[row.platform]) map[row.platform].push(row);
+    }
+    return map;
+  }, [accountsQuery.data]);
+
+  // ── Topic generation flow ──
+  // Insert a video_generation_jobs row, poll for `result.topics`.
+  async function handleGenerateTopics() {
+    if (!user) { toast.error('Please sign in to generate topics.'); return; }
+    if ((intakeSummary.prompt ?? '').trim().length < 4) {
+      toast.error('Add a content idea above first — even a sentence is enough.');
+      return;
+    }
+    setGeneratingTopics(true);
+    try {
+      const { data: job, error } = await supabase
+        .from('video_generation_jobs')
+        .insert({
+          user_id: user.id,
+          task_type: 'generate_topics',
+          status: 'pending',
+          payload: {
+            prompt: intakeSummary.prompt.trim(),
+            styleId: intakeSummary.styleId,
+            count: 15,
+            // On regenerate we pass the previous batch so the worker
+            // can dedup. Empty array on first run.
+            existingTopics: generatedTopics,
+          } as unknown as never,
+        })
+        .select('id')
+        .single();
+      if (error || !job) throw new Error(error?.message ?? 'queue failed');
+
+      const deadline = Date.now() + TOPIC_POLL_TIMEOUT_MS;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, TOPIC_POLL_MS));
+        const { data: row } = await supabase
+          .from('video_generation_jobs')
+          .select('status, result, error_message')
+          .eq('id', job.id)
+          .single();
+        if (row?.status === 'completed') {
+          const topics = (row.result as { topics?: string[] } | null)?.topics ?? [];
+          if (!Array.isArray(topics) || topics.length === 0) {
+            throw new Error('Worker returned no topics');
+          }
+          setGeneratedTopics(topics);
+          // Default-select all so the user starts with a usable queue.
+          setSelectedTopics(new Set(topics));
+          toast.success(`Generated ${topics.length} topic ideas — uncheck any you don't want.`);
+          return;
+        }
+        if (row?.status === 'failed') {
+          throw new Error(row.error_message ?? 'Topic generation failed');
+        }
+      }
+      throw new Error('Timed out waiting for topics — try again.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Couldn't generate topics: ${msg}`);
+    } finally {
+      setGeneratingTopics(false);
+    }
+  }
+
+  /** Save the current draft to localStorage before redirecting to OAuth. */
+  function persistDraftForOAuth() {
+    try {
+      const draft: ScheduleState & { savedAt: number } = {
+        enabled,
+        interval,
+        topics: Array.from(selectedTopics),
+        generatedTopics,
+        platformAccountIds: Array.from(platformAccountIds),
+        termsAgreed,
+        savedAt: Date.now(),
+      };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    } catch {
+      // Quota or disabled — not fatal, OAuth still works, user just
+      // re-picks topics on return.
+    }
+  }
+
+  function handleConnectPlatform(platform: 'youtube' | 'instagram' | 'tiktok') {
+    persistDraftForOAuth();
+    // Wave B1 frontend: build the start URL with current session token
+    // so the callback can match the user. The auth token is passed via
+    // the Supabase auth helper rather than embedded so we don't ship a
+    // JWT through localStorage.
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const token = session?.access_token ?? '';
+      const url = `/api/autopost/connect/${platform}/start?token=${encodeURIComponent(token)}`;
+      window.location.href = url;
+    });
+  }
+
+  function toggleTopic(topic: string) {
+    setSelectedTopics((prev) => {
+      const next = new Set(prev);
+      if (next.has(topic)) next.delete(topic); else next.add(topic);
+      return next;
+    });
+  }
+
+  function selectAllTopics(checked: boolean) {
+    setSelectedTopics(checked ? new Set(generatedTopics) : new Set());
+  }
+
+  function togglePlatformAccount(id: string) {
+    setPlatformAccountIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  // ── Visibility gate ──
+  // Soft launch: hide the entire block from non-admins. Wave C will
+  // flip this to a feature-flag check once Studio Pro is the gating
+  // condition.
+  if (!isAdmin) return null;
+
+  const monthlyRuns = interval ? RUNS_PER_MONTH[interval] : 0;
+  // Cap displayed cost at 4 figures so a "Every 3 minutes" pick doesn't
+  // print a 7-digit nightmare number — instead we say "1M+" and trust
+  // the user to read the run-count hint above.
+  const monthlyCost = monthlyRuns * PER_RUN_CREDIT_ESTIMATE;
+  const monthlyCostLabel = monthlyCost > 99_999
+    ? '99,999+'
+    : monthlyCost.toLocaleString();
+
+  const selectedCount = selectedTopics.size;
+
+  return (
+    <Card className="bg-[#151B20] border-white/5 rounded-xl overflow-hidden text-[#ECEAE4]">
+      {/* Header — toggle only */}
+      <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Clock className="w-4 h-4 text-[#14C8CC] shrink-0" />
+          <div className="text-[13.5px] font-medium truncate">Run on a schedule</div>
+        </div>
+        <Switch
+          checked={enabled}
+          onCheckedChange={(v) => onChange({
+            enabled: v,
+            interval,
+            topics: Array.from(selectedTopics),
+            generatedTopics,
+            platformAccountIds: Array.from(platformAccountIds),
+            termsAgreed,
+          })}
+          aria-label="Run on a schedule"
+        />
+      </div>
+
+      {enabled && (
+        <div className="border-t border-white/5">
+          {/* ── Frequency picker ── */}
+          <div className="px-4 py-3.5 border-b border-white/5">
+            <div className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#5A6268] mb-2">
+              How often?
+            </div>
+            <Select
+              value={interval ?? undefined}
+              onValueChange={(v) => setInterval(v as ScheduleInterval)}
+            >
+              <SelectTrigger className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4] hover:border-[#14C8CC]/40">
+                <SelectValue placeholder="Select a frequency" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#151B20] border-white/10 text-[#ECEAE4]">
+                {SCHEDULE_INTERVALS.map((opt) => (
+                  <SelectItem
+                    key={opt.value}
+                    value={opt.value}
+                    className="text-[#ECEAE4] focus:bg-[#14C8CC]/10 focus:text-[#ECEAE4]"
+                  >
+                    <span>{opt.label}</span>
+                    <span className="text-xs text-muted-foreground ml-2">— {opt.hint}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {interval && (
+              <div className="mt-2 text-[11.5px] text-[#8A9198] flex items-center gap-1.5">
+                <span aria-hidden>💡</span>
+                <span>
+                  Estimated cost: ~{monthlyCostLabel} credits/month
+                  <span className="text-[#5A6268] ml-1">({monthlyRuns.toLocaleString()} runs)</span>
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* ── Pre-plan / topic generation ── */}
+          <div className="px-4 py-3.5 border-b border-white/5">
+            <div className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#5A6268] mb-1.5">
+              Pre-plan your content
+            </div>
+            <p className="text-[12px] leading-[1.5] text-[#8A9198] mb-3">
+              Generate 15 topic suggestions — select which to queue for scheduled generation.
+            </p>
+
+            <Button
+              type="button"
+              onClick={handleGenerateTopics}
+              disabled={generatingTopics}
+              className="w-full bg-[#14C8CC]/10 border border-[#14C8CC]/30 text-[#14C8CC] hover:bg-[#14C8CC]/20 hover:text-[#ECEAE4]"
+              variant="outline"
+            >
+              {generatingTopics ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Generating…
+                </>
+              ) : generatedTopics.length > 0 ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Regenerate
+                </>
+              ) : (
+                <>
+                  <Wand2 className="w-4 h-4 mr-2" />
+                  Generate Topics
+                </>
+              )}
+            </Button>
+
+            {generatedTopics.length > 0 && (
+              <div className="mt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-mono text-[10.5px] text-[#8A9198] tracking-wide">
+                    {selectedCount} of {generatedTopics.length} selected
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => selectAllTopics(selectedCount !== generatedTopics.length)}
+                    className="font-mono text-[10.5px] text-[#14C8CC] hover:text-[#ECEAE4] transition-colors"
+                  >
+                    {selectedCount === generatedTopics.length ? 'Deselect all' : 'Select all'}
+                  </button>
+                </div>
+                <ul className="grid gap-1.5 max-h-[260px] overflow-y-auto pr-1">
+                  {generatedTopics.map((t, idx) => {
+                    const checked = selectedTopics.has(t);
+                    const id = `topic-${idx}`;
+                    return (
+                      <li key={id} className="flex items-start gap-2.5 px-2.5 py-2 rounded-md border border-white/5 bg-[#0A0D0F] hover:border-white/10 transition-colors">
+                        <Checkbox
+                          id={id}
+                          checked={checked}
+                          onCheckedChange={() => toggleTopic(t)}
+                          className="mt-0.5 border-[#14C8CC]/40 data-[state=checked]:bg-[#14C8CC] data-[state=checked]:text-[#0A0D0F]"
+                        />
+                        <label htmlFor={id} className="text-[12.5px] leading-[1.45] text-[#ECEAE4] cursor-pointer flex-1">
+                          {t}
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* ── Platform picker ── */}
+          <div className="px-4 py-3.5 border-b border-white/5">
+            <div className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#5A6268] mb-2">
+              Where to publish
+            </div>
+            {accountsQuery.isLoading && (
+              <div className="text-[12px] text-[#8A9198] flex items-center gap-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Loading connected accounts…
+              </div>
+            )}
+            {!accountsQuery.isLoading && (
+              <div className="grid gap-2 sm:gap-2.5">
+                {PLATFORMS.map(({ id, label, Icon }) => {
+                  const accounts = accountsByPlatform[id] ?? [];
+                  if (accounts.length === 0) {
+                    return (
+                      <div
+                        key={id}
+                        className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-md border border-white/5 bg-[#0A0D0F]"
+                      >
+                        <span className="flex items-center gap-2 text-[12.5px] text-[#8A9198]">
+                          <Icon className="w-3.5 h-3.5 text-[#5A6268]" />
+                          {label}
+                          <span className="text-[#5A6268]">— Not connected</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleConnectPlatform(id)}
+                          className="inline-flex items-center gap-1.5 font-mono text-[10.5px] tracking-wider uppercase text-[#e4c875] hover:text-[#ECEAE4] transition-colors"
+                        >
+                          <Plug className="w-3 h-3" />
+                          Connect
+                        </button>
+                      </div>
+                    );
+                  }
+                  return accounts.map((acc) => {
+                    const checked = platformAccountIds.has(acc.id);
+                    const idAttr = `acct-${acc.id}`;
+                    return (
+                      <div
+                        key={acc.id}
+                        className="flex items-center gap-2.5 px-3 py-2.5 rounded-md border border-white/5 bg-[#0A0D0F]"
+                      >
+                        <Checkbox
+                          id={idAttr}
+                          checked={checked}
+                          onCheckedChange={() => togglePlatformAccount(acc.id)}
+                          className="border-[#14C8CC]/40 data-[state=checked]:bg-[#14C8CC] data-[state=checked]:text-[#0A0D0F]"
+                        />
+                        <label htmlFor={idAttr} className="flex-1 flex items-center gap-2 text-[12.5px] text-[#ECEAE4] cursor-pointer">
+                          <Icon className="w-3.5 h-3.5 text-[#14C8CC]" />
+                          <span>{label}</span>
+                          <span className="text-[#8A9198] truncate">— {acc.display_name}</span>
+                        </label>
+                        {acc.status !== 'connected' && (
+                          <span className="font-mono text-[9.5px] tracking-wider uppercase text-[#e4c875]">
+                            {acc.status}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  });
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* ── Terms acknowledgement ── */}
+          <div className="px-4 py-3.5">
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <Checkbox
+                checked={termsAgreed}
+                onCheckedChange={(v) => setTermsAgreed(v === true)}
+                className="mt-0.5 border-[#14C8CC]/40 data-[state=checked]:bg-[#14C8CC] data-[state=checked]:text-[#0A0D0F]"
+              />
+              <span className="text-[12px] leading-[1.5] text-[#ECEAE4]">
+                I agree to the terms — credits will be deducted for each scheduled run, and posts will go out
+                automatically once topics are queued.
+              </span>
+            </label>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}

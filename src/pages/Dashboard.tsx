@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { Lightbulb, Video, Film, Wallpaper, AlertCircle, FolderOpen, Sparkles, Gift, Copy, Check } from "lucide-react";
+import { Lightbulb, Video, Film, Wallpaper, AlertCircle, FolderOpen, Wand2, Gift, Copy, Check } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { supabase } from "@/integrations/supabase/client";
@@ -328,7 +328,7 @@ export default function Dashboard() {
               <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 space-y-3">
                 <div className="flex items-start gap-3">
                   <div className="p-2 rounded-lg bg-primary/10 shrink-0">
-                    <Sparkles className="h-5 w-5 text-primary" />
+                    <Wand2 className="h-5 w-5 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="type-h4 text-foreground">Try it now — one click</h3>
@@ -341,7 +341,7 @@ export default function Dashboard() {
                   className="w-full sm:w-auto gap-2"
                   onClick={() => navigate("/app/create?mode=doc2video&template=sample")}
                 >
-                  <Sparkles className="h-4 w-4" />
+                  <Wand2 className="h-4 w-4" />
                   Create a Sample Video
                 </Button>
               </div>

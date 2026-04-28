@@ -14,7 +14,6 @@ import {
   Crown,
   Gem,
   Building2,
-  Sparkles,
   ExternalLink,
   Plus,
   CheckCircle2,
@@ -60,7 +59,7 @@ import {
  *  (the local table had no `studio` key so the lookup fell back
  *  to free). */
 const planDisplay: Record<PlanTier, { label: string; color: string; icon: LucideIcon }> = {
-  free: { label: "Free", color: "bg-muted", icon: Sparkles },
+  free: { label: "Free", color: "bg-muted", icon: Zap },
   creator: { label: "Creator", color: "bg-primary/30", icon: Crown },
   studio: { label: "Studio", color: "bg-primary/40", icon: Gem },
   enterprise: { label: "Enterprise", color: "bg-primary/50", icon: Building2 },

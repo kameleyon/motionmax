@@ -10,7 +10,7 @@ import {
   Volume2,
   VolumeX,
   Maximize,
-  Sparkles,
+  Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -43,7 +43,7 @@ function HeaderCTA() {
 
   return (
     <Button asChild size={isMobile ? "icon" : "sm"} variant="default">
-      <Link to="/">{isMobile ? <Sparkles className="h-5 w-5" /> : "Get Started"}</Link>
+      <Link to="/">{isMobile ? <Wand2 className="h-5 w-5" /> : "Get Started"}</Link>
     </Button>
   );
 }

@@ -13,8 +13,13 @@
  *                             cinematic / doc2video script generation
  *
  * Env required on the worker (Render):
- *   GEMINI_API_KEY   — get from https://aistudio.google.com/app/apikey
- *   GEMINI_MODEL     — optional override, defaults to "gemini-3.1-pro-preview"
+ *   GOOGLE_TTS_API_KEY (or _2, _3) — same Google API key chain used
+ *      by the TTS handler. Reads in priority order _3 → _2 → base,
+ *      matching handleCinematicAudio.ts. The key needs the
+ *      "Generative Language API" enabled in Google Cloud Console;
+ *      if the existing keys are restricted to TTS-only, enable the
+ *      additional API on the same project.
+ *   GEMINI_MODEL — optional override, defaults to "gemini-3.1-pro-preview"
  *
  * Note on tool + JSON output: when googleSearch is enabled, Google's API
  * does NOT honor `responseMimeType: "application/json"` — search-grounded
@@ -44,10 +49,26 @@ export interface GeminiCallOptions {
   timeoutMs?: number;
 }
 
+function resolveGoogleApiKey(): string {
+  // Same priority chain as handleCinematicAudio.ts: try the newest /
+  // highest-quota key first, fall through to older ones. All three
+  // map to the same Google Cloud project; just slots so quota can be
+  // rotated when one hits a daily cap.
+  const candidates = [
+    process.env.GOOGLE_TTS_API_KEY_3,
+    process.env.GOOGLE_TTS_API_KEY_2,
+    process.env.GOOGLE_TTS_API_KEY,
+  ];
+  for (const k of candidates) {
+    if (k && k.trim().length > 0) return k.trim();
+  }
+  return "";
+}
+
 export async function callGemini(opts: GeminiCallOptions): Promise<string> {
-  const apiKey = (process.env.GEMINI_API_KEY || "").trim();
+  const apiKey = resolveGoogleApiKey();
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY not configured on the worker");
+    throw new Error("GOOGLE_TTS_API_KEY (or _2/_3) not configured on the worker");
   }
 
   const model = opts.model || process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;

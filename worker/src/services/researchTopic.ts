@@ -70,8 +70,8 @@ Return your research as a structured brief in plain text (NOT JSON). Use section
  * Returns a research brief string to inject into the script prompt.
  */
 export async function researchTopic(content: string): Promise<string> {
-  if (!process.env.GEMINI_API_KEY) {
-    console.warn("[Research] GEMINI_API_KEY not set — skipping web-grounded research");
+  if (!process.env.GOOGLE_TTS_API_KEY && !process.env.GOOGLE_TTS_API_KEY_2 && !process.env.GOOGLE_TTS_API_KEY_3) {
+    console.warn("[Research] No GOOGLE_TTS_API_KEY (or _2/_3) set — skipping web-grounded research");
     return "";
   }
 

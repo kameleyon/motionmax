@@ -81,23 +81,30 @@ export async function handleGenerateTopics(
     : [];
 
   const exclusionBlock = existing.length > 0
-    ? `\n\nDo NOT repeat any of these previously-suggested topics:\n${existing.map((t) => `- ${t}`).join("\n")}`
-    : "";
-
-  const styleHint = payload.styleId && payload.styleId !== "realistic"
-    ? `The visual treatment will be "${payload.styleId}", so favour ideas whose visuals lean into that look.`
+    ? `\n\nIMPORTANT — These topics have already been suggested. Do NOT repeat them or any close variant:\n${existing.map((t) => `- ${t}`).join("\n")}\n\nGenerate topics that explore COMPLETELY DIFFERENT angles, sub-topics, or perspectives.`
     : "";
 
   const todayHuman = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
 
-  const systemPrompt = `Today is ${todayHuman}.
+  const systemPrompt = `You are a content strategist who generates compelling clickbait topic titles.
+Stay strictly on the requested subject and reject off-topic themes.`;
 
-You are a content strategist generating short, scroll-stopping video topic ideas.
-Given a creator's content area, produce ${count} distinct topic angles.
-Each topic should be a single specific idea (5-12 words), NOT a generic category.
-Avoid clickbait phrasing — clear, intriguing, scannable.
-${styleHint}
-Output strictly as JSON: {"topics": ["topic1", "topic2", ...]}${exclusionBlock}`;
+  const userPrompt = `Today is ${todayHuman}.
+
+Generate exactly ${count} unique, SHORT, clickbait-worthy titles based on the inputs.
+
+${seedPrompt}
+${exclusionBlock}
+
+Requirements:
+- Each title MUST be UNDER 10 WORDS — short, punchy, irresistible
+- Use curiosity gaps, power words, unexpected angles
+- Create titles that make people NEED to click
+- Each title should cover a DIFFERENT topic or sub-topic
+- Titles MUST be directly relevant to the intended subject
+- Vary the format: provocative statements, questions, revelations, challenges
+
+Output strictly as JSON: {"topics": ["topic1", "topic2", ...]}`;
 
   await writeSystemLog({
     jobId, userId,
@@ -108,7 +115,7 @@ Output strictly as JSON: {"topics": ["topic1", "topic2", ...]}${exclusionBlock}`
   });
 
   const raw = await callOpenRouterLLM(
-    { system: systemPrompt, user: seedPrompt },
+    { system: systemPrompt, user: userPrompt },
     {
       // Claude Sonnet 4.6 — better factual grounding for dated topics
       // (astrology, news, holidays) than Gemini Flash. Same default

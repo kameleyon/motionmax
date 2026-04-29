@@ -91,17 +91,20 @@ Stay strictly on the requested subject and reject off-topic themes.`;
 
   const userPrompt = `Today is ${todayHuman}.
 
-Generate exactly ${count} unique, SHORT, clickbait-worthy titles based on the inputs.
+Research everything related to the topic requested below — and ONLY that topic. Use any source URLs or material the user provides as primary references. Do not drift into adjacent or unrelated subjects.
 
+Topic:
 ${seedPrompt}
 ${exclusionBlock}
+
+Generate exactly ${count} unique, SHORT, clickbait-worthy titles based on the inputs above.
 
 Requirements:
 - Each title MUST be UNDER 10 WORDS — short, punchy, irresistible
 - Use curiosity gaps, power words, unexpected angles
 - Create titles that make people NEED to click
-- Each title should cover a DIFFERENT topic or sub-topic
-- Titles MUST be directly relevant to the intended subject
+- Each title should cover a DIFFERENT angle or sub-topic
+- Titles MUST be directly relevant to the requested subject
 - Vary the format: provocative statements, questions, revelations, challenges
 
 Output strictly as JSON: {"topics": ["topic1", "topic2", ...]}`;

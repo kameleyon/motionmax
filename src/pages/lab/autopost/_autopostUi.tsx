@@ -9,8 +9,23 @@
  * - Group-by-day labelling for the history list.
  */
 
-import { Youtube, Instagram, Music2 } from "lucide-react";
+import { Youtube, Instagram, Music2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+/**
+ * Statuses that mean "still doing work" — the dashboard surfaces them
+ * with an animated spinner so users don't think the page is frozen
+ * while the worker chews through script + audio + visuals + render.
+ */
+const ACTIVE_RUN_STATUSES: ReadonlySet<string> = new Set([
+  "queued",
+  "generating",
+  "publishing",
+]);
+
+export function isRunStatusActive(status: string): boolean {
+  return ACTIVE_RUN_STATUSES.has(status);
+}
 
 export const AUTOPOST_BRAND = {
   bg: "#0A0D0F",
@@ -128,16 +143,44 @@ export function StatusPill({
   const tone =
     RUN_STATUS_TONE[status as RunStatus] ??
     { text: "#8A9198", bg: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.1)" };
+  const active = isRunStatusActive(status);
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide",
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide",
         className,
       )}
       style={{ color: tone.text, backgroundColor: tone.bg, borderColor: tone.border }}
     >
+      {active && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
       {status}
     </span>
+  );
+}
+
+/**
+ * Indeterminate progress bar shown under any run row that is still in
+ * flight. Reuses the .animate-shimmer keyframe defined in src/index.css
+ * — a translucent slice slides across the track until status changes.
+ */
+export function RunProgressBar({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "h-0.5 w-full overflow-hidden rounded-full bg-white/[0.04]",
+        className,
+      )}
+      aria-label="Generation in progress"
+      role="progressbar"
+      aria-busy="true"
+    >
+      <div
+        className="h-full w-1/3 animate-shimmer rounded-full"
+        style={{
+          background: "linear-gradient(90deg, transparent, #11C4D0, transparent)",
+        }}
+      />
+    </div>
   );
 }
 

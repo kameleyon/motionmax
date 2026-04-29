@@ -27,7 +27,9 @@ import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown, ChevronRight, ExternalLink, Image as ImageIcon, Play, RefreshCw,
+  Pencil,
 } from "lucide-react";
+import { isFlagOn } from "@/lib/featureFlags";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -70,8 +72,8 @@ interface PublishJobRow {
 }
 
 interface VideoJobRow {
-  result: { finalUrl?: string } | null;
-  payload: { finalUrl?: string } | null;
+  result: { finalUrl?: string; projectId?: string } | null;
+  payload: { finalUrl?: string; projectId?: string } | null;
   status: string;
 }
 
@@ -216,6 +218,18 @@ export default function RunDetail() {
     return r || p || null;
   }, [videoJobQuery.data]);
 
+  const projectId = useMemo(() => {
+    const r = videoJobQuery.data?.result?.projectId;
+    const p = videoJobQuery.data?.payload?.projectId;
+    return r || p || null;
+  }, [videoJobQuery.data]);
+
+  const editorRoute = projectId
+    ? (isFlagOn("UNIFIED_EDITOR")
+      ? `/app/editor/${projectId}`
+      : `/app/create?project=${projectId}`)
+    : null;
+
   const shortId = id ? `${id.slice(0, 8)}…` : "—";
 
   return (
@@ -309,19 +323,19 @@ export default function RunDetail() {
                         </a>
                       </Button>
                     )}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-white/10 bg-transparent text-[#ECEAE4] hover:bg-white/5"
-                      onClick={() => {
-                        queryClient.invalidateQueries({ queryKey: ["autopost", "run", id] });
-                        queryClient.invalidateQueries({ queryKey: ["autopost", "run-jobs", id] });
-                        queryClient.invalidateQueries({ queryKey: ["autopost", "run-logs", id] });
-                      }}
-                    >
-                      <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-                      Refresh
-                    </Button>
+                    {editorRoute && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        asChild
+                        className="border-white/10 bg-transparent text-[#ECEAE4] hover:bg-white/5"
+                      >
+                        <Link to={editorRoute}>
+                          <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                          Open in editor
+                        </Link>
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>

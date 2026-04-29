@@ -40,6 +40,7 @@
 
 import { supabase } from "../../lib/supabase.js";
 import { writeSystemLog } from "../../lib/logger.js";
+import { generateAutopostThumbnail } from "./thumbnails.js";
 import { randomUUID } from "node:crypto";
 
 interface AutopostRenderPayload {
@@ -360,6 +361,17 @@ export async function handleAutopostRun(
     .from("autopost_runs")
     .update({ video_job_id: jobId })
     .eq("id", runId);
+
+  // Generate the thumbnail unconditionally — the publish dispatcher
+  // also calls this for delivery_method='social' runs, but library_only
+  // and email-only runs never reach the dispatcher and would otherwise
+  // show the placeholder image-icon forever. Thumbnail generation is
+  // best-effort and self-guards against re-running on a row that
+  // already has thumbnail_url set, so calling it from both places is
+  // safe.
+  void generateAutopostThumbnail(runId, finalUrl).catch((err) => {
+    console.warn(`[autopost] thumbnail generation failed for run ${runId}:`, err);
+  });
 
   await writeSystemLog({
     jobId,

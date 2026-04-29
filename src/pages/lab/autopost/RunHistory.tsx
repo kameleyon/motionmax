@@ -31,7 +31,8 @@ import {
 import { LabLayout } from "../_LabLayout";
 import { AutopostNav } from "./_AutopostNav";
 import {
-  StatusPill, PlatformPill, relativeTime, dayBucketLabel, dayBucketKey,
+  StatusPill, PlatformPill, RunProgressBar, isRunStatusActive,
+  relativeTime, dayBucketLabel, dayBucketKey,
 } from "./_autopostUi";
 
 const PAGE_SIZE = 50;
@@ -348,6 +349,7 @@ function RunListItem({ run, onClick }: { run: RunRow; onClick: () => void }) {
             <PlatformPill key={`${j.platform}-${i}`} platform={j.platform} status={j.status} />
           ))}
         </div>
+        {isRunStatusActive(run.status) && <RunProgressBar className="mt-1.5" />}
         {run.error_summary && run.status === "failed" && (
           <p className="text-[11px] text-[#F47272] line-clamp-1">{run.error_summary}</p>
         )}

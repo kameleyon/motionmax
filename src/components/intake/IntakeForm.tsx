@@ -634,7 +634,11 @@ export default function IntakeForm({
         }
 
         const cronExpr = INTERVAL_TO_CRON[scheduleState.interval];
-        const durationSec = features.duration && duration === '>3min' ? 200 : 30;
+        // Duration is no longer a flat per-schedule cap. Each flow
+        // (smartflow / cinematic / doc2video) decides its own scene
+        // count + pacing from the LLM script and from `length`. The
+        // schedule row's duration_seconds column is informational only
+        // — keep it null and let dashboards estimate from `length`.
         const resolution = aspect === '16:9' ? '1920x1080' : '1080x1920';
 
         const scheduleInsert = await supabase
@@ -646,7 +650,7 @@ export default function IntakeForm({
             prompt_template: enrichedContent,
             topic_pool: scheduleState.topics,
             motion_preset: features.camera ? camera : null,
-            duration_seconds: durationSec,
+            duration_seconds: null,
             resolution,
             cron_expression: cronExpr,
             timezone: 'UTC',

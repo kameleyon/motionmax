@@ -461,6 +461,18 @@ async function processJob(job: Job) {
         const { handleGenerateTopics } = await import("./handlers/handleGenerateTopics.js");
         const result = await handleGenerateTopics(job.id, job.payload as any, job.user_id);
         finalPayload = { ...finalPayload, ...result };
+      } else if (job.task_type === 'autopost_render' as any) {
+        // Autopost orchestrator — the cron tick (autopost_tick) and
+        // user-driven Run-now (autopost_fire_now RPC) both insert
+        // autopost_render jobs. Without this branch they would sit
+        // pending forever. Walks the script→audio→images→[video]→
+        // finalize→export pipeline in one long-running task,
+        // returning finalUrl in result so autopost_on_video_completed
+        // fans out publish/email/library based on delivery_method.
+        if (!job.user_id) throw new Error("autopost_render job is missing user_id");
+        const { handleAutopostRun } = await import("./handlers/autopost/handleAutopostRun.js");
+        const result = await handleAutopostRun(job.id, job.payload as any, job.user_id);
+        finalPayload = { ...finalPayload, ...result };
       } else if (job.task_type === 'autopost_email_delivery' as any) {
         // Wave E (Autopost delivery modes) — when an autopost render
         // completes for a schedule with delivery_method='email', the

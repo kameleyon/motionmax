@@ -17,7 +17,11 @@ export interface AutomationSchedule {
   prompt_template: string;
   topic_pool: string[] | null;
   motion_preset: string | null;
-  duration_seconds: number;
+  /**
+   * Informational only — not enforced. Older rows have 30 (the prior
+   * default), new rows use null and let the flow decide the duration.
+   */
+  duration_seconds: number | null;
   resolution: string;
   cron_expression: string;
   timezone: string;

@@ -12,12 +12,13 @@
  *   active=true + empty topic_pool        → gray "Out of topics"
  *   active=false (and any topic state)    → yellow "Paused"
  *
- * The "Run now" action inserts a queued autopost_runs row directly via
- * supabase-js. RLS (admins-insert-runs-for-own-schedules) enforces the
- * ownership + admin gate. The worker dispatcher polls
- * autopost_runs.status='queued' and picks it up on its next tick.
- * Realtime invalidation in AutopostHome refreshes Last Run / Next Run
- * automatically.
+ * The "Run now" action calls the autopost_fire_now(p_schedule_id) RPC.
+ * That SECURITY DEFINER function mirrors what pg_cron's autopost_tick
+ * does for a single schedule: round-robin topic, resolve prompt, insert
+ * an autopost_runs row + the matching video_generation_jobs(autopost_
+ * render). The worker picks the render job up and walks the full
+ * generation pipeline; AutopostHome's realtime subscription updates
+ * Last Run / Next Run automatically.
  */
 
 import { useState, useMemo } from "react";
@@ -38,7 +39,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { humanizeCron, formatRelativeTime, resolvePrompt } from "./_utils";
+import { humanizeCron, formatRelativeTime } from "./_utils";
 import { EditAutomationDialog } from "./_EditAutomationDialog";
 import { GenerateTopicsDialog } from "./_GenerateTopicsDialog";
 import { UpdateScheduleDialog } from "./_UpdateScheduleDialog";
@@ -83,12 +84,14 @@ const STATUS_META: Record<StatusKey, StatusMeta> = {
 
 /**
  * Rough credits-per-run estimate. The render side of the pipeline scales
- * roughly linearly with duration; ~1 credit per second of finished video
- * is the heuristic the rest of the app uses for budgeting.
+ * with the chosen length, not a fixed seconds cap — `presentation` runs
+ * roughly 6× longer than `short`, so we surface that rather than the old
+ * "~30 cr" stamp that was always wrong for >3min videos.
  */
 function estimateCredits(s: AutomationSchedule): string {
-  const seconds = s.duration_seconds ?? 30;
-  return `~${Math.max(1, Math.round(seconds))} cr`;
+  const length = (s.config_snapshot?.length as string | undefined) ?? "short";
+  if (length === "presentation") return "~200 cr";
+  return "~30 cr";
 }
 
 /**
@@ -177,20 +180,9 @@ export function AutomationCard({ schedule, lastRunAt }: AutomationCardProps) {
 
   const fireMutation = useMutation({
     mutationFn: async () => {
-      const pool = schedule.topic_pool ?? [];
-      const topic = pool.length > 0
-        ? pool[Math.floor(Math.random() * pool.length)] ?? null
-        : null;
-      const promptResolved = resolvePrompt(schedule.prompt_template, topic);
-
-      const { error } = await supabase
-        .from("autopost_runs")
-        .insert({
-          schedule_id: schedule.id,
-          topic,
-          prompt_resolved: promptResolved,
-          status: "queued",
-        });
+      const { error } = await supabase.rpc("autopost_fire_now", {
+        p_schedule_id: schedule.id,
+      });
       if (error) throw new Error(error.message);
     },
     onSuccess: () => {

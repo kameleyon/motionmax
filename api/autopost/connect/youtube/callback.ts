@@ -17,6 +17,7 @@ import {
   getYouTubeConfig,
   logError,
 } from '../../../_shared/platformConfig';
+import { webHandler } from '../../../_shared/webHandler';
 
 type GoogleTokenResponse = {
   access_token: string;
@@ -39,7 +40,7 @@ type YouTubeChannelListResponse = {
   items?: YouTubeChannel[];
 };
 
-export default async function handler(req: Request): Promise<Response> {
+export default webHandler(async (req: Request): Promise<Response> => {
   const pf = handlePreflight(req);
   if (pf) return pf;
 
@@ -166,4 +167,4 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   return connectRedirect({ platform: 'youtube', status: 'connected' });
-}
+});

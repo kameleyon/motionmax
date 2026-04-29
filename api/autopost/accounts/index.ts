@@ -11,6 +11,7 @@
 import { requireAdmin, isResponse } from '../../_shared/auth';
 import { handlePreflight, corsHeaders } from '../../_shared/cors';
 import { logError } from '../../_shared/platformConfig';
+import { webHandler } from '../../_shared/webHandler';
 
 type SocialAccountRow = {
   id: string;
@@ -29,7 +30,7 @@ type SocialAccountRow = {
   connected_at: string;
 };
 
-export default async function handler(req: Request): Promise<Response> {
+export default webHandler(async (req: Request): Promise<Response> => {
   const pf = handlePreflight(req);
   if (pf) return pf;
 
@@ -100,4 +101,4 @@ export default async function handler(req: Request): Promise<Response> {
       headers: { 'content-type': 'application/json', ...corsHeaders(origin) },
     });
   }
-}
+});

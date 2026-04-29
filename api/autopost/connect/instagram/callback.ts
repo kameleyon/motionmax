@@ -26,6 +26,7 @@ import {
   getMetaConfig,
   logError,
 } from '../../../_shared/platformConfig';
+import { webHandler } from '../../../_shared/webHandler';
 
 type MetaTokenResponse = {
   access_token: string;
@@ -54,7 +55,7 @@ type MetaPageDetail = {
   };
 };
 
-export default async function handler(req: Request): Promise<Response> {
+export default webHandler(async (req: Request): Promise<Response> => {
   const pf = handlePreflight(req);
   if (pf) return pf;
 
@@ -210,4 +211,4 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   return connectRedirect({ platform: 'instagram', status: 'connected' });
-}
+});

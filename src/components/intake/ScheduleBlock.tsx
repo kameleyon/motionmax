@@ -709,14 +709,10 @@ export default function ScheduleBlock({
           )}
 
           {deliveryMethod === 'library_only' && (
-            <div className="px-4 py-3.5 border-b border-white/5">
-              <div className="rounded-md border border-white/8 bg-white/[0.02] px-3 py-2.5 text-[12px] leading-[1.5] text-[#ECEAE4] flex items-start gap-2">
-                <FolderHeart className="w-3.5 h-3.5 text-[#14C8CC] mt-0.5 shrink-0" />
-                <span>
-                  Videos will appear in your Run History only — nothing is published or emailed.
-                  You can still download them from there.
-                </span>
-              </div>
+            <div className="px-4 py-2.5 border-b border-white/5">
+              <p className="text-[11px] text-[#5A6268] leading-[1.5] pl-1">
+                Note: videos will appear in your Run History only — nothing is published or emailed. You can still download them from there.
+              </p>
             </div>
           )}
 

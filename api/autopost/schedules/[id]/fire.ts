@@ -11,6 +11,7 @@
 import { requireAdmin, isResponse } from '../../../_shared/auth';
 import { handlePreflight, corsHeaders } from '../../../_shared/cors';
 import { logError } from '../../../_shared/platformConfig';
+import { webHandler } from '../../../_shared/webHandler';
 
 type ScheduleRow = {
   id: string;
@@ -50,7 +51,7 @@ function resolvePrompt(template: string, topic: string | null): string {
     .replace(/\{date\}/g, date);
 }
 
-export default async function handler(req: Request): Promise<Response> {
+export default webHandler(async (req: Request): Promise<Response> => {
   const pf = handlePreflight(req);
   if (pf) return pf;
 
@@ -150,4 +151,4 @@ export default async function handler(req: Request): Promise<Response> {
       ...corsHeaders(origin),
     },
   });
-}
+});

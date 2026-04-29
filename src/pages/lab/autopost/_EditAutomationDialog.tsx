@@ -343,10 +343,9 @@ export function EditAutomationDialog({
             )}
 
             {draft.delivery_method === 'library_only' && (
-              <div className="rounded-md border border-white/8 bg-white/[0.02] px-3 py-2 text-[11.5px] leading-[1.5] text-[#ECEAE4] flex items-start gap-2">
-                <FolderHeart className="w-3.5 h-3.5 text-[#11C4D0] mt-0.5 shrink-0" />
-                <span>Videos will appear in your Run History only — nothing is published or emailed.</span>
-              </div>
+              <p className="text-[11px] text-[#5A6268] leading-[1.5] pl-1">
+                Note: videos will appear in your Run History only — nothing is published or emailed.
+              </p>
             )}
           </div>
 

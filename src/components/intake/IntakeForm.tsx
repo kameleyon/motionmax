@@ -660,7 +660,11 @@ export default function IntakeForm({
               : [],
             delivery_method: scheduleState.deliveryMethod,
             email_recipients: scheduleState.emailRecipients,
-            caption_template: enrichedContent.slice(0, 200),
+            // Default caption is intentionally tiny — the prompt is the
+            // generation instruction, the caption is what gets posted
+            // ALONGSIDE each video. User edits it later via the Edit
+            // dialog. {topic} interpolates the queued topic for that run.
+            caption_template: '{topic}',
             hashtags: [],
             ai_disclosure: true,
             // Shadow copy — frozen creative prefs the worker reads on

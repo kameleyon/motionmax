@@ -23,13 +23,17 @@
  */
 
 import { writeSystemLog } from "../lib/logger.js";
-import { callOpenRouterLLM } from "../services/openrouter.js";
+import { callGemini } from "../services/geminiNative.js";
 
 interface GenerateTopicsPayload {
   prompt: string;
   styleId?: string;
   count?: number;
   existingTopics?: string[];
+  /** Pre-processed source attachments string (text files inlined,
+   *  URL/YouTube/GitHub markers, image URLs). Comes from the intake's
+   *  processAttachments() before the worker job is queued. */
+  sources?: string;
 }
 
 export interface GenerateTopicsResult {
@@ -86,15 +90,19 @@ export async function handleGenerateTopics(
 
   const todayHuman = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
 
+  const sourcesBlock = (typeof payload.sources === "string" && payload.sources.trim().length > 0)
+    ? `\n\nUser-provided sources (treat as PRIMARY references — do not drift away from these):\n${payload.sources.trim()}`
+    : "";
+
   const systemPrompt = `You are a content strategist who generates compelling clickbait topic titles.
 Stay strictly on the requested subject and reject off-topic themes.`;
 
   const userPrompt = `Today is ${todayHuman}.
 
-Research everything related to the topic requested below — and ONLY that topic. Use any source URLs or material the user provides as primary references. Do not drift into adjacent or unrelated subjects.
+Use Google Search to research everything related to the topic requested below — and ONLY that topic. Pull the most current, factually accurate information. Use any source URLs or material the user provides as primary references. Do not drift into adjacent or unrelated subjects.
 
 Topic:
-${seedPrompt}
+${seedPrompt}${sourcesBlock}
 ${exclusionBlock}
 
 Generate exactly ${count} unique, SHORT, clickbait-worthy titles based on the inputs above.
@@ -107,7 +115,8 @@ Requirements:
 - Titles MUST be directly relevant to the requested subject
 - Vary the format: provocative statements, questions, revelations, challenges
 
-Output strictly as JSON: {"topics": ["topic1", "topic2", ...]}`;
+Return ONLY valid JSON in this exact shape (no prose, no code fences):
+{"topics": ["title 1", "title 2", "..."]}`;
 
   await writeSystemLog({
     jobId, userId,
@@ -117,18 +126,20 @@ Output strictly as JSON: {"topics": ["topic1", "topic2", ...]}`;
     details: { count, existingCount: existing.length, styleId: payload.styleId ?? null },
   });
 
-  const raw = await callOpenRouterLLM(
-    { system: systemPrompt, user: userPrompt },
-    {
-      // Claude Sonnet 4.6 — better factual grounding for dated topics
-      // (astrology, news, holidays) than Gemini Flash. Same default
-      // model used by buildCinematic / buildDoc2Video.
-      model: "anthropic/claude-sonnet-4.6",
-      maxTokens: 2000,
-      temperature: 0.85,
-      forceJson: true,
-    },
-  );
+  // Native Google Gemini API with googleSearch tool — gives us live
+  // web-grounded responses, the only way the model can produce real
+  // current-year astrology / news / event dates instead of fabricating
+  // them from training data. JSON mode is incompatible with the
+  // search tool on Google's API, so the model returns prose-with-JSON
+  // that extractJson() unwraps.
+  const raw = await callGemini({
+    system: systemPrompt,
+    user: userPrompt,
+    enableSearch: true,
+    temperature: 0.85,
+    maxTokens: 4000, // search-grounded responses are wordier
+    timeoutMs: 90_000, // search calls can take 20-40s
+  });
 
   let parsed: { topics?: unknown };
   try {

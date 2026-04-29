@@ -181,7 +181,7 @@ export default function IntakeRail({
    *  can branch on whether to insert into projects vs autopost_schedules. */
   scheduleState?: ScheduleState;
   onScheduleChange?: (s: ScheduleState) => void;
-  intakeSummary?: { prompt: string; styleId: string; aspect: string; voice: string };
+  intakeSummary?: { prompt: string; styleId: string; aspect: string; voice: string; sourceAttachments?: import('@/components/workspace/SourceInput').SourceAttachment[] };
 }) {
   const { user } = useAuth();
 

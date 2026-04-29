@@ -19,7 +19,7 @@ interface LogPayload {
 interface ApiCallPayload {
   userId?: string;
   generationId?: string;
-  provider: "openrouter" | "hypereal" | "elevenlabs" | "replicate" | "google_tts" | "fish_audio" | "lemonfox" | "qwen3" | "smallest";
+  provider: "openrouter" | "hypereal" | "elevenlabs" | "replicate" | "google_tts" | "google" | "fish_audio" | "lemonfox" | "qwen3" | "smallest";
   model: string;
   status: "success" | "error";
   queueTimeMs?: number;

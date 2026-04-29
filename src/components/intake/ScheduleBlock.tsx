@@ -45,7 +45,7 @@ export interface ScheduleBlockProps {
   enabled: boolean;
   onChange: (s: ScheduleState) => void;
   /** Read by the topic-generation worker as the seed for ideation. */
-  intakeSummary: { prompt: string; styleId: string; aspect: string; voice: string };
+  intakeSummary: { prompt: string; styleId: string; aspect: string; voice: string; sourceAttachments?: import('@/components/workspace/SourceInput').SourceAttachment[] };
   /** Whole-block visibility gate — soft launch is admins only. */
   isAdmin: boolean;
 }
@@ -205,6 +205,14 @@ export default function ScheduleBlock({
     }
     setGeneratingTopics(true);
     try {
+      // Enrich the prompt with whatever the user attached (text files +
+      // images already-inlined, URLs/YouTube/GitHub passed as markers
+      // for the worker to fetch). If nothing was attached, this is "".
+      const { processAttachments } = await import('@/lib/attachmentProcessor');
+      const sources = intakeSummary.sourceAttachments && intakeSummary.sourceAttachments.length > 0
+        ? await processAttachments(intakeSummary.sourceAttachments)
+        : '';
+
       const { data: job, error } = await supabase
         .from('video_generation_jobs')
         .insert({
@@ -215,6 +223,7 @@ export default function ScheduleBlock({
             prompt: intakeSummary.prompt.trim(),
             styleId: intakeSummary.styleId,
             count: 15,
+            sources,
             // On regenerate we pass the previous batch so the worker
             // can dedup. Empty array on first run.
             existingTopics: generatedTopics,

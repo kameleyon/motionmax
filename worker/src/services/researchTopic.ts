@@ -1,16 +1,21 @@
 /**
- * AI-powered topic research using Hypereal + Gemini 3.1 Pro.
+ * AI-powered topic research using Google's native Gemini API
+ * (gemini-3.1-pro-preview by default) with the `googleSearch` tool
+ * enabled — so the brief is grounded on live web results rather than
+ * stale training data.
  *
- * Generates a factual research brief about a topic before script generation.
- * The research brief covers: key facts, character descriptions (race, gender,
- * ethnicity, appearance), historical/cultural context, geography, clothing,
- * and any verifiable details needed for accurate visual representation.
+ * Generates a factual research brief about a topic before script
+ * generation. Covers key facts, character descriptions (race, gender,
+ * ethnicity, appearance), historical/cultural context, geography,
+ * clothing, and verifiable details needed for accurate visual rep.
  *
- * This runs as a lightweight pre-pass before the main script generation.
- * Uses Gemini 3.1 Pro via Hypereal (1M context, $0.80/M input, $4.80/M output).
+ * Set GEMINI_API_KEY on the worker; optionally GEMINI_MODEL to override
+ * the model id. Falls back gracefully (returns "") if the key is
+ * missing so old projects without the env var still build.
  */
 
 import { writeApiLog } from "../lib/logger.js";
+import { callGemini } from "./geminiNative.js";
 
 // Built at request time with current date injected — see buildResearchPrompt()
 function buildResearchPrompt(): string {
@@ -65,81 +70,47 @@ Return your research as a structured brief in plain text (NOT JSON). Use section
  * Returns a research brief string to inject into the script prompt.
  */
 export async function researchTopic(content: string): Promise<string> {
-  const apiKey = process.env.HYPEREAL_API_KEY;
-  if (!apiKey) {
-    console.warn("[Research] HYPEREAL_API_KEY not set — skipping research");
+  if (!process.env.GEMINI_API_KEY) {
+    console.warn("[Research] GEMINI_API_KEY not set — skipping web-grounded research");
     return "";
   }
 
-  console.log(`[Research] Starting topic research via Gemini 3.1 Pro (${content.length} chars input)`);
+  console.log(`[Research] Starting topic research via Gemini 3.1 Pro Preview + googleSearch (${content.length} chars input)`);
   const startTime = Date.now();
 
+  // Extract image URLs from content for multimodal research
+  const imageUrls: string[] = [];
+  const imagePattern = /\[SOURCE IMAGE\]\s*(https?:\/\/[^\s]+)/g;
+  let match;
+  while ((match = imagePattern.exec(content)) !== null) {
+    imageUrls.push(match[1]);
+  }
+
+  // Truncate at 50K chars to stay well under request size limits
+  // (Gemini Pro context is 1M+ tokens but the API rejects large bodies)
+  const userText = `Research this topic for an AI-generated cinematic video. Use Google Search to pull current, factually accurate information — appearances, dates, events, rosters, releases. Cite where it matters.\n\n${content.substring(0, 50000)}`;
+
+  if (imageUrls.length > 0) {
+    console.log(`[Research] Including ${imageUrls.length} attached image URL(s) for multimodal grounding`);
+  }
+
   try {
-    // Extract image URLs from content for multimodal research
-    const imageUrls: string[] = [];
-    const imagePattern = /\[SOURCE IMAGE\]\s*(https?:\/\/[^\s]+)/g;
-    let match;
-    while ((match = imagePattern.exec(content)) !== null) {
-      imageUrls.push(match[1]);
-    }
-
-    // Build user message — include full content (Gemini has 1M context)
-    // Truncate at 50K chars to stay within reasonable request size
-    const userText = `Research this topic for an AI-generated cinematic video:\n\n${content.substring(0, 50000)}`;
-
-    // Build multimodal content parts if images are attached
-    let userContent: any;
-    if (imageUrls.length > 0) {
-      // Multimodal: text + image URLs for Gemini to analyze
-      userContent = [
-        { type: "text", text: userText },
-        ...imageUrls.slice(0, 5).map(url => ({
-          type: "image_url",
-          image_url: { url },
-        })),
-      ];
-      console.log(`[Research] Sending ${imageUrls.length} images for multimodal analysis`);
-    } else {
-      userContent = userText;
-    }
-
-    // Hypereal chat API follows OpenAI format: system + user messages
-    const res = await fetch("https://api.hypereal.cloud/v1/chat", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gemini-3.1-fast",
-        max_tokens: 3000,
-        temperature: 0.3,
-        stream: false,
-        messages: [
-          { role: "system", content: buildResearchPrompt() },
-          { role: "user", content: userContent },
-        ],
-      }),
-      signal: AbortSignal.timeout(60_000), // 60s max for research
+    const brief = await callGemini({
+      system: buildResearchPrompt(),
+      user: userText,
+      imageUrls,
+      enableSearch: true,
+      temperature: 0.3,
+      maxTokens: 4000,
+      timeoutMs: 90_000,
     });
-
-    if (!res.ok) {
-      const body = await res.text();
-      console.warn(`[Research] Hypereal error ${res.status}: ${body.substring(0, 200)}`);
-      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-fast", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: `Hypereal error ${res.status}` }).catch((err) => { console.warn('[Research] background log failed:', (err as Error).message); });
-      return "";
-    }
-
-    const data = (await res.json()) as any;
-    const brief = data.choices?.[0]?.message?.content || "";
     const elapsed = Date.now() - startTime;
-
-    console.log(`[Research] Complete (${brief.length} chars, ${(elapsed / 1000).toFixed(1)}s, credits: ${data.creditsUsed ?? "?"})`);
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-fast", status: "success", totalDurationMs: elapsed, cost: 0, error: undefined }).catch((err) => { console.warn('[Research] background log failed:', (err as Error).message); });
+    console.log(`[Research] Complete (${brief.length} chars, ${(elapsed / 1000).toFixed(1)}s)`);
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "google", model: "gemini-3.1-pro-preview", status: "success", totalDurationMs: elapsed, cost: 0, error: undefined }).catch((err) => { console.warn('[Research] background log failed:', (err as Error).message); });
     return brief;
   } catch (err) {
     console.warn(`[Research] Failed: ${(err as Error).message} — continuing without research`);
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-fast", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: (err as Error).message }).catch((err) => { console.warn('[Research] background log failed:', (err as Error).message); });
+    writeApiLog({ userId: undefined, generationId: undefined, provider: "google", model: "gemini-3.1-pro-preview", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: (err as Error).message }).catch((err) => { console.warn('[Research] background log failed:', (err as Error).message); });
     return "";
   }
 }

@@ -459,7 +459,7 @@ export default function ScheduleBlock({
             >
               {generatingTopics ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <Loader2 className="w-4 h-4 mr-2 autopost-spin" />
                   Generating…
                 </>
               ) : generatedTopics.length > 0 ? (
@@ -599,7 +599,7 @@ export default function ScheduleBlock({
               </div>
               {accountsQuery.isLoading && (
                 <div className="text-[12px] text-[#8A9198] flex items-center gap-2">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Loader2 className="w-3.5 h-3.5 autopost-spin" />
                   Loading connected accounts…
                 </div>
               )}

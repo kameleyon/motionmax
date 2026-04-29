@@ -109,6 +109,13 @@ async function setRunStatus(runId: string, status: string, extra: Record<string,
     .eq("id", runId);
 }
 
+async function setRunProgress(runId: string, pct: number): Promise<void> {
+  await supabase
+    .from("autopost_runs")
+    .update({ progress_pct: Math.max(0, Math.min(100, Math.round(pct))) })
+    .eq("id", runId);
+}
+
 async function submitJob(
   userId: string,
   taskType: string,
@@ -200,6 +207,7 @@ export async function handleAutopostRun(
   const projectId = randomUUID();
 
   await setRunStatus(runId, "generating");
+  await setRunProgress(runId, 5);
 
   // Insert the projects row up front. Two reasons:
   //   1. video_generation_jobs.project_id has a FK to projects(id), so
@@ -273,6 +281,7 @@ export async function handleAutopostRun(
   if (!generationId || sceneCount < 1) {
     throw new Error(`autopost_render: script result missing generationId/sceneCount (${JSON.stringify(scriptResult).slice(0, 200)})`);
   }
+  await setRunProgress(runId, 25);
 
   // Phase 2 — submit all subsequent jobs with depends_on chains. The
   // worker handles dependency resolution itself, so we only need to wait
@@ -329,8 +338,10 @@ export async function handleAutopostRun(
     { phase: "finalize", generationId, projectId },
     finalizeDeps,
   );
+  await setRunProgress(runId, 35);
 
   await waitForJob(finalizeJobId, PHASE_TIMEOUT_MS, "finalize_generation");
+  await setRunProgress(runId, 80);
 
   // Phase 3 — Export. Stitches scenes into the final mp4 the publishers
   // and email handler can hand off as a URL.
@@ -352,6 +363,7 @@ export async function handleAutopostRun(
   if (!finalUrl) {
     throw new Error("autopost_render: export_video result missing finalUrl");
   }
+  await setRunProgress(runId, 100);
 
   // Tag the autopost_run with this autopost_render job id so the publish
   // dispatcher can look up finalUrl by run.video_job_id. The trigger

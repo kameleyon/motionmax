@@ -21,13 +21,18 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Image as ImageIcon, Inbox, Plus, RefreshCw } from "lucide-react";
+import { Image as ImageIcon, Inbox, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { LabLayout } from "../_LabLayout";
 import { AutopostNav } from "./_AutopostNav";
 import {
@@ -49,6 +54,7 @@ interface RunRow {
   topic: string | null;
   thumbnail_url: string | null;
   error_summary: string | null;
+  progress_pct: number | null;
   schedule: { name: string } | null;
   publish_jobs: Array<{ platform: string; status: string }>;
 }
@@ -106,7 +112,7 @@ export default function RunHistory() {
       let query = supabase
         .from("autopost_runs")
         .select(
-          "id, fired_at, status, schedule_id, topic, thumbnail_url, error_summary, schedule:autopost_schedules(name), publish_jobs:autopost_publish_jobs(platform, status)",
+          "id, fired_at, status, schedule_id, topic, thumbnail_url, error_summary, progress_pct, schedule:autopost_schedules(name), publish_jobs:autopost_publish_jobs(platform, status)",
         )
         .order("fired_at", { ascending: false })
         .limit(page * PAGE_SIZE);
@@ -156,6 +162,26 @@ export default function RunHistory() {
     (id: string) => navigate(`/lab/autopost/runs/${id}`),
     [navigate],
   );
+
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  async function performDelete() {
+    if (!pendingDeleteId) return;
+    setIsDeleting(true);
+    const { error } = await supabase
+      .from("autopost_runs")
+      .delete()
+      .eq("id", pendingDeleteId);
+    setIsDeleting(false);
+    if (error) {
+      toast.error(`Couldn't delete run: ${error.message}`);
+      return;
+    }
+    toast.success("Run deleted");
+    setPendingDeleteId(null);
+    queryClient.invalidateQueries({ queryKey: ["autopost", "runs"] });
+  }
 
   return (
     <LabLayout
@@ -277,7 +303,11 @@ export default function RunHistory() {
                 <ul className="divide-y divide-white/5">
                   {group.runs.map(run => (
                     <li key={run.id}>
-                      <RunListItem run={run} onClick={() => handleRowClick(run.id)} />
+                      <RunListItem
+                        run={run}
+                        onClick={() => handleRowClick(run.id)}
+                        onDelete={(id) => setPendingDeleteId(id)}
+                      />
                     </li>
                   ))}
                 </ul>
@@ -300,16 +330,59 @@ export default function RunHistory() {
           )}
         </div>
       )}
+
+      <AlertDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
+      >
+        <AlertDialogContent className="bg-[#10151A] border-white/10 text-[#ECEAE4]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this run?</AlertDialogTitle>
+            <AlertDialogDescription className="text-[#8A9198]">
+              The run row, its publish jobs, and its thumbnail will be removed
+              permanently. The rendered video itself stays in your library — only
+              the autopost history entry is deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              className="border-white/10 bg-transparent text-[#ECEAE4] hover:bg-white/5"
+              disabled={isDeleting}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={performDelete}
+              disabled={isDeleting}
+              className="bg-[#F47272] text-[#0A0D0F] hover:bg-[#F47272]/90"
+            >
+              {isDeleting ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </LabLayout>
   );
 }
 
-function RunListItem({ run, onClick }: { run: RunRow; onClick: () => void }) {
+function RunListItem({
+  run,
+  onClick,
+  onDelete,
+}: {
+  run: RunRow;
+  onClick: () => void;
+  onDelete: (id: string) => void;
+}) {
   return (
-    <button
-      type="button"
+    <div
+      className="group flex w-full items-center gap-3 px-3 py-3 transition-colors hover:bg-white/[0.03] sm:gap-4 sm:px-4 cursor-pointer"
       onClick={onClick}
-      className="group flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-white/[0.03] sm:gap-4 sm:px-4"
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); }
+      }}
     >
       {/* Thumbnail — 90×160 mobile, 180×320 max desktop. aspect 9:16. */}
       <div className="shrink-0 overflow-hidden rounded-md bg-black/40 border border-white/8 w-[60px] h-[107px] sm:w-[90px] sm:h-[160px]">
@@ -349,12 +422,27 @@ function RunListItem({ run, onClick }: { run: RunRow; onClick: () => void }) {
             <PlatformPill key={`${j.platform}-${i}`} platform={j.platform} status={j.status} />
           ))}
         </div>
-        {isRunStatusActive(run.status) && <RunProgressBar className="mt-1.5" />}
+        {isRunStatusActive(run.status) && (
+          <RunProgressBar value={run.progress_pct} className="mt-1.5" />
+        )}
         {run.error_summary && run.status === "failed" && (
           <p className="text-[11px] text-[#F47272] line-clamp-1">{run.error_summary}</p>
         )}
       </div>
-    </button>
+
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete(run.id);
+        }}
+        className="ml-1 shrink-0 self-start rounded-md p-2 text-[#5A6268] opacity-0 transition-opacity hover:bg-[#F47272]/10 hover:text-[#F47272] group-hover:opacity-100 focus:opacity-100"
+        aria-label="Delete run"
+        title="Delete run"
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
+    </div>
   );
 }
 

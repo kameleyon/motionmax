@@ -284,6 +284,23 @@
   animation: shimmer 2s linear infinite;
 }
 
+/*
+ * Explicit autopost spinner. Tailwind's animate-spin is theoretically
+ * available, but we hit at least one user-visible case where it
+ * looked frozen (likely a browser extension blocking utility-class
+ * keyframes or a stale CSS bundle). Defining our own keyframe + class
+ * bypasses any such conflict and makes the loader unambiguously
+ * animated.
+ */
+@keyframes autopost-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.autopost-spin {
+  animation: autopost-spin 1s linear infinite;
+  transform-origin: 50% 50%;
+}
+
 /* ══════════════════════════════════════════════════════
    TYPOGRAPHY SYSTEM
    Codified type scale for consistent hierarchy.

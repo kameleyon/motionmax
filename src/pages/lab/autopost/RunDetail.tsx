@@ -23,12 +23,16 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown, ChevronRight, ExternalLink, Image as ImageIcon, Play, RefreshCw,
-  Pencil,
+  Pencil, Trash2,
 } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { isFlagOn } from "@/lib/featureFlags";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -89,8 +93,10 @@ const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled"]);
 
 export default function RunDetail() {
   const { id = "" } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [promptOpen, setPromptOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const runQuery = useQuery<RunDetailRow | null>({
     queryKey: ["autopost", "run", id],
@@ -188,6 +194,22 @@ export default function RunDetail() {
       supabase.removeChannel(channel);
     };
   }, [id, queryClient]);
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      if (!id) return;
+      const { error } = await supabase.from("autopost_runs").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Run deleted");
+      queryClient.invalidateQueries({ queryKey: ["autopost", "runs"] });
+      navigate("/lab/autopost/runs");
+    },
+    onError: (e: Error) => {
+      toast.error(`Couldn't delete run: ${e.message}`);
+    },
+  });
 
   const retryMutation = useMutation({
     mutationFn: async (jobId: string) => {
@@ -336,6 +358,16 @@ export default function RunDetail() {
                         </Link>
                       </Button>
                     )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setConfirmDelete(true)}
+                      disabled={deleteMutation.isPending}
+                      className="border-[#F47272]/30 bg-transparent text-[#F47272] hover:bg-[#F47272]/10"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                      Delete run
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -437,6 +469,33 @@ export default function RunDetail() {
           </Card>
         </>
       )}
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent className="bg-[#10151A] border-white/10 text-[#ECEAE4]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this run?</AlertDialogTitle>
+            <AlertDialogDescription className="text-[#8A9198]">
+              This removes the autopost history entry, its publish jobs, and its
+              thumbnail. The rendered video itself stays in your library.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              className="border-white/10 bg-transparent text-[#ECEAE4] hover:bg-white/5"
+              disabled={deleteMutation.isPending}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteMutation.mutate()}
+              disabled={deleteMutation.isPending}
+              className="bg-[#F47272] text-[#0A0D0F] hover:bg-[#F47272]/90"
+            >
+              {deleteMutation.isPending ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </LabLayout>
   );
 }

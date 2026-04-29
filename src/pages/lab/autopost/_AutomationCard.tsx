@@ -139,7 +139,7 @@ function IconButton({
           )}
         >
           {loading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="h-4 w-4 autopost-spin" />
           ) : (
             <Icon className="h-4 w-4" />
           )}
@@ -342,7 +342,7 @@ export function AutomationCard({ schedule, lastRunAt }: AutomationCardProps) {
               className="bg-[#F47272] text-[#0A0D0F] hover:bg-[#F47272]/90"
             >
               {deleteMutation.isPending ? (
-                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                <Loader2 className="h-4 w-4 mr-1.5 autopost-spin" />
               ) : null}
               Delete
             </AlertDialogAction>

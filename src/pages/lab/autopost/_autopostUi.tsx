@@ -152,34 +152,67 @@ export function StatusPill({
       )}
       style={{ color: tone.text, backgroundColor: tone.bg, borderColor: tone.border }}
     >
-      {active && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+      {active && <Loader2 className="h-3.5 w-3.5 autopost-spin" aria-hidden="true" />}
       {status}
     </span>
   );
 }
 
 /**
- * Indeterminate progress bar shown under any run row that is still in
- * flight. Reuses the .animate-shimmer keyframe defined in src/index.css
- * — a translucent slice slides across the track until status changes.
+ * Progress bar shown under any run row that is still in flight.
+ *
+ * Two modes, picked by the `value` prop:
+ *   - number 0..100  → determinate. Aqua bar fills proportionally with
+ *                      a small "X%" label on the right.
+ *   - null/undefined → indeterminate. Translucent slice slides across
+ *                      the track via the .animate-shimmer keyframe.
+ *
+ * The autopost worker pushes coarse waypoints to autopost_runs.progress
+ * _pct (5 / 25 / 35 / 80 / 100). Old rows or freshly queued ones have
+ * null and fall back to the shimmer.
  */
-export function RunProgressBar({ className }: { className?: string }) {
+export function RunProgressBar({
+  value,
+  className,
+}: {
+  value?: number | null;
+  className?: string;
+}) {
+  const determinate = typeof value === "number" && Number.isFinite(value);
+  const pct = determinate ? Math.max(0, Math.min(100, Math.round(value!))) : 0;
   return (
     <div
-      className={cn(
-        "h-0.5 w-full overflow-hidden rounded-full bg-white/[0.04]",
-        className,
-      )}
-      aria-label="Generation in progress"
+      className={cn("flex items-center gap-2", className)}
       role="progressbar"
       aria-busy="true"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={determinate ? pct : undefined}
+      aria-label="Generation in progress"
     >
-      <div
-        className="h-full w-1/3 animate-shimmer rounded-full"
-        style={{
-          background: "linear-gradient(90deg, transparent, #11C4D0, transparent)",
-        }}
-      />
+      <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
+        {determinate ? (
+          <div
+            className="h-full rounded-full transition-[width] duration-700 ease-out"
+            style={{
+              width: `${pct}%`,
+              background: "linear-gradient(90deg, #11C4D0, #5BE3EE)",
+            }}
+          />
+        ) : (
+          <div
+            className="h-full w-1/3 animate-shimmer rounded-full"
+            style={{
+              background: "linear-gradient(90deg, transparent, #11C4D0, transparent)",
+            }}
+          />
+        )}
+      </div>
+      {determinate && (
+        <span className="text-[10px] font-mono text-[#8A9198] tabular-nums shrink-0 w-9 text-right">
+          {pct}%
+        </span>
+      )}
     </div>
   );
 }

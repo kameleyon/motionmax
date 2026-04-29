@@ -16,9 +16,10 @@
  * `existingTopics`. We pass that into the system prompt as an
  * exclusion list so the model dedups across requests.
  *
- * Model choice: Gemini 2.5 Flash via OpenRouter. Cheap (~$0.075/1M
- * input, $0.30/1M output) and fast enough that the 30s polling cap
- * is plenty of headroom even on a cold cache.
+ * Model choice: Claude Sonnet 4.6 via OpenRouter. More accurate on
+ * dated/factual angles than Gemini Flash (which fabricated wrong
+ * astronomy dates). Slightly slower + pricier but the 30s polling
+ * window still has plenty of headroom.
  */
 
 import { writeSystemLog } from "../lib/logger.js";
@@ -109,10 +110,10 @@ Output strictly as JSON: {"topics": ["topic1", "topic2", ...]}${exclusionBlock}`
   const raw = await callOpenRouterLLM(
     { system: systemPrompt, user: seedPrompt },
     {
-      // Gemini 2.5 Flash is fast + cheap. If OpenRouter cannot route
-      // to Google (rare), the call wrapper throws and the worker's
-      // generic transient-retry kicks in.
-      model: "google/gemini-2.5-flash",
+      // Claude Sonnet 4.6 — better factual grounding for dated topics
+      // (astrology, news, holidays) than Gemini Flash. Same default
+      // model used by buildCinematic / buildDoc2Video.
+      model: "anthropic/claude-sonnet-4.6",
       maxTokens: 2000,
       temperature: 0.85,
       forceJson: true,

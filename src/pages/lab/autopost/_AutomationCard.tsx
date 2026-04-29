@@ -12,10 +12,12 @@
  *   active=true + empty topic_pool        → gray "Out of topics"
  *   active=false (and any topic state)    → yellow "Paused"
  *
- * The "Run now" action POSTs to /api/autopost/schedules/{id}/fire which
- * inserts a queued autopost_runs row; the worker dispatcher picks it up
- * on the next tick. Realtime invalidation in AutopostHome refreshes
- * Last Run / Next Run automatically.
+ * The "Run now" action inserts a queued autopost_runs row directly via
+ * supabase-js. RLS (admins-insert-runs-for-own-schedules) enforces the
+ * ownership + admin gate. The worker dispatcher polls
+ * autopost_runs.status='queued' and picks it up on its next tick.
+ * Realtime invalidation in AutopostHome refreshes Last Run / Next Run
+ * automatically.
  */
 
 import { useState, useMemo } from "react";
@@ -36,7 +38,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { humanizeCron, formatRelativeTime } from "./_utils";
+import { humanizeCron, formatRelativeTime, resolvePrompt } from "./_utils";
 import { EditAutomationDialog } from "./_EditAutomationDialog";
 import { GenerateTopicsDialog } from "./_GenerateTopicsDialog";
 import { UpdateScheduleDialog } from "./_UpdateScheduleDialog";
@@ -97,11 +99,6 @@ function estimateCredits(s: AutomationSchedule): string {
 function countdown(iso: string | null | undefined): string {
   if (!iso) return "—";
   return formatRelativeTime(iso);
-}
-
-async function getJwt(): Promise<string | null> {
-  const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
 }
 
 interface IconButtonProps {
@@ -180,46 +177,21 @@ export function AutomationCard({ schedule, lastRunAt }: AutomationCardProps) {
 
   const fireMutation = useMutation({
     mutationFn: async () => {
-      const jwt = await getJwt();
-      if (!jwt) throw new Error("Not signed in");
-      // No request body — do NOT send `content-type: application/json`
-      // (otherwise Vercel's runtime spins up a JSON body parser for an
-      // empty payload and the function 500s before our handler runs).
-      const res = await fetch(
-        `/api/autopost/schedules/${schedule.id}/fire`,
-        {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${jwt}`,
-            accept: "application/json",
-          },
-        },
-      );
-      if (!res.ok) {
-        // Read as text first; the body may be Vercel's HTML error page
-        // (FUNCTION_INVOCATION_FAILED etc.) rather than our JSON.
-        // Surfacing a snippet beats showing "Fire failed (500)".
-        const raw = await res.text().catch(() => "");
-        let parsed: Record<string, unknown> = {};
-        try { parsed = JSON.parse(raw); } catch { /* not JSON */ }
-        // Some error fields end up as nested objects (Postgres errors,
-        // Supabase auth errors), so coerce to string and skip
-        // "[object Object]" before falling back.
-        const stringy = (v: unknown): string => {
-          if (typeof v === "string") return v;
-          if (v && typeof v === "object") {
-            try { return JSON.stringify(v); } catch { return ""; }
-          }
-          return "";
-        };
-        const detail =
-          stringy(parsed.message)
-          || stringy(parsed.error)
-          || raw.slice(0, 200).trim()
-          || res.statusText
-          || "unknown error";
-        throw new Error(`Fire failed (${res.status}): ${detail}`);
-      }
+      const pool = schedule.topic_pool ?? [];
+      const topic = pool.length > 0
+        ? pool[Math.floor(Math.random() * pool.length)] ?? null
+        : null;
+      const promptResolved = resolvePrompt(schedule.prompt_template, topic);
+
+      const { error } = await supabase
+        .from("autopost_runs")
+        .insert({
+          schedule_id: schedule.id,
+          topic,
+          prompt_resolved: promptResolved,
+          status: "queued",
+        });
+      if (error) throw new Error(error.message);
     },
     onSuccess: () => {
       toast.success("Run queued — check Run History in a moment");

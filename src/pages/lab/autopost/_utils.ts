@@ -94,6 +94,21 @@ export function humanizeCron(cron: string, tz?: string): string {
   const clock = formatClockHour(hour, minute);
   const at = clock ? ` at ${clock}${tzLabel ? ` ${tzLabel}` : ""}` : "";
 
+  // Sub-hour intervals — must match BEFORE the daily check, otherwise
+  // "*/15 * * * *" gets labelled "Daily" because dom/month/dow are all "*".
+  if (dom === "*" && month === "*" && dow === "*" && hour === "*") {
+    const stepMin = minute.match(/^\*\/(\d+)$/);
+    if (stepMin) return `Every ${stepMin[1]} minutes`;
+    if (minute === "0") return "Hourly";
+    if (minute === "*") return "Every minute";
+  }
+
+  // Multi-hour intervals: "0 */N * * *"
+  if (dom === "*" && month === "*" && dow === "*" && minute === "0") {
+    const stepHr = hour.match(/^\*\/(\d+)$/);
+    if (stepHr) return `Every ${stepHr[1]} hours`;
+  }
+
   // Daily: 0 9 * * *
   if (dom === "*" && month === "*" && dow === "*") return `Daily${at}`;
   // Weekdays: * * * * 1-5 or 1,2,3,4,5
@@ -208,6 +223,34 @@ export function nextNFiresFromCron(
     cursor = next;
   }
   return out;
+}
+
+/* ────────────────────────────────────────────────────────────── */
+/* Prompt template substitution                                    */
+/* ────────────────────────────────────────────────────────────── */
+
+/**
+ * Client-side mirror of the SQL `autopost_resolve_prompt` function.
+ * Used for the manual "Run now" path which inserts a queued autopost_runs
+ * row directly via supabase-js — pg_cron's tick path uses the SQL
+ * version; both produce the same string.
+ *
+ * Substitutes:
+ *   {topic} → topic (or "" if null)
+ *   {date}  → "Apr 29, 2026" (locale: en-US)
+ *   {day}   → "Wednesday"
+ */
+export function resolvePrompt(template: string, topic: string | null): string {
+  const now = new Date();
+  const date = now.toLocaleDateString("en-US", {
+    month: "short", day: "2-digit", year: "numeric",
+  });
+  const day = now.toLocaleDateString("en-US", { weekday: "long" });
+  return template
+    .replace(/\{topic\}/g, topic ?? "")
+    .replace(/\{date\}/g, date)
+    .replace(/\{day\}/g, day)
+    .trim();
 }
 
 /* ────────────────────────────────────────────────────────────── */

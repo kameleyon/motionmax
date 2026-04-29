@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { isFlagOn } from '@/lib/featureFlags';
 import { useUserClones, resolveVoiceForProject } from "@/hooks/useUserClones";
 import { INTERVAL_TO_CRON } from './_scheduleConstants';
+import { nextFireFromCron } from '@/pages/lab/autopost/_utils';
 import type { ScheduleState } from './ScheduleBlock';
 import {
   getDefaultSpeaker,
@@ -649,10 +650,17 @@ export default function IntakeForm({
             resolution,
             cron_expression: cronExpr,
             timezone: 'UTC',
-            // First fire is one minute out so pg_cron's next tick picks
-            // it up — keeps the round-trip to "I see something happen"
-            // under 90 seconds for the demo.
-            next_fire_at: new Date(Date.now() + 60_000).toISOString(),
+            // Compute the FIRST matching slot for the chosen cron (UTC).
+            // The previous hardcoded NOW+60s meant a "Daily at 9am"
+            // schedule still pretended to fire in a minute, then drifted
+            // into the past once pg_cron's autopost_tick advanced past
+            // it. Worker re-stamps next_fire_at after each fire via the
+            // autopost_advance_next_fire RPC, so this is just the first
+            // anchor.
+            next_fire_at: (
+              nextFireFromCron(cronExpr, 'UTC', new Date())
+              ?? new Date(Date.now() + 60_000)
+            ).toISOString(),
             // Only carry the platform IDs when we're actually publishing
             // to social — email/library_only modes leave it empty.
             target_account_ids: scheduleState.deliveryMethod === 'social'

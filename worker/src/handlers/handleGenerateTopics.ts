@@ -45,21 +45,23 @@ const MIN_COUNT = 5;
 const MAX_COUNT = 25;
 
 /**
- * Strip code-fences / leading prose so JSON.parse always sees a
- * valid object even when the model wraps the JSON in ```json ```
- * blocks (some Gemini variants do this despite forceJson: true).
+ * Pull the JSON object out of the model response. Search-grounded
+ * Gemini calls return prose with the JSON embedded somewhere; we
+ * scan from the first { to the LAST matching }. If the response was
+ * truncated (no closing brace), throw a clear error so the caller
+ * can surface a useful retry message instead of a confusing
+ * "Unexpected end of JSON input".
  */
 function extractJson(raw: string): string {
   const trimmed = raw.trim();
-  // Already pure JSON
-  if (trimmed.startsWith("{")) return trimmed;
-  // Fenced block — pull from the first { to the last }
   const firstBrace = trimmed.indexOf("{");
   const lastBrace = trimmed.lastIndexOf("}");
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    return trimmed.slice(firstBrace, lastBrace + 1);
+  if (firstBrace === -1 || lastBrace <= firstBrace) {
+    throw new Error(
+      `model response had no complete JSON object (likely truncated): ${trimmed.slice(0, 200)}…`,
+    );
   }
-  return trimmed;
+  return trimmed.slice(firstBrace, lastBrace + 1);
 }
 
 export async function handleGenerateTopics(
@@ -137,8 +139,12 @@ Return ONLY valid JSON in this exact shape (no prose, no code fences):
     user: userPrompt,
     enableSearch: true,
     temperature: 0.85,
-    maxTokens: 4000, // search-grounded responses are wordier
-    timeoutMs: 90_000, // search calls can take 20-40s
+    // Search-grounded responses include the model's reasoning over the
+    // search hits + citations + the final JSON. 4000 tokens was getting
+    // truncated mid-array ("topics": ...<cutoff>). Bumped well above
+    // worst-case to leave the JSON room to close cleanly.
+    maxTokens: 12_000,
+    timeoutMs: 120_000,
   });
 
   let parsed: { topics?: unknown };

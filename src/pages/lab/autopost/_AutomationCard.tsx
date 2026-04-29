@@ -200,11 +200,21 @@ export function AutomationCard({ schedule, lastRunAt }: AutomationCardProps) {
         // (FUNCTION_INVOCATION_FAILED etc.) rather than our JSON.
         // Surfacing a snippet beats showing "Fire failed (500)".
         const raw = await res.text().catch(() => "");
-        let parsed: { error?: string; message?: string } = {};
+        let parsed: Record<string, unknown> = {};
         try { parsed = JSON.parse(raw); } catch { /* not JSON */ }
+        // Some error fields end up as nested objects (Postgres errors,
+        // Supabase auth errors), so coerce to string and skip
+        // "[object Object]" before falling back.
+        const stringy = (v: unknown): string => {
+          if (typeof v === "string") return v;
+          if (v && typeof v === "object") {
+            try { return JSON.stringify(v); } catch { return ""; }
+          }
+          return "";
+        };
         const detail =
-          parsed.message
-          || parsed.error
+          stringy(parsed.message)
+          || stringy(parsed.error)
           || raw.slice(0, 200).trim()
           || res.statusText
           || "unknown error";

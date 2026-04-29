@@ -82,10 +82,27 @@ export function webHandler(handler: WebHandler) {
       const buf = Buffer.from(await webRes.arrayBuffer());
       res.end(buf);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      // Supabase / pg / Stripe etc. throw plain objects with a `.message`
+      // field but are NOT Error instances, so `String(err)` would yield
+      // the unhelpful "[object Object]". Walk the common shapes first.
+      let message = "unknown error";
+      if (err instanceof Error) {
+        message = err.message;
+      } else if (err && typeof err === "object") {
+        const e = err as Record<string, unknown>;
+        if (typeof e.message === "string") message = e.message;
+        else if (typeof e.error === "string") message = e.error;
+        else if (typeof e.code === "string") message = e.code;
+        else {
+          try { message = JSON.stringify(err); } catch { message = String(err); }
+        }
+      } else if (err !== undefined && err !== null) {
+        message = String(err);
+      }
       console.error(JSON.stringify({
         at: "webHandler.uncaught",
         err: message,
+        raw: err && typeof err === "object" ? Object.keys(err) : undefined,
         stack: err instanceof Error ? err.stack : undefined,
       }));
       if (!res.headersSent) {

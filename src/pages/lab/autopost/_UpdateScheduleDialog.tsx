@@ -134,7 +134,7 @@ export function UpdateScheduleDialog({
         </DialogHeader>
 
         {schedule.active && (
-          <div className="rounded-md border border-[#7BD389]/25 bg-[#7BD389]/[0.06] px-3 py-2 text-[12px] text-[#7BD389] flex items-center gap-2">
+          <div className="rounded-md border border-[#11C4D0]/25 bg-[#11C4D0]/[0.06] px-3 py-2 text-[12px] text-[#11C4D0] flex items-center gap-2">
             <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
             <span>
               Schedule active · Running {intervalMeta?.label.toLowerCase() ?? "on cadence"} · Next run {formatRelativeTime(schedule.next_fire_at)}

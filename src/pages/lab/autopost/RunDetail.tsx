@@ -275,7 +275,7 @@ export default function RunDetail() {
         </Card>
       ) : !runQuery.data ? (
         <Card className="bg-[#10151A] border-white/8">
-          <CardContent className="py-12 text-center text-[13px] text-[#F47272]">
+          <CardContent className="py-12 text-center text-[13px] text-[#E4C875]">
             Run not found (or you don't have access).
           </CardContent>
         </Card>
@@ -327,8 +327,8 @@ export default function RunDetail() {
                   </div>
 
                   {runQuery.data.error_summary && (
-                    <div className="rounded-md border border-[#F47272]/30 bg-[#F47272]/5 px-3 py-2">
-                      <p className="text-[12px] text-[#F47272]">{runQuery.data.error_summary}</p>
+                    <div className="rounded-md border border-[#E4C875]/30 bg-[#E4C875]/5 px-3 py-2">
+                      <p className="text-[12px] text-[#E4C875]">{runQuery.data.error_summary}</p>
                     </div>
                   )}
 
@@ -363,7 +363,7 @@ export default function RunDetail() {
                       variant="outline"
                       onClick={() => setConfirmDelete(true)}
                       disabled={deleteMutation.isPending}
-                      className="border-[#F47272]/30 bg-transparent text-[#F47272] hover:bg-[#F47272]/10"
+                      className="border-[#E4C875]/30 bg-transparent text-[#E4C875] hover:bg-[#E4C875]/10"
                     >
                       <Trash2 className="h-3.5 w-3.5 mr-1.5" />
                       Delete run
@@ -420,9 +420,9 @@ export default function RunDetail() {
                             className="font-mono text-[11px] shrink-0"
                             style={{
                               color:
-                                log.category === "system_error" ? "#F47272"
+                                log.category === "system_error" ? "#E4C875"
                                 : log.category === "system_warning" ? "#E4C875"
-                                : "#7BD389",
+                                : "#11C4D0",
                             }}
                           >
                             {new Date(log.created_at).toLocaleTimeString()}
@@ -489,7 +489,7 @@ export default function RunDetail() {
             <AlertDialogAction
               onClick={() => deleteMutation.mutate()}
               disabled={deleteMutation.isPending}
-              className="bg-[#F47272] text-[#0A0D0F] hover:bg-[#F47272]/90"
+              className="bg-[#E4C875] text-[#0A0D0F] hover:bg-[#E4C875]/90"
             >
               {deleteMutation.isPending ? "Deleting…" : "Delete"}
             </AlertDialogAction>
@@ -561,7 +561,7 @@ function PublishJobPanel({
           <CollapsibleTrigger asChild>
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-md border border-[#F47272]/20 bg-[#F47272]/5 px-2.5 py-1.5 text-left text-[12px] text-[#F47272] hover:bg-[#F47272]/10 transition-colors"
+              className="flex w-full items-center gap-2 rounded-md border border-[#E4C875]/20 bg-[#E4C875]/5 px-2.5 py-1.5 text-left text-[12px] text-[#E4C875] hover:bg-[#E4C875]/10 transition-colors"
             >
               {errOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
               <span className="truncate">
@@ -571,7 +571,7 @@ function PublishJobPanel({
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-2">
-            <pre className="rounded-md border border-white/8 bg-black/40 px-2.5 py-2 text-[11px] text-[#F47272] whitespace-pre-wrap break-words font-mono">
+            <pre className="rounded-md border border-white/8 bg-black/40 px-2.5 py-2 text-[11px] text-[#E4C875] whitespace-pre-wrap break-words font-mono">
               {job.error_code ? `${job.error_code}\n\n` : ""}
               {job.error_message ?? ""}
             </pre>

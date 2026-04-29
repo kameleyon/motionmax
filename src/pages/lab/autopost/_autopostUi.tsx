@@ -119,8 +119,8 @@ const RUN_STATUS_TONE: Record<RunStatus, PillTone> = {
   generating: { text: "#11C4D0", bg: "rgba(17,196,208,0.1)",   border: "rgba(17,196,208,0.3)" },
   rendered:   { text: "#11C4D0", bg: "rgba(17,196,208,0.1)",   border: "rgba(17,196,208,0.3)" },
   publishing: { text: "#E4C875", bg: "rgba(228,200,117,0.1)",  border: "rgba(228,200,117,0.3)" },
-  completed:  { text: "#7BD389", bg: "rgba(123,211,137,0.1)",  border: "rgba(123,211,137,0.3)" },
-  failed:     { text: "#F47272", bg: "rgba(244,114,114,0.1)",  border: "rgba(244,114,114,0.3)" },
+  completed:  { text: "#11C4D0", bg: "rgba(17,196,208,0.1)",  border: "rgba(17,196,208,0.3)" },
+  failed:     { text: "#E4C875", bg: "rgba(228,200,117,0.1)",  border: "rgba(228,200,117,0.3)" },
   cancelled:  { text: "#8A9198", bg: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.1)" },
 };
 
@@ -128,9 +128,9 @@ const PUBLISH_STATUS_TONE: Record<PublishStatus, PillTone> = {
   pending:    { text: "#8A9198", bg: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.12)" },
   uploading:  { text: "#E4C875", bg: "rgba(228,200,117,0.1)",  border: "rgba(228,200,117,0.3)" },
   processing: { text: "#E4C875", bg: "rgba(228,200,117,0.1)",  border: "rgba(228,200,117,0.3)" },
-  published:  { text: "#7BD389", bg: "rgba(123,211,137,0.1)",  border: "rgba(123,211,137,0.3)" },
-  failed:     { text: "#F47272", bg: "rgba(244,114,114,0.1)",  border: "rgba(244,114,114,0.3)" },
-  rejected:   { text: "#F47272", bg: "rgba(244,114,114,0.1)",  border: "rgba(244,114,114,0.3)" },
+  published:  { text: "#11C4D0", bg: "rgba(17,196,208,0.1)",  border: "rgba(17,196,208,0.3)" },
+  failed:     { text: "#E4C875", bg: "rgba(228,200,117,0.1)",  border: "rgba(228,200,117,0.3)" },
+  rejected:   { text: "#E4C875", bg: "rgba(228,200,117,0.1)",  border: "rgba(228,200,117,0.3)" },
 };
 
 export function StatusPill({

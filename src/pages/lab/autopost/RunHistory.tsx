@@ -265,7 +265,7 @@ export default function RunHistory() {
         <ListSkeleton />
       ) : runsQuery.isError ? (
         <Card className="bg-[#10151A] border-white/8">
-          <CardContent className="py-10 text-center text-[#F47272] text-[13px]">
+          <CardContent className="py-10 text-center text-[#E4C875] text-[13px]">
             Couldn't load runs: {(runsQuery.error as Error)?.message ?? "unknown error"}
           </CardContent>
         </Card>
@@ -354,7 +354,7 @@ export default function RunHistory() {
             <AlertDialogAction
               onClick={performDelete}
               disabled={isDeleting}
-              className="bg-[#F47272] text-[#0A0D0F] hover:bg-[#F47272]/90"
+              className="bg-[#E4C875] text-[#0A0D0F] hover:bg-[#E4C875]/90"
             >
               {isDeleting ? "Deleting…" : "Delete"}
             </AlertDialogAction>
@@ -426,7 +426,7 @@ function RunListItem({
           <RunProgressBar value={run.progress_pct} className="mt-1.5" />
         )}
         {run.error_summary && run.status === "failed" && (
-          <p className="text-[11px] text-[#F47272] line-clamp-1">{run.error_summary}</p>
+          <p className="text-[11px] text-[#E4C875] line-clamp-1">{run.error_summary}</p>
         )}
       </div>
 
@@ -436,7 +436,7 @@ function RunListItem({
           e.stopPropagation();
           onDelete(run.id);
         }}
-        className="ml-1 shrink-0 self-start rounded-md p-2 text-[#5A6268] opacity-0 transition-opacity hover:bg-[#F47272]/10 hover:text-[#F47272] group-hover:opacity-100 focus:opacity-100"
+        className="ml-1 shrink-0 self-start rounded-md p-2 text-[#5A6268] opacity-0 transition-opacity hover:bg-[#E4C875]/10 hover:text-[#E4C875] group-hover:opacity-100 focus:opacity-100"
         aria-label="Delete run"
         title="Delete run"
       >

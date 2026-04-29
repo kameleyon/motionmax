@@ -331,7 +331,7 @@ export function GenerateTopicsDialog({
                       onClick={() => removeMutation.mutate(topic)}
                       disabled={removeMutation.isPending}
                       aria-label={`Remove ${topic}`}
-                      className="shrink-0 rounded p-1 text-[#5A6268] opacity-0 group-hover:opacity-100 hover:bg-[#F47272]/10 hover:text-[#F47272] transition-opacity"
+                      className="shrink-0 rounded p-1 text-[#5A6268] opacity-0 group-hover:opacity-100 hover:bg-[#E4C875]/10 hover:text-[#E4C875] transition-opacity"
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>

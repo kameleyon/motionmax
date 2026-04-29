@@ -313,7 +313,7 @@ export default function AutopostHome() {
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
-              className="bg-[#F47272] text-[#0A0D0F] hover:bg-[#F47272]/90"
+              className="bg-[#E4C875] text-[#0A0D0F] hover:bg-[#E4C875]/90"
               onClick={() => {
                 if (pendingDisable) void writeSwitch(pendingDisable, false);
                 setPendingDisable(null);
@@ -347,9 +347,9 @@ function CompactSwitch({
         {isLoading ? (
           <Loader2 className="h-3.5 w-3.5 shrink-0 text-[#8A9198] animate-spin" />
         ) : isActive ? (
-          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#7BD389]" />
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#11C4D0]" />
         ) : (
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[#F47272]" />
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[#E4C875]" />
         )}
         <span className="text-[12px] text-[#ECEAE4] truncate">{label}</span>
       </div>

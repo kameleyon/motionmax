@@ -68,7 +68,7 @@ const STATUS_META: Record<StatusKey, StatusMeta> = {
   active: {
     label: "Active",
     className:
-      "bg-[#7BD389]/10 border-[#7BD389]/30 text-[#7BD389] hover:bg-[#7BD389]/15",
+      "bg-[#11C4D0]/10 border-[#11C4D0]/30 text-[#11C4D0] hover:bg-[#11C4D0]/15",
   },
   paused: {
     label: "Paused",
@@ -135,7 +135,7 @@ function IconButton({
           className={cn(
             "h-8 w-8 text-[#8A9198] hover:bg-white/5 hover:text-[#ECEAE4]",
             amber && "text-[#E4C875] hover:text-[#E4C875] hover:bg-[#E4C875]/10",
-            destructive && "hover:text-[#F47272] hover:bg-[#F47272]/10",
+            destructive && "hover:text-[#E4C875] hover:bg-[#E4C875]/10",
           )}
         >
           {loading ? (
@@ -339,7 +339,7 @@ export function AutomationCard({ schedule, lastRunAt }: AutomationCardProps) {
             <AlertDialogAction
               onClick={() => deleteMutation.mutate()}
               disabled={deleteMutation.isPending}
-              className="bg-[#F47272] text-[#0A0D0F] hover:bg-[#F47272]/90"
+              className="bg-[#E4C875] text-[#0A0D0F] hover:bg-[#E4C875]/90"
             >
               {deleteMutation.isPending ? (
                 <Loader2 className="h-4 w-4 mr-1.5 autopost-spin" />

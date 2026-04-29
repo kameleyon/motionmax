@@ -200,8 +200,45 @@ export async function handleAutopostRun(
 
   await setRunStatus(runId, "generating");
 
-  // Phase 1 — Script. handleGenerateVideo creates the projects row using
-  // the projectId we pass and runs the script LLM call.
+  // Insert the projects row up front. Two reasons:
+  //   1. video_generation_jobs.project_id has a FK to projects(id), so
+  //      submitting the script job with a non-existent project_id fails
+  //      with a foreign-key violation.
+  //   2. handleGenerateVideo looks up payload.projectId and only reuses
+  //      the row when it exists — otherwise it inserts a NEW row with
+  //      a different id, leaving our subsequent jobs pointing at a
+  //      phantom project. Mirroring IntakeForm's "insert first, then
+  //      kickoff" pattern keeps both code paths consistent.
+  const intake = (config.intake_settings ?? {}) as Record<string, unknown>;
+  const projectRow: Record<string, unknown> = {
+    id: projectId,
+    user_id: schedule.user_id,
+    title,
+    content,
+    project_type: projectType,
+    format: config.format ?? "landscape",
+    length: config.length ?? "short",
+    style: config.style ?? "realistic",
+    voice_type: config.voice_type ?? "standard",
+    voice_id: config.voice_id ?? null,
+    voice_name: config.voice_name ?? null,
+    voice_inclination: config.language ?? null,
+    character_description: config.character_description ?? null,
+    character_consistency_enabled: !!config.character_consistency_enabled,
+    character_images: config.character_images ?? null,
+    intake_settings: intake,
+    status: "generating",
+  };
+  const { error: projInsertErr } = await supabase
+    .from("projects")
+    .insert(projectRow);
+  if (projInsertErr) {
+    throw new Error(`autopost_render: failed to insert projects row: ${projInsertErr.message}`);
+  }
+
+  // Phase 1 — Script. handleGenerateVideo finds the project via
+  // payload.projectId and updates it with title/status, then runs the
+  // script LLM call.
   const scriptPayload: Record<string, unknown> = {
     projectId,
     content,
@@ -221,8 +258,8 @@ export async function handleAutopostRun(
   };
   // Pull style/feature toggles out of intake_settings so they round-trip
   // through the worker prompt builders the same way the interactive
-  // intake form passes them.
-  const intake = (config.intake_settings ?? {}) as Record<string, unknown>;
+  // intake form passes them. (`intake` was hoisted above the projects
+  // insert so this and the project row stay in sync.)
   if (intake.brandName) scriptPayload.brandName = intake.brandName;
   if (intake.presenterFocus) scriptPayload.presenterFocus = intake.presenterFocus;
   if (intake.disableExpressions === true) scriptPayload.disableExpressions = true;

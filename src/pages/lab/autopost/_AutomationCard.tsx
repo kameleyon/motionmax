@@ -182,19 +182,33 @@ export function AutomationCard({ schedule, lastRunAt }: AutomationCardProps) {
     mutationFn: async () => {
       const jwt = await getJwt();
       if (!jwt) throw new Error("Not signed in");
+      // No request body — do NOT send `content-type: application/json`
+      // (otherwise Vercel's runtime spins up a JSON body parser for an
+      // empty payload and the function 500s before our handler runs).
       const res = await fetch(
         `/api/autopost/schedules/${schedule.id}/fire`,
         {
           method: "POST",
           headers: {
             authorization: `Bearer ${jwt}`,
-            "content-type": "application/json",
+            accept: "application/json",
           },
         },
       );
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.message || `Fire failed (${res.status})`);
+        // Read as text first; the body may be Vercel's HTML error page
+        // (FUNCTION_INVOCATION_FAILED etc.) rather than our JSON.
+        // Surfacing a snippet beats showing "Fire failed (500)".
+        const raw = await res.text().catch(() => "");
+        let parsed: { error?: string; message?: string } = {};
+        try { parsed = JSON.parse(raw); } catch { /* not JSON */ }
+        const detail =
+          parsed.message
+          || parsed.error
+          || raw.slice(0, 200).trim()
+          || res.statusText
+          || "unknown error";
+        throw new Error(`Fire failed (${res.status}): ${detail}`);
       }
     },
     onSuccess: () => {

@@ -77,7 +77,11 @@ export default async function handler(req: Request): Promise<Response> {
   } catch (e) {
     if (isResponse(e)) return e;
     logError('autopost.schedules.fire.auth', e);
-    return new Response(JSON.stringify({ error: 'auth_error' }), {
+    // Surface the real error message so we can diagnose missing
+    // env vars (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) without
+    // needing access to Vercel function logs.
+    const msg = e instanceof Error ? e.message : String(e);
+    return new Response(JSON.stringify({ error: 'auth_error', message: msg }), {
       status: 500,
       headers: { 'content-type': 'application/json', ...corsHeaders(origin) },
     });

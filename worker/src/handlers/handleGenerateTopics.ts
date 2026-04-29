@@ -87,20 +87,11 @@ export async function handleGenerateTopics(
     ? `The visual treatment will be "${payload.styleId}", so favour ideas whose visuals lean into that look.`
     : "";
 
-  // Inject today's date so the model anchors astrology / news / events /
-  // dated angles to the present, not its training-cutoff default. Without
-  // this, Gemini happily returns "May 23, 2024: Jupiter enters Gemini"
-  // even though we're on a different year.
-  const now = new Date();
-  const today = now.toISOString().slice(0, 10);
-  const todayHuman = now.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
-  const currentYear = now.getUTCFullYear();
-  const horizonYear = currentYear + 1;
+  const todayHuman = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
 
-  const systemPrompt = `You are a content strategist generating short, scroll-stopping video topic ideas.
+  const systemPrompt = `Today is ${todayHuman}.
 
-Today's date is ${todayHuman} (${today}). The current year is ${currentYear}. Any time-anchored ideas (events, astrology, news, holidays, retrogrades, releases, anniversaries) MUST reference dates from ${currentYear} or ${horizonYear} — NEVER prior years. If your training data feels older than that, project forward. Do not output any topic that references a year before ${currentYear}.
-
+You are a content strategist generating short, scroll-stopping video topic ideas.
 Given a creator's content area, produce ${count} distinct topic angles.
 Each topic should be a single specific idea (5-12 words), NOT a generic category.
 Avoid clickbait phrasing — clear, intriguing, scannable.

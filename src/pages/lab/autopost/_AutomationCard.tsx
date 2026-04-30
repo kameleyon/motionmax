@@ -39,7 +39,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { humanizeCron, formatRelativeTime } from "./_utils";
+import { humanizeCron, formatRelativeTime, nextFireFromCron } from "./_utils";
 import { EditAutomationDialog } from "./_EditAutomationDialog";
 import { GenerateTopicsDialog } from "./_GenerateTopicsDialog";
 import { UpdateScheduleDialog } from "./_UpdateScheduleDialog";
@@ -198,9 +198,25 @@ export function AutomationCard({ schedule, lastRunAt }: AutomationCardProps) {
   const toggleMutation = useMutation({
     mutationFn: async () => {
       const next = !schedule.active;
+      // Resuming a long-paused schedule used to fire one run per minute
+      // until the stored next_fire_at caught up to wall-clock (a
+      // catch-up storm). When unpausing, re-anchor next_fire_at to the
+      // next valid cron slot strictly AFTER NOW so the schedule honors
+      // its declared cadence (every hour = every hour, not 4-in-a-row
+      // after a 4-hour pause). The autopost_tick SQL function applies
+      // the same GREATEST(...) clamp server-side as a safety net.
+      const patch: Record<string, unknown> = { active: next };
+      if (next) {
+        const nextFire = nextFireFromCron(
+          schedule.cron_expression,
+          schedule.timezone || "UTC",
+          new Date(),
+        );
+        if (nextFire) patch.next_fire_at = nextFire.toISOString();
+      }
       const { error } = await supabase
         .from("autopost_schedules")
-        .update({ active: next })
+        .update(patch)
         .eq("id", schedule.id);
       if (error) throw error;
       return next;

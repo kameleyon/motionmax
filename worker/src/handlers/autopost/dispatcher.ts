@@ -37,8 +37,24 @@ const POLL_INTERVAL_MS = 5_000;
 const MAX_CONCURRENT_PUBLISHES = 4;
 /** uploading rows older than this on startup are considered orphaned and reset. */
 const STALE_UPLOADING_MS = 30 * 60_000;
-/** runs in 'generating' older than this with no progress are considered timed out. */
-const STALLED_RUN_MS = 60 * 60_000;
+/**
+ * Hard ceiling for an autopost render. Cinematic mode with Kling 3.0
+ * Pro image-to-video can legitimately take 60–90 minutes for longer
+ * scripts (each scene = 60–600s of Kling polling, run sequentially
+ * inside the cinematic_video pool). 1 hour was killing live runs that
+ * were still polling Kling. 3 hours is the new outer bound — past
+ * that the render is almost certainly stuck.
+ */
+const STALLED_RUN_MS = 3 * 60 * 60_000;
+/**
+ * Activity heartbeat. Even within the hard ceiling, mark a run failed
+ * only if its underlying video_generation_jobs row hasn't been touched
+ * for this long. Each phase handler bumps `updated_at` on its job row,
+ * so a healthy in-progress render heartbeats every couple of minutes.
+ * 30 minutes of silence is much longer than any single phase should
+ * take and reliably indicates a genuine stall.
+ */
+const STALLED_RUN_HEARTBEAT_MS = 30 * 60_000;
 /** Throttle interval for cleanupStalledRuns — runs at most every ~minute. */
 const STALLED_CLEANUP_INTERVAL_MS = 60_000;
 
@@ -670,19 +686,62 @@ async function recordPublishOutcome(
  * publish_jobs path owns.
  */
 async function cleanupStalledRuns(): Promise<void> {
-  const cutoff = new Date(Date.now() - STALLED_RUN_MS).toISOString();
+  const ceiling = new Date(Date.now() - STALLED_RUN_MS).toISOString();
+  const heartbeat = new Date(Date.now() - STALLED_RUN_HEARTBEAT_MS).toISOString();
+
+  // Find candidates: 'generating' runs older than the hard ceiling.
+  const { data: oldRuns, error: oldErr } = await supabase
+    .from("autopost_runs")
+    .select("id, video_job_id, fired_at")
+    .eq("status", "generating")
+    .lt("fired_at", ceiling);
+  if (oldErr) {
+    console.warn(`[Autopost] cleanupStalledRuns query failed: ${oldErr.message}`);
+    return;
+  }
+  if (!oldRuns || oldRuns.length === 0) return;
+
+  // Of those, only mark failed the ones whose underlying render job
+  // has been silent for STALLED_RUN_HEARTBEAT_MS. Each phase handler
+  // bumps video_generation_jobs.updated_at, so a still-progressing
+  // run (e.g., Kling i2v polling for 90 minutes) survives this sweep
+  // even though its run row is older than the hard ceiling.
+  const stalledIds: string[] = [];
+  for (const r of oldRuns as Array<{ id: string; video_job_id: string | null; fired_at: string }>) {
+    if (!r.video_job_id) {
+      // No render job linked — orphaned. Definitely stalled.
+      stalledIds.push(r.id);
+      continue;
+    }
+    const { data: jobRow } = await supabase
+      .from("video_generation_jobs")
+      .select("status, updated_at")
+      .eq("id", r.video_job_id)
+      .maybeSingle();
+    const status = (jobRow as { status?: string } | null)?.status ?? null;
+    const updatedAt = (jobRow as { updated_at?: string } | null)?.updated_at ?? r.fired_at;
+    // If the job is already terminal (completed/failed) but the run
+    // didn't transition, the trigger will catch up. Skip.
+    if (status === "completed" || status === "failed") continue;
+    // If the worker has bumped updated_at recently, the render is
+    // alive — give it more time.
+    if (updatedAt > heartbeat) continue;
+    stalledIds.push(r.id);
+  }
+
+  if (stalledIds.length === 0) return;
+
   const { data, error } = await supabase
     .from("autopost_runs")
     .update({
       status: "failed",
-      error_summary: "Render timed out",
+      error_summary: "Render stalled (no progress for 30+ minutes)",
     })
-    .eq("status", "generating")
-    .lt("fired_at", cutoff)
+    .in("id", stalledIds)
     .select("id");
 
   if (error) {
-    console.warn(`[Autopost] cleanupStalledRuns failed: ${error.message}`);
+    console.warn(`[Autopost] cleanupStalledRuns update failed: ${error.message}`);
     return;
   }
   if (data && data.length > 0) {
@@ -690,7 +749,7 @@ async function cleanupStalledRuns(): Promise<void> {
     await writeSystemLog({
       category: "system_warning",
       eventType: "autopost_run_stalled_timeout",
-      message: `Marked ${data.length} stalled autopost run(s) as failed (>1h in 'generating')`,
+      message: `Marked ${data.length} stalled autopost run(s) as failed (no heartbeat in ${Math.round(STALLED_RUN_HEARTBEAT_MS / 60_000)}min, ceiling ${Math.round(STALLED_RUN_MS / 3_600_000)}h)`,
       details: { count: data.length, ids: data.map((r: { id: string }) => r.id) },
     });
   }

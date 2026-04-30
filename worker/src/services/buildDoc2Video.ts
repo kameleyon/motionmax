@@ -24,6 +24,10 @@ export interface Doc2VideoParams {
   characterDescription?: string; voiceType?: string;
   disableExpressions?: boolean;
   language?: string;
+  /** Autopost-only — see SmartFlowParams for rationale. */
+  topic?: string;
+  /** Autopost-only — see SmartFlowParams for rationale. */
+  previousTopics?: string[];
 }
 
 export interface PromptResult { system: string; user: string; maxTokens: number; }
@@ -158,9 +162,24 @@ ${buildOutputFormat({
 
   const brandSec = buildBrandSection(p.brandMark);
   const truncatedContent = p.content.length > 15000 ? p.content.substring(0, 15000) + "\n\n[Content truncated — focus on the key themes above]" : p.content;
-  // Inject character guidance into SYSTEM prompt too so the LLM reads it as
-  // authoritative ground truth before analyzing the content.
   const finalSystem = characterGuidance ? `${system}\n${characterGuidance}` : system;
-  const user = `Content: ${truncatedContent}\n${presenterGuidance}${characterGuidance}${brandSec}`;
+
+  // Autopost: topic + previousTopics as structured fields (Autonomux
+  // pattern). When present, force the LLM to treat the topic as the
+  // exclusive subject and demote `content` to "additional context."
+  const exclusionBlock = p.previousTopics && p.previousTopics.length > 0
+    ? `\n=== DO NOT REPEAT (recently covered topics) ===\n${p.previousTopics.map((t, i) => `${i + 1}. "${t}"`).join("\n")}\nThe video MUST cover a DIFFERENT angle from every entry above.\n`
+    : "";
+
+  const user = p.topic
+    ? `=== EXACT TOPIC FOR THIS VIDEO ===
+"${p.topic}"
+
+This quoted phrase IS the subject. Use the FULL phrase. Do not abbreviate to a single keyword. Do not generalize.
+${exclusionBlock}
+=== ADDITIONAL CONTEXT (tone, style, audience — NOT subject) ===
+${truncatedContent}
+${presenterGuidance}${characterGuidance}${brandSec}`
+    : `Content: ${truncatedContent}\n${presenterGuidance}${characterGuidance}${brandSec}`;
   return { system: finalSystem, user, maxTokens };
 }

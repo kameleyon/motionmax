@@ -204,44 +204,30 @@ export async function handleAutopostRun(
 
   const topic = run.topic?.trim() ?? "";
   const title = topic || schedule.name || "Autopost video";
-  const baseInstructions = (run.prompt_resolved?.trim() || schedule.prompt_template || "").trim();
 
-  // Topic-first prompt assembly.
-  //
-  // Symptom we hit twice: every run produced "Blue Moon Alert"
-  // content even when the topic was something else, because (1) the
-  // user's prompt template + attached sources dominated the LLM
-  // input, and (2) when topic phrasing did reach the model it grabbed
-  // the first concrete noun ("Blue Moon") instead of the FULL topic
-  // phrase ("Sagittarius Blue Moon Demands Plot Twists").
-  //
-  // Three things land the topic where the prompt builders' system
-  // prompts already look for it (they all reference the user's
-  // "EXTRACTION GOAL" / "user's input" as the authoritative subject):
-  //
-  //  1. Lead with the exact topic phrase quoted, twice — once as the
-  //     EXTRACTION GOAL (matches the system-prompt terminology) and
-  //     once as the verbatim title the model must use.
-  //  2. Explicit "use the FULL phrase, not just one word" directive
-  //     to defeat the noun-grab failure mode.
-  //  3. Demote the user's template to a clearly-labeled "ADDITIONAL
-  //     STYLE / TONE PREFERENCES" trailer. The model still sees it
-  //     for voice/format guidance, but the subject hierarchy is now
-  //     unambiguous.
-  const content = topic
-    ? `EXTRACTION GOAL: "${topic}"
+  // Pull the last 10 topics this schedule has already produced (any
+  // status), so the prompt builder can hand them to the LLM as a
+  // "do not repeat" exclusion list. Pattern adapted from autonomux
+  // run-agent's previousTopics gathering. Empty list is fine.
+  const { data: prevRuns } = await supabase
+    .from("autopost_runs")
+    .select("topic")
+    .eq("schedule_id", schedule.id)
+    .neq("id", run.id)
+    .not("topic", "is", null)
+    .order("fired_at", { ascending: false })
+    .limit(10);
+  const previousTopics: string[] = (prevRuns ?? [])
+    .map((r) => (r as { topic?: string | null }).topic)
+    .filter((t): t is string => typeof t === "string" && t.trim().length > 0);
 
-The exact subject of this video is the full quoted phrase above — every word matters.
-
-STRICT RULES:
-- The video MUST be about "${topic}" specifically. Do NOT abbreviate, generalize, or replace it with a single keyword from the phrase.
-- Do NOT default to the first concrete noun (e.g., do not turn "Sagittarius Blue Moon Demands Plot Twists" into a generic "Blue Moon" video).
-- Use the FULL topic phrase as the headline and as the central theme.
-- Ignore any references to other subjects in the additional preferences below; they describe TONE and STYLE only, not subject matter.
-
-ADDITIONAL STYLE / TONE PREFERENCES (use for voice and format guidance only — NOT for subject):
-${baseInstructions}`
-    : baseInstructions;
+  // `content` now carries the user's intake-form prompt template
+  // verbatim (style/tone/persona guidance). Topic and previousTopics
+  // are passed as STRUCTURED FIELDS on the payload — the prompt
+  // builders surface them as their own labeled blocks in the user
+  // message ("EXACT TOPIC FOR THIS VIDEO" + "DO NOT REPEAT"). This
+  // is the autonomux pattern: topic is never mixed with content.
+  const content = (run.prompt_resolved?.trim() || schedule.prompt_template || "").trim();
 
   const projectId = randomUUID();
 
@@ -303,6 +289,14 @@ ${baseInstructions}`
     characterImages: config.character_images ?? null,
     characterConsistencyEnabled: !!config.character_consistency_enabled,
     title,
+    // Autopost-only structured fields. buildPrompt in generateVideo.ts
+    // forwards these to the per-flow builder which renders them as
+    // dedicated user-message blocks ("EXACT TOPIC FOR THIS VIDEO" +
+    // "DO NOT REPEAT"). Without these, the LLM had to infer the
+    // subject from `content`, where it lost out to whatever the user
+    // typed in their intake-form prompt template.
+    topic: topic || null,
+    previousTopics,
   };
   // Pull style/feature toggles out of intake_settings so they round-trip
   // through the worker prompt builders the same way the interactive

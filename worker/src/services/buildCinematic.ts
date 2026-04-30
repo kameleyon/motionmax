@@ -36,6 +36,10 @@ export interface CinematicParams {
   disableExpressions?: boolean;
   characterConsistencyEnabled?: boolean;
   language?: string;
+  /** Autopost-only — see SmartFlowParams for rationale. */
+  topic?: string;
+  /** Autopost-only — see SmartFlowParams for rationale. */
+  previousTopics?: string[];
 }
 
 export function buildCinematicPrompt(p: CinematicParams): PromptResult {
@@ -72,7 +76,23 @@ export function buildCinematicPrompt(p: CinematicParams): PromptResult {
   }
   // Truncate content to 10,000 chars to prevent API timeouts on massive inputs
   const truncatedContent = p.content.length > 10000 ? p.content.substring(0, 10000) + "\n\n[Content truncated — focus on the key themes above]" : p.content;
-  const user = `Create a cinematic video script based on this idea:\n\n${truncatedContent}\n${presenterGuidance}${characterGuidance}${brandSec}`;
+
+  // Autopost: same Autonomux-style topic + previousTopics injection
+  // as the smartflow / doc2video builders.
+  const exclusionBlock = p.previousTopics && p.previousTopics.length > 0
+    ? `\n=== DO NOT REPEAT (recently covered topics) ===\n${p.previousTopics.map((t, i) => `${i + 1}. "${t}"`).join("\n")}\nThe video MUST cover a DIFFERENT angle from every entry above.\n`
+    : "";
+
+  const user = p.topic
+    ? `=== EXACT TOPIC FOR THIS VIDEO ===
+"${p.topic}"
+
+This quoted phrase IS the subject of the cinematic. Use the FULL phrase. Do not abbreviate to a single keyword. Do not generalize.
+${exclusionBlock}
+=== ADDITIONAL CONTEXT (tone, style, audience — NOT subject) ===
+${truncatedContent}
+${presenterGuidance}${characterGuidance}${brandSec}`
+    : `Create a cinematic video script based on this idea:\n\n${truncatedContent}\n${presenterGuidance}${characterGuidance}${brandSec}`;
   return { system, user, maxTokens };
 }
 

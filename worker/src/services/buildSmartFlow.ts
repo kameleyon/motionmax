@@ -15,6 +15,23 @@ export interface SmartFlowParams {
   content: string; format: string; style: string;
   customStyle?: string; brandMark?: string;
   language?: string;
+  /**
+   * Autopost-only: the exact topic for this run. When present, gets
+   * surfaced as a structured `=== EXACT TOPIC FOR THIS VIDEO ===`
+   * block in the user message and demotes `content` to "additional
+   * context." Pattern borrowed from Autonomux's run-agent, which
+   * passes `Topic: X` as a separate field rather than mixing topic
+   * and persona/sources into one blob.
+   */
+  topic?: string;
+  /**
+   * Autopost-only: the last N successful run topics for this
+   * schedule. Listed as an explicit "do not repeat" exclusion. Same
+   * anti-repetition trick autonomux uses to keep scheduled runs
+   * varying their angle even when the user's prompt template is
+   * static.
+   */
+  previousTopics?: string[];
 }
 
 export function buildSmartFlowPrompt(p: SmartFlowParams): PromptResult {
@@ -108,7 +125,35 @@ IMPORTANT: Do NOT include any style description in visualPrompt - the system wil
 - Focus on CONTENT and LAYOUT only - do NOT write style descriptions`;
 
   const truncatedContent = p.content.length > 15000 ? p.content.substring(0, 15000) + "\n\n[Content truncated]" : p.content;
-  const user = `=== DATA SOURCE ===
+
+  // Autopost path: topic + previousTopics are structured fields, not
+  // baked into content. Demoting `content` to "additional context"
+  // stops the LLM from mining the user's prompt template for subject
+  // matter and forces it to use the exact topic phrase as the
+  // headline. See Autonomux's run-agent for the same shape.
+  const exclusionBlock = p.previousTopics && p.previousTopics.length > 0
+    ? `\n=== DO NOT REPEAT (recently covered topics) ===
+${p.previousTopics.map((t, i) => `${i + 1}. "${t}"`).join("\n")}
+The video MUST cover a DIFFERENT angle from every entry above. Do not regenerate any of those subjects.\n`
+    : "";
+
+  const user = p.topic
+    ? `=== EXACT TOPIC FOR THIS VIDEO ===
+"${p.topic}"
+
+This quoted phrase IS the subject of the video — every word matters. The headline, narration, and visual content MUST be about this exact topic.
+
+STRICT RULES:
+- Use the FULL topic phrase. Do not abbreviate to a single keyword.
+- Do not default to the first concrete noun in the phrase.
+- Ignore any references to OTHER subjects in the additional context below — that section is for tone/style/format only, NOT for subject matter.
+${exclusionBlock}
+=== ADDITIONAL CONTEXT (tone, style, audience — NOT subject) ===
+${truncatedContent}
+
+=== EXTRACTION GOAL ===
+Build the infographic about the EXACT TOPIC quoted above. Extract key insights that fit THAT specific topic, design the layout to present THAT topic, choose visuals and text that support THAT topic. Treat "Additional Context" as voice/style guidance only.`
+    : `=== DATA SOURCE ===
 ${truncatedContent}
 
 === EXTRACTION GOAL ===

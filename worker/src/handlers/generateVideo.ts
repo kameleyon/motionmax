@@ -36,6 +36,16 @@ import {
 // ── Prompt Router ──────────────────────────────────────────────────
 
 function buildPrompt(projectType: string, p: Record<string, any>): PromptResult {
+  // Autopost passes `topic` (the exact subject for this run) and
+  // `previousTopics` (recent topics for the same schedule, so the
+  // model varies its angle). Both are forwarded to every flow's
+  // builder so the autonomux-style structured-field treatment kicks
+  // in regardless of project_type.
+  const topic = typeof p.topic === "string" && p.topic.trim().length > 0 ? p.topic.trim() : undefined;
+  const previousTopics = Array.isArray(p.previousTopics)
+    ? (p.previousTopics as unknown[]).filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+    : undefined;
+
   switch (projectType) {
     case "cinematic":
       return buildCinematicPrompt({
@@ -51,6 +61,8 @@ function buildPrompt(projectType: string, p: Record<string, any>): PromptResult 
         disableExpressions: p.disableExpressions === true,
         characterConsistencyEnabled: p.characterConsistencyEnabled === true,
         language: p.language,
+        topic,
+        previousTopics,
       });
 
     case "smartflow":
@@ -61,6 +73,8 @@ function buildPrompt(projectType: string, p: Record<string, any>): PromptResult 
         customStyle: p.customStyle,
         brandMark: p.brandMark,
         language: p.language,
+        topic,
+        previousTopics,
       });
 
     default: // doc2video
@@ -76,6 +90,8 @@ function buildPrompt(projectType: string, p: Record<string, any>): PromptResult 
         voiceType: p.voiceType,
         disableExpressions: p.disableExpressions === true,
         language: p.language,
+        topic,
+        previousTopics,
       });
   }
 }

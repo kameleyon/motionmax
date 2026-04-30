@@ -202,8 +202,32 @@ export async function handleAutopostRun(
   const isSmartflow = projectType === "smartflow";
   const isCinematic = projectType === "cinematic";
 
-  const title = run.topic?.trim() || schedule.name || "Autopost video";
-  const content = run.prompt_resolved?.trim() || schedule.prompt_template;
+  const topic = run.topic?.trim() ?? "";
+  const title = topic || schedule.name || "Autopost video";
+  const baseInstructions = (run.prompt_resolved?.trim() || schedule.prompt_template || "").trim();
+
+  // Topic-first prompt assembly.
+  //
+  // Earlier runs all drifted onto the same theme (every video kept
+  // talking about a "blue moon" no matter which topic was picked from
+  // the pool) because the user's prompt template — plus any attached
+  // sources baked in by the intake form — dominated the LLM input. The
+  // {topic} placeholder is optional, so when the user forgets it the
+  // topic never reaches the model at all.
+  //
+  // Always lead with an explicit topic banner and frame the user's
+  // template as style guidance. The script LLM treats the first lines
+  // as the primary directive, so this guarantees the topic is the
+  // subject of every run regardless of what the template said.
+  const content = topic
+    ? `TOPIC FOR THIS VIDEO: ${topic}
+
+This video MUST focus entirely on the topic above. Treat the topic as the subject; do not drift to adjacent themes from the instructions below.
+
+STYLE / TONE / FORMAT GUIDANCE:
+${baseInstructions}`
+    : baseInstructions;
+
   const projectId = randomUUID();
 
   await setRunStatus(runId, "generating");

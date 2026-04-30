@@ -208,23 +208,38 @@ export async function handleAutopostRun(
 
   // Topic-first prompt assembly.
   //
-  // Earlier runs all drifted onto the same theme (every video kept
-  // talking about a "blue moon" no matter which topic was picked from
-  // the pool) because the user's prompt template — plus any attached
-  // sources baked in by the intake form — dominated the LLM input. The
-  // {topic} placeholder is optional, so when the user forgets it the
-  // topic never reaches the model at all.
+  // Symptom we hit twice: every run produced "Blue Moon Alert"
+  // content even when the topic was something else, because (1) the
+  // user's prompt template + attached sources dominated the LLM
+  // input, and (2) when topic phrasing did reach the model it grabbed
+  // the first concrete noun ("Blue Moon") instead of the FULL topic
+  // phrase ("Sagittarius Blue Moon Demands Plot Twists").
   //
-  // Always lead with an explicit topic banner and frame the user's
-  // template as style guidance. The script LLM treats the first lines
-  // as the primary directive, so this guarantees the topic is the
-  // subject of every run regardless of what the template said.
+  // Three things land the topic where the prompt builders' system
+  // prompts already look for it (they all reference the user's
+  // "EXTRACTION GOAL" / "user's input" as the authoritative subject):
+  //
+  //  1. Lead with the exact topic phrase quoted, twice — once as the
+  //     EXTRACTION GOAL (matches the system-prompt terminology) and
+  //     once as the verbatim title the model must use.
+  //  2. Explicit "use the FULL phrase, not just one word" directive
+  //     to defeat the noun-grab failure mode.
+  //  3. Demote the user's template to a clearly-labeled "ADDITIONAL
+  //     STYLE / TONE PREFERENCES" trailer. The model still sees it
+  //     for voice/format guidance, but the subject hierarchy is now
+  //     unambiguous.
   const content = topic
-    ? `TOPIC FOR THIS VIDEO: ${topic}
+    ? `EXTRACTION GOAL: "${topic}"
 
-This video MUST focus entirely on the topic above. Treat the topic as the subject; do not drift to adjacent themes from the instructions below.
+The exact subject of this video is the full quoted phrase above — every word matters.
 
-STYLE / TONE / FORMAT GUIDANCE:
+STRICT RULES:
+- The video MUST be about "${topic}" specifically. Do NOT abbreviate, generalize, or replace it with a single keyword from the phrase.
+- Do NOT default to the first concrete noun (e.g., do not turn "Sagittarius Blue Moon Demands Plot Twists" into a generic "Blue Moon" video).
+- Use the FULL topic phrase as the headline and as the central theme.
+- Ignore any references to other subjects in the additional preferences below; they describe TONE and STYLE only, not subject matter.
+
+ADDITIONAL STYLE / TONE PREFERENCES (use for voice and format guidance only — NOT for subject):
 ${baseInstructions}`
     : baseInstructions;
 

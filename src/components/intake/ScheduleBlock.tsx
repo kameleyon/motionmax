@@ -527,32 +527,17 @@ export default function ScheduleBlock({
               className="grid gap-2"
             >
               {[
-                {
-                  value: 'social' as const,
-                  label: 'Publish to social media',
-                  hint: 'Post to your connected platforms automatically.',
-                  Icon: Send,
-                },
-                {
-                  value: 'email' as const,
-                  label: 'Email me when each video is ready',
-                  hint: 'Get a download link per render — no social account needed.',
-                  Icon: Mail,
-                },
-                {
-                  value: 'library_only' as const,
-                  label: 'Just save to my library',
-                  hint: 'Videos appear in Run History only — nothing posted or emailed.',
-                  Icon: FolderHeart,
-                },
-              ].map(({ value, label, hint, Icon }) => {
+                { value: 'social' as const,       label: 'Publish to social media',         Icon: Send },
+                { value: 'email' as const,        label: 'Email me when each video is ready', Icon: Mail },
+                { value: 'library_only' as const, label: 'Just save to my library',         Icon: FolderHeart },
+              ].map(({ value, label, Icon }) => {
                 const selected = deliveryMethod === value;
                 const inputId = `delivery-${value}`;
                 return (
                   <label
                     key={value}
                     htmlFor={inputId}
-                    className={`flex items-start gap-2.5 px-3 py-2.5 rounded-md border cursor-pointer transition-colors ${
+                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border cursor-pointer transition-colors ${
                       selected
                         ? 'border-[#14C8CC]/50 bg-[#14C8CC]/[0.06]'
                         : 'border-white/5 bg-[#0A0D0F] hover:border-white/10'
@@ -567,24 +552,16 @@ export default function ScheduleBlock({
                       onChange={() => setDeliveryMethod(value)}
                       className="sr-only"
                     />
-                    {/* Custom radio dot — keeps the visual language in
-                        line with the rest of the dark UI without pulling
-                        in a new shadcn primitive. */}
                     <span
                       aria-hidden
-                      className={`mt-0.5 w-3.5 h-3.5 rounded-full border-2 shrink-0 flex items-center justify-center ${
+                      className={`w-3 h-3 rounded-full border-2 shrink-0 flex items-center justify-center ${
                         selected ? 'border-[#14C8CC]' : 'border-white/20'
                       }`}
                     >
-                      {selected && <span className="w-1.5 h-1.5 rounded-full bg-[#14C8CC]" />}
+                      {selected && <span className="w-1 h-1 rounded-full bg-[#14C8CC]" />}
                     </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 text-[12.5px] text-[#ECEAE4]">
-                        <Icon className="w-3.5 h-3.5 text-[#14C8CC] shrink-0" />
-                        <span className="truncate">{label}</span>
-                      </div>
-                      <p className="mt-0.5 text-[11.5px] leading-[1.45] text-[#8A9198]">{hint}</p>
-                    </div>
+                    <Icon className="w-3.5 h-3.5 text-[#14C8CC] shrink-0" />
+                    <span className="text-[12px] text-[#ECEAE4] truncate">{label}</span>
                   </label>
                 );
               })}

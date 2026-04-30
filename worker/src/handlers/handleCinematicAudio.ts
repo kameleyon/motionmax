@@ -15,10 +15,14 @@ import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField, updateSceneFieldJson } from "../lib/sceneUpdate.js";
 import { probeDuration } from "./export/ffmpegCmd.js";
 
-/** Probe the MP3 duration of `audioUrl` via ffprobe and merge
- *  `audioDurationMs` into the scene's `_meta`. Best-effort — if the
- *  probe fails we fall back to silent word-count estimation and the
- *  Editor timeline uses that via estDurationMs instead. */
+/** Probe the MP3 duration of `audioUrl` via ffprobe and write it onto
+ *  the scene as the authoritative duration. The export pipeline reads
+ *  `scene.duration` to size the video clip AND to time captions — if
+ *  that field stays at the word-count estimate (~2.5 wps), TTS pauses
+ *  and pacing make actual audio longer, captions finish before voice
+ *  does, and the visual cuts before audio ends. Always overwriting
+ *  with the probed value keeps captions, clip length, and audio in
+ *  lockstep. */
 async function recordAudioDurationMs(
   generationId: string,
   sceneIndex: number,
@@ -27,6 +31,7 @@ async function recordAudioDurationMs(
   try {
     const durationSec = await probeDuration(audioUrl);
     const ms = Math.max(500, Math.round(durationSec * 1000));
+    const seconds = Math.max(1, Math.round(durationSec));
     // Read current _meta, merge audioDurationMs in, write back. Race is
     // negligible because per-scene jobs are serialised via depends_on.
     const { data: gen } = await supabase
@@ -40,7 +45,10 @@ async function recordAudioDurationMs(
       ...existingMeta,
       audioDurationMs: ms,
     });
-    console.log(`[CinematicAudio] Scene ${sceneIndex}: audioDurationMs=${ms}`);
+    // Overwrite scene.duration with the true probed value so the
+    // export and caption builders use real audio length.
+    await updateSceneField(generationId, sceneIndex, "duration", String(seconds));
+    console.log(`[CinematicAudio] Scene ${sceneIndex}: audioDurationMs=${ms} (duration=${seconds}s)`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`[CinematicAudio] Scene ${sceneIndex}: duration probe skipped — ${msg}`);

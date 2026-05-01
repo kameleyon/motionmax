@@ -3,7 +3,7 @@ import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Mail, CreditCard, Activity, Flag, Coins, DollarSign, ShieldAlert, ShieldX, ShieldCheck, RefreshCw, LogOut, Archive, Trash2 } from "lucide-react";
+import { Loader2, Mail, CreditCard, Activity, Flag, Coins, DollarSign, ShieldAlert, ShieldX, ShieldCheck, RefreshCw, LogOut, Archive, Trash2, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -86,6 +86,44 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
   const [deleteDialog, setDeleteDialog] = useState<{ kind: "soft" | "hard" | null }>({ kind: null });
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleting, setDeleting] = useState(false);
+
+  // Credit-grant modal state
+  const [grantOpen, setGrantOpen] = useState(false);
+  const [grantAmount, setGrantAmount] = useState<string>("");
+  const [grantReason, setGrantReason] = useState<string>("");
+  const [granting, setGranting] = useState(false);
+
+  async function handleGrantCredits() {
+    const amt = parseInt(grantAmount, 10);
+    if (!Number.isFinite(amt) || amt === 0) {
+      toast.error("Enter a non-zero amount (positive to add, negative to subtract).");
+      return;
+    }
+    if (amt > 1000000 || amt < -1000000) {
+      toast.error("Amount must be between -1,000,000 and 1,000,000.");
+      return;
+    }
+    setGranting(true);
+    try {
+      const { data: newBalance, error } = await supabase.rpc("admin_grant_credits", {
+        p_target_user_id: userId,
+        p_credits: amt,
+        p_reason: grantReason.trim() || null,
+      });
+      if (error) throw error;
+      toast.success(`Granted ${amt > 0 ? "+" : ""}${amt} credits. New balance: ${newBalance}`);
+      setGrantOpen(false);
+      setGrantAmount("");
+      setGrantReason("");
+      // Refresh details so the visible balance updates
+      const result = await callAdminApi("user_details", { targetUserId: userId });
+      if (result.ok && result.data) setData(result.data as UserDetails);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Grant failed");
+    } finally {
+      setGranting(false);
+    }
+  }
 
   const fetchDetails = async () => {
     try {
@@ -362,10 +400,21 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
 
       {/* Compact Stats Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Card className="bg-[#10151A] border-white/8 shadow-none p-3">
-          <div className="flex items-center gap-2 text-muted-foreground mb-1">
-            <Coins className="h-3.5 w-3.5" />
-            <span className="text-xs uppercase tracking-wide">Credits</span>
+        <Card className="bg-[#10151A] border-white/8 shadow-none p-3 relative">
+          <div className="flex items-center justify-between gap-2 text-muted-foreground mb-1">
+            <div className="flex items-center gap-2">
+              <Coins className="h-3.5 w-3.5" />
+              <span className="text-xs uppercase tracking-wide">Credits</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setGrantOpen(true)}
+              className="rounded-md p-1 text-[#11C4D0] hover:bg-[#11C4D0]/10 transition-colors"
+              aria-label="Grant credits to user"
+              title="Grant credits"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
           </div>
           <div className="text-lg">{data.credits?.credits_balance || 0}</div>
           <div className="text-xs text-muted-foreground mt-0.5">
@@ -676,6 +725,76 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
               {actionDialog.type === "suspend" && "Suspend User"}
               {actionDialog.type === "unblock" && "Unblock User"}
               {actionDialog.type === "force_signout" && "Force Sign Out"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Credit-grant modal */}
+      <Dialog open={grantOpen} onOpenChange={(open) => { if (!granting) setGrantOpen(open); }}>
+        <DialogContent className="bg-[#10151A] border-white/10 text-[#ECEAE4]">
+          <DialogHeader>
+            <DialogTitle className="text-[#ECEAE4]">Grant credits</DialogTitle>
+            <DialogDescription className="text-[#8A9198]">
+              Add or subtract credits for {data.user.email}. Use a negative number to deduct.
+              Current balance: <span className="text-[#ECEAE4]">{data.credits?.credits_balance ?? 0}</span>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="grant-amount" className="text-[12px] text-[#ECEAE4]">Amount (credits)</Label>
+              <Input
+                id="grant-amount"
+                type="number"
+                inputMode="numeric"
+                placeholder="e.g. 100 or -50"
+                value={grantAmount}
+                onChange={(e) => setGrantAmount(e.target.value)}
+                className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4]"
+              />
+              <div className="flex flex-wrap gap-1.5">
+                {[50, 100, 250, 500, 1000].map((v) => (
+                  <Button
+                    key={v}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setGrantAmount(String(v))}
+                    className="h-7 px-2 border-white/10 bg-transparent text-[#ECEAE4] hover:bg-white/5 text-[11px]"
+                  >
+                    +{v}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="grant-reason" className="text-[12px] text-[#ECEAE4]">Reason (audit log)</Label>
+              <Textarea
+                id="grant-reason"
+                placeholder="e.g. Refund for failed render — ticket #MM-1234"
+                value={grantReason}
+                onChange={(e) => setGrantReason(e.target.value)}
+                rows={2}
+                className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4] resize-none"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setGrantOpen(false)}
+              disabled={granting}
+              className="border-white/10 bg-transparent text-[#ECEAE4] hover:bg-white/5"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleGrantCredits}
+              disabled={granting || !grantAmount.trim()}
+              className="bg-[#11C4D0] text-[#0A0D0F] hover:bg-[#11C4D0]/90"
+            >
+              {granting ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Plus className="h-4 w-4 mr-1.5" />}
+              {granting ? "Granting…" : "Grant credits"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -267,23 +267,109 @@ export async function handleCinematicVideo(
   const baseNegatives = "blurry, low quality, watermark, text, UI elements, slow motion, sluggish, nudity, naked, exposed body, extra limbs, body contortion, distorted anatomy, lip sync, talking, mouth movement, speaking";
   const negPrompt = [baseNegatives, styleNegative].filter(Boolean).join(", ");
 
-  // Kling V3.0 Pro I2V (active, end-to-end) — used for BOTH the
-  // first-time batch AND per-scene regenerations. Higher cost vs
-  // V2.6 Pro but stronger subject + texture fidelity. Native
-  // end_image for seamless transitions when we have the next scene's
-  // image; final scene passes undefined so the model renders a
-  // natural conclusion. sound=false — we mux audio separately at
-  // export time.
+  // ── Per-scene Kling rejection fallback ──────────────────────────────
+  // Kling 3.0 Pro's risk-control system permanently rejects some prompts
+  // ("Failure to pass the risk control system"). Before this fallback,
+  // a single rejected scene blew up the whole render (markRunFailed
+  // surfaced "kling: Failure to pass the risk control system" and the
+  // user got nothing — even though 11 of 12 scenes succeeded).
+  //
+  // Three options were on the table:
+  //   1. Retry with a softened prompt — moderation is opaque and
+  //      keyword-stripping rarely flips the verdict on a second try; one
+  //      extra Kling call costs ~10–60s and another ~15–35 credits.
+  //   2. Skip the scene — but the audio track is one continuous master
+  //      file (handleMasterAudio) timed against scene boundaries, so
+  //      removing scene N would desync every later scene's voiceover.
+  //   3. Hold-frame: keep the still image, return null videoUrl. The
+  //      finalize+export path already handles scenes that have only
+  //      imageUrl (exportVideo.ts:128 `s.videoUrl || s.imageUrl || ...`),
+  //      Ken-Burns or static — so the user gets a visually intact final
+  //      mp4 with one held shot instead of a 100% loss.
+  //
+  // We picked #3. It's the only option that produces a watchable result
+  // on a single Kling rejection, and the existing export pipeline
+  // already supports it without changes. We surface the choice via
+  // the return payload so handleAutopostRun can stamp error_summary
+  // ("scene N held as still frame: Kling moderation").
   provider = "Kling V3.0 Pro I2V";
-  videoUrl = await generateKlingV3ProVideo(
-    imageUrl,
-    finalPrompt,
-    apiKey,
-    10,
-    endImageUrl,
-    negPrompt,
-    0.5,
-  );
+  let heldFrameReason: string | null = null;
+
+  try {
+    videoUrl = await generateKlingV3ProVideo(
+      imageUrl,
+      finalPrompt,
+      apiKey,
+      10,
+      endImageUrl,
+      negPrompt,
+      0.5,
+    );
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    // Treat moderation rejection as a permanent per-scene failure —
+    // never retry and never bubble. Anything else (transient API,
+    // timeout, etc.) we re-throw so the dispatcher's retry policy
+    // gets a shot at it.
+    const isModerationReject = /risk control|content[_ ]?violation|blocked.*content|moderation/i.test(errMsg);
+    if (!isModerationReject) {
+      throw err;
+    }
+    heldFrameReason = `Kling moderation rejected scene ${sceneIndex}; held still image as frame`;
+    console.warn(`[CinematicVideo] Scene ${sceneIndex}: ${heldFrameReason} — ${errMsg}`);
+    await writeSystemLog({
+      jobId, projectId, userId, generationId,
+      category: "system_warning",
+      eventType: "cinematic_video_held_frame_fallback",
+      message: `Scene ${sceneIndex}: Kling rejected — using still image as held frame`,
+      details: {
+        sceneIndex,
+        provider: "Kling V3.0 Pro I2V",
+        reason: errMsg,
+        fallback: "hold_frame",
+      },
+    });
+
+    // Mark the scene with a hold-frame sentinel. videoUrl stays null;
+    // export pipeline picks up imageUrl and renders a static shot for
+    // this scene's audio duration. _meta.heldFrame lets the editor /
+    // RunDetail surface "this scene was held" if the user opens it.
+    const { data: freshGen2 } = await supabase
+      .from("generations").select("scenes").eq("id", generationId).maybeSingle();
+    const freshScenes2 = ((freshGen2?.scenes as any[]) ?? []).slice();
+    if (freshScenes2[sceneIndex]) {
+      const meta = (freshScenes2[sceneIndex]._meta && typeof freshScenes2[sceneIndex]._meta === "object")
+        ? { ...freshScenes2[sceneIndex]._meta }
+        : {};
+      meta.heldFrame = {
+        reason: errMsg.slice(0, 240),
+        provider: "kling-3-0-pro-i2v",
+        at: new Date().toISOString(),
+      };
+      freshScenes2[sceneIndex] = { ...freshScenes2[sceneIndex], videoUrl: null, _meta: meta };
+      await supabase.from("generations").update({ scenes: freshScenes2 }).eq("id", generationId);
+    }
+
+    await writeSystemLog({
+      jobId, projectId, userId, generationId,
+      category: "system_warning",
+      eventType: "cinematic_video_completed",
+      message: `Cinematic video for scene ${sceneIndex} held as still frame (Kling moderation)`,
+      details: { provider, hasTransition: !!endImageUrl, cost: 0, fallback: "hold_frame", reason: errMsg },
+    });
+
+    return {
+      success: true,
+      status: "held_frame",
+      videoUrl: null,
+      sceneIndex,
+      provider,
+      hasTransition: false,
+      cost: 0,
+      heldFrame: true,
+      heldFrameReason,
+    };
+  }
 
   // Rollback references (all commented out):
   //

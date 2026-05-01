@@ -487,13 +487,65 @@ Do NOT invent or describe any human character's race, ethnicity, skin tone, hair
   await waitForJob(finalizeJobId, PHASE_TIMEOUT_MS, "finalize_generation");
   await setRunProgress(runId, 80);
 
+  // Per-scene Kling rejection fallback surfacing. handleCinematicVideo
+  // sets scene._meta.heldFrame for any scene rejected by Kling
+  // moderation; the export pipeline still produces a finished mp4
+  // (still image stretched over the scene's audio duration) so the
+  // user gets a watchable result. Expose the count + indices on the
+  // run record so RunDetail / email recipients know one or more
+  // scenes were held — without this the user would assume the render
+  // succeeded silently.
+  const { data: finalGen } = await supabase
+    .from("generations")
+    .select("scenes")
+    .eq("id", generationId)
+    .maybeSingle();
+  const heldFrameIndices: number[] = [];
+  const heldFrameReasons: string[] = [];
+  if (finalGen && Array.isArray((finalGen as { scenes?: unknown[] }).scenes)) {
+    const sceneArr = (finalGen as { scenes: unknown[] }).scenes;
+    sceneArr.forEach((sc, i) => {
+      const meta = (sc as { _meta?: { heldFrame?: { reason?: string } } } | null)?._meta;
+      if (meta && meta.heldFrame) {
+        heldFrameIndices.push(i);
+        if (typeof meta.heldFrame.reason === "string") {
+          heldFrameReasons.push(meta.heldFrame.reason);
+        }
+      }
+    });
+  }
+  if (heldFrameIndices.length > 0) {
+    const summary =
+      heldFrameIndices.length === 1
+        ? `Scene ${heldFrameIndices[0] + 1} held as still frame (Kling moderation)`
+        : `${heldFrameIndices.length} scenes held as still frames (Kling moderation): ${heldFrameIndices.map((i) => i + 1).join(", ")}`;
+    await supabase
+      .from("autopost_runs")
+      .update({ error_summary: summary })
+      .eq("id", runId);
+    await writeSystemLog({
+      jobId,
+      userId,
+      category: "system_warning",
+      eventType: "autopost_render_held_frames",
+      message: summary,
+      details: {
+        autopost_run_id: runId,
+        projectId,
+        generationId,
+        heldFrameIndices,
+        sampleReasons: heldFrameReasons.slice(0, 3),
+      },
+    });
+  }
+
   await writeSystemLog({
     jobId,
     userId,
     category: "system_info",
     eventType: "autopost_render_finalize_done",
     message: `Finalize complete for run ${runId}`,
-    details: { autopost_run_id: runId, projectId, generationId, finalizeJobId },
+    details: { autopost_run_id: runId, projectId, generationId, finalizeJobId, heldFrameCount: heldFrameIndices.length },
   });
 
   // Phase 3 — Export. Stitches scenes into the final mp4 the publishers

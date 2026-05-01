@@ -297,6 +297,13 @@ export async function handleMasterAudio(
   // master URL, which produces 1 long clip during export (degraded
   // but not broken).
   const sceneAudioUrls: (string | null)[] = new Array(scenes.length).fill(null);
+  // Probed actual durations of each slice file (set by ffprobe after
+  // ffmpeg writes the slice). Word-proportional sliceMs is only a
+  // PLAN — the actual mp3 duration after a seek+trim drifts by tens
+  // of ms each scene, and that drift accumulates across the timeline,
+  // pulling captions out of sync. We probe each slice and overwrite
+  // scene.duration with the real value below.
+  const sceneActualMs: number[] = new Array(scenes.length).fill(0);
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `master-slice-${generationId.slice(0, 8)}-`));
   try {
     const masterLocal = path.join(tempDir, "master.mp3");
@@ -316,6 +323,14 @@ export async function handleMasterAudio(
           "-b:a", "128k",
           slicePath,
         ]);
+        // Probe the real duration so captions/clip-length use the
+        // actual sliced audio rather than the planned sliceMs.
+        try {
+          const actualSec = await probeDuration(slicePath);
+          sceneActualMs[i] = Math.max(500, Math.round(actualSec * 1000));
+        } catch {
+          sceneActualMs[i] = sliceMs;
+        }
         const sliceBuf = fs.readFileSync(slicePath);
         // Bucket name is `audio` in prod (not `scene-audio`) — matches
         // what geminiFlashTTS uploads to. The wrong name caused every
@@ -366,9 +381,12 @@ export async function handleMasterAudio(
   for (let i = 0; i < scenes.length; i++) {
     const { startMs, sliceMs } = sceneSlices[i];
     const finalAudioUrl = sceneAudioUrls[i] ?? result.url;
+    // Use the probed actual slice duration when available; fall back
+    // to sliceMs only if probing failed or the slice never wrote.
+    const effectiveMs = sceneActualMs[i] || sliceMs;
     try {
       await updateSceneField(generationId, i, "audioUrl", finalAudioUrl);
-      await updateSceneField(generationId, i, "duration", String(Math.max(1, Math.round(sliceMs / 1000))));
+      await updateSceneField(generationId, i, "duration", String(Math.max(1, Math.round(effectiveMs / 1000))));
       // Read current _meta to preserve keys set by other handlers
       // (characterBible, language, sceneIndex, etc.), then merge our
       // slice fields. Still uses atomic RPC so no read-modify-write

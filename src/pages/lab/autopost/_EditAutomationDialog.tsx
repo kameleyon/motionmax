@@ -387,7 +387,7 @@ export function EditAutomationDialog({
                 <SelectTrigger className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4]">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-[#10151A] border-white/10 text-[#ECEAE4]">
+                <SelectContent className="z-[10000] bg-[#10151A] border-white/10 text-[#ECEAE4]">
                   <SelectItem value="1080x1920">1080×1920 (vertical)</SelectItem>
                   <SelectItem value="1920x1080">1920×1080 (horizontal)</SelectItem>
                 </SelectContent>
@@ -408,7 +408,7 @@ export function EditAutomationDialog({
                 <SelectTrigger className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4]">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-[#10151A] border-white/10 text-[#ECEAE4] max-h-72">
+                <SelectContent className="z-[10000] bg-[#10151A] border-white/10 text-[#ECEAE4] max-h-72">
                   {LANGUAGES.map((l) => (
                     <SelectItem key={l.code} value={l.code}>
                       {l.flag} {l.label}
@@ -429,7 +429,7 @@ export function EditAutomationDialog({
                 <SelectTrigger className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4]">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-[#10151A] border-white/10 text-[#ECEAE4] max-h-72">
+                <SelectContent className="z-[10000] bg-[#10151A] border-white/10 text-[#ECEAE4] max-h-72">
                   {voiceOptions.map((opt) => (
                     <SelectItem key={opt.id as string} value={opt.id as string}>
                       {opt.label}
@@ -448,7 +448,7 @@ export function EditAutomationDialog({
                 <SelectTrigger className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4]">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-[#10151A] border-white/10 text-[#ECEAE4] max-h-72">
+                <SelectContent className="z-[10000] bg-[#10151A] border-white/10 text-[#ECEAE4] max-h-72">
                   {CAPTION_STYLES.map((c) => (
                     <SelectItem key={c.value} value={c.value}>
                       {c.label}

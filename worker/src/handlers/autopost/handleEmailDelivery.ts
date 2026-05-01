@@ -96,8 +96,30 @@ export async function handleAutopostEmailDelivery(
   // doesn't crash; the operator should configure motionmax.io once a
   // verified domain is set up. The format "Display Name <addr>" is what
   // Resend expects for a friendly sender label.
-  const fromAddress =
-    process.env.RESEND_FROM_EMAIL?.trim() || "MotionMax <onboarding@resend.dev>";
+  const rawFrom = process.env.RESEND_FROM_EMAIL?.trim() || "";
+  const fromAddress = rawFrom || "MotionMax <onboarding@resend.dev>";
+  // Surface mis-configured FROM addresses to ops as a system_warning on
+  // every send. Resend's onboarding@resend.dev sandbox only delivers
+  // to addresses verified inside the Resend dashboard — production mail
+  // to arbitrary recipients silently 403s. If we're using the sandbox
+  // OR the var is empty, log it once per send so it shows up in
+  // system_logs and the daily summary catches the misconfig.
+  const usingSandbox =
+    !rawFrom || /onboarding@resend\.dev/i.test(fromAddress);
+  if (usingSandbox) {
+    await writeSystemLog({
+      jobId,
+      userId,
+      category: "system_warning",
+      eventType: "autopost_email_misconfigured_from",
+      message:
+        "RESEND_FROM_EMAIL is missing or still set to the sandbox onboarding@resend.dev — production deliveries to non-verified recipients will fail",
+      details: {
+        autopost_run_id: payload.autopost_run_id,
+        fromAddress,
+      },
+    });
+  }
 
   if (!apiKey) {
     throw new Error("RESEND_API_KEY not configured on the worker");
@@ -162,6 +184,7 @@ export async function handleAutopostEmailDelivery(
     eventType: "autopost_email_delivery_started",
     message: `Sending video to ${payload.recipients.length} recipient(s)`,
     details: {
+      autopost_run_id: (run as { id: string }).id,
       runId: (run as { id: string }).id,
       recipients: payload.recipients.length,
       scheduleId: (run as { schedule_id: string }).schedule_id,
@@ -260,46 +283,74 @@ Direct download (7 days): ${directDownloadUrl}
 Manage this automation: ${appUrl}/lab/autopost
 — MotionMax`;
 
-    let res: Response;
-    try {
-      res = await fetch(RESEND_API_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: fromAddress,
-          to,
-          subject: `Your MotionMax video is ready — ${scheduleName}`,
-          html,
-          text,
-        }),
-      });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+    // Per-recipient retry: 3 attempts with exponential backoff (1s, 2s, 4s).
+    // Resend transients (5xx, network blips, 429) tend to clear quickly;
+    // a hard 4xx (400 invalid recipient, 403 unverified domain) won't,
+    // so we only retry on transport errors and 5xx/429. Permanent 4xx
+    // bails out after the first attempt.
+    let res: Response | null = null;
+    let lastErr: string | null = null;
+    let lastBody = "";
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        const delayMs = 1000 * Math.pow(2, attempt - 1); // 1s, 2s, 4s
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+      try {
+        res = await fetch(RESEND_API_URL, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            from: fromAddress,
+            to,
+            subject: `Your MotionMax video is ready — ${scheduleName}`,
+            html,
+            text,
+          }),
+        });
+      } catch (e) {
+        lastErr = e instanceof Error ? e.message : String(e);
+        res = null;
+        continue; // network / DNS / TLS — retry
+      }
+      if (res.ok) break;
+      lastBody = await res.text().catch(() => "");
+      // Permanent 4xx (400, 401, 403, 404, 422): no retry.
+      if (res.status >= 400 && res.status < 500 && res.status !== 429) break;
+      // 5xx + 429: retry.
+    }
+
+    if (res && res.ok) {
+      delivered += 1;
+    } else if (res === null) {
       await writeSystemLog({
         jobId,
         userId,
         category: "system_warning",
         eventType: "autopost_email_delivery_recipient_failed",
-        message: `Resend transport error for ${to}: ${msg}`,
-        details: { recipient: to, error: msg },
+        message: `Resend transport error for ${to}: ${lastErr ?? "unknown"}`,
+        details: {
+          autopost_run_id: payload.autopost_run_id,
+          recipient: to,
+          error: lastErr,
+        },
       });
-      continue;
-    }
-
-    if (res.ok) {
-      delivered += 1;
     } else {
-      const body = await res.text().catch(() => "");
       await writeSystemLog({
         jobId,
         userId,
         category: "system_warning",
         eventType: "autopost_email_delivery_recipient_failed",
         message: `Resend rejected delivery to ${to}: ${res.status}`,
-        details: { recipient: to, status: res.status, body: body.slice(0, 500) },
+        details: {
+          autopost_run_id: payload.autopost_run_id,
+          recipient: to,
+          status: res.status,
+          body: lastBody.slice(0, 500),
+        },
       });
     }
   }
@@ -317,7 +368,12 @@ Manage this automation: ${appUrl}/lab/autopost
     category: "system_info",
     eventType: "autopost_email_delivery_completed",
     message: `Delivered video to ${delivered}/${payload.recipients.length} recipient(s)`,
-    details: { runId, delivered, recipients: payload.recipients.length },
+    details: {
+      autopost_run_id: runId,
+      runId,
+      delivered,
+      recipients: payload.recipients.length,
+    },
   });
 
   return { delivered, recipients: payload.recipients.length, runId };

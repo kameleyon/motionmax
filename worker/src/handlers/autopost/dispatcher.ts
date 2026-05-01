@@ -47,6 +47,14 @@ const STALE_UPLOADING_MS = 30 * 60_000;
  */
 const STALLED_RUN_MS = 3 * 60 * 60_000;
 /**
+ * Stale threshold for `queued` runs that never got picked up by the worker.
+ * autopost_tick + autopost_fire_now insert the run as 'queued' and immediately
+ * flip to 'generating' once the render-job row exists. A 'queued' row that
+ * survives more than 2 h means the render job was never inserted (DB error,
+ * crash mid-RPC) and the row will sit forever otherwise.
+ */
+const STALLED_QUEUED_RUN_MS = 2 * 60 * 60_000;
+/**
  * Activity heartbeat. Even within the hard ceiling, mark a run failed
  * only if its underlying video_generation_jobs row hasn't been touched
  * for this long. Each phase handler bumps `updated_at` on its job row,
@@ -751,6 +759,63 @@ async function cleanupStalledRuns(): Promise<void> {
       eventType: "autopost_run_stalled_timeout",
       message: `Marked ${data.length} stalled autopost run(s) as failed (no heartbeat in ${Math.round(STALLED_RUN_HEARTBEAT_MS / 60_000)}min, ceiling ${Math.round(STALLED_RUN_MS / 3_600_000)}h)`,
       details: { count: data.length, ids: data.map((r: { id: string }) => r.id) },
+    });
+  }
+
+  // ── Stalled-queued sweep ─────────────────────────────────────────
+  // A run row stuck in 'queued' for >2 h with no matching
+  // video_generation_jobs row (or with a video_job_id pointing at a
+  // row that no longer exists) is unrecoverable — the watchdog above
+  // only handles 'generating'.
+  const queuedCutoff = new Date(Date.now() - STALLED_QUEUED_RUN_MS).toISOString();
+  const { data: queuedRuns, error: queuedErr } = await supabase
+    .from("autopost_runs")
+    .select("id, video_job_id, fired_at")
+    .eq("status", "queued")
+    .lt("fired_at", queuedCutoff);
+  if (queuedErr) {
+    console.warn(`[Autopost] cleanupStalledRuns queued query failed: ${queuedErr.message}`);
+    return;
+  }
+  if (!queuedRuns || queuedRuns.length === 0) return;
+
+  const orphanIds: string[] = [];
+  for (const r of queuedRuns as Array<{ id: string; video_job_id: string | null; fired_at: string }>) {
+    if (!r.video_job_id) {
+      orphanIds.push(r.id);
+      continue;
+    }
+    const { data: jobRow } = await supabase
+      .from("video_generation_jobs")
+      .select("id, status")
+      .eq("id", r.video_job_id)
+      .maybeSingle();
+    // No matching job row → orphaned.
+    if (!jobRow) orphanIds.push(r.id);
+  }
+
+  if (orphanIds.length === 0) return;
+
+  const { data: queuedKilled, error: killErr } = await supabase
+    .from("autopost_runs")
+    .update({
+      status: "failed",
+      error_summary: "Run never picked up by worker (no render job)",
+    })
+    .in("id", orphanIds)
+    .select("id");
+
+  if (killErr) {
+    console.warn(`[Autopost] cleanupStalledRuns queued sweep failed: ${killErr.message}`);
+    return;
+  }
+  if (queuedKilled && queuedKilled.length > 0) {
+    console.log(`[Autopost] marked ${queuedKilled.length} orphan queued run(s) as failed`);
+    await writeSystemLog({
+      category: "system_warning",
+      eventType: "autopost_run_stalled_queued",
+      message: `Marked ${queuedKilled.length} orphan queued autopost run(s) as failed (>${Math.round(STALLED_QUEUED_RUN_MS / 3_600_000)}h with no render job)`,
+      details: { count: queuedKilled.length, ids: queuedKilled.map((r: { id: string }) => r.id) },
     });
   }
 }

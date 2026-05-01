@@ -263,6 +263,24 @@ async function refundCreditsOnFailure(job: Job) {
     const projectType = payload.projectType || "doc2video";
     const length = payload.length || "brief";
 
+    // Autopost-specific guard. The autopost_render task type does NOT
+    // deduct credits at edge-function entry — deduction now happens
+    // inside autopost_tick / autopost_fire_now via deduct_credits_securely
+    // and the actual amount is stamped onto payload.creditsDeducted.
+    // If creditsDeducted is missing (older queued rows pre-deduction
+    // migration), refund nothing — falling back to getCreditCost(...)
+    // would refund a phantom 280-credit "brief" allowance against a
+    // zero-deduction basis and silently inflate user balances.
+    if (job.task_type === "autopost_render" as any) {
+      const deducted = typeof payload.creditsDeducted === "number" && payload.creditsDeducted > 0
+        ? payload.creditsDeducted
+        : 0;
+      if (deducted === 0) {
+        console.log(`[Refund] Skipping autopost refund for job ${job.id} — no creditsDeducted on payload (pre-deduction row)`);
+        return;
+      }
+    }
+
     // Use the exact amount deducted upfront when available (stored in payload
     // by the edge function). Falls back to the formula estimate for legacy jobs
     // where the payload doesn't carry creditsDeducted.
@@ -747,12 +765,20 @@ const FALLBACK_POLL_INTERVAL_MS = 30_000;
 
 // Per-task-type hard timeouts. Export jobs run ffmpeg (CPU-bound, can be long);
 // LLM/API jobs should fail fast if a provider hangs.
-const EXPORT_JOB_TIMEOUT_MS  = parseInt(process.env.EXPORT_JOB_TIMEOUT_MS  || "5400000", 10); // 90 min
-const LLM_JOB_TIMEOUT_MS     = parseInt(process.env.LLM_JOB_TIMEOUT_MS     || "900000",  10); // 15 min
-const JOB_TIMEOUT_MS         = parseInt(process.env.JOB_TIMEOUT_MS          || "5400000", 10); // legacy override
+const EXPORT_JOB_TIMEOUT_MS  = parseInt(process.env.EXPORT_JOB_TIMEOUT_MS  || "5400000",  10); // 90 min
+const LLM_JOB_TIMEOUT_MS     = parseInt(process.env.LLM_JOB_TIMEOUT_MS     || "900000",   10); // 15 min
+// Autopost orchestrator runs the FULL pipeline (script → audio → images →
+// [video] → finalize → export) inline by polling each child job. The
+// orchestrator already has a 3 h watchdog on its child jobs, but if the
+// dispatcher itself wedges (waitForJob in a polling loop where the row
+// row never transitions), no inner timeout will fire. 3.5 h is the
+// outer safety net — past every per-phase budget combined.
+const AUTOPOST_JOB_TIMEOUT_MS = parseInt(process.env.AUTOPOST_JOB_TIMEOUT_MS || "12600000", 10); // 3.5 h
+const JOB_TIMEOUT_MS         = parseInt(process.env.JOB_TIMEOUT_MS          || "5400000",  10); // legacy override
 
 function getJobTimeoutMs(taskType: string): number {
   if (process.env.JOB_TIMEOUT_MS) return JOB_TIMEOUT_MS; // honour explicit override
+  if (taskType === "autopost_render") return AUTOPOST_JOB_TIMEOUT_MS;
   return isExportTask(taskType) ? EXPORT_JOB_TIMEOUT_MS : LLM_JOB_TIMEOUT_MS;
 }
 

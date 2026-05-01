@@ -163,7 +163,7 @@ async function waitForJob(jobId: string, timeoutMs: number, taskType: string): P
   throw new Error(`${taskType} job ${jobId} timed out after ${Math.round(timeoutMs / 60000)} min`);
 }
 
-async function markRunFailed(runId: string, error: unknown): Promise<void> {
+async function markRunFailed(runId: string, error: unknown, jobId?: string, userId?: string): Promise<void> {
   // Surface the underlying cause from a depends_on chain failure: the
   // dispatcher wraps it in "finalize_generation job ... failed:
   // Upstream dependency failed: job ... (cinematic_video) — <real>"
@@ -182,6 +182,18 @@ async function markRunFailed(runId: string, error: unknown): Promise<void> {
         progress_pct: null,
       })
       .eq("id", runId);
+    // Surface the failure into RunDetail's log feed too. RunDetail
+    // filters system_logs on details->>autopost_run_id, so without
+    // this entry the user only sees the single error_summary on the
+    // run row and can't trace which phase imploded.
+    await writeSystemLog({
+      jobId,
+      userId,
+      category: "system_error",
+      eventType: "autopost_render_failed",
+      message: `Autopost run ${runId} marked failed: ${summary}`,
+      details: { autopost_run_id: runId, error: summary, fullError: raw.slice(0, 1000) },
+    });
   } catch (err) {
     console.warn(`[autopost_render] markRunFailed failed for ${runId}: ${(err as Error).message}`);
   }
@@ -202,6 +214,7 @@ export async function handleAutopostRun(
     category: "system_info",
     eventType: "autopost_render_start",
     message: `Autopost render started for run ${runId}`,
+    details: { autopost_run_id: runId },
   });
 
   try {
@@ -213,7 +226,7 @@ export async function handleAutopostRun(
     // "GENERATING 35%" indefinitely and the user can see the real
     // reason. Re-throw so the worker dispatcher still marks the
     // autopost_render job failed itself.
-    await markRunFailed(runId, err);
+    await markRunFailed(runId, err, jobId, userId);
     throw err;
   }
 }
@@ -369,6 +382,15 @@ Do NOT invent or describe any human character's race, ethnicity, skin tone, hair
   if (intake.presenterFocus) scriptPayload.presenterFocus = intake.presenterFocus;
   if (intake.disableExpressions === true) scriptPayload.disableExpressions = true;
 
+  await writeSystemLog({
+    jobId,
+    userId,
+    category: "system_info",
+    eventType: "autopost_render_script_queued",
+    message: `Script job queued for run ${runId}`,
+    details: { autopost_run_id: runId, projectId, scriptJobId: undefined, projectType, length: config.length ?? "short" },
+  });
+
   const scriptJobId = await submitJob(userId, "generate_video", scriptPayload, [], projectId);
   const scriptResult = await waitForJob(scriptJobId, SCRIPT_TIMEOUT_MS, "generate_video");
 
@@ -378,6 +400,15 @@ Do NOT invent or describe any human character's race, ethnicity, skin tone, hair
     throw new Error(`autopost_render: script result missing generationId/sceneCount (${JSON.stringify(scriptResult).slice(0, 200)})`);
   }
   await setRunProgress(runId, 25);
+
+  await writeSystemLog({
+    jobId,
+    userId,
+    category: "system_info",
+    eventType: "autopost_render_script_done",
+    message: `Script ready for run ${runId} (sceneCount=${sceneCount})`,
+    details: { autopost_run_id: runId, projectId, generationId, sceneCount },
+  });
 
   // Phase 2 — submit all subsequent jobs with depends_on chains. The
   // worker handles dependency resolution itself, so we only need to wait
@@ -427,6 +458,23 @@ Do NOT invent or describe any human character's race, ethnicity, skin tone, hair
     }
   }
 
+  await writeSystemLog({
+    jobId,
+    userId,
+    category: "system_info",
+    eventType: "autopost_render_audio_queued",
+    message: `Audio + image jobs queued for run ${runId}`,
+    details: {
+      autopost_run_id: runId,
+      projectId,
+      generationId,
+      audioJobs: audioJobIds.length,
+      imageJobs: imageJobIds.length,
+      videoJobs: videoJobIds.length,
+      mode: projectType,
+    },
+  });
+
   const finalizeDeps = [...audioJobIds, ...(isCinematic ? videoJobIds : imageJobIds)];
   const finalizeJobId = await submitJob(
     userId,
@@ -438,6 +486,15 @@ Do NOT invent or describe any human character's race, ethnicity, skin tone, hair
 
   await waitForJob(finalizeJobId, PHASE_TIMEOUT_MS, "finalize_generation");
   await setRunProgress(runId, 80);
+
+  await writeSystemLog({
+    jobId,
+    userId,
+    category: "system_info",
+    eventType: "autopost_render_finalize_done",
+    message: `Finalize complete for run ${runId}`,
+    details: { autopost_run_id: runId, projectId, generationId, finalizeJobId },
+  });
 
   // Phase 3 — Export. Stitches scenes into the final mp4 the publishers
   // and email handler can hand off as a URL.
@@ -461,6 +518,22 @@ Do NOT invent or describe any human character's race, ethnicity, skin tone, hair
   }
   await setRunProgress(runId, 100);
 
+  await writeSystemLog({
+    jobId,
+    userId,
+    category: "system_info",
+    eventType: "autopost_render_export_done",
+    message: `Export complete for run ${runId}`,
+    details: {
+      autopost_run_id: runId,
+      projectId,
+      exportJobId,
+      finalUrl,
+      durationSeconds: exportResult.durationSeconds,
+      sizeBytes: exportResult.sizeBytes,
+    },
+  });
+
   // Tag the autopost_run with this autopost_render job id so the publish
   // dispatcher can look up finalUrl by run.video_job_id. The trigger
   // flips status='rendered' once we mark the autopost_render row
@@ -478,8 +551,28 @@ Do NOT invent or describe any human character's race, ethnicity, skin tone, hair
   // downstream step reads the run row.
   try {
     await generateAutopostThumbnail(runId, finalUrl);
+    await writeSystemLog({
+      jobId,
+      userId,
+      category: "system_info",
+      eventType: "autopost_render_thumbnail_success",
+      message: `Thumbnail generated for run ${runId}`,
+      details: { autopost_run_id: runId, projectId },
+    });
   } catch (err) {
     console.warn(`[autopost] thumbnail generation failed for run ${runId}:`, err);
+    await writeSystemLog({
+      jobId,
+      userId,
+      category: "system_warning",
+      eventType: "autopost_render_thumbnail_failed",
+      message: `Thumbnail generation failed for run ${runId}`,
+      details: {
+        autopost_run_id: runId,
+        projectId,
+        error: err instanceof Error ? err.message : String(err),
+      },
+    });
   }
 
   await writeSystemLog({
@@ -488,6 +581,7 @@ Do NOT invent or describe any human character's race, ethnicity, skin tone, hair
     category: "system_info",
     eventType: "autopost_render_complete",
     message: `Autopost render complete for run ${runId} (sceneCount=${sceneCount})`,
+    details: { autopost_run_id: runId, projectId, generationId, sceneCount, finalUrl },
   });
 
   return {

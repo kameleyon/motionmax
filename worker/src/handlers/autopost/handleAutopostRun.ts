@@ -163,6 +163,30 @@ async function waitForJob(jobId: string, timeoutMs: number, taskType: string): P
   throw new Error(`${taskType} job ${jobId} timed out after ${Math.round(timeoutMs / 60000)} min`);
 }
 
+async function markRunFailed(runId: string, error: unknown): Promise<void> {
+  // Surface the underlying cause from a depends_on chain failure: the
+  // dispatcher wraps it in "finalize_generation job ... failed:
+  // Upstream dependency failed: job ... (cinematic_video) — <real>"
+  // — pull the trailing message after the last em-dash so users see
+  // "kling: Failure to pass the risk control system" instead of the
+  // whole nesting noise.
+  const raw = error instanceof Error ? error.message : String(error);
+  const tail = raw.split(/—|\u2014/).pop()?.trim() || raw;
+  const summary = (tail.length > 240 ? `${tail.slice(0, 237)}…` : tail);
+  try {
+    await supabase
+      .from("autopost_runs")
+      .update({
+        status: "failed",
+        error_summary: summary,
+        progress_pct: null,
+      })
+      .eq("id", runId);
+  } catch (err) {
+    console.warn(`[autopost_render] markRunFailed failed for ${runId}: ${(err as Error).message}`);
+  }
+}
+
 export async function handleAutopostRun(
   jobId: string,
   payload: AutopostRenderPayload,
@@ -179,6 +203,27 @@ export async function handleAutopostRun(
     eventType: "autopost_render_start",
     message: `Autopost render started for run ${runId}`,
   });
+
+  try {
+    return await runPipeline(jobId, payload, userId, runId);
+  } catch (err) {
+    // The orchestrator throws when ANY child job in the depends_on
+    // chain fails (Kling moderation, OOM, transient API, etc.). Mark
+    // the autopost_run failed so the dashboard stops showing it as
+    // "GENERATING 35%" indefinitely and the user can see the real
+    // reason. Re-throw so the worker dispatcher still marks the
+    // autopost_render job failed itself.
+    await markRunFailed(runId, err);
+    throw err;
+  }
+}
+
+async function runPipeline(
+  jobId: string,
+  payload: AutopostRenderPayload,
+  userId: string,
+  runId: string,
+): Promise<AutopostRenderResult> {
 
   // Load run + schedule. service_role bypasses RLS.
   const { data: runData, error: runErr } = await supabase

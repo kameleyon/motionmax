@@ -132,7 +132,22 @@ async function tryHypereal(
           console.warn(`[ImageGen] Hypereal giving up on ${res.status} (client error, non-retriable)`);
           return null;
         }
-        if (attempt < HYPEREAL_RETRIES) await sleep(1500 * attempt);
+        // Hypereal's E9999 ("unexpected error") signals an upstream
+        // outage that doesn't recover within a few seconds — fall to
+        // Replicate after one retry instead of burning 4 attempts and
+        // making every queued scene wait ~9s during their hiccup.
+        if (err.includes("E9999") && attempt >= 2) {
+          console.warn(`[ImageGen] Hypereal E9999 sustained — failing over to Replicate early`);
+          return null;
+        }
+        // Exponential backoff with mild jitter: 1s, 2s, 4s, 8s ± 30%.
+        // Linear backoff was too kind to a struggling upstream and
+        // never gave it real time to recover between attempts.
+        if (attempt < HYPEREAL_RETRIES) {
+          const base = 1000 * Math.pow(2, attempt - 1);
+          const jitter = base * (0.7 + Math.random() * 0.6);
+          await sleep(Math.round(jitter));
+        }
         continue;
       }
 

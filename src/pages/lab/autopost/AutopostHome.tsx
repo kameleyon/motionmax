@@ -185,7 +185,9 @@ export default function AutopostHome() {
     () => (
       <Button
         asChild
-        className="bg-[#11C4D0] text-[#0A0D0F] hover:bg-[#11C4D0]/90"
+        size="default"
+        className="h-10 px-4 bg-[#11C4D0] text-[#0A0D0F] hover:bg-[#11C4D0]/90"
+        style={{ backgroundImage: "linear-gradient(180deg, #11C4D0 0%, #0EA8B3 100%)" }}
       >
         <Link to="/app/create/new?mode=cinematic">
           <Plus className="h-4 w-4 mr-1.5" />
@@ -212,7 +214,8 @@ export default function AutopostHome() {
           <Button
             asChild
             variant="outline"
-            className="border-white/10 bg-transparent text-[#ECEAE4] hover:bg-white/5"
+            size="default"
+            className="h-10 px-4 border-white/10 bg-transparent text-[#ECEAE4] hover:bg-white/5"
           >
             <Link to="/lab/autopost/runs">
               <History className="h-4 w-4 mr-1.5" />

@@ -296,7 +296,10 @@ export default function RunHistory() {
         <div className="space-y-6">
           {grouped.map(group => (
             <div key={group.key} className="space-y-2">
-              <h3 className="text-[11px] uppercase tracking-wide text-[#8A9198] px-1">
+              <h3
+                className="px-1 font-mono text-[11px] uppercase text-[#8A9198]"
+                style={{ letterSpacing: "0.14em" }}
+              >
                 {group.label}
               </h3>
               <Card className="bg-[#10151A] border-white/8 overflow-hidden">
@@ -365,6 +368,47 @@ export default function RunHistory() {
   );
 }
 
+/**
+ * Compact 9:16 thumbnail tile sized for the dense list. Always renders
+ * a real frame in slots so a missing thumbnail looks intentional, not
+ * broken: in-flight runs get a shimmer overlay, failed runs get a gold
+ * fail glyph, completed-without-thumb keeps the muted image icon.
+ */
+function RunThumb({ run }: { run: RunRow }) {
+  const active = isRunStatusActive(run.status);
+  const failed = run.status === "failed";
+  return (
+    <div className="shrink-0 overflow-hidden rounded bg-black/40 border border-white/8 w-[27px] h-[48px] sm:w-[30px] sm:h-[54px] relative">
+      {run.thumbnail_url ? (
+        <img
+          src={run.thumbnail_url}
+          alt=""
+          loading="lazy"
+          className="h-full w-full object-cover"
+          onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+        />
+      ) : null}
+      {!run.thumbnail_url && active && (
+        <div
+          aria-hidden
+          className="absolute inset-0 animate-shimmer"
+          style={{ background: "linear-gradient(180deg, transparent, rgba(17,196,208,0.35), transparent)" }}
+        />
+      )}
+      {!run.thumbnail_url && failed && (
+        <div className="absolute inset-0 flex items-center justify-center text-[#E4C875]">
+          <span className="text-[14px] font-bold">!</span>
+        </div>
+      )}
+      {!run.thumbnail_url && !active && !failed && (
+        <div className="absolute inset-0 flex items-center justify-center text-[#3A4248]">
+          <ImageIcon className="h-3.5 w-3.5" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RunListItem({
   run,
   onClick,
@@ -374,75 +418,73 @@ function RunListItem({
   onClick: () => void;
   onDelete: (id: string) => void;
 }) {
+  const [errorOpen, setErrorOpen] = useState(false);
+  const isActive = isRunStatusActive(run.status);
+  const isFailed = run.status === "failed";
   return (
-    <div
-      className="group flex w-full items-center gap-3 px-3 py-3 transition-colors hover:bg-white/[0.03] sm:gap-4 sm:px-4 cursor-pointer"
-      onClick={onClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); }
-      }}
-    >
-      {/* Thumbnail — 90×160 mobile, 180×320 max desktop. aspect 9:16. */}
-      <div className="shrink-0 overflow-hidden rounded-md bg-black/40 border border-white/8 w-[60px] h-[107px] sm:w-[90px] sm:h-[160px]">
-        {run.thumbnail_url ? (
-          <img
-            src={run.thumbnail_url}
-            alt=""
-            loading="lazy"
-            className="h-full w-full object-cover"
-            onError={e => {
-              // Hide broken images so the placeholder kicks in.
-              (e.currentTarget as HTMLImageElement).style.display = "none";
-            }}
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-[#5A6268]">
-            <ImageIcon className="h-5 w-5" />
-          </div>
-        )}
-      </div>
+    <>
+      <div
+        className="group flex w-full items-center gap-3 px-3 py-2 transition-colors hover:bg-white/[0.03] sm:px-4 cursor-pointer min-h-[48px]"
+        onClick={onClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); }
+        }}
+      >
+        <RunThumb run={run} />
 
-      <div className="min-w-0 flex-1 space-y-1.5">
-        <div className="flex items-baseline gap-2 min-w-0">
-          <p className="font-medium text-[13px] text-[#ECEAE4] truncate">
-            {run.schedule?.name ?? "(deleted schedule)"}
-          </p>
-          <span className="text-[11px] text-[#5A6268] shrink-0">
-            {relativeTime(run.fired_at)}
-          </span>
+        <div className="min-w-0 flex-1 flex flex-col gap-0.5">
+          <div className="flex items-baseline gap-2 min-w-0">
+            <p className="font-medium text-[13px] text-[#ECEAE4] truncate">
+              {run.topic || run.schedule?.name || "(untitled run)"}
+            </p>
+          </div>
+          {isActive && (
+            <RunProgressBar value={run.progress_pct} className="mt-0.5" />
+          )}
         </div>
-        {run.topic && (
-          <p className="text-[12px] text-[#8A9198] truncate">{run.topic}</p>
-        )}
-        <div className="flex flex-wrap items-center gap-1.5">
+
+        <div className="hidden sm:flex items-center gap-2 shrink-0">
           <StatusPill status={run.status} />
-          {run.publish_jobs.map((j, i) => (
+          {run.publish_jobs.slice(0, 3).map((j, i) => (
             <PlatformPill key={`${j.platform}-${i}`} platform={j.platform} status={j.status} />
           ))}
         </div>
-        {isRunStatusActive(run.status) && (
-          <RunProgressBar value={run.progress_pct} className="mt-1.5" />
+
+        <span className="text-[11px] text-[#5A6268] shrink-0 tabular-nums w-[64px] text-right">
+          {relativeTime(run.fired_at)}
+        </span>
+
+        {isFailed && run.error_summary && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setErrorOpen(o => !o); }}
+            className="shrink-0 rounded-md px-2 py-1 text-[10px] uppercase tracking-wider border border-[#E4C875]/30 bg-[#E4C875]/5 text-[#E4C875] hover:bg-[#E4C875]/10"
+            aria-label="Show error details"
+            aria-expanded={errorOpen}
+          >
+            {errorOpen ? "Hide details" : "Show details"}
+          </button>
         )}
-        {run.error_summary && run.status === "failed" && (
-          <p className="text-[11px] text-[#E4C875] line-clamp-1">{run.error_summary}</p>
-        )}
+
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onDelete(run.id); }}
+          className="ml-1 shrink-0 rounded-md p-1.5 text-[#5A6268] opacity-0 transition-opacity hover:bg-[#E4C875]/10 hover:text-[#E4C875] group-hover:opacity-100 focus:opacity-100"
+          aria-label="Delete run"
+          title="Delete run"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
       </div>
 
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete(run.id);
-        }}
-        className="ml-1 shrink-0 self-start rounded-md p-2 text-[#5A6268] opacity-0 transition-opacity hover:bg-[#E4C875]/10 hover:text-[#E4C875] group-hover:opacity-100 focus:opacity-100"
-        aria-label="Delete run"
-        title="Delete run"
-      >
-        <Trash2 className="h-4 w-4" />
-      </button>
-    </div>
+      {isFailed && errorOpen && run.error_summary && (
+        <pre className="mx-3 sm:mx-4 mb-2 mt-1 rounded-md border border-white/8 bg-black/40 px-3 py-2 text-[11px] font-mono text-[#8A9198] whitespace-pre-wrap break-words leading-relaxed">
+          {run.error_summary}
+        </pre>
+      )}
+    </>
   );
 }
 

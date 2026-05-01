@@ -108,7 +108,10 @@ interface IconButtonProps {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   onClick: () => void;
-  amber?: boolean;
+  /** Cyan-tinted only fires for the active/selected state — the action
+   *  the operator most-likely wants right now (e.g. "Run now"). All
+   *  other icons default to the muted-ink convention. */
+  active?: boolean;
   destructive?: boolean;
   disabled?: boolean;
   loading?: boolean;
@@ -118,7 +121,7 @@ function IconButton({
   icon: Icon,
   label,
   onClick,
-  amber,
+  active,
   destructive,
   disabled,
   loading,
@@ -133,8 +136,9 @@ function IconButton({
           disabled={disabled || loading}
           onClick={onClick}
           className={cn(
-            "h-8 w-8 text-[#8A9198] hover:bg-white/5 hover:text-[#ECEAE4]",
-            amber && "text-[#E4C875] hover:text-[#E4C875] hover:bg-[#E4C875]/10",
+            // Default: muted-ink, hover→ink (matches Dashboard convention).
+            "h-8 w-8 text-[#5A6268] hover:bg-white/5 hover:text-[#ECEAE4]",
+            active && "text-[#11C4D0] hover:text-[#11C4D0] hover:bg-[#11C4D0]/10",
             destructive && "hover:text-[#E4C875] hover:bg-[#E4C875]/10",
           )}
         >
@@ -259,7 +263,10 @@ export function AutomationCard({ schedule, lastRunAt }: AutomationCardProps) {
         <CardContent className="p-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
-              <h3 className="font-semibold text-[14px] text-[#ECEAE4] truncate">
+              <h3
+                className="font-serif font-medium text-[18px] leading-tight text-[#ECEAE4] truncate"
+                style={{ fontFamily: 'Fraunces, Georgia, serif' }}
+              >
                 {schedule.name}
               </h3>
               <Badge
@@ -278,7 +285,7 @@ export function AutomationCard({ schedule, lastRunAt }: AutomationCardProps) {
             <IconButton
               icon={Zap}
               label="Run now"
-              amber
+              active
               onClick={() => fireMutation.mutate()}
               loading={fireMutation.isPending}
             />

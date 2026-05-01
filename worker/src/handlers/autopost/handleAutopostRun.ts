@@ -272,7 +272,25 @@ async function runPipeline(
   // builders surface them as their own labeled blocks in the user
   // message ("EXACT TOPIC FOR THIS VIDEO" + "DO NOT REPEAT"). This
   // is the autonomux pattern: topic is never mixed with content.
-  const content = (run.prompt_resolved?.trim() || schedule.prompt_template || "").trim();
+  const baseContent = (run.prompt_resolved?.trim() || schedule.prompt_template || "").trim();
+
+  // Autopost-only character policy. The core research + script prompts
+  // (researchTopic.ts:61, buildCinematic.ts character bible, etc.)
+  // train the script LLM to describe ethnicity / skin tone / detailed
+  // features for any character, which produces fully-rendered humans
+  // even when the chosen art style is paper-cutout or stick-figure.
+  // For autopost runs (where the user's intake didn't supply a
+  // character) we prepend an explicit override that tells the LLM to
+  // stay in style and avoid demographic markers entirely. Only fires
+  // when no schedule-level character_description is set.
+  const hasUserCharacter =
+    typeof config.character_description === "string" && config.character_description.trim().length > 0;
+  const characterPolicy = hasUserCharacter ? "" : `=== CHARACTER POLICY (autopost-specific) ===
+Do NOT invent or describe any human character's race, ethnicity, skin tone, hair, age, gender, clothing, or facial features. Stick to the style description. When the chosen art style is stick-figure / paper-cutout / moody / sketch / or any other stylized medium — figures must be simple, generic, abstract shapes (single-line bodies, circle heads, no realistic faces) and stick to the style prompt strictly. If a person is in the scene, render them as a stick figure with no demographic markers.
+
+`;
+
+  const content = `${characterPolicy}${baseContent}`;
 
   const projectId = randomUUID();
 

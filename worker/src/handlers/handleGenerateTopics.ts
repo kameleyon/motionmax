@@ -86,8 +86,14 @@ export async function handleGenerateTopics(
     ? payload.existingTopics.filter((t) => typeof t === "string" && t.trim().length > 0).slice(-60)
     : [];
 
+  // When existing topics are provided we want NEW topics with NEW
+  // subjects but EXACTLY THE SAME structural format (prefix, casing,
+  // punctuation, word style). Without the format-match clause the LLM
+  // reads "explore different angles" and abandons whatever naming
+  // scheme the existing topics established (e.g. "3 of Clubs: Stop X"
+  // → drops the card prefix and just writes generic self-help).
   const exclusionBlock = existing.length > 0
-    ? `\n\nIMPORTANT — These topics have already been suggested. Do NOT repeat them or any close variant:\n${existing.map((t) => `- ${t}`).join("\n")}\n\nGenerate topics that explore COMPLETELY DIFFERENT angles, sub-topics, or perspectives.`
+    ? `\n\nEXISTING TOPICS (do NOT repeat these or any close variant — but DO match their format exactly):\n${existing.map((t) => `- ${t}`).join("\n")}\n\nFORMAT CONSISTENCY — CRITICAL:\nStudy the existing topics above. Match their EXACT structural format in every new topic:\n- Same prefix pattern (if they all start with a card name, place name, date, etc., yours must too — using a NEW value of the same kind)\n- Same casing rules (Title Case vs Sentence case)\n- Same punctuation style (colons, em-dashes, etc.)\n- Same approximate length and rhythm\n- Same tone\nThe new topics should feel like they belong in the same series. Only the subject changes — never the format.`
     : "";
 
   const todayHuman = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });

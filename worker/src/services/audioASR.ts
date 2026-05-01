@@ -59,38 +59,51 @@ export async function transcribeAudio(
 
   const startTime = Date.now();
   try {
-    // Download the audio file ourselves and send as base64 data URI.
-    // Hypereal's async jobs can't reliably fetch from private Supabase buckets,
-    // so we download first and send the data inline.
+    // Two transport modes for the audio payload:
+    //   1. PUBLIC URL — preferred. We just hand Hypereal the URL and
+    //      they fetch it themselves. Avoids the 413 Payload Too Large
+    //      we used to get when long master-audio mp3s (multi-MB) were
+    //      base64-inlined.
+    //   2. BASE64 DATA URI — fallback for signed/private URLs that
+    //      Hypereal can't reach. Capped at ~6MB raw to stay under
+    //      their request-body limit (~8MB after base64 inflation).
     const accessibleUrl = await ensureAccessibleUrl(audioUrl, signUrl);
-    console.log(`[ASR] Downloading audio: ${accessibleUrl.substring(0, 80)}...`);
+    const isPublicUrl = /^https?:\/\/[^?#]+\.supabase\.co\/storage\/v1\/object\/public\//.test(accessibleUrl);
+    console.log(`[ASR] Audio source (${isPublicUrl ? "public-url" : "base64-inline"}): ${accessibleUrl.substring(0, 80)}...`);
 
-    const audioRes = await fetch(accessibleUrl);
-    if (!audioRes.ok) {
-      console.warn(`[ASR] Failed to download audio (${audioRes.status})`);
-      return null;
+    let audioField: string;
+    if (isPublicUrl) {
+      audioField = accessibleUrl;
+    } else {
+      const audioRes = await fetch(accessibleUrl);
+      if (!audioRes.ok) {
+        console.warn(`[ASR] Failed to download audio (${audioRes.status})`);
+        return null;
+      }
+      const buffer = await audioRes.arrayBuffer();
+      if (buffer.byteLength === 0) {
+        console.warn("[ASR] Downloaded audio is empty");
+        return null;
+      }
+      const MAX_INLINE_BYTES = 6 * 1024 * 1024;
+      if (buffer.byteLength > MAX_INLINE_BYTES) {
+        console.warn(`[ASR] Audio too large to inline (${(buffer.byteLength / 1024 / 1024).toFixed(1)}MB > 6MB) — skipping ASR`);
+        return null;
+      }
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const ext = audioUrl.includes(".wav") ? "wav" : "mpeg";
+      audioField = `data:audio/${ext};base64,${btoa(binary)}`;
+      console.log(`[ASR] Sending ${(buffer.byteLength / 1024).toFixed(0)}KB as base64 data URI`);
     }
-
-    const buffer = await audioRes.arrayBuffer();
-    if (buffer.byteLength === 0) {
-      console.warn("[ASR] Downloaded audio is empty");
-      return null;
-    }
-
-    // Convert to base64 data URI
-    const bytes = new Uint8Array(buffer);
-    let binary = "";
-    for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    const ext = audioUrl.includes(".wav") ? "wav" : "mpeg";
-    const dataUri = `data:audio/${ext};base64,${btoa(binary)}`;
-    console.log(`[ASR] Sending ${(buffer.byteLength / 1024).toFixed(0)}KB as base64 data URI`);
 
     const payload = {
       model: "audio-asr",
       input: {
-        audio: dataUri,
+        audio: audioField,
         language,
         ignore_timestamps: false,
       },

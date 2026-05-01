@@ -169,20 +169,45 @@ export async function handleAutopostEmailDelivery(
   });
 
   // ── Per-recipient send loop ────────────────────────────────────────
-  // Build URLs that point at motionmax.io rather than the raw signed
-  // Supabase URL — the run-detail page already has a Watch + Download
-  // + Open-in-editor surface and is the natural landing for users
-  // clicking through from the email. Signed URL is still surfaced as a
-  // secondary direct-download link for users who don't want to log in.
+  // Build URLs that point at motionmax.io rather than raw Supabase
+  // URLs. vercel.json rewrites /api/video/:path* and
+  // /api/media/:bucket/:path* through the Supabase serve-media edge
+  // function, so we can proxy any storage path behind the brand
+  // domain. This keeps every URL in the email on motionmax.io —
+  // watch link, thumbnail, and direct-download link.
   const appUrl = (process.env.APP_URL || "https://www.motionmax.io").replace(/\/+$/, "");
   const runUrl = `${appUrl}/lab/autopost/runs/${(run as { id: string }).id}`;
+
+  /** Convert a `https://<ref>.supabase.co/storage/v1/object/(public|sign)/<bucket>/<path>`
+   *  URL into the equivalent `<appUrl>/api/media/<bucket>/<path>` proxy
+   *  URL. Falls through unchanged for anything that doesn't match. */
+  function brandedMediaUrl(input: string | null | undefined): string {
+    if (!input) return "";
+    try {
+      const u = new URL(input);
+      if (!u.hostname.endsWith(".supabase.co")) return input;
+      // expected path: /storage/v1/object/(public|sign|...)/<bucket>/<path>
+      const parts = u.pathname.split("/").filter(Boolean);
+      if (parts.length < 5 || parts[0] !== "storage") return input;
+      // parts: ["storage", "v1", "object", "<mode>", "<bucket>", ...rest]
+      const bucket = parts[4];
+      const rest = parts.slice(5).join("/");
+      if (!bucket || !rest) return input;
+      return `${appUrl}/api/media/${encodeURI(bucket)}/${encodeURI(rest)}`;
+    } catch {
+      return input;
+    }
+  }
+
+  const brandedDownloadUrl = brandedMediaUrl(signedUrl);
+  const brandedThumbUrl = thumbnailUrl ? brandedMediaUrl(thumbnailUrl) : "";
   let delivered = 0;
   for (const to of payload.recipients) {
     const safeName = escapeHtml(scheduleName);
     const safeTopic = escapeHtml(topicText);
     const safeRunUrl = escapeHtml(runUrl);
-    const safeSignedUrl = escapeHtml(signedUrl);
-    const safeThumb = thumbnailUrl ? escapeHtml(thumbnailUrl) : "";
+    const safeSignedUrl = escapeHtml(brandedDownloadUrl);
+    const safeThumb = brandedThumbUrl ? escapeHtml(brandedThumbUrl) : "";
 
     const html = `<!doctype html>
 <html>
@@ -251,7 +276,7 @@ export async function handleAutopostEmailDelivery(
 ${topicText ? `Topic: ${topicText}\n` : ""}From: ${scheduleName}
 
 Watch on MotionMax: ${runUrl}
-Direct download (7 days): ${signedUrl}
+Direct download (7 days): ${brandedDownloadUrl}
 
 Manage this automation: ${appUrl}/lab/autopost
 — MotionMax`;

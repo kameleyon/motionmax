@@ -470,16 +470,17 @@ Do NOT invent or describe any human character's race, ethnicity, skin tone, hair
     .update({ video_job_id: jobId })
     .eq("id", runId);
 
-  // Generate the thumbnail unconditionally — the publish dispatcher
-  // also calls this for delivery_method='social' runs, but library_only
-  // and email-only runs never reach the dispatcher and would otherwise
-  // show the placeholder image-icon forever. Thumbnail generation is
-  // best-effort and self-guards against re-running on a row that
-  // already has thumbnail_url set, so calling it from both places is
-  // safe.
-  void generateAutopostThumbnail(runId, finalUrl).catch((err) => {
+  // Generate the thumbnail BEFORE we return. The autopost_render
+  // completion fires `autopost_on_video_completed`, which queues the
+  // email-delivery job — if the thumbnail were still uploading in the
+  // background, the email would render with no hero image. Awaiting
+  // here costs ~2–5s but guarantees thumbnail_url is set before any
+  // downstream step reads the run row.
+  try {
+    await generateAutopostThumbnail(runId, finalUrl);
+  } catch (err) {
     console.warn(`[autopost] thumbnail generation failed for run ${runId}:`, err);
-  });
+  }
 
   await writeSystemLog({
     jobId,

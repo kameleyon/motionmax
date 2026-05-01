@@ -90,7 +90,10 @@ export default function ScheduleBlock({
   // Delivery mode + email recipients (Wave E). Default 'social' so the
   // existing user flow is unchanged; default-seed the recipient list with
   // the signed-in user's auth email below so email-mode is one click.
-  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('social');
+  // Default to 'library_only' while social-publishing is gated behind
+  // Google's pending data-access verification. Flip back to 'social'
+  // once the verification clears.
+  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('library_only');
   const [emailRecipients, setEmailRecipients] = useState<string[]>([]);
   const [emailDraft, setEmailDraft] = useState('');
   const [termsAgreed, setTermsAgreed] = useState(false);
@@ -527,20 +530,26 @@ export default function ScheduleBlock({
               className="grid gap-2"
             >
               {[
-                { value: 'social' as const,       label: 'Publish to social media',         Icon: Send },
-                { value: 'email' as const,        label: 'Email me when each video is ready', Icon: Mail },
-                { value: 'library_only' as const, label: 'Just save to my library',         Icon: FolderHeart },
-              ].map(({ value, label, Icon }) => {
+                // 'social' is disabled until Google completes
+                // youtube.upload data-access verification (4–8 wk
+                // SLA). Re-enable by removing `disabled: true` here.
+                { value: 'social' as const,       label: 'Publish to social media',         Icon: Send,        disabled: true },
+                { value: 'email' as const,        label: 'Email me when each video is ready', Icon: Mail,        disabled: false },
+                { value: 'library_only' as const, label: 'Just save to my library',         Icon: FolderHeart, disabled: false },
+              ].map(({ value, label, Icon, disabled }) => {
                 const selected = deliveryMethod === value;
                 const inputId = `delivery-${value}`;
                 return (
                   <label
                     key={value}
                     htmlFor={inputId}
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border cursor-pointer transition-colors ${
-                      selected
-                        ? 'border-[#14C8CC]/50 bg-[#14C8CC]/[0.06]'
-                        : 'border-white/5 bg-[#0A0D0F] hover:border-white/10'
+                    aria-disabled={disabled}
+                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border transition-colors ${
+                      disabled
+                        ? 'border-white/5 bg-[#0A0D0F] opacity-50 cursor-not-allowed'
+                        : selected
+                          ? 'border-[#14C8CC]/50 bg-[#14C8CC]/[0.06] cursor-pointer'
+                          : 'border-white/5 bg-[#0A0D0F] hover:border-white/10 cursor-pointer'
                     }`}
                   >
                     <input
@@ -549,19 +558,25 @@ export default function ScheduleBlock({
                       name="autopost-delivery-method"
                       value={value}
                       checked={selected}
-                      onChange={() => setDeliveryMethod(value)}
+                      disabled={disabled}
+                      onChange={() => { if (!disabled) setDeliveryMethod(value); }}
                       className="sr-only"
                     />
                     <span
                       aria-hidden
                       className={`w-3 h-3 rounded-full border-2 shrink-0 flex items-center justify-center ${
-                        selected ? 'border-[#14C8CC]' : 'border-white/20'
+                        selected && !disabled ? 'border-[#14C8CC]' : 'border-white/20'
                       }`}
                     >
-                      {selected && <span className="w-1 h-1 rounded-full bg-[#14C8CC]" />}
+                      {selected && !disabled && <span className="w-1 h-1 rounded-full bg-[#14C8CC]" />}
                     </span>
                     <Icon className="w-3.5 h-3.5 text-[#14C8CC] shrink-0" />
                     <span className="text-[12px] text-[#ECEAE4] truncate">{label}</span>
+                    {disabled && (
+                      <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-[#E4C875] border border-[#E4C875]/30 bg-[#E4C875]/5 rounded px-1.5 py-0.5">
+                        coming soon
+                      </span>
+                    )}
                   </label>
                 );
               })}

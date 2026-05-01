@@ -4,7 +4,7 @@
 
 **Verdict: PRODUCTION-READY (email + library modes).**
 
-> Social publishing remains gated behind Google verification (out of scope). OAuth-token-vault encryption is deferred until that ships. Daily-summary email transport, Slack/PagerDuty queue alerts, and metrics race-RPC are accepted nice-to-haves.
+> Social publishing remains gated behind Google verification (out of scope). OAuth-token-vault encryption is deferred until that ships. Per-scene Kling fallback (hold-frame), daily-summary email transport (Resend), and structured queue-depth alert webhook (`AUTOPOST_ALERT_WEBHOOK_URL`) are now LIVE. Metrics race-free RPC remains an accepted nice-to-have (read-modify-write in `recordPublishOutcome` lives in the publish dispatcher, which is gated behind social-media verification).
 
 ## Top 3 blockers — RESOLVED
 
@@ -52,7 +52,7 @@
 | Per-phase hard timeouts | ✅ | Script 8m, phase 30m, export 15m. |
 | Stall watchdog | ✅ | 3 h hard ceiling + 30 min heartbeat-silence check. |
 | Outer absolute timeout on `autopost_render` job | ✅ | `getJobTimeoutMs("autopost_render")` returns `AUTOPOST_JOB_TIMEOUT_MS` (3.5 h, env-overridable). Existing `Promise.race(processJob, setTimeout(reject))` in `pollQueue` enforces it. |
-| Per-scene fallback for Kling rejection | ❌ | blocked: deferred — requires per-scene retry/fallback policy that is out of scope for this ship. |
+| Per-scene fallback for Kling rejection | ✅ | `handleCinematicVideo.ts` wraps the Kling V3.0 Pro call in a try/catch that detects moderation rejections (regex on "risk control" / "content violation" / "moderation"). On reject: clear `videoUrl`, stamp `scene._meta.heldFrame`, return `status='held_frame'`. The export pipeline already accepts scenes with only `imageUrl` (Ken-Burns over the still), so the user gets a finished mp4 with one held shot instead of a 100% loss. `handleAutopostRun` reads the held-frame meta after finalize and stamps a human-readable `error_summary` like "Scene 3 held as still frame (Kling moderation)". Choice rationale documented in code: hold-frame was the only option that produces a watchable result without desyncing the master audio track. |
 
 ---
 
@@ -119,8 +119,8 @@
 |------|--------|-------|
 | `system_logs` per-phase coverage | ✅ | Render start/complete, thumbnail, email start/per-recipient/complete, dispatcher events. |
 | `error_summary` user-friendly | ✅ | Em-dash unwrap surfaces leaf cause. |
-| Queue-depth alerts to operator channel | ⚠️ | blocked: deferred nice-to-have — `ALERT_WEBHOOK_URL` already supported in `worker/src/index.ts`; routing decision (Slack vs PagerDuty) is ops-side. |
-| Daily summary email | ⚠️ | blocked: deferred nice-to-have — log-only stays. |
+| Queue-depth alerts to operator channel | ✅ | Two parallel webhook sinks: legacy `ALERT_WEBHOOK_URL` (back-compat) and new `AUTOPOST_ALERT_WEBHOOK_URL` for ops. The new channel emits the structured `{ text: "[MotionMax] Queue depth alert: <N> pending", details: {...} }` payload spec'd in the ship plan; failures are swallowed so a missing webhook never breaks a tick. |
+| Daily summary email | ✅ | `dailySummary.ts` now ships the digest via Resend (3-attempt exponential backoff, same transport as `handleEmailDelivery`). Gates: empty-digest skip (totalAttempts === 0), eligibility = at least one `delivery_method='email'` schedule on the user, per-user-per-day cap via `system_logs` dedup on `autopost_daily_summary_email_sent`, recipient resolved via `supabase.auth.admin.getUserById`. Missing `RESEND_API_KEY` no-ops (log-only summary still emitted). TODO in code: add `profiles.notify_daily_summary` column for explicit opt-out — defaults ON until then. |
 | RunDetail log panel populated | ✅ | (See §6.) |
 | Metrics race-free updates | ⚠️ | blocked: deferred nice-to-have — read-modify-write in `recordPublishOutcome` accepted for v1; no observed impact at current scale. |
 

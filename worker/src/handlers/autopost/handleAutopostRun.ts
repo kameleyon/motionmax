@@ -286,7 +286,7 @@ async function runPipeline(
   const hasUserCharacter =
     typeof config.character_description === "string" && config.character_description.trim().length > 0;
   const characterPolicy = hasUserCharacter ? "" : `=== CHARACTER POLICY (autopost-specific) ===
-Do NOT invent or describe any human character's race, ethnicity, skin tone, hair, age, gender, clothing, or facial features. Stick to the style description. When the chosen art style is stick-figure / paper-cutout / moody / sketch / or any other stylized medium — figures must be simple, generic, abstract shapes (single-line bodies, circle heads, no realistic faces) and stick to the style prompt strictly. If a person is in the scene, render them as a stick figure with no demographic markers.
+Do NOT invent or describe any human character's race, ethnicity, skin tone, hair, age, gender, clothing, or facial features, When the chosen art style is stick-figure / paper-cutout / moody / sketch — figures must be simple, generic, abstract shapes and stick to the style prompt strictly. If a person is in the scene, render them as described in the style prompt with no demographic markers.
 
 `;
 

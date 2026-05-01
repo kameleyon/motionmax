@@ -685,14 +685,49 @@ async function pollQueue() {
           `RSS: ${Math.round(mem.rss / 1048576)}MB`
         );
 
-        const alertWebhookUrl = process.env.ALERT_WEBHOOK_URL;
-        if (alertWebhookUrl) {
-          fetch(alertWebhookUrl, {
+        // Two webhook channels supported:
+        //   - ALERT_WEBHOOK_URL: legacy generic alert sink (kept for
+        //     back-compat — anything that already consumes our older
+        //     `{ text, queue_depth }` payload).
+        //   - AUTOPOST_ALERT_WEBHOOK_URL: production-readiness alert
+        //     channel (Slack/Discord/PagerDuty incoming webhook). Uses
+        //     the structured `[MotionMax]`-prefixed payload spec'd in
+        //     the autopost ship plan so a single sink can fan out to
+        //     ops without per-channel parsing.
+        // Both are independent: setting one does not silence the other.
+        // If neither is set, both branches no-op silently — never let a
+        // missing webhook break a worker tick.
+        const legacyAlertUrl = process.env.ALERT_WEBHOOK_URL;
+        if (legacyAlertUrl) {
+          fetch(legacyAlertUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               text: `MotionMax queue depth alert: ${totalPending} jobs pending`,
               queue_depth: totalPending,
+            }),
+          }).catch(() => {
+            // Silently ignore webhook failures — never let an alert break the worker
+          });
+        }
+
+        const autopostAlertUrl = process.env.AUTOPOST_ALERT_WEBHOOK_URL;
+        if (autopostAlertUrl) {
+          fetch(autopostAlertUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: `[MotionMax] Queue depth alert: ${totalPending} pending`,
+              details: {
+                pendingJobs: totalPending,
+                threshold: queueDepthAlertThreshold,
+                activeExportJobs: activeExportJobs.size,
+                activeLlmJobs: activeLlmJobs.size,
+                maxExportSlots: MAX_EXPORT_SLOTS,
+                maxLlmSlots: MAX_LLM_SLOTS,
+                rssMb: Math.round(mem.rss / 1048576),
+                workerId: WORKER_ID,
+              },
             }),
           }).catch(() => {
             // Silently ignore webhook failures — never let an alert break the worker

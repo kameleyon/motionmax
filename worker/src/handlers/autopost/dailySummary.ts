@@ -5,17 +5,29 @@
  * Iterates over each user that had any autopost activity in the last 24
  * hours, aggregates their per-platform roll-up via the
  * `autopost_daily_summary` RPC, and emits a single structured-log entry
- * per user via writeSystemLog.
+ * per user via writeSystemLog. As of the production-readiness ship,
+ * also delivers the summary as a real email through Resend (same
+ * transport pattern as handleEmailDelivery.ts).
  *
  * Design notes:
  *   - `setInterval` once per hour, gated by `getUTCHours() === 9`. We
  *     accept that this fires once per worker replica; the soft-launch
  *     scope is single-tenant so dedup across replicas is YAGNI.
- *   - We deliberately do NOT ship a real email transport in this wave.
- *     The supabase/functions/_shared/resend.ts helper is Deno-only and
- *     can't be imported from Node. When Jo wires SendGrid/Resend (per
- *     the AUTOPOST_PLAN.md §14 outstanding-work list) the only change
- *     here is to add a transport call alongside the writeSystemLog.
+ *   - Email transport: Resend REST API. Same key (RESEND_API_KEY) and
+ *     from address (RESEND_FROM_EMAIL) as the per-run delivery email,
+ *     with a separate per-user-per-day cap enforced by checking
+ *     system_logs for an existing autopost_daily_summary_email_sent
+ *     event for the same (userId, day) pair before sending.
+ *   - Recipient: pulled via supabase.auth.admin.getUserById() against
+ *     the user's id. profiles.notify_daily_summary doesn't exist yet
+ *     (TODO: add column), so we default ON for everyone with at least
+ *     one delivery_method='email' schedule that fired the run set —
+ *     that gates spam to users who didn't already opt into autopost
+ *     email delivery.
+ *   - Empty-digest guard: `runSummaryForDay` already filters users
+ *     down to "had any autopost run." We additionally skip the email
+ *     when totalAttempts === 0 (e.g. all runs failed before producing
+ *     any publish_jobs row) so we never send a "0 attempts" email.
  *   - Scope = "users with any autopost run fired in the last 24h." That
  *     gives us the right denominator (users who SHOULD see a summary)
  *     and avoids spamming users who paused all schedules yesterday.
@@ -23,6 +35,23 @@
 
 import { supabase } from "../../lib/supabase.js";
 import { writeSystemLog } from "../../lib/logger.js";
+
+const RESEND_API_URL = "https://api.resend.com/emails";
+
+/** Minimal HTML escape so we can safely interpolate user-typed schedule
+ *  names and platform identifiers into the email body. */
+function escapeHtmlSummary(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => {
+    switch (c) {
+      case "&": return "&amp;";
+      case "<": return "&lt;";
+      case ">": return "&gt;";
+      case '"': return "&quot;";
+      case "'": return "&#39;";
+      default:  return c;
+    }
+  });
+}
 
 const ONE_HOUR_MS = 60 * 60_000;
 const TARGET_UTC_HOUR = 9;
@@ -163,7 +192,7 @@ async function emitUserSummary(userId: string, day: string): Promise<void> {
   } else {
     lines.push("By platform:");
     for (const row of rows) {
-      lines.push(`  ${row.platform.padEnd(10)} ${row.succeeded}✓  ${row.failed}✗  (${row.total_attempts} attempts)`);
+      lines.push(`  ${row.platform.padEnd(10)} ${row.succeeded}\u2713  ${row.failed}\u2717  (${row.total_attempts} attempts)`);
     }
   }
   const body = lines.join("\n");
@@ -183,4 +212,182 @@ async function emitUserSummary(userId: string, day: string): Promise<void> {
       body,
     },
   });
+
+  // ── Email transport ───────────────────────────────────────────────
+  // Empty-digest guard: skip the email when there were no publish
+  // outcomes at all. Even though runSummaryForDay scopes us to "users
+  // with at least one autopost run," a user whose runs all failed
+  // before reaching the publish_jobs fan-out shows up here with
+  // totalAttempts === 0 — sending them a "0 attempts" email is just
+  // noise.
+  if (totalAttempts === 0) return;
+
+  // Eligibility gate: only deliver to users who have at least one
+  // delivery_method='email' autopost schedule. They've already opted
+  // into autopost emails by setting that delivery method, so a daily
+  // summary on top of per-run emails is a fair extension. Users on
+  // library-only or platform-publish-only schedules don't get
+  // summaries until profiles.notify_daily_summary lands as a real
+  // opt-in column.
+  // TODO: add profiles.notify_daily_summary boolean (default ON) and
+  // honour that in addition to (or instead of) the delivery_method
+  // gate so users can disable summary emails without losing per-run
+  // delivery. Default ON per ship-plan instructions.
+  const { count: emailScheduleCount, error: schedErr } = await supabase
+    .from("autopost_schedules")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("delivery_method", "email");
+  if (schedErr) {
+    console.warn(`[Autopost] daily summary: schedule check failed for ${userId}: ${schedErr.message}`);
+    return;
+  }
+  if (!emailScheduleCount || emailScheduleCount === 0) return;
+
+  // Per-user-per-day cap. The cron tick can fire from multiple worker
+  // replicas (each maintains its own lastSentForDate); the
+  // system_logs lookup is the cross-replica dedupe.
+  const { count: alreadySentCount } = await supabase
+    .from("system_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("event_type", "autopost_daily_summary_email_sent")
+    .contains("details", { day });
+  if (alreadySentCount && alreadySentCount > 0) {
+    return; // silent — already mailed today
+  }
+
+  // Recipient lookup. Service-role key allows admin auth API.
+  let recipientEmail = "";
+  try {
+    const { data: userRow, error: userErr } = await supabase.auth.admin.getUserById(userId);
+    if (userErr) {
+      console.warn(`[Autopost] daily summary: getUserById failed for ${userId}: ${userErr.message}`);
+      return;
+    }
+    recipientEmail = userRow?.user?.email ?? "";
+  } catch (e) {
+    console.warn(`[Autopost] daily summary: getUserById exception for ${userId}: ${e instanceof Error ? e.message : String(e)}`);
+    return;
+  }
+  if (!recipientEmail) return; // user has no email on auth row — nothing to send to
+
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) {
+    console.warn(`[Autopost] daily summary: RESEND_API_KEY missing — skipping email send for ${userId}`);
+    return;
+  }
+  const rawFrom = process.env.RESEND_FROM_EMAIL?.trim() || "";
+  const fromAddress = rawFrom || "MotionMax <onboarding@resend.dev>";
+
+  const appUrl = (process.env.APP_URL || "https://www.motionmax.io").replace(/\/+$/, "");
+
+  const platformRowsHtml = rows
+    .map((r) => {
+      const p = escapeHtmlSummary(r.platform);
+      return `<tr>
+        <td style="padding:6px 12px;color:#ECEAE4;">${p}</td>
+        <td style="padding:6px 12px;color:#11C4D0;text-align:right;">${r.succeeded}</td>
+        <td style="padding:6px 12px;color:#E4C875;text-align:right;">${r.failed}</td>
+        <td style="padding:6px 12px;color:#8A9198;text-align:right;">${r.total_attempts}</td>
+      </tr>`;
+    })
+    .join("");
+
+  const html = `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#0A0D0F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#ECEAE4;">
+    <div style="max-width:600px;margin:0 auto;padding:32px 16px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-bottom:16px;">
+        <tr>
+          <td style="font-family:Georgia,'Times New Roman',serif;font-size:22px;font-weight:600;color:#ECEAE4;letter-spacing:0.2px;">
+            <span style="color:#11C4D0;">Motion</span><span style="color:#E4C875;">Max</span>
+          </td>
+          <td align="right" style="font-size:11px;text-transform:uppercase;letter-spacing:0.18em;color:#5A6268;">
+            Daily Summary
+          </td>
+        </tr>
+      </table>
+      <div style="background:#10151A;border:1px solid rgba(255,255,255,0.08);border-radius:14px;overflow:hidden;padding:28px;">
+        <p style="margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:0.16em;color:#11C4D0;">Autopost summary</p>
+        <h1 style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:22px;font-weight:600;line-height:1.25;color:#ECEAE4;">${escapeHtmlSummary(day)}</h1>
+        <p style="margin:0 0 22px;font-size:13px;color:#8A9198;">${totalSucceeded} succeeded \u00b7 ${totalFailed} failed \u00b7 ${totalAttempts} attempts</p>
+        ${rows.length > 0 ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th align="left"  style="padding:6px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.16em;color:#5A6268;">Platform</th>
+              <th align="right" style="padding:6px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.16em;color:#5A6268;">Succeeded</th>
+              <th align="right" style="padding:6px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.16em;color:#5A6268;">Failed</th>
+              <th align="right" style="padding:6px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.16em;color:#5A6268;">Attempts</th>
+            </tr>
+          </thead>
+          <tbody>${platformRowsHtml}</tbody>
+        </table>` : `<p style="margin:8px 0 0;font-size:13px;color:#8A9198;">No publishes recorded \u2014 schedules may have been paused or the kill-switch was off.</p>`}
+      </div>
+      <p style="margin:18px 0 0;font-size:11px;color:#5A6268;text-align:center;line-height:1.6;">
+        Manage your automations at
+        <a href="${appUrl}/lab/autopost" style="color:#8A9198;text-decoration:underline;">${appUrl.replace(/^https?:\/\//, "")}/lab/autopost</a>.
+      </p>
+    </div>
+  </body>
+</html>`;
+
+  let res: Response | null = null;
+  let lastErr: string | null = null;
+  let lastBody = "";
+  // 3-attempt exponential backoff, identical policy to handleEmailDelivery.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) {
+      await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+    }
+    try {
+      res = await fetch(RESEND_API_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: fromAddress,
+          to: recipientEmail,
+          subject: `MotionMax autopost summary \u2014 ${day}`,
+          html,
+          text: body,
+        }),
+      });
+    } catch (e) {
+      lastErr = e instanceof Error ? e.message : String(e);
+      res = null;
+      continue;
+    }
+    if (res.ok) break;
+    lastBody = await res.text().catch(() => "");
+    if (res.status >= 400 && res.status < 500 && res.status !== 429) break;
+  }
+
+  if (res && res.ok) {
+    await writeSystemLog({
+      userId,
+      category: "system_info",
+      eventType: "autopost_daily_summary_email_sent",
+      message: `Daily summary email sent to ${recipientEmail} for ${day}`,
+      details: { userId, day, recipient: recipientEmail, totalAttempts, totalSucceeded, totalFailed },
+    });
+  } else if (res === null) {
+    await writeSystemLog({
+      userId,
+      category: "system_warning",
+      eventType: "autopost_daily_summary_email_failed",
+      message: `Resend transport error sending daily summary to ${recipientEmail}: ${lastErr ?? "unknown"}`,
+      details: { userId, day, recipient: recipientEmail, error: lastErr },
+    });
+  } else {
+    await writeSystemLog({
+      userId,
+      category: "system_warning",
+      eventType: "autopost_daily_summary_email_failed",
+      message: `Resend rejected daily summary to ${recipientEmail}: ${res.status}`,
+      details: { userId, day, recipient: recipientEmail, status: res.status, body: lastBody.slice(0, 500) },
+    });
+  }
 }

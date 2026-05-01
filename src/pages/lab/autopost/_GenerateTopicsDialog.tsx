@@ -73,23 +73,31 @@ export function GenerateTopicsDialog({
   const [generating, setGenerating] = useState(false);
   const [candidates, setCandidates] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  /** Total topics ever excluded across past generations — best-effort
-   *  client-side counter; persisted via config_snapshot in a future
-   *  iteration. */
-  const [excludedCount, setExcludedCount] = useState(0);
+  /** Total topics ever excluded across past generations. Persisted as
+   *  `config_snapshot.skipped_topics` (an array of strings) on the
+   *  schedule row so re-opening the dialog after a session restart
+   *  shows an accurate count, not a fresh 0. */
+  const initialSkipped = useMemo(() => {
+    const raw = (schedule.config_snapshot ?? {}).skipped_topics;
+    return Array.isArray(raw) ? (raw as string[]) : [];
+  }, [schedule.config_snapshot]);
+  const [excludedCount, setExcludedCount] = useState(initialSkipped.length);
   const cancelRef = useRef(false);
 
   // Reset transient state every time the dialog opens, so a previous
-  // generation's candidates don't leak across schedules.
+  // generation's candidates don't leak across schedules. The persisted
+  // excluded count is re-hydrated from the schedule's config_snapshot
+  // each time so it reflects the latest server-side total.
   useEffect(() => {
     if (open) {
       setCandidates([]);
       setSelected(new Set());
+      setExcludedCount(initialSkipped.length);
       cancelRef.current = false;
     } else {
       cancelRef.current = true;
     }
-  }, [open]);
+  }, [open, initialSkipped.length]);
 
   const queue = schedule.topic_pool ?? [];
 
@@ -160,14 +168,32 @@ export function GenerateTopicsDialog({
         throw new Error("Nothing new to add");
       }
       const next = [...queue, ...additions];
+      // Anything in candidates that we didn't pick is recorded as a
+      // permanent skip in config_snapshot.skipped_topics so the count
+      // survives dialog re-opens and page reloads. We dedupe to avoid
+      // counting the same topic twice if the worker happens to suggest
+      // it again on a later regeneration.
+      const skippedTopics = candidates.filter(t => !selected.has(t));
+      const existingSnapshot = (schedule.config_snapshot ?? {}) as Record<string, unknown>;
+      const existingSkipped = Array.isArray(existingSnapshot.skipped_topics)
+        ? (existingSnapshot.skipped_topics as string[])
+        : [];
+      const mergedSkipped = Array.from(new Set([...existingSkipped, ...skippedTopics]));
+
+      const patch: Record<string, unknown> = { topic_pool: next };
+      if (mergedSkipped.length !== existingSkipped.length) {
+        patch.config_snapshot = {
+          ...existingSnapshot,
+          skipped_topics: mergedSkipped,
+        };
+      }
+
       const { error } = await supabase
         .from("autopost_schedules")
-        .update({ topic_pool: next })
+        .update(patch)
         .eq("id", schedule.id);
       if (error) throw error;
-      // Anything in candidates that we didn't pick counts as excluded.
-      const skipped = candidates.filter(t => !selected.has(t)).length;
-      setExcludedCount(prev => prev + skipped);
+      setExcludedCount(mergedSkipped.length);
       return additions.length;
     },
     onSuccess: (added) => {

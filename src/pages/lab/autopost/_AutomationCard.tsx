@@ -43,6 +43,7 @@ import { humanizeCron, formatRelativeTime, nextFireFromCron } from "./_utils";
 import { EditAutomationDialog } from "./_EditAutomationDialog";
 import { GenerateTopicsDialog } from "./_GenerateTopicsDialog";
 import { UpdateScheduleDialog } from "./_UpdateScheduleDialog";
+import { getCreditsRequired } from "@/lib/planLimits";
 import type { AutomationSchedule } from "./_automationTypes";
 
 interface AutomationCardProps {
@@ -83,15 +84,20 @@ const STATUS_META: Record<StatusKey, StatusMeta> = {
 };
 
 /**
- * Rough credits-per-run estimate. The render side of the pipeline scales
- * with the chosen length, not a fixed seconds cap — `presentation` runs
- * roughly 6× longer than `short`, so we surface that rather than the old
- * "~30 cr" stamp that was always wrong for >3min videos.
+ * Credits-per-run estimate. Uses the same getCreditsRequired(mode, length)
+ * helper that the rest of the app uses for credit cost display so the
+ * automation card and the credit deduction in autopost_tick agree on the
+ * number. Pulls mode + length from config_snapshot with the same defaults
+ * the worker pipeline + SQL deduction fall back to.
  */
 function estimateCredits(s: AutomationSchedule): string {
-  const length = (s.config_snapshot?.length as string | undefined) ?? "short";
-  if (length === "presentation") return "~200 cr";
-  return "~30 cr";
+  const cfg = s.config_snapshot ?? {};
+  const length = (cfg.length as string | undefined) ?? "short";
+  const rawMode = (cfg.mode as string | undefined) ?? "smartflow";
+  const mode: "doc2video" | "smartflow" | "cinematic" =
+    rawMode === "doc2video" || rawMode === "cinematic" ? rawMode : "smartflow";
+  const credits = getCreditsRequired(mode, length);
+  return `${credits} cr`;
 }
 
 /**

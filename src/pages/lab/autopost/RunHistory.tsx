@@ -105,17 +105,31 @@ export default function RunHistory() {
     staleTime: 60_000,
   });
 
+  // Cumulative cache of pages we've already fetched. Cursor pagination
+  // requests ONE page at a time (range(from, to)) and we merge into the
+  // accumulator below, so "Load more" no longer re-downloads the first
+  // N×PAGE_SIZE rows on every click.
+  const [accumulatedRuns, setAccumulatedRuns] = useState<RunRow[]>([]);
+
+  // Reset the accumulator whenever a filter changes (the next page-1
+  // fetch will repopulate it from scratch).
+  useEffect(() => {
+    setAccumulatedRuns([]);
+  }, [statusFilter, scheduleFilter, dateFilter]);
+
   const queryKey = ["autopost", "runs", { statusFilter, scheduleFilter, dateFilter, page }] as const;
   const runsQuery = useQuery<RunRow[]>({
     queryKey,
     queryFn: async () => {
+      const from = (page - 1) * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
       let query = supabase
         .from("autopost_runs")
         .select(
           "id, fired_at, status, schedule_id, topic, thumbnail_url, error_summary, progress_pct, schedule:autopost_schedules(name), publish_jobs:autopost_publish_jobs(platform, status)",
         )
         .order("fired_at", { ascending: false })
-        .limit(page * PAGE_SIZE);
+        .range(from, to);
 
       if (statusFilter !== "all") query = query.eq("status", statusFilter);
       if (scheduleFilter !== "all") query = query.eq("schedule_id", scheduleFilter);
@@ -130,9 +144,27 @@ export default function RunHistory() {
     staleTime: 5_000,
   });
 
+  // Merge each page into the accumulator. Page 1 replaces; subsequent
+  // pages append (with a dedupe by id so a realtime invalidation that
+  // re-fetches page 1 doesn't double-render rows we already have).
+  useEffect(() => {
+    const data = runsQuery.data;
+    if (!data) return;
+    setAccumulatedRuns(prev => {
+      if (page === 1) return data;
+      const seen = new Set(prev.map(r => r.id));
+      const additions = data.filter(r => !seen.has(r.id));
+      return [...prev, ...additions];
+    });
+  }, [runsQuery.data, page]);
+
   // Realtime — copy of the AdminQueueMonitor pattern, debounced.
+  // With cursor pagination we snap back to page 1 on each event so new
+  // rows surface at the top; the accumulator's effect-merge then
+  // replaces the cached snapshot with the fresh page-1 data.
   useEffect(() => {
     const debouncedRefetch = debounce(() => {
+      setPage(1);
       queryClient.invalidateQueries({ queryKey: ["autopost", "runs"] });
     }, 300);
     const channel = supabase
@@ -146,17 +178,15 @@ export default function RunHistory() {
   }, [queryClient]);
 
   const visibleRows = useMemo(() => {
-    const rows = runsQuery.data ?? [];
-    if (platformFilter === "all") return rows;
-    return rows.filter(r => r.publish_jobs.some(p => p.platform === platformFilter));
-  }, [runsQuery.data, platformFilter]);
+    if (platformFilter === "all") return accumulatedRuns;
+    return accumulatedRuns.filter(r => r.publish_jobs.some(p => p.platform === platformFilter));
+  }, [accumulatedRuns, platformFilter]);
 
   const grouped = useMemo(() => groupByDay(visibleRows), [visibleRows]);
 
-  // The "load more" button is only meaningful when the server returned
-  // exactly `page * PAGE_SIZE` rows (i.e. it filled the limit, so there
-  // might be more). When fewer come back, we've hit the end.
-  const hasMore = (runsQuery.data?.length ?? 0) >= page * PAGE_SIZE;
+  // The "load more" button is only meaningful when the most recent page
+  // fetch came back full — fewer rows = end of the result set.
+  const hasMore = (runsQuery.data?.length ?? 0) >= PAGE_SIZE;
 
   const handleRowClick = useCallback(
     (id: string) => navigate(`/lab/autopost/runs/${id}`),

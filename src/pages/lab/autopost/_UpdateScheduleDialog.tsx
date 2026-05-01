@@ -34,6 +34,7 @@ import {
   type ScheduleInterval,
 } from "@/components/intake/_scheduleConstants";
 import { nextFireFromCron, formatRelativeTime } from "./_utils";
+import { getCreditsRequired } from "@/lib/planLimits";
 import type { AutomationSchedule } from "./_automationTypes";
 
 interface UpdateScheduleDialogProps {
@@ -68,14 +69,21 @@ export function UpdateScheduleDialog({
     [interval],
   );
 
-  // Estimated credits assume ~1 credit per second of finished video,
-  // matching the rest of the dashboard's heuristic. Multiply by the
-  // monthly run count for a back-of-the-napkin monthly bill.
+  // Per-run cost mirrors the autopost SQL deduction: pull mode + length
+  // from the frozen config_snapshot and use the shared getCreditsRequired
+  // helper. The legacy duration_seconds column was nullable after the
+  // 20260429150000 migration and rounded to 30 for older rows, which made
+  // the monthly preview wildly wrong for cinematic / brief / presentation.
   const monthlyCredits = useMemo(() => {
     const runs = RUNS_PER_MONTH[interval] ?? 0;
-    const creditsPerRun = Math.max(1, Math.round(schedule.duration_seconds ?? 30));
+    const cfg = schedule.config_snapshot ?? {};
+    const length = (cfg.length as string | undefined) ?? "short";
+    const rawMode = (cfg.mode as string | undefined) ?? "smartflow";
+    const mode: "doc2video" | "smartflow" | "cinematic" =
+      rawMode === "doc2video" || rawMode === "cinematic" ? rawMode : "smartflow";
+    const creditsPerRun = getCreditsRequired(mode, length);
     return runs * creditsPerRun;
-  }, [interval, schedule.duration_seconds]);
+  }, [interval, schedule.config_snapshot]);
 
   const updateMutation = useMutation({
     mutationFn: async () => {

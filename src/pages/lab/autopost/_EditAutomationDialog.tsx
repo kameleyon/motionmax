@@ -13,7 +13,7 @@
  * blob without thinking about chip pickers.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, Send, Mail, FolderHeart, X as XIcon } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -27,9 +27,52 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
 import { supabase } from "@/integrations/supabase/client";
+import { getSpeakersForLanguage, getDefaultSpeaker, type SpeakerVoice } from "@/components/workspace/SpeakerSelector";
 import type { AutomationSchedule, IntakeSettings } from "./_automationTypes";
+
+// Match the inline LANGUAGES list in IntakeForm so the Edit dialog
+// surfaces every language the schedule could have been created with.
+const LANGUAGES: Array<{ code: string; label: string; flag: string }> = [
+  { code: 'en', label: 'English',         flag: '\u{1F1FA}\u{1F1F8}' },
+  { code: 'fr', label: 'Français',        flag: '\u{1F1EB}\u{1F1F7}' },
+  { code: 'es', label: 'Español',         flag: '\u{1F1EA}\u{1F1F8}' },
+  { code: 'ht', label: 'Kreyòl Ayisyen',  flag: '\u{1F1ED}\u{1F1F9}' },
+  { code: 'de', label: 'Deutsch',         flag: '\u{1F1E9}\u{1F1EA}' },
+  { code: 'it', label: 'Italiano',        flag: '\u{1F1EE}\u{1F1F9}' },
+  { code: 'nl', label: 'Nederlands',      flag: '\u{1F1F3}\u{1F1F1}' },
+  { code: 'ru', label: 'Русский',         flag: '\u{1F1F7}\u{1F1FA}' },
+  { code: 'zh', label: '中文',            flag: '\u{1F1E8}\u{1F1F3}' },
+  { code: 'ja', label: '日本語',          flag: '\u{1F1EF}\u{1F1F5}' },
+  { code: 'ko', label: '한국어',          flag: '\u{1F1F0}\u{1F1F7}' },
+];
+
+// Mirror of the workspace CaptionStyleSelector list.
+const CAPTION_STYLES: Array<{ value: string; label: string }> = [
+  { value: "none",           label: "None (no captions)" },
+  { value: "cleanPop",       label: "Clean Pop" },
+  { value: "toxicBounce",    label: "Toxic Bounce" },
+  { value: "proShortForm",   label: "Pro Block" },
+  { value: "orangeBox",      label: "Orange Box" },
+  { value: "yellowSlanted",  label: "Yellow Slant" },
+  { value: "redSlantedBox",  label: "Red Slant" },
+  { value: "cyanOutline",    label: "Cyan Outline" },
+  { value: "motionBlur",     label: "Motion Blur" },
+  { value: "thickStroke",    label: "Thick Stroke" },
+  { value: "karaokePop",     label: "Karaoke" },
+  { value: "neonTeal",       label: "Neon Teal" },
+  { value: "goldLuxury",     label: "Gold" },
+  { value: "bouncyPill",     label: "Pill" },
+  { value: "glitch",         label: "Glitch" },
+  { value: "comicBurst",     label: "Comic" },
+  { value: "redTag",         label: "Red Tag" },
+  { value: "blackBox",       label: "Black Box" },
+  { value: "typewriter",     label: "Typewriter" },
+  { value: "cinematicFade",  label: "Cinematic" },
+  { value: "retroTerminal",  label: "Terminal" },
+  { value: "heavyDropShadow",label: "Shadow" },
+  { value: "yellowSmall",    label: "Small Yellow" },
+];
 
 type DeliveryMethod = 'social' | 'email' | 'library_only';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -43,10 +86,10 @@ interface EditAutomationDialogProps {
 interface DraftState {
   name: string;
   prompt_template: string;
-  caption_template: string;
-  hashtags: string;
   resolution: string;
-  duration_seconds: number;
+  language: string;
+  voice: SpeakerVoice;
+  caption_style: string;
   delivery_method: DeliveryMethod;
   email_recipients: string[];
 }
@@ -55,27 +98,27 @@ function buildDraft(s: AutomationSchedule): DraftState {
   // Prefer the snapshot when it's present (it carries the intake-form
   // values verbatim), but always fall back to the live column so
   // pre-snapshot rows still edit cleanly.
-  const snap = (s.config_snapshot ?? {}) as IntakeSettings;
+  const snap = (s.config_snapshot ?? {}) as IntakeSettings & {
+    language?: string;
+    voice_name?: string;
+    intake_settings?: { captionStyle?: string };
+  };
+  const language = snap.language ?? "en";
+  const voice = (snap.voice_name as SpeakerVoice | undefined) ?? getDefaultSpeaker(language);
+  const captionStyle = snap.intake_settings?.captionStyle ?? "none";
   return {
     name: s.name,
     prompt_template: s.prompt_template ?? snap.prompt ?? "",
-    caption_template: s.caption_template ?? "",
-    hashtags: (s.hashtags ?? []).join(", "),
     resolution: s.resolution ?? snap.resolution ?? "1080x1920",
-    duration_seconds: s.duration_seconds ?? snap.duration_seconds ?? 30,
-    // Default to 'social' when reading rows authored before Wave E so the
-    // existing behaviour (publish to connected platforms) is preserved.
-    delivery_method: (s.delivery_method ?? 'social') as DeliveryMethod,
+    language,
+    voice,
+    caption_style: captionStyle,
+    // Default to 'library_only' when reading rows authored before Wave
+    // E (and surface only library-only / email until social
+    // verification clears).
+    delivery_method: (s.delivery_method ?? 'library_only') as DeliveryMethod,
     email_recipients: Array.isArray(s.email_recipients) ? s.email_recipients : [],
   };
-}
-
-function parseHashtags(input: string): string[] {
-  return input
-    .split(/[,\s]+/)
-    .map(t => t.trim().replace(/^#/, ""))
-    .filter(Boolean)
-    .map(t => `#${t}`);
 }
 
 export function EditAutomationDialog({
@@ -93,6 +136,17 @@ export function EditAutomationDialog({
       setEmailDraft("");
     }
   }, [open, schedule]);
+
+  // Voices available for the currently-selected language. Keep the
+  // currently-saved voice visible even if it isn't in the language's
+  // standard list (e.g. a clone or a cross-language test pick).
+  const voiceOptions = useMemo(() => {
+    const list = getSpeakersForLanguage(draft.language);
+    if (!list.some((s) => s.id === draft.voice)) {
+      return [{ id: draft.voice, label: draft.voice }, ...list];
+    }
+    return list;
+  }, [draft.language, draft.voice]);
 
   function tryAddEmail(raw: string): boolean {
     const candidate = raw.trim().replace(/[,;]+$/, "");
@@ -139,34 +193,37 @@ export function EditAutomationDialog({
         throw new Error("Add at least one email recipient before saving.");
       }
 
-      const hashtags = parseHashtags(draft.hashtags);
-      const prevSnap = (schedule.config_snapshot ?? {}) as IntakeSettings;
-      const nextSnap: IntakeSettings = {
+      const prevSnap = (schedule.config_snapshot ?? {}) as IntakeSettings & {
+        intake_settings?: Record<string, unknown>;
+      };
+      const prevIntake = (prevSnap.intake_settings ?? {}) as Record<string, unknown>;
+      const nextSnap = {
         ...prevSnap,
         prompt: draft.prompt_template,
-        caption_template: draft.caption_template,
-        hashtags,
         resolution: draft.resolution,
-        duration_seconds: draft.duration_seconds,
+        language: draft.language,
+        voice_name: draft.voice,
+        intake_settings: {
+          ...prevIntake,
+          captionStyle: draft.caption_style,
+        },
       };
 
-      // The generated supabase types may not yet include `config_snapshot`,
-      // `delivery_method`, or `email_recipients` (introduced by Wave B1
-      // / Wave E migrations). Cast through unknown so the update payload
-      // type-checks while still being typo-safe.
+      // Captions, hashtags, and the per-schedule duration cap have been
+      // dropped from the editor — captions/hashtags will be AI-generated
+      // when social publishing comes back online, and per-flow scene
+      // pacing already controls duration. We still null those columns
+      // out on save so legacy values don't leak into new runs.
       const updatePayload = {
         name: draft.name.trim(),
         prompt_template: draft.prompt_template,
-        caption_template: draft.caption_template || null,
-        hashtags: hashtags.length > 0 ? hashtags : null,
+        caption_template: null,
+        hashtags: null,
         resolution: draft.resolution,
-        duration_seconds: draft.duration_seconds,
+        duration_seconds: null,
         config_snapshot: nextSnap,
         delivery_method: draft.delivery_method,
         email_recipients: draft.email_recipients,
-        // Clear social targets when the user switches away from social so
-        // a future flip back to social-mode doesn't accidentally use a
-        // stale list. The user re-picks intentionally.
         ...(draft.delivery_method !== 'social' ? { target_account_ids: [] } : {}),
       } as unknown as Record<string, unknown>;
 
@@ -224,58 +281,28 @@ export function EditAutomationDialog({
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="auto-edit-caption" className="text-[12px] text-[#ECEAE4]">
-              Caption template
-            </Label>
-            <Textarea
-              id="auto-edit-caption"
-              value={draft.caption_template}
-              onChange={e => setDraft(d => ({ ...d, caption_template: e.target.value }))}
-              rows={3}
-              className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4] resize-none"
-              placeholder="Each platform truncates differently — keep the hook in the first 80 chars."
-            />
-            <p className="text-[11px] text-[#5A6268]">
-              YouTube allows up to 5,000 chars; IG ~2,200; TikTok ~2,200. Hook in the first 80.
-            </p>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="auto-edit-hashtags" className="text-[12px] text-[#ECEAE4]">
-              Hashtags
-            </Label>
-            <Input
-              id="auto-edit-hashtags"
-              value={draft.hashtags}
-              onChange={e => setDraft(d => ({ ...d, hashtags: e.target.value }))}
-              placeholder="#shorts, #reels, #foryou"
-              className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4]"
-            />
-            <p className="text-[11px] text-[#5A6268]">
-              Comma-separated. The leading # is added automatically if missing.
-            </p>
-          </div>
-
           {/* ── Delivery method (Wave E) ── */}
           <div className="space-y-2">
             <Label className="text-[12px] text-[#ECEAE4]">Where it goes</Label>
             <div role="radiogroup" aria-label="Delivery method" className="grid gap-2">
               {[
-                { value: 'social' as const,       label: 'Publish to social media',       Icon: Send,        hint: 'Post to your connected platforms automatically.' },
-                { value: 'email' as const,        label: 'Email when each video is ready', Icon: Mail,        hint: 'Get a download link per render — no social account needed.' },
-                { value: 'library_only' as const, label: 'Just save to my library',       Icon: FolderHeart, hint: 'Videos appear in Run History only — nothing posted or emailed.' },
-              ].map(({ value, label, Icon, hint }) => {
+                { value: 'social' as const,       label: 'Publish to social media',       Icon: Send,        disabled: true  },
+                { value: 'email' as const,        label: 'Email when each video is ready', Icon: Mail,        disabled: false },
+                { value: 'library_only' as const, label: 'Just save to my library',       Icon: FolderHeart, disabled: false },
+              ].map(({ value, label, Icon, disabled }) => {
                 const selected = draft.delivery_method === value;
                 const inputId = `edit-delivery-${value}`;
                 return (
                   <label
                     key={value}
                     htmlFor={inputId}
-                    className={`flex items-start gap-2.5 px-3 py-2 rounded-md border cursor-pointer transition-colors ${
-                      selected
-                        ? 'border-[#11C4D0]/50 bg-[#11C4D0]/[0.06]'
-                        : 'border-white/10 bg-[#0A0D0F] hover:border-white/20'
+                    aria-disabled={disabled}
+                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border transition-colors ${
+                      disabled
+                        ? 'border-white/10 bg-[#0A0D0F] opacity-50 cursor-not-allowed'
+                        : selected
+                          ? 'border-[#11C4D0]/50 bg-[#11C4D0]/[0.06] cursor-pointer'
+                          : 'border-white/10 bg-[#0A0D0F] hover:border-white/20 cursor-pointer'
                     }`}
                   >
                     <input
@@ -284,24 +311,25 @@ export function EditAutomationDialog({
                       name="edit-delivery-method"
                       value={value}
                       checked={selected}
-                      onChange={() => setDraft((d) => ({ ...d, delivery_method: value }))}
+                      disabled={disabled}
+                      onChange={() => { if (!disabled) setDraft((d) => ({ ...d, delivery_method: value })); }}
                       className="sr-only"
                     />
                     <span
                       aria-hidden
-                      className={`mt-0.5 w-3.5 h-3.5 rounded-full border-2 shrink-0 flex items-center justify-center ${
-                        selected ? 'border-[#11C4D0]' : 'border-white/25'
+                      className={`w-3 h-3 rounded-full border-2 shrink-0 flex items-center justify-center ${
+                        selected && !disabled ? 'border-[#11C4D0]' : 'border-white/25'
                       }`}
                     >
-                      {selected && <span className="w-1.5 h-1.5 rounded-full bg-[#11C4D0]" />}
+                      {selected && !disabled && <span className="w-1.5 h-1.5 rounded-full bg-[#11C4D0]" />}
                     </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 text-[12.5px] text-[#ECEAE4]">
-                        <Icon className="w-3.5 h-3.5 text-[#11C4D0] shrink-0" />
-                        <span className="truncate">{label}</span>
-                      </div>
-                      <p className="mt-0.5 text-[11.5px] leading-[1.45] text-[#8A9198]">{hint}</p>
-                    </div>
+                    <Icon className="w-3.5 h-3.5 text-[#11C4D0] shrink-0" />
+                    <span className="text-[12.5px] text-[#ECEAE4] truncate">{label}</span>
+                    {disabled && (
+                      <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-[#E4C875] border border-[#E4C875]/30 bg-[#E4C875]/5 rounded px-1.5 py-0.5">
+                        coming soon
+                      </span>
+                    )}
                   </label>
                 );
               })}
@@ -367,19 +395,67 @@ export function EditAutomationDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-[12px] text-[#ECEAE4]">
-                Duration · {draft.duration_seconds}s
-              </Label>
-              <Slider
-                min={5}
-                max={90}
-                step={1}
-                value={[draft.duration_seconds]}
-                onValueChange={(values: number[]) =>
-                  setDraft(d => ({ ...d, duration_seconds: values[0] ?? d.duration_seconds }))
-                }
-                className="pt-2"
-              />
+              <Label className="text-[12px] text-[#ECEAE4]">Language</Label>
+              <Select
+                value={draft.language}
+                onValueChange={(code) => {
+                  // Auto-swap to a default voice for the new language so we
+                  // don't carry a French voice into a Spanish run, etc.
+                  const defaultVoice = getDefaultSpeaker(code);
+                  setDraft(d => ({ ...d, language: code, voice: defaultVoice }));
+                }}
+              >
+                <SelectTrigger className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-[#10151A] border-white/10 text-[#ECEAE4] max-h-72">
+                  {LANGUAGES.map((l) => (
+                    <SelectItem key={l.code} value={l.code}>
+                      {l.flag} {l.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-[12px] text-[#ECEAE4]">Voice</Label>
+              <Select
+                value={draft.voice as string}
+                onValueChange={(v) => setDraft(d => ({ ...d, voice: v as SpeakerVoice }))}
+              >
+                <SelectTrigger className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-[#10151A] border-white/10 text-[#ECEAE4] max-h-72">
+                  {voiceOptions.map((opt) => (
+                    <SelectItem key={opt.id as string} value={opt.id as string}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-[12px] text-[#ECEAE4]">Closed caption</Label>
+              <Select
+                value={draft.caption_style}
+                onValueChange={(v) => setDraft(d => ({ ...d, caption_style: v }))}
+              >
+                <SelectTrigger className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-[#10151A] border-white/10 text-[#ECEAE4] max-h-72">
+                  {CAPTION_STYLES.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>

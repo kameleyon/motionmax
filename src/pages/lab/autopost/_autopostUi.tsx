@@ -182,7 +182,7 @@ export function RunProgressBar({
   const pct = determinate ? Math.max(0, Math.min(100, Math.round(value!))) : 0;
   return (
     <div
-      className={cn("relative w-full", className)}
+      className={cn("flex items-center gap-2 w-full", className)}
       role="progressbar"
       aria-busy="true"
       aria-valuemin={0}
@@ -190,7 +190,7 @@ export function RunProgressBar({
       aria-valuenow={determinate ? pct : undefined}
       aria-label="Generation in progress"
     >
-      <div className="h-3.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+      <div className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/[0.06]">
         {determinate ? (
           <div
             className="h-full rounded-full transition-[width] duration-700 ease-out"
@@ -209,10 +209,7 @@ export function RunProgressBar({
         )}
       </div>
       {determinate && (
-        <span
-          className="absolute inset-0 flex items-center justify-center text-[10px] font-mono font-semibold tabular-nums text-[#0A0D0F] mix-blend-screen"
-          style={{ textShadow: "0 0 4px rgba(10,13,15,0.55)" }}
-        >
+        <span className="text-[10px] font-mono tabular-nums text-[#8A9198] shrink-0 w-9 text-right">
           {pct}%
         </span>
       )}

@@ -26,6 +26,8 @@ import {
   generateSceneVideo,
   isAiVideoAvailable,
 } from "../../services/sceneVideoGenerator.js";
+import { resolveGradeFilter, joinVf } from "./colorGrade.js";
+import type { TransitionType } from "./transitions.js";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -40,6 +42,9 @@ export interface ExportConfig {
   kenBurns: boolean;
   /** Crossfade duration in seconds — 0 disables (default 0.5) */
   crossfadeDuration: number;
+  /** xfade transition type used by concatWithCrossfade. Ignored when
+   *  crossfadeDuration is 0. */
+  crossfadeType: TransitionType;
   /** Enable AI video generation for image scenes (default false) */
   aiVideo: boolean;
   /** Per-scene AI video timeout in ms (default 5 min) */
@@ -50,6 +55,9 @@ export interface ExportConfig {
   aiTransitionTimeoutMs: number;
   /** Output format string for AI providers */
   format: string;
+  /** Project-wide color grade preset name (intake_settings.grade). Per-scene
+   *  scene._meta.grade overrides this on a per-clip basis. */
+  colorGrade: string | null;
   /** Project ID for logging */
   projectId?: string;
   /** User ID for logging */
@@ -63,12 +71,23 @@ export const DEFAULT_EXPORT_CONFIG: ExportConfig = {
   fps: 24,
   kenBurns: false,
   crossfadeDuration: 0.5,
+  crossfadeType: "fade",
   aiVideo: false,
   aiVideoTimeoutMs: 5 * 60 * 1000,
   aiTransitions: false,
   aiTransitionTimeoutMs: 3 * 60 * 1000,
   format: "landscape",
+  colorGrade: null,
 };
+
+/** Pull the per-scene grade override (scene._meta.grade) and fall back to
+ *  the project-wide grade in ExportConfig. Returns the FFmpeg filter
+ *  fragment, or `null` when no grade is configured / known. */
+export function pickGradeFilter(scene: any, config: ExportConfig): string | null {
+  const sceneGrade =
+    typeof scene?._meta?.grade === "string" ? scene._meta.grade : null;
+  return resolveGradeFilter(sceneGrade ?? config.colorGrade);
+}
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -93,12 +112,14 @@ async function encodeWithKenBurns(
   outputPath: string,
   duration: number,
   sceneIndex: number,
-  config: ExportConfig
+  config: ExportConfig,
+  gradeFilter: string | null,
 ): Promise<void> {
   const preset = getKenBurnsPreset(sceneIndex);
   logPreset(sceneIndex, preset, duration);
 
-  const vf = buildKenBurnsVf(preset, duration, config.fps, config.width, config.height);
+  const baseVf = buildKenBurnsVf(preset, duration, config.fps, config.width, config.height);
+  const vf = joinVf(baseVf, gradeFilter);
 
   await runFfmpeg([
     "-loop", "1",
@@ -121,13 +142,15 @@ async function encodeSilentChunkStatic(
   imagePath: string,
   outputPath: string,
   duration: number,
-  config: ExportConfig
+  config: ExportConfig,
+  gradeFilter: string | null,
 ): Promise<void> {
+  const vf = joinVf(scaleAndPad(config.width, config.height), gradeFilter);
   await runFfmpeg([
     "-loop", "1",
     "-framerate", "2",
     "-i", imagePath,
-    "-vf", scaleAndPad(config.width, config.height),
+    "-vf", vf,
     "-c:v", "libx264",
     "-preset", "ultrafast",
     "-crf", "23",
@@ -148,18 +171,19 @@ async function imageToSilentClip(
   outputPath: string,
   duration: number,
   sceneIndex: number,
-  config: ExportConfig
+  config: ExportConfig,
+  gradeFilter: string | null,
 ): Promise<void> {
   if (config.kenBurns) {
     // Ken Burns handles full duration in one pass (no chunking needed —
     // zoompan generates frames on-the-fly with minimal memory)
-    await encodeWithKenBurns(imagePath, outputPath, duration, sceneIndex, config);
+    await encodeWithKenBurns(imagePath, outputPath, duration, sceneIndex, config, gradeFilter);
     return;
   }
 
   // Fallback: static image (chunked for long durations to cap memory)
   if (duration <= MAX_CHUNK_SECONDS) {
-    await encodeSilentChunkStatic(imagePath, outputPath, duration, config);
+    await encodeSilentChunkStatic(imagePath, outputPath, duration, config, gradeFilter);
     return;
   }
 
@@ -171,7 +195,7 @@ async function imageToSilentClip(
   while (remaining > 0.1) {
     const chunkDur = Math.min(remaining, MAX_CHUNK_SECONDS);
     const chunkPath = outputPath.replace(".mp4", `_chunk${idx}.mp4`);
-    await encodeSilentChunkStatic(imagePath, chunkPath, chunkDur, config);
+    await encodeSilentChunkStatic(imagePath, chunkPath, chunkDur, config, gradeFilter);
     chunks.push(chunkPath);
     remaining -= chunkDur;
     idx++;
@@ -268,7 +292,8 @@ async function imageAudioToClip(
   outputPath: string,
   tempDir: string,
   sceneIndex: number,
-  config: ExportConfig
+  config: ExportConfig,
+  gradeFilter: string | null,
 ): Promise<number> {
   const audioDur = await getExactAudioDuration(audioPath);
   console.log(`[SceneEncoder] Scene ${sceneIndex} imageAudio: ${audioDur.toFixed(2)}s`);
@@ -282,7 +307,7 @@ async function imageAudioToClip(
     // probe failure. The audio path here is local-derived from
     // scene.audioUrl upstream; we don't re-thread it because
     // imageAudioToClip's audioPath was already validated by streamToFile.
-    await muxVideoAudio(aiVid.path, audioPath, outputPath, tempDir, sceneIndex, config, {
+    await muxVideoAudio(aiVid.path, audioPath, outputPath, tempDir, sceneIndex, config, gradeFilter, {
       video: aiVid.sourceUrl,
     });
     removeFiles(aiVid.path);
@@ -291,7 +316,7 @@ async function imageAudioToClip(
 
   // Fallback: Ken Burns on still image
   const silentVidPath = path.join(tempDir, `scene_${sceneIndex}_imgvid.mp4`);
-  await imageToSilentClip(imagePath, silentVidPath, audioDur, sceneIndex, config);
+  await imageToSilentClip(imagePath, silentVidPath, audioDur, sceneIndex, config, gradeFilter);
 
   // Merge video + audio (stream-copy video, re-encode audio)
   // -t caps output at audioDur to prevent filter-graph reinit when one
@@ -417,6 +442,7 @@ async function muxVideoAudio(
   tempDir: string,
   sceneIndex: number,
   config: ExportConfig,
+  gradeFilter: string | null,
   /** Optional source URLs — if provided, a probe failure will trigger
    *  ONE re-download with a fresh signed URL before bailing. This
    *  catches the case where the file passes the magic-byte + size
@@ -443,10 +469,13 @@ async function muxVideoAudio(
     `speed=${speedRatio.toFixed(2)}x setpts=${setptsFactor}`
   );
 
+  const baseVf = `setpts=${setptsFactor}*PTS,${scaleAndPad(config.width, config.height)}`;
+  const vf = joinVf(baseVf, gradeFilter);
+
   await runFfmpeg([
     "-i", videoPath,
     "-i", audioPath,
-    "-vf", `setpts=${setptsFactor}*PTS,${scaleAndPad(config.width, config.height)}`,
+    "-vf", vf,
     "-map", "0:v:0",
     "-map", "1:a:0",
     "-c:v", "libx264",
@@ -471,7 +500,8 @@ async function slideshowFromImages(
   outputPath: string,
   tempDir: string,
   sceneIndex: number,
-  config: ExportConfig
+  config: ExportConfig,
+  gradeFilter: string | null,
 ): Promise<void> {
   const audioDur = await getExactAudioDuration(audioPath);
   const n = imageUrls.length;
@@ -486,7 +516,7 @@ async function slideshowFromImages(
 
     // Each sub-image in a slideshow gets its own Ken Burns preset
     // Offset by sub-index for variety within the scene
-    await imageToSilentClip(imgPath, subPath, perImgDur, sceneIndex * 10 + j, config);
+    await imageToSilentClip(imgPath, subPath, perImgDur, sceneIndex * 10 + j, config, gradeFilter);
 
     removeFiles(imgPath);
     subClips.push(subPath);
@@ -527,12 +557,17 @@ export async function processScene(
 ): Promise<{ index: number; path: string | null }> {
   const localPath = path.join(tempDir, `scene_${i}.mp4`);
 
+  // Per-scene color grade — scene._meta.grade overrides the project-wide
+  // intake_settings.grade. Returns null when neither is set, in which
+  // case joinVf passes the base filter chain through unchanged.
+  const gradeFilter = pickGradeFilter(scene, config);
+
   try {
     // ── Video + Audio scene (cinematic / AI video) ──
     if (scene.videoUrl && scene.audioUrl) {
       const vidPath = path.join(tempDir, `scene_${i}_vid.mp4`);
       const audPath = path.join(tempDir, `scene_${i}_aud.mp3`);
-      console.log(`[SceneEncoder] Scene ${i}: video+audio → mux`);
+      console.log(`[SceneEncoder] Scene ${i}: video+audio → mux${gradeFilter ? " (graded)" : ""}`);
       await Promise.all([
         streamToFile(scene.videoUrl, vidPath, "video"),
         streamToFile(scene.audioUrl, audPath, "audio"),
@@ -541,7 +576,7 @@ export async function processScene(
       // This is the path that produced the "ffprobe: Command failed"
       // symptom — a downloaded MP4 that passed magic-byte+size checks
       // but had a truncated tail / missing moov atom.
-      await muxVideoAudio(vidPath, audPath, localPath, tempDir, i, config, {
+      await muxVideoAudio(vidPath, audPath, localPath, tempDir, i, config, gradeFilter, {
         video: scene.videoUrl,
         audio: scene.audioUrl,
       });
@@ -552,14 +587,14 @@ export async function processScene(
     // ── Video only (no audio) ──
     if (scene.videoUrl) {
       const vidPath = path.join(tempDir, `scene_${i}_vid_raw.mp4`);
-      console.log(`[SceneEncoder] Scene ${i}: video only → normalize + silent audio`);
+      console.log(`[SceneEncoder] Scene ${i}: video only → normalize + silent audio${gradeFilter ? " (graded)" : ""}`);
       await streamToFile(scene.videoUrl, vidPath, "video");
 
       // Normalize resolution
       const normalizedPath = path.join(tempDir, `scene_${i}_vid_norm.mp4`);
       await runFfmpeg([
         "-i", vidPath,
-        "-vf", scaleAndPad(config.width, config.height),
+        "-vf", joinVf(scaleAndPad(config.width, config.height), gradeFilter),
         "-c:v", "libx264",
         "-preset", "ultrafast",
         "-crf", "23",
@@ -584,9 +619,9 @@ export async function processScene(
 
     if (validImageUrls.length > 1 && scene.audioUrl) {
       const audPath = path.join(tempDir, `scene_${i}_aud.mp3`);
-      console.log(`[SceneEncoder] Scene ${i}: ${validImageUrls.length} images+audio → slideshow`);
+      console.log(`[SceneEncoder] Scene ${i}: ${validImageUrls.length} images+audio → slideshow${gradeFilter ? " (graded)" : ""}`);
       await streamToFile(scene.audioUrl, audPath, "audio");
-      await slideshowFromImages(validImageUrls, audPath, localPath, tempDir, i, config);
+      await slideshowFromImages(validImageUrls, audPath, localPath, tempDir, i, config, gradeFilter);
       removeFiles(audPath);
       return { index: i, path: localPath };
     }
@@ -597,12 +632,12 @@ export async function processScene(
       const audPath = path.join(tempDir, `scene_${i}_aud.mp3`);
       const scenePrompt = scene.visualPrompt || scene.visual_prompt || scene.voiceover || "";
       const mode = config.aiVideo ? "AI video → Ken Burns fallback" : "Ken Burns";
-      console.log(`[SceneEncoder] Scene ${i}: image+audio → ${mode}`);
+      console.log(`[SceneEncoder] Scene ${i}: image+audio → ${mode}${gradeFilter ? " (graded)" : ""}`);
       await Promise.all([
         streamToFile(scene.imageUrl, imgPath, "image"),
         streamToFile(scene.audioUrl, audPath, "audio"),
       ]);
-      const dur = await imageAudioToClip(imgPath, scene.imageUrl, scenePrompt, audPath, localPath, tempDir, i, config);
+      const dur = await imageAudioToClip(imgPath, scene.imageUrl, scenePrompt, audPath, localPath, tempDir, i, config, gradeFilter);
       console.log(`[SceneEncoder] Scene ${i}: done (${dur.toFixed(1)}s)`);
       removeFiles(imgPath, audPath);
       return { index: i, path: localPath };
@@ -611,12 +646,12 @@ export async function processScene(
     // ── Single image only (no audio) ──
     if (scene.imageUrl) {
       const imgPath = path.join(tempDir, `scene_${i}_img.png`);
-      console.log(`[SceneEncoder] Scene ${i}: image → Ken Burns + silent audio`);
+      console.log(`[SceneEncoder] Scene ${i}: image → Ken Burns + silent audio${gradeFilter ? " (graded)" : ""}`);
       await streamToFile(scene.imageUrl, imgPath, "image");
 
       const duration = scene.duration || 5;
       const silentVidPath = path.join(tempDir, `scene_${i}_imgonly.mp4`);
-      await imageToSilentClip(imgPath, silentVidPath, duration, i, config);
+      await imageToSilentClip(imgPath, silentVidPath, duration, i, config, gradeFilter);
       removeFiles(imgPath);
 
       // Add silent audio for crossfade compatibility

@@ -1237,9 +1237,9 @@ function ChipDot({ active, dot, pulse, onClick, children }: {
       onClick={onClick}
       className={cn(
         "h-7 inline-flex items-center gap-1.5 px-3 rounded-full font-mono text-[10px] tracking-[0.14em] uppercase border transition-colors",
-        active
-          ? "bg-white/[0.04] border-white/20 text-[#ECEAE4]"
-          : "bg-[#10151A] border-white/10 text-[#8A9198] hover:text-[#ECEAE4] hover:border-white/20",
+        active && "bg-white/[0.04] border-white/20 text-[#ECEAE4]",
+        !active && "bg-[#10151A] text-[#8A9198] hover:text-[#ECEAE4]",
+        !active && "border-white/10 hover:border-white/20",
       )}
     >
       <span

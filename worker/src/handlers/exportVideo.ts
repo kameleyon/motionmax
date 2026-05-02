@@ -20,11 +20,10 @@ import { writeSystemLog } from "../lib/logger.js";
 import { wlog } from "../lib/workerLogger.js";
 import { processScene, type ExportConfig } from "./export/sceneEncoder.js";
 import { concatFiles, concatWithCaptions, concatWithBrandMark } from "./export/concatScenes.js";
-// concatWithCrossfade is imported conditionally; crossfade is currently disabled
-// (EXPORT_CROSSFADE_DURATION defaults to 0 and all project types force it to 0).
-// The module is kept in source but excluded from the active import graph until
-// crossfade is re-enabled via feature flag.
-// import { concatWithCrossfade } from "./export/transitions.js";
+import { resolveTransition } from "./export/transitionMap.js";
+// concatWithCrossfade is now imported dynamically below — only loaded
+// when the user-selected transition has a non-zero duration. Hard cuts
+// fall back to the concat demuxer path with no crossfade module loaded.
 import { compressIfNeeded } from "./export/compressVideo.js";
 import { mixBackgroundMusic } from "./export/mixMusic.js";
 import { uploadToSupabase, removeFiles } from "./export/storageHelpers.js";
@@ -243,14 +242,38 @@ async function buildExportConfig(payload: any): Promise<ExportConfig> {
     fps: 24,
     kenBurns: KEN_BURNS_ENABLED,
     crossfadeDuration: CROSSFADE_DURATION,
+    crossfadeType: "fade",
     aiVideo,
     aiVideoTimeoutMs: AI_VIDEO_TIMEOUT_MS,
     aiTransitions: false,
     aiTransitionTimeoutMs: 0,
     format,
+    colorGrade: null,
     projectId: payload.project_id,
     userId: undefined, // set in handler
   };
+}
+
+/** Defensive load of the project's intake_settings — older deploys
+ *  may be missing the column entirely. Returns an empty object on any
+ *  failure so the export still renders (just without grade/transition). */
+async function loadIntakeSettings(projectId: string | null | undefined): Promise<Record<string, unknown>> {
+  if (!projectId) return {};
+  try {
+    const { data } = await supabase
+      .from("projects")
+      .select("intake_settings")
+      .eq("id", projectId)
+      .maybeSingle();
+    const intake = (data as { intake_settings?: Record<string, unknown> } | null)?.intake_settings;
+    return intake && typeof intake === "object" ? intake : {};
+  } catch (err) {
+    wlog.warn("intake_settings lookup failed in export — proceeding without", {
+      projectId,
+      error: (err as Error).message,
+    });
+    return {};
+  }
 }
 
 // ── Main Export Handler ──────────────────────────────────────────────
@@ -337,20 +360,62 @@ async function _runExport(
   const isCinematic = scenes.some((s: any) => !!s.videoUrl);
   const isSmartFlow = projectType === "smartflow";
 
+  // ── Resolve user creative settings ─────────────────────────────────
+  // intake_settings carries the IntakeForm choices (project-wide). Per-scene
+  // overrides live on scene._meta.transition / scene._meta.grade and are
+  // applied inside processScene (grade) or below (transition).
+  const intake = await loadIntakeSettings(project_id);
+  const projectGrade = typeof intake.grade === "string" ? intake.grade : null;
+  // Transition source priority: scene[0]._meta.transition (editor per-scene
+  // override, which is also what the editor's "apply to all scenes" button
+  // writes) → intake.transition (initial intake form choice) → "Default".
+  // We use scene[0]'s _meta because the user's "apply to all" pattern in
+  // Inspector.tsx writes the same value to every scene; reading the first
+  // is sufficient and avoids treating per-scene transitions as a per-pair
+  // mix (which xfade can't easily express in pairwiseCrossfade today).
+  const editorTransition =
+    typeof scenes[0]?._meta?.transition === "string" ? scenes[0]._meta.transition : null;
+  const intakeTransition = typeof intake.transition === "string" ? intake.transition : null;
+  const resolvedTransition = resolveTransition(editorTransition ?? intakeTransition ?? "Default");
+  exportConfig.colorGrade = projectGrade;
+
   if (isCinematic) {
-    exportConfig.crossfadeDuration = 0;
+    // Cinematic projects already carry per-scene Kling video; we still
+    // honor the user-selected transition to stitch them. Ken Burns is
+    // off because the source clips are already real video.
     exportConfig.kenBurns = false;
-    log.info("Cinematic detected — direct concat, no Ken Burns");
+    exportConfig.crossfadeDuration = resolvedTransition.duration;
+    exportConfig.crossfadeType = resolvedTransition.type;
+    log.info("Cinematic detected", {
+      transition: editorTransition ?? intakeTransition ?? "Default",
+      crossfadeDuration: resolvedTransition.duration,
+      crossfadeType: resolvedTransition.type,
+      grade: projectGrade,
+    });
   } else if (isSmartFlow) {
-    exportConfig.crossfadeDuration = 0;
+    // SmartFlow = static slides; transition is exposed in some intake
+    // configurations and should still apply between slides.
     exportConfig.kenBurns = false;
-    exportConfig.aiVideo = false; // SmartFlow = static slides, no AI video
-    log.info("SmartFlow detected — static images, no animation");
+    exportConfig.aiVideo = false;
+    exportConfig.crossfadeDuration = resolvedTransition.duration;
+    exportConfig.crossfadeType = resolvedTransition.type;
+    log.info("SmartFlow detected", {
+      transition: editorTransition ?? intakeTransition ?? "Default",
+      crossfadeDuration: resolvedTransition.duration,
+      grade: projectGrade,
+    });
   } else {
+    // doc2video / explainer — image-based, no AI video, but Ken Burns
+    // could be enabled by env. Honor the user-selected transition.
     exportConfig.kenBurns = false;
-    exportConfig.crossfadeDuration = 0;
-    exportConfig.aiVideo = false; // doc2video / explainer = image-based, no AI video
-    log.info("Standard project — direct concat, no Ken Burns, no crossfade");
+    exportConfig.aiVideo = false;
+    exportConfig.crossfadeDuration = resolvedTransition.duration;
+    exportConfig.crossfadeType = resolvedTransition.type;
+    log.info("Standard project", {
+      transition: editorTransition ?? intakeTransition ?? "Default",
+      crossfadeDuration: resolvedTransition.duration,
+      grade: projectGrade,
+    });
   }
 
   // ── Initialize per-scene progress tracking ──────────────────────
@@ -540,14 +605,15 @@ async function _runExport(
         message: `Applying ${exportConfig.crossfadeDuration}s crossfade to ${clipPaths.length} clips`,
       });
 
-      // Standard projects use fadeblack (clean fade to black between scenes)
-      const transitionType = "fadeblack";
+      // Use the user-selected transition type (resolved from
+      // intake_settings.transition or scene[0]._meta.transition above).
+      const transitionType = exportConfig.crossfadeType;
 
       // Dynamic import: only load transitions module when crossfade is actually used
       const { concatWithCrossfade } = await import("./export/transitions.js");
       usedCrossfade = await concatWithCrossfade(clipPaths, finalOutputPath, {
         duration: exportConfig.crossfadeDuration,
-        transition: transitionType as any,
+        transition: transitionType,
         pairTimeoutMs: CROSSFADE_TIMEOUT_MS,
         onPairComplete: async (completed, total) => {
           // Progress range for crossfade: 55% → 80%

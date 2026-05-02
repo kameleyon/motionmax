@@ -1,66 +1,15 @@
--- ============================================================
--- Autopost pricing + plan gating
+-- Fix: credit_transactions check constraint rejects 'autopost_run'.
 --
--- 1. Flat 45 credits per autopost run (regardless of mode/length).
---    The previous autopost_credits_required(mode, length) function
---    mirrored the per-render variable cost. Product decision: every
---    autopost run is now a flat 45 credits.
+-- The 20260501150000 migration deducted credits with
+--   p_transaction_type := 'autopost_run'
+-- which is not in the credit_transactions_transaction_type_check
+-- enum. Allowed values are: purchase, usage, generation,
+-- video_generation, subscription_grant, refund, refund_clawback,
+-- adjustment, signup_bonus, daily_bonus.
 --
--- 2. Plan gate: only the 'creator' and 'studio' plans (or their
---    legacy aliases 'starter' and 'professional', plus 'enterprise')
---    may create schedules or fire runs. Free users can browse the UI
---    but the SQL functions and the schedule INSERT policy reject them.
--- ============================================================
-
--- 1. Flat-rate credit cost ------------------------------------
-
-CREATE OR REPLACE FUNCTION public.autopost_credits_required(
-  p_mode   TEXT,
-  p_length TEXT
-)
-RETURNS INT
-LANGUAGE sql
-IMMUTABLE
-SET search_path = public, pg_catalog
-AS $$
-  -- Flat 45 credits per autopost run. Args kept for backwards
-  -- compatibility with autopost_tick() / autopost_fire_now() which
-  -- still pass mode + length through.
-  SELECT 45;
-$$;
-
-COMMENT ON FUNCTION public.autopost_credits_required(TEXT, TEXT)
-  IS 'Flat 45-credit cost per autopost run. mode + length args retained for callsite compatibility but ignored.';
-
--- 2. Plan gate helper -----------------------------------------
-
-CREATE OR REPLACE FUNCTION public.is_creator_or_studio(p_user_id UUID)
-RETURNS BOOLEAN
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public, pg_catalog
-AS $$
-  SELECT EXISTS (
-    SELECT 1
-      FROM public.subscriptions s
-     WHERE s.user_id = p_user_id
-       AND COALESCE(s.status, '') IN ('active','trialing','past_due')
-       AND s.plan_name IN (
-         -- canonical names
-         'creator','studio','enterprise',
-         -- legacy aliases still in some rows
-         'starter','professional'
-       )
-  );
-$$;
-
-GRANT EXECUTE ON FUNCTION public.is_creator_or_studio(UUID) TO authenticated, service_role;
-
-COMMENT ON FUNCTION public.is_creator_or_studio(UUID)
-  IS 'TRUE if the user has an active/trialing/past_due subscription on the creator, studio, or enterprise plan (or their legacy aliases). Free users return FALSE.';
-
--- 3. Wire the plan gate into autopost_fire_now ----------------
+-- Autopost runs are scheduled video generations, so 'video_generation'
+-- is the right semantic match. Re-apply both functions with the
+-- corrected type. Bodies are otherwise identical to 20260501150000.
 
 CREATE OR REPLACE FUNCTION public.autopost_fire_now(p_schedule_id UUID)
 RETURNS UUID
@@ -96,12 +45,10 @@ BEGIN
     RAISE EXCEPTION 'autopost_fire_now: caller does not own schedule' USING ERRCODE = '42501';
   END IF;
 
-  -- Plan gate: autopost is a Creator/Studio feature.
   IF NOT public.is_creator_or_studio(s.user_id) THEN
     RAISE EXCEPTION 'autopost_fire_now: autopost requires the Creator or Studio plan' USING ERRCODE = '42501';
   END IF;
 
-  -- Topic-pool guard: never fire a topicless run.
   topic := public.autopost_resolve_topic(s);
   IF topic IS NULL AND COALESCE(array_length(s.topic_pool, 1), 0) = 0 THEN
     RAISE EXCEPTION 'autopost_fire_now: no topics in queue — generate or add topics first' USING ERRCODE = '02000';
@@ -112,8 +59,6 @@ BEGIN
     resolved := replace(resolved, '{schedule_name}', s.name);
   END IF;
 
-  -- Upfront credit deduction. cost is the flat 45 (mode + length
-  -- args ignored by the helper, kept here for trace clarity).
   cfg  := COALESCE(s.config_snapshot, '{}'::jsonb);
   cost := public.autopost_credits_required(
     COALESCE(cfg->>'mode',   'smartflow'),
@@ -128,7 +73,6 @@ BEGIN
   ) INTO ok;
 
   IF NOT ok THEN
-    -- Insert a failed run row so the user sees the reason in run history.
     INSERT INTO public.autopost_runs (
       schedule_id, fired_at, topic, prompt_resolved, status, error_summary
     ) VALUES (
@@ -138,7 +82,6 @@ BEGIN
     RAISE EXCEPTION 'autopost_fire_now: insufficient credits (need %)', cost USING ERRCODE = '53400';
   END IF;
 
-  -- Insert run + render job atomically.
   INSERT INTO public.autopost_runs (
     schedule_id, fired_at, topic, prompt_resolved, status
   ) VALUES (
@@ -174,8 +117,6 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.autopost_fire_now(UUID) TO authenticated;
 
--- 4. Wire the plan gate into autopost_tick --------------------
-
 CREATE OR REPLACE FUNCTION public.autopost_tick()
 RETURNS VOID
 LANGUAGE plpgsql
@@ -210,8 +151,6 @@ BEGIN
      ORDER BY next_fire_at ASC
   LOOP
     BEGIN
-      -- Plan gate: silently skip schedules owned by users no longer
-      -- on a paid plan. Advance next_fire_at so we don't busy-loop.
       IF NOT public.is_creator_or_studio(s.user_id) THEN
         next_fire := public.autopost_advance_next_fire(
           s.cron_expression,
@@ -227,8 +166,6 @@ BEGIN
         CONTINUE;
       END IF;
 
-      -- Advance next_fire_at first so a failed deduction doesn't
-      -- produce a busy-loop on this row.
       next_fire := public.autopost_advance_next_fire(
         s.cron_expression,
         GREATEST(s.next_fire_at, NOW()),
@@ -240,7 +177,6 @@ BEGIN
 
       topic := public.autopost_resolve_topic(s);
 
-      -- Topic-pool guard.
       IF topic IS NULL AND COALESCE(array_length(s.topic_pool, 1), 0) = 0 THEN
         RAISE NOTICE 'autopost_tick: schedule % has empty topic pool — skipping', s.id;
         CONTINUE;
@@ -323,19 +259,3 @@ BEGIN
   END LOOP;
 END;
 $$;
-
-COMMENT ON FUNCTION public.autopost_tick()
-  IS 'Per-minute pg_cron driver. Skips when autopost_enabled=false, when the schedule owner is not on Creator/Studio, or when the topic pool is empty. Deducts 45 credits per run via deduct_credits_securely; insufficient balance writes a failed run row.';
-
--- 5. Schedule INSERT policy (block free users at the DB) -------
-
-DROP POLICY IF EXISTS "creator+ inserts own schedules" ON public.autopost_schedules;
-CREATE POLICY "creator+ inserts own schedules"
-  ON public.autopost_schedules
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    public.is_admin(auth.uid())
-    AND user_id = auth.uid()
-    AND public.is_creator_or_studio(auth.uid())
-  );

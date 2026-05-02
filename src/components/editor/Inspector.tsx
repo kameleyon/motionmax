@@ -22,8 +22,28 @@ type InspectorTab = 'scene' | 'voice' | 'captions' | 'motion';
 
 type Motion = 'Still' | 'Push-in' | 'Pan' | 'Dolly';
 type Transition = 'Cut' | 'Dissolve' | 'Whip' | 'Black';
+type Grade =
+  | 'None'
+  | 'Kodak 250D'
+  | 'Bleach Bypass'
+  | 'Teal & Orange'
+  | 'Warm Film'
+  | 'Cool Noir'
+  | 'Desaturated';
 const MOTION_OPTIONS: Motion[] = ['Still', 'Push-in', 'Pan', 'Dolly'];
 const TRANSITION_OPTIONS: Transition[] = ['Cut', 'Dissolve', 'Whip', 'Black'];
+// Mirrors COLOR_GRADES in IntakeForm.tsx with an explicit "None" entry
+// for clearing the override. The worker side maps these names to FFmpeg
+// filter chains in worker/src/handlers/export/colorGrade.ts.
+const GRADE_OPTIONS: Grade[] = [
+  'None',
+  'Kodak 250D',
+  'Bleach Bypass',
+  'Teal & Orange',
+  'Warm Film',
+  'Cool Noir',
+  'Desaturated',
+];
 
 function prettyVoiceName(raw: string | null | undefined): string {
   if (!raw) return '—';
@@ -118,6 +138,13 @@ function Inspector({
   const meta = scene?.meta ?? {};
   const motion = (meta.motion as Motion | undefined) ?? 'Push-in';
   const transition = (meta.transition as Transition | undefined) ?? 'Cut';
+  // Color grade: scene._meta.grade overrides the project-wide
+  // intake.grade. The intake fallback is what the export uses when no
+  // per-scene override is set, so the editor surfaces it as the visible
+  // default to avoid showing "None" while the export is actually
+  // applying the project default.
+  const intakeGrade = (state.intake.grade as Grade | undefined) ?? 'None';
+  const grade: Grade = (meta.grade as Grade | undefined) ?? intakeGrade;
 
   // Music + SFX availability — toggle stems are only meaningful if
   // the project actually generated those stems. Two signals:
@@ -904,7 +931,11 @@ function Inspector({
             </>
           )}
 
-          {isExplainer && (
+          {/* Transition is now wired through the export pipeline for
+              every project type — cinematic clips get the same xfade
+              treatment as explainer slides. Single section, no longer
+              explainer-only. */}
+          {(isCinematic || isExplainer) && (
             <section>
               <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium mb-2">Transition</h5>
               <div className="inline-flex rounded-lg border border-white/5 bg-[#1B2228] p-[2px] gap-[2px] w-full">
@@ -931,7 +962,70 @@ function Inspector({
                 ))}
               </div>
               <p className="text-[11.5px] text-[#8A9198] leading-[1.5] mt-2">
-                Applied to every scene boundary at export. "Cut" is instant; "Dissolve" / "Whip" / "Black" cross-fade between scenes.
+                Applied to every scene boundary at export. "Cut" is instant; "Dissolve" / "Whip" / "Black" cross-fade between scenes. Re-export to see the change.
+              </p>
+            </section>
+          )}
+
+          {/* Color grade — applied as an FFmpeg filter at export time
+              (eq + colorbalance per preset). This is a true post-process
+              and IS visible in the final mp4. The "Apply to all scenes"
+              button writes intake.grade so the project default also
+              changes; per-scene override is "Just this scene". */}
+          {(isCinematic || isExplainer) && (
+            <section>
+              <div className="flex items-baseline justify-between mb-2 gap-3">
+                <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium">Color grade</h5>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    // Apply grade as the project-wide default. We write
+                    // both intake_settings.grade (used by export when no
+                    // scene override exists) AND clear scene._meta.grade
+                    // on every scene so the project default takes effect
+                    // visually across the timeline immediately.
+                    const next = grade === 'None' ? null : grade;
+                    await updateIntakeSettings({ grade: next });
+                    await updateAllScenesMeta({ grade: next });
+                    toast.success(
+                      next
+                        ? `Color grade "${next}" applied to every scene.`
+                        : 'Color grade cleared on every scene.',
+                    );
+                  }}
+                  disabled={busy !== 'idle' || projectLocked}
+                  className="font-mono text-[9.5px] tracking-wider uppercase text-[#14C8CC] hover:text-[#ECEAE4] transition-colors disabled:opacity-40"
+                  title="Use this color grade on every scene"
+                >
+                  Apply to all
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-[4px]">
+                {GRADE_OPTIONS.map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={async () => {
+                      // Per-scene override. "None" clears the override
+                      // (writes null) so the scene falls back to the
+                      // project's intake.grade.
+                      const next = g === 'None' ? null : g;
+                      await updateSceneMeta(selectedSceneIndex, { grade: next });
+                    }}
+                    disabled={busy !== 'idle' || projectLocked}
+                    className={cn(
+                      'px-2 py-2 font-mono text-[10.5px] tracking-tight rounded-md border transition-colors min-h-[36px] whitespace-nowrap',
+                      g === grade
+                        ? 'border-[#14C8CC]/40 bg-[#14C8CC]/10 text-[#14C8CC]'
+                        : 'border-white/5 bg-[#1B2228] text-[#8A9198] hover:text-[#ECEAE4]',
+                    )}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11.5px] text-[#8A9198] leading-[1.5] mt-2">
+                Applied at export as a film-stock color preset. This scene uses {grade === 'None' ? 'no grade' : `"${grade}"`}{meta.grade ? ' (per-scene override)' : ' (project default)'}. Re-export to see the change.
               </p>
             </section>
           )}

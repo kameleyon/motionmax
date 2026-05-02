@@ -121,9 +121,22 @@ export async function handleCinematicVideo(
   // Intake settings shape: { camera?: string, grade?: string, lipSync?, music?, ... }
   // "Default" = let the AI pick (rotates per scene via getCameraMotion).
   // Anything else is a hard override the user explicitly chose.
-  const rawCamera = typeof intake.camera === "string" ? intake.camera : null;
-  const userCameraOverride = rawCamera && rawCamera !== "Default" ? rawCamera : null;
-  const userColorGrade = typeof intake.grade === "string" ? intake.grade : null;
+  //
+  // Camera-source priority (per-scene):
+  //   1. scene._meta.motion — set by the editor's Inspector per-scene picker.
+  //   2. intake_settings.camera — initial intake form choice (project-wide).
+  //   3. Rotated default list via getCameraMotion(sceneIndex) for visual variety.
+  // "Default" or "Still" cancels the override and falls back to the rotation.
+  const sceneMotion = typeof scene?._meta?.motion === "string" ? scene._meta.motion : null;
+  const rawCamera = sceneMotion ?? (typeof intake.camera === "string" ? intake.camera : null);
+  const userCameraOverride =
+    rawCamera && rawCamera !== "Default" && rawCamera !== "Still" ? rawCamera : null;
+  // Color grade: scene._meta.grade overrides intake_settings.grade. The
+  // export pipeline also applies grade as an FFmpeg color filter at
+  // mux time, but injecting it into the Kling prompt biases the i2v
+  // generation toward matching tones — so we keep both layers.
+  const sceneGrade = typeof scene?._meta?.grade === "string" ? scene._meta.grade : null;
+  const userColorGrade = sceneGrade ?? (typeof intake.grade === "string" ? intake.grade : null);
   const { getStylePrompt: getStyle, getStyleNegativePrompt } = await import("../services/prompts.js");
   const styleDesc = getStyle(styleId);
   // Style-specific negative tokens (e.g. "no photorealistic humans" for

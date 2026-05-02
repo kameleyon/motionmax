@@ -164,12 +164,16 @@ const App = () => (
             />
             <Route path="/admin" element={<AdminRoute><RouteErrorBoundary routeName="admin"><Admin /></RouteErrorBoundary></AdminRoute>} />
 
-            {/* Lab — admin-only soft-launch sandbox. Routes are
-                additive and live behind <AdminOnlyRoute> so non-admins
-                never load the page modules. Not linked from main nav.
-                See AUTOPOST_PLAN.md §5 for the rationale. */}
+            {/* Lab — autopost is now GA for any authenticated user.
+                The plan gate (free vs Creator/Studio/Enterprise) is
+                enforced inside the page itself + at the DB layer via
+                the is_creator_or_studio RLS check, so all we need at
+                the route layer is "must be signed in". /lab itself
+                stays AdminOnlyRoute because LabHome is still the
+                internal sandbox index — only /lab/autopost and its
+                children are user-facing. */}
             <Route path="/lab" element={<AdminOnlyRoute><RouteErrorBoundary routeName="lab"><LabHome /></RouteErrorBoundary></AdminOnlyRoute>} />
-            <Route path="/lab/autopost" element={<AdminOnlyRoute><RouteErrorBoundary routeName="lab-autopost"><AutopostHome /></RouteErrorBoundary></AdminOnlyRoute>} />
+            <Route path="/lab/autopost" element={<ProtectedRoute><RouteErrorBoundary routeName="lab-autopost"><AutopostHome /></RouteErrorBoundary></ProtectedRoute>} />
             {/* Connect moved to Settings → Integrations (Wave B2). */}
             <Route path="/lab/autopost/connect" element={<Navigate to="/settings?tab=integrations" replace />} />
             {/* Schedule CRUD now happens inline on /lab/autopost via the
@@ -177,8 +181,8 @@ const App = () => (
             <Route path="/lab/autopost/schedules" element={<Navigate to="/lab/autopost" replace />} />
             <Route path="/lab/autopost/schedules/new" element={<Navigate to="/lab/autopost" replace />} />
             <Route path="/lab/autopost/schedules/:id" element={<Navigate to="/lab/autopost" replace />} />
-            <Route path="/lab/autopost/runs" element={<AdminOnlyRoute><RouteErrorBoundary routeName="lab-autopost-runs"><RunHistory /></RouteErrorBoundary></AdminOnlyRoute>} />
-            <Route path="/lab/autopost/runs/:id" element={<AdminOnlyRoute><RouteErrorBoundary routeName="lab-autopost-run-detail"><RunDetail /></RouteErrorBoundary></AdminOnlyRoute>} />
+            <Route path="/lab/autopost/runs" element={<ProtectedRoute><RouteErrorBoundary routeName="lab-autopost-runs"><RunHistory /></RouteErrorBoundary></ProtectedRoute>} />
+            <Route path="/lab/autopost/runs/:id" element={<ProtectedRoute><RouteErrorBoundary routeName="lab-autopost-run-detail"><RunDetail /></RouteErrorBoundary></ProtectedRoute>} />
 
             {/* New dashboard preview — outside AppShell so its own
                 Sidebar/topbar don't stack with AppSidebar. Still

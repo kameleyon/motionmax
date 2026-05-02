@@ -34,7 +34,7 @@ import {
   type ScheduleInterval,
 } from "@/components/intake/_scheduleConstants";
 import { nextFireFromCron, formatRelativeTime } from "./_utils";
-import { getCreditsRequired } from "@/lib/planLimits";
+import { AUTOPOST_CREDITS_PER_RUN } from "@/lib/planLimits";
 import type { AutomationSchedule } from "./_automationTypes";
 
 interface UpdateScheduleDialogProps {
@@ -69,21 +69,13 @@ export function UpdateScheduleDialog({
     [interval],
   );
 
-  // Per-run cost mirrors the autopost SQL deduction: pull mode + length
-  // from the frozen config_snapshot and use the shared getCreditsRequired
-  // helper. The legacy duration_seconds column was nullable after the
-  // 20260429150000 migration and rounded to 30 for older rows, which made
-  // the monthly preview wildly wrong for cinematic / brief / presentation.
+  // Per-run cost is a flat AUTOPOST_CREDITS_PER_RUN — mirrors the SQL
+  // `autopost_credits_required` function which now returns 45
+  // unconditionally. Schedule mode/length no longer factor into cost.
   const monthlyCredits = useMemo(() => {
     const runs = RUNS_PER_MONTH[interval] ?? 0;
-    const cfg = schedule.config_snapshot ?? {};
-    const length = (cfg.length as string | undefined) ?? "short";
-    const rawMode = (cfg.mode as string | undefined) ?? "smartflow";
-    const mode: "doc2video" | "smartflow" | "cinematic" =
-      rawMode === "doc2video" || rawMode === "cinematic" ? rawMode : "smartflow";
-    const creditsPerRun = getCreditsRequired(mode, length);
-    return runs * creditsPerRun;
-  }, [interval, schedule.config_snapshot]);
+    return runs * AUTOPOST_CREDITS_PER_RUN;
+  }, [interval]);
 
   const updateMutation = useMutation({
     mutationFn: async () => {

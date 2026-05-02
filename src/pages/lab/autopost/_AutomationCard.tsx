@@ -43,7 +43,7 @@ import { humanizeCron, formatRelativeTime, nextFireFromCron } from "./_utils";
 import { EditAutomationDialog } from "./_EditAutomationDialog";
 import { GenerateTopicsDialog } from "./_GenerateTopicsDialog";
 import { UpdateScheduleDialog } from "./_UpdateScheduleDialog";
-import { getCreditsRequired } from "@/lib/planLimits";
+import { AUTOPOST_CREDITS_PER_RUN } from "@/lib/planLimits";
 import type { AutomationSchedule } from "./_automationTypes";
 
 interface AutomationCardProps {
@@ -84,20 +84,12 @@ const STATUS_META: Record<StatusKey, StatusMeta> = {
 };
 
 /**
- * Credits-per-run estimate. Uses the same getCreditsRequired(mode, length)
- * helper that the rest of the app uses for credit cost display so the
- * automation card and the credit deduction in autopost_tick agree on the
- * number. Pulls mode + length from config_snapshot with the same defaults
- * the worker pipeline + SQL deduction fall back to.
+ * Credits-per-run estimate. Autopost charges a flat
+ * AUTOPOST_CREDITS_PER_RUN (=45) per run regardless of mode/length —
+ * mirrors the SQL `autopost_credits_required(mode,length)` deduction.
  */
-function estimateCredits(s: AutomationSchedule): string {
-  const cfg = s.config_snapshot ?? {};
-  const length = (cfg.length as string | undefined) ?? "short";
-  const rawMode = (cfg.mode as string | undefined) ?? "smartflow";
-  const mode: "doc2video" | "smartflow" | "cinematic" =
-    rawMode === "doc2video" || rawMode === "cinematic" ? rawMode : "smartflow";
-  const credits = getCreditsRequired(mode, length);
-  return `${credits} cr`;
+function estimateCredits(_s: AutomationSchedule): string {
+  return `${AUTOPOST_CREDITS_PER_RUN} cr`;
 }
 
 /**

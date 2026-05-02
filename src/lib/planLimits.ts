@@ -136,6 +136,26 @@ export function getMultiplier(projectType: string): number {
   return PRODUCT_MULTIPLIER[projectType] || 1;
 }
 
+/**
+ * Flat per-run cost for autopost. Mirrors the
+ * `public.autopost_credits_required(mode, length)` SQL function which
+ * returns 45 unconditionally. Both frontend cost displays and the
+ * SQL deduction read from the same constant so the UI estimate
+ * always matches what the user is actually charged.
+ */
+export const AUTOPOST_CREDITS_PER_RUN = 45;
+
+/** Plans that are allowed to use the autopost feature. Free is gated. */
+export const AUTOPOST_ELIGIBLE_PLANS: ReadonlyArray<PlanTier> = [
+  "creator",
+  "studio",
+  "enterprise",
+] as const;
+
+export function isAutopostEligible(plan: PlanTier): boolean {
+  return AUTOPOST_ELIGIBLE_PLANS.includes(plan);
+}
+
 /** Get estimated duration in seconds */
 export function getEstimatedSeconds(length: string): number {
   return LENGTH_SECONDS[length] || LENGTH_SECONDS.short;

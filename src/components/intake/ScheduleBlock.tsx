@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { AUTOPOST_CREDITS_PER_RUN, isAutopostEligible } from '@/lib/planLimits';
+import { useSubscription } from '@/hooks/useSubscription';
 import {
   Clock, Wand2, Loader2, RefreshCw, Plug, Youtube, Instagram, Music2,
   Send, Mail, FolderHeart, X as XIcon,
@@ -61,7 +63,9 @@ const TOPIC_POLL_TIMEOUT_MS = 120_000;
  *  the user picked; we use a conservative single number here so the
  *  helper is honest without being precise. Wave B2 can replace this
  *  with a live read from the parent's `totalCost`. */
-const PER_RUN_CREDIT_ESTIMATE = 75;
+// Re-exported as a const for backwards-compat with the existing
+// monthly-cost calculation below. Mirrors the flat-45 SQL deduction.
+const PER_RUN_CREDIT_ESTIMATE = AUTOPOST_CREDITS_PER_RUN;
 
 const PLATFORMS: Array<{ id: 'youtube' | 'instagram' | 'tiktok'; label: string; Icon: typeof Youtube }> = [
   { id: 'youtube',   label: 'YouTube',   Icon: Youtube },
@@ -80,6 +84,11 @@ export default function ScheduleBlock({
   enabled, onChange, intakeSummary, isAdmin,
 }: ScheduleBlockProps) {
   const { user } = useAuth();
+  // Plan gate: autopost is a Creator/Studio feature. Free users see
+  // the toggle but it's disabled with an upgrade CTA. Server-side the
+  // SQL functions and INSERT policy reject free users regardless.
+  const { plan } = useSubscription();
+  const planEligible = isAutopostEligible(plan);
 
   // ── Block state — kept here, mirrored up via onChange so the parent
   //    handleGenerate() can read the latest values without prop drilling. ──
@@ -389,22 +398,44 @@ export default function ScheduleBlock({
         <div className="flex items-center gap-2.5 min-w-0">
           <Clock className="w-4 h-4 text-[#14C8CC] shrink-0" />
           <div className="text-[13.5px] font-medium truncate">Run on a schedule</div>
+          {!planEligible && (
+            <span className="ml-2 shrink-0 text-[10px] uppercase tracking-wider text-[#E4C875] border border-[#E4C875]/30 bg-[#E4C875]/5 rounded px-1.5 py-0.5">
+              Creator+
+            </span>
+          )}
         </div>
         <Switch
-          checked={enabled}
-          onCheckedChange={(v) => onChange({
-            enabled: v,
-            interval,
-            topics: Array.from(selectedTopics),
-            generatedTopics,
-            platformAccountIds: Array.from(platformAccountIds),
-            deliveryMethod,
-            emailRecipients,
-            termsAgreed,
-          })}
+          checked={enabled && planEligible}
+          disabled={!planEligible}
+          onCheckedChange={(v) => {
+            if (!planEligible) return;
+            onChange({
+              enabled: v,
+              interval,
+              topics: Array.from(selectedTopics),
+              generatedTopics,
+              platformAccountIds: Array.from(platformAccountIds),
+              deliveryMethod,
+              emailRecipients,
+              termsAgreed,
+            });
+          }}
           aria-label="Run on a schedule"
         />
       </div>
+
+      {!planEligible && (
+        <div className="px-4 pb-3 -mt-1">
+          <div className="rounded-md border border-[#E4C875]/30 bg-[#E4C875]/5 px-3 py-2 text-[12px] text-[#ECEAE4] flex items-start gap-2">
+            <Clock className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[#E4C875]" />
+            <div className="flex-1 min-w-0">
+              <span className="text-[#E4C875] font-medium">Autopost is a Creator/Studio feature.</span>{' '}
+              <span className="text-[#8A9198]">{AUTOPOST_CREDITS_PER_RUN} credits per run.</span>{' '}
+              <a href="/pricing" className="text-[#14C8CC] hover:underline">Upgrade your plan →</a>
+            </div>
+          </div>
+        </div>
+      )}
 
       {enabled && (
         <div className="border-t border-white/5">

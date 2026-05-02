@@ -1211,9 +1211,10 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
       onClick={onClick}
       className={cn(
         "h-7 px-3 rounded-full font-mono text-[10px] tracking-[0.14em] uppercase border transition-colors",
-        active
-          ? "bg-[#14C8CC]/10 border-[#14C8CC]/40 text-[#14C8CC]"
-          : "bg-[#10151A] border-white/10 text-[#8A9198] hover:text-[#ECEAE4] hover:border-white/20",
+        active && "bg-[#14C8CC]/10 text-[#14C8CC]",
+        active && "border-[#14C8CC]/40",
+        !active && "bg-[#10151A] text-[#8A9198] hover:text-[#ECEAE4]",
+        !active && "border-white/10 hover:border-white/20",
       )}
     >
       {children}

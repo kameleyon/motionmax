@@ -3,7 +3,6 @@ import { Wand2, Pencil, Users, Cherry, Camera, Box, Hand, PenTool, Laugh, Chevro
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useRef, useState, useEffect } from "react";
@@ -47,10 +46,6 @@ interface StyleSelectorProps {
   onCustomStyleChange: (value: string) => void;
   customStyleImage?: string | null;
   onCustomStyleImageChange?: (image: string | null) => void;
-  brandMarkEnabled?: boolean;
-  brandMarkText?: string;
-  onBrandMarkEnabledChange?: (enabled: boolean) => void;
-  onBrandMarkTextChange?: (text: string) => void;
 }
 
 const styles: { id: VisualStyle; label: string; icon: React.ElementType; preview: string }[] = [
@@ -73,17 +68,13 @@ const styles: { id: VisualStyle; label: string; icon: React.ElementType; preview
   { id: "custom", label: "Custom", icon: Wand2, preview: customPreview },
 ];
 
-export function StyleSelector({ 
-  selected, 
-  customStyle, 
-  onSelect, 
+export function StyleSelector({
+  selected,
+  customStyle,
+  onSelect,
   onCustomStyleChange,
   customStyleImage,
   onCustomStyleImageChange,
-  brandMarkEnabled = false,
-  brandMarkText = "",
-  onBrandMarkEnabledChange,
-  onBrandMarkTextChange
 }: StyleSelectorProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);

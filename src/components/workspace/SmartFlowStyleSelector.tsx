@@ -42,10 +42,6 @@ interface SmartFlowStyleSelectorProps {
   onCustomStyleChange?: (value: string) => void;
   customStyleImage?: string | null;
   onCustomStyleImageChange?: (image: string | null) => void;
-  brandMarkEnabled?: boolean;
-  brandMarkText?: string;
-  onBrandMarkEnabledChange?: (enabled: boolean) => void;
-  onBrandMarkTextChange?: (text: string) => void;
 }
 
 const styles: { id: SmartFlowStyle; label: string; icon: React.ElementType; preview: string }[] = [
@@ -68,17 +64,13 @@ const styles: { id: SmartFlowStyle; label: string; icon: React.ElementType; prev
   { id: "custom", label: "Custom", icon: Wand2, preview: customPreview },
 ];
 
-export function SmartFlowStyleSelector({ 
-  selected, 
+export function SmartFlowStyleSelector({
+  selected,
   onSelect,
   customStyle = "",
   onCustomStyleChange,
   customStyleImage,
   onCustomStyleImageChange,
-  brandMarkEnabled = false,
-  brandMarkText = "",
-  onBrandMarkEnabledChange,
-  onBrandMarkTextChange
 }: SmartFlowStyleSelectorProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);

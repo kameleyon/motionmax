@@ -386,10 +386,6 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
                     onCustomStyleChange={setCustomStyle}
                     customStyleImage={customStyleImage}
                     onCustomStyleImageChange={setCustomStyleImage}
-                    brandMarkEnabled={brandMarkEnabled}
-                    brandMarkText={brandMarkText}
-                    onBrandMarkEnabledChange={setBrandMarkEnabled}
-                    onBrandMarkTextChange={setBrandMarkText}
                   />
 
                   {/* Credit Cost Display */}

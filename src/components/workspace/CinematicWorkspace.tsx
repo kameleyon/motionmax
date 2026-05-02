@@ -408,10 +408,6 @@ export const CinematicWorkspace = forwardRef<WorkspaceHandle, CinematicWorkspace
                     onCustomStyleChange={setCustomStyle}
                     customStyleImage={customStyleImage}
                     onCustomStyleImageChange={setCustomStyleImage}
-                    brandMarkEnabled={brandMarkEnabled}
-                    brandMarkText={brandMarkText}
-                    onBrandMarkEnabledChange={setBrandMarkEnabled}
-                    onBrandMarkTextChange={setBrandMarkText}
                   />
 
                   {/* Credit Cost Display */}

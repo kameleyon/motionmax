@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import {
-  AudioLines, Music, Wand2, Camera, Palette, Link as LinkIcon, Paperclip,
+  AudioLines, Wand2, Camera, Palette, Link as LinkIcon, Paperclip,
   ChevronLeft, ChevronRight, ImagePlus, X, Upload, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -89,7 +89,9 @@ const LANGUAGES: Array<{ code: string; label: string; flag: string }> = [
   { code: 'ko', label: '한국어',          flag: '\u{1F1F0}\u{1F1F7}' },
 ];
 
-const MUSIC_GENRES: MusicGenre[] = ['Cinematic', 'Electronic', 'Acoustic', 'Ambient', 'Hip-hop', 'Jazz', 'Orchestral'];
+// MUSIC_GENRES removed alongside the Music + SFX intake UI block while
+// Lyria is unstable. See git history for the constant + the JSX block
+// when re-enabling.
 const CAMERA_MOTIONS: CameraMotion[] = ['Default', 'Static', 'Dolly', 'Handheld', 'Drone', 'Crane', 'Whip Pan'];
 const SCENE_TRANSITIONS: SceneTransition[] = ['Default', 'Cut', 'Dissolve', 'Whip', 'Black'];
 const COLOR_GRADES: ColorGrade[] = ['Kodak 250D', 'Bleach Bypass', 'Teal & Orange', 'Warm Film', 'Cool Noir', 'Desaturated'];
@@ -188,10 +190,13 @@ export default function IntakeForm({
 
   const [lipSync, setLipSync] = useState(false);
   const [lipStrength, setLipStrength] = useState(70);
-  const [music, setMusic] = useState(false);
-  const [musicGenre, setMusicGenre] = useState<MusicGenre>('Cinematic');
-  const [musicIntensity, setMusicIntensity] = useState(55);
-  const [sfx, setSfx] = useState(false);
+  // Music + SFX state — UI block is commented out while Lyria is
+  // unstable. Setters dropped from the destructure (TS6133) since the
+  // only writes lived inside the disabled JSX. The values are still
+  // read by the cost summary's useMemo deps array below.
+  const [music] = useState(false);
+  const [musicGenre] = useState<MusicGenre>('Cinematic');
+  const [sfx] = useState(false);
 
   // Character consistency is FORCED ON when the mode supports it — the
   // base credit cost already covers it, so it's not a toggle.
@@ -1115,59 +1120,10 @@ export default function IntakeForm({
         </div>
       )}
       {/*
-      ── ORIGINAL AUDIO & REALISM BLOCK (music + sfx disabled) ──
-      {(features.lipSync || features.music) && (
-        <div>
-          <IntakeLabel><span className="text-[#14C8CC]">★</span> Audio & realism · NEW</IntakeLabel>
-          <div className="grid gap-3">
-            {features.lipSync && (
-              <FeatureToggle
-                icon={<AudioLines className="w-4 h-4" />}
-                title="Lip Sync"
-                subtitle="Align character mouth shapes to the narration line by line."
-                cost={ADDON_COST.lipSync}
-                on={lipSync}
-                onToggle={setLipSync}
-              >
-                <IntakeLabel>Lip sync strength</IntakeLabel>
-                <IntakeSlider value={lipStrength} onChange={setLipStrength} fmt={(v) => v < 40 ? 'Subtle' : v < 70 ? 'Natural' : 'Exaggerated'} />
-              </FeatureToggle>
-            )}
-            {features.music && (
-              <FeatureToggle
-                icon={<Music className="w-4 h-4" />}
-                title="Music & Sound Effects"
-                subtitle="Auto-scored soundtrack plus optional ambient SFX and foley."
-                cost={ADDON_COST.music}
-                on={music}
-                onToggle={setMusic}
-              >
-                <div className="grid gap-3.5">
-                  <div>
-                    <IntakeLabel>Music genre</IntakeLabel>
-                    <div className="flex gap-1.5 flex-wrap">
-                      {MUSIC_GENRES.map((g) => (<Pill key={g} on={g === musicGenre} onClick={() => setMusicGenre(g)}>{g}</Pill>))}
-                    </div>
-                  </div>
-                  <div>
-                    <IntakeLabel>Intensity · auto-ducks under voice</IntakeLabel>
-                    <IntakeSlider value={musicIntensity} onChange={setMusicIntensity} fmt={(v) => v < 35 ? 'Bed' : v < 65 ? 'Balanced' : 'Driving'} />
-                  </div>
-                  {features.sfx && (
-                    <div className="flex items-center gap-2">
-                      <button type="button" role="switch" aria-checked={sfx} onClick={() => setSfx(!sfx)} className={cn('relative w-9 h-5 rounded-full transition-colors shrink-0 border', sfx ? 'bg-[#14C8CC] border-transparent' : 'bg-[#1B2228] border-white/10')}>
-                        <span className={cn('absolute top-[1px] w-4 h-4 rounded-full transition-all', sfx ? 'left-[18px] bg-[#0A0D0F]' : 'left-[1px] bg-[#8A9198]')} />
-                      </button>
-                      <div className="text-[12.5px] text-[#ECEAE4]">Add ambient SFX & foley</div>
-                      <span className="ml-auto font-mono text-[9px] text-[#5A6268] tracking-wider uppercase">+{ADDON_COST.sfx} cr</span>
-                    </div>
-                  )}
-                </div>
-              </FeatureToggle>
-            )}
-          </div>
-        </div>
-      )}
+      Original "Audio & realism" block with the Music + SFX toggle was
+      removed when Lyria became unreliable. Restore the FeatureToggle
+      for music from git history (look for "Music & Sound Effects")
+      when the provider is stable again.
       */}
 
       {/* Character consistency — ALWAYS ON for cinematic + explainer (folded

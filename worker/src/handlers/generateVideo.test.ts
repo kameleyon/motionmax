@@ -444,8 +444,15 @@ describe("handleGenerateVideo", () => {
 
   // ── 6. Cinematic project type ─────────────────────────────────────────────
   describe("cinematic project type", () => {
-    it("should build cinematic prompt for cinematic projectType", async () => {
-      const { buildCinematicPrompt, callLLMWithFallback } = await import("../services/openrouter.js");
+    it("should reuse the doc2video prompt builder for cinematic projects", async () => {
+      // Cinematic now routes through buildDoc2VideoPrompt — the
+      // explainer scripter produces tighter narrative scripts that
+      // match the user's topic better than the cinematic-specific
+      // prompt did. characterConsistencyEnabled is dropped from the
+      // builder call because handleCinematicVideo reads it from the
+      // projects row downstream, not from the script payload.
+      const { buildDoc2VideoPrompt, buildCinematicPrompt, callLLMWithFallback } =
+        await import("../services/openrouter.js");
       vi.mocked(callLLMWithFallback).mockResolvedValue(
         JSON.stringify({
           title: "Epic Cinematic",
@@ -467,7 +474,8 @@ describe("handleGenerateVideo", () => {
         "user-cin"
       );
 
-      expect(buildCinematicPrompt).toHaveBeenCalledOnce();
+      expect(buildDoc2VideoPrompt).toHaveBeenCalledOnce();
+      expect(buildCinematicPrompt).not.toHaveBeenCalled();
     });
   });
 });

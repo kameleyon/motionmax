@@ -19,7 +19,10 @@ import { writeSystemLog } from "../lib/logger.js";
 import {
   buildDoc2VideoPrompt,
   buildSmartFlowPrompt,
-  buildCinematicPrompt,
+  // buildCinematicPrompt — unused now that cinematic routes through
+  // buildDoc2VideoPrompt (see buildPrompt below). Kept exported from
+  // openrouter.ts so it can be restored if cinematic needs its own
+  // tone again, but importing it here would trip noUnusedLocals.
   callOpenRouterLLM,
   callLLMWithFallback,
 } from "../services/openrouter.js";
@@ -48,7 +51,19 @@ function buildPrompt(projectType: string, p: Record<string, any>): PromptResult 
 
   switch (projectType) {
     case "cinematic":
-      return buildCinematicPrompt({
+      // Cinematic now uses the explainer/doc2video script builder
+      // verbatim — same scene counts (15/28/36), same per-scene word
+      // budget, same character / presenter / language sections. The
+      // earlier cinematic-specific prompt produced more
+      // theatrical/abstract scripts that drifted from the user's
+      // topic; switching to doc2video's tighter narrative scripter
+      // keeps factual fidelity. The project's
+      // `character_consistency_enabled` flag is still read DOWNSTREAM
+      // by handleCinematicVideo from the projects row — it never
+      // needed to live inside the script prompt itself, so dropping
+      // it from this builder call is safe. buildCinematicPrompt is
+      // kept in source for any future cinematic-only experiment.
+      return buildDoc2VideoPrompt({
         content: p.content || "",
         format: p.format || "landscape",
         length: p.length || "brief",
@@ -59,7 +74,6 @@ function buildPrompt(projectType: string, p: Record<string, any>): PromptResult 
         characterDescription: p.characterDescription,
         voiceType: p.voiceType,
         disableExpressions: p.disableExpressions === true,
-        characterConsistencyEnabled: p.characterConsistencyEnabled === true,
         language: p.language,
         topic,
         previousTopics,

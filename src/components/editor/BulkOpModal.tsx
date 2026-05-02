@@ -103,6 +103,13 @@ export default function BulkOpModal({
   const { bulkOpActive, bulkOpKind, bulkOpProgress, bulkOpJobCount } =
     useActiveJobs(projectId ?? null);
   const [cancelling, setCancelling] = useState(false);
+  // Local hard-dismiss flag. The user-side cancel cannot rely on the
+  // worker honouring status='failed' immediately — a long ffmpeg
+  // invocation can keep writing progress updates that keep
+  // bulkOpActive=true for several minutes. Once the user clicks cancel
+  // we OWE them an unblocked UI, so we force-close locally regardless
+  // of what the worker is still doing.
+  const [userCancelled, setUserCancelled] = useState(false);
 
   // Track when the op started so we can show an elapsed counter. Reset
   // whenever the kind changes (different op started).
@@ -165,7 +172,15 @@ export default function BulkOpModal({
     };
   }, [forceShow]);
 
-  if (!forceShow || !bulkOpKind) return null;
+  // Reset the local-cancel flag whenever a fresh bulk op starts so a
+  // future export modal isn't permanently dismissed.
+  useEffect(() => {
+    if (bulkOpActive && userCancelled) setUserCancelled(false);
+    // We only want to reset on the rising edge of bulkOpActive.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bulkOpActive]);
+
+  if (!forceShow || !bulkOpKind || userCancelled) return null;
 
   // Cancel the active export. Marks every pending/processing
   // export_video job for this project as `failed` with a "Cancelled by
@@ -196,7 +211,16 @@ export default function BulkOpModal({
         .eq('task_type', 'export_video')
         .in('status', ['pending', 'processing']);
       if (error) throw error;
-      toast.success('Export cancelled.');
+      toast.success('Export cancelled. The worker will finish its current step then stop.');
+      // Hard-dismiss the modal immediately. The worker may still finish
+      // whatever ffmpeg pass it's halfway through (we can't kill it
+      // mid-encode without an AbortController on the child process), so
+      // we don't wait for bulkOpActive to flip — the user gets their
+      // editor back right now, and useExport's realtime handler will
+      // surface any late completion as a no-op error toast instead of
+      // an auto-download.
+      setUserCancelled(true);
+      setCancelling(false);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Cancel failed: ${msg}`);

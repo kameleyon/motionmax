@@ -145,6 +145,36 @@ function logScenes(prefix: string, scenes: any[]): void {
   });
 }
 
+/** Bail-out class so callers can distinguish a user-cancelled export
+ *  from a "real" worker failure in the catch block — we don't want
+ *  cancellations to count toward the queue-depth alert or page oncall. */
+export class ExportCancelledError extends Error {
+  constructor(jobId: string) {
+    super(`Export ${jobId} cancelled by user`);
+    this.name = "ExportCancelledError";
+  }
+}
+
+/** Read the current row status. Returns `failed` when the user clicked
+ *  Cancel in the editor (BulkOpModal writes status='failed' with
+ *  error_message='Cancelled by user' for in-flight exports). The export
+ *  loop calls this at every major checkpoint and throws
+ *  ExportCancelledError so any in-flight ffmpeg child process is
+ *  abandoned at the next .await — we can't actually kill the running
+ *  child, but we stop spawning new ones the moment cancellation is
+ *  observed, which matches what the UI promises. */
+async function checkCancelled(jobId: string): Promise<void> {
+  const { data } = await supabase
+    .from("video_generation_jobs")
+    .select("status, error_message")
+    .eq("id", jobId)
+    .maybeSingle();
+  const row = data as { status?: string; error_message?: string | null } | null;
+  if (row?.status === "failed" && (row.error_message ?? "").toLowerCase().includes("cancel")) {
+    throw new ExportCancelledError(jobId);
+  }
+}
+
 /** Wrap a promise with a timeout. */
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -595,6 +625,14 @@ async function _runExport(
       // Persist checkpoint so a Render restart can resume from this point
       writeCheckpoint(tempDir, jobId, sceneResults);
       log.info("Batch done", { batchStart: start, batchEnd: end - 1, progressPct: pct });
+
+      // Honour user-side cancellation between batches. Worst case the
+      // user waits one batch (~3 scenes) for the cancel to take
+      // effect, since the in-flight scenePromises still resolve
+      // before we can throw — that's acceptable; the scene encodes
+      // are 5-10s each, so up to ~30s of "still running" after the
+      // click instead of forever.
+      await checkCancelled(jobId);
     }
 
     const clipPaths = sceneResults.filter((p): p is string => p !== null);
@@ -615,6 +653,7 @@ async function _runExport(
       message: `Encoded ${clipPaths.length}/${scenes.length} scene clips (${sceneErrors.length} failed)`,
     });
     await supabase.from("video_generation_jobs").update({ progress: 55 }).eq("id", jobId);
+    await checkCancelled(jobId);
 
     // ── 2. Stitch scenes: crossfade or concat ───────────────────────
 
@@ -847,6 +886,37 @@ async function _runExport(
 
     return { success: true, url: finalVideoUrl };
   } catch (error) {
+    // User-cancelled exports take a separate path so they don't pollute
+    // the queue-depth alert / oncall pager. We also clean up the temp
+    // dir (no Render-restart resume is wanted — the user explicitly
+    // killed this one). The job row's status is already 'failed' with
+    // error_message='Cancelled by user' from the BulkOpModal click;
+    // we leave it as-is rather than writing our own error_message over
+    // the top.
+    if (error instanceof ExportCancelledError) {
+      log.info("Export cancelled by user — bailing out", { jobId });
+      sceneProgress.overallPhase = "failed";
+      sceneProgress.overallMessage = "Export cancelled by user";
+      await flushSceneProgress(jobId);
+      await writeSystemLog({
+        jobId,
+        projectId: project_id,
+        userId,
+        category: "system_info",
+        eventType: "export_video_cancelled",
+        message: "Video export cancelled by user",
+      });
+      try {
+        if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch (cleanupErr) {
+        log.warn("Cancelled-export temp cleanup skipped", { error: (cleanupErr as Error).message });
+      }
+      // Re-throw so the worker poll loop still sees the job as
+      // terminated; the row status is already 'failed' so claim_pending_job
+      // won't pick it up again.
+      throw error;
+    }
+
     log.error("Export job failed", { error: error instanceof Error ? error.message : String(error) });
 
     sceneProgress.overallPhase = "failed";

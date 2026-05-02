@@ -550,6 +550,13 @@ Do NOT invent or describe any human character's race, ethnicity, skin tone, hair
 
   // Phase 3 — Export. Stitches scenes into the final mp4 the publishers
   // and email handler can hand off as a URL.
+  //
+  // Format MUST be forwarded — exportVideo.ts defaults to "landscape"
+  // when payload.format is missing, which silently downgraded every
+  // portrait autopost video to 16:9 with letterboxing. The user-chosen
+  // format is captured in config.format at schedule-create time and is
+  // already used to insert the project row above; mirror it here so
+  // the export pipeline picks the right target resolution.
   const captionStyle = (intake.captionStyle as string) ?? "none";
   const exportJobId = await submitJob(
     userId,
@@ -557,6 +564,7 @@ Do NOT invent or describe any human character's race, ethnicity, skin tone, hair
     {
       project_id: projectId,
       project_type: projectType,
+      format: config.format ?? "landscape",
       caption_style: captionStyle,
     },
     [finalizeJobId],

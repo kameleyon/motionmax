@@ -9,7 +9,6 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
-import { useSubscription } from '@/hooks/useSubscription';
 import { isAutopostEligible, AUTOPOST_CREDITS_PER_RUN } from '@/lib/planLimits';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -146,13 +145,14 @@ export default function IntakeForm({
   const features = FEATURES[mode];
   const { user } = useAuth();
   const { isAdmin } = useAdminAuth();
-  const { plan } = useSubscription();
-  const planEligibleForAutopost = isAutopostEligible(plan);
   const navigate = useNavigate();
   // Upgrade dialog for free users who configure an autopost schedule.
   // ScheduleBlock now lets free users walk the entire flow; we only
   // surface the upsell when they hit Generate. The dialog is rendered
-  // at the bottom of the component.
+  // at the bottom of the component. `planEligibleForAutopost` is
+  // computed below once the local `plan` variable lands (the file
+  // already has its own subscription useQuery — no need to call
+  // useSubscription a second time and shadow it).
   const [autopostUpgradeOpen, setAutopostUpgradeOpen] = useState(false);
 
   // ── Autopost schedule state — lifted up from <ScheduleBlock /> so
@@ -281,6 +281,9 @@ export default function IntakeForm({
   });
   const plan = normalizePlanName(subscription?.plan_name ?? 'free');
   const creditsCap = PLAN_LIMITS[plan].creditsPerMonth || 1;
+  // Autopost upsell uses the same `plan` variable so we never disagree
+  // with the cost-summary's notion of which tier the user is on.
+  const planEligibleForAutopost = isAutopostEligible(plan);
 
   const costItems = useMemo(() => {
     const items: Array<{ label: string; v: number }> = [

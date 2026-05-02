@@ -388,12 +388,27 @@ ${researchBrief}
   // ── Step 4: Post-process scenes ──────────────────────────────────
   const stylePrompt = getStylePrompt(style, customStyle, projectType);
   const length: string = payload.length || "brief";
-  const { scenes, totalImages, title } = postProcessScenes(
+  const { scenes, totalImages, title: parsedTitle } = postProcessScenes(
     parsed,
     stylePrompt,
     projectType,
     length,
   );
+
+  // Title source priority:
+  //   1. payload.title — set by callers that already chose a meaningful
+  //      one (autopost passes the run's topic; the editor's "Restart"
+  //      flow passes the original project title). These should NEVER
+  //      be clobbered by the LLM's output, since postProcessScenes'
+  //      fallback is the literal string "Untitled Video" which would
+  //      overwrite an autopost project's topic-derived title.
+  //   2. LLM-parsed title from the script JSON.
+  //   3. "Untitled Video" fallback (already handled by postProcessScenes).
+  const callerTitle =
+    typeof payload.title === "string" && payload.title.trim().length > 0
+      ? payload.title.trim()
+      : null;
+  const title = callerTitle ?? parsedTitle;
   const phaseTime = Date.now() - phaseStart;
 
   // Duration is already set by postProcessScenes/sceneProcessor (11s for non-smartflow).

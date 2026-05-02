@@ -81,7 +81,7 @@ interface SocialAccountRow {
 }
 
 export default function ScheduleBlock({
-  enabled, onChange, intakeSummary, isAdmin,
+  enabled, onChange, intakeSummary, isAdmin: _isAdmin,
 }: ScheduleBlockProps) {
   const { user } = useAuth();
   // Plan gate: autopost is a Creator/Studio feature. Free users see
@@ -187,7 +187,7 @@ export default function ScheduleBlock({
   // ── Connected accounts query — TanStack as required ──
   const accountsQuery = useQuery({
     queryKey: ['autopost-accounts-picker', user?.id],
-    enabled: !!user && enabled && isAdmin,
+    enabled: !!user && enabled,
     queryFn: async (): Promise<SocialAccountRow[]> => {
       const { data, error } = await supabase
         .from('autopost_social_accounts')
@@ -374,12 +374,11 @@ export default function ScheduleBlock({
     }
   }
 
-  // ── Visibility gate ──
-  // Soft launch: hide the entire block from non-admins. Wave C will
-  // flip this to a feature-flag check once Studio Pro is the gating
-  // condition.
-  if (!isAdmin) return null;
-
+  // Visibility gate intentionally removed — automation is now GA for
+  // every plan tier. Free users can walk the entire setup flow and
+  // get the upgrade dialog at submit time (see IntakeForm.tsx). The
+  // `isAdmin` prop is no longer consulted here; it's kept on the
+  // interface so callers don't have to change.
   const monthlyRuns = interval ? RUNS_PER_MONTH[interval] : 0;
   // Cap displayed cost at 4 figures so a "Every 3 minutes" pick doesn't
   // print a 7-digit nightmare number — instead we say "1M+" and trust

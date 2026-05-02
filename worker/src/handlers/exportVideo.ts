@@ -226,7 +226,38 @@ async function applyWatermarkOverlay(filePath: string, text: string, tempDir: st
 
 /** Build ExportConfig from environment, feature flags, and payload. */
 async function buildExportConfig(payload: any): Promise<ExportConfig> {
-  const format = payload.format || "landscape";
+  // Format source priority:
+  //   1. payload.format — explicit caller choice (intake / autopost / preset).
+  //   2. projects.format — fallback when payload omits it. Catches the
+  //      old autopost path that wasn't forwarding format and any future
+  //      caller that forgets — the project row IS the canonical aspect
+  //      ratio, so reading it stops landscape-letterbox bugs at the
+  //      source instead of relying on every caller to remember.
+  //   3. "landscape" — last-ditch default if even the project lookup
+  //      fails (very old rows, RLS quirks).
+  let format: string = payload.format || "landscape";
+  if (!payload.format && payload.project_id) {
+    try {
+      const { data } = await supabase
+        .from("projects")
+        .select("format")
+        .eq("id", payload.project_id)
+        .maybeSingle();
+      const projectFormat = (data as { format?: string } | null)?.format;
+      if (projectFormat && projectFormat !== "landscape") {
+        wlog.warn("payload.format missing — falling back to projects.format", {
+          projectId: payload.project_id,
+          projectFormat,
+        });
+        format = projectFormat;
+      }
+    } catch (err) {
+      wlog.warn("projects.format lookup failed — using landscape default", {
+        projectId: payload.project_id,
+        error: (err as Error).message,
+      });
+    }
+  }
   const { width, height } = getTargetResolution(format);
 
   // Env var EXPORT_AI_VIDEO still works as the legacy override; the DB flag is

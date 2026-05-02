@@ -98,8 +98,16 @@ export function useSceneRegen(state: EditorState | null) {
       .update({ scenes: patched as unknown as never })
       .eq('id', state.generation.id);
     if (error) { toast.error(`Couldn't save: ${error.message}`); return false; }
+    // Invalidate the editor-state cache so the Inspector's derived state
+    // (active grade pill, per-scene transition highlight, etc.) reflects
+    // the new _meta immediately. Without this the UI looked frozen on
+    // the previous value until the next realtime tick — which felt like
+    // the buttons weren't doing anything.
+    if (state?.project?.id) {
+      queryClient.invalidateQueries({ queryKey: ['editor-state', state.project.id] });
+    }
     return true;
-  }, [state?.generation]);
+  }, [state?.generation, state?.project?.id, queryClient]);
 
   const apply = useCallback(async (index: number, nextPrompt: string) => {
     setBusy('apply');
@@ -487,8 +495,11 @@ export function useSceneRegen(state: EditorState | null) {
       .update({ scenes: patched as unknown as never })
       .eq('id', state.generation.id);
     if (error) { toast.error(`Couldn't save: ${error.message}`); return false; }
+    if (state?.project?.id) {
+      queryClient.invalidateQueries({ queryKey: ['editor-state', state.project.id] });
+    }
     return true;
-  }, [state?.generation]);
+  }, [state?.generation, state?.project?.id, queryClient]);
 
   /** Re-render the video for EVERY scene that has an image. Used by
    *  the Motion tab's "Re-render all" button after the user applies a
@@ -623,12 +634,20 @@ export function useSceneRegen(state: EditorState | null) {
     if (!state?.project) return false;
     const current = (state.project.intake_settings as Record<string, unknown> | null) ?? {};
     const next = { ...current, ...patch };
+    const projectId = state.project.id;
     try {
       const { error } = await supabase
         .from('projects')
         .update({ intake_settings: next as unknown as never })
-        .eq('id', state.project.id);
-      if (!error) return true;
+        .eq('id', projectId);
+      if (!error) {
+        // Invalidate so the Inspector picks up the new intake.grade /
+        // captionStyle / etc. immediately. Without this the dropdown
+        // would show the stale "Apply to all" target until the next
+        // realtime UPDATE arrived (or never, on quiet projects).
+        queryClient.invalidateQueries({ queryKey: ['editor-state', projectId] });
+        return true;
+      }
 
       // Schema-cache miss = intake_settings column not in prod yet.
       // Fall back to writing into scenes[0]._meta.intakeOverrides on
@@ -662,13 +681,14 @@ export function useSceneRegen(state: EditorState | null) {
         console.warn('[updateIntakeSettings] fallback failed:', genErr.message);
         return false;
       }
+      queryClient.invalidateQueries({ queryKey: ['editor-state', projectId] });
       return true;
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       toast.error(`Couldn't save: ${errMsg}`);
       return false;
     }
-  }, [state?.project, state?.generation]);
+  }, [state?.project, state?.generation, queryClient]);
 
   return {
     busy,

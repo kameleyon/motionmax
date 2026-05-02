@@ -161,33 +161,42 @@ async function singlePassCrossfade(
   }
 
   // ── Audio chain ────────────────────────────────────────────────────
-  // For each clip, compute the "kept duration" — how much of its audio
-  // survives the trim. Convention:
-  //   • clip 0   → keep durations[0] - (duration - audioFade); fade out at end.
-  //   • clip n-1 → keep all; fade in at start.
-  //   • middle   → keep durations[i] - 2*(duration - audioFade); fade in + out.
-  // The +0.3s audio safety pad from muxVideoAudio ensures the voiceover
-  // finishes well before the trim, so only silence is cut.
+  // The total audio length MUST equal the total video length, otherwise
+  // ffmpeg has to truncate or stretch at the end (audible static / pop).
+  //
+  //   video output len = sum(durations) - (n-1)*X
+  //
+  // Cut convention (split the xfade at its midpoint, X/2 on each side):
+  //   clip 0      → atrim [0, d[0] - X/2]                    fade out
+  //   clip middle → atrim [X/2, d[i] - X/2]                  fade in + out
+  //   clip last   → atrim [X/2, d[n-1]]                      fade in
+  //
+  // Per-clip lengths sum to exactly sum(d) - (n-1)*X — derivation:
+  //   (d0 - X/2) + Σ(di - X) + (d_last - X/2) = sum(d) - (n-1)*X.
+  //
+  // The previous formula left the head untrimmed on every middle clip
+  // (trimHead always 0), so middle segments were each X/2 too long and
+  // the totals diverged by ~(n-2)*X/2 over a long project. That mismatch
+  // produced the audible static / popping at the tail of the export.
+  const halfX = opts.duration / 2;
+  // Sync the audio fade duration with the visual half-xfade so the
+  // dissolve / whip / fadeblack feels right; cap it at the legacy 0.3s
+  // for very long crossfades.
+  const audioFadeDur = Math.min(audioFade, halfX);
   const audioChain: string[] = [];
   const audioInputs: string[] = [];
   for (let i = 0; i < n; i++) {
     const isFirst = i === 0;
     const isLast = i === n - 1;
-    // Keep all of this clip's audio EXCEPT what gets sacrificed to the
-    // xfade boundary on either side. The xfade duration eats `duration`
-    // seconds of video; we let audio overlap by `audioFade` of that
-    // for a soft join (not a full crossfade — concat enforces no overlap).
-    const trimHead = isFirst ? 0 : 0;
-    const trimEnd = isLast
-      ? durations[i]
-      : durations[i] - (opts.duration - audioFade);
+    const trimHead = isFirst ? 0 : halfX;
+    const trimEnd = isLast ? durations[i] : durations[i] - halfX;
     const segLen = trimEnd - trimHead;
 
     const fades: string[] = [];
-    if (!isFirst) fades.push(`afade=t=in:d=${audioFade.toFixed(3)}`);
+    if (!isFirst) fades.push(`afade=t=in:d=${audioFadeDur.toFixed(3)}`);
     if (!isLast) {
-      const foStart = Math.max(0, segLen - audioFade);
-      fades.push(`afade=t=out:st=${foStart.toFixed(3)}:d=${audioFade.toFixed(3)}`);
+      const foStart = Math.max(0, segLen - audioFadeDur);
+      fades.push(`afade=t=out:st=${foStart.toFixed(3)}:d=${audioFadeDur.toFixed(3)}`);
     }
 
     const trimExpr = `atrim=${trimHead.toFixed(3)}:${trimEnd.toFixed(3)},asetpts=PTS-STARTPTS`;

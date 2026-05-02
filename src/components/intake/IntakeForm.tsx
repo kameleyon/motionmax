@@ -9,6 +9,12 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import { useSubscription } from '@/hooks/useSubscription';
+import { isAutopostEligible, AUTOPOST_CREDITS_PER_RUN } from '@/lib/planLimits';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { isFlagOn } from '@/lib/featureFlags';
@@ -140,7 +146,14 @@ export default function IntakeForm({
   const features = FEATURES[mode];
   const { user } = useAuth();
   const { isAdmin } = useAdminAuth();
+  const { plan } = useSubscription();
+  const planEligibleForAutopost = isAutopostEligible(plan);
   const navigate = useNavigate();
+  // Upgrade dialog for free users who configure an autopost schedule.
+  // ScheduleBlock now lets free users walk the entire flow; we only
+  // surface the upsell when they hit Generate. The dialog is rendered
+  // at the bottom of the component.
+  const [autopostUpgradeOpen, setAutopostUpgradeOpen] = useState(false);
 
   // ── Autopost schedule state — lifted up from <ScheduleBlock /> so
   //    handleGenerate() can branch on whether the user is creating a
@@ -615,6 +628,19 @@ export default function IntakeForm({
       // least one platform account selected so the dispatcher has
       // somewhere to publish to.
       if (scheduleState.enabled && scheduleState.termsAgreed) {
+        // Free-plan upsell. ScheduleBlock allows free users to flip
+        // the Schedule toggle on and walk the whole flow (so they can
+        // see the value of the feature with their own topics + cadence
+        // mapped out) — but at submit time we open the upgrade dialog
+        // instead of inserting the row. The DB-side INSERT RLS policy
+        // (creator+ inserts own schedules) is the secondary gate; this
+        // client-side check is the user-facing one that explains WHY
+        // the upgrade is needed instead of failing with a Postgres
+        // RLS error toast.
+        if (!planEligibleForAutopost) {
+          setAutopostUpgradeOpen(true);
+          return;
+        }
         if (!scheduleState.interval) {
           toast.error('Pick how often the schedule should run.');
           return;
@@ -1491,6 +1517,50 @@ export default function IntakeForm({
       >
         {generating ? 'Submitting…' : `Create Video · ${totalCost} cr`}
       </button>
+
+      {/* Free-plan autopost upsell.
+          Shown when a free user hits Generate with the schedule toggle
+          on. We let them walk the whole setup flow first so the value
+          is concrete (your topics, your cadence, your delivery method)
+          before asking for an upgrade — much warmer pitch than blocking
+          the toggle on click. Closing the dialog leaves the form state
+          intact so the user can either upgrade and re-submit, or flip
+          the schedule off and create a one-shot project instead. */}
+      <Dialog open={autopostUpgradeOpen} onOpenChange={setAutopostUpgradeOpen}>
+        <DialogContent className="bg-[#10151A] border-white/10 text-[#ECEAE4] max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-[#ECEAE4]">Autopost is a Creator+ feature</DialogTitle>
+            <DialogDescription className="text-[#8A9198]">
+              Your schedule is configured and ready to run, but recurring
+              automation is reserved for paid plans. Upgrade to start
+              firing this schedule automatically — {AUTOPOST_CREDITS_PER_RUN} credits per run.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border border-[#14C8CC]/25 bg-[#14C8CC]/[0.06] px-3 py-2.5 text-[12.5px] text-[#ECEAE4] leading-[1.55]">
+            <div className="font-medium text-[#14C8CC] mb-1">What you'll unlock</div>
+            <ul className="list-disc pl-4 text-[#8A9198] space-y-0.5">
+              <li>Run topics on your cadence (hourly to weekly)</li>
+              <li>Email or social-publish each finished video</li>
+              <li>Per-run cost is a flat {AUTOPOST_CREDITS_PER_RUN} credits — no surprises</li>
+            </ul>
+          </div>
+          <DialogFooter className="gap-2 flex-col-reverse sm:flex-row">
+            <Button
+              variant="outline"
+              onClick={() => setAutopostUpgradeOpen(false)}
+              className="border-white/10 bg-transparent text-[#8A9198] hover:bg-white/5 hover:text-[#ECEAE4]"
+            >
+              Maybe later
+            </Button>
+            <Button
+              onClick={() => navigate('/pricing')}
+              className="bg-gradient-to-r from-[#11C4D0] to-[#E4C875] text-[#0A0D0F] hover:opacity-90"
+            >
+              View plans
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </form>
   );
 }

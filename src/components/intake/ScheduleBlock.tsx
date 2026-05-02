@@ -393,7 +393,15 @@ export default function ScheduleBlock({
 
   return (
     <Card className="bg-[#151B20] border-white/5 rounded-xl overflow-hidden text-[#ECEAE4]">
-      {/* Header — toggle only */}
+      {/* Header — toggle only.
+          Free users can NOW flip the toggle and walk through the entire
+          schedule setup (frequency, topic queue, delivery method, terms).
+          The plan gate is enforced at submit time by IntakeForm.tsx —
+          when handleGenerate sees an ineligible plan with the schedule
+          enabled, it opens the Upgrade modal instead of inserting the
+          schedule. The DB-side INSERT RLS policy + autopost_fire_now /
+          autopost_tick gates remain as the safety net so a determined
+          API caller can't bypass the upsell. */}
       <div className="flex items-center justify-between gap-3 px-4 py-3.5">
         <div className="flex items-center gap-2.5 min-w-0">
           <Clock className="w-4 h-4 text-[#14C8CC] shrink-0" />
@@ -405,10 +413,8 @@ export default function ScheduleBlock({
           )}
         </div>
         <Switch
-          checked={enabled && planEligible}
-          disabled={!planEligible}
+          checked={enabled}
           onCheckedChange={(v) => {
-            if (!planEligible) return;
             onChange({
               enabled: v,
               interval,
@@ -424,14 +430,14 @@ export default function ScheduleBlock({
         />
       </div>
 
-      {!planEligible && (
+      {!planEligible && enabled && (
         <div className="px-4 pb-3 -mt-1">
           <div className="rounded-md border border-[#E4C875]/30 bg-[#E4C875]/5 px-3 py-2 text-[12px] text-[#ECEAE4] flex items-start gap-2">
             <Clock className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[#E4C875]" />
             <div className="flex-1 min-w-0">
-              <span className="text-[#E4C875] font-medium">Autopost is a Creator/Studio feature.</span>{' '}
-              <span className="text-[#8A9198]">{AUTOPOST_CREDITS_PER_RUN} credits per run.</span>{' '}
-              <a href="/pricing" className="text-[#14C8CC] hover:underline">Upgrade your plan →</a>
+              <span className="text-[#E4C875] font-medium">Heads up — Autopost is a Creator/Studio feature.</span>{' '}
+              <span className="text-[#8A9198]">You can configure your schedule below; you'll be prompted to upgrade when you click Generate. {AUTOPOST_CREDITS_PER_RUN} credits per run on Creator+.</span>{' '}
+              <a href="/pricing" className="text-[#14C8CC] hover:underline whitespace-nowrap">See plans →</a>
             </div>
           </div>
         </div>

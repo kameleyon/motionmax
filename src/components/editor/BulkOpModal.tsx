@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useActiveJobs } from './useActiveJobs';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { toast } from 'sonner';
 
 /** Full-screen modal that shows progress for project-wide operations:
  *  exports, voice apply-all, captions burn, and motion re-render-all.
@@ -96,8 +99,10 @@ export default function BulkOpModal({
 }: {
   projectId: string | null | undefined;
 }) {
+  const { user } = useAuth();
   const { bulkOpActive, bulkOpKind, bulkOpProgress, bulkOpJobCount } =
     useActiveJobs(projectId ?? null);
+  const [cancelling, setCancelling] = useState(false);
 
   // Track when the op started so we can show an elapsed counter. Reset
   // whenever the kind changes (different op started).
@@ -161,6 +166,43 @@ export default function BulkOpModal({
   }, [forceShow]);
 
   if (!forceShow || !bulkOpKind) return null;
+
+  // Cancel the active export. Marks every pending/processing
+  // export_video job for this project as `failed` with a "Cancelled by
+  // user" error_message — there's no `cancelled` value in the
+  // chk_video_generation_jobs_status enum, so `failed` is the closest
+  // valid terminal state. Two effects:
+  //   • useActiveJobs requeries on the realtime UPDATE → bulkOpActive
+  //     flips false → this modal dismisses.
+  //   • EditorTopBar's useExport realtime handler sees status='failed'
+  //     and sets exportState='error' → no auto-download fires.
+  // The worker may still finish whatever ffmpeg invocation it's mid-way
+  // through, but the UI is freed and credits already deducted are NOT
+  // refunded here (refund logic lives in admin_cancel_job_with_refund;
+  // user-initiated cancels currently forfeit credits the same way a
+  // failed render does).
+  const cancelExport = async () => {
+    if (!user || !projectId || cancelling) return;
+    setCancelling(true);
+    try {
+      const { error } = await supabase
+        .from('video_generation_jobs')
+        .update({
+          status: 'failed',
+          error_message: 'Cancelled by user',
+        })
+        .eq('project_id', projectId)
+        .eq('user_id', user.id)
+        .eq('task_type', 'export_video')
+        .in('status', ['pending', 'processing']);
+      if (error) throw error;
+      toast.success('Export cancelled.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Cancel failed: ${msg}`);
+      setCancelling(false);
+    }
+  };
 
   const title = TITLE_BY_KIND[bulkOpKind] ?? 'Project re-rendering';
   // Voice/audio operations don't have meaningful per-scene progress
@@ -235,6 +277,21 @@ export default function BulkOpModal({
               ? 'Your file will download as soon as encoding finishes'
               : 'Editing is locked while this finishes'}
           </div>
+
+          {/* Cancel — only on export jobs and only while the worker
+              is still active. Once bulkOpActive flips false (job
+              completed or failed) the modal is in its 1.2s wrap-up
+              hold and a Cancel click would be misleading. */}
+          {bulkOpKind === 'export' && bulkOpActive && (
+            <button
+              type="button"
+              onClick={cancelExport}
+              disabled={cancelling}
+              className="mt-3 inline-flex items-center justify-center px-4 py-2 rounded-md font-mono text-[10.5px] tracking-[0.14em] uppercase border border-white/10 text-[#8A9198] hover:text-[#ECEAE4] hover:border-white/20 hover:bg-white/[0.03] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {cancelling ? 'Cancelling…' : 'Cancel export'}
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -530,6 +530,30 @@ export function useSceneRegen(state: EditorState | null) {
     }
   }, [user, state]);
 
+  /** Swap the project's narration language. Voices are language-scoped
+   *  so the caller is responsible for surfacing a new voice picker after
+   *  this resolves — we don't auto-pick one because each language has a
+   *  different "best default" (Adam for en, Aria for fr, etc.). We only
+   *  touch `voice_inclination`; `voice_name` stays put so the user can
+   *  see the stale selection and consciously switch. */
+  const updateProjectLanguage = useCallback(async (language: string) => {
+    if (!state?.project) return false;
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .update({ voice_inclination: language } as never)
+        .eq('id', state.project.id);
+      if (error) throw new Error(error.message);
+      queryClient.invalidateQueries({ queryKey: ['editor-state', state.project.id] });
+      toast.success('Language updated. Pick a voice for this language and Apply to all.');
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Language switch failed: ${msg}`);
+      return false;
+    }
+  }, [state?.project, queryClient]);
+
   /** Shallow-merge `patch` into `scenes[i]._meta` for EVERY scene in
    *  one write. Used by the Motion tab's "Apply to all scenes" button
    *  when the user wants the same camera motion / transition across
@@ -754,6 +778,7 @@ export function useSceneRegen(state: EditorState | null) {
     updateAllScenesMeta,
     updateSceneVoiceover,
     updateProjectVoice,
+    updateProjectLanguage,
     updateIntakeSettings,
     applyCaptionsAll,
     regenerateAllVideos,

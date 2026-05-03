@@ -45,6 +45,23 @@ const GRADE_OPTIONS: Grade[] = [
   'Desaturated',
 ];
 
+// Mirrors src/components/workspace/LanguageSelector.tsx so the editor's
+// language picker matches the intake. Voices are language-scoped so when
+// the user changes language here we surface a fresh voice list below.
+const LANGUAGE_OPTIONS: { id: string; label: string; flag: string }[] = [
+  { id: 'en', label: 'English', flag: '\u{1F1FA}\u{1F1F8}' },
+  { id: 'fr', label: 'Fran\u00e7ais', flag: '\u{1F1EB}\u{1F1F7}' },
+  { id: 'es', label: 'Espa\u00f1ol', flag: '\u{1F1EA}\u{1F1F8}' },
+  { id: 'ht', label: 'Krey\u00f2l Ayisyen', flag: '\u{1F1ED}\u{1F1F9}' },
+  { id: 'de', label: 'Deutsch', flag: '\u{1F1E9}\u{1F1EA}' },
+  { id: 'it', label: 'Italiano', flag: '\u{1F1EE}\u{1F1F9}' },
+  { id: 'nl', label: 'Nederlands', flag: '\u{1F1F3}\u{1F1F1}' },
+  { id: 'ru', label: '\u0420\u0443\u0441\u0441\u043A\u0438\u0439', flag: '\u{1F1F7}\u{1F1FA}' },
+  { id: 'zh', label: '\u4E2D\u6587', flag: '\u{1F1E8}\u{1F1F3}' },
+  { id: 'ja', label: '\u65E5\u672C\u8A9E', flag: '\u{1F1EF}\u{1F1F5}' },
+  { id: 'ko', label: '\uD55C\uAD6D\uC5B4', flag: '\u{1F1F0}\u{1F1F7}' },
+];
+
 function prettyVoiceName(raw: string | null | undefined): string {
   if (!raw) return '—';
   // Never leak a raw `clone:<uuid>` picker value into UI labels — the
@@ -86,7 +103,7 @@ function Inspector({
   const {
     busy, apply, regenerate, regenerateImage, regenerateVideo, editVideo, regenerateAudio,
     undoLastRegen,
-    updateSceneMeta, updateAllScenesMeta, updateProjectVoice, updateIntakeSettings,
+    updateSceneMeta, updateAllScenesMeta, updateProjectVoice, updateProjectLanguage, updateIntakeSettings,
     applyCaptionsAll, regenerateAllVideos,
   } = useSceneRegen(state);
   const { tasksForScene, bulkAudioRegenActive, bulkOpActive, bulkOpKind } =
@@ -707,6 +724,43 @@ function Inspector({
               </button>
             );
           })()}
+
+          {/* Language picker — voices are language-scoped, so changing
+              language here refreshes the Voice picker options below. We
+              don't auto-pick a voice; the user must consciously choose
+              one in the new language and click "Apply to all" to
+              re-render. The current voice stays visible as a stale
+              fallback so users notice they need to switch. */}
+          <section>
+            <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">Language</h5>
+            <select
+              value={language}
+              onChange={(e) => {
+                const next = e.target.value;
+                if (next === language) return;
+                setConfirmState({
+                  open: true,
+                  title: `Switch language to ${LANGUAGE_OPTIONS.find((l) => l.id === next)?.label ?? next}?`,
+                  message: 'Voices are language-specific. After switching you\u2019ll need to pick a voice for this language and tap "Apply to all" to re-render every scene.',
+                  confirmLabel: 'Switch language',
+                  footer: 'Voice list refreshes automatically',
+                  onConfirm: () => {
+                    setConfirmState((s) => ({ ...s, open: false }));
+                    void updateProjectLanguage(next);
+                  },
+                });
+              }}
+              disabled={busy !== 'idle' || projectLocked}
+              className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-base sm:text-[12.5px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {LANGUAGE_OPTIONS.map((l) => (
+                <option key={l.id} value={l.id}>{l.flag} {l.label}</option>
+              ))}
+            </select>
+            <div className="font-mono text-[10px] text-[#5A6268] tracking-wider mt-1.5 uppercase">
+              Current: {LANGUAGE_OPTIONS.find((l) => l.id === language)?.label ?? language.toUpperCase()}
+            </div>
+          </section>
 
           {/* Voice picker */}
           <section>

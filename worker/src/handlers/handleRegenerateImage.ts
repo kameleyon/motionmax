@@ -137,6 +137,8 @@ export async function handleRegenerateImage(
       editInstruction,
       hyperealApiKey,
       aspectRatio,
+      undefined,
+      projectId,
     );
   } else {
     // Full Regeneration — include style + character bible in prompt

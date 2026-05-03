@@ -13,6 +13,8 @@
  */
 
 import { writeApiLog } from "../lib/logger.js";
+import { supabase } from "../lib/supabase.js";
+import { v4 as uuidv4 } from "uuid";
 
 const HYPEREAL_IMAGE_EDIT_URL = "https://api.hypereal.cloud/v1/images/generate";
 const NANO_BANANA_PRO_MODEL = "nano-banana-pro-edit";
@@ -22,12 +24,30 @@ export type NanoBananaProResolution = "1k" | "2k" | "4k";
 /** Default per Hypereal spec is "1k". */
 const DEFAULT_RESOLUTION: NanoBananaProResolution = "1k";
 
+/** Re-host an r2.dev (or any external) image URL on Supabase. r2.dev
+ *  has hotlink protection — motionmax.io referers get 404'd — so we
+ *  ALWAYS persist the bytes to our own bucket before handing the URL
+ *  back to the editor. Mirrors imageGenerator.ts's uploadToStorage. */
+async function rehostToSupabase(externalUrl: string, projectId: string): Promise<string> {
+  const res = await fetch(externalUrl);
+  if (!res.ok) throw new Error(`Edit re-host fetch failed: ${res.status} ${externalUrl.substring(0, 80)}`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const fileName = `${projectId}/${uuidv4()}.png`;
+  const { error } = await supabase.storage
+    .from("scene-images")
+    .upload(fileName, bytes, { contentType: "image/png", upsert: true });
+  if (error) throw new Error(`Edit re-host upload failed: ${error.message}`);
+  const { data } = supabase.storage.from("scene-images").getPublicUrl(fileName);
+  return data.publicUrl;
+}
+
 export async function editImageWithNanoBanana(
   imageUrl: string,
   prompt: string,
   apiKey: string,
   aspectRatio: string = "16:9",
   resolution: NanoBananaProResolution = DEFAULT_RESOLUTION,
+  projectId?: string,
 ): Promise<string> {
   if (!imageUrl || typeof imageUrl !== "string" || imageUrl.trim().length === 0) {
     throw new Error("editImageWithNanoBanana: imageUrl is required and must be a non-empty string");
@@ -72,18 +92,21 @@ export async function editImageWithNanoBanana(
     // If async job, poll for result
     const jobId = data?.jobId;
     if (jobId) {
-      const result = await pollNanoBananaJob(jobId, apiKey);
+      const polledUrl = await pollNanoBananaJob(jobId, apiKey);
+      const finalUrl = projectId ? await rehostToSupabase(polledUrl, projectId) : polledUrl;
       writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: NANO_BANANA_PRO_MODEL, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[NanoBananaProEdit] background log failed:', (err as Error).message); });
-      return result;
+      return finalUrl;
     }
     const err = new Error(`No image URL returned from Nano Banana Pro Edit: ${JSON.stringify(data).substring(0, 200)}`);
     writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: NANO_BANANA_PRO_MODEL, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[NanoBananaProEdit] background log failed:', (err as Error).message); });
     throw err;
   }
 
-  console.log(`[NanoBananaProEdit] Edit complete: ${editedUrl.substring(0, 80)}...`);
+  console.log(`[NanoBananaProEdit] Edit complete (r2): ${editedUrl.substring(0, 80)}...`);
+  const finalUrl = projectId ? await rehostToSupabase(editedUrl, projectId) : editedUrl;
+  if (projectId) console.log(`[NanoBananaProEdit] Re-hosted to Supabase: ${finalUrl.substring(0, 80)}...`);
   writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: NANO_BANANA_PRO_MODEL, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[NanoBananaProEdit] background log failed:', (err as Error).message); });
-  return editedUrl;
+  return finalUrl;
 }
 
 /** Poll for async job completion */

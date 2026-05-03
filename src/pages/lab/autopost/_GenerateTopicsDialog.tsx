@@ -248,11 +248,18 @@ export function GenerateTopicsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[#10151A] border-white/10 text-[#ECEAE4] max-w-xl max-h-[90vh] overflow-y-auto">
+      {/* Sizing fix: max-w-xl alone let the dialog overflow on
+          narrow viewports because internal flex rows had no min-w-0
+          and footer / counter text could push wider than the
+          container. Pin the width to viewport-minus-padding on
+          mobile and let max-w-xl cap it on larger screens; hide
+          horizontal overflow at the root; let the interior scroll
+          vertically. */}
+      <DialogContent className="bg-[#10151A] border-white/10 text-[#ECEAE4] w-[calc(100vw-2rem)] sm:w-auto max-w-xl max-h-[90vh] overflow-x-hidden overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-[#ECEAE4] flex items-center gap-2">
-            <Wand2 className="h-4 w-4 text-[#11C4D0]" />
-            Generate more topics
+          <DialogTitle className="text-[#ECEAE4] flex items-center gap-2 min-w-0">
+            <Wand2 className="h-4 w-4 text-[#11C4D0] shrink-0" />
+            <span className="truncate">Generate more topics</span>
           </DialogTitle>
           <DialogDescription className="text-[#8A9198]">
             Builds a fresh batch of topic ideas using the automation's prompt
@@ -260,13 +267,13 @@ export function GenerateTopicsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="rounded-md border border-white/8 bg-white/[0.02] px-3 py-2.5 text-[12px] text-[#ECEAE4] flex items-center justify-between gap-3">
-          <span className="flex items-center gap-1.5">
-            <Lightbulb className="h-3.5 w-3.5 text-[#E4C875]" />
+        <div className="rounded-md border border-white/8 bg-white/[0.02] px-3 py-2.5 text-[12px] text-[#ECEAE4] flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <span className="flex items-center gap-1.5 min-w-0">
+            <Lightbulb className="h-3.5 w-3.5 text-[#E4C875] shrink-0" />
             <span className="font-medium">{queue.length}</span>
-            <span className="text-[#8A9198]">topic{queue.length === 1 ? "" : "s"} in queue</span>
+            <span className="text-[#8A9198] truncate">topic{queue.length === 1 ? "" : "s"} in queue</span>
           </span>
-          <span className="text-[#8A9198]">
+          <span className="text-[#8A9198] whitespace-nowrap">
             <span className="font-medium text-[#ECEAE4]">{excludedCount}</span> past excluded
           </span>
         </div>
@@ -320,9 +327,9 @@ export function GenerateTopicsDialog({
                       <Checkbox
                         checked={isSelected}
                         onCheckedChange={() => toggleOne(topic)}
-                        className="border-white/20 data-[state=checked]:bg-[#11C4D0] data-[state=checked]:border-[#11C4D0]"
+                        className="border-white/20 data-[state=checked]:bg-[#11C4D0] data-[state=checked]:border-[#11C4D0] shrink-0"
                       />
-                      <span className="text-[13px] text-[#ECEAE4] flex-1 min-w-0">{topic}</span>
+                      <span className="text-[13px] text-[#ECEAE4] flex-1 min-w-0 break-words">{topic}</span>
                     </li>
                   );
                 })}
@@ -368,23 +375,25 @@ export function GenerateTopicsDialog({
           </div>
         )}
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="gap-2 flex-col-reverse sm:flex-row">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
-            className="border-white/10 bg-transparent text-[#ECEAE4] hover:bg-white/5"
+            className="border-white/10 bg-transparent text-[#ECEAE4] hover:bg-white/5 w-full sm:w-auto"
           >
             Close
           </Button>
           <Button
             onClick={() => addMutation.mutate()}
             disabled={selected.size === 0 || addMutation.isPending}
-            className="bg-[#11C4D0] text-[#0A0D0F] hover:bg-[#11C4D0]/90"
+            className="bg-[#11C4D0] text-[#0A0D0F] hover:bg-[#11C4D0]/90 w-full sm:w-auto whitespace-normal text-left sm:text-center"
           >
             {addMutation.isPending ? (
-              <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+              <Loader2 className="h-4 w-4 mr-1.5 animate-spin shrink-0" />
             ) : null}
-            Add {selected.size > 0 ? selected.size : ""} Topic{selected.size === 1 ? "" : "s"} to Queue
+            <span className="truncate">
+              Add {selected.size > 0 ? selected.size : ""} Topic{selected.size === 1 ? "" : "s"} to Queue
+            </span>
           </Button>
         </DialogFooter>
       </DialogContent>

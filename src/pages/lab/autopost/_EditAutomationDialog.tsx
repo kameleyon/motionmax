@@ -47,6 +47,30 @@ const LANGUAGES: Array<{ code: string; label: string; flag: string }> = [
   { code: 'ko', label: '한국어',          flag: '\u{1F1F0}\u{1F1F7}' },
 ];
 
+// Mirror of the IntakeForm STYLES list — every visual style autopost
+// can render in. Kept as a flat (id, label) pair here so the Select
+// stays light; the heavier preview thumbnails live in IntakeForm
+// where the picker is a visual grid.
+const VISUAL_STYLES: Array<{ id: string; label: string }> = [
+  { id: 'realistic',  label: 'Realistic' },
+  { id: '3d-pixar',   label: '3D Style' },
+  { id: 'anime',      label: 'Anime' },
+  { id: 'claymation', label: 'Claymation' },
+  { id: 'storybook',  label: 'Storybook' },
+  { id: 'caricature', label: 'Caricature' },
+  { id: 'doodle',     label: 'Urban Doodle' },
+  { id: 'stick',      label: 'Stick Figure' },
+  { id: 'sketch',     label: 'Papercut 3D' },
+  { id: 'crayon',     label: 'Crayon' },
+  { id: 'minimalist', label: 'Minimalist' },
+  { id: 'moody',      label: 'Moody' },
+  { id: 'chalkboard', label: 'Chalkboard' },
+  { id: 'lego',       label: 'LEGO' },
+  { id: 'cardboard',  label: 'Cardboard' },
+  { id: 'babie',      label: 'Babie' },
+  { id: 'custom',     label: 'Custom' },
+];
+
 // Mirror of the workspace CaptionStyleSelector list.
 const CAPTION_STYLES: Array<{ value: string; label: string }> = [
   { value: "none",           label: "None (no captions)" },
@@ -90,6 +114,12 @@ interface DraftState {
   language: string;
   voice: SpeakerVoice;
   caption_style: string;
+  /** Visual style id (matches the IntakeForm STYLES list). Persisted
+   *  on save into config_snapshot.style and into
+   *  config_snapshot.intake_settings.visualStyle so the worker's
+   *  Imagen / Kling prompt builder picks it up the same way it
+   *  would for a fresh intake. */
+  style: string;
   delivery_method: DeliveryMethod;
   email_recipients: string[];
 }
@@ -101,11 +131,16 @@ function buildDraft(s: AutomationSchedule): DraftState {
   const snap = (s.config_snapshot ?? {}) as IntakeSettings & {
     language?: string;
     voice_name?: string;
-    intake_settings?: { captionStyle?: string };
+    style?: string;
+    intake_settings?: { captionStyle?: string; visualStyle?: string };
   };
   const language = snap.language ?? "en";
   const voice = (snap.voice_name as SpeakerVoice | undefined) ?? getDefaultSpeaker(language);
   const captionStyle = snap.intake_settings?.captionStyle ?? "none";
+  // Style source priority: top-level config_snapshot.style (what
+  // IntakeForm writes today) → intake_settings.visualStyle (legacy
+  // shape) → 'realistic' as the safest default.
+  const style = snap.style ?? snap.intake_settings?.visualStyle ?? "realistic";
   return {
     name: s.name,
     prompt_template: s.prompt_template ?? snap.prompt ?? "",
@@ -113,6 +148,7 @@ function buildDraft(s: AutomationSchedule): DraftState {
     language,
     voice,
     caption_style: captionStyle,
+    style,
     // Default to 'library_only' when reading rows authored before Wave
     // E (and surface only library-only / email until social
     // verification clears).
@@ -203,9 +239,18 @@ export function EditAutomationDialog({
         resolution: draft.resolution,
         language: draft.language,
         voice_name: draft.voice,
+        // Persist the visual style at both the canonical snapshot key
+        // (where IntakeForm writes it) and inside intake_settings
+        // (where legacy autopost rows / older worker code paths read
+        // from). Worker prompt builders read style from the project
+        // row that handleAutopostRun inserts via config.style, which
+        // is sourced from this snapshot, so writing both keys keeps
+        // the runtime behavior identical to a fresh intake save.
+        style: draft.style,
         intake_settings: {
           ...prevIntake,
           captionStyle: draft.caption_style,
+          visualStyle: draft.style,
         },
       };
 
@@ -452,6 +497,34 @@ export function EditAutomationDialog({
                   {CAPTION_STYLES.map((c) => (
                     <SelectItem key={c.value} value={c.value}>
                       {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Visual style — matches IntakeForm's STYLES list. The
+                worker reads `style` from the project row inserted by
+                handleAutopostRun, which it sources from
+                config_snapshot.style. saveMutation writes the chosen
+                value to both `style` (top-level) and
+                `intake_settings.visualStyle` for back-compat with any
+                legacy code path that reads the older key. */}
+            <div className="space-y-1.5">
+              <Label className="text-[12px] text-[#ECEAE4]">Visual style</Label>
+              <Select
+                value={draft.style}
+                onValueChange={(v) => setDraft(d => ({ ...d, style: v }))}
+              >
+                <SelectTrigger className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="z-[10000] bg-[#10151A] border-white/10 text-[#ECEAE4] max-h-72">
+                  {VISUAL_STYLES.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.label}
                     </SelectItem>
                   ))}
                 </SelectContent>

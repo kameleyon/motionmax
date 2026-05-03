@@ -254,7 +254,7 @@ export function GenerateTopicsDialog({
           mobile and let max-w-xl cap it on larger screens; hide
           horizontal overflow at the root; let the interior scroll
           vertically. */}
-      <DialogContent className="bg-[#10151A] border-white/10 text-[#ECEAE4] w-[calc(100vw-2rem)] sm:w-auto max-w-xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="bg-[#10151A] border-white/10 text-[#ECEAE4] w-[calc(100vw-2rem)] sm:w-auto max-w-xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="text-[#ECEAE4] flex items-center gap-2 min-w-0">
             <Wand2 className="h-4 w-4 text-[#11C4D0] shrink-0" />
@@ -313,7 +313,7 @@ export function GenerateTopicsDialog({
             <div
               className="rounded-md border border-white/8 overflow-y-auto overscroll-contain"
               style={{
-                height: '40vh',
+                maxHeight: '260px',
                 scrollbarWidth: 'thin',
                 scrollbarColor: '#11C4D0 #1B2228',
               }}
@@ -352,7 +352,7 @@ export function GenerateTopicsDialog({
             <div
               className="rounded-md border border-white/8 overflow-y-auto overscroll-contain"
               style={{
-                height: '30vh',
+                maxHeight: '180px',
                 scrollbarWidth: 'thin',
                 scrollbarColor: '#11C4D0 #1B2228',
               }}

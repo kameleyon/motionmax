@@ -338,6 +338,77 @@ export async function generateKlingV3ProVideo(
   return pollHyperealJob(jobId, apiKey, model, pollUrl);
 }
 
+// ── Grok Imagine Video Edit (text-prompt video editing) ──────────
+
+/**
+ * Edit an existing video via Hypereal `grok-imagine-video-edit`.
+ *
+ * xAI's Grok Imagine video-edit endpoint takes a video URL plus a
+ * natural-language instruction and returns a modified clip — much
+ * faster + cheaper than re-rendering an image-to-video pass with
+ * Kling. We wire it through the same Hypereal endpoint as Kling V3
+ * Pro (same URL, same Bearer auth, same { model, input } body
+ * envelope, same pollHyperealJob for the result). The only delta vs
+ * Kling is `model` plus a `video` field in `input` instead of
+ * `image` + `end_image`.
+ *
+ * Model: grok-imagine-video-edit (55 credits, $0.55/edit)
+ * Required: prompt, video (URL of the source clip)
+ *
+ * Returns the edited video URL.
+ */
+export async function editVideoWithGrokImagine(
+  videoUrl: string,
+  prompt: string,
+  apiKey: string,
+): Promise<string> {
+  const model = "grok-imagine-video-edit";
+  const clampedPrompt = truncateKlingPrompt(prompt); // same 2400-char ceiling — shared upstream limit
+
+  console.log(`[Hypereal] Starting Grok Imagine video edit`);
+  console.log(`[Hypereal] VIDEO: ${videoUrl.substring(0, 80)}...`);
+  console.log(`[Hypereal] PROMPT (${clampedPrompt.length} chars): ${truncate(clampedPrompt)}`);
+
+  // Mirror the Kling V3 Pro request envelope verbatim. Only the input
+  // payload shape differs: { prompt, video } instead of
+  // { prompt, image, end_image, ... }.
+  const requestBody = {
+    model,
+    input: {
+      prompt: clampedPrompt,
+      video: videoUrl,
+    },
+  };
+  const bodyJson = JSON.stringify(requestBody);
+  console.log(`[Hypereal] grok-imagine-video-edit body (${bodyJson.length} chars): ${truncate(bodyJson)}`);
+
+  const response = await hyperealFetch(HYPEREAL_VIDEO_URL, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: bodyJson,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Hypereal grok-imagine-video-edit API Error: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json() as any;
+  const jobId = data.jobId;
+  const pollUrl = data.pollUrl || null;
+
+  console.log(`[Hypereal] grok-imagine-video-edit job created: ${jobId} (credits: ${data.creditsUsed})`);
+
+  if (!jobId) {
+    throw new Error(`No jobId from grok-imagine-video-edit — response: ${JSON.stringify(data)}`);
+  }
+
+  return pollHyperealJob(jobId, apiKey, model, pollUrl);
+}
+
 // ── Kling V2.6 Pro I2V (fallback for transitions) ─────────────────
 
 /**

@@ -194,14 +194,21 @@ export async function handleRegenerateImage(
     .eq("id", projectId)
     .is("thumbnail_url", null);
 
-  // Clear stale videoUrls invalidated by this image change. LEGACY
-  // logic (useCinematicRegeneration.applyImageEdit / regenerateImage):
-  //   - scene N:   its video's FIRST frame was this image → stale.
-  //   - scene N-1: its video's END frame (transition to next scene)
-  //                was this image → stale.
-  // Both get cleared + both get video regen queued below.
+  // Track which scenes' videos were stale-by-this-edit, plus their
+  // PRE-clear videoUrls so the auto-chain below can route between
+  //   • cinematic_video_edit  (text-prompt edit on the existing clip
+  //     via grok-imagine-video-edit) — only valid when the user typed
+  //     an `imageModification` we can forward as the edit prompt AND
+  //     a source videoUrl actually exists.
+  //   • cinematic_video       (full Kling V3 Pro re-render) — fallback
+  //     for plain regenerations where there's no instruction to feed
+  //     into a video edit.
+  //
+  // Capture URLs FIRST, then clear, so we don't race the auto-chain.
   const prevIndex = sceneIndex - 1;
-  const prevHasVideo = prevIndex >= 0 && !!scenes[prevIndex]?.videoUrl;
+  const currentSourceVideoUrl: string | null = scenes[sceneIndex]?.videoUrl ?? null;
+  const prevSourceVideoUrl: string | null = prevIndex >= 0 ? (scenes[prevIndex]?.videoUrl ?? null) : null;
+  const prevHasVideo = prevSourceVideoUrl !== null;
   if (scenes[sceneIndex]?.videoUrl) {
     console.log(`[RegenerateImage] Clearing stale videoUrl for scene ${sceneIndex + 1}`);
     await updateSceneFieldJson(generationId, sceneIndex, "videoUrl", null);
@@ -240,31 +247,78 @@ export async function handleRegenerateImage(
       .maybeSingle();
     const isCinematic = proj?.project_type === "cinematic";
     if (isCinematic && targetImageIndex === 0 && userId) {
-      // Indices whose videos were just invalidated above.
-      const affected: number[] = [];
-      if (scenes[sceneIndex]) affected.push(sceneIndex);
-      if (prevIndex >= 0 && scenes[prevIndex]) affected.push(prevIndex);
+      // Decide between two routing modes:
+      //   EDIT mode  → user supplied an imageModification AND we
+      //                captured a source videoUrl for the affected
+      //                scene. Queue cinematic_video_edit so Grok
+      //                Imagine modifies the existing clip in place.
+      //                ~55 credits / $0.55 per edit, ~30s round-trip.
+      //   REGEN mode → no instruction or no prior videoUrl. Fall back
+      //                to the historical cinematic_video full re-render
+      //                path (Kling V3 Pro image-to-video). ~70 credits
+      //                / $0.70+, ~30-60s per scene.
+      //
+      // Per-scene routing is independent — it's possible (e.g. for the
+      // first scene) that current has a video but prev doesn't.
+      type ChainRow = {
+        idx: number;
+        sourceVideoUrl: string | null;
+        reason: string;
+      };
+      const affected: ChainRow[] = [];
+      if (scenes[sceneIndex]) {
+        affected.push({
+          idx: sceneIndex,
+          sourceVideoUrl: currentSourceVideoUrl,
+          reason: "scene-image-changed",
+        });
+      }
+      if (prevIndex >= 0 && scenes[prevIndex]) {
+        affected.push({
+          idx: prevIndex,
+          sourceVideoUrl: prevSourceVideoUrl,
+          reason: "prev-scene-end-frame-changed",
+        });
+      }
 
-      // Batch-insert both rows in a single Supabase call so the worker
-      // can pick them up in parallel. Mirrors the legacy
-      // regenAffectedVideos() Promise.allSettled pattern.
-      if (affected.length > 0) {
-        const inserts = affected.map((idx) => ({
+      const editPrompt = imageModification.trim();
+      const inserts = affected.map((row) => {
+        const useEditPath = !!editPrompt && !!row.sourceVideoUrl;
+        if (useEditPath) {
+          return {
+            user_id: userId,
+            project_id: projectId,
+            task_type: "cinematic_video_edit" as const,
+            payload: {
+              generationId,
+              projectId,
+              sceneIndex: row.idx,
+              sourceVideoUrl: row.sourceVideoUrl,
+              editPrompt,
+              regenerate: true,
+              _chainedFromImage: true,
+              _reason: row.reason,
+            },
+            status: "pending",
+          };
+        }
+        return {
           user_id: userId,
           project_id: projectId,
           task_type: "cinematic_video" as const,
           payload: {
             generationId,
             projectId,
-            sceneIndex: idx,
+            sceneIndex: row.idx,
             regenerate: true,
             _chainedFromImage: true,
-            _reason: idx === sceneIndex
-              ? "scene-image-changed"
-              : "prev-scene-end-frame-changed",
+            _reason: row.reason,
           },
           status: "pending",
-        }));
+        };
+      });
+
+      if (inserts.length > 0) {
         try {
           const { error: chainErr } = await supabase
             .from("video_generation_jobs")
@@ -272,7 +326,12 @@ export async function handleRegenerateImage(
           if (chainErr) {
             console.warn(`[RegenerateImage] Auto-chain batch insert failed (non-fatal): ${chainErr.message}`);
           } else {
-            console.log(`[RegenerateImage] Auto-queued ${inserts.length} cinematic_video regens in parallel: scenes [${affected.map((i) => i + 1).join(", ")}]`);
+            const editCount = inserts.filter(r => r.task_type === "cinematic_video_edit").length;
+            const regenCount = inserts.length - editCount;
+            console.log(
+              `[RegenerateImage] Auto-queued ${inserts.length} jobs in parallel: ` +
+              `${editCount} edit, ${regenCount} regen, scenes [${affected.map(r => r.idx + 1).join(", ")}]`,
+            );
           }
         } catch (queueErr) {
           const qm = queueErr instanceof Error ? queueErr.message : String(queueErr);

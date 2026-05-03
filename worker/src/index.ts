@@ -453,6 +453,15 @@ async function processJob(job: Job) {
       } else if (job.task_type === 'cinematic_video' as any) {
         const result = await handleCinematicVideo(job.id, job.payload as any, job.user_id);
         finalPayload = { ...finalPayload, ...result };
+      } else if (job.task_type === 'cinematic_video_edit' as any) {
+        // Text-prompt video edit via grok-imagine-video-edit. Replaces
+        // the legacy "regen 2 scenes from new keyframes" path used after
+        // a Nano Banana Pro image edit. Dynamic import keeps the main
+        // bundle slim — handler is only loaded when an edit job claims
+        // a slot.
+        const { handleCinematicVideoEdit } = await import("./handlers/handleCinematicVideoEdit.js");
+        const result = await handleCinematicVideoEdit(job.id, job.payload as any, job.user_id);
+        finalPayload = { ...finalPayload, ...result };
       } else if (job.task_type === 'cinematic_audio' as any) {
         const result = await handleCinematicAudio(job.id, job.payload as any, job.user_id);
         finalPayload = { ...finalPayload, ...result };

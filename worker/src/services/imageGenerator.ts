@@ -1,7 +1,14 @@
 /**
  * Image generation service for the worker.
- * Tries Hypereal (gemini-3-1-flash-t2i) first with 4 retries,
- * then falls back to Replicate nano-banana-2.
+ *
+ * Provider chain (highest priority first):
+ *   1. Hypereal `gpt-4o-image` — primary, OpenAI native image gen at
+ *      $0.02/image. Uses `size` param ("1024x1024" | "1024x1792" |
+ *      "1792x1024"), NOT aspect_ratio.
+ *   2. Hypereal `gemini-3-1-flash-t2i` — backup. Uses `aspect_ratio`.
+ *   3. Replicate `nano-banana-2` — last-resort tertiary AND the only
+ *      path that supports `image_input` (character-consistency
+ *      reference images). gpt-4o-image and gemini are both text-only.
  *
  * IMPORTANT: Hypereal CDN URLs (r2.dev) have hotlink protection —
  * browsers sending a Referer from motionmax.io get blocked.
@@ -17,6 +24,12 @@ import { v4 as uuidv4 } from "uuid";
 // ── Constants ──────────────────────────────────────────────────────
 
 const HYPEREAL_API_URL = "https://api.hypereal.cloud/v1/images/generate";
+// Primary: GPT-4o native image generation. $0.02/image, supports
+// 1024x1024 / 1024x1792 (portrait) / 1792x1024 (landscape).
+const HYPEREAL_GPT4O_MODEL = "gpt-4o-image";
+const HYPEREAL_GPT4O_RETRIES = 3;
+// Backup: Gemini 3.1 Flash text-to-image (the previous primary). Same
+// Hypereal endpoint but uses `aspect_ratio` instead of `size`.
 const HYPEREAL_MODEL = "gemini-3-1-flash-t2i";
 const HYPEREAL_RETRIES = 4;
 
@@ -85,6 +98,15 @@ function toAspectRatio(format: string): string {
   return "16:9";
 }
 
+/** Map our format keys to gpt-4o-image's allowed `size` values.
+ *  GPT-4o native image gen accepts only these three sizes; anything
+ *  else is rejected by the upstream API. Square is the default. */
+function toGpt4oSize(format: string): "1024x1024" | "1024x1792" | "1792x1024" {
+  if (format === "portrait") return "1024x1792";
+  if (format === "landscape") return "1792x1024";
+  return "1024x1024";
+}
+
 // ── Supabase Storage upload ────────────────────────────────────────
 
 async function uploadToStorage(bytes: Uint8Array, projectId: string): Promise<string> {
@@ -99,7 +121,90 @@ async function uploadToStorage(bytes: Uint8Array, projectId: string): Promise<st
   return data.publicUrl;
 }
 
-// ── Hypereal ───────────────────────────────────────────────────────
+// ── Hypereal — GPT-4o native image (primary) ──────────────────────
+
+/** Generate from Hypereal `gpt-4o-image`. Returns raw image bytes
+ *  (already downloaded — caller re-uploads to Supabase to dodge the
+ *  r2.dev hotlink-protection block). Same API URL + key as the
+ *  Gemini backup; the only differences are `model` and `size` (vs
+ *  `aspect_ratio`). Retry budget is tighter than Gemini's because
+ *  gpt-4o-image is faster and we want quicker failover when it has
+ *  a bad minute. */
+async function tryHyperealGpt4o(
+  prompt: string,
+  apiKey: string,
+  format: string,
+): Promise<Uint8Array | null> {
+  const size = toGpt4oSize(format);
+
+  for (let attempt = 1; attempt <= HYPEREAL_GPT4O_RETRIES; attempt++) {
+    try {
+      const res = await fetch(HYPEREAL_API_URL, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, model: HYPEREAL_GPT4O_MODEL, size }),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        console.warn(`[ImageGen] gpt-4o-image attempt ${attempt} failed (${res.status}): ${err.substring(0, 200)}`);
+        if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+          console.warn(`[ImageGen] gpt-4o-image giving up on ${res.status} (client error, non-retriable)`);
+          return null;
+        }
+        // E9999 from Hypereal == sustained upstream outage; bail
+        // early so the Gemini backup gets to try sooner.
+        if (err.includes("E9999") && attempt >= 2) {
+          console.warn(`[ImageGen] gpt-4o-image E9999 sustained — failing over to Gemini`);
+          return null;
+        }
+        if (attempt < HYPEREAL_GPT4O_RETRIES) {
+          const base = 1000 * Math.pow(2, attempt - 1);
+          const jitter = base * (0.7 + Math.random() * 0.6);
+          await sleep(Math.round(jitter));
+        }
+        continue;
+      }
+
+      const data = await res.json() as any;
+      // OpenAI-compatible response shape: data.data[0].url. Some
+      // providers also return data.data[0].b64_json — handle both.
+      const url = data?.data?.[0]?.url as string | undefined;
+      const b64 = data?.data?.[0]?.b64_json as string | undefined;
+
+      if (b64) {
+        const bytes = Uint8Array.from(Buffer.from(b64, "base64"));
+        console.log(`[ImageGen] gpt-4o-image ✅ attempt ${attempt} (b64) — ${bytes.length} bytes`);
+        return bytes;
+      }
+
+      if (!url) {
+        console.warn(`[ImageGen] gpt-4o-image attempt ${attempt}: no url/b64 in response`);
+        if (attempt < HYPEREAL_GPT4O_RETRIES) await sleep(1500 * attempt);
+        continue;
+      }
+
+      const imgRes = await fetch(url);
+      if (!imgRes.ok) {
+        console.warn(`[ImageGen] gpt-4o-image download failed (${imgRes.status}) on attempt ${attempt}`);
+        if (imgRes.status >= 400 && imgRes.status < 500 && imgRes.status !== 429) return null;
+        if (attempt < HYPEREAL_GPT4O_RETRIES) await sleep(1500 * attempt);
+        continue;
+      }
+
+      const bytes = new Uint8Array(await imgRes.arrayBuffer());
+      console.log(`[ImageGen] gpt-4o-image ✅ attempt ${attempt} — ${bytes.length} bytes`);
+      return bytes;
+    } catch (err) {
+      console.warn(`[ImageGen] gpt-4o-image attempt ${attempt} threw: ${err}`);
+      if (attempt < HYPEREAL_GPT4O_RETRIES) await sleep(1500 * attempt);
+    }
+  }
+
+  return null;
+}
+
+// ── Hypereal — Gemini 3.1 Flash (backup) ───────────────────────────
 
 /** Generate from Hypereal, download bytes, return raw bytes (not URL). */
 async function tryHypereal(
@@ -358,22 +463,48 @@ async function _generateImageUncached(
     }
   }
 
-  // Primary: Hypereal → download bytes → upload to Supabase
+  // Hypereal master kill-switch + per-model flags. The Hypereal
+  // concurrency limiter is shared across both gpt-4o and gemini
+  // since they hit the same upstream account / rate-limit pool.
   const hyperealEnabled = await isEnabled("image_provider_hypereal");
-  if (hyperealApiKey && hyperealEnabled) {
+  // Per-model toggles default to ON when the row is missing — that
+  // matches the existing pattern (image_provider_hypereal defaults to
+  // true), so adding a fresh feature_flags row to disable gpt-4o is
+  // an explicit operator action, not the default state.
+  const gpt4oEnabled = await isEnabled("image_provider_gpt4o", true);
+  const geminiEnabled = await isEnabled("image_provider_gemini", true);
+
+  // ── Primary: Hypereal gpt-4o-image ────────────────────────────────
+  if (hyperealApiKey && hyperealEnabled && gpt4oEnabled) {
+    await acquireHypereal();
+    const bytes = await tryHyperealGpt4o(prompt, hyperealApiKey, format).finally(releaseHypereal);
+    if (bytes) {
+      const url = await uploadToStorage(bytes, projectId);
+      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: HYPEREAL_GPT4O_MODEL, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
+      return url;
+    }
+    console.warn("[ImageGen] gpt-4o-image exhausted — falling back to Gemini 3.1 Flash");
+  } else if (!gpt4oEnabled) {
+    console.warn("[ImageGen] gpt-4o-image disabled via feature flag — skipping to Gemini");
+  }
+
+  // ── Backup: Hypereal Gemini 3.1 Flash ─────────────────────────────
+  if (hyperealApiKey && hyperealEnabled && geminiEnabled) {
     await acquireHypereal();
     const bytes = await tryHypereal(prompt, hyperealApiKey, format).finally(releaseHypereal);
     if (bytes) {
       const url = await uploadToStorage(bytes, projectId);
-      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3-1-flash-t2i", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
+      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: HYPEREAL_MODEL, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
       return url;
     }
-    console.warn("[ImageGen] Hypereal exhausted — falling back to Replicate");
+    console.warn("[ImageGen] Gemini 3.1 Flash exhausted — falling back to Replicate");
   } else if (!hyperealEnabled) {
     console.warn("[ImageGen] Hypereal disabled via feature flag — skipping to Replicate");
+  } else if (!geminiEnabled) {
+    console.warn("[ImageGen] Gemini 3.1 Flash disabled via feature flag — skipping to Replicate");
   }
 
-  // Fallback: Replicate (already uploads to Supabase internally)
+  // ── Last resort: Replicate (already uploads to Supabase internally) ─
   if (replicateApiKey && replicateEnabled) {
     const url = await tryReplicate(prompt, replicateApiKey, format, projectId);
     if (url) {
@@ -384,8 +515,8 @@ async function _generateImageUncached(
     console.warn("[ImageGen] Replicate disabled via feature flag");
   }
 
-  const err = new Error("Image generation failed: both Hypereal and Replicate exhausted");
-  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3-1-flash-t2i", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
+  const err = new Error("Image generation failed: gpt-4o-image, Gemini 3.1 Flash, and Replicate all exhausted");
+  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: HYPEREAL_GPT4O_MODEL, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
   throw err;
 }
 

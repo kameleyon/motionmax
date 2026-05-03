@@ -341,9 +341,15 @@ export function GenerateTopicsDialog({
         {queue.length > 0 && (
           <div className="space-y-1.5 pt-1">
             <p className="text-[11px] uppercase tracking-wider text-[#5A6268]">
-              Current queue
+              Current queue ({queue.length})
             </p>
-            <div className="rounded-md border border-white/8 max-h-40 overflow-y-auto">
+            {/* ScrollArea instead of a plain overflow-y-auto div: shadcn
+                ScrollArea uses Radix's scroll primitive whose viewport is
+                a properly scoped scroll container, so it doesn't lose
+                wheel/touch events to DialogContent's outer overflow.
+                Bumped from max-h-40 to max-h-64 so an obviously long
+                queue (like 48 entries) shows ~10 rows by default. */}
+            <ScrollArea className="max-h-64 rounded-md border border-white/8">
               <ul className="divide-y divide-white/8">
                 {queue.map(topic => (
                   <li
@@ -356,7 +362,7 @@ export function GenerateTopicsDialog({
                     >
                       queued
                     </Badge>
-                    <span className="text-[12px] text-[#ECEAE4] flex-1 min-w-0 truncate">
+                    <span className="text-[12px] text-[#ECEAE4] flex-1 min-w-0 break-words">
                       {topic}
                     </span>
                     <button
@@ -371,29 +377,37 @@ export function GenerateTopicsDialog({
                   </li>
                 ))}
               </ul>
-            </div>
+            </ScrollArea>
           </div>
         )}
 
-        <DialogFooter className="gap-2 flex-col-reverse sm:flex-row">
+        {/* Footer: full-width column on every breakpoint where Add's
+            label could outgrow its row. The previous mix of
+            whitespace-normal on the button + truncate on an inner span
+            was contradictory (truncate needs nowrap+overflow:hidden;
+            whitespace-normal undoes nowrap), so the label rendered as
+            a single overflowing line that pushed the button past the
+            dialog's right edge. Drop both classes; let the label show
+            in full and stack the buttons vertically up through the
+            sm breakpoint so the Add button never has to share a row
+            with Close on cramped widths. */}
+        <DialogFooter className="gap-2 flex-col-reverse md:flex-row">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
-            className="border-white/10 bg-transparent text-[#ECEAE4] hover:bg-white/5 w-full sm:w-auto"
+            className="border-white/10 bg-transparent text-[#ECEAE4] hover:bg-white/5 w-full md:w-auto"
           >
             Close
           </Button>
           <Button
             onClick={() => addMutation.mutate()}
             disabled={selected.size === 0 || addMutation.isPending}
-            className="bg-[#11C4D0] text-[#0A0D0F] hover:bg-[#11C4D0]/90 w-full sm:w-auto whitespace-normal text-left sm:text-center"
+            className="bg-[#11C4D0] text-[#0A0D0F] hover:bg-[#11C4D0]/90 w-full md:w-auto"
           >
             {addMutation.isPending ? (
               <Loader2 className="h-4 w-4 mr-1.5 animate-spin shrink-0" />
             ) : null}
-            <span className="truncate">
-              Add {selected.size > 0 ? selected.size : ""} Topic{selected.size === 1 ? "" : "s"} to Queue
-            </span>
+            Add {selected.size > 0 ? selected.size : ""} Topic{selected.size === 1 ? "" : "s"} to Queue
           </Button>
         </DialogFooter>
       </DialogContent>

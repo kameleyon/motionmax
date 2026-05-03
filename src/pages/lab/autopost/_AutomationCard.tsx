@@ -255,6 +255,22 @@ export function AutomationCard({ schedule, lastRunAt }: AutomationCardProps) {
     [schedule.cron_expression, schedule.timezone],
   );
 
+  // Surface the project flow this schedule was created with.
+  // config_snapshot.mode is the canonical key (set by IntakeForm) —
+  // values are 'cinematic' | 'doc2video' | 'smartflow'. Default to
+  // smartflow for legacy rows that pre-date the snapshot column.
+  const flowMeta = useMemo(() => {
+    const mode = (schedule.config_snapshot as Record<string, unknown> | null)?.mode;
+    const m = typeof mode === "string" ? mode.toLowerCase() : "";
+    if (m === "cinematic") {
+      return { label: "Cinematic", className: "border-[#11C4D0]/40 bg-[#11C4D0]/[0.08] text-[#11C4D0]" };
+    }
+    if (m === "doc2video") {
+      return { label: "Explainer", className: "border-[#E4C875]/40 bg-[#E4C875]/[0.08] text-[#E4C875]" };
+    }
+    return { label: "Smart Flow", className: "border-white/15 bg-white/5 text-[#ECEAE4]" };
+  }, [schedule.config_snapshot]);
+
   return (
     <TooltipProvider>
       <Card className="bg-[#10151A] border-white/8 hover:border-white/12 transition-colors">
@@ -267,6 +283,15 @@ export function AutomationCard({ schedule, lastRunAt }: AutomationCardProps) {
               >
                 {schedule.name}
               </h3>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "shrink-0 text-[10px] uppercase tracking-wide border",
+                  flowMeta.className,
+                )}
+              >
+                {flowMeta.label}
+              </Badge>
               <Badge
                 variant="outline"
                 className={cn(

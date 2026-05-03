@@ -461,7 +461,14 @@ function Inspector({
               placeholder="Describe the edit (image or video — e.g. darker sky, sunset)"
               className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-base sm:text-[12px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 placeholder:text-[#5A6268]"
             />
-            <div className="grid grid-cols-3 gap-2 mt-2">
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              {/* Edit image button — DISABLED. Hypereal's
+                  nano-banana-pro-edit kept generating fresh images
+                  instead of editing the source despite spec compliance.
+                  Hidden until we either get the upstream behaving or
+                  swap to a different edit provider. Restore by
+                  uncommenting and switching grid back to 3 cols. */}
+              {/*
               <button
                 type="button"
                 onClick={() => {
@@ -477,6 +484,7 @@ function Inspector({
                 {imageRegenActive ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
                 Edit
               </button>
+              */}
               <button
                 type="button"
                 onClick={() => regenerateImage(selectedSceneIndex)}

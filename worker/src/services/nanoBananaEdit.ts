@@ -19,10 +19,8 @@ const NANO_BANANA_PRO_MODEL = "nano-banana-pro-edit";
 
 export type NanoBananaProResolution = "1k" | "2k" | "4k";
 
-/** Default to 2K — meaningful upgrade over the 1K legacy default
- *  without paying the 4K premium ($0.22 vs $0.11). Callers that need
- *  the full 4K bump can pass it through explicitly. */
-const DEFAULT_RESOLUTION: NanoBananaProResolution = "2k";
+/** Default per Hypereal spec is "1k". */
+const DEFAULT_RESOLUTION: NanoBananaProResolution = "1k";
 
 export async function editImageWithNanoBanana(
   imageUrl: string,
@@ -31,7 +29,22 @@ export async function editImageWithNanoBanana(
   aspectRatio: string = "16:9",
   resolution: NanoBananaProResolution = DEFAULT_RESOLUTION,
 ): Promise<string> {
-  console.log(`[NanoBananaProEdit] Editing image: "${prompt.substring(0, 60)}..." aspect=${aspectRatio} res=${resolution} src=${imageUrl.substring(0, 80)}...`);
+  if (!imageUrl || typeof imageUrl !== "string" || imageUrl.trim().length === 0) {
+    throw new Error("editImageWithNanoBanana: imageUrl is required and must be a non-empty string");
+  }
+
+  const images = [imageUrl];
+  const requestBody = {
+    model: NANO_BANANA_PRO_MODEL,
+    prompt,
+    images,
+    aspect_ratio: aspectRatio,
+    resolution,
+    output_format: "png",
+  };
+
+  console.log(`[NanoBananaProEdit] images.length=${images.length} src=${imageUrl.substring(0, 100)}`);
+  console.log(`[NanoBananaProEdit] Editing image: "${prompt.substring(0, 60)}..." aspect=${aspectRatio} res=${resolution}`);
   const startTime = Date.now();
 
   const response = await fetch(HYPEREAL_IMAGE_EDIT_URL, {
@@ -40,14 +53,7 @@ export async function editImageWithNanoBanana(
       "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: NANO_BANANA_PRO_MODEL,
-      prompt,
-      images: [imageUrl],
-      aspect_ratio: aspectRatio,
-      resolution,
-      output_format: "png",
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {

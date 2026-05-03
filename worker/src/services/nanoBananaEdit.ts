@@ -14,12 +14,7 @@
 
 import { writeApiLog } from "../lib/logger.js";
 
-// nano-banana-pro-edit lives on the dedicated /images/edit endpoint,
-// not /images/generate. Hitting /generate with an edit model can
-// silently fall through to a text-to-image render that ignores the
-// `images` array — exactly the failure mode user reported (a "Canada
-// 2026" infographic returning a "Golden Key" storybook scene).
-const HYPEREAL_IMAGE_EDIT_URL = "https://api.hypereal.cloud/v1/images/edit";
+const HYPEREAL_IMAGE_EDIT_URL = "https://api.hypereal.cloud/v1/images/generate";
 const NANO_BANANA_PRO_MODEL = "nano-banana-pro-edit";
 
 export type NanoBananaProResolution = "1k" | "2k" | "4k";

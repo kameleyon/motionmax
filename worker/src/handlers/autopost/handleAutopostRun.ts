@@ -292,18 +292,19 @@ async function runPipeline(
   // train the script LLM to describe ethnicity / skin tone / detailed
   // features for any character, which produces fully-rendered humans
   // even when the chosen art style is paper-cutout or stick-figure.
-  // For autopost runs (where the user's intake didn't supply a
-  // character) we prepend an explicit override that tells the LLM to
-  // stay in style and avoid demographic markers entirely. Only fires
-  // when no schedule-level character_description is set.
-  const hasUserCharacter =
-    typeof config.character_description === "string" && config.character_description.trim().length > 0;
-  const characterPolicy = hasUserCharacter ? "" : `=== CHARACTER POLICY (autopost-specific) ===
-Do NOT invent or describe any human character's race, ethnicity, skin tone, hair, age, gender, clothing, or facial features, When the chosen art style is stick-figure / paper-cutout / moody / sketch — figures must be simple, generic, abstract shapes and stick to the style prompt strictly. If a person is in the scene, render them as described in the style prompt with no demographic markers.
+  // Autopost-specific CHARACTER POLICY negative prompt — DISABLED.
+  // Was prepending a "do not invent demographic markers" block to
+  // every autopost run when the user hadn't supplied a character.
+  // Restore by uncommenting and putting `${characterPolicy}` back
+  // into the content template.
+  // const hasUserCharacter =
+  //   typeof config.character_description === "string" && config.character_description.trim().length > 0;
+  // const characterPolicy = hasUserCharacter ? "" : `=== CHARACTER POLICY (autopost-specific) ===
+  // Do NOT invent or describe any human character's race, ethnicity, skin tone, hair, age, gender, clothing, or facial features, When the chosen art style is stick-figure / paper-cutout / moody / sketch — figures must be simple, generic, abstract shapes and stick to the style prompt strictly. If a person is in the scene, render them as described in the style prompt with no demographic markers.
+  //
+  // `;
 
-`;
-
-  const content = `${characterPolicy}${baseContent}`;
+  const content = baseContent;
 
   const projectId = randomUUID();
 

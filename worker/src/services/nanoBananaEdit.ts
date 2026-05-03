@@ -27,17 +27,31 @@ const DEFAULT_RESOLUTION: NanoBananaProResolution = "1k";
 /** Re-host an r2.dev (or any external) image URL on Supabase. r2.dev
  *  has hotlink protection — motionmax.io referers get 404'd — so we
  *  ALWAYS persist the bytes to our own bucket before handing the URL
- *  back to the editor. Mirrors imageGenerator.ts's uploadToStorage. */
+ *  back to the editor. Mirrors imageGenerator.ts's uploadToStorage.
+ *
+ *  Trusts the response's Content-Type to decide the storage extension
+ *  + MIME — a stale "always-png" assumption is what shipped the URL
+ *  the user saw 404 on (Hypereal returned a JPEG; we wrote it under
+ *  a .png path with image/png MIME, which Supabase happily stored but
+ *  the public URL Supabase auto-resolves only matches when the actual
+ *  content matches the declared type). */
 async function rehostToSupabase(externalUrl: string, projectId: string): Promise<string> {
   const res = await fetch(externalUrl);
   if (!res.ok) throw new Error(`Edit re-host fetch failed: ${res.status} ${externalUrl.substring(0, 80)}`);
+  const contentType = (res.headers.get("content-type") || "image/png").split(";")[0].trim();
+  const ext =
+    contentType === "image/jpeg" || contentType === "image/jpg" ? "jpg"
+    : contentType === "image/webp" ? "webp"
+    : "png";
   const bytes = new Uint8Array(await res.arrayBuffer());
-  const fileName = `${projectId}/${uuidv4()}.png`;
+  const fileName = `${projectId}/${uuidv4()}.${ext}`;
+  console.log(`[NanoBananaProEdit] Re-host upload: bucket=scene-images path=${fileName} ct=${contentType} bytes=${bytes.length}`);
   const { error } = await supabase.storage
     .from("scene-images")
-    .upload(fileName, bytes, { contentType: "image/png", upsert: true });
-  if (error) throw new Error(`Edit re-host upload failed: ${error.message}`);
+    .upload(fileName, bytes, { contentType, upsert: true });
+  if (error) throw new Error(`Edit re-host upload failed: ${error.message} (path=${fileName})`);
   const { data } = supabase.storage.from("scene-images").getPublicUrl(fileName);
+  console.log(`[NanoBananaProEdit] Re-host public URL: ${data.publicUrl}`);
   return data.publicUrl;
 }
 
@@ -102,9 +116,8 @@ export async function editImageWithNanoBanana(
     throw err;
   }
 
-  console.log(`[NanoBananaProEdit] Edit complete (r2): ${editedUrl.substring(0, 80)}...`);
+  console.log(`[NanoBananaProEdit] Edit complete (r2): ${editedUrl}`);
   const finalUrl = projectId ? await rehostToSupabase(editedUrl, projectId) : editedUrl;
-  if (projectId) console.log(`[NanoBananaProEdit] Re-hosted to Supabase: ${finalUrl.substring(0, 80)}...`);
   writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: NANO_BANANA_PRO_MODEL, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[NanoBananaProEdit] background log failed:', (err as Error).message); });
   return finalUrl;
 }

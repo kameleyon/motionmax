@@ -2,13 +2,17 @@
  * Image generation service for the worker.
  *
  * Provider chain (highest priority first):
- *   1. Hypereal `gpt-4o-image` — primary, OpenAI native image gen at
- *      $0.02/image. Uses `size` param ("1024x1024" | "1024x1792" |
- *      "1792x1024"), NOT aspect_ratio.
+ *   1. Hypereal `gpt-image-2` — primary. OpenAI flagship image gen
+ *      via Hypereal. Uses `size` param ("1024x1024" | "1536x1024"
+ *      landscape | "1024x1536" portrait), accepts an optional
+ *      `reference_images: string[]` for character-consistency
+ *      image-to-image renders. NOT `aspect_ratio`.
  *   2. Hypereal `gemini-3-1-flash-t2i` — backup. Uses `aspect_ratio`.
- *   3. Replicate `nano-banana-2` — last-resort tertiary AND the only
- *      path that supports `image_input` (character-consistency
- *      reference images). gpt-4o-image and gemini are both text-only.
+ *      Text-only — no reference-image support.
+ *   3. Replicate `nano-banana-2` — last-resort tertiary, also the
+ *      pre-existing reference-image path. Now superseded by
+ *      gpt-image-2 for reference renders but kept in the chain as
+ *      a safety net.
  *
  * IMPORTANT: Hypereal CDN URLs (r2.dev) have hotlink protection —
  * browsers sending a Referer from motionmax.io get blocked.
@@ -24,14 +28,16 @@ import { v4 as uuidv4 } from "uuid";
 // ── Constants ──────────────────────────────────────────────────────
 
 const HYPEREAL_API_URL = "https://api.hypereal.cloud/v1/images/generate";
-// Primary: GPT-4o native image generation. $0.02/image, supports
-// 1024x1024 / 1024x1792 (portrait) / 1792x1024 (landscape).
-const HYPEREAL_GPT4O_MODEL = "gpt-4o-image";
+// Primary: OpenAI gpt-image-2 via Hypereal. Supports
+// 1024x1024 / 1536x1024 (landscape) / 1024x1536 (portrait), plus an
+// optional reference_images array for image-to-image / character-
+// consistency renders.
+const HYPEREAL_GPT_IMAGE2_MODEL = "gpt-image-2";
 // Match Gemini's retry budget (4) + exponential-with-jitter backoff
 // so the only intentional difference between the two providers is
 // the `size` vs `aspect_ratio` payload field. Per-attempt log lines
 // will look identical aside from the model name.
-const HYPEREAL_GPT4O_RETRIES = 4;
+const HYPEREAL_GPT_IMAGE2_RETRIES = 4;
 // Backup: Gemini 3.1 Flash text-to-image (the previous primary). Same
 // Hypereal endpoint but uses `aspect_ratio` instead of `size`.
 const HYPEREAL_MODEL = "gemini-3-1-flash-t2i";
@@ -102,12 +108,12 @@ function toAspectRatio(format: string): string {
   return "16:9";
 }
 
-/** Map our format keys to gpt-4o-image's allowed `size` values.
- *  GPT-4o native image gen accepts only these three sizes; anything
- *  else is rejected by the upstream API. Square is the default. */
-function toGpt4oSize(format: string): "1024x1024" | "1024x1792" | "1792x1024" {
-  if (format === "portrait") return "1024x1792";
-  if (format === "landscape") return "1792x1024";
+/** Map our format keys to gpt-image-2's allowed `size` values.
+ *  Hypereal's gpt-image-2 accepts only these three sizes; anything
+ *  else is rejected upstream. Square is the default. */
+function toGptImage2Size(format: string): "1024x1024" | "1536x1024" | "1024x1536" {
+  if (format === "portrait") return "1024x1536";
+  if (format === "landscape") return "1536x1024";
   return "1024x1024";
 }
 
@@ -125,50 +131,64 @@ async function uploadToStorage(bytes: Uint8Array, projectId: string): Promise<st
   return data.publicUrl;
 }
 
-// ── Hypereal — GPT-4o native image (primary) ──────────────────────
+// ── Hypereal — gpt-image-2 (primary) ──────────────────────────────
 
-/** Generate from Hypereal `gpt-4o-image`. Returns raw image bytes
+/** Generate from Hypereal `gpt-image-2`. Returns raw image bytes
  *  (already downloaded — caller re-uploads to Supabase to dodge the
  *  r2.dev hotlink-protection block). Same API URL + key as the
- *  Gemini backup; the only differences are `model` and `size` (vs
- *  `aspect_ratio`). Retry budget is tighter than Gemini's because
- *  gpt-4o-image is faster and we want quicker failover when it has
- *  a bad minute. */
-async function tryHyperealGpt4o(
+ *  Gemini backup; differences are: `model: "gpt-image-2"`, `size`
+ *  (instead of `aspect_ratio`), and an optional `reference_images`
+ *  array for character-consistency image-to-image renders.
+ *  Retry budget + backoff intentionally identical to tryHypereal so
+ *  the only behavioural delta between primary and backup is the
+ *  request payload. */
+async function tryHyperealGptImage2(
   prompt: string,
   apiKey: string,
   format: string,
+  referenceImages?: string[],
 ): Promise<Uint8Array | null> {
-  const size = toGpt4oSize(format);
+  const size = toGptImage2Size(format);
 
-  for (let attempt = 1; attempt <= HYPEREAL_GPT4O_RETRIES; attempt++) {
+  // gpt-image-2 accepts an OPTIONAL reference_images array (public
+  // URLs, no base64). Only attach when the caller actually has refs;
+  // an empty array is rejected by the upstream as a 400.
+  const requestBody: Record<string, unknown> = {
+    prompt,
+    model: HYPEREAL_GPT_IMAGE2_MODEL,
+    size,
+  };
+  if (referenceImages && referenceImages.length > 0) {
+    requestBody.reference_images = referenceImages;
+  }
+
+  for (let attempt = 1; attempt <= HYPEREAL_GPT_IMAGE2_RETRIES; attempt++) {
     try {
       const res = await fetch(HYPEREAL_API_URL, {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, model: HYPEREAL_GPT4O_MODEL, size }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!res.ok) {
         const err = await res.text();
-        console.warn(`[ImageGen] gpt-4o-image attempt ${attempt} failed (${res.status}): ${err.substring(0, 200)}`);
+        console.warn(`[ImageGen] gpt-image-2 attempt ${attempt} failed (${res.status}): ${err.substring(0, 200)}`);
         // Do not retry on 4xx client errors — they won't succeed on retry
         if (res.status >= 400 && res.status < 500 && res.status !== 429) {
-          console.warn(`[ImageGen] gpt-4o-image giving up on ${res.status} (client error, non-retriable)`);
+          console.warn(`[ImageGen] gpt-image-2 giving up on ${res.status} (client error, non-retriable)`);
           return null;
         }
         // Hypereal's E9999 ("unexpected error") signals an upstream
         // outage that doesn't recover within a few seconds — fall to
         // Gemini after one retry instead of burning all 4 attempts.
-        // Same short-circuit Gemini's tryHypereal uses; kept symmetric.
+        // Same short-circuit tryHypereal (Gemini) uses; kept symmetric.
         if (err.includes("E9999") && attempt >= 2) {
-          console.warn(`[ImageGen] gpt-4o-image E9999 sustained — failing over to Gemini early`);
+          console.warn(`[ImageGen] gpt-image-2 E9999 sustained — failing over to Gemini early`);
           return null;
         }
         // Exponential backoff with mild jitter: 1s, 2s, 4s, 8s ± 30%.
-        // Identical to tryHypereal's Gemini path so failure timing
-        // stays consistent across both primary attempts.
-        if (attempt < HYPEREAL_GPT4O_RETRIES) {
+        // Identical to tryHypereal's Gemini path.
+        if (attempt < HYPEREAL_GPT_IMAGE2_RETRIES) {
           const base = 1000 * Math.pow(2, attempt - 1);
           const jitter = base * (0.7 + Math.random() * 0.6);
           await sleep(Math.round(jitter));
@@ -184,30 +204,30 @@ async function tryHyperealGpt4o(
 
       if (b64) {
         const bytes = Uint8Array.from(Buffer.from(b64, "base64"));
-        console.log(`[ImageGen] gpt-4o-image ✅ attempt ${attempt} (b64) — ${bytes.length} bytes`);
+        console.log(`[ImageGen] gpt-image-2 ✅ attempt ${attempt} (b64) — ${bytes.length} bytes`);
         return bytes;
       }
 
       if (!url) {
-        console.warn(`[ImageGen] gpt-4o-image attempt ${attempt}: no url/b64 in response`);
-        if (attempt < HYPEREAL_GPT4O_RETRIES) await sleep(1500 * attempt);
+        console.warn(`[ImageGen] gpt-image-2 attempt ${attempt}: no url/b64 in response`);
+        if (attempt < HYPEREAL_GPT_IMAGE2_RETRIES) await sleep(1500 * attempt);
         continue;
       }
 
       const imgRes = await fetch(url);
       if (!imgRes.ok) {
-        console.warn(`[ImageGen] gpt-4o-image download failed (${imgRes.status}) on attempt ${attempt}`);
+        console.warn(`[ImageGen] gpt-image-2 download failed (${imgRes.status}) on attempt ${attempt}`);
         if (imgRes.status >= 400 && imgRes.status < 500 && imgRes.status !== 429) return null;
-        if (attempt < HYPEREAL_GPT4O_RETRIES) await sleep(1500 * attempt);
+        if (attempt < HYPEREAL_GPT_IMAGE2_RETRIES) await sleep(1500 * attempt);
         continue;
       }
 
       const bytes = new Uint8Array(await imgRes.arrayBuffer());
-      console.log(`[ImageGen] gpt-4o-image ✅ attempt ${attempt} — ${bytes.length} bytes`);
+      console.log(`[ImageGen] gpt-image-2 ✅ attempt ${attempt} — ${bytes.length} bytes`);
       return bytes;
     } catch (err) {
-      console.warn(`[ImageGen] gpt-4o-image attempt ${attempt} threw: ${err}`);
-      if (attempt < HYPEREAL_GPT4O_RETRIES) await sleep(1500 * attempt);
+      console.warn(`[ImageGen] gpt-image-2 attempt ${attempt} threw: ${err}`);
+      if (attempt < HYPEREAL_GPT_IMAGE2_RETRIES) await sleep(1500 * attempt);
     }
   }
 
@@ -459,46 +479,34 @@ async function _generateImageUncached(
 
   const replicateEnabled = await isEnabled("image_provider_replicate");
 
-  // When reference images are provided (character consistency), skip Hypereal —
-  // it is text-only and cannot use image_input. Go straight to Replicate.
-  if (referenceImages && referenceImages.length > 0) {
-    console.log(`[ImageGen] Reference images provided (${referenceImages.length}) — routing to Replicate for consistency`);
-    if (replicateApiKey && replicateEnabled) {
-      const url = await tryReplicate(prompt, replicateApiKey, format, projectId, referenceImages);
-      if (url) {
-        writeApiLog({ userId: undefined, generationId: undefined, provider: "replicate", model: "nano-banana-2", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
-        return url;
-      }
-      console.warn("[ImageGen] Replicate (with reference images) failed — falling through to standard flow");
-    }
-  }
-
   // Hypereal master kill-switch + per-model flags. The Hypereal
-  // concurrency limiter is shared across both gpt-4o and gemini
-  // since they hit the same upstream account / rate-limit pool.
+  // concurrency limiter is shared across both routes since they hit
+  // the same upstream account / rate-limit pool.
   const hyperealEnabled = await isEnabled("image_provider_hypereal");
-  // Per-model toggles default to ON when the row is missing — that
-  // matches the existing pattern (image_provider_hypereal defaults to
-  // true), so adding a fresh feature_flags row to disable gpt-4o is
-  // an explicit operator action, not the default state.
-  const gpt4oEnabled = await isEnabled("image_provider_gpt4o", true);
+  const gptImage2Enabled = await isEnabled("image_provider_gpt_image2", true);
   const geminiEnabled = await isEnabled("image_provider_gemini", true);
 
-  // ── Primary: Hypereal gpt-4o-image ────────────────────────────────
-  if (hyperealApiKey && hyperealEnabled && gpt4oEnabled) {
+  // ── Primary: Hypereal gpt-image-2 ─────────────────────────────────
+  // gpt-image-2 supports the optional `reference_images` array, so
+  // character-consistency renders go through this path too — no
+  // separate Replicate detour for refs.
+  if (hyperealApiKey && hyperealEnabled && gptImage2Enabled) {
     await acquireHypereal();
-    const bytes = await tryHyperealGpt4o(prompt, hyperealApiKey, format).finally(releaseHypereal);
+    const bytes = await tryHyperealGptImage2(prompt, hyperealApiKey, format, referenceImages).finally(releaseHypereal);
     if (bytes) {
       const url = await uploadToStorage(bytes, projectId);
-      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: HYPEREAL_GPT4O_MODEL, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
+      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: HYPEREAL_GPT_IMAGE2_MODEL, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
       return url;
     }
-    console.warn("[ImageGen] gpt-4o-image exhausted — falling back to Gemini 3.1 Flash");
-  } else if (!gpt4oEnabled) {
-    console.warn("[ImageGen] gpt-4o-image disabled via feature flag — skipping to Gemini");
+    console.warn("[ImageGen] gpt-image-2 exhausted — falling back to Gemini 3.1 Flash");
+  } else if (!gptImage2Enabled) {
+    console.warn("[ImageGen] gpt-image-2 disabled via feature flag — skipping to Gemini");
   }
 
   // ── Backup: Hypereal Gemini 3.1 Flash ─────────────────────────────
+  // Text-only — no reference-image support. If the caller has refs,
+  // we still try this path; the result will be a fresh render that
+  // ignores the refs. That's strictly better than failing the scene.
   if (hyperealApiKey && hyperealEnabled && geminiEnabled) {
     await acquireHypereal();
     const bytes = await tryHypereal(prompt, hyperealApiKey, format).finally(releaseHypereal);
@@ -507,16 +515,16 @@ async function _generateImageUncached(
       writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: HYPEREAL_MODEL, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
       return url;
     }
-    console.warn("[ImageGen] Gemini 3.1 Flash exhausted — falling back to Replicate");
+    console.warn("[ImageGen] Gemini 3.1 Flash exhausted — last-resort tertiary will run");
   } else if (!hyperealEnabled) {
-    console.warn("[ImageGen] Hypereal disabled via feature flag — skipping to Replicate");
+    console.warn("[ImageGen] Hypereal disabled via feature flag");
   } else if (!geminiEnabled) {
-    console.warn("[ImageGen] Gemini 3.1 Flash disabled via feature flag — skipping to Replicate");
+    console.warn("[ImageGen] Gemini 3.1 Flash disabled via feature flag");
   }
 
-  // ── Last resort: Replicate (already uploads to Supabase internally) ─
+  // ── Last-resort tertiary fallback (untouched legacy path) ────────
   if (replicateApiKey && replicateEnabled) {
-    const url = await tryReplicate(prompt, replicateApiKey, format, projectId);
+    const url = await tryReplicate(prompt, replicateApiKey, format, projectId, referenceImages);
     if (url) {
       writeApiLog({ userId: undefined, generationId: undefined, provider: "replicate", model: "nano-banana-2", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
       return url;
@@ -525,8 +533,8 @@ async function _generateImageUncached(
     console.warn("[ImageGen] Replicate disabled via feature flag");
   }
 
-  const err = new Error("Image generation failed: gpt-4o-image, Gemini 3.1 Flash, and Replicate all exhausted");
-  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: HYPEREAL_GPT4O_MODEL, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
+  const err = new Error("Image generation failed: gpt-image-2, Gemini 3.1 Flash, and tertiary fallback all exhausted");
+  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: HYPEREAL_GPT_IMAGE2_MODEL, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
   throw err;
 }
 

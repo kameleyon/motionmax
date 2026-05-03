@@ -14,7 +14,12 @@
 
 import { writeApiLog } from "../lib/logger.js";
 
-const HYPEREAL_IMAGE_URL = "https://api.hypereal.cloud/v1/images/generate";
+// nano-banana-pro-edit lives on the dedicated /images/edit endpoint,
+// not /images/generate. Hitting /generate with an edit model can
+// silently fall through to a text-to-image render that ignores the
+// `images` array — exactly the failure mode user reported (a "Canada
+// 2026" infographic returning a "Golden Key" storybook scene).
+const HYPEREAL_IMAGE_EDIT_URL = "https://api.hypereal.cloud/v1/images/edit";
 const NANO_BANANA_PRO_MODEL = "nano-banana-pro-edit";
 
 export type NanoBananaProResolution = "1k" | "2k" | "4k";
@@ -31,10 +36,10 @@ export async function editImageWithNanoBanana(
   aspectRatio: string = "16:9",
   resolution: NanoBananaProResolution = DEFAULT_RESOLUTION,
 ): Promise<string> {
-  console.log(`[NanoBananaProEdit] Editing image: "${prompt.substring(0, 60)}..." aspect=${aspectRatio} res=${resolution}`);
+  console.log(`[NanoBananaProEdit] Editing image: "${prompt.substring(0, 60)}..." aspect=${aspectRatio} res=${resolution} src=${imageUrl.substring(0, 80)}...`);
   const startTime = Date.now();
 
-  const response = await fetch(HYPEREAL_IMAGE_URL, {
+  const response = await fetch(HYPEREAL_IMAGE_EDIT_URL, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,

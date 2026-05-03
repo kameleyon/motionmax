@@ -52,11 +52,26 @@ export async function handleRegenerateImage(
     throw new Error("No image generation API key configured");
   }
 
+  // Branch-routing diagnostic — captured BEFORE any other work so a
+  // single grep ("[RegenerateImage] route=") on a job's logs answers
+  // "did this go through nano-banana-pro-edit, or did it fall through
+  // to a full regen?" The user-reported case where an edit produced a
+  // completely different image is exactly the symptom we get when
+  // imageModification arrives empty (the regen branch fires text-to-
+  // image with the scene's full visualPrompt) — so log the field
+  // length plus the chosen route up front.
+  const route = imageModification ? "edit" : "regen";
+  console.log(
+    `[RegenerateImage] route=${route} sceneIdx=${sceneIndex} imgIdx=${targetImageIndex} ` +
+    `modLen=${imageModification.length} jobId=${jobId.substring(0, 8)}`
+  );
+
   await writeSystemLog({
     jobId, projectId, userId, generationId,
     category: "system_info",
     eventType: "regenerate_image_started",
     message: `Regenerating scene ${sceneIndex + 1} image ${targetImageIndex + 1}${imageModification ? " (edit)" : ""}`,
+    details: { route, imageModificationLen: imageModification.length },
   });
 
   // Fetch generation + project style/format

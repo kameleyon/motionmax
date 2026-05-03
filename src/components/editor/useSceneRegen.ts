@@ -194,7 +194,9 @@ export function useSceneRegen(state: EditorState | null) {
     }
   }, [user, state]);
 
-  /** Video-only regen (reuses existing scene image). */
+  /** Video-only regen (reuses existing scene image). Full re-render
+   *  via Kling V3 Pro — slowest path, used when the user just wants
+   *  the clip rebuilt from the current keyframe. */
   const regenerateVideo = useCallback(async (index: number) => {
     if (!user || !state?.generation || !state?.project) return;
     if (!debounceFire(`video:${index}`)) return;
@@ -220,6 +222,55 @@ export function useSceneRegen(state: EditorState | null) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Video regen failed: ${msg}`);
+    } finally {
+      setBusy('idle');
+    }
+  }, [user, state]);
+
+  /** Text-prompt video edit via Grok Imagine. Modifies the existing
+   *  scene clip in place — much faster + cheaper than a full Kling
+   *  re-render. The Inspector's Video button calls this when the
+   *  user typed an instruction in the visual-edit textbox AND the
+   *  scene already has a videoUrl. Falls through to regenerateVideo
+   *  at the call site otherwise. */
+  const editVideo = useCallback(async (index: number, instruction: string) => {
+    if (!user || !state?.generation || !state?.project) return;
+    const scene = state.scenes[index];
+    const sourceVideoUrl = scene?.videoUrl ?? null;
+    if (!sourceVideoUrl) {
+      toast.error('No video to edit yet — render the scene first.');
+      return;
+    }
+    const editPrompt = instruction.trim();
+    if (!editPrompt) {
+      toast.info('Type the edit you want first.');
+      return;
+    }
+    if (!debounceFire(`video-edit:${index}`)) return;
+    setBusy('regen');
+    try {
+      const { error } = await supabase
+        .from('video_generation_jobs')
+        .insert({
+          user_id: user.id,
+          project_id: state.project.id,
+          task_type: 'cinematic_video_edit',
+          payload: {
+            generationId: state.generation.id,
+            projectId: state.project.id,
+            sceneIndex: index,
+            sourceVideoUrl,
+            editPrompt,
+            regenerate: true,
+          } as unknown as never,
+          status: 'pending',
+        });
+      if (error) throw new Error(error.message);
+      toast.success('Video edit queued.');
+      scheduleRefresh(state.project.id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Video edit failed: ${msg}`);
     } finally {
       setBusy('idle');
     }
@@ -696,6 +747,7 @@ export function useSceneRegen(state: EditorState | null) {
     regenerate,
     regenerateImage,
     regenerateVideo,
+    editVideo,
     regenerateAudio,
     undoLastRegen,
     updateSceneMeta,

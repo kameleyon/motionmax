@@ -84,7 +84,7 @@ function Inspector({
 
   const scene = state.scenes[selectedSceneIndex];
   const {
-    busy, apply, regenerate, regenerateImage, regenerateVideo, regenerateAudio,
+    busy, apply, regenerate, regenerateImage, regenerateVideo, editVideo, regenerateAudio,
     undoLastRegen,
     updateSceneMeta, updateAllScenesMeta, updateProjectVoice, updateIntakeSettings,
     applyCaptionsAll, regenerateAllVideos,
@@ -341,17 +341,22 @@ function Inspector({
         ))}
       </div>
 
-      {/* Version-history toolbar — only visible post-render. Undo button
-          walks the scene back one step; History button opens the
-          SceneVersionHistory modal with every past state. */}
-      {!disabled && scene && state.generation && state.project && versionCount > 0 && (
+      {/* Version-history toolbar — visible the moment a scene loads
+          (used to be gated on versionCount > 0, which made it invisible
+          on a fresh SmartFlow scene that hadn't been regenerated yet,
+          even though regen creates a version on every run). Both
+          buttons disable cleanly when there's nothing to undo / no
+          history to show. */}
+      {!disabled && scene && state.generation && state.project && (
         <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-white/5 bg-[#10151A]/60">
           <button
             type="button"
             onClick={() => undoLastRegen(selectedSceneIndex)}
-            disabled={busy !== 'idle' || sceneLocked}
+            disabled={busy !== 'idle' || sceneLocked || versionCount === 0}
             className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10.5px] font-mono tracking-wider text-[#8A9198] hover:text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed uppercase"
-            title="Restore this scene to its previous version"
+            title={versionCount === 0
+              ? 'Nothing to undo yet — Undo unlocks after the first regen / edit on this scene'
+              : 'Restore this scene to its previous version'}
           >
             {busy === 'regen' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Undo2 className="w-3 h-3" />}
             Undo
@@ -359,9 +364,11 @@ function Inspector({
           <button
             type="button"
             onClick={() => setHistoryOpen(true)}
-            disabled={busy !== 'idle' || sceneLocked}
+            disabled={busy !== 'idle' || sceneLocked || versionCount === 0}
             className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10.5px] font-mono tracking-wider text-[#8A9198] hover:text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-40 uppercase ml-auto"
-            title="Browse all past versions of this scene"
+            title={versionCount === 0
+              ? 'No history yet — past versions appear here after regenerating / editing this scene'
+              : 'Browse all past versions of this scene'}
           >
             <History className="w-3 h-3" />
             History ({versionCount})
@@ -436,16 +443,22 @@ function Inspector({
 
           {/* Per-asset actions. Three distinct buttons so each
               affordance is obvious:
-                Edit image  → uses Nano Banana Edit with the text above
+                Edit image  → Nano Banana Pro Edit with the text above
                 Regenerate  → full image regen from the scene prompt
-                Video       → re-render the video from the current image.
-              No Voice button here — that lives in the Voice tab. */}
+                Video       → with text → Grok Imagine video edit
+                              (modifies the existing clip in place)
+                              without text → full Kling V3 Pro
+                              re-render from the current image.
+              The same textbox feeds both image and video edits so a
+              single "darker sky" instruction can be applied to both
+              without retyping. No Voice button here — that lives in
+              the Voice tab. */}
           <section>
             <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">Visuals</h5>
             <input
               value={imageEdit}
               onChange={(e) => setImageEdit(e.target.value)}
-              placeholder="Describe the edit (e.g. add a lens flare, darker sky…)"
+              placeholder="Describe the edit (image or video — e.g. darker sky, sunset)"
               className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-base sm:text-[12px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 placeholder:text-[#5A6268]"
             />
             <div className="grid grid-cols-3 gap-2 mt-2">
@@ -478,13 +491,40 @@ function Inspector({
               </button>
               <button
                 type="button"
-                onClick={() => regenerateVideo(selectedSceneIndex)}
+                onClick={() => {
+                  // Branch on whether the user typed an edit instruction:
+                  //   • text present + scene already has a video →
+                  //     Grok Imagine video edit (cinematic_video_edit
+                  //     task) — modifies the clip in place using the
+                  //     existing videoUrl + the typed instruction.
+                  //   • text present but no videoUrl → fall through
+                  //     to a full re-render so the user gets a clip,
+                  //     and we'll surface an info toast since the
+                  //     edit wouldn't have anything to edit.
+                  //   • no text → legacy Kling full re-render from
+                  //     the current image.
+                  const text = imageEdit.trim();
+                  const hasVideo = !!scene.videoUrl;
+                  if (text && hasVideo) {
+                    editVideo(selectedSceneIndex, text);
+                    setImageEdit('');
+                  } else {
+                    if (text && !hasVideo) {
+                      toast.info('No video yet — running a full render. Type the edit again on the new clip to refine it.');
+                    }
+                    regenerateVideo(selectedSceneIndex);
+                  }
+                }}
                 disabled={busy !== 'idle' || videoRegenActive || !scene.imageUrl}
                 className="inline-flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[11px] border border-white/10 text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-50"
-                title="Re-render video from the current image"
+                title={
+                  imageEdit.trim() && scene.videoUrl
+                    ? 'Edit the existing video with this instruction (Grok Imagine)'
+                    : 'Re-render video from the current image'
+                }
               >
                 {videoRegenActive ? <Loader2 className="w-3 h-3 animate-spin" /> : <Video className="w-3 h-3" />}
-                Video
+                {imageEdit.trim() && scene.videoUrl ? 'Edit Video' : 'Video'}
               </button>
             </div>
           </section>

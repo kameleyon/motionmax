@@ -125,14 +125,13 @@ export async function handleRegenerateImage(
 
     if (!hyperealApiKey) throw new Error("HYPEREAL_API_KEY required for image editing");
 
-    // Edit prompt is JUST the user's instruction. The source image
-    // already carries its own visual style and character look — the
-    // model preserves them by default. Appending a multi-paragraph
-    // STYLE block (full storybook / 3D PaperCut description, etc.)
-    // was reading as "regenerate this image in the described style"
-    // and wiping the source. Keep the prompt minimal so the edit
-    // stays scoped to what the user actually asked for.
-    const editInstruction = imageModification;
+    // Hard-coded edit guard — explicitly tell the model to PRESERVE
+    // the source image and apply only the user's change. Without this
+    // the model was treating short instructions ("change the title to
+    // gold") as standalone generation prompts and producing a
+    // completely fresh image. The variable is the user's textbox
+    // input verbatim; everything else is the guardrail.
+    const editInstruction = `EDIT THE IMAGE, DO NOT CHANGE THE IMAGE, JUST EDIT IT AND ${imageModification}`;
     console.log(`[RegenerateImage] edit prompt (${editInstruction.length} chars): "${editInstruction.substring(0, 200)}"`);
 
     imageUrl = await editImageWithNanoBanana(

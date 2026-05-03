@@ -27,7 +27,11 @@ const HYPEREAL_API_URL = "https://api.hypereal.cloud/v1/images/generate";
 // Primary: GPT-4o native image generation. $0.02/image, supports
 // 1024x1024 / 1024x1792 (portrait) / 1792x1024 (landscape).
 const HYPEREAL_GPT4O_MODEL = "gpt-4o-image";
-const HYPEREAL_GPT4O_RETRIES = 3;
+// Match Gemini's retry budget (4) + exponential-with-jitter backoff
+// so the only intentional difference between the two providers is
+// the `size` vs `aspect_ratio` payload field. Per-attempt log lines
+// will look identical aside from the model name.
+const HYPEREAL_GPT4O_RETRIES = 4;
 // Backup: Gemini 3.1 Flash text-to-image (the previous primary). Same
 // Hypereal endpoint but uses `aspect_ratio` instead of `size`.
 const HYPEREAL_MODEL = "gemini-3-1-flash-t2i";
@@ -148,30 +152,26 @@ async function tryHyperealGpt4o(
       if (!res.ok) {
         const err = await res.text();
         console.warn(`[ImageGen] gpt-4o-image attempt ${attempt} failed (${res.status}): ${err.substring(0, 200)}`);
+        // Do not retry on 4xx client errors — they won't succeed on retry
         if (res.status >= 400 && res.status < 500 && res.status !== 429) {
           console.warn(`[ImageGen] gpt-4o-image giving up on ${res.status} (client error, non-retriable)`);
           return null;
         }
-        // Sustained upstream failures from Hypereal: bail after the
-        // second attempt and let Gemini take over instead of burning
-        // the full retry budget. E9999 = generic "unexpected error",
-        // E1001 = "Generation failed. Please try again." — both have
-        // historically sat for minutes when they fire, so a third
-        // attempt is wasted latency for the user.
-        const sustainedFailure =
-          err.includes("E9999") || err.includes("E1001");
-        if (sustainedFailure && attempt >= 2) {
-          console.warn(`[ImageGen] gpt-4o-image upstream error sustained — failing over to Gemini`);
+        // Hypereal's E9999 ("unexpected error") signals an upstream
+        // outage that doesn't recover within a few seconds — fall to
+        // Gemini after one retry instead of burning all 4 attempts.
+        // Same short-circuit Gemini's tryHypereal uses; kept symmetric.
+        if (err.includes("E9999") && attempt >= 2) {
+          console.warn(`[ImageGen] gpt-4o-image E9999 sustained — failing over to Gemini early`);
           return null;
         }
+        // Exponential backoff with mild jitter: 1s, 2s, 4s, 8s ± 30%.
+        // Identical to tryHypereal's Gemini path so failure timing
+        // stays consistent across both primary attempts.
         if (attempt < HYPEREAL_GPT4O_RETRIES) {
-          // Shorter, fixed-ish backoff (0.6s / 1.2s) so the user
-          // hits Gemini fast when gpt-4o-image is having a moment.
-          // The original exponential-with-jitter was tuned for a
-          // primary that recovers within a few seconds; gpt-4o-image
-          // E1001 outages last longer, and waiting 4s+ between
-          // attempts is just dead time before the failover.
-          await sleep(600 * attempt);
+          const base = 1000 * Math.pow(2, attempt - 1);
+          const jitter = base * (0.7 + Math.random() * 0.6);
+          await sleep(Math.round(jitter));
         }
         continue;
       }

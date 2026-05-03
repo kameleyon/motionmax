@@ -259,49 +259,39 @@ export function AutomationCard({ schedule, lastRunAt }: AutomationCardProps) {
   // config_snapshot.mode is the canonical key (set by IntakeForm) —
   // values are 'cinematic' | 'doc2video' | 'smartflow'. Default to
   // smartflow for legacy rows that pre-date the snapshot column.
-  const flowMeta = useMemo(() => {
+  const flowLabel = useMemo(() => {
     const mode = (schedule.config_snapshot as Record<string, unknown> | null)?.mode;
     const m = typeof mode === "string" ? mode.toLowerCase() : "";
-    if (m === "cinematic") {
-      return { label: "Cinematic", className: "border-[#11C4D0]/40 bg-[#11C4D0]/[0.08] text-[#11C4D0]" };
-    }
-    if (m === "doc2video") {
-      return { label: "Explainer", className: "border-[#E4C875]/40 bg-[#E4C875]/[0.08] text-[#E4C875]" };
-    }
-    return { label: "Smart Flow", className: "border-white/15 bg-white/5 text-[#ECEAE4]" };
+    if (m === "cinematic") return "Cinematic";
+    if (m === "doc2video") return "Explainer";
+    return "Smart Flow";
   }, [schedule.config_snapshot]);
 
   return (
     <TooltipProvider>
       <Card className="bg-[#10151A] border-white/8 hover:border-white/12 transition-colors">
         <CardContent className="p-4 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] uppercase tracking-wider text-white/70 leading-none mb-1">
+                {flowLabel}
+              </div>
               <h3
                 className="font-serif font-medium text-[18px] leading-tight text-[#ECEAE4] truncate"
                 style={{ fontFamily: 'Fraunces, Georgia, serif' }}
               >
                 {schedule.name}
               </h3>
-              <Badge
-                variant="outline"
-                className={cn(
-                  "shrink-0 text-[10px] uppercase tracking-wide border",
-                  flowMeta.className,
-                )}
-              >
-                {flowMeta.label}
-              </Badge>
-              <Badge
-                variant="outline"
-                className={cn(
-                  "shrink-0 text-[10px] uppercase tracking-wide border",
-                  statusMeta.className,
-                )}
-              >
-                {statusMeta.label}
-              </Badge>
             </div>
+            <Badge
+              variant="outline"
+              className={cn(
+                "shrink-0 text-[10px] uppercase tracking-wide border",
+                statusMeta.className,
+              )}
+            >
+              {statusMeta.label}
+            </Badge>
           </div>
 
           <div className="flex items-center gap-1 -ml-1">

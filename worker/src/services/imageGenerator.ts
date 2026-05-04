@@ -187,16 +187,30 @@ async function tryHyperealGptImage2(
     );
   }
 
-  // gpt-image-2 accepts an OPTIONAL reference_images array (public
-  // URLs, no base64). Only attach when the caller actually has refs;
-  // an empty array is rejected by the upstream as a 400.
+  // gpt-image-2's reference_images parameter requires PUBLIC URLs
+  // only — per spec, "public URLs only" (no base64 data URIs).
+  // Character images uploaded via the intake form are stored as
+  // `data:image/jpeg;base64,...` strings on projects.character_images,
+  // so we have to filter to http(s) URLs before forwarding. Sending
+  // a data: URI returns 500 E1004 "Invalid input parameters" and
+  // burns the entire retry budget. An all-data-URI array becomes an
+  // empty array, which we then omit (an empty array is also a 400).
+  const publicRefs = (referenceImages ?? []).filter((u) =>
+    typeof u === "string" && /^https?:\/\//i.test(u),
+  );
+  if ((referenceImages?.length ?? 0) > publicRefs.length) {
+    console.warn(
+      `[ImageGen] gpt-image-2 dropped ${(referenceImages?.length ?? 0) - publicRefs.length} non-public reference image(s) (data:/blob: not allowed by spec)`,
+    );
+  }
+
   const requestBody: Record<string, unknown> = {
     prompt: safePrompt,
     model: HYPEREAL_GPT_IMAGE2_MODEL,
     size,
   };
-  if (referenceImages && referenceImages.length > 0) {
-    requestBody.reference_images = referenceImages;
+  if (publicRefs.length > 0) {
+    requestBody.reference_images = publicRefs;
   }
 
   for (let attempt = 1; attempt <= HYPEREAL_GPT_IMAGE2_RETRIES; attempt++) {

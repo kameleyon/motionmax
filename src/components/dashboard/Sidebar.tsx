@@ -1,12 +1,22 @@
 import { useEffect, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { Settings as SettingsIcon, History, Shield, LogOut, Video, FlaskConical } from 'lucide-react';
+import { Settings as SettingsIcon, History, Shield, LogOut, Video, FlaskConical, MoreHorizontal, Trash2 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import motionmaxLogo from '@/assets/motionmax-logo.webp';
 import {
   CommandDialog,
@@ -193,6 +203,42 @@ export default function Sidebar() {
   // unaffected by the modal search state.
   const sidebarRecent = recentProjects.slice(0, 4);
 
+  // Inline delete from the Recent list. Two-step (kebab → confirm
+  // dialog) so a stray hover-click doesn't nuke a project.
+  // pendingDeleteId is the project the user is about to confirm; null
+  // when no dialog is open. Mirrors the cleanup chain from
+  // pages/Projects.tsx#deleteProjectMutation so cascade rows
+  // (generations / shares / characters) get cleaned up first.
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const pendingDeleteTitle = pendingDeleteId
+    ? sidebarRecent.find((p) => p.id === pendingDeleteId)?.title || 'this project'
+    : null;
+  const deleteProjectMutation = useMutation({
+    mutationFn: async (projectId: string) => {
+      await supabase.from('generations').delete().eq('project_id', projectId);
+      await supabase.from('project_shares').delete().eq('project_id', projectId);
+      await supabase.from('project_characters').delete().eq('project_id', projectId);
+      const { error } = await supabase.from('projects').delete().eq('id', projectId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Project deleted');
+      // Refresh every surface that lists projects so the sidebar +
+      // dashboard gallery + /projects page all drop the deleted row
+      // immediately without a hard reload.
+      queryClient.invalidateQueries({ queryKey: ['sidebar-recent-projects'] });
+      queryClient.invalidateQueries({ queryKey: ['recent-projects'] });
+      queryClient.invalidateQueries({ queryKey: ['all-projects'] });
+      setPendingDeleteId(null);
+    },
+    onError: (err) => {
+      toast.error('Failed to delete', {
+        description: err instanceof Error ? err.message : String(err),
+      });
+      setPendingDeleteId(null);
+    },
+  });
+
   const generateGradient = (id: string) => {
     const hash = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     const hue = hash % 360;
@@ -255,7 +301,7 @@ export default function Sidebar() {
           <div className="pl-4 flex flex-col gap-px mt-1">
             <a href="/app/create/new?mode=cinematic" className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline">
               <svg aria-hidden="true" className="w-4 h-4 opacity-85" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M10 9l5 3-5 3V9z" fill="currentColor" /></svg>
-              Cinematic <span className="ml-auto font-mono text-[9px] tracking-wide px-1.5 py-0.5 rounded bg-[#14C8CC]/10 text-[#14C8CC]">NEW</span>
+              Cinematic
             </a>
             <a href="/app/create/new?mode=doc2video" className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline">
               <svg aria-hidden="true" className="w-4 h-4 opacity-85" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M7 3h8l4 4v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" /><path d="M14 3v5h5M9 14h6" /></svg>
@@ -273,7 +319,8 @@ export default function Sidebar() {
               policy is the safety net. */}
           <a href="/lab/autopost" className="flex items-center gap-2.5 px-3 py-3 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors mt-1 no-underline">
             <FlaskConical className="w-4 h-4 opacity-85" />
-            Autopost Lab
+            <span>Autopost Lab</span>
+            <span className="ml-auto font-mono text-[9px] tracking-wide px-1.5 py-0.5 rounded bg-[#14C8CC]/10 text-[#14C8CC]">NEW</span>
           </a>
           <a href="/voice-lab" className="flex items-center gap-2.5 px-3 py-3 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors mt-1 no-underline">
             <svg aria-hidden="true" className="w-4 h-4 opacity-85" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M8 4v16M16 4v16M4 8h4M16 8h4M4 16h4M16 16h4" /></svg>
@@ -321,26 +368,66 @@ export default function Sidebar() {
             </div>
           ) : (
             sidebarRecent.map((item) => (
-              <a
-                href={`/app/editor/${item.id}`}
-                key={item.id}
-                className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-[#151B20] transition-colors no-underline"
-              >
-                <div className="w-7 h-7 rounded-[5px] shrink-0 border border-white/5 relative overflow-hidden" style={{ background: generateGradient(item.id) }}>
-                  {item.thumbnail_url && (
-                    <img
-                      src={item.thumbnail_url}
-                      alt=""
-                      className="absolute inset-0 w-full h-full object-cover"
-                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                    />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[12.5px] text-[#ECEAE4] whitespace-nowrap overflow-hidden text-ellipsis">{item.title || 'Untitled'}</div>
-                  <div className="font-mono text-[9.5px] text-[#5A6268] tracking-widest">{format(new Date(item.updated_at), 'MMM d')}</div>
-                </div>
-              </a>
+              // `group` lets the kebab fade in on hover. The kebab is
+              // a sibling button overlaid on the row, NOT nested inside
+              // the <a>, because nested interactive elements break
+              // accessibility + click semantics. Both wrap in a relative
+              // container so the kebab can be position:absolute.
+              <div key={item.id} className="group relative">
+                <a
+                  href={`/app/editor/${item.id}`}
+                  className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-[#151B20] transition-colors no-underline"
+                >
+                  <div className="w-7 h-7 rounded-[5px] shrink-0 border border-white/5 relative overflow-hidden" style={{ background: generateGradient(item.id) }}>
+                    {item.thumbnail_url && (
+                      <img
+                        src={item.thumbnail_url}
+                        alt=""
+                        className="absolute inset-0 w-full h-full object-cover"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0 pr-6">
+                    <div className="text-[12.5px] text-[#ECEAE4] whitespace-nowrap overflow-hidden text-ellipsis">{item.title || 'Untitled'}</div>
+                    <div className="font-mono text-[9.5px] text-[#5A6268] tracking-widest">{format(new Date(item.updated_at), 'MMM d')}</div>
+                  </div>
+                </a>
+
+                {/* Hover-revealed kebab → opens a delete dropdown.
+                    Lives outside the anchor so a click on the dots
+                    never navigates. opacity-0 → opacity-100 on the
+                    parent's hover, plus always-visible while the
+                    dropdown is open via :focus-within. */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={`Open actions for ${item.title || 'project'}`}
+                      onClick={(e) => { e.stopPropagation(); }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 inline-flex items-center justify-center rounded-md text-[#8A9198] opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-white/10 hover:text-[#ECEAE4] transition-opacity"
+                    >
+                      <MoreHorizontal className="w-3.5 h-3.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    sideOffset={4}
+                    className="bg-[#10151A] border-white/10 text-[#ECEAE4]"
+                  >
+                    <DropdownMenuItem
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        setPendingDeleteId(item.id);
+                      }}
+                      className="text-[#E48A8A] focus:text-[#E48A8A] focus:bg-[#E48A8A]/10 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-2" />
+                      Delete project
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             ))
           )}
         </div>
@@ -416,6 +503,34 @@ export default function Sidebar() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+      {/* Delete-confirm dialog driven by the Recent kebab menu. Open
+          state is bound to pendingDeleteId — null = closed. Keeps the
+          mutation and the dialog wiring in one place. */}
+      <AlertDialog open={!!pendingDeleteId} onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}>
+        <AlertDialogContent className="bg-[#10151A] border-white/10 text-[#ECEAE4]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete project?</AlertDialogTitle>
+            <AlertDialogDescription className="text-[#8A9198]">
+              "{pendingDeleteTitle}" and all of its scenes will be permanently deleted. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-transparent border-white/10 text-[#ECEAE4] hover:bg-white/5">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                if (pendingDeleteId) deleteProjectMutation.mutate(pendingDeleteId);
+              }}
+              className="bg-[#E48A8A] text-[#0A0D0F] hover:bg-[#E48A8A]/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Search modal — opens from the search trigger or Cmd/Ctrl+K.
           Dark palette matches the dashboard shell (#10151A / white borders

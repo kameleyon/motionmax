@@ -114,7 +114,12 @@ export default function Projects() {
   const { refreshThumbnails } = useRefreshThumbnails();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [sortField, setSortField] = useState<SortField>("updated_at");
+  // Default sort: most recently CREATED first. Was updated_at, but a
+  // re-rendered older project would jump to the top of the grid (any
+  // editor save touches updated_at) which made the list feel
+  // disordered. created_at is stable — newest projects pin to top in
+  // the order they were made.
+  const [sortField, setSortField] = useState<SortField>("created_at");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [projectTypeFilter, setProjectTypeFilter] = useState<string>("all");
@@ -836,15 +841,15 @@ export default function Projects() {
         </div>
 
         {/* Filter chips. 16:9 / 9:16 are mutually exclusive; status
-            chips support multi-select. Trimmed Rendering + Has-captions
-            chips per design feedback — Rendering rarely matches at the
-            time the user looks (status flips quickly), and captions
-            metadata isn't reliably present on every project yet. */}
-        <div className="flex flex-wrap items-center gap-1.5 mt-3 mb-6">
+            chips support multi-select. Draft was dropped per design —
+            users mostly want to filter to the two terminal states. The
+            row is sized to fit on one line on a 360px-wide phone:
+            no-wrap container + smaller chip padding/text on mobile,
+            growing back to the original size at sm: breakpoint. */}
+        <div className="flex flex-nowrap items-center gap-1 sm:gap-1.5 mt-3 mb-6 overflow-x-auto -mx-1 px-1">
           <Chip active={formatFilter === 'landscape'} onClick={() => setFormatFilter(formatFilter === 'landscape' ? 'all' : 'landscape')}>16:9</Chip>
           <Chip active={formatFilter === 'portrait'} onClick={() => setFormatFilter(formatFilter === 'portrait' ? 'all' : 'portrait')}>9:16</Chip>
           <ChipDot active={statusFilters.has('complete')} dot="#14C8CC" onClick={() => toggleStatus('complete')}>Published</ChipDot>
-          <ChipDot active={statusFilters.has('draft')} dot="#5A6268" onClick={() => toggleStatus('draft')}>Draft</ChipDot>
           <ChipDot active={statusFilters.has('failed')} dot="#E4C875" onClick={() => toggleStatus('failed')}>Failed</ChipDot>
         </div>
 
@@ -1197,7 +1202,10 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
       type="button"
       onClick={onClick}
       className={cn(
-        "h-7 px-3 rounded-full font-mono text-[10px] tracking-[0.14em] uppercase border transition-colors",
+        // Mobile: 24px tall, 8px padding, 9px text — fits 4 chips on
+        // a 360px screen. Restores to original 28px / 12px / 10px at
+        // sm: so larger viewports keep the same density as before.
+        "h-6 sm:h-7 px-2 sm:px-3 rounded-full font-mono text-[9px] sm:text-[10px] tracking-[0.12em] sm:tracking-[0.14em] uppercase border transition-colors whitespace-nowrap shrink-0",
         active && "bg-[#14C8CC]/10 text-[#14C8CC]",
         active && "border-[#14C8CC]/40",
         !active && "bg-[#10151A] text-[#8A9198] hover:text-[#ECEAE4]",
@@ -1224,14 +1232,16 @@ function ChipDot({ active, dot, pulse, onClick, children }: {
       type="button"
       onClick={onClick}
       className={cn(
-        "h-7 inline-flex items-center gap-1.5 px-3 rounded-full font-mono text-[10px] tracking-[0.14em] uppercase border transition-colors",
+        // Mirror the size step-down used by Chip so chip rows fit on
+        // one line on a 360px phone.
+        "h-6 sm:h-7 inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 rounded-full font-mono text-[9px] sm:text-[10px] tracking-[0.12em] sm:tracking-[0.14em] uppercase border transition-colors whitespace-nowrap shrink-0",
         active && "bg-white/[0.04] border-white/20 text-[#ECEAE4]",
         !active && "bg-[#10151A] text-[#8A9198] hover:text-[#ECEAE4]",
         !active && "border-white/10 hover:border-white/20",
       )}
     >
       <span
-        className={cn("w-1.5 h-1.5 rounded-full", pulse && "animate-pulse")}
+        className={cn("w-1 sm:w-1.5 h-1 sm:h-1.5 rounded-full", pulse && "animate-pulse")}
         style={{ background: dot }}
       />
       {children}

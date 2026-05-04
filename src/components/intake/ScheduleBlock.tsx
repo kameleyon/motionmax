@@ -54,10 +54,11 @@ export interface ScheduleBlockProps {
 
 const DRAFT_KEY = 'motionmax.scheduleblock.draft';
 const TOPIC_POLL_MS = 1500;
-// Gemini's googleSearch-grounded calls regularly take 30-60s — search,
-// scrape, synthesize, then format. Frontend has to wait at least that
-// long or it'll bail before the worker finishes.
-const TOPIC_POLL_TIMEOUT_MS = 120_000;
+// Worker callGemini timeout for search-grounded topic gen is 180s, and
+// the retryClassifier auto-retries up to 3x on AbortError. We poll for
+// 5 min — enough to cover one retry attempt without leaving the
+// intake form spinning forever.
+const TOPIC_POLL_TIMEOUT_MS = 300_000;
 /** Per-run cost estimate used for the "X credits/month" helper. The
  *  intake form's full cost calculator is downstream of which mode
  *  the user picked; we use a conservative single number here so the

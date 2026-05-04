@@ -206,6 +206,73 @@ async function submitJob(
   return (data as { id: string }).id;
 }
 
+/**
+ * Like waitForJob but also reports per-scene progress to the autopost
+ * run row while waiting. On every poll we count how many of the
+ * `subJobIds` (audio + image + video sub-jobs the finalize step depends
+ * on) have reached 'completed' or 'failed' and stretch the run's
+ * progress_pct from 35 → 78 proportional to that count. Without this
+ * the bar sat at 35% for the entire ~5–10 min scene-render phase.
+ *
+ * Sub-job failures are still counted as "done" for progress purposes
+ * — the depends_on chain will still cascade-fail finalize and the
+ * outer try/catch in handleAutopostRun will mark the run failed; we
+ * just don't want the progress indicator to lie about how many
+ * scenes are still in flight.
+ */
+async function waitForJobWithSubProgress(
+  jobId: string,
+  timeoutMs: number,
+  taskType: string,
+  runId: string,
+  subJobIds: string[],
+  totalSubJobs: number,
+): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + timeoutMs;
+  let lastReportedDone = 0;
+  while (Date.now() < deadline) {
+    // Sub-progress poll. Skipped when there are no sub-jobs to track
+    // (defensive — totalSubJobs is always > 0 in current call sites).
+    if (totalSubJobs > 0) {
+      const { data: subRows } = await supabase
+        .from("video_generation_jobs")
+        .select("id, status")
+        .in("id", subJobIds);
+      if (Array.isArray(subRows)) {
+        const done = (subRows as Array<{ status: string }>).filter(
+          (r) => r.status === "completed" || r.status === "failed",
+        ).length;
+        if (done !== lastReportedDone) {
+          lastReportedDone = done;
+          // 35 → 78 spread (43-pt range), reserve 78→80 for finalize.
+          const pct = 35 + Math.floor((done / totalSubJobs) * 43);
+          await setRunProgress(runId, pct);
+        }
+      }
+    }
+
+    // Now check the finalize job itself.
+    const { data, error } = await supabase
+      .from("video_generation_jobs")
+      .select("status, error_message, payload, result")
+      .eq("id", jobId)
+      .single();
+    if (error) {
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      continue;
+    }
+    const row = data as { status: string; error_message?: string | null; payload?: Record<string, unknown> | null; result?: Record<string, unknown> | null };
+    if (row.status === "completed") {
+      return row.result ?? row.payload ?? {};
+    }
+    if (row.status === "failed") {
+      throw new Error(`${taskType} job ${jobId} failed: ${row.error_message ?? "unknown error"}`);
+    }
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+  }
+  throw new Error(`${taskType} job ${jobId} timed out after ${Math.round(timeoutMs / 60000)} min`);
+}
+
 async function waitForJob(jobId: string, timeoutMs: number, taskType: string): Promise<Record<string, unknown>> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -577,7 +644,22 @@ async function runPipeline(
   );
   await setRunProgress(runId, 35);
 
-  await waitForJob(finalizeJobId, PHASE_TIMEOUT_MS, "finalize_generation");
+  // Per-scene progress: while finalize is queued behind its depends_on
+  // chain (audio + image (+ video for cinematic)), poll the count of
+  // completed dependencies and stretch the bar 35 → 78% as scenes
+  // finish. Without this the bar sat at 35% for the whole 5–10 min
+  // scene-render window with zero feedback. The reserved 78–80% slice
+  // covers the moment finalize itself starts running.
+  const subJobIds = finalizeDeps;
+  const totalSubJobs = subJobIds.length;
+  await waitForJobWithSubProgress(
+    finalizeJobId,
+    PHASE_TIMEOUT_MS,
+    "finalize_generation",
+    runId,
+    subJobIds,
+    totalSubJobs,
+  );
   await setRunProgress(runId, 80);
 
   // Per-scene Kling rejection fallback surfacing. handleCinematicVideo

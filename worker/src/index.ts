@@ -652,6 +652,51 @@ async function pollQueue() {
 
     if (exportAvailable <= 0 && llmAvailable <= 0) return;
 
+    // Stale-claim reaper. Render redeploys SIGTERM the worker mid-job;
+    // the claim-RPC stamps status='processing' but there's no
+    // heartbeat, so on restart those jobs are zombies — finalize stays
+    // pending behind a depends_on chain that will never resolve, and
+    // the autopost run sits at GENERATING 35% indefinitely.
+    //
+    // Once every ~5 min, reset any 'processing' job whose updated_at
+    // is older than STALE_PROCESSING_MS back to 'pending'. The next
+    // claim_pending_job RPC re-acquires it. 15 min is well past the
+    // longest legit per-job duration we see in prod (Seedance 10s
+    // calls finish in 90–180s; Kling capped at ~5 min).
+    // 30 min is comfortably past PHASE_TIMEOUT_MS (30 min) used by
+    // handleAutopostRun's finalize wait — anything still 'processing'
+    // beyond that has either failed silently or been orphaned by a
+    // worker restart.
+    const STALE_PROCESSING_MS = 30 * 60 * 1000;
+    if (pollCount % 60 === 0) {
+      const cutoff = new Date(Date.now() - STALE_PROCESSING_MS).toISOString();
+      const { data: reclaimed, error: reapErr } = await supabase
+        .from("video_generation_jobs")
+        .update({ status: "pending", worker_id: null })
+        .eq("status", "processing")
+        .lt("updated_at", cutoff)
+        .select("id, task_type");
+      if (reapErr) {
+        console.warn(`[Worker] Stale-claim reaper failed: ${reapErr.message}`);
+      } else if (reclaimed && reclaimed.length > 0) {
+        const taskTypes = (reclaimed as Array<{ task_type: string }>).map((r) => r.task_type);
+        console.warn(
+          `[Worker] Stale-claim reaper revived ${reclaimed.length} zombie job(s) ` +
+          `(types: ${[...new Set(taskTypes)].join(", ")}) — likely orphaned by a prior worker restart`,
+        );
+        await writeSystemLog({
+          category: "system_warning",
+          eventType: "stale_jobs_reaped",
+          message: `Reset ${reclaimed.length} stale processing job(s) to pending`,
+          details: {
+            count: reclaimed.length,
+            taskTypes: [...new Set(taskTypes)],
+            staleAfterMin: STALE_PROCESSING_MS / 60000,
+          },
+        }).catch((e) => console.warn(`[Worker] reap log failed: ${(e as Error).message}`));
+      }
+    }
+
     const claimedJobs: any[] = [];
 
     // Claim export jobs first into their dedicated slots

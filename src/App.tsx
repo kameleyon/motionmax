@@ -8,7 +8,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
 import { AdminOnlyRoute } from "@/components/auth/AdminOnlyRoute";
-import { AppShell } from "@/components/layout/AppShell";
+import { SubscriptionRenewalModal } from "@/components/workspace/SubscriptionRenewalModal";
 import { lazy, Suspense } from "react";
 import { GlobalErrorBoundary } from "./components/GlobalErrorBoundary";
 import { RouteErrorBoundary } from "./components/RouteErrorBoundary";
@@ -17,19 +17,13 @@ import { CookieConsent } from "./components/CookieConsent";
 // Route-level code splitting — each page loads only when visited
 const Landing = lazy(() => import("./pages/Landing"));
 const Auth = lazy(() => import("./pages/Auth"));
-// Legacy `Dashboard` retired alongside the /app/legacy route on
-// 2026-05-04 (one day after the NewDashboardBanner sunset window). The
-// surviving dashboard is `DashboardLayout` at /dashboard-new.
+// Legacy `Dashboard` + `CreateWorkspace` (WorkspaceRouter) retired
+// 2026-05-04 alongside the BetaRebuildBanner sunset. The surviving
+// surfaces are DashboardLayout (/dashboard-new) and CreateNew
+// (/app/create/new) — the former renders the new dashboard, the
+// latter the unified intake form. Old /app/* URLs redirect.
 const DashboardLayout = lazy(() => import("./components/dashboard/DashboardLayout"));
-const CreateWorkspace = lazy(() => import("./pages/CreateWorkspace"));
-// Unified intake form — /app/create/new. Reuses the dashboard-new shell
-// and feeds all three modes (cinematic/doc2video/smartflow) through a
-// single shared form. Added alongside the existing CreateWorkspace so we
-// don't break in-flight projects that depend on the old routes.
 const CreateNew = lazy(() => import("./pages/CreateNew"));
-// Unified Editor — post-intake surface that replaces the generation
-// progress screen + legacy Result view + legacy CreateWorkspace. See
-// player_editor_roadmap.md for the full rollout plan.
 const Editor = lazy(() => import("./pages/Editor"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Usage = lazy(() => import("./pages/Usage"));
@@ -90,6 +84,10 @@ const App = () => (
       <TooltipProvider>
         <Sonner />
         <CookieConsent />
+        {/* Renewal nag was previously mounted inside the legacy
+            AppShell. With AppShell retired, mount it globally so it
+            still triggers on every authenticated surface. */}
+        <SubscriptionRenewalModal />
         <BrowserRouter>
           <Suspense fallback={<PageLoader />}>
           <Routes>
@@ -98,23 +96,16 @@ const App = () => (
             {/* Public share page - no auth required */}
             <Route path="/share/:token" element={<PublicShare />} />
 
-            {/* Legacy authenticated app routes share AppShell
-                (SidebarProvider + AppSidebar). Routes that own the
-                NEW dashboard chrome (Projects, dashboard-new) live
-                outside this wrapper to avoid stacking two sidebars. */}
-            <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
-              {/* /app keeps its redirect for any external bookmarks /
-                  email links / OAuth callbacks that still target the
-                  old root. The legacy /app/legacy route was retired
-                  2026-05-04 — anyone landing there now follows the
-                  /app → /dashboard-new bounce. */}
-              <Route path="/app" element={<Navigate to="/dashboard-new" replace />} />
-              <Route path="/app/legacy" element={<Navigate to="/dashboard-new" replace />} />
-              <Route path="/app/create" element={<RouteErrorBoundary routeName="create"><CreateWorkspace /></RouteErrorBoundary>} />
-            </Route>
+            {/* Legacy /app/* routes — all redirect now that the
+                BetaRebuild banner has expired and the legacy AppShell
+                + WorkspaceRouter were retired (2026-05-04). External
+                bookmarks / OAuth callbacks still hit /app, and old
+                "Create video" links hit /app/create — both bounce to
+                their new-shell equivalents. */}
+            <Route path="/app" element={<Navigate to="/dashboard-new" replace />} />
+            <Route path="/app/legacy" element={<Navigate to="/dashboard-new" replace />} />
+            <Route path="/app/create" element={<Navigate to="/app/create/new" replace />} />
 
-            {/* Pricing renders its own NEW AppShell — must NOT nest
-                inside the legacy AppShell wrapper above. */}
             <Route path="/pricing" element={<Pricing />} />
 
             {/* Projects + Voice Lab + Settings + Usage render their own

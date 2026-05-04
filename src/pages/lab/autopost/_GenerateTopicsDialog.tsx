@@ -44,7 +44,11 @@ const TARGET_COUNT = 15;
 
 /** Polling cadence and ceiling for the topic-generation job. */
 const POLL_INTERVAL_MS = 1500;
-const POLL_MAX_MS = 90_000;
+// Worker callGemini timeout for search-grounded topic gen is 180s, and
+// the retryClassifier auto-retries up to 3x on AbortError, so worst-
+// case end-to-end is ~9 min. We poll for 5 min — enough to cover one
+// retry attempt without leaving the dialog spinning forever.
+const POLL_MAX_MS = 300_000;
 
 interface GenerationResultPayload {
   topics?: string[];

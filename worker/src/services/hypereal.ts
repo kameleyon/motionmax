@@ -338,6 +338,108 @@ export async function generateKlingV3ProVideo(
   return pollHyperealJob(jobId, apiKey, model, pollUrl);
 }
 
+// ── Seedance 2.0 Fast I2V (active scene renderer) ────────────────
+// ByteDance Seedance 2.0 Fast image-to-video via the Hypereal proxy.
+// Active scene-renderer model (~53 credits/scene, vs Kling 3.0 Pro's
+// ~57). Same Hypereal envelope as Kling — { model, input } posted to
+// HYPEREAL_VIDEO_URL — only the model id and input keys differ.
+//
+// Audio: we always pass generate_audio=false. Motionmax produces
+// voiceover via the TTS pipeline and muxes it in at export, so an
+// extra video-track soundtrack would clash and pay for synthesis we
+// throw away.
+
+export type SeedanceAspectRatio = "16:9" | "4:3" | "1:1" | "3:4" | "9:16";
+export type SeedanceResolution = "480p" | "720p";
+
+const SEEDANCE_MAX_PROMPT_CHARS = 2400;
+
+/**
+ * Generate video via Seedance 2.0 Fast I2V (`seedance-2-0-fast-i2v`).
+ *
+ *  duration:     5–10s (clamped; default 10)
+ *  resolution:   "480p" | "720p" (default "720p")
+ *  aspectRatio:  "16:9" | "9:16" | "1:1" | "4:3" | "3:4" (default "16:9")
+ *  endImageUrl:  optional last frame for start→end interpolation
+ *  generateAudio: false (synthesized audio is muxed by the export
+ *                 pipeline — overriding to true is rarely what you want)
+ *
+ * Returns the rendered video URL after polling the Hypereal job.
+ */
+export async function generateSeedance2FastI2V(
+  imageUrl: string,
+  prompt: string,
+  apiKey: string,
+  duration: number = 10,
+  endImageUrl?: string,
+  aspectRatio: SeedanceAspectRatio = "16:9",
+  resolution: SeedanceResolution = "720p",
+  generateAudio: boolean = false,
+): Promise<string> {
+  const model = "seedance-2-0-fast-i2v";
+
+  // Duration: spec range 5–10s (continuous). Clamp + warn if outside.
+  const clampedDuration = Math.min(10, Math.max(5, Math.round(duration)));
+  if (clampedDuration !== duration) {
+    console.warn(`[Hypereal] Seedance 2.0 duration ${duration}s out of range — clamped to ${clampedDuration}s`);
+  }
+
+  const clampedPrompt = truncateKlingPrompt(prompt); // share the same 2400-char ceiling
+  if (clampedPrompt.length < prompt.length) {
+    console.warn(`[Hypereal] Seedance 2.0 prompt truncated ${prompt.length} → ${clampedPrompt.length} chars`);
+  }
+
+  console.log(
+    `[Hypereal] Starting Seedance 2.0 Fast I2V — ${clampedDuration}s, ${resolution}, ${aspectRatio}` +
+    `${endImageUrl ? " (start→end)" : ""}${generateAudio ? " +audio" : ""}`,
+  );
+  console.log(`[Hypereal] IMAGE: ${imageUrl.substring(0, 80)}...`);
+  if (endImageUrl) console.log(`[Hypereal] LAST IMAGE: ${endImageUrl.substring(0, 80)}...`);
+
+  const inputPayload: Record<string, unknown> = {
+    prompt: clampedPrompt,
+    image: imageUrl,
+    duration: clampedDuration,
+    resolution,
+    aspect_ratio: aspectRatio,
+    generate_audio: generateAudio,
+  };
+  if (endImageUrl) {
+    inputPayload.last_image = endImageUrl;
+  }
+
+  const requestBody = { model, input: inputPayload };
+  const bodyJson = JSON.stringify(requestBody);
+  console.log(`[Hypereal] Seedance 2.0 body (${bodyJson.length} chars): ${truncate(bodyJson)}`);
+
+  const response = await hyperealFetch(HYPEREAL_VIDEO_URL, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: bodyJson,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Hypereal Seedance 2.0 Fast I2V API Error: ${response.status} - ${errorText}`);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = await response.json() as any;
+  const jobId = data.jobId;
+  const pollUrl = data.pollUrl || null;
+
+  console.log(`[Hypereal] Seedance 2.0 job created: ${jobId} (credits: ${data.creditsUsed})`);
+
+  if (!jobId) {
+    throw new Error(`No jobId from Seedance 2.0 — response: ${JSON.stringify(data)}`);
+  }
+
+  return pollHyperealJob(jobId, apiKey, model, pollUrl);
+}
+
 // ── Grok Imagine Video Edit (text-prompt video editing) ──────────
 
 /**

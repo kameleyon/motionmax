@@ -29,7 +29,8 @@ import {
   // generateKlingV3Video,        // V3.0 Std — skipped; Pro variant below is used instead
   // generateVeo31Video,          // Veo 3.1 — doesn't follow prompts, generates unwanted audio/lip sync
   // generateKlingV26Video,       // Kling V2.6 Pro — retired, superseded by V3.0 Pro
-  generateKlingV3ProVideo,        // Active model — Kling V3.0 Pro I2V (kling-3-0-pro-i2v).
+  // generateKlingV3ProVideo,     // Retired — replaced by Seedance 2.0 Fast I2V (cheaper + audio-capable).
+  generateSeedance2FastI2V,       // Active model — Seedance 2.0 Fast I2V (seedance-2-0-fast-i2v).
   // generateGrokVideo,           // Grok Video I2V — status-lookup failures on Hypereal, rolled back
 } from "../services/hypereal.js";
 
@@ -270,18 +271,39 @@ export async function handleCinematicVideo(
 
   const cameraName = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("\u2014")[0].trim();
   console.log(
-    `[CinematicVideo] Scene ${sceneIndex}: Kling V3.0 Pro I2V${regenerate ? " (regen)" : ""}, ` +
+    `[CinematicVideo] Scene ${sceneIndex}: Seedance 2.0 Fast I2V${regenerate ? " (regen)" : ""}, ` +
     `camera=${cameraName}, prompt=${finalPrompt.length} chars`
   );
+
+  // Map project format → Seedance aspect_ratio. Seedance crops/pads
+  // away from this aspect, so a portrait schedule with a hardcoded
+  // 16:9 would render letterboxed in the final stitched mp4.
+  const seedanceAspect: "16:9" | "9:16" | "1:1" =
+    format === "portrait" ? "9:16"
+    : format === "square" ? "1:1"
+    : "16:9";
 
   // ── Generate video ────────────────────────────────────────────────
   let videoUrl: string;
   let provider: string;
-  // Base negatives + style-specific anti-realism tokens (when style is
-  // non-realistic). Comma-joined so Kling parses them as one negative
-  // prompt list. Empty styleNegative is filtered out before joining.
-  const baseNegatives = "blurry, low quality, watermark, text, UI elements, slow motion, sluggish, nudity, naked, exposed body, extra limbs, body contortion, distorted anatomy, lip sync, talking, mouth movement, speaking";
-  const negPrompt = [baseNegatives, styleNegative].filter(Boolean).join(", ");
+  // Seedance has no negative_prompt slot, so fold the prohibitions
+  // directly into the positive prompt as a hard "AVOID" trailer.
+  // Kept the original Kling negative list and added the user-flagged
+  // failure modes from prod feedback: clothes morphing mid-shot,
+  // characters clipping through furniture, faces twisted away from
+  // their bodies, jerky camera moves. Also reinforces "smooth camera
+  // motion + smooth transition" so transitions between scenes don't
+  // snap.
+  const motionGuardrails =
+    "Camera motion is SMOOTH and continuous; transitions are SMOOTH (no jump cuts within the clip). " +
+    "AVOID: blurry, low quality, watermark, text, UI elements, slow motion, sluggish; " +
+    "no nudity / naked / exposed body parts; no extra limbs, body contortion, or distorted anatomy; " +
+    "no lip sync, talking, mouth movement, or speaking; " +
+    "characters MUST NOT change clothes or outfits mid-shot; " +
+    "characters MUST NOT pass or clip through furniture, walls, or props; " +
+    "head and face MUST stay aligned with the body — no faces rotated opposite to the torso; " +
+    "limbs and joints bend only in anatomically natural directions" +
+    (styleNegative ? `; additional style restrictions: ${styleNegative}` : "");
 
   // ── Per-scene Kling rejection fallback ──────────────────────────────
   // Kling 3.0 Pro's risk-control system permanently rejects some prompts
@@ -308,39 +330,46 @@ export async function handleCinematicVideo(
   // already supports it without changes. We surface the choice via
   // the return payload so handleAutopostRun can stamp error_summary
   // ("scene N held as still frame: Kling moderation").
-  provider = "Kling V3.0 Pro I2V";
+  provider = "Seedance 2.0 Fast I2V";
   let heldFrameReason: string | null = null;
 
   try {
-    videoUrl = await generateKlingV3ProVideo(
+    // Seedance accepts no negative_prompt or cfg_scale — those were
+    // Kling-specific knobs. Anti-realism / motion guardrails live in
+    // the positive prompt that the script + visual builders compose
+    // (buildCinematic.ts negative-style block + the global directives
+    // injected by the prompt assembler).
+    videoUrl = await generateSeedance2FastI2V(
       imageUrl,
-      finalPrompt,
+      `${finalPrompt}\n\n${motionGuardrails}`,
       apiKey,
       10,
       endImageUrl,
-      negPrompt,
-      0.5,
+      seedanceAspect,
+      "720p",
+      false,
     );
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     // Treat moderation rejection as a permanent per-scene failure —
     // never retry and never bubble. Anything else (transient API,
     // timeout, etc.) we re-throw so the dispatcher's retry policy
-    // gets a shot at it.
+    // gets a shot at it. Seedance moderation surfaces with similar
+    // wording to Kling — same regex covers both.
     const isModerationReject = /risk control|content[_ ]?violation|blocked.*content|moderation/i.test(errMsg);
     if (!isModerationReject) {
       throw err;
     }
-    heldFrameReason = `Kling moderation rejected scene ${sceneIndex}; held still image as frame`;
+    heldFrameReason = `Seedance moderation rejected scene ${sceneIndex}; held still image as frame`;
     console.warn(`[CinematicVideo] Scene ${sceneIndex}: ${heldFrameReason} — ${errMsg}`);
     await writeSystemLog({
       jobId, projectId, userId, generationId,
       category: "system_warning",
       eventType: "cinematic_video_held_frame_fallback",
-      message: `Scene ${sceneIndex}: Kling rejected — using still image as held frame`,
+      message: `Scene ${sceneIndex}: Seedance rejected — using still image as held frame`,
       details: {
         sceneIndex,
-        provider: "Kling V3.0 Pro I2V",
+        provider: "Seedance 2.0 Fast I2V",
         reason: errMsg,
         fallback: "hold_frame",
       },
@@ -359,7 +388,7 @@ export async function handleCinematicVideo(
         : {};
       meta.heldFrame = {
         reason: errMsg.slice(0, 240),
-        provider: "kling-3-0-pro-i2v",
+        provider: "seedance-2-0-fast-i2v",
         at: new Date().toISOString(),
       };
       freshScenes2[sceneIndex] = { ...freshScenes2[sceneIndex], videoUrl: null, _meta: meta };

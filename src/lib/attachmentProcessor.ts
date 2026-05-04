@@ -186,6 +186,43 @@ export async function processAttachmentsForPersistence(
 }
 
 /**
+ * Resolve a SourceAttachment.value to a Blob ready for upload.
+ *
+ *   blob:...              fetch() — allowed by CSP connect-src 'blob:'
+ *   data:<mime>;base64,X  decode inline via atob/Uint8Array (fetch
+ *                         against data: URIs is blocked by CSP)
+ *   data:<mime>           degenerate placeholder (no payload) — null
+ *   anything else         not handled here — caller passes through
+ *
+ * Returns null when the value can't yield real bytes so callers can
+ * skip the attachment with a warning instead of throwing.
+ */
+async function attachmentValueToBlob(value: string): Promise<Blob | null> {
+  if (value.startsWith("blob:")) {
+    const res = await fetch(value);
+    return await res.blob();
+  }
+  if (value.startsWith("data:")) {
+    const commaIdx = value.indexOf(",");
+    if (commaIdx === -1) return null;  // "data:application/pdf" placeholder, no payload
+    const meta = value.slice(5, commaIdx);
+    const payload = value.slice(commaIdx + 1);
+    if (!payload) return null;
+    const isBase64 = /;base64$/i.test(meta);
+    const mime = meta.replace(/;base64$/i, "") || "application/octet-stream";
+    if (isBase64) {
+      const binary = atob(payload);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return new Blob([bytes], { type: mime });
+    }
+    // URL-encoded text data URI — decodeURIComponent then UTF-8 encode.
+    return new Blob([decodeURIComponent(payload)], { type: mime });
+  }
+  return null;
+}
+
+/**
  * Upload an image attachment to Supabase storage.
  * Returns the public URL or null on failure.
  */
@@ -194,9 +231,14 @@ async function uploadImageAttachment(
   projectId?: string,
 ): Promise<string | null> {
   try {
-    // Fetch the blob URL to get actual file data
-    const res = await fetch(attachment.value);
-    const blob = await res.blob();
+    const blob = await attachmentValueToBlob(attachment.value);
+    if (!blob) {
+      log.warn("Image attachment has no usable bytes — skipping", {
+        name: attachment.name,
+        valuePrefix: attachment.value.slice(0, 32),
+      });
+      return null;
+    }
 
     const ext = attachment.name.split(".").pop()?.toLowerCase() || "png";
     const folder = projectId || "uploads";
@@ -236,8 +278,14 @@ async function uploadPdfAttachment(
   projectId?: string,
 ): Promise<string | null> {
   try {
-    const res = await fetch(attachment.value);
-    const blob = await res.blob();
+    const blob = await attachmentValueToBlob(attachment.value);
+    if (!blob) {
+      log.warn("PDF attachment has no usable bytes — skipping", {
+        name: attachment.name,
+        valuePrefix: attachment.value.slice(0, 32),
+      });
+      return null;
+    }
     const folder = projectId || "uploads";
     const safeName = attachment.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const filename = `${folder}/source-${Date.now()}-${safeName}`;

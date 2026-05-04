@@ -329,7 +329,11 @@ export default function IntakeForm({
     let value = '';
     if (isImage) value = URL.createObjectURL(file);
     else if (isText) { try { value = await file.text(); } catch { value = ''; } }
-    else value = 'data:' + (file.type || 'application/octet-stream');
+    // Binary (PDF/doc/etc.) — store a real blob URL so the upload
+    // helpers can fetch the actual bytes. The previous "data:<mime>"
+    // placeholder string had no payload and tripped CSP connect-src
+    // when processAttachments tried to fetch it.
+    else value = URL.createObjectURL(file);
     setSourceAttachments((prev) => [...prev, {
       id: `${Date.now()}-${file.name}`,
       type: isImage ? 'image' : 'file',

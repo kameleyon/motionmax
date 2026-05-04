@@ -12,13 +12,29 @@
  * Called before research phase to enrich content with actual source data.
  */
 
-// pdf-parse exports as a namespace under ESM — no default — so import
-// the parser function explicitly. The shape is { pdf } where `pdf` is
-// the same callable that the CJS default export used to point to.
-import * as pdfParseNs from "pdf-parse";
-const pdfParse: (data: Buffer) => Promise<{ text: string; numpages?: number }> =
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (pdfParseNs as any).pdf ?? (pdfParseNs as any).default ?? (pdfParseNs as any);
+// pdf-parse v2.x is a complete redesign vs v1: the old `pdfParse(buf)
+// → { text }` callable is gone. v2 exports a `PDFParse` class with
+// `new PDFParse({ data }).getText()` returning `{ text, pages, total }`.
+// Wrap that into the same one-shot signature the rest of this file
+// expects so the call sites stay simple.
+import { PDFParse } from "pdf-parse";
+
+async function pdfParse(data: Buffer): Promise<{ text: string; numpages?: number }> {
+  // pdf-parse converts Buffer → Uint8Array internally, but the loader
+  // also accepts a Uint8Array directly. Pass the underlying view to
+  // avoid a redundant Buffer copy on large PDFs.
+  const parser = new PDFParse({
+    data: new Uint8Array(data.buffer, data.byteOffset, data.byteLength),
+  });
+  try {
+    const result = await parser.getText();
+    return { text: result.text ?? "", numpages: result.total };
+  } finally {
+    // Releases the underlying pdfjs document; skipping it leaks a
+    // worker process across many PDFs.
+    await parser.destroy().catch(() => undefined);
+  }
+}
 
 const FETCH_TIMEOUT = 10_000; // 10s per URL fetch
 // Big PDFs (research papers, books) need more headroom than HTML pages.

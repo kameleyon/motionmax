@@ -178,10 +178,15 @@ const geminiFlashSpeakers: SpeakerOption[] = [
   { id: "gm:Zubenelgenubi", label: "Zubenelgenubi", description: "Male · Casual, conversational" },
 ];
 
-const creoleSpeakers: SpeakerOption[] = [
-  { id: "Pierre", label: "Pierre", description: "Male · Warm, measured · Haitian Creole narration" },
-  { id: "Marie",  label: "Marie",  description: "Female · Clear, friendly · Haitian Creole narration" },
-];
+// Haitian Creole — switched to Gemini-only. The legacy Pierre/Marie
+// Fish Audio voices below are commented out (kept for reference in
+// case we revert). Gemini Flash voices auto-adapt accent to the input
+// text, so the same 15-voice roster used for FR/ES/etc covers HC.
+// const creoleSpeakers: SpeakerOption[] = [
+//   { id: "Pierre", label: "Pierre", description: "Male · Warm, measured · Haitian Creole narration" },
+//   { id: "Marie",  label: "Marie",  description: "Female · Clear, friendly · Haitian Creole narration" },
+// ];
+const creoleSpeakers: SpeakerOption[] = geminiFlashSpeakers;
 
 const frenchSpeakers: SpeakerOption[] = [
   // Legacy Fish Audio voices — untouched.
@@ -248,7 +253,9 @@ export function getSpeakersForLanguage(language?: string): SpeakerOption[] {
 
 export function getDefaultSpeaker(language: string): SpeakerVoice {
   switch (language) {
-    case "ht": return "Pierre";
+    // HC switched from Pierre (Fish) to a Gemini default — Sulafat is
+    // warm/conversational, the closest analog to the legacy Pierre.
+    case "ht": return "gm:Sulafat";
     case "fr": return "Camille";
     case "es": return "Isabella";
     // English default stays "Adam" (legacy Fish Audio) so existing

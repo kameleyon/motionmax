@@ -3,7 +3,22 @@ services:
     name: motionmax-worker
     env: node
     region: oregon
-    plan: standard
+    # Upgraded standard → pro (2 CPU / 4 GB) on the new Pro workspace.
+    # Standard's 2 GB cap was OOM'ing on long-video exports (FFmpeg
+    # plus music+SFX mixing pushed past 2 GB). Pro doubles that and
+    # gives an extra CPU to parallelise FFmpeg passes.
+    plan: pro
+    # Horizontal autoscaling (Pro workspace feature). Render boots
+    # additional worker instances when CPU/memory pressure is high
+    # and scales back down when idle. Each instance runs the same
+    # claim_pending_job RPC, so multiple instances naturally pick up
+    # different jobs without coordination — N projects can render in
+    # parallel up to maxInstances.
+    scaling:
+      minInstances: 1
+      maxInstances: 4
+      targetCPUPercent: 70
+      targetMemoryPercent: 75
     buildCommand: npm ci
     startCommand: npm start
     autoDeploy: true

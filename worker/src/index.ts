@@ -65,11 +65,16 @@ function detectOptimalConcurrency(): number {
   const containerMemMb = Math.round(getContainerMemoryBytes() / 1048576);
 
   // Use container memory (not host) for memory-based limit
-  // Reserve 512MB for OS/Node.js overhead, use the rest for jobs
-  const availableMemMb = Math.max(512, containerMemMb - 512);
+  // Reserve 768MB for OS/Node.js overhead (FFmpeg + pdfjs occasionally
+  // spike past the old 512MB reservation under load).
+  const availableMemMb = Math.max(512, containerMemMb - 768);
   const byMemory = Math.floor(availableMemMb / 200);  // ~200MB per concurrent job
-  const byCpu = cpuCount * 3;                           // conservative CPU multiplier
-  const optimal = Math.max(4, Math.min(byCpu, byMemory, 20)); // floor 4, cap 20
+  const byCpu = cpuCount * 4;                           // 4 jobs per CPU — most jobs are I/O-bound API calls
+  // Cap raised 20 → 60. Pro plan + horizontal scaling means a single
+  // instance can comfortably hold 30+ concurrent LLM/API jobs, and
+  // additional instances scale beyond that. Leaving the floor at 4
+  // for tiny dev environments.
+  const optimal = Math.max(4, Math.min(byCpu, byMemory, 60));
 
   wlog.info("Auto-tuned concurrency", {
     optimal, cpus: cpuCount, hostRamMb: hostMemMb,
@@ -667,8 +672,14 @@ async function pollQueue() {
     // handleAutopostRun's finalize wait — anything still 'processing'
     // beyond that has either failed silently or been orphaned by a
     // worker restart.
+    //
+    // Cadence: every 12 polls (~1 min @ 5s polling). Was 60 polls
+    // (5 min) but that was too slow for OOM-restart loops — the
+    // worker often died before the reaper ever ran. Faster cadence
+    // is cheap (a single bounded UPDATE) and catches stragglers
+    // alongside startupDiagnostic.
     const STALE_PROCESSING_MS = 30 * 60 * 1000;
-    if (pollCount % 60 === 0) {
+    if (pollCount % 12 === 0) {
       const cutoff = new Date(Date.now() - STALE_PROCESSING_MS).toISOString();
       const { data: reclaimed, error: reapErr } = await supabase
         .from("video_generation_jobs")
@@ -904,15 +915,28 @@ async function startupDiagnostic(): Promise<boolean> {
     console.log(`[Worker] ✅ Startup diagnostic OK — video_generation_jobs has ${count ?? 0} total row(s)`);
 
     // Find processing jobs that are safe to reclaim:
-    //   (a) rows this exact worker_id previously claimed — same process restarting, or
-    //   (b) rows with no worker_id stamp that are >10 min old (genuinely stale / pre-migration rows)
-    // This avoids touching rows actively held by sibling replicas.
+    //   (a) rows this exact worker_id previously claimed — same
+    //       process restarting, or
+    //   (b) ANY row stale-stuck for >10 min — covers orphans from
+    //       a dead sibling replica or a previous Render instance
+    //       that was killed mid-job (OOM, deploy SIGTERM, crash).
+    // Sibling replicas update their jobs on every progress tick and
+    // finalize completes within minutes, so a 10-min staleness gate
+    // is well past any legit in-flight work — anything older is
+    // orphaned regardless of which worker_id is stamped on it.
+    //
+    // This was the root cause of the 2026-05-04 OOM-restart loop:
+    // the previous filter only matched rows the *current* worker_id
+    // had touched, so jobs orphaned by an OOM'd predecessor (with a
+    // different worker_id) sat as zombies forever, the per-job
+    // _restartCount never incremented, and MAX_RESTART_RETRIES never
+    // tripped to fail the offending job.
     const staleThreshold = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     const { data: processingRows } = await supabase
       .from("video_generation_jobs")
       .select("id, task_type, payload, created_at, updated_at")
       .eq("status", "processing")
-      .or(`worker_id.eq.${WORKER_ID},and(worker_id.is.null,updated_at.lt.${staleThreshold})`)
+      .or(`worker_id.eq.${WORKER_ID},updated_at.lt.${staleThreshold}`)
       .order("created_at", { ascending: true });
 
     if (processingRows && processingRows.length > 0) {

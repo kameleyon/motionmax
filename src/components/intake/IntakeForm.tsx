@@ -895,7 +895,7 @@ export default function IntakeForm({
                         value = '';
                       }
                     } else {
-                      value = 'data:' + (f.type || 'application/octet-stream');
+                      value = URL.createObjectURL(f);
                     }
                     added.push({
                       id: `${Date.now()}-${f.name}`,
@@ -1234,7 +1234,7 @@ export default function IntakeForm({
                     const isText = /text|json|xml|csv|rtf|html/i.test(f.type || '');
                     let value = '';
                     if (isText) { try { value = await f.text(); } catch { value = ''; } }
-                    else value = 'data:' + (f.type || 'application/octet-stream');
+                    else value = URL.createObjectURL(f);
                     added.push({
                       id: `${Date.now()}-${f.name}`,
                       type: 'file',

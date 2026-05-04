@@ -39,6 +39,15 @@ const TRANSIENT_PATTERNS: RegExp[] = [
   /upstream timeout/i,
   /temporarily unavailable/i,
 
+  // Local AbortController timeouts (e.g. callGemini's 120s/180s cap on
+  // search-grounded responses). Our AbortControllers are scoped to a
+  // single fetch and are not wired to worker shutdown, so an AbortError
+  // here always means "our own timeout fired" — safe to retry.
+  /this operation was aborted/i,
+  /\bAbortError\b/,
+  /the operation was aborted/i,
+  /\baborted\b/i,
+
   // Postgres / Supabase transient DB errors. statement_timeout shows up
   // when a heavy SELECT (e.g. generations join + huge scenes jsonb) runs
   // past the configured cap under contention; a short wait + retry

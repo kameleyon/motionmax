@@ -29,7 +29,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import type { AutomationSchedule } from "./_automationTypes";
+import { serializeAttachmentsForWorker } from "@/lib/attachmentProcessor";
+import type { SourceAttachment } from "@/components/workspace/SourceInput";
+import type { AutomationSchedule, PersistedSourceAttachment } from "./_automationTypes";
 
 interface GenerateTopicsDialogProps {
   open: boolean;
@@ -120,11 +122,30 @@ export function GenerateTopicsDialog({
       const userId = userData.user?.id;
       if (!userId) throw new Error("Not signed in");
 
+      // Wave F — forward the schedule's persisted source attachments
+      // (PDFs / URLs / images / inline text) to the topic generator so
+      // candidates are grounded in the user's actual sources, not just
+      // the prompt-template text. Worker handleGenerateTopics injects
+      // payload.sources directly into its userPrompt, and
+      // processContentAttachments expands [PDF_URL]/[FETCH_URL]/etc
+      // tags before the model sees them. Empty list → empty string,
+      // pre-Wave-F behaviour.
+      const persisted = Array.isArray(schedule.source_attachments)
+        ? (schedule.source_attachments as PersistedSourceAttachment[]).map<SourceAttachment>((a) => ({
+            id: a.id ?? Math.random().toString(36).substring(2, 10),
+            type: a.type,
+            name: a.name,
+            value: a.value,
+          }))
+        : [];
+      const sources = serializeAttachmentsForWorker(persisted);
+
       const insertPayload = {
         prompt: schedule.prompt_template,
         count: TARGET_COUNT,
         existingTopics: queue,
         scheduleId: schedule.id,
+        sources,
       };
       const { data: inserted, error: insertErr } = await supabase
         .from("video_generation_jobs")

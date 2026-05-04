@@ -38,6 +38,29 @@ export interface AutomationSchedule {
   delivery_method?: 'social' | 'email' | 'library_only';
   /** Wave E — recipient list used when delivery_method='email'. */
   email_recipients?: string[] | null;
+  /**
+   * Wave F — persisted SourceAttachment[] (PDFs, URLs, images, inline
+   * text) re-fed into research + script on every run. PDFs/images are
+   * stored as Supabase public URLs (uploaded at schedule-save time) so
+   * the worker can rebuild the [PDF_URL]/[FETCH_URL]/etc. tag block
+   * without re-uploading. Empty array on schedules created before this
+   * column existed — the migration's default keeps loads safe.
+   */
+  source_attachments?: PersistedSourceAttachment[] | null;
+}
+
+/**
+ * Persisted shape of a source attachment on an autopost schedule.
+ * Mirrors components/workspace/SourceInput.tsx's SourceAttachment but
+ * with no blob URLs — those are uploaded to Supabase Storage before
+ * persistence. The `id` is preserved across save/load so React keys
+ * stay stable while the user edits.
+ */
+export interface PersistedSourceAttachment {
+  id: string;
+  type: 'file' | 'image' | 'link' | 'youtube' | 'github' | 'gdrive' | 'text';
+  name: string;
+  value: string;
 }
 
 /**

@@ -24,6 +24,7 @@
 
 import { writeSystemLog } from "../lib/logger.js";
 import { callGemini } from "../services/geminiNative.js";
+import { processContentAttachments } from "../services/processAttachments.js";
 
 interface GenerateTopicsPayload {
   prompt: string;
@@ -98,8 +99,29 @@ export async function handleGenerateTopics(
 
   const todayHuman = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
 
-  const sourcesBlock = (typeof payload.sources === "string" && payload.sources.trim().length > 0)
-    ? `\n\nUser-provided sources (treat as PRIMARY references — do not drift away from these):\n${payload.sources.trim()}`
+  // Expand any [PDF_URL]/[FETCH_URL]/[YOUTUBE_URL]/[GITHUB_URL] tags
+  // into actual fetched/parsed content BEFORE we embed sources in the
+  // prompt — without this, the LLM was seeing literal opaque tag
+  // strings ("[PDF_URL] https://...") instead of the document body it
+  // was supposed to ground topic ideas in. processContentAttachments
+  // is idempotent on strings without the "--- ATTACHED SOURCES ---"
+  // marker, so plain text sources pass through unchanged.
+  let resolvedSources = "";
+  if (typeof payload.sources === "string" && payload.sources.trim().length > 0) {
+    try {
+      resolvedSources = await processContentAttachments(payload.sources);
+    } catch (err) {
+      // A failed fetch on one source shouldn't kill the whole topic
+      // job — log and fall back to the raw string so the model at
+      // least sees the URLs.
+      console.warn(
+        `[GenerateTopics] processContentAttachments failed: ${(err as Error).message} — falling back to raw sources`,
+      );
+      resolvedSources = payload.sources;
+    }
+  }
+  const sourcesBlock = resolvedSources.trim().length > 0
+    ? `\n\nUser-provided sources (treat as PRIMARY references — do not drift away from these):\n${resolvedSources.trim()}`
     : "";
 
   const systemPrompt = `You are a content strategist who generates compelling clickbait topic titles.
@@ -150,7 +172,11 @@ Return ONLY valid JSON in this exact shape (no prose, no code fences):
     // truncated mid-array ("topics": ...<cutoff>). Bumped well above
     // worst-case to leave the JSON room to close cleanly.
     maxTokens: 12_000,
-    timeoutMs: 120_000,
+    // Search-grounded calls fan out to live web results before
+    // generating, routinely running 60–90s+ on a slow search day.
+    // 120s left almost no headroom and was tripping our AbortController
+    // on legitimate-but-slow responses; 180s gives ~2x median latency.
+    timeoutMs: 180_000,
   });
 
   let parsed: { topics?: unknown };

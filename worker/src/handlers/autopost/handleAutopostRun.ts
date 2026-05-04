@@ -87,6 +87,73 @@ interface ScheduleRow {
   prompt_template: string;
   config_snapshot: ScheduleConfig | null;
   caption_template: string | null;
+  source_attachments: PersistedSourceAttachment[] | null;
+}
+
+/**
+ * Persisted SourceAttachment shape (autopost_schedules.source_attachments
+ * JSONB column). Mirrors the frontend's SourceAttachment type but with
+ * blob URLs replaced by Supabase Storage public URLs at schedule-save
+ * time, so the worker can re-process them on every run.
+ */
+interface PersistedSourceAttachment {
+  id?: string;
+  type: "file" | "image" | "link" | "youtube" | "github" | "gdrive" | "text";
+  name: string;
+  value: string;
+}
+
+/**
+ * Convert a persisted SourceAttachment[] into the worker-ready content
+ * block — the same format src/lib/attachmentProcessor.ts emits — so
+ * generateVideo.ts:190 detects the marker and runs
+ * processContentAttachments() to expand [PDF_URL]/[FETCH_URL]/etc tags
+ * before researchTopic() runs.
+ *
+ * Returns "" when there are no attachments so callers can concat
+ * unconditionally.
+ */
+function buildAutopostSourcesBlock(attachments: PersistedSourceAttachment[]): string {
+  if (!attachments.length) return "";
+  const sections: string[] = [];
+  for (const a of attachments) {
+    switch (a.type) {
+      case "text":
+        sections.push(`[SOURCE TEXT: ${a.name}]\n${a.value}`);
+        break;
+      case "image":
+        // Public Supabase URL captured at save time — Gemini fetches the
+        // image server-side via fileData refs in geminiNative.ts.
+        sections.push(`[SOURCE IMAGE] ${a.value}`);
+        break;
+      case "file":
+        // PDF or text-extracted file. value is either inline text (for
+        // small text files) or a Supabase public URL pointing at the
+        // PDF — distinguished by whether it starts with http(s).
+        if (/^https?:\/\//i.test(a.value) && /\.pdf($|\?)/i.test(a.value)) {
+          sections.push(`[PDF_URL] ${a.value}`);
+        } else if (/^https?:\/\//i.test(a.value)) {
+          sections.push(`[FETCH_URL] ${a.value}`);
+        } else {
+          sections.push(`[SOURCE FILE: ${a.name}]\n${a.value}`);
+        }
+        break;
+      case "youtube":
+        sections.push(`[YOUTUBE_URL] ${a.value}`);
+        break;
+      case "link":
+        sections.push(`[FETCH_URL] ${a.value}`);
+        break;
+      case "github":
+        sections.push(`[GITHUB_URL] ${a.value}`);
+        break;
+      case "gdrive":
+        sections.push(`[GOOGLE_DRIVE] ${a.value}`);
+        break;
+    }
+  }
+  if (!sections.length) return "";
+  return `\n\n--- ATTACHED SOURCES ---\n${sections.join("\n\n")}`;
 }
 
 interface AutopostRunRow {
@@ -249,7 +316,7 @@ async function runPipeline(
 
   const { data: schedData, error: schedErr } = await supabase
     .from("autopost_schedules")
-    .select("id, user_id, name, prompt_template, config_snapshot, caption_template")
+    .select("id, user_id, name, prompt_template, config_snapshot, caption_template, source_attachments")
     .eq("id", run.schedule_id)
     .single();
   if (schedErr || !schedData) throw new Error(`autopost_render: schedule not found: ${schedErr?.message}`);
@@ -304,7 +371,32 @@ async function runPipeline(
   //
   // `;
 
-  const content = baseContent;
+  // Append any persisted source attachments (PDF / link / YouTube /
+  // GitHub / image / inline text) so the worker's
+  // processContentAttachments() (generateVideo.ts:190) expands them
+  // before researchTopic() runs. Without this block the script LLM
+  // never sees the user's attached sources — only the prompt template
+  // and the topic title — and drifts into hallucinated facts/dates.
+  // The frontend's processAttachments() emits the same
+  // "--- ATTACHED SOURCES ---" header + tag format we rebuild here.
+  const sourcesBlock = buildAutopostSourcesBlock(schedule.source_attachments ?? []);
+  const content = sourcesBlock ? `${baseContent}${sourcesBlock}` : baseContent;
+
+  if (sourcesBlock) {
+    await writeSystemLog({
+      jobId,
+      userId,
+      category: "system_info",
+      eventType: "autopost_render_sources_attached",
+      message: `Attached ${(schedule.source_attachments ?? []).length} source(s) to run ${runId}`,
+      details: {
+        autopost_run_id: runId,
+        sourceCount: (schedule.source_attachments ?? []).length,
+        sourceTypes: (schedule.source_attachments ?? []).map((a) => a.type),
+        contentLength: content.length,
+      },
+    });
+  }
 
   const projectId = randomUUID();
 

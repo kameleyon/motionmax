@@ -29,7 +29,10 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { getSpeakersForLanguage, getDefaultSpeaker, type SpeakerVoice } from "@/components/workspace/SpeakerSelector";
-import type { AutomationSchedule, IntakeSettings } from "./_automationTypes";
+import type { SourceAttachment } from "@/components/workspace/SourceInput";
+import { processAttachmentsForPersistence } from "@/lib/attachmentProcessor";
+import type { AutomationSchedule, IntakeSettings, PersistedSourceAttachment } from "./_automationTypes";
+import { SourcesField } from "./_SourcesField";
 
 // Match the inline LANGUAGES list in IntakeForm so the Edit dialog
 // surfaces every language the schedule could have been created with.
@@ -122,6 +125,13 @@ interface DraftState {
   style: string;
   delivery_method: DeliveryMethod;
   email_recipients: string[];
+  /**
+   * Source attachments (PDFs, URLs, images, inline text). Loaded from
+   * the schedule's source_attachments JSONB column on open. New items
+   * may temporarily carry blob: URLs in `value` until save runs them
+   * through processAttachmentsForPersistence().
+   */
+  source_attachments: SourceAttachment[];
 }
 
 function buildDraft(s: AutomationSchedule): DraftState {
@@ -154,6 +164,14 @@ function buildDraft(s: AutomationSchedule): DraftState {
     // verification clears).
     delivery_method: (s.delivery_method ?? 'library_only') as DeliveryMethod,
     email_recipients: Array.isArray(s.email_recipients) ? s.email_recipients : [],
+    source_attachments: Array.isArray(s.source_attachments)
+      ? (s.source_attachments as PersistedSourceAttachment[]).map<SourceAttachment>((a) => ({
+          id: a.id ?? Math.random().toString(36).substring(2, 10),
+          type: a.type,
+          name: a.name,
+          value: a.value,
+        }))
+      : [],
   };
 }
 
@@ -254,6 +272,16 @@ export function EditAutomationDialog({
         },
       };
 
+      // Upload any pending blob: URLs (newly-attached PDFs/images) to
+      // Supabase Storage so the persisted descriptors point at public
+      // URLs the worker can fetch on every run. Items without blob:
+      // values pass through unchanged. Failed uploads are dropped with
+      // a console warning rather than blocking the save.
+      const persistedAttachments = await processAttachmentsForPersistence(
+        draft.source_attachments,
+        schedule.id,
+      );
+
       // Captions, hashtags, and the per-schedule duration cap have been
       // dropped from the editor — captions/hashtags will be AI-generated
       // when social publishing comes back online, and per-flow scene
@@ -269,6 +297,7 @@ export function EditAutomationDialog({
         config_snapshot: nextSnap,
         delivery_method: draft.delivery_method,
         email_recipients: draft.email_recipients,
+        source_attachments: persistedAttachments as unknown as PersistedSourceAttachment[],
         ...(draft.delivery_method !== 'social' ? { target_account_ids: [] } : {}),
       } as unknown as Record<string, unknown>;
 
@@ -324,6 +353,30 @@ export function EditAutomationDialog({
               className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4] resize-none"
               placeholder="e.g. A 30-second motivational reel about resilience for entrepreneurs"
             />
+          </div>
+
+          {/* ── Sources (Wave F) ────────────────────────────────────
+              Persisted into autopost_schedules.source_attachments and
+              re-fed into research + script on every run by the worker
+              (handleAutopostRun.ts → buildAutopostSourcesBlock). PDFs
+              and images are uploaded on save; URLs/YouTube/etc. are
+              re-fetched fresh per run. */}
+          <div className="space-y-1.5">
+            <Label className="text-[12px] text-[#ECEAE4]">
+              Sources
+              <span className="ml-2 text-[10.5px] font-normal text-[#8A9198]">
+                Used as ground truth on every run
+              </span>
+            </Label>
+            <SourcesField
+              attachments={draft.source_attachments}
+              onChange={(next) => setDraft((d) => ({ ...d, source_attachments: next }))}
+            />
+            {draft.source_attachments.length === 0 && (
+              <p className="text-[11px] text-[#5A6268] leading-[1.5]">
+                Add PDFs, web links, YouTube videos, GitHub repos, images, or text. The script writer reads them on every run alongside fresh web search.
+              </p>
+            )}
           </div>
 
           {/* ── Delivery method (Wave E) ── */}

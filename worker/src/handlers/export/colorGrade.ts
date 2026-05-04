@@ -11,19 +11,39 @@
  */
 
 export type ColorGrade =
-  | "Kodak 250D"
+  | "Kodak 250D"        // legacy alias — resolves to the Gold 400 filter
+  | "Kodak Gold 400"
   | "Bleach Bypass"
   | "Teal & Orange"
   | "Warm Film"
   | "Cool Noir"
   | "Desaturated";
 
+// Kodak Gold 400 tone formula. Re-tuned per design feedback:
+//   • Warmer overall — more red+yellow in mids and highlights
+//   • Blues pulled down across the curve (Gold's hallmark vs 250D's
+//     cooler daylight balance)
+//   • Slight saturation lift in warm tones, gentler contrast
+//   • Soft gamma >1 to lift midtones (Gold prints don't crush blacks
+//     the way 250D motion stock does)
+//
+// Shared by both the legacy "Kodak 250D" key (kept as an alias so
+// existing scenes with grade='Kodak 250D' in DB still resolve) and
+// the new "Kodak Gold 400" key.
+const KODAK_GOLD_400_FILTER =
+  "eq=contrast=1.05:saturation=1.12:gamma=1.02," +
+  "colorbalance=" +
+    "rs=0.06:gs=0.02:bs=-0.10:" +    // shadows: warm red lift, push out of blue
+    "rm=0.10:gm=0.04:bm=-0.12:" +    // mids: stronger golden push
+    "rh=0.08:gh=0.02:bh=-0.08";      // highlights: warm peachy roll-off
+
 const PRESETS: Record<ColorGrade, string> = {
-  // Warm midtones, slight green-shadow lift, gentle contrast — the
-  // classic motion-picture daylight stock.
-  "Kodak 250D":
-    "eq=contrast=1.08:saturation=1.05:gamma=0.97," +
-    "colorbalance=rs=0.04:gs=-0.02:bs=-0.04:rm=0.05:gm=0.02:bm=-0.03:rh=0.02:gh=0.0:bh=-0.02",
+  // Kodak Gold 400 film tones — warm, golden, slightly soft. Replaces
+  // the previous 250D motion-stock formula per design feedback.
+  // "Kodak 250D" key is kept (UI label still reads that way today)
+  // until the frontend rename ships.
+  "Kodak 250D": KODAK_GOLD_400_FILTER,
+  "Kodak Gold 400": KODAK_GOLD_400_FILTER,
 
   // High contrast, crushed blacks, low saturation — the "skip-bleach"
   // look. Strong contrast bump, big saturation cut.
@@ -76,7 +96,8 @@ export function joinVf(base: string, extra: string | null): string {
 }
 
 export const SUPPORTED_GRADES: ReadonlyArray<ColorGrade> = [
-  "Kodak 250D",
+  "Kodak 250D",        // legacy alias kept for back-compat — same filter as Kodak Gold 400
+  "Kodak Gold 400",
   "Bleach Bypass",
   "Teal & Orange",
   "Warm Film",

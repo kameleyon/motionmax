@@ -303,18 +303,22 @@ export default function ProjectsGallery() {
         </a>
       )}
 
-      {/* Filter pills — stack on mobile so Smart Flow has room to breathe,
-          then swipe horizontally if the pills overflow. */}
+      {/* Filter pills — sized so all four (All / Cinematic / Explainer
+          / Smart Flow) fit on a 360 px phone without horizontal
+          scroll. Mobile gets tighter padding (px-2.5), smaller text
+          (11.5 px), and a thinner pill height (28 px). The sm:
+          breakpoint restores the original generous touch sizing on
+          tablet+ so desktop density is unchanged. */}
       <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2 sm:gap-3 mt-9 mb-3.5">
         <h2 className="font-serif font-medium text-[18px] sm:text-[20px] tracking-tight m-0">Recent projects</h2>
-        <div className="flex gap-1 p-1 bg-[#1B2228] rounded-lg border border-white/5 overflow-x-auto scrollbar-hide -mx-1 sm:mx-0 whitespace-nowrap">
+        <div className="flex gap-0.5 sm:gap-1 p-0.5 sm:p-1 bg-[#1B2228] rounded-lg border border-white/5 overflow-x-auto scrollbar-hide whitespace-nowrap">
           {FILTER_PILLS.map((pill) => (
             <button
               key={pill.id}
               onClick={() => setFilter(pill.id)}
               aria-pressed={filter === pill.id}
               className={
-                `px-4 py-2 text-[13px] min-h-[36px] rounded-md font-medium transition-colors shrink-0 ` +
+                `px-2.5 sm:px-4 py-1 sm:py-2 text-[11.5px] sm:text-[13px] min-h-[28px] sm:min-h-[36px] rounded-md font-medium transition-colors shrink-0 ` +
                 (filter === pill.id
                   ? 'bg-[#10151A] text-[#ECEAE4] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'
                   : 'text-[#8A9198] hover:text-[#ECEAE4]')

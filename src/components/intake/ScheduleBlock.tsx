@@ -5,7 +5,7 @@ import { AUTOPOST_CREDITS_PER_RUN, isAutopostEligible } from '@/lib/planLimits';
 import { useSubscription } from '@/hooks/useSubscription';
 import {
   Clock, Wand2, Loader2, RefreshCw, Plug, Youtube, Instagram, Music2,
-  Send, Mail, FolderHeart, X as XIcon,
+  Send, Mail, FolderHeart, X as XIcon, Zap,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -393,25 +393,51 @@ export default function ScheduleBlock({
   const selectedCount = selectedTopics.size;
 
   return (
-    <Card className="bg-[#151B20] border-white/5 rounded-xl overflow-hidden text-[#ECEAE4]">
-      {/* Header — toggle only.
-          Free users can NOW flip the toggle and walk through the entire
-          schedule setup (frequency, topic queue, delivery method, terms).
-          The plan gate is enforced at submit time by IntakeForm.tsx —
-          when handleGenerate sees an ineligible plan with the schedule
-          enabled, it opens the Upgrade modal instead of inserting the
-          schedule. The DB-side INSERT RLS policy + autopost_fire_now /
-          autopost_tick gates remain as the safety net so a determined
-          API caller can't bypass the upsell. */}
-      <div className="flex items-center justify-between gap-3 px-4 py-3.5">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <Clock className="w-4 h-4 text-[#14C8CC] shrink-0" />
-          <div className="text-[13.5px] font-medium truncate">Run on a schedule</div>
-          {!planEligible && (
-            <span className="ml-2 shrink-0 text-[10px] uppercase tracking-wider text-[#E4C875] border border-[#E4C875]/30 bg-[#E4C875]/5 rounded px-1.5 py-0.5">
-              Creator+
-            </span>
-          )}
+    <Card
+      className={
+        // Subtle teal glow + accent border when the toggle is OFF so
+        // the row reads as a CTA, not just another setting card. Once
+        // enabled, the glow recedes (it's no longer a marketing
+        // surface — it's an active schedule editor).
+        enabled
+          ? 'bg-[#151B20] border-white/5 rounded-xl overflow-hidden text-[#ECEAE4] transition-colors'
+          : 'bg-gradient-to-br from-[#14C8CC]/[0.07] via-[#151B20] to-[#151B20] border border-[#14C8CC]/30 rounded-xl overflow-hidden text-[#ECEAE4] shadow-[0_0_28px_-12px_rgba(20,200,204,0.55)] transition-colors'
+      }
+    >
+      {/* Header — promoted from a plain "Run on a schedule" toggle to
+          a discoverable Autopost CTA. The teal-glow card and the
+          large icon make the row stand out as a marketing surface
+          rather than blending into the rest of the intake settings.
+          Label "Turn on Autopost" — clear value (Autopost is the
+          product brand) + action verb. Sub-line spells the benefit so
+          users can decide without expanding the section. */}
+      <div className="flex items-center justify-between gap-3 px-4 py-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className={
+            'w-9 h-9 shrink-0 rounded-lg grid place-items-center ' +
+            (enabled
+              ? 'bg-[#14C8CC]/10 text-[#14C8CC]'
+              : 'bg-[#14C8CC]/15 text-[#14C8CC] ring-1 ring-[#14C8CC]/40')
+          }>
+            <Zap className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="text-[14px] font-semibold tracking-tight truncate">
+                {enabled ? 'Autopost is on' : 'Turn on Autopost'}
+              </div>
+              {!planEligible && (
+                <span className="shrink-0 text-[10px] uppercase tracking-wider text-[#E4C875] border border-[#E4C875]/30 bg-[#E4C875]/5 rounded px-1.5 py-0.5">
+                  Creator+
+                </span>
+              )}
+            </div>
+            <div className="text-[11.5px] text-[#8A9198] mt-0.5 leading-snug">
+              {enabled
+                ? 'Videos generate on the schedule below — set it once.'
+                : 'Generate fresh videos automatically on a schedule. Set it once.'}
+            </div>
+          </div>
         </div>
         <Switch
           checked={enabled}
@@ -427,7 +453,7 @@ export default function ScheduleBlock({
               termsAgreed,
             });
           }}
-          aria-label="Run on a schedule"
+          aria-label="Turn on Autopost"
         />
       </div>
 

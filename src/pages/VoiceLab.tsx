@@ -219,14 +219,18 @@ export default function VoiceLab() {
           </div>
         </motion.div>
 
-        {/* Tabs — horizontal scroll on phones to avoid wrap. */}
-        <div className="mt-6 -mx-1 overflow-x-auto scrollbar-thin scrollbar-thumb-white/10">
-          <div className="flex items-center gap-1 px-1 min-w-max border-b border-white/8">
+        {/* Tabs — sized to fit all 5 on a 360 px phone without
+            horizontal scroll. Mobile gets tighter padding + smaller
+            text and count chip; sm: restores the original tablet+
+            density. min-w-max removed so the row width caps at the
+            container instead of forcing the parent to scroll. */}
+        <div className="mt-6 border-b border-white/8">
+          <div className="flex items-center gap-0 sm:gap-1">
             <TabButton active={tab === "discovery"}  onClick={() => setTab("discovery")}  label="Discovery"  count={counts.discovery} />
             <TabButton active={tab === "mine"}       onClick={() => setTab("mine")}       label="My Voices"  count={counts.mine} />
             <TabButton active={tab === "clone"}      onClick={() => setTab("clone")}      label="Cloned"     count="+" />
             <TabButton active={tab === "liked"}      onClick={() => setTab("liked")}      label="Liked"      count={counts.liked} />
-            <TabButton active={tab === "bookmarked"} onClick={() => setTab("bookmarked")} label="Bookmarked" count={counts.bookmarked} />
+            <TabButton active={tab === "bookmarked"} onClick={() => setTab("bookmarked")} label="Saved"      count={counts.bookmarked} />
           </div>
         </div>
 
@@ -324,16 +328,19 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "relative px-3 sm:px-4 py-2.5 text-[13px] font-medium transition-colors whitespace-nowrap",
+        // Mobile: 1.5×9px padding, 11px text, tight count chip — five
+        // tabs fit on a 360 px phone. sm: restores the original
+        // tablet+ touch density.
+        "relative px-1.5 sm:px-4 py-1.5 sm:py-2.5 text-[11px] sm:text-[13px] font-medium transition-colors whitespace-nowrap shrink-0",
         active ? "text-[#ECEAE4]" : "text-[#5A6268] hover:text-[#ECEAE4]",
       )}
     >
       {label}
       <span className={cn(
-        "ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full font-mono text-[9.5px]",
+        "ml-1 sm:ml-1.5 inline-flex items-center justify-center min-w-[14px] sm:min-w-[18px] h-[14px] sm:h-[18px] px-1 sm:px-1.5 rounded-full font-mono text-[8.5px] sm:text-[9.5px]",
         active ? "bg-[#14C8CC]/20 text-[#14C8CC]" : "bg-white/[0.04] text-[#5A6268]",
       )}>{count}</span>
-      {active && <span className="absolute inset-x-3 -bottom-px h-[2px] bg-[#14C8CC] rounded-full" />}
+      {active && <span className="absolute inset-x-1.5 sm:inset-x-3 -bottom-px h-[2px] bg-[#14C8CC] rounded-full" />}
     </button>
   );
 }
@@ -345,7 +352,10 @@ const FILTER_GROUPS = {
   Age:    ["Young", "Middle Aged", "Old"],
   Style:  ["Narration", "Documentary", "Casual", "Conversational", "Energetic", "Soft", "Deep", "Professional", "Dramatic", "Mysterious", "Warm", "Bright"],
 };
-const FLAT_FILTERS = Object.values(FILTER_GROUPS).flat();
+// FLAT_FILTERS used to drive the flat-wrap chip row — now superseded
+// by the grouped layout in DiscoveryTab. Left as a one-liner doc
+// pointer in case future code needs a flat list.
+// const FLAT_FILTERS = Object.values(FILTER_GROUPS).flat();
 
 function DiscoveryTab({
   catalog, language, onLanguageChange, selected, onSelect, playing, onPlay,
@@ -438,31 +448,44 @@ function DiscoveryTab({
         </div>
       </div>
 
-      {/* Filter chips */}
-      <div className="flex flex-wrap items-center gap-1.5 mt-3">
-        {FLAT_FILTERS.map((f) => (
-          <button
-            key={f}
-            type="button"
-            onClick={() => toggleFilter(f)}
-            className={cn(
-              "h-7 px-3 rounded-full font-mono text-[10px] tracking-[0.12em] uppercase border transition-colors inline-flex items-center gap-1",
-              active.includes(f)
-                ? "bg-[#14C8CC]/10 border-[#14C8CC]/40 text-[#14C8CC]"
-                : "bg-[#10151A] border-white/10 text-[#8A9198] hover:text-[#ECEAE4] hover:border-white/20",
-            )}
-          >
-            {f}
-            {active.includes(f) && <X className="w-2.5 h-2.5" />}
-          </button>
+      {/* Filter chips — grouped by category. Was a flat-wrap pile of
+          21 pills which was hard to scan and consumed 4–5 lines on
+          mobile. Now each FILTER_GROUPS section gets its own row with
+          a small label, mobile pills are tighter (h-6, px-2, 9.5px
+          text) and desktop restores generous sizing at sm:. Fits
+          Gender (2 pills) + Age (3) on a 360 px phone in one row;
+          Style wraps to 2–3 rows. */}
+      <div className="mt-3 space-y-1.5">
+        {Object.entries(FILTER_GROUPS).map(([groupLabel, options]) => (
+          <div key={groupLabel} className="flex flex-wrap items-center gap-1 sm:gap-1.5">
+            <span className="font-mono text-[9.5px] tracking-[0.16em] uppercase text-[#5A6268] mr-0.5 sm:mr-1 w-12 sm:w-14 shrink-0">
+              {groupLabel}
+            </span>
+            {options.map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => toggleFilter(f)}
+                className={cn(
+                  "h-6 sm:h-7 px-2 sm:px-3 rounded-full font-mono text-[9.5px] sm:text-[10px] tracking-[0.1em] sm:tracking-[0.12em] uppercase border transition-colors inline-flex items-center gap-1 shrink-0",
+                  active.includes(f)
+                    ? "bg-[#14C8CC]/10 border-[#14C8CC]/40 text-[#14C8CC]"
+                    : "bg-[#10151A] border-white/10 text-[#8A9198] hover:text-[#ECEAE4] hover:border-white/20",
+                )}
+              >
+                {f}
+                {active.includes(f) && <X className="w-2 h-2 sm:w-2.5 sm:h-2.5" />}
+              </button>
+            ))}
+          </div>
         ))}
         {active.length > 0 && (
           <button
             type="button"
             onClick={() => setActive([])}
-            className="h-7 px-3 rounded-full font-mono text-[10px] tracking-[0.12em] uppercase text-[#E4C875] hover:text-white transition-colors"
+            className="h-6 sm:h-7 px-2 sm:px-3 rounded-full font-mono text-[9.5px] sm:text-[10px] tracking-[0.12em] uppercase text-[#E4C875] hover:text-white transition-colors"
           >
-            Clear all
+            Clear all ({active.length})
           </button>
         )}
       </div>
@@ -1146,7 +1169,13 @@ function TestPlayground({
   }
 
   return (
-    <div className="rounded-xl border border-white/8 bg-[#10151A] p-4 sm:p-5 max-h-[calc(100vh-7rem)] overflow-y-auto">
+    // overflow-x-hidden + min-w-0 + w-full so a long history line
+    // (the user's prompt is rendered verbatim with `truncate`) can't
+    // push the panel wider than its parent column on a 360 px phone.
+    // Tighter horizontal padding on mobile (`p-3` vs `p-5` desktop)
+    // gives the inner controls another 16 px of breathing room before
+    // the truncate kicks in.
+    <div className="w-full min-w-0 rounded-xl border border-white/8 bg-[#10151A] p-3 sm:p-5 max-h-[calc(100vh-7rem)] overflow-y-auto overflow-x-hidden">
       <div className="flex items-center justify-between mb-3">
         <div className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#ECEAE4] inline-flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-[#14C8CC] animate-pulse" />

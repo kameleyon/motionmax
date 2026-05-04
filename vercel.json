@@ -20,7 +20,6 @@
     { "source": "/auth", "destination": "/app-shell.html" },
     { "source": "/auth/:path*", "destination": "/app-shell.html" },
     { "source": "/app", "destination": "/app-shell.html" },
-    { "source": "/app/legacy", "destination": "/app-shell.html" },
     { "source": "/app/:path*", "destination": "/app-shell.html" },
     { "source": "/dashboard-new", "destination": "/app-shell.html" },
     { "source": "/dashboard-new/:path*", "destination": "/app-shell.html" },

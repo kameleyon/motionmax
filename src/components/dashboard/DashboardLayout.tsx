@@ -2,14 +2,13 @@ import AppShell from './AppShell';
 import Hero from './Hero';
 import ProjectsGallery from './ProjectsGallery';
 import RightRail from './RightRail';
-import NewDashboardBanner from './NewDashboardBanner';
 
 /** Dashboard home — sits inside AppShell so its sidebar+topbar chrome
  *  is identical to All-projects and any other future shell-wrapped page.
  *  This file just owns the dashboard-home content composition. */
 export default function DashboardLayout() {
   return (
-    <AppShell breadcrumb="Studio" topBanner={<NewDashboardBanner />}>
+    <AppShell breadcrumb="Studio">
       {/* Right rail (credits, render queue, weekly stats) used to be
           xl:block (>=1280 px). That hid it on every tablet AND every
           mobile, so users couldn't see their credit balance. Bumped down

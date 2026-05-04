@@ -17,10 +17,9 @@ import { CookieConsent } from "./components/CookieConsent";
 // Route-level code splitting — each page loads only when visited
 const Landing = lazy(() => import("./pages/Landing"));
 const Auth = lazy(() => import("./pages/Auth"));
-const Dashboard = lazy(() => import("./pages/Dashboard"));
-// New dashboard under construction — lives at /dashboard-new until it's
-// ready to replace the /app route entirely. Self-contained layout
-// (Sidebar + topbar + main + RightRail) so it opts OUT of AppShell.
+// Legacy `Dashboard` retired alongside the /app/legacy route on
+// 2026-05-04 (one day after the NewDashboardBanner sunset window). The
+// surviving dashboard is `DashboardLayout` at /dashboard-new.
 const DashboardLayout = lazy(() => import("./components/dashboard/DashboardLayout"));
 const CreateWorkspace = lazy(() => import("./pages/CreateWorkspace"));
 // Unified intake form — /app/create/new. Reuses the dashboard-new shell
@@ -104,12 +103,13 @@ const App = () => (
                 NEW dashboard chrome (Projects, dashboard-new) live
                 outside this wrapper to avoid stacking two sidebars. */}
             <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
-              {/* Legacy dashboard moved to /app/legacy as backup.
-                  /app now bounces to the new /dashboard-new (the gold
-                  banner there gives users a one-click escape hatch
-                  back here until 2026-05-03). */}
+              {/* /app keeps its redirect for any external bookmarks /
+                  email links / OAuth callbacks that still target the
+                  old root. The legacy /app/legacy route was retired
+                  2026-05-04 — anyone landing there now follows the
+                  /app → /dashboard-new bounce. */}
               <Route path="/app" element={<Navigate to="/dashboard-new" replace />} />
-              <Route path="/app/legacy" element={<RouteErrorBoundary routeName="dashboard-legacy"><Dashboard /></RouteErrorBoundary>} />
+              <Route path="/app/legacy" element={<Navigate to="/dashboard-new" replace />} />
               <Route path="/app/create" element={<RouteErrorBoundary routeName="create"><CreateWorkspace /></RouteErrorBoundary>} />
             </Route>
 

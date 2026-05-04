@@ -23,9 +23,13 @@ const pdfParse: (data: Buffer) => Promise<{ text: string; numpages?: number }> =
 const FETCH_TIMEOUT = 10_000; // 10s per URL fetch
 // Big PDFs (research papers, books) need more headroom than HTML pages.
 const PDF_FETCH_TIMEOUT = 90_000;
-// Cap extracted PDF text. ~150k chars ≈ 100 pages of dense text and
-// stays well inside Gemini's 1M-token context.
-const PDF_MAX_CHARS = 150_000;
+// Cap extracted PDF text at 15M chars (~10,000 pages of dense text).
+// Sized so a full-length PDF book (textbook, novel, research thesis)
+// passes through without server-side truncation. The downstream LLM
+// will still apply its own context budget — Gemini's 1M-token window
+// covers roughly 4M chars, so anything past that gets truncated by
+// the model itself; we just don't pre-truncate on the worker.
+const PDF_MAX_CHARS = 15_000_000;
 
 /**
  * Process tagged attachments in the content string.

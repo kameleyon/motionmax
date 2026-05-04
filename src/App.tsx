@@ -84,12 +84,13 @@ const App = () => (
       <TooltipProvider>
         <Sonner />
         <CookieConsent />
-        {/* Renewal nag was previously mounted inside the legacy
-            AppShell. With AppShell retired, mount it globally so it
-            still triggers on every authenticated surface. */}
-        <SubscriptionRenewalModal />
         <BrowserRouter>
           <Suspense fallback={<PageLoader />}>
+          {/* Renewal nag was previously mounted inside the legacy
+              AppShell. With AppShell retired, mount it globally so it
+              still triggers on every authenticated surface. Must live
+              INSIDE BrowserRouter — it calls useNavigate(). */}
+          <SubscriptionRenewalModal />
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/auth" element={<Auth />} />

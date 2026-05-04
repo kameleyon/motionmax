@@ -28,6 +28,15 @@ import { v4 as uuidv4 } from "uuid";
 // ── Constants ──────────────────────────────────────────────────────
 
 const HYPEREAL_API_URL = "https://api.hypereal.cloud/v1/images/generate";
+
+// Image-gen-only Hypereal key. We bill image generation (gpt-image-2
+// primary + Gemini 3.1 Flash fallback) against a separate Hypereal
+// account from video / edit / lipsync / ASR / music. When set,
+// HYPEREALIMAGE_API_KEY overrides the apiKey passed in by the
+// handler. When unset we fall back to the handler's key (which still
+// reads HYPEREAL_API_KEY) so a single-key deployment keeps working.
+const HYPEREAL_IMAGE_KEY = (process.env.HYPEREALIMAGE_API_KEY || "").trim();
+
 // Primary: OpenAI gpt-image-2 via Hypereal. Supports
 // 1024x1024 / 1536x1024 (landscape) / 1024x1536 (portrait), plus an
 // optional reference_images array for image-to-image / character-
@@ -148,6 +157,8 @@ async function tryHyperealGptImage2(
   format: string,
   referenceImages?: string[],
 ): Promise<Uint8Array | null> {
+  // Image-gen-only override — see HYPEREAL_IMAGE_KEY comment up top.
+  const effectiveKey = HYPEREAL_IMAGE_KEY || apiKey;
   const size = toGptImage2Size(format);
 
   // gpt-image-2 accepts an OPTIONAL reference_images array (public
@@ -166,7 +177,7 @@ async function tryHyperealGptImage2(
     try {
       const res = await fetch(HYPEREAL_API_URL, {
         method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${effectiveKey}`, "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
       });
 
@@ -242,20 +253,22 @@ async function tryHypereal(
   apiKey: string,
   format: string,
 ): Promise<Uint8Array | null> {
+  // Image-gen-only override — see HYPEREAL_IMAGE_KEY comment up top.
+  const effectiveKey = HYPEREAL_IMAGE_KEY || apiKey;
   const aspectRatio = toAspectRatio(format);
 
   // Log masked key on first attempt for debugging
-  const keyLen = apiKey.length;
+  const keyLen = effectiveKey.length;
   const maskedKey = keyLen === 0 ? "(EMPTY)" : keyLen <= 12
-    ? `${apiKey.substring(0, 3)}…${apiKey.substring(keyLen - 3)} (${keyLen}ch)`
-    : `${apiKey.substring(0, 6)}…${apiKey.substring(keyLen - 4)} (${keyLen}ch)`;
+    ? `${effectiveKey.substring(0, 3)}…${effectiveKey.substring(keyLen - 3)} (${keyLen}ch)`
+    : `${effectiveKey.substring(0, 6)}…${effectiveKey.substring(keyLen - 4)} (${keyLen}ch)`;
   console.log(`[ImageGen] Hypereal key in use: ${maskedKey}`);
 
   for (let attempt = 1; attempt <= HYPEREAL_RETRIES; attempt++) {
     try {
       const res = await fetch(HYPEREAL_API_URL, {
         method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${effectiveKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, model: HYPEREAL_MODEL, aspect_ratio: aspectRatio }),
       });
 

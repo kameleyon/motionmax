@@ -5,13 +5,27 @@
  *   [FETCH_URL] https://example.com       → fetches page, strips HTML, extracts text
  *   [YOUTUBE_URL] https://youtube.com/...  → fetches oEmbed metadata + attempts transcript
  *   [GITHUB_URL] https://github.com/...   → fetches README.md
+ *   [PDF_URL] https://...                 → fetches PDF, extracts text via pdf-parse
  *   [SOURCE IMAGE] https://...            → passes through (Gemini handles multimodal)
  *   [SOURCE TEXT: ...] / [SOURCE FILE: ...]→ already has content, passes through
  *
  * Called before research phase to enrich content with actual source data.
  */
 
+// pdf-parse exports as a namespace under ESM — no default — so import
+// the parser function explicitly. The shape is { pdf } where `pdf` is
+// the same callable that the CJS default export used to point to.
+import * as pdfParseNs from "pdf-parse";
+const pdfParse: (data: Buffer) => Promise<{ text: string; numpages?: number }> =
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (pdfParseNs as any).pdf ?? (pdfParseNs as any).default ?? (pdfParseNs as any);
+
 const FETCH_TIMEOUT = 10_000; // 10s per URL fetch
+// Big PDFs (research papers, books) need more headroom than HTML pages.
+const PDF_FETCH_TIMEOUT = 90_000;
+// Cap extracted PDF text. ~150k chars ≈ 100 pages of dense text and
+// stays well inside Gemini's 1M-token context.
+const PDF_MAX_CHARS = 150_000;
 
 /**
  * Process tagged attachments in the content string.
@@ -36,6 +50,10 @@ export async function processContentAttachments(content: string): Promise<string
       const url = line.replace("[GITHUB_URL] ", "").trim();
       const readme = await fetchGitHubReadme(url);
       processed.push(readme ? `[GITHUB SOURCE]\n${readme}` : line);
+    } else if (line.startsWith("[PDF_URL] ")) {
+      const url = line.replace("[PDF_URL] ", "").trim();
+      const text = await fetchAndParsePdf(url);
+      processed.push(text ? `[PDF SOURCE: ${url}]\n${text}` : `[PDF: ${url}] (could not extract text)`);
     } else {
       processed.push(line);
     }
@@ -144,6 +162,39 @@ async function fetchYouTubeInfo(url: string): Promise<string | null> {
 function extractYouTubeId(url: string): string | null {
   const match = url.match(/(?:v=|youtu\.be\/|shorts\/)([a-zA-Z0-9_-]{11})/);
   return match ? match[1] : null;
+}
+
+/**
+ * Fetch a PDF from a public URL and extract its plain-text content.
+ * pdf-parse handles any PDF with embedded text. Image-only scans (no
+ * OCR layer) return an empty string and the caller surfaces a clear
+ * "could not extract text" note instead of failing the whole job.
+ */
+async function fetchAndParsePdf(url: string): Promise<string | null> {
+  try {
+    console.log(`[Attachments] Fetching PDF: ${url}`);
+    const res = await fetch(url, {
+      headers: { "User-Agent": "MotionMaxBot/1.0", Accept: "application/pdf" },
+      signal: AbortSignal.timeout(PDF_FETCH_TIMEOUT),
+    });
+    if (!res.ok) {
+      console.warn(`[Attachments] PDF fetch failed (${res.status}): ${url}`);
+      return null;
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    const parsed = await pdfParse(buf);
+    const text = (parsed.text || "").replace(/\s+/g, " ").trim();
+    if (!text) {
+      console.warn(`[Attachments] PDF parsed but empty (likely image-only): ${url}`);
+      return null;
+    }
+    const trimmed = text.substring(0, PDF_MAX_CHARS);
+    console.log(`[Attachments] PDF extracted ${trimmed.length} chars (of ${text.length}, ${parsed.numpages ?? "?"}p) from ${url}`);
+    return trimmed;
+  } catch (err) {
+    console.warn(`[Attachments] PDF parse error for ${url}: ${(err as Error).message}`);
+    return null;
+  }
 }
 
 /**

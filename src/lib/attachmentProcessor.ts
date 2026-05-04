@@ -43,8 +43,20 @@ export async function processAttachments(
       case "file": {
         // File content was read in the browser — value contains the text
         if (a.value.startsWith("blob:") || a.value.startsWith("data:")) {
-          // Binary file that couldn't be read as text — skip content, just note it
-          sections.push(`[ATTACHED FILE: ${a.name}] (binary file — content not extractable)`);
+          // PDFs aren't readable as text in-browser, but the worker can
+          // parse them server-side via pdf-parse. Upload the blob to
+          // scene-images and pass a [PDF_URL] tag the worker resolves.
+          // Other binary types (doc/docx/etc.) still fall through.
+          if (/\.pdf$/i.test(a.name)) {
+            const pdfUrl = await uploadPdfAttachment(a, projectId);
+            sections.push(
+              pdfUrl
+                ? `[PDF_URL] ${pdfUrl}`
+                : `[ATTACHED FILE: ${a.name}] (PDF upload failed — content not extractable)`,
+            );
+          } else {
+            sections.push(`[ATTACHED FILE: ${a.name}] (binary file — content not extractable)`);
+          }
         } else {
           sections.push(`[SOURCE FILE: ${a.name}]\n${a.value}`);
         }
@@ -115,5 +127,38 @@ async function uploadImageAttachment(
     }
     log.error("Image upload error:", (err as Error).message);
     throw new Error("Failed to upload attachment. Please try again.");
+  }
+}
+
+/**
+ * Upload a PDF attachment to Supabase Storage so the worker can fetch
+ * + parse it server-side via pdf-parse. Lives in the same scene-images
+ * bucket that already handles image uploads (public, project-scoped
+ * folder convention).
+ */
+async function uploadPdfAttachment(
+  attachment: SourceAttachment,
+  projectId?: string,
+): Promise<string | null> {
+  try {
+    const res = await fetch(attachment.value);
+    const blob = await res.blob();
+    const folder = projectId || "uploads";
+    const safeName = attachment.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const filename = `${folder}/source-${Date.now()}-${safeName}`;
+    const { error } = await supabase.storage
+      .from("scene-images")
+      .upload(filename, blob, { contentType: "application/pdf", upsert: true });
+    if (error) {
+      log.error("PDF upload failed:", error.message);
+      return null;
+    }
+    const { data: urlData } = supabase.storage
+      .from("scene-images")
+      .getPublicUrl(filename);
+    return urlData?.publicUrl || null;
+  } catch (err) {
+    log.error("PDF upload error:", (err as Error).message);
+    return null;
   }
 }

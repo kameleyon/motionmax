@@ -16,6 +16,7 @@
     "@supabase/supabase-js": "^2.45.6",
     "dotenv": "^16.4.7",
     "openai": "^4.77.0",
+    "pdf-parse": "^2.4.5",
     "replicate": "^1.4.0",
     "uuid": "^11.0.3"
   },

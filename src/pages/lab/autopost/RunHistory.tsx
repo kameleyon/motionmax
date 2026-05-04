@@ -21,7 +21,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Image as ImageIcon, Inbox, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Image as ImageIcon, Inbox, Plus, RefreshCw, RotateCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -55,6 +55,9 @@ interface RunRow {
   thumbnail_url: string | null;
   error_summary: string | null;
   progress_pct: number | null;
+  /** Source render job. Used by Regenerate to look up the project +
+   *  generation IDs for the rerender payload. */
+  video_job_id: string | null;
   schedule: { name: string } | null;
   publish_jobs: Array<{ platform: string; status: string }>;
 }
@@ -126,7 +129,7 @@ export default function RunHistory() {
       let query = supabase
         .from("autopost_runs")
         .select(
-          "id, fired_at, status, schedule_id, topic, thumbnail_url, error_summary, progress_pct, schedule:autopost_schedules(name), publish_jobs:autopost_publish_jobs(platform, status)",
+          "id, fired_at, status, schedule_id, topic, thumbnail_url, error_summary, progress_pct, video_job_id, schedule:autopost_schedules(name), publish_jobs:autopost_publish_jobs(platform, status)",
         )
         .order("fired_at", { ascending: false })
         .range(from, to);
@@ -195,6 +198,7 @@ export default function RunHistory() {
 
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
 
   async function performDelete() {
     if (!pendingDeleteId) return;
@@ -211,6 +215,63 @@ export default function RunHistory() {
     toast.success("Run deleted");
     setPendingDeleteId(null);
     queryClient.invalidateQueries({ queryKey: ["autopost", "runs"] });
+  }
+
+  /** Re-render an existing autopost project keeping the same script.
+   *  Resolves projectId + generationId via the run's source video job,
+   *  then queues an `autopost_rerender` task. The worker handler will
+   *  fan out audio/image/video/finalize/export jobs against the
+   *  existing scenes (no script regeneration). */
+  async function performRegenerate(run: RunRow) {
+    if (!run.video_job_id) {
+      toast.error("This run has no source job to regenerate from");
+      return;
+    }
+    setRegeneratingId(run.id);
+    try {
+      const { data: srcJob, error: srcErr } = await supabase
+        .from("video_generation_jobs")
+        .select("project_id, payload")
+        .eq("id", run.video_job_id)
+        .maybeSingle();
+      if (srcErr || !srcJob) throw new Error(srcErr?.message ?? "Source job not found");
+      const projectId =
+        (srcJob as { project_id?: string | null }).project_id ??
+        ((srcJob as { payload?: Record<string, unknown> | null }).payload?.projectId as string | undefined);
+      if (!projectId) throw new Error("Source job is missing a project_id");
+
+      const { data: gen, error: genErr } = await supabase
+        .from("generations")
+        .select("id")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (genErr || !gen) throw new Error("Source generation not found for project");
+      const generationId = (gen as { id: string }).id;
+
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id;
+      if (!userId) throw new Error("Not signed in");
+
+      const { error: insertErr } = await supabase
+        .from("video_generation_jobs")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .insert({
+          user_id: userId,
+          project_id: projectId,
+          task_type: "autopost_rerender",
+          status: "pending",
+          payload: { projectId, generationId } as never,
+        } as never);
+      if (insertErr) throw insertErr;
+      toast.success("Regeneration queued — same script, fresh visuals");
+      queryClient.invalidateQueries({ queryKey: ["autopost", "runs"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not queue regeneration");
+    } finally {
+      setRegeneratingId(null);
+    }
   }
 
   return (
@@ -340,6 +401,8 @@ export default function RunHistory() {
                         run={run}
                         onClick={() => handleRowClick(run.id)}
                         onDelete={(id) => setPendingDeleteId(id)}
+                        onRegenerate={performRegenerate}
+                        regenerating={regeneratingId === run.id}
                       />
                     </li>
                   ))}
@@ -443,14 +506,19 @@ function RunListItem({
   run,
   onClick,
   onDelete,
+  onRegenerate,
+  regenerating,
 }: {
   run: RunRow;
   onClick: () => void;
   onDelete: (id: string) => void;
+  onRegenerate: (run: RunRow) => void;
+  regenerating: boolean;
 }) {
   const [errorOpen, setErrorOpen] = useState(false);
   const isActive = isRunStatusActive(run.status);
   const isFailed = run.status === "failed";
+  const isCompleted = run.status === "completed";
   return (
     <>
       <div
@@ -495,6 +563,19 @@ function RunListItem({
             aria-expanded={errorOpen}
           >
             {errorOpen ? "Hide details" : "Show details"}
+          </button>
+        )}
+
+        {isCompleted && run.video_job_id && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onRegenerate(run); }}
+            disabled={regenerating}
+            className="ml-1 shrink-0 rounded-md p-1.5 text-[#5A6268] opacity-0 transition-opacity hover:bg-[#11C4D0]/10 hover:text-[#11C4D0] group-hover:opacity-100 focus:opacity-100 disabled:opacity-100 disabled:text-[#11C4D0]"
+            aria-label="Regenerate run with same script"
+            title="Regenerate (keep script, fresh audio + images + videos + export)"
+          >
+            <RotateCw className={`h-3.5 w-3.5 ${regenerating ? "animate-spin" : ""}`} />
           </button>
         )}
 

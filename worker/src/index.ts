@@ -500,6 +500,16 @@ async function processJob(job: Job) {
         const { handleAutopostRun } = await import("./handlers/autopost/handleAutopostRun.js");
         const result = await handleAutopostRun(job.id, job.payload as any, job.user_id);
         finalPayload = { ...finalPayload, ...result };
+      } else if (job.task_type === 'autopost_rerender' as any) {
+        // Re-render an EXISTING autopost project (same script, fresh
+        // audio + images + videos + export). Triggered from the Run
+        // History "Regenerate" button. Skips the script phase entirely
+        // — the existing scene voiceovers/visualPrompts drive media
+        // regeneration directly.
+        if (!job.user_id) throw new Error("autopost_rerender job is missing user_id");
+        const { handleAutopostRerender } = await import("./handlers/autopost/handleAutopostRerender.js");
+        const result = await handleAutopostRerender(job.id, job.payload as any, job.user_id);
+        finalPayload = { ...finalPayload, ...result };
       } else if (job.task_type === 'autopost_email_delivery' as any) {
         // Wave E (Autopost delivery modes) — when an autopost render
         // completes for a schedule with delivery_method='email', the
@@ -822,7 +832,7 @@ const JOB_TIMEOUT_MS         = parseInt(process.env.JOB_TIMEOUT_MS          || "
 
 function getJobTimeoutMs(taskType: string): number {
   if (process.env.JOB_TIMEOUT_MS) return JOB_TIMEOUT_MS; // honour explicit override
-  if (taskType === "autopost_render") return AUTOPOST_JOB_TIMEOUT_MS;
+  if (taskType === "autopost_render" || taskType === "autopost_rerender") return AUTOPOST_JOB_TIMEOUT_MS;
   return isExportTask(taskType) ? EXPORT_JOB_TIMEOUT_MS : LLM_JOB_TIMEOUT_MS;
 }
 

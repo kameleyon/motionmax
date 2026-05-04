@@ -303,7 +303,15 @@ export default function EditorTopBar({
         aria-label="Share"
         onClick={() => setShareOpen(true)}
         disabled={projectLocked || !project}
-        className="hidden md:inline-flex w-11 h-11 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        // Display class hygiene: was `hidden md:inline-flex ... grid
+        // place-items-center` — `grid` overrode the flex, leaving the
+        // 44×44 button without proper centering hooks AND the hover
+        // bg #151B20 was indistinguishable from the topbar's own
+        // background on dark themes (looked like nothing happened on
+        // hover). Switched to flex centering + bg-white/[0.06] which
+        // reads against any topbar shade. Also tightened to 40×40 so
+        // the hover pad doesn't look chunky next to the export pill.
+        className="hidden md:inline-flex items-center justify-center w-10 h-10 rounded-md text-[#8A9198] hover:bg-white/[0.06] hover:text-[#ECEAE4] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       >
         <Share2 className="w-4 h-4" />
       </button>
@@ -319,7 +327,9 @@ export default function EditorTopBar({
         aria-label="Regenerate as a new project"
         onClick={handleRegenerate}
         disabled={regenerating || projectLocked || !project}
-        className="hidden md:inline-flex w-11 h-11 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        // Same display + hover-bg hygiene as the Share button — see
+        // comment above for the rationale.
+        className="hidden md:inline-flex items-center justify-center w-10 h-10 rounded-md text-[#8A9198] hover:bg-white/[0.06] hover:text-[#ECEAE4] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {regenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCw className="w-4 h-4" />}
       </button>

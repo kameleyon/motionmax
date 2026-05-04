@@ -26,6 +26,7 @@ import { resolveTransition } from "./export/transitionMap.js";
 // fall back to the concat demuxer path with no crossfade module loaded.
 import { compressIfNeeded } from "./export/compressVideo.js";
 import { mixBackgroundMusic } from "./export/mixMusic.js";
+import { replaceMasterAudio } from "./export/replaceMasterAudio.js";
 import { uploadToSupabase, removeFiles } from "./export/storageHelpers.js";
 import { generateAssSubtitles, writeAssFile, normalizeCaptionStyle, type ASRSceneResult } from "../services/captionBuilder.js";
 import { transcribeAllScenes } from "../services/audioASR.js";
@@ -790,6 +791,64 @@ async function _runExport(
 
     // Free individual scene MP4s
     for (const f of clipPaths) removeFiles(f);
+
+    // ── 2a-bis. Continuous master-audio swap ────────────────────────
+    // handleMasterAudio slices the master TTS mp3 into per-scene
+    // segments so the editor (and per-scene captions) can address each
+    // scene independently. Those slices are mp3-frame-boundary trims
+    // — every seam introduces a 10–40 ms decode click between scenes.
+    // At export time we don't need the slices: we already concatenated
+    // their video portions, so we can swap the spliced audio track for
+    // the original unedited master mp3 and the listener hears one
+    // continuous narrator. Stream-copy on video, AAC re-encode on
+    // audio only.
+    //
+    // Skipped when master_audio_url is null (smartflow's per-scene
+    // path, or pre-master-audio rows) — those need their per-scene
+    // audio preserved.
+    try {
+      const { data: genRow } = await supabase
+        .from("generations")
+        .select("master_audio_url")
+        .eq("project_id", project_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const masterUrl = (genRow as { master_audio_url?: string | null } | null)?.master_audio_url ?? null;
+      if (masterUrl) {
+        const swappedPath = finalOutputPath + ".master.mp4";
+        await writeSystemLog({
+          jobId, projectId: project_id, userId,
+          category: "system_info",
+          eventType: "master_audio_swap_started",
+          message: "Replacing per-scene audio splices with continuous master mp3",
+        });
+        await replaceMasterAudio({
+          videoPath: finalOutputPath,
+          masterAudioUrl: masterUrl,
+          outputPath: swappedPath,
+          tempDir,
+        });
+        try { fs.unlinkSync(finalOutputPath); } catch { /* ignore */ }
+        fs.renameSync(swappedPath, finalOutputPath);
+        await writeSystemLog({
+          jobId, projectId: project_id, userId,
+          category: "system_info",
+          eventType: "master_audio_swap_completed",
+          message: "Continuous master narration muxed",
+        });
+      }
+    } catch (err) {
+      // Non-fatal: keep the spliced audio so we still ship a video.
+      console.warn(`[ExportVideo] master-audio swap skipped: ${(err as Error).message}`);
+      await writeSystemLog({
+        jobId, projectId: project_id, userId,
+        category: "system_warning",
+        eventType: "master_audio_swap_failed",
+        message: `Master audio swap failed — keeping spliced track`,
+        details: { error: (err as Error).message.slice(0, 240) },
+      }).catch(() => undefined);
+    }
 
     // ── 2b. Mix Lyria music + SFX beds (additive) ──────────────────
     // handleFinalize stamps `generations.music_url` and/or

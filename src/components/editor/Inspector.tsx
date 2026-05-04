@@ -163,6 +163,29 @@ function Inspector({
   const intakeGrade = (state.intake.grade as Grade | undefined) ?? 'None';
   const grade: Grade = (meta.grade as Grade | undefined) ?? intakeGrade;
 
+  // Optimistic UI for the chip rows. `motion`/`transition`/`grade` are
+  // derived from server state, so without a local override the chip
+  // stays visually unselected until the DB roundtrip lands (~200–500ms
+  // — feels broken on click). We flash the clicked target immediately
+  // and let the server-derived value retake control once it matches
+  // or when the user switches scenes.
+  const [optimisticMotion, setOptimisticMotion] = useState<Motion | null>(null);
+  const [optimisticTransition, setOptimisticTransition] = useState<Transition | null>(null);
+  const [optimisticGrade, setOptimisticGrade] = useState<Grade | null>(null);
+  useEffect(() => {
+    setOptimisticMotion(null);
+    setOptimisticTransition(null);
+    setOptimisticGrade(null);
+  }, [selectedSceneIndex]);
+  // Clear once the server confirms the choice, so the optimistic
+  // override doesn't outlive the real value.
+  useEffect(() => { if (optimisticMotion && optimisticMotion === motion) setOptimisticMotion(null); }, [motion, optimisticMotion]);
+  useEffect(() => { if (optimisticTransition && optimisticTransition === transition) setOptimisticTransition(null); }, [transition, optimisticTransition]);
+  useEffect(() => { if (optimisticGrade && optimisticGrade === grade) setOptimisticGrade(null); }, [grade, optimisticGrade]);
+  const displayMotion = optimisticMotion ?? motion;
+  const displayTransition = optimisticTransition ?? transition;
+  const displayGrade = optimisticGrade ?? grade;
+
   // Music + SFX availability — toggle stems are only meaningful if
   // the project actually generated those stems. Two signals:
   //   • intake.music.on / intake.music.sfx — what the user picked at
@@ -583,44 +606,45 @@ function Inspector({
             </button>
           </section>
 
-          {/* Audio-bed toggles — per-scene switches that tell the
-              export pipeline to skip music / sfx for this scene. No
-              regen needed: export reads scene._meta on the next run
-              and just doesn't mix those stems in. "With or without" —
-              simple toggles, no slider. Each toggle is GREYED OUT
-              when the underlying stem doesn't exist in the project
-              (music wasn't enabled at intake, or no SFX track was
-              generated) — flipping a toggle for a stem that doesn't
-              exist would do nothing, so we surface that visually
-              instead of pretending the control works. */}
-          <section>
-            <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">Audio bed for this scene</h5>
-            <div className="flex flex-col gap-1.5">
-              <AudioBedToggle
-                label="Background music"
-                sub={hasProjectMusic
-                  ? 'Mute the Lyria bed under this scene'
-                  : 'No music was generated for this project'}
-                enabled={hasProjectMusic && !(meta.muteMusic as boolean | undefined)}
-                onToggle={(on) => updateSceneMeta(selectedSceneIndex, { muteMusic: !on })}
-                disabled={!hasProjectMusic || busy !== 'idle' || sceneLocked || projectLocked}
-              />
-              <AudioBedToggle
-                label="Sound effects"
-                sub={hasProjectSfx
-                  ? 'Mute the per-scene SFX stems'
-                  : 'No sound effects were generated for this project'}
-                enabled={hasProjectSfx && !(meta.muteSfx as boolean | undefined)}
-                onToggle={(on) => updateSceneMeta(selectedSceneIndex, { muteSfx: !on })}
-                disabled={!hasProjectSfx || busy !== 'idle' || sceneLocked || projectLocked}
-              />
-            </div>
-            <p className="font-mono text-[9.5px] text-[#5A6268] tracking-wider mt-2 uppercase">
-              {(hasProjectMusic || hasProjectSfx)
-                ? 'Applied on next export · no regeneration needed'
-                : 'Add music / SFX in a new project to enable these toggles'}
-            </p>
-          </section>
+          {/* Audio bed toggles — hidden until the music/SFX pipeline
+              actually ships. The Lyria + SFX stems aren't being
+              generated in production yet, so showing greyed-out
+              toggles ("No music was generated for this project") just
+              advertises a feature that doesn't exist. Re-enable this
+              section by deleting the `false &&` once the underlying
+              stems are wired through handleFinalize / export. Code
+              kept intact below so wiring is a one-line revert. */}
+          {/* eslint-disable-next-line no-constant-binary-expression */}
+          {false && (
+            <section>
+              <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">Audio bed for this scene</h5>
+              <div className="flex flex-col gap-1.5">
+                <AudioBedToggle
+                  label="Background music"
+                  sub={hasProjectMusic
+                    ? 'Mute the Lyria bed under this scene'
+                    : 'No music was generated for this project'}
+                  enabled={hasProjectMusic && !(meta.muteMusic as boolean | undefined)}
+                  onToggle={(on) => updateSceneMeta(selectedSceneIndex, { muteMusic: !on })}
+                  disabled={!hasProjectMusic || busy !== 'idle' || sceneLocked || projectLocked}
+                />
+                <AudioBedToggle
+                  label="Sound effects"
+                  sub={hasProjectSfx
+                    ? 'Mute the per-scene SFX stems'
+                    : 'No sound effects were generated for this project'}
+                  enabled={hasProjectSfx && !(meta.muteSfx as boolean | undefined)}
+                  onToggle={(on) => updateSceneMeta(selectedSceneIndex, { muteSfx: !on })}
+                  disabled={!hasProjectSfx || busy !== 'idle' || sceneLocked || projectLocked}
+                />
+              </div>
+              <p className="font-mono text-[9.5px] text-[#5A6268] tracking-wider mt-2 uppercase">
+                {(hasProjectMusic || hasProjectSfx)
+                  ? 'Applied on next export · no regeneration needed'
+                  : 'Add music / SFX in a new project to enable these toggles'}
+              </p>
+            </section>
+          )}
         </div>
       )}
 
@@ -643,10 +667,14 @@ function Inspector({
               <textarea
                 value={voiceoverDraft}
                 onChange={(e) => setVoiceoverDraft(e.target.value)}
-                rows={12}
+                rows={5}
                 placeholder="Type the narration for this scene…"
                 disabled={audioRegenActive}
-                style={{ minHeight: '220px' }}
+                // Shorter peephole so Current Audio + Regenerate +
+                // Language + Voice rows are visible below without
+                // scrolling. Users can still drag the bottom-right
+                // grip to expand (resize-y on the className).
+                style={{ minHeight: '110px' }}
                 className={cn(
                   'w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2.5 text-base sm:text-[12.5px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 resize-y leading-[1.6]',
                   audioRegenActive && 'opacity-50 cursor-not-allowed',
@@ -925,19 +953,20 @@ function Inspector({
         </div>
       )}
 
-      {/* MOTION TAB — split by project type:
-          • Cinematic → Camera motion ONLY (no transition; cinematic
-            scenes flow into each other via Kling's own continuity).
-          • Explainer → Transition ONLY (no camera motion; explainer
-            scenes are still images concatenated at export time).
-          • SmartFlow → tab is hidden entirely (see visibleTabs above).
-          Each section gets a Clear button that resets THIS scene to
-          the project's intake default — so users can experiment per
-          scene then revert without remembering what was originally
-          generated. */}
+      {/* MOTION TAB — narrowed by project type:
+          • Cinematic → COLOR GRADE ONLY. Camera motion + transition
+            were removed per design feedback (cinematic clips already
+            carry their own intra-scene motion from Seedance, and the
+            transition between scenes was confusing alongside it).
+          • Explainer → Transition + Color Grade.
+          • SmartFlow → tab is hidden entirely (see visibleTabs above). */}
       {!disabled && tab === 'motion' && sceneReady && scene && (
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5">
-          {isCinematic && (
+          {/* Camera-motion section retired for cinematic. Kept the
+              code below commented for one release in case design wants
+              it back; safe to delete after that. */}
+          {/* eslint-disable-next-line no-constant-binary-expression */}
+          {false && isCinematic && (
             <>
               <section>
                 <div className="flex items-baseline justify-between mb-2 gap-3">
@@ -971,10 +1000,13 @@ function Inspector({
                     <button
                       key={m}
                       type="button"
-                      onClick={() => updateSceneMeta(selectedSceneIndex, { motion: m })}
+                      onClick={() => {
+                        setOptimisticMotion(m);
+                        void updateSceneMeta(selectedSceneIndex, { motion: m });
+                      }}
                       className={cn(
                         'flex-1 px-1 py-2 font-mono text-[10px] tracking-tight rounded-md transition-colors min-h-[36px] whitespace-nowrap',
-                        m === motion ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'text-[#8A9198] hover:text-[#ECEAE4]',
+                        m === displayMotion ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'text-[#8A9198] hover:text-[#ECEAE4]',
                       )}
                     >
                       {m}
@@ -1033,11 +1065,10 @@ function Inspector({
             </>
           )}
 
-          {/* Transition is now wired through the export pipeline for
-              every project type — cinematic clips get the same xfade
-              treatment as explainer slides. Single section, no longer
-              explainer-only. */}
-          {(isCinematic || isExplainer) && (
+          {/* Transition — explainer only. Cinematic was removed per
+              design feedback (Seedance handles inter-scene flow on
+              its own; an additional ffmpeg xfade just looked off). */}
+          {isExplainer && (
             <section>
               <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] font-medium mb-2">Transition</h5>
               <div className="inline-flex rounded-lg border border-white/5 bg-[#1B2228] p-[2px] gap-[2px] w-full">
@@ -1047,16 +1078,18 @@ function Inspector({
                     type="button"
                     onClick={async () => {
                       // Transition is project-wide — picking a value here
-                      // applies it to every scene at once. Removes the
-                      // separate "Apply to all" button + inconsistent
-                      // per-scene state that was confusing users.
+                      // applies it to every scene at once. Optimistic
+                      // highlight first so the chip flips on click; the
+                      // server roundtrip catches up afterwards.
+                      setOptimisticTransition(t);
                       const ok = await updateAllScenesMeta({ transition: t });
                       if (ok) toast.success(`Transition "${t}" applied to all scenes.`);
+                      else setOptimisticTransition(null);
                     }}
                     disabled={busy !== 'idle' || projectLocked}
                     className={cn(
                       'flex-1 px-2 py-2 font-mono text-[11.5px] tracking-wider rounded-md transition-colors disabled:opacity-40 min-h-[36px]',
-                      t === transition ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'text-[#8A9198] hover:text-[#ECEAE4]',
+                      t === displayTransition ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'text-[#8A9198] hover:text-[#ECEAE4]',
                     )}
                   >
                     {t}
@@ -1110,14 +1143,18 @@ function Inspector({
                     onClick={async () => {
                       // Per-scene override. "None" clears the override
                       // (writes null) so the scene falls back to the
-                      // project's intake.grade.
+                      // project's intake.grade. Optimistic UI: flash
+                      // the choice immediately, then commit; revert
+                      // on failure.
+                      setOptimisticGrade(g);
                       const next = g === 'None' ? null : g;
-                      await updateSceneMeta(selectedSceneIndex, { grade: next });
+                      const ok = await updateSceneMeta(selectedSceneIndex, { grade: next });
+                      if (!ok) setOptimisticGrade(null);
                     }}
                     disabled={busy !== 'idle' || projectLocked}
                     className={cn(
                       'px-2 py-2 font-mono text-[10.5px] tracking-tight rounded-md border transition-colors min-h-[36px] whitespace-nowrap',
-                      g === grade
+                      g === displayGrade
                         ? 'border-[#14C8CC]/40 bg-[#14C8CC]/10 text-[#14C8CC]'
                         : 'border-white/5 bg-[#1B2228] text-[#8A9198] hover:text-[#ECEAE4]',
                     )}

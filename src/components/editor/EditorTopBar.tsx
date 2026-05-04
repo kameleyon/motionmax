@@ -6,7 +6,6 @@ import HelpPopover from '@/components/dashboard/HelpPopover';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { isFlagOn } from '@/lib/featureFlags';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -91,10 +90,8 @@ export default function EditorTopBar({
       if (error || !data) throw new Error(error?.message ?? 'Insert returned no row');
 
       toast.success('New project created — kicking off generation…');
-      const editorRoute = isFlagOn('UNIFIED_EDITOR')
-        ? `/app/editor/${data.id}?autostart=1`
-        : `/app/create?project=${data.id}&autostart=1`;
-      navigate(editorRoute);
+      // Legacy WorkspaceRouter retired — both branches go to editor.
+      navigate(`/app/editor/${data.id}?autostart=1`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error("Couldn't start regeneration", { description: msg });

@@ -16,7 +16,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { isFlagOn } from '@/lib/featureFlags';
 import { useUserClones, resolveVoiceForProject } from "@/hooks/useUserClones";
 import { INTERVAL_TO_CRON } from './_scheduleConstants';
 import { nextFireFromCron } from '@/pages/lab/autopost/_utils';
@@ -762,13 +761,9 @@ export default function IntakeForm({
       if (error || !data) throw error || new Error('Insert returned no row');
 
       toast.success('Project created. Taking you to the editor…');
-      // Route to the new unified Editor when the flag is on, else fall
-      // back to the legacy workspace flow so we don't lose users mid-
-      // rollout. See player_editor_roadmap.md Phase 0.
-      const editorRoute = isFlagOn('UNIFIED_EDITOR')
-        ? `/app/editor/${data.id}?autostart=1`
-        : `/app/create?project=${data.id}&autostart=1`;
-      navigate(editorRoute);
+      // Legacy WorkspaceRouter retired — always route to the unified
+      // editor. UNIFIED_EDITOR flag is now effectively a no-op.
+      navigate(`/app/editor/${data.id}?autostart=1`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Couldn't save project: ${msg}`);

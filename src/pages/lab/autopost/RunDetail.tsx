@@ -33,7 +33,6 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { isFlagOn } from "@/lib/featureFlags";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -246,11 +245,7 @@ export default function RunDetail() {
     return r || p || null;
   }, [videoJobQuery.data]);
 
-  const editorRoute = projectId
-    ? (isFlagOn("UNIFIED_EDITOR")
-      ? `/app/editor/${projectId}`
-      : `/app/create?project=${projectId}`)
-    : null;
+  const editorRoute = projectId ? `/app/editor/${projectId}` : null;
 
   const shortId = id ? `${id.slice(0, 8)}…` : "—";
 

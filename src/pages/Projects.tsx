@@ -78,7 +78,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { isFlagOn } from "@/lib/featureFlags";
 
 type SortField = "title" | "created_at" | "updated_at";
 type SortOrder = "asc" | "desc";
@@ -492,21 +491,11 @@ export default function Projects() {
   };
 
   // Action handlers
-  const getCreateMode = (projectType?: string | null) => {
-    switch (projectType) {
-      
-      case "smartflow":
-        return "smartflow";
-      case "cinematic":
-        return "cinematic";
-      default:
-        return "doc2video";
-    }
-  };
+  // getCreateMode removed alongside the legacy /app/create route; the
+  // editor at /app/editor/:id figures out the project mode itself.
 
   const handleView = (project: Project) => {
-    const mode = getCreateMode(project.project_type);
-    navigate(`/app/create?mode=${mode}&project=${project.id}`);
+    navigate(`/app/editor/${project.id}`);
   };
 
   const handleRename = (project: Project) => {
@@ -605,10 +594,9 @@ export default function Projects() {
       if (error || !data) throw new Error(error?.message ?? "Insert returned no row");
 
       toast.success("New project created — kicking off generation…");
-      const editorRoute = isFlagOn("UNIFIED_EDITOR")
-        ? `/app/editor/${data.id}?autostart=1`
-        : `/app/create?project=${data.id}&autostart=1`;
-      navigate(editorRoute);
+      // Legacy WorkspaceRouter is gone; both branches go to the
+      // editor. UNIFIED_EDITOR flag is now effectively always-on.
+      navigate(`/app/editor/${data.id}?autostart=1`);
       // Invalidate so the dashboard sidebar Recent + Projects grid
       // both pick the new row up immediately if the user navigates
       // back without a full refresh.
@@ -710,10 +698,9 @@ export default function Projects() {
         return;
       }
 
-      // Otherwise, redirect to workspace to export
-      toast.info("Redirecting to workspace to export video...");
-      const mode = getCreateMode(project.project_type);
-      navigate(`/app/create?mode=${mode}&project=${project.id}`);
+      // Otherwise, redirect to editor to export from there.
+      toast.info("Redirecting to editor to export video...");
+      navigate(`/app/editor/${project.id}`);
     } catch (err: unknown) {
       toast.error("Download failed: " + (err instanceof Error ? err.message : String(err)));
     } finally {

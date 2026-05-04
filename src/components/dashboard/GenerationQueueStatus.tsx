@@ -75,7 +75,9 @@ export function GenerationQueueStatus() {
   };
 
   const getModeLabel = (projectType: string | null) => getProjectTypeMeta(projectType).label;
-  const getCreateMode  = (projectType: string | null) => getProjectTypeMeta(projectType).mode;
+  // getCreateMode is no longer needed: project clicks now route to
+  // /app/editor/:id and the editor figures out the mode itself.
+  // const getCreateMode  = (projectType: string | null) => getProjectTypeMeta(projectType).mode;
 
   return (
     <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm p-5 shadow-sm space-y-3">
@@ -95,8 +97,7 @@ export function GenerationQueueStatus() {
               className="flex items-center gap-3 rounded-lg bg-muted/30 p-2.5 cursor-pointer hover:bg-muted/50 transition-colors"
               onClick={() => {
                 if (job.project_id) {
-                  const mode = getCreateMode(job.project_type);
-                  navigate(`/app/create?mode=${mode}&project=${job.project_id}`);
+                  navigate(`/app/editor/${job.project_id}`);
                 }
               }}
             >

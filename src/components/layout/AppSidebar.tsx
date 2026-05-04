@@ -294,7 +294,7 @@ export function AppSidebar() {
         {(!isCollapsed || isMobile) && (
           <div>
             <ProjectSearch onSelectProject={(projectId) => {
-              navTo(`/app/create?project=${projectId}`);
+              navTo(`/app/editor/${projectId}`);
             }} />
           </div>
         )}
@@ -467,7 +467,7 @@ export function AppSidebar() {
                       <SidebarMenuButton
                           onClick={(e) => {
                             e.preventDefault();
-                            navTo(`/app/create?mode=${projectMode}&project=${project.id}`);
+                            navTo(`/app/editor/${project.id}`);
                           }}
                           className={`w-full cursor-pointer rounded-lg px-3 py-2 sm:py-2.5 transition-colors pr-8 ${
                             isActiveProject 

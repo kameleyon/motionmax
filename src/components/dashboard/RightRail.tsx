@@ -426,7 +426,7 @@ export default function RightRail() {
               return (
                 <a
                   key={item.id}
-                  href={item.project_id ? `/app/create?project=${item.project_id}` : '#'}
+                  href={item.project_id ? `/app/editor/${item.project_id}` : '#'}
                   className={`flex items-center gap-2.5 py-2.5 hover:bg-white/5 rounded-md px-2 -mx-2 transition-colors ${i > 0 ? 'border-t border-white/5' : ''}`}
                 >
                   <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />

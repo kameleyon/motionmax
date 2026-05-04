@@ -87,7 +87,7 @@ export default function NotificationsPopover() {
   const openProject = (projectId: string | null) => {
     if (!projectId) return;
     setOpen(false);
-    navigate(`/app/create?project=${projectId}`);
+    navigate(`/app/editor/${projectId}`);
   };
 
   return (

@@ -322,7 +322,7 @@ export default function Sidebar() {
           ) : (
             sidebarRecent.map((item) => (
               <a
-                href={`/app/create?project=${item.id}`}
+                href={`/app/editor/${item.id}`}
                 key={item.id}
                 className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-[#151B20] transition-colors no-underline"
               >
@@ -438,7 +438,7 @@ export default function Sidebar() {
                   onSelect={() => {
                     setSearchOpen(false);
                     setSearch('');
-                    navigate(`/app/create?project=${p.id}`);
+                    navigate(`/app/editor/${p.id}`);
                   }}
                 >
                   <Video className="mr-2 h-4 w-4 text-[#8A9198]" />

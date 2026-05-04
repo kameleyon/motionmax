@@ -248,7 +248,7 @@ export default function ProjectsGallery() {
       {recentProject && (
         <a
           className="border border-white/5 rounded-2xl bg-[#10151A] overflow-hidden grid grid-cols-1 sm:grid-cols-[200px_1fr] md:grid-cols-[240px_1fr] gap-0 text-inherit hover:border-white/10 transition-colors no-underline"
-          href={`/app/create?project=${recentProject.id}`}
+          href={`/app/editor/${recentProject.id}`}
         >
           <div className="relative aspect-[4/3] sm:aspect-[4/3] bg-black overflow-hidden group">
             {recentProject.thumbnail_url ? (
@@ -337,7 +337,7 @@ export default function ProjectsGallery() {
             <a
               key={proj.id}
               className="relative rounded-xl overflow-hidden border border-white/5 bg-[#10151A] flex flex-col hover:-translate-y-0.5 hover:border-white/10 transition-all group no-underline"
-              href={`/app/create?project=${proj.id}`}
+              href={`/app/editor/${proj.id}`}
             >
               <div className="relative aspect-[4/5] overflow-hidden bg-black">
                 {proj.thumbnail_url ? (

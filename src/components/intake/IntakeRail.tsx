@@ -12,6 +12,8 @@ import {
 import { IntakeField, IntakeLabel } from './primitives';
 import type { IntakeAspect, ProjectMode } from './types';
 import ScheduleBlock, { type ScheduleState } from './ScheduleBlock';
+import { useUserClones } from '@/hooks/useUserClones';
+import { resolveCloneName } from '@/lib/voiceUtils';
 
 /** Tip shown in the Suggestions card. Surfaced when a condition holds —
  *  see `buildSuggestions` below for the rules. */
@@ -21,12 +23,8 @@ type Tip = {
   body: string;
 };
 
-/** Strip the sm:/sm2:/gm: provider prefix so "sm:quinn" renders as
- *  "Quinn" in the setup recap. */
-function prettyVoice(raw: string): string {
-  const s = raw.replace(/^(sm2?|gm):/i, '');
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
+// `prettyVoice` was replaced by `displayVoice` (resolveCloneName-aware)
+// so the recap shows the user's clone name instead of "Clone:<uuid>".
 
 const LANGUAGE_LABEL: Record<string, string> = {
   en: 'English', fr: 'Français', es: 'Español', ht: 'Kreyòl',
@@ -184,6 +182,12 @@ export default function IntakeRail({
   intakeSummary?: { prompt: string; styleId: string; aspect: string; voice: string; language?: string; sourceAttachments?: import('@/components/workspace/SourceInput').SourceAttachment[] };
 }) {
   const { user } = useAuth();
+  // Load the user's clones so we can render the friendly clone NAME
+  // (e.g. "My narration voice") instead of the raw "clone:13cee05..."
+  // picker value in the recap chip + sample-text playback.
+  const { data: userClones = [] } = useUserClones();
+  const displayVoice = (raw: string) =>
+    resolveCloneName(raw, userClones);
 
   // ── Voice preview playback (shared pattern with SpeakerSelector) ──
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -217,7 +221,7 @@ export default function IntakeRail({
 
     setPreviewLoading(true);
     try {
-      const sampleText = `Hello, I'm ${prettyVoice(voice)}. This is how my voice sounds for your video.`;
+      const sampleText = `Hello, I'm ${displayVoice(voice)}. This is how my voice sounds for your video.`;
       const { data: job, error } = await supabase
         .from('video_generation_jobs')
         .insert({
@@ -352,10 +356,10 @@ export default function IntakeRail({
         {/* Voice row with Play button */}
         <div className="flex items-center gap-2.5 mb-3">
           <div className="w-9 h-9 rounded-full grid place-items-center bg-gradient-to-br from-[#14C8CC] to-[#0FA6AE] text-[#0A0D0F] font-serif font-semibold text-[14px] shrink-0">
-            {prettyVoice(voice).charAt(0)}
+            {displayVoice(voice).charAt(0)}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[13px] text-[#ECEAE4] truncate">{prettyVoice(voice)}</div>
+            <div className="text-[13px] text-[#ECEAE4] truncate">{displayVoice(voice)}</div>
             <div className="font-mono text-[9.5px] tracking-wider uppercase text-[#5A6268]">
               {LANGUAGE_LABEL[language] ?? language}
             </div>

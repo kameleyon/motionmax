@@ -47,7 +47,7 @@ export interface ScheduleBlockProps {
   enabled: boolean;
   onChange: (s: ScheduleState) => void;
   /** Read by the topic-generation worker as the seed for ideation. */
-  intakeSummary: { prompt: string; styleId: string; aspect: string; voice: string; sourceAttachments?: import('@/components/workspace/SourceInput').SourceAttachment[] };
+  intakeSummary: { prompt: string; styleId: string; aspect: string; voice: string; language?: string; sourceAttachments?: import('@/components/workspace/SourceInput').SourceAttachment[] };
   /** Whole-block visibility gate — soft launch is admins only. */
   isAdmin: boolean;
 }
@@ -239,6 +239,7 @@ export default function ScheduleBlock({
             styleId: intakeSummary.styleId,
             count: 15,
             sources,
+            language: intakeSummary.language ?? 'en',
             // On regenerate we pass the previous batch so the worker
             // can dedup. Empty array on first run.
             existingTopics: generatedTopics,

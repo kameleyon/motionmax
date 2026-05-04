@@ -35,7 +35,25 @@ interface GenerateTopicsPayload {
    *  URL/YouTube/GitHub markers, image URLs). Comes from the intake's
    *  processAttachments() before the worker job is queued. */
   sources?: string;
+  /** ISO 639-1 code (en, fr, es, ht, de, it, nl, ru, zh, ja, ko).
+   *  Topic titles are written in this language instead of defaulting
+   *  to English. */
+  language?: string;
 }
+
+const LANGUAGE_NAMES: Record<string, string> = {
+  en: "English",
+  fr: "French",
+  es: "Spanish",
+  ht: "Haitian Creole",
+  de: "German",
+  it: "Italian",
+  nl: "Dutch",
+  ru: "Russian",
+  zh: "Chinese",
+  ja: "Japanese",
+  ko: "Korean",
+};
 
 export interface GenerateTopicsResult {
   topics: string[];
@@ -124,8 +142,18 @@ export async function handleGenerateTopics(
     ? `\n\nUser-provided sources (treat as PRIMARY references — do not drift away from these):\n${resolvedSources.trim()}`
     : "";
 
+  // The model defaults to English if not told otherwise. Map the
+  // schedule/intake language code to its display name and inject a
+  // hard directive — both in the system prompt (for tone setting)
+  // and the user prompt (for the JSON output requirement).
+  const langCode = (payload.language ?? "en").toLowerCase();
+  const langName = LANGUAGE_NAMES[langCode] ?? "English";
+  const languageDirective = langCode === "en"
+    ? ""
+    : `\n\nLANGUAGE: Write every title in ${langName}. Do NOT use English. Titles must be natural, idiomatic ${langName} — not translated word-for-word from English.`;
+
   const systemPrompt = `You are a content strategist who generates compelling clickbait topic titles.
-Stay strictly on the requested subject and reject off-topic themes.`;
+Stay strictly on the requested subject and reject off-topic themes.${languageDirective}`;
 
   const userPrompt = `Today is ${todayHuman}.
 
@@ -144,6 +172,7 @@ Requirements:
 - Each title should cover a DIFFERENT angle or sub-topic
 - Titles MUST be directly relevant to the requested subject
 - Vary the format: provocative statements, questions, revelations, challenges
+${langCode === "en" ? "" : `- Every title MUST be written in ${langName} (idiomatic, not translated)`}
 
 Return ONLY valid JSON in this exact shape (no prose, no code fences):
 {"topics": ["title 1", "title 2", "..."]}`;
@@ -153,7 +182,7 @@ Return ONLY valid JSON in this exact shape (no prose, no code fences):
     category: "system_info",
     eventType: "generate_topics_started",
     message: `Generating ${count} topic ideas for "${seedPrompt.slice(0, 80)}…"`,
-    details: { count, existingCount: existing.length, styleId: payload.styleId ?? null },
+    details: { count, existingCount: existing.length, styleId: payload.styleId ?? null, language: langCode },
   });
 
   // Native Google Gemini API with googleSearch tool — gives us live

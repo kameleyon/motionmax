@@ -821,7 +821,7 @@ export default function IntakeForm({
           isAdmin={isAdmin}
           scheduleState={scheduleState}
           onScheduleChange={setScheduleState}
-          intakeSummary={{ prompt, styleId, aspect, voice, sourceAttachments }}
+          intakeSummary={{ prompt, styleId, aspect, voice, language, sourceAttachments }}
         />,
       );
     }, 200);

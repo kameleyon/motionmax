@@ -140,12 +140,19 @@ export function GenerateTopicsDialog({
         : [];
       const sources = serializeAttachmentsForWorker(persisted);
 
+      // Schedule language lives in config_snapshot.language (set by
+      // EditAutomationDialog). Default to English when missing so
+      // pre-language schedules behave like before.
+      const snap = (schedule.config_snapshot ?? {}) as Record<string, unknown>;
+      const language = typeof snap.language === "string" ? snap.language : "en";
+
       const insertPayload = {
         prompt: schedule.prompt_template,
         count: TARGET_COUNT,
         existingTopics: queue,
         scheduleId: schedule.id,
         sources,
+        language,
       };
       const { data: inserted, error: insertErr } = await supabase
         .from("video_generation_jobs")

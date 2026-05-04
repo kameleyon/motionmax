@@ -18,7 +18,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Wand2, X, Lightbulb } from "lucide-react";
+import { Loader2, Wand2, X, Lightbulb, GripVertical } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -92,13 +92,26 @@ export function GenerateTopicsDialog({
       setCandidates([]);
       setSelected(new Set());
       setExcludedCount(initialSkipped.length);
+      setLocalQueueOrder(null);
       cancelRef.current = false;
     } else {
       cancelRef.current = true;
     }
   }, [open, initialSkipped.length]);
 
-  const queue = schedule.topic_pool ?? [];
+  // Local override for the queue array so drag-and-drop reorders feel
+  // instant. We clear it whenever the dialog reopens (because the
+  // user may have re-dragged in another tab) and whenever the
+  // reorderMutation persists successfully (the invalidated server
+  // value becomes the source of truth again).
+  const [localQueueOrder, setLocalQueueOrder] = useState<string[] | null>(null);
+  const queue = localQueueOrder ?? schedule.topic_pool ?? [];
+
+  // Drag-and-drop state — index of the item the user is currently
+  // dragging. Used both to set the dragged row's visual style and to
+  // compute the reordered array on drop.
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   const generate = async () => {
     setGenerating(true);
@@ -216,12 +229,48 @@ export function GenerateTopicsDialog({
       if (error) throw error;
     },
     onSuccess: () => {
+      setLocalQueueOrder(null);
       void queryClient.invalidateQueries({ queryKey: ["autopost", "schedules-list"] });
     },
     onError: (err: unknown) => {
       toast.error(err instanceof Error ? err.message : "Could not remove topic");
     },
   });
+
+  /** Persist a new topic order to the schedule. The cron worker fires
+   *  topics in array index order (round-robin from the head), so a
+   *  reorder genuinely changes "what gets generated next." Optimistic:
+   *  we already updated localQueueOrder before this fires, and we
+   *  clear it on success so the server value takes over. */
+  const reorderMutation = useMutation({
+    mutationFn: async (next: string[]) => {
+      const { error } = await supabase
+        .from("autopost_schedules")
+        .update({ topic_pool: next })
+        .eq("id", schedule.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setLocalQueueOrder(null);
+      void queryClient.invalidateQueries({ queryKey: ["autopost", "schedules-list"] });
+    },
+    onError: (err: unknown) => {
+      // Roll back the optimistic reorder so the user sees the previous
+      // (server-truthful) order if the write fails.
+      setLocalQueueOrder(null);
+      toast.error(err instanceof Error ? err.message : "Could not reorder topics");
+    },
+  });
+
+  /** Move queue[from] to position `to` and persist. */
+  const reorderQueue = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0 || from >= queue.length || to >= queue.length) return;
+    const next = [...queue];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setLocalQueueOrder(next);
+    reorderMutation.mutate(next);
+  };
 
   const allSelected = useMemo(
     () => candidates.length > 0 && candidates.every(t => selected.has(t)),
@@ -358,31 +407,73 @@ export function GenerateTopicsDialog({
               }}
             >
               <ul className="divide-y divide-white/8">
-                {queue.map(topic => (
-                  <li
-                    key={topic}
-                    className="group flex items-center gap-2 px-3 py-2 hover:bg-white/[0.03]"
-                  >
-                    <Badge
-                      variant="outline"
-                      className="shrink-0 border-white/15 bg-white/5 text-[#8A9198] text-[10px]"
+                {queue.map((topic, index) => {
+                  const isDragging = dragIndex === index;
+                  const isDropTarget = dragOverIndex === index && dragIndex !== null && dragIndex !== index;
+                  return (
+                    <li
+                      key={topic}
+                      draggable
+                      onDragStart={(e) => {
+                        setDragIndex(index);
+                        // dataTransfer required by Firefox or the drag won't fire.
+                        e.dataTransfer.effectAllowed = "move";
+                        e.dataTransfer.setData("text/plain", String(index));
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                        if (dragOverIndex !== index) setDragOverIndex(index);
+                      }}
+                      onDragLeave={() => {
+                        if (dragOverIndex === index) setDragOverIndex(null);
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const from = dragIndex;
+                        setDragIndex(null);
+                        setDragOverIndex(null);
+                        if (from === null) return;
+                        reorderQueue(from, index);
+                      }}
+                      onDragEnd={() => {
+                        setDragIndex(null);
+                        setDragOverIndex(null);
+                      }}
+                      className={cn(
+                        "group flex items-center gap-2 px-3 py-2 hover:bg-white/[0.03] transition-opacity",
+                        isDragging && "opacity-40",
+                        isDropTarget && "bg-[#11C4D0]/[0.06] outline outline-1 outline-[#11C4D0]/40",
+                      )}
                     >
-                      queued
-                    </Badge>
-                    <span className="text-[12px] text-[#ECEAE4] flex-1 min-w-0 break-words">
-                      {topic}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => removeMutation.mutate(topic)}
-                      disabled={removeMutation.isPending}
-                      aria-label={`Remove ${topic}`}
-                      className="shrink-0 rounded p-1 text-[#5A6268] opacity-0 group-hover:opacity-100 hover:bg-[#E4C875]/10 hover:text-[#E4C875] transition-opacity"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </li>
-                ))}
+                      <span
+                        className="shrink-0 cursor-grab active:cursor-grabbing text-[#5A6268] hover:text-[#ECEAE4] -ml-1 px-0.5 py-1"
+                        title="Drag to reorder — earlier topics fire first"
+                        aria-hidden
+                      >
+                        <GripVertical className="h-3.5 w-3.5" />
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className="shrink-0 border-white/15 bg-white/5 text-[#8A9198] text-[10px]"
+                      >
+                        queued
+                      </Badge>
+                      <span className="text-[12px] text-[#ECEAE4] flex-1 min-w-0 break-words">
+                        {topic}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeMutation.mutate(topic)}
+                        disabled={removeMutation.isPending}
+                        aria-label={`Remove ${topic}`}
+                        className="shrink-0 rounded p-1 text-[#5A6268] opacity-0 group-hover:opacity-100 hover:bg-[#E4C875]/10 hover:text-[#E4C875] transition-opacity"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           </div>

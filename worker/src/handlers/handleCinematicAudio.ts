@@ -14,6 +14,7 @@ import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField, updateSceneFieldJson } from "../lib/sceneUpdate.js";
 import { probeDuration } from "./export/ffmpegCmd.js";
+import { retryDbRead } from "../lib/retryClassifier.js";
 
 /** Probe the MP3 duration of `audioUrl` via ffprobe and write it onto
  *  the scene as the authoritative duration. The export pipeline reads
@@ -116,11 +117,13 @@ export async function handleCinematicAudio(
     message: `Cinematic audio started for scene ${sceneIndex}`,
   });
 
-  const { data: generation, error: genError } = await supabase
-    .from("generations")
-    .select("*, projects(voice_type, voice_id, voice_name, presenter_focus, voice_inclination)")
-    .eq("id", generationId)
-    .maybeSingle();
+  const { data: generation, error: genError } = await retryDbRead(() =>
+    supabase
+      .from("generations")
+      .select("*, projects(voice_type, voice_id, voice_name, presenter_focus, voice_inclination)")
+      .eq("id", generationId)
+      .maybeSingle()
+  );
 
   if (genError || !generation) throw new Error(`Generation not found: ${genError?.message}`);
 

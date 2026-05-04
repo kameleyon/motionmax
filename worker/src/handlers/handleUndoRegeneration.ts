@@ -1,5 +1,6 @@
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
+import { retryDbRead } from "../lib/retryClassifier.js";
 
 interface UndoRegenerationPayload {
   generationId: string;
@@ -25,11 +26,13 @@ export async function handleUndoRegeneration(
   });
 
   // Fetch current generation scenes
-  const { data: generation, error: genError } = await supabase
-    .from("generations")
-    .select("scenes")
-    .eq("id", generationId)
-    .single();
+  const { data: generation, error: genError } = await retryDbRead(() =>
+    supabase
+      .from("generations")
+      .select("scenes")
+      .eq("id", generationId)
+      .single()
+  );
 
   if (genError || !generation) {
     throw new Error(`Generation not found: ${genError?.message}`);

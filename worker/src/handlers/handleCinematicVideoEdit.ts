@@ -21,6 +21,7 @@ import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField } from "../lib/sceneUpdate.js";
 import { editVideoWithGrokImagine } from "../services/hypereal.js";
+import { retryDbRead } from "../lib/retryClassifier.js";
 
 interface CinematicVideoEditPayload {
   generationId: string;
@@ -71,11 +72,13 @@ export async function handleCinematicVideoEdit(
   // videoUrl into scene._history if this is a regen. We don't need
   // the project row here — grok-imagine-video-edit is a pure
   // video-in / video-out transform, no aspect / style metadata.
-  const { data: generation, error: genError } = await supabase
-    .from("generations")
-    .select("scenes")
-    .eq("id", generationId)
-    .maybeSingle();
+  const { data: generation, error: genError } = await retryDbRead(() =>
+    supabase
+      .from("generations")
+      .select("scenes")
+      .eq("id", generationId)
+      .maybeSingle()
+  );
   if (genError || !generation) {
     throw new Error(`cinematic_video_edit: generation not found: ${genError?.message ?? "no row"}`);
   }

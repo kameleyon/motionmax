@@ -22,6 +22,7 @@ import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField } from "../lib/sceneUpdate.js";
 import { generateImage } from "../services/imageGenerator.js";
+import { retryDbRead } from "../lib/retryClassifier.js";
 import {
   // generatePixVerseTransition,  // PixVerse V6 — disabled, returns 500 E1001
   // generateKlingV25Video,       // Kling V2.5 Turbo — retired
@@ -74,11 +75,13 @@ export async function handleCinematicVideo(
   });
 
   // Fetch generation scenes
-  const { data: generation, error: genError } = await supabase
-    .from("generations")
-    .select("scenes")
-    .eq("id", generationId)
-    .maybeSingle();
+  const { data: generation, error: genError } = await retryDbRead(() =>
+    supabase
+      .from("generations")
+      .select("scenes")
+      .eq("id", generationId)
+      .maybeSingle()
+  );
 
   if (genError || !generation) {
     throw new Error(`Generation not found: ${genError?.message}`);

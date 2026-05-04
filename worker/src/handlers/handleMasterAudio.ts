@@ -21,6 +21,7 @@ import os from "os";
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField, updateSceneFieldJson } from "../lib/sceneUpdate.js";
+import { retryDbRead } from "../lib/retryClassifier.js";
 import { generateGeminiFlashTTS, generateGeminiFlashTTSChunked } from "../services/geminiFlashTTS.js";
 import { generateSmallestTTS } from "../services/smallestTTS.js";
 import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
@@ -107,11 +108,13 @@ export async function handleMasterAudio(
     message: `Master audio started (1 continuous TTS for all scenes)`,
   });
 
-  const { data: generation, error: genError } = await supabase
-    .from("generations")
-    .select("*, projects(voice_type, voice_id, voice_name, presenter_focus, voice_inclination)")
-    .eq("id", generationId)
-    .maybeSingle();
+  const { data: generation, error: genError } = await retryDbRead(() =>
+    supabase
+      .from("generations")
+      .select("*, projects(voice_type, voice_id, voice_name, presenter_focus, voice_inclination)")
+      .eq("id", generationId)
+      .maybeSingle()
+  );
 
   if (genError || !generation) throw new Error(`Generation not found: ${genError?.message}`);
 

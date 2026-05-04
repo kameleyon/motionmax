@@ -13,6 +13,7 @@ import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField, updateSceneFieldJson } from "../lib/sceneUpdate.js";
 import { generateImage } from "../services/imageGenerator.js";
 import { editImageWithNanoBanana } from "../services/nanoBananaEdit.js";
+import { retryDbRead } from "../lib/retryClassifier.js";
 import { getStylePrompt } from "../services/prompts.js";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -75,11 +76,13 @@ export async function handleRegenerateImage(
   });
 
   // Fetch generation + project style/format
-  const { data: generation, error: genError } = await supabase
-    .from("generations")
-    .select("scenes, projects(format, style)")
-    .eq("id", generationId)
-    .maybeSingle();
+  const { data: generation, error: genError } = await retryDbRead(() =>
+    supabase
+      .from("generations")
+      .select("scenes, projects(format, style)")
+      .eq("id", generationId)
+      .maybeSingle()
+  );
 
   if (genError || !generation) throw new Error(`Generation not found: ${genError?.message}`);
 

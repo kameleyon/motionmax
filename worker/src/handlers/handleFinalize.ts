@@ -7,6 +7,7 @@
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { generateLyriaMusic, lyriaIsConfigured, type LyriaMusicGenre } from "../services/lyriaMusic.js";
+import { retryDbRead } from "../lib/retryClassifier.js";
 
 // ── Pricing (matches edge function PRICING constants) ──────────────
 
@@ -73,11 +74,13 @@ export async function handleFinalizePhase(
   // old DB schemas (where `intake_settings` hasn't been migrated yet)
   // don't break finalize. The optional `intake_settings` / `content`
   // columns are fetched in a separate, defensive query below.
-  const { data: generation, error: genError } = await supabase
-    .from("generations")
-    .select("*, projects(title, length, project_type, voice_inclination)")
-    .eq("id", generationId)
-    .maybeSingle();
+  const { data: generation, error: genError } = await retryDbRead(() =>
+    supabase
+      .from("generations")
+      .select("*, projects(title, length, project_type, voice_inclination)")
+      .eq("id", generationId)
+      .maybeSingle()
+  );
 
   if (genError || !generation) throw new Error(`Generation not found: ${genError?.message}`);
 

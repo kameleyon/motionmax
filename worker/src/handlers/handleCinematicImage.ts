@@ -1,6 +1,7 @@
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { updateSceneField } from "../lib/sceneUpdate.js";
+import { retryDbRead } from "../lib/retryClassifier.js";
 import { generateImage } from "../services/imageGenerator.js";
 import { buildImagePrompt, type Scene as ImageScene } from "../services/imagePromptBuilder.js";
 import {
@@ -33,11 +34,13 @@ export async function handleCinematicImage(
     message: `Cinematic image started for scene ${sceneIndex}`,
   });
 
-  const { data: generation, error: genError } = await supabase
-    .from("generations")
-    .select("*, projects(format, style, character_description, character_consistency_enabled, project_type, character_images)")
-    .eq("id", generationId)
-    .maybeSingle();
+  const { data: generation, error: genError } = await retryDbRead(() =>
+    supabase
+      .from("generations")
+      .select("*, projects(format, style, character_description, character_consistency_enabled, project_type, character_images)")
+      .eq("id", generationId)
+      .maybeSingle()
+  );
 
   if (genError || !generation) {
     throw new Error(`Generation not found: ${genError?.message}`);

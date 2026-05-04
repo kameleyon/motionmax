@@ -11,6 +11,7 @@
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
+import { retryDbRead } from "../lib/retryClassifier.js";
 // Qwen3 TTS (Replicate) disabled — standard audio chain handles all speakers.
 // import { generateQwen3TTS } from "../services/qwen3TTS.js";
 import { generateSmallestTTS } from "../services/smallestTTS.js";
@@ -102,11 +103,13 @@ export async function handleRegenerateAudio(
   });
 
   // Fetch generation + project settings
-  const { data: generation, error: genError } = await supabase
-    .from("generations")
-    .select("scenes, projects(voice_type, voice_id, voice_name, presenter_focus, voice_inclination, project_type)")
-    .eq("id", generationId)
-    .maybeSingle();
+  const { data: generation, error: genError } = await retryDbRead(() =>
+    supabase
+      .from("generations")
+      .select("scenes, projects(voice_type, voice_id, voice_name, presenter_focus, voice_inclination, project_type)")
+      .eq("id", generationId)
+      .maybeSingle()
+  );
 
   if (genError || !generation) throw new Error(`Generation not found: ${genError?.message}`);
 

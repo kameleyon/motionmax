@@ -226,42 +226,46 @@ export default function AutopostHome() {
         </div>
       </div>
 
-      {/* Compact kill-switch row */}
-      <Card className="bg-[#10151A] border-white/8 mb-6">
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between gap-3">
-            <CardTitle className="text-[#ECEAE4] text-[13px] font-medium flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-[#E4C875]" />
-              Kill switches
-            </CardTitle>
-            <Badge
-              variant="outline"
-              className="self-start border-[#E4C875]/40 bg-[#E4C875]/10 text-[#E4C875] text-[10px]"
-            >
-              admin only
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="pt-0 pb-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <CompactSwitch
-            label="Master"
-            isActive={switchesQuery.data?.master ?? false}
-            isLoading={updatingKey === "master" || switchesQuery.isLoading}
-            disabled={!isAdmin}
-            onToggle={next => handleSwitchChange("master", next)}
-          />
-          {(["youtube", "instagram", "tiktok"] as const).map(p => (
+      {/* Compact kill-switch row — admin only. The card itself is
+          gated, not just its toggles, so non-admins don't see the
+          "admin only" badge or the disabled switches at all. */}
+      {isAdmin && (
+        <Card className="bg-[#10151A] border-white/8 mb-6">
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between gap-3">
+              <CardTitle className="text-[#ECEAE4] text-[13px] font-medium flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-[#E4C875]" />
+                Kill switches
+              </CardTitle>
+              <Badge
+                variant="outline"
+                className="self-start border-[#E4C875]/40 bg-[#E4C875]/10 text-[#E4C875] text-[10px]"
+              >
+                admin only
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0 pb-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
             <CompactSwitch
-              key={p}
-              label={platformLabel(p)}
-              isActive={(switchesQuery.data?.[p]) ?? true}
-              isLoading={updatingKey === p || switchesQuery.isLoading}
+              label="Master"
+              isActive={switchesQuery.data?.master ?? false}
+              isLoading={updatingKey === "master" || switchesQuery.isLoading}
               disabled={!isAdmin}
-              onToggle={next => handleSwitchChange(p, next)}
+              onToggle={next => handleSwitchChange("master", next)}
             />
-          ))}
-        </CardContent>
-      </Card>
+            {(["youtube", "instagram", "tiktok"] as const).map(p => (
+              <CompactSwitch
+                key={p}
+                label={platformLabel(p)}
+                isActive={(switchesQuery.data?.[p]) ?? true}
+                isLoading={updatingKey === p || switchesQuery.isLoading}
+                disabled={!isAdmin}
+                onToggle={next => handleSwitchChange(p, next)}
+              />
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Automation list */}
       {isLoading ? (

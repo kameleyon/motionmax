@@ -161,11 +161,37 @@ async function tryHyperealGptImage2(
   const effectiveKey = HYPEREAL_IMAGE_KEY || apiKey;
   const size = toGptImage2Size(format);
 
+  // OpenAI gpt-image-1 (which Hypereal proxies as gpt-image-2) caps
+  // prompt at 4000 chars. Anything longer comes back as
+  //   500 E1004 "Invalid input parameters. Please check your request."
+  // Truncate at 3900 to leave a 100-char safety margin and break at
+  // the last sentence boundary so the trailing fragment still reads
+  // naturally. The TEMPORAL CONSISTENCY rules added to
+  // buildCinematic.ts pushed many scene prompts past 4000 chars in
+  // production — this defends both old and new prompt sources.
+  const PROMPT_CAP = 3900;
+  let safePrompt = prompt;
+  if (prompt.length > PROMPT_CAP) {
+    const slice = prompt.slice(0, PROMPT_CAP);
+    const lastBoundary = Math.max(
+      slice.lastIndexOf(". "),
+      slice.lastIndexOf("! "),
+      slice.lastIndexOf("? "),
+      slice.lastIndexOf(".\n"),
+    );
+    safePrompt = (lastBoundary > PROMPT_CAP * 0.6
+      ? slice.slice(0, lastBoundary + 1)
+      : slice).trimEnd();
+    console.warn(
+      `[ImageGen] gpt-image-2 prompt truncated ${prompt.length} → ${safePrompt.length} chars (4000 char cap)`,
+    );
+  }
+
   // gpt-image-2 accepts an OPTIONAL reference_images array (public
   // URLs, no base64). Only attach when the caller actually has refs;
   // an empty array is rejected by the upstream as a 400.
   const requestBody: Record<string, unknown> = {
-    prompt,
+    prompt: safePrompt,
     model: HYPEREAL_GPT_IMAGE2_MODEL,
     size,
   };

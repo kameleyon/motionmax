@@ -154,14 +154,24 @@ You are writing prompts for a generative video AI that CANNOT do lip-sync.
 - All characters must be FULLY CLOTHED in context-appropriate attire at all times
 
 === TEMPORAL CONSISTENCY & PHYSICS (ZERO TOLERANCE) ===
-The video AI tends to morph appearance and break physics across frames. Your visualPrompt must EXPLICITLY rule these out so the renderer doesn't drift:
+The video AI tends to morph appearance and break physics across frames.
+Keep these rules in MIND while writing each scene, but DO NOT copy
+this list into the visualPrompt — that text gets passed to the still-
+image generator (gpt-image-2, 4000-char prompt cap) and bloats the
+prompt past the limit, returning E1004 "Invalid input parameters".
+The video-side worker (handleCinematicVideo.ts) already appends a
+condensed motion-guardrail trailer to the Seedance prompt, so these
+constraints are enforced at render time. Use them HERE only to shape
+the scene description (e.g. don't write "Mary swaps her coat for a
+dress mid-scene"; that's a NEW scene).
 
-1. **OUTFIT LOCK:** A character's clothing, colors, accessories, and hair MUST stay identical from the first frame to the last frame of the clip. Never describe a clothing change mid-scene. If you need a wardrobe change, that's a NEW scene, not an action within one.
-2. **NO CLIPPING THROUGH SOLID OBJECTS:** Characters MUST go AROUND furniture, walls, doors, and props — never THROUGH them. If a character must pass an obstacle, describe the realistic path ("steps around the table", "ducks under the beam", "opens the door and walks through").
-3. **HEAD-BODY ALIGNMENT:** A character's head and face MUST always face the same general direction as their torso. NEVER describe a face turned more than 90° from the body's facing direction. If they need to look behind, the body must turn with them.
-4. **ANATOMICAL JOINT LIMITS:** Limbs bend only at real joints (elbows, knees, wrists, ankles) and only in natural directions. No backward knees, no broken-doll wrists, no spines bending unnaturally.
-5. **SMOOTH CAMERA & MOTION:** Camera moves and character motion must be SMOOTH and CONTINUOUS — no jerks, no teleports, no within-clip jump cuts. Energetic pacing ≠ choppy motion.
-6. **SMOOTH SCENE TRANSITIONS:** The end pose, framing, and lighting of each scene must FLOW naturally into the next scene's opening. No abrupt scene-to-scene snaps. Match colors, motion direction, and energy across the cut.
+Internal checklist (do not write into visualPrompt):
+1. OUTFIT LOCK — same clothing/hair from start to end of a scene.
+2. NO CLIPPING THROUGH SOLID OBJECTS — characters go around, not through.
+3. HEAD-BODY ALIGNMENT — face never turned >90° from the torso.
+4. ANATOMICAL JOINT LIMITS — limbs bend only at real joints, natural directions.
+5. SMOOTH CAMERA & MOTION — no within-clip jumps; energy ≠ choppy motion.
+6. SMOOTH SCENE TRANSITIONS — end pose/framing/light flows into next scene.
 
 === CAMERA MOVEMENT VOCABULARY (MANDATORY — use varied moves across scenes) ===
 ⛔ BANNED: Zoom in, zoom out, dolly zoom, Vertigo effect — do NOT use any zoom.

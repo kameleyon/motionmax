@@ -16,6 +16,7 @@
 
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
+import { audit, auditError } from "../lib/audit.js";
 import {
   buildDoc2VideoPrompt,
   buildSmartFlowPrompt,
@@ -157,6 +158,30 @@ function buildProjectInsert(
 // ── Main Handler ───────────────────────────────────────────────────
 
 export async function handleGenerateVideo(
+  jobId: string,
+  payload: any,
+  userId?: string,
+): Promise<Record<string, unknown>> {
+  const projectType: string = payload?.projectType || "doc2video";
+
+  await audit("gen.started", {
+    jobId, userId,
+    message: `Script generation started for ${projectType} project`,
+    details: { projectType },
+  });
+
+  try {
+    return await _runGenerateVideo(jobId, payload, userId);
+  } catch (err) {
+    await auditError("gen.failed", err, {
+      jobId, userId,
+      details: { phase: "script", projectType },
+    });
+    throw err;
+  }
+}
+
+async function _runGenerateVideo(
   jobId: string,
   payload: any,
   userId?: string,

@@ -17,6 +17,7 @@ import os from "os";
 import { supabase } from "../lib/supabase.js";
 import { isEnabled } from "../lib/featureFlags.js";
 import { writeSystemLog } from "../lib/logger.js";
+import { audit, auditError } from "../lib/audit.js";
 import { wlog } from "../lib/workerLogger.js";
 import { processScene, type ExportConfig } from "./export/sceneEncoder.js";
 import { concatFiles, concatWithCaptions, concatWithBrandMark } from "./export/concatScenes.js";
@@ -936,6 +937,12 @@ async function _runExport(
       message: `Video exported: ${clipPaths.length} scenes, ${features}, crossfade=${usedCrossfade}`,
     });
 
+    await audit("gen.completed", {
+      jobId, projectId: project_id, userId,
+      message: `Video exported: ${clipPaths.length} scenes`,
+      details: { phase: "export", sceneCount: clipPaths.length, crossfade: usedCrossfade },
+    });
+
     // Success: clean up temp dir now that output is safely uploaded
     try {
       if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
@@ -965,6 +972,11 @@ async function _runExport(
         eventType: "export_video_cancelled",
         message: "Video export cancelled by user",
       });
+      await audit("gen.cancelled", {
+        jobId, projectId: project_id, userId,
+        message: "Video export cancelled by user",
+        details: { phase: "export" },
+      });
       try {
         if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
       } catch (cleanupErr) {
@@ -990,6 +1002,10 @@ async function _runExport(
       eventType: "export_video_failed",
       message: "Video export failed",
       details: { error: error instanceof Error ? error.message : "Unknown" },
+    });
+    await auditError("gen.failed", error, {
+      jobId, projectId: project_id, userId,
+      details: { phase: "export" },
     });
     log.warn("Temp dir preserved for restart", { tempDir });
     throw error;

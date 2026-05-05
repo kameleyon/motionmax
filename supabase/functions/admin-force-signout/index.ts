@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
+import { writeSystemLog } from "../_shared/log.ts";
 
 const logStep = (step: string, details?: unknown) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : "";
@@ -180,6 +181,22 @@ export async function handler(req: Request): Promise<Response> {
       // don't pretend the ban itself failed.
       logStep("WARNING: admin_logs insert failed", { error: logError.message });
     }
+
+    // Mirror to system_logs so admin actions show on the unified
+    // Activity Feed alongside non-admin events. admin_logs is the
+    // authoritative store; system_logs is the streaming view.
+    await writeSystemLog({
+      supabase: supabaseAdmin,
+      category: "system_warning",
+      event_type: "admin.force_signout",
+      userId: callerUserId,
+      message: `Admin ${callerUserId} force-signed-out user ${targetUserId}`,
+      details: {
+        target_user_id: targetUserId,
+        reason: reason ?? null,
+        banned_until: BANNED_UNTIL,
+      },
+    });
 
     return new Response(
       JSON.stringify({ success: true, banned_until: BANNED_UNTIL }),

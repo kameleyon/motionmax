@@ -2,6 +2,7 @@
    No @import here to avoid render-blocking. */
 
 @import "./styles/admin-tokens.css";
+@import "./styles/admin-shell.css";
 
 @tailwind base;
 @tailwind components;

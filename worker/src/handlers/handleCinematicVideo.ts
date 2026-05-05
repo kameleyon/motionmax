@@ -20,6 +20,7 @@
 
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
+import { audit, auditError } from "../lib/audit.js";
 import { updateSceneField } from "../lib/sceneUpdate.js";
 import { generateImage } from "../services/imageGenerator.js";
 import { retryDbRead } from "../lib/retryClassifier.js";
@@ -68,12 +69,29 @@ export async function handleCinematicVideo(
 ) {
   const { generationId, projectId, sceneIndex, regenerate } = payload;
 
-  await writeSystemLog({
+  await audit("video.gen_started", {
     jobId, projectId, userId, generationId,
-    category: "system_info",
-    eventType: "cinematic_video_started",
     message: `Cinematic video started for scene ${sceneIndex}`,
+    details: { sceneIndex, regenerate: !!regenerate },
   });
+
+  try {
+    return await _runCinematicVideo(jobId, payload, userId);
+  } catch (err) {
+    await auditError("video.gen_failed", err, {
+      jobId, projectId, userId, generationId,
+      details: { sceneIndex, regenerate: !!regenerate },
+    });
+    throw err;
+  }
+}
+
+async function _runCinematicVideo(
+  jobId: string,
+  payload: CinematicVideoPayload,
+  userId?: string,
+) {
+  const { generationId, projectId, sceneIndex, regenerate } = payload;
 
   // Fetch generation scenes
   const { data: generation, error: genError } = await retryDbRead(() =>
@@ -480,6 +498,12 @@ export async function handleCinematicVideo(
     eventType: "cinematic_video_completed",
     message: `Cinematic video completed for scene ${sceneIndex} (${provider}, 10s${endImageUrl ? ", with transition" : ""})`,
     details: { provider, hasTransition: !!endImageUrl, cost: 0.40 },
+  });
+
+  await audit("video.gen_completed", {
+    jobId, projectId, userId, generationId,
+    message: `Cinematic video completed for scene ${sceneIndex}`,
+    details: { sceneIndex, provider, hasTransition: !!endImageUrl, cost: 0.40 },
   });
 
   return {

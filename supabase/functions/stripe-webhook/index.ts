@@ -4,6 +4,24 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { creditPackProducts, subscriptionProducts, monthlyCredits } from "../_shared/stripeProducts.ts";
 import { sendWelcomeEmail, sendPaymentFailedEmail, sendCancellationEmail } from "../_shared/resend.ts";
+import { writeSystemLog } from "../_shared/log.ts";
+
+/**
+ * Map a Stripe event type → our SystemEventType. Centralized so a new
+ * Stripe event drops in one place. Unknown types fall through to
+ * `system.info` so we still get a row but don't pollute pay.* metrics.
+ */
+function eventTypeToSystem(stripeType: string): { event_type: string; category: "user_activity" | "system_info" | "system_error" } {
+  switch (stripeType) {
+    case "checkout.session.completed": return { event_type: "pay.checkout_created", category: "user_activity" };
+    case "invoice.paid":                return { event_type: "pay.payment_succeeded", category: "user_activity" };
+    case "invoice.payment_failed":      return { event_type: "pay.payment_failed", category: "system_error" };
+    case "customer.subscription.updated":  return { event_type: "pay.subscription_renewed", category: "user_activity" };
+    case "customer.subscription.deleted":  return { event_type: "pay.subscription_renewed", category: "user_activity" };
+    case "charge.refunded":             return { event_type: "pay.refund_issued", category: "user_activity" };
+    default: return { event_type: `pay.${stripeType.replace(/\./g, "_")}`, category: "system_info" };
+  }
+}
 import * as Sentry from "https://deno.land/x/sentry/index.mjs";
 
 Sentry.init({
@@ -502,6 +520,30 @@ export async function handler(req: Request): Promise<Response> {
       logStep("WARNING: Idempotency insert failed (non-duplicate)", { message: idempotencyError.message });
     } else {
       logStep("Event recorded for idempotency", { eventId: event.id });
+    }
+
+    // Mirror every successfully-processed Stripe event into system_logs
+    // so the admin Activity Feed surfaces revenue motion in real time.
+    // The userId is best-effort: pulled from session metadata when
+    // available, otherwise NULL (still useful for category filtering).
+    {
+      const obj = event.data.object as { metadata?: Record<string, unknown>; customer?: string; client_reference_id?: string };
+      const userIdFromEvent =
+        (typeof obj.metadata?.user_id === "string" ? obj.metadata.user_id : undefined) ??
+        (typeof obj.client_reference_id === "string" ? obj.client_reference_id : undefined);
+      const mapped = eventTypeToSystem(event.type);
+      await writeSystemLog({
+        supabase: supabaseAdmin,
+        category: mapped.category,
+        event_type: mapped.event_type,
+        userId: userIdFromEvent,
+        message: `Stripe webhook: ${event.type}`,
+        details: {
+          stripe_event_id: event.id,
+          stripe_event_type: event.type,
+          customer_id: typeof obj.customer === "string" ? obj.customer : undefined,
+        },
+      });
     }
 
     return new Response(JSON.stringify({ received: true }), {

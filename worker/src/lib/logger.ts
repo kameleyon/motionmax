@@ -1,6 +1,19 @@
+import * as os from "os";
 import { supabase } from "../lib/supabase.js";
 import { v4 as uuidv4 } from "uuid";
 import * as Sentry from "@sentry/node";
+
+/**
+ * Stable per-process worker identifier. Phase 2.4 added `worker_id`
+ * columns to `system_logs` and `api_call_logs` so the admin Console
+ * tab can filter by replica. Resolved once at module load — Render's
+ * RENDER_INSTANCE_ID, our own WORKER_ID env, or hostname fallback.
+ */
+const WORKER_ID: string =
+  process.env.WORKER_ID ||
+  process.env.RENDER_INSTANCE_ID ||
+  os.hostname() ||
+  "unknown-worker";
 
 type LogCategory = "user_activity" | "system_error" | "system_warning" | "system_info";
 
@@ -75,9 +88,11 @@ export async function writeSystemLog(payload: LogPayload) {
       category: payload.category,
       event_type: payload.eventType,
       message: payload.message,
+      worker_id: WORKER_ID,
       details: {
         ...payload.details,
         worker_job_id: payload.jobId,
+        worker_id: WORKER_ID,
         node_env: "render_worker"
       },
       created_at: new Date().toISOString()
@@ -114,6 +129,7 @@ export async function writeApiLog(payload: ApiCallPayload) {
       total_duration_ms: payload.totalDurationMs,
       cost: payload.cost,
       error_message: payload.error || null,
+      worker_id: WORKER_ID,
       created_at: new Date().toISOString()
     });
   } catch (error) {

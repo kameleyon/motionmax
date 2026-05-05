@@ -2,6 +2,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rateLimit.ts";
+import { writeSystemLog } from "../_shared/log.ts";
 
 export async function handler(req: Request): Promise<Response> {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
@@ -354,6 +355,15 @@ export async function handler(req: Request): Promise<Response> {
     }
 
     console.log("Voice saved to database:", insertData.id);
+
+    await writeSystemLog({
+      supabase: supabaseAdmin,
+      category: "user_activity",
+      event_type: "voice.clone_completed",
+      userId: user.id,
+      message: `Voice "${voiceName}" cloned via ElevenLabs (id: ${voiceId})`,
+      details: { voiceName, voiceId, provider: "elevenlabs" },
+    });
 
     // Persist consent audit record (non-fatal — log but don't fail the request)
     const ipAddress = req.headers.get("x-forwarded-for") ?? req.headers.get("cf-connecting-ip") ?? null;

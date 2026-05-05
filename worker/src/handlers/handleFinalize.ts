@@ -6,6 +6,7 @@
 
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
+import { audit, auditError } from "../lib/audit.js";
 import { generateLyriaMusic, lyriaIsConfigured, type LyriaMusicGenre } from "../services/lyriaMusic.js";
 import { retryDbRead } from "../lib/retryClassifier.js";
 
@@ -52,6 +53,24 @@ interface FinalizeResult {
 // ── Handler ────────────────────────────────────────────────────────
 
 export async function handleFinalizePhase(
+  jobId: string,
+  payload: FinalizePayload,
+  userId?: string,
+): Promise<FinalizeResult> {
+  const { generationId, projectId } = payload;
+
+  try {
+    return await _runFinalize(jobId, payload, userId);
+  } catch (err) {
+    await auditError("gen.failed", err, {
+      jobId, projectId, userId, generationId,
+      details: { phase: "finalize" },
+    });
+    throw err;
+  }
+}
+
+async function _runFinalize(
   jobId: string,
   payload: FinalizePayload,
   userId?: string,
@@ -385,6 +404,12 @@ export async function handleFinalizePhase(
     eventType: "finalize_phase_completed",
     message: `Generation finalized: ${finalScenes.length} scenes, ${Math.round(totalTimeMs / 1000)}s total`,
     details: { costTracking, phaseTimings, totalTimeMs },
+  });
+
+  await audit("gen.completed", {
+    jobId, projectId, userId, generationId,
+    message: `Generation finalized: ${finalScenes.length} scenes, ${Math.round(totalTimeMs / 1000)}s total`,
+    details: { sceneCount: finalScenes.length, totalTimeMs, costTracking, phaseTimings },
   });
 
   return {

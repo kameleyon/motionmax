@@ -10,6 +10,7 @@
 
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
+import { audit, auditError } from "../lib/audit.js";
 import { updateSceneField, updateSceneFieldJson } from "../lib/sceneUpdate.js";
 import { generateImage } from "../services/imageGenerator.js";
 import { editImageWithNanoBanana } from "../services/nanoBananaEdit.js";
@@ -38,6 +39,36 @@ interface RegenerateImageResult {
 // ── Handler ────────────────────────────────────────────────────────
 
 export async function handleRegenerateImage(
+  jobId: string,
+  payload: RegenerateImagePayload,
+  userId?: string,
+): Promise<RegenerateImageResult> {
+  const { generationId, projectId, sceneIndex } = payload;
+
+  await audit("image.gen_started", {
+    jobId, projectId, userId, generationId,
+    message: `Regenerating image for scene ${sceneIndex + 1}`,
+    details: { sceneIndex, mode: "regenerate" },
+  });
+
+  try {
+    const result = await _runRegenerateImage(jobId, payload, userId);
+    await audit("image.gen_completed", {
+      jobId, projectId, userId, generationId,
+      message: `Image regenerated for scene ${sceneIndex + 1}`,
+      details: { sceneIndex, mode: "regenerate", imageIndex: result.imageIndex },
+    });
+    return result;
+  } catch (err) {
+    await auditError("image.gen_failed", err, {
+      jobId, projectId, userId, generationId,
+      details: { sceneIndex, mode: "regenerate" },
+    });
+    throw err;
+  }
+}
+
+async function _runRegenerateImage(
   jobId: string,
   payload: RegenerateImagePayload,
   userId?: string,

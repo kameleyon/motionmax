@@ -12,6 +12,7 @@ import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js
 import { generateSmallestTTS } from "../services/smallestTTS.js";
 import { generateGeminiFlashTTS } from "../services/geminiFlashTTS.js";
 import { supabase } from "../lib/supabase.js";
+import { audit, auditError } from "../lib/audit.js";
 
 interface VoicePreviewPayload {
   speaker: string;
@@ -32,6 +33,36 @@ const LEGACY_SPEAKER_MAP: Record<string, { gender: string; language: string }> =
 };
 
 export async function handleVoicePreview(
+  jobId: string,
+  payload: VoicePreviewPayload,
+  userId?: string,
+) {
+  const { speaker, language } = payload;
+
+  await audit("voice.preview_started", {
+    jobId, userId,
+    message: `Voice preview requested: speaker=${speaker} lang=${language}`,
+    details: { speaker, language },
+  });
+
+  try {
+    const result = await _runVoicePreview(jobId, payload, userId);
+    await audit("voice.preview_completed", {
+      jobId, userId,
+      message: `Voice preview ready: ${speaker}`,
+      details: { speaker, language },
+    });
+    return result;
+  } catch (err) {
+    await auditError("voice.preview_failed", err, {
+      jobId, userId,
+      details: { speaker, language },
+    });
+    throw err;
+  }
+}
+
+async function _runVoicePreview(
   jobId: string,
   payload: VoicePreviewPayload,
   userId?: string,

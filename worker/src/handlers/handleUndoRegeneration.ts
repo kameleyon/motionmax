@@ -1,5 +1,6 @@
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
+import { audit, auditError } from "../lib/audit.js";
 import { retryDbRead } from "../lib/retryClassifier.js";
 
 interface UndoRegenerationPayload {
@@ -12,6 +13,30 @@ export async function handleUndoRegeneration(
   jobId: string,
   payload: UndoRegenerationPayload,
   userId?: string
+) {
+  const { generationId, projectId, sceneIndex } = payload;
+
+  await audit("image.gen_started", {
+    jobId, projectId, userId, generationId,
+    message: `Undo regeneration started for scene ${sceneIndex}`,
+    details: { sceneIndex, mode: "undo" },
+  });
+
+  try {
+    return await _runUndoRegeneration(jobId, payload, userId);
+  } catch (err) {
+    await auditError("image.gen_failed", err, {
+      jobId, projectId, userId, generationId,
+      details: { sceneIndex, mode: "undo" },
+    });
+    throw err;
+  }
+}
+
+async function _runUndoRegeneration(
+  jobId: string,
+  payload: UndoRegenerationPayload,
+  userId?: string,
 ) {
   const { generationId, projectId, sceneIndex } = payload;
 

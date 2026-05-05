@@ -40,6 +40,7 @@
 
 import { supabase } from "../../lib/supabase.js";
 import { writeSystemLog } from "../../lib/logger.js";
+import { audit, auditError } from "../../lib/audit.js";
 import { generateAutopostThumbnail } from "./thumbnails.js";
 import { randomUUID } from "node:crypto";
 
@@ -399,8 +400,20 @@ export async function handleAutopostRun(
     details: { autopost_run_id: runId },
   });
 
+  await audit("autopost.run_started", {
+    jobId, userId,
+    message: `Autopost render started for run ${runId}`,
+    details: { autopost_run_id: runId },
+  });
+
   try {
-    return await runPipeline(jobId, payload, userId, runId);
+    const result = await runPipeline(jobId, payload, userId, runId);
+    await audit("autopost.run_completed", {
+      jobId, userId,
+      message: `Autopost render completed for run ${runId}`,
+      details: { autopost_run_id: runId },
+    });
+    return result;
   } catch (err) {
     // The orchestrator throws when ANY child job in the depends_on
     // chain fails (Kling moderation, OOM, transient API, etc.). Mark
@@ -409,6 +422,10 @@ export async function handleAutopostRun(
     // reason. Re-throw so the worker dispatcher still marks the
     // autopost_render job failed itself.
     await markRunFailed(runId, err, jobId, userId);
+    await auditError("autopost.run_failed", err, {
+      jobId, userId,
+      details: { autopost_run_id: runId },
+    });
     throw err;
   }
 }

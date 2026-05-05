@@ -3,6 +3,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rateLimit.ts";
+import { writeSystemLog } from "../_shared/log.ts";
 import * as Sentry from "https://deno.land/x/sentry/index.mjs";
 
 Sentry.init({
@@ -104,6 +105,15 @@ export async function handler(req: Request): Promise<Response> {
     });
     
     logStep("Portal session created", { sessionId: portalSession.id });
+
+    await writeSystemLog({
+      supabase: supabaseClient,
+      category: "user_activity",
+      event_type: "pay.checkout_created",
+      userId: user.id,
+      message: `Stripe customer portal session created`,
+      details: { sessionId: portalSession.id, customerId, mode: "billing_portal" },
+    });
 
     return new Response(JSON.stringify({ url: portalSession.url }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

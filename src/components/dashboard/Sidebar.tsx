@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -46,6 +46,30 @@ export default function Sidebar() {
   const { user, signOut } = useAuth();
   const { isAdmin } = useAdminAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Admin sidebar collapsible state — persisted across reloads in
+  // localStorage. Falsy / missing key = collapsed (default), so first-time
+  // admins see a tidy single-row Admin section instead of a 15-item dump.
+  const [adminOpen, setAdminOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem('mm_admin_sidebar_open') === '1';
+  });
+  const toggleAdminOpen = () => {
+    setAdminOpen((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem('mm_admin_sidebar_open', next ? '1' : '0');
+      } catch {
+        /* ignore quota / private-mode write errors */
+      }
+      return next;
+    });
+  };
+  // Active-tab matcher for the Admin sub-list. We only highlight a sub-item
+  // when we're on the /admin route AND the ?tab= query string matches.
+  const adminCurrentTab = location.pathname === '/admin'
+    ? new URLSearchParams(location.search).get('tab')
+    : null;
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -331,6 +355,55 @@ export default function Sidebar() {
             All projects
           </a>
         </div>
+
+        {/* Admin nav — desktop-only; the md:hidden Account block above
+            handles the mobile entry. Wrapped in {isAdmin && ...} so this
+            entire block (header, caret, and 15 sub-links) is excluded
+            from the DOM for non-admin users; useAdminAuth gates isAdmin
+            on the user_roles table, so non-admins never see /admin links
+            in the sidebar. */}
+        {isAdmin && (
+          <div className="mb-5 hidden md:block">
+            <button
+              type="button"
+              onClick={toggleAdminOpen}
+              aria-expanded={adminOpen}
+              className="w-full flex items-center mx-3 mb-1.5 font-mono text-[10px] tracking-[0.16em] uppercase text-[#5A6268] font-medium hover:text-[#8A9198] transition-colors"
+              style={{ width: 'calc(100% - 1.5rem)' }}
+            >
+              <span>Admin</span>
+              <svg
+                aria-hidden="true"
+                className={`ml-auto opacity-50 w-3 h-3 transition-transform ${adminOpen ? '' : '-rotate-90'}`}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+            {adminOpen && (
+              <div className="pl-4 flex flex-col gap-px mt-1">
+                <a href="/admin?tab=overview" className={adminCurrentTab === 'overview' ? 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] bg-[#151B20] text-[#ECEAE4] cursor-pointer relative before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:bg-[#14C8CC] before:rounded-full no-underline' : 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline'}>Overview</a>
+                <a href="/admin?tab=analytics" className={adminCurrentTab === 'analytics' ? 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] bg-[#151B20] text-[#ECEAE4] cursor-pointer relative before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:bg-[#14C8CC] before:rounded-full no-underline' : 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline'}>Analytics</a>
+                <a href="/admin?tab=activity" className={adminCurrentTab === 'activity' ? 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] bg-[#151B20] text-[#ECEAE4] cursor-pointer relative before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:bg-[#14C8CC] before:rounded-full no-underline' : 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline'}>Activity</a>
+                <a href="/admin?tab=api" className={adminCurrentTab === 'api' ? 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] bg-[#151B20] text-[#ECEAE4] cursor-pointer relative before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:bg-[#14C8CC] before:rounded-full no-underline' : 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline'}>API &amp; Costs</a>
+                <a href="/admin?tab=apikeys" className={adminCurrentTab === 'apikeys' ? 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] bg-[#151B20] text-[#ECEAE4] cursor-pointer relative before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:bg-[#14C8CC] before:rounded-full no-underline' : 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline'}>API Keys</a>
+                <a href="/admin?tab=users" className={adminCurrentTab === 'users' ? 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] bg-[#151B20] text-[#ECEAE4] cursor-pointer relative before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:bg-[#14C8CC] before:rounded-full no-underline' : 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline'}>Users</a>
+                <a href="/admin?tab=gens" className={adminCurrentTab === 'gens' ? 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] bg-[#151B20] text-[#ECEAE4] cursor-pointer relative before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:bg-[#14C8CC] before:rounded-full no-underline' : 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline'}>Generations</a>
+                <a href="/admin?tab=perf" className={adminCurrentTab === 'perf' ? 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] bg-[#151B20] text-[#ECEAE4] cursor-pointer relative before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:bg-[#14C8CC] before:rounded-full no-underline' : 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline'}>Performance</a>
+                <a href="/admin?tab=errors" className={adminCurrentTab === 'errors' ? 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] bg-[#151B20] text-[#ECEAE4] cursor-pointer relative before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:bg-[#14C8CC] before:rounded-full no-underline' : 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline'}>Errors</a>
+                <a href="/admin?tab=console" className={adminCurrentTab === 'console' ? 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] bg-[#151B20] text-[#ECEAE4] cursor-pointer relative before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:bg-[#14C8CC] before:rounded-full no-underline' : 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline'}>Console</a>
+                <a href="/admin?tab=messages" className={adminCurrentTab === 'messages' ? 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] bg-[#151B20] text-[#ECEAE4] cursor-pointer relative before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:bg-[#14C8CC] before:rounded-full no-underline' : 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline'}>Messages</a>
+                <a href="/admin?tab=notifs" className={adminCurrentTab === 'notifs' ? 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] bg-[#151B20] text-[#ECEAE4] cursor-pointer relative before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:bg-[#14C8CC] before:rounded-full no-underline' : 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline'}>Notifications</a>
+                <a href="/admin?tab=news" className={adminCurrentTab === 'news' ? 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] bg-[#151B20] text-[#ECEAE4] cursor-pointer relative before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:bg-[#14C8CC] before:rounded-full no-underline' : 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline'}>Newsletter</a>
+                <a href="/admin?tab=announce" className={adminCurrentTab === 'announce' ? 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] bg-[#151B20] text-[#ECEAE4] cursor-pointer relative before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:bg-[#14C8CC] before:rounded-full no-underline' : 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline'}>Announcements</a>
+                <a href="/admin?tab=kill" className={adminCurrentTab === 'kill' ? 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] bg-[#151B20] text-[#ECEAE4] cursor-pointer relative before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:bg-[#14C8CC] before:rounded-full no-underline' : 'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline'}>Kill switches</a>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="md:hidden mb-5">
           <h6 className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#5A6268] mx-3 mb-1.5 font-medium">

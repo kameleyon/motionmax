@@ -22,6 +22,7 @@
 
 import { supabase } from "../../lib/supabase.js";
 import { writeSystemLog } from "../../lib/logger.js";
+import { audit, auditError } from "../../lib/audit.js";
 
 interface AutopostRerenderPayload {
   projectId: string;
@@ -121,6 +122,30 @@ export async function handleAutopostRerender(
     eventType: "autopost_rerender_started",
     message: `Autopost rerender started for project ${projectId}`,
   });
+
+  await audit("autopost.run_started", {
+    jobId, userId, projectId, generationId,
+    message: `Autopost rerender started for project ${projectId}`,
+    details: { mode: "rerender" },
+  });
+
+  try {
+    return await _runAutopostRerender(jobId, payload, userId);
+  } catch (err) {
+    await auditError("autopost.run_failed", err, {
+      jobId, userId, projectId, generationId,
+      details: { mode: "rerender" },
+    });
+    throw err;
+  }
+}
+
+async function _runAutopostRerender(
+  jobId: string,
+  payload: AutopostRerenderPayload,
+  userId: string,
+): Promise<AutopostRerenderResult> {
+  const { projectId, generationId } = payload;
 
   // Project context — type drives smartflow vs cinematic vs explainer
   // routing, format drives export aspect ratio, intake_settings holds
@@ -240,6 +265,12 @@ export async function handleAutopostRerender(
     eventType: "autopost_rerender_completed",
     message: `Autopost rerender completed`,
     details: { finalUrl, exportJobId, audioJobs: audioJobIds.length, imageJobs: imageJobIds.length, videoJobs: videoJobIds.length },
+  });
+
+  await audit("autopost.run_completed", {
+    jobId, userId, projectId, generationId,
+    message: `Autopost rerender completed`,
+    details: { mode: "rerender", finalUrl, audioJobs: audioJobIds.length, imageJobs: imageJobIds.length, videoJobs: videoJobIds.length },
   });
 
   return { finalUrl, exportJobId };

@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
+import { writeSystemLog } from "../_shared/log.ts";
 
 export async function handler(req: Request): Promise<Response> {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
@@ -80,6 +81,15 @@ export async function handler(req: Request): Promise<Response> {
     }
 
     console.log(`Account deletion scheduled for user ${user.id} at ${scheduledAt}`);
+
+    await writeSystemLog({
+      supabase: supabaseAdmin,
+      category: "user_activity",
+      event_type: "user.account_deletion_requested",
+      userId: user.id,
+      message: `Account deletion scheduled for ${user.email ?? user.id}`,
+      details: { scheduled_at: scheduledAt, hadActiveSubscription: sub?.status === "active" },
+    });
 
     return new Response(
       JSON.stringify({ success: true, scheduled_at: scheduledAt }),

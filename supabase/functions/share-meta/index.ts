@@ -1,6 +1,7 @@
 ﻿import { createClient } from "npm:@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rateLimit.ts";
+import { writeSystemLog } from "../_shared/log.ts";
 
 // Bot User-Agent patterns to detect social media crawlers
 const BOT_PATTERNS = [
@@ -283,7 +284,17 @@ export async function handler(req: Request): Promise<Response> {
   </body>
 </html>`;
 
-    return new Response(html, { 
+    // Hot-path system_info row so we can chart share-card crawl rate
+    // and bot vs human split on the admin Activity Feed.
+    await writeSystemLog({
+      supabase,
+      category: "system_info",
+      event_type: "share.meta_served",
+      message: `share-meta served (${isBotRequest ? "bot" : "human"})`,
+      details: { isBot: isBotRequest, hasToken: !!token, hasGenerationId: !!generationId },
+    });
+
+    return new Response(html, {
       headers: {
         ...corsHeaders,
         "Content-Type": "text/html; charset=utf-8",

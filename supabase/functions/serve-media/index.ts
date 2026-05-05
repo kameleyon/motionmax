@@ -15,6 +15,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { checkRateLimit } from "../_shared/rateLimit.ts";
+import { writeSystemLog } from "../_shared/log.ts";
 
 const ALLOWED_BUCKETS = ["videos", "scene-images", "scene-videos", "audio"];
 
@@ -113,6 +114,19 @@ export async function handler(req: Request): Promise<Response> {
   if (download) {
     headers["Content-Disposition"] = `attachment; filename="${filename}"`;
   }
+
+  // Hot-path system_info row so we can chart serve-media volume per
+  // bucket on the admin dashboard without scraping function logs.
+  // Awaited but writeSystemLog swallows errors → never blocks the
+  // 302, never breaks playback.
+  await writeSystemLog({
+    supabase,
+    category: "system_info",
+    event_type: "media.served",
+    userId: user.id,
+    message: `serve-media: ${bucket}/${filename}`,
+    details: { bucket, contentType, download },
+  });
 
   // 302 redirect to the signed URL — browser follows it transparently
   return new Response(null, { status: 302, headers });

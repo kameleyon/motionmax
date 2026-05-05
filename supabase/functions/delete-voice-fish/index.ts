@@ -15,6 +15,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
+import { writeSystemLog } from "../_shared/log.ts";
 
 interface DeleteRequestBody {
   /** user_voices row id (NOT the Fish external id). */
@@ -128,6 +129,15 @@ export async function handler(req: Request): Promise<Response> {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    await writeSystemLog({
+      supabase,
+      category: "user_activity",
+      event_type: "voice.deleted",
+      userId: user.id,
+      message: `Cloned voice deleted (${provider})`,
+      details: { voiceRowId: body.voiceId, externalId, provider },
+    });
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,

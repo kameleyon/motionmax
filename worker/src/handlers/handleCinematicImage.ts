@@ -1,5 +1,6 @@
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
+import { audit, auditError } from "../lib/audit.js";
 import { updateSceneField } from "../lib/sceneUpdate.js";
 import { retryDbRead } from "../lib/retryClassifier.js";
 import { generateImage } from "../services/imageGenerator.js";
@@ -21,6 +22,30 @@ export async function handleCinematicImage(
   jobId: string,
   payload: CinematicImagePayload,
   userId?: string
+) {
+  const { generationId, projectId, sceneIndex } = payload;
+
+  await audit("image.gen_started", {
+    jobId, projectId, userId, generationId,
+    message: `Cinematic image started for scene ${sceneIndex}`,
+    details: { sceneIndex },
+  });
+
+  try {
+    return await _runCinematicImage(jobId, payload, userId);
+  } catch (err) {
+    await auditError("image.gen_failed", err, {
+      jobId, projectId, userId, generationId,
+      details: { sceneIndex },
+    });
+    throw err;
+  }
+}
+
+async function _runCinematicImage(
+  jobId: string,
+  payload: CinematicImagePayload,
+  userId?: string,
 ) {
   const { generationId, projectId, sceneIndex } = payload;
 
@@ -133,6 +158,12 @@ export async function handleCinematicImage(
     category: "system_info",
     eventType: "cinematic_image_completed",
     message: `Cinematic image completed for scene ${sceneIndex}`,
+  });
+
+  await audit("image.gen_completed", {
+    jobId, projectId, userId, generationId,
+    message: `Cinematic image completed for scene ${sceneIndex}`,
+    details: { sceneIndex },
   });
 
   return { success: true, status: "complete", sceneIndex, imageUrl };

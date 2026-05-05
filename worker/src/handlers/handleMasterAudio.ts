@@ -20,6 +20,7 @@ import path from "path";
 import os from "os";
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
+import { audit, auditError } from "../lib/audit.js";
 import { updateSceneField, updateSceneFieldJson } from "../lib/sceneUpdate.js";
 import { retryDbRead } from "../lib/retryClassifier.js";
 import { generateGeminiFlashTTS, generateGeminiFlashTTSChunked } from "../services/geminiFlashTTS.js";
@@ -68,6 +69,24 @@ export async function handleMasterAudio(
 ): Promise<{ success: boolean; masterAudioUrl: string; masterAudioDurationMs: number; provider: string }> {
   const { generationId, projectId } = payload;
 
+  try {
+    return await _runMasterAudio(jobId, payload, userId);
+  } catch (err) {
+    await auditError("voice.tts_failed", err, {
+      jobId, projectId, userId, generationId,
+      details: { phase: "master_audio" },
+    });
+    throw err;
+  }
+}
+
+async function _runMasterAudio(
+  jobId: string,
+  payload: MasterAudioPayload,
+  userId?: string,
+): Promise<{ success: boolean; masterAudioUrl: string; masterAudioDurationMs: number; provider: string }> {
+  const { generationId, projectId } = payload;
+
   // Server-side dedup: refuse to run if an OLDER pending/processing
   // master_audio job for this same project is still in flight. The
   // client also guards against this but races + multi-tab clicks +
@@ -106,6 +125,12 @@ export async function handleMasterAudio(
     category: "system_info",
     eventType: "master_audio_started",
     message: `Master audio started (1 continuous TTS for all scenes)`,
+  });
+
+  await audit("voice.tts_started", {
+    jobId, projectId, userId, generationId,
+    message: `Master audio started (1 continuous TTS)`,
+    details: { phase: "master_audio" },
   });
 
   const { data: generation, error: genError } = await retryDbRead(() =>
@@ -420,6 +445,12 @@ export async function handleMasterAudio(
     category: "system_info",
     eventType: "master_audio_completed",
     message: `Master audio complete: ${result.provider ?? "unknown"}, ${(durationMs / 1000).toFixed(1)}s, ${scenes.length} scene slices`,
+  });
+
+  await audit("voice.tts_completed", {
+    jobId, projectId, userId, generationId,
+    message: `Master audio complete (${result.provider ?? "unknown"}, ${(durationMs / 1000).toFixed(1)}s)`,
+    details: { phase: "master_audio", provider: result.provider ?? "unknown", durationMs, sceneCount: scenes.length },
   });
 
   console.log(`[MasterAudio] ✅ ${(durationMs / 1000).toFixed(1)}s via ${result.provider}, sliced across ${scenes.length} scenes`);

@@ -19,6 +19,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { writeSystemLog } from "../_shared/log.ts";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 
 interface CloneRequestBody {
@@ -144,6 +145,15 @@ export async function handler(req: Request): Promise<Response> {
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
+
+    await writeSystemLog({
+      supabase,
+      category: "user_activity",
+      event_type: "voice.clone_started",
+      userId: user.id,
+      message: `Fish IVC clone job queued for "${voiceName.trim()}"`,
+      details: { voiceName: voiceName.trim(), provider: "fish", jobId: (job as { id: string }).id },
+    });
 
     return new Response(
       JSON.stringify({ success: true, jobId: (job as { id: string }).id }),

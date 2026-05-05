@@ -10,6 +10,7 @@
 
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
+import { audit, auditError } from "../lib/audit.js";
 import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
 import { retryDbRead } from "../lib/retryClassifier.js";
 // Qwen3 TTS (Replicate) disabled — standard audio chain handles all speakers.
@@ -87,6 +88,36 @@ function inferStyleInstruction(voiceover: string): string {
 // ── Handler ────────────────────────────────────────────────────────
 
 export async function handleRegenerateAudio(
+  jobId: string,
+  payload: RegenerateAudioPayload,
+  userId?: string,
+): Promise<RegenerateAudioResult> {
+  const { generationId, projectId, sceneIndex } = payload;
+
+  await audit("voice.tts_started", {
+    jobId, projectId, userId, generationId,
+    message: `Regenerating audio for scene ${sceneIndex + 1}`,
+    details: { sceneIndex, mode: "regenerate" },
+  });
+
+  try {
+    const result = await _runRegenerateAudio(jobId, payload, userId);
+    await audit("voice.tts_completed", {
+      jobId, projectId, userId, generationId,
+      message: `Audio regenerated for scene ${sceneIndex + 1}`,
+      details: { sceneIndex, mode: "regenerate", duration: result.duration },
+    });
+    return result;
+  } catch (err) {
+    await auditError("voice.tts_failed", err, {
+      jobId, projectId, userId, generationId,
+      details: { sceneIndex, mode: "regenerate" },
+    });
+    throw err;
+  }
+}
+
+async function _runRegenerateAudio(
   jobId: string,
   payload: RegenerateAudioPayload,
   userId?: string,

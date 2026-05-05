@@ -2,6 +2,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rateLimit.ts";
+import { writeSystemLog } from "../_shared/log.ts";
 
 export async function handler(req: Request): Promise<Response> {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
@@ -144,6 +145,15 @@ export async function handler(req: Request): Promise<Response> {
     }
 
     console.log("Voice deleted from database successfully");
+
+    await writeSystemLog({
+      supabase: supabaseAdmin,
+      category: "user_activity",
+      event_type: "voice.deleted",
+      userId: user.id,
+      message: `Cloned voice deleted (ElevenLabs)`,
+      details: { voiceId, elevenLabsVoiceId, provider: "elevenlabs" },
+    });
 
     return new Response(
       JSON.stringify({ success: true }),

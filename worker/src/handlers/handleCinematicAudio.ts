@@ -12,6 +12,7 @@
 
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
+import { audit, auditError } from "../lib/audit.js";
 import { updateSceneField, updateSceneFieldJson } from "../lib/sceneUpdate.js";
 import { probeDuration } from "./export/ffmpegCmd.js";
 import { retryDbRead } from "../lib/retryClassifier.js";
@@ -110,12 +111,29 @@ export async function handleCinematicAudio(
 ) {
   const { generationId, projectId, sceneIndex } = payload;
 
-  await writeSystemLog({
+  await audit("voice.tts_started", {
     jobId, projectId, userId, generationId,
-    category: "system_info",
-    eventType: "cinematic_audio_started",
     message: `Cinematic audio started for scene ${sceneIndex}`,
+    details: { sceneIndex },
   });
+
+  try {
+    return await _runCinematicAudio(jobId, payload, userId);
+  } catch (err) {
+    await auditError("voice.tts_failed", err, {
+      jobId, projectId, userId, generationId,
+      details: { sceneIndex },
+    });
+    throw err;
+  }
+}
+
+async function _runCinematicAudio(
+  jobId: string,
+  payload: CinematicAudioPayload,
+  userId?: string,
+) {
+  const { generationId, projectId, sceneIndex } = payload;
 
   const { data: generation, error: genError } = await retryDbRead(() =>
     supabase
@@ -509,6 +527,12 @@ export async function handleCinematicAudio(
     category: "system_info",
     eventType: "cinematic_audio_completed",
     message: `Cinematic audio completed for scene ${sceneIndex} (${result.provider})`,
+  });
+
+  await audit("voice.tts_completed", {
+    jobId, projectId, userId, generationId,
+    message: `Cinematic audio completed for scene ${sceneIndex} (${result.provider})`,
+    details: { sceneIndex, provider: result.provider ?? "unknown" },
   });
 
   return { success: true, status: "complete", sceneIndex, audioUrl: result.url };

@@ -18,6 +18,7 @@
 
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
+import { audit, auditError } from "../lib/audit.js";
 import { cloneVoiceWithFish } from "../services/fishVoiceClone.js";
 
 interface CloneVoicePayload {
@@ -41,6 +42,34 @@ export interface CloneVoiceResult {
 }
 
 export async function handleCloneVoice(
+  jobId: string,
+  payload: CloneVoicePayload,
+  userId: string,
+): Promise<CloneVoiceResult> {
+  await audit("voice.clone_started", {
+    jobId, userId,
+    message: `Cloning voice "${payload.voiceName ?? "(unnamed)"}" via Fish IVC`,
+    details: { voiceName: payload.voiceName ?? null },
+  });
+
+  try {
+    const result = await _runCloneVoice(jobId, payload, userId);
+    await audit("voice.clone_completed", {
+      jobId, userId,
+      message: `Voice "${result.voiceName}" cloned (Fish id: ${result.voiceId})`,
+      details: { voiceName: result.voiceName, voiceId: result.voiceId },
+    });
+    return result;
+  } catch (err) {
+    await auditError("voice.clone_failed", err, {
+      jobId, userId,
+      details: { voiceName: payload.voiceName ?? null },
+    });
+    throw err;
+  }
+}
+
+async function _runCloneVoice(
   jobId: string,
   payload: CloneVoicePayload,
   userId: string,

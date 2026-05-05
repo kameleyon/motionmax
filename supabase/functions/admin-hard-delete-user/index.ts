@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
+import { writeSystemLog } from "../_shared/log.ts";
 
 const logStep = (step: string, details?: unknown) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : "";
@@ -255,6 +256,15 @@ export async function handler(req: Request): Promise<Response> {
     }
 
     logStep("User hard-deleted", { targetUserId });
+
+    await writeSystemLog({
+      supabase: supabaseAdmin,
+      category: "user_activity",
+      event_type: "user.account_deleted",
+      userId: targetUserId,
+      message: `Admin hard-deleted user ${targetUserId}`,
+      details: { admin_id: callerUserId, mode: "hard_delete" },
+    });
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

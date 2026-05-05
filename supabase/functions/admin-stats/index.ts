@@ -3,6 +3,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rateLimit.ts";
+import { writeSystemLog } from "../_shared/log.ts";
 
 const logStep = (step: string, details?: unknown) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -875,6 +876,18 @@ export async function handler(req: Request): Promise<Response> {
           user_agent: req.headers.get("user-agent") || null,
         }).catch(() => {});
 
+        // Mirror to system_logs so the Activity Feed surfaces sensitive
+        // admin reads (PII access). admin_logs is the authoritative
+        // store; this writeSystemLog gives realtime visibility.
+        await writeSystemLog({
+          supabase: supabaseAdmin,
+          category: "system_warning",
+          event_type: "admin.read_user_detail",
+          userId,
+          message: `Admin viewed full user detail`,
+          details: { target_user_id: targetUserId },
+        });
+
         break;
       }
 
@@ -1024,6 +1037,15 @@ export async function handler(req: Request): Promise<Response> {
           ip_address: req.headers.get("x-forwarded-for") || null,
           user_agent: req.headers.get("user-agent") || null,
         }).catch(() => {});
+
+        await writeSystemLog({
+          supabase: supabaseAdmin,
+          category: "system_warning",
+          event_type: "admin.read_api_call_detail",
+          userId,
+          message: `Admin viewed API call detail`,
+          details: { call_id: callId, call_user_id: call.user_id || null, provider: call.provider || null },
+        });
 
         break;
       }

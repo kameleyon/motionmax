@@ -1,6 +1,7 @@
 ﻿import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rateLimit.ts";
+import { writeSystemLog } from "../_shared/log.ts";
 
 const PBKDF2_ITERATIONS = 100_000;
 
@@ -335,6 +336,19 @@ export async function handler(req: Request): Promise<Response> {
 
       console.log("API keys saved successfully for user:", userId);
 
+      await writeSystemLog({
+        supabase: serviceClient,
+        category: "user_activity",
+        event_type: "keys.created",
+        userId,
+        message: `User API keys saved`,
+        details: {
+          hasGemini: !!encryptedGemini,
+          hasReplicate: !!encryptedReplicate,
+          mode: existing ? "update" : "insert",
+        },
+      });
+
       return new Response(
         JSON.stringify({ success: true }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -392,6 +406,14 @@ export async function handler(req: Request): Promise<Response> {
         .eq("user_id", userId);
 
       if (error) throw error;
+
+      await writeSystemLog({
+        supabase: serviceClient,
+        category: "user_activity",
+        event_type: "keys.deleted",
+        userId,
+        message: `User API keys deleted`,
+      });
 
       return new Response(
         JSON.stringify({ success: true }),

@@ -43,9 +43,9 @@ const AdminLogs = lazy(() =>
     default: m.AdminLogs,
   })),
 );
-const AdminApiCalls = lazy(() =>
-  import("@/components/admin/AdminApiCalls").then((m) => ({
-    default: m.AdminApiCalls,
+const TabApi = lazy(() =>
+  import("@/components/admin/tabs/TabApi").then((m) => ({
+    default: m.TabApi,
   })),
 );
 const AdminPerformanceMetrics = lazy(() =>
@@ -61,6 +61,11 @@ const TabAnalytics = lazy(() =>
 const TabActivity = lazy(() =>
   import("@/components/admin/tabs/TabActivity").then((m) => ({
     default: m.TabActivity,
+  })),
+);
+const TabApiKeys = lazy(() =>
+  import("@/components/admin/tabs/TabApiKeys").then((m) => ({
+    default: m.TabApiKeys,
   })),
 );
 
@@ -115,9 +120,9 @@ function renderTabContent(tab: AdminTabKey) {
     case "activity":
       return <TabActivity />;
     case "api":
-      return <AdminApiCalls />;
+      return <TabApi />;
     case "apikeys":
-      return <ComingSoon phase="Phase 7" tab="apikeys" />;
+      return <TabApiKeys />;
     case "users":
       return <AdminSubscribers />;
     case "gens":

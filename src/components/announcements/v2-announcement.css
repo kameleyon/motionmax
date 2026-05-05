@@ -1,0 +1,381 @@
+/*
+ * v2.0 Announcement Modal — visual port of mm-ann-* styles from
+ * the MotionMax Dashboard standalone bundle. CSS-vars from the
+ * original design are inlined as concrete hex values so the modal
+ * renders identically inside the React app even when the host page
+ * doesn't define --cyan / --panel / --line.
+ *
+ * Palette mapping:
+ *   --cyan      → #14C8CC
+ *   --cyan-2    → #0FA6AE
+ *   --gold      → #F5B049
+ *   --good      → #5CD68D
+ *   --bg        → #0A0E10
+ *   --panel     → #10151A
+ *   --panel-2   → #151B20
+ *   --line      → rgba(255,255,255,.06)
+ *   --line-2    → rgba(255,255,255,.10)
+ *   --ink       → #ECEAE4
+ *   --ink-dim   → #8A9198
+ *   --ink-mute  → #5A6268
+ *   --serif     → 'Instrument Serif',Georgia,serif
+ *   --sans      → 'Inter',system-ui,sans-serif
+ *   --mono      → 'JetBrains Mono',ui-monospace,monospace
+ */
+
+.mm-ann-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  background: rgba(8, 11, 13, .72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  opacity: 0;
+  transition: opacity .25s ease;
+}
+.mm-ann-overlay.on { opacity: 1; }
+
+.mm-ann {
+  position: relative;
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  grid-template-rows: 1fr;
+  width: min(960px, 100%);
+  height: min(720px, 92vh);
+  background: #10151A;
+  border: 1px solid rgba(255, 255, 255, .10);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow:
+    0 30px 80px -20px rgba(0, 0, 0, .6),
+    0 0 0 1px rgba(20, 200, 204, .08),
+    inset 0 1px 0 rgba(255, 255, 255, .04);
+  transform: translateY(14px) scale(.985);
+  opacity: 0;
+  transition: transform .35s cubic-bezier(.2, .8, .2, 1), opacity .25s ease;
+}
+.mm-ann-overlay.on .mm-ann {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+
+.mm-ann-x {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 5;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(10, 13, 15, .5);
+  border: 1px solid rgba(255, 255, 255, .06);
+  color: #8A9198;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: color .15s, background .15s, border-color .15s;
+}
+.mm-ann-x:hover {
+  color: #ECEAE4;
+  background: #151B20;
+  border-color: rgba(255, 255, 255, .10);
+}
+
+/* left stage */
+.mm-ann-stage {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(60% 70% at 30% 30%, rgba(20, 200, 204, .22), transparent 65%),
+    radial-gradient(50% 60% at 80% 85%, rgba(245, 176, 73, .18), transparent 60%),
+    linear-gradient(160deg, #0d1416, #0a0e10);
+  border-right: 1px solid rgba(255, 255, 255, .06);
+  display: grid;
+  place-items: center;
+}
+.mm-ann-grid {
+  position: absolute;
+  inset: -1px;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, .04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, .04) 1px, transparent 1px);
+  background-size: 36px 36px;
+  -webkit-mask-image: radial-gradient(70% 70% at 50% 50%, #000, transparent 85%);
+  mask-image: radial-gradient(70% 70% at 50% 50%, #000, transparent 85%);
+}
+.mm-ann-glow {
+  position: absolute;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(20, 200, 204, .35), transparent 60%);
+  filter: blur(20px);
+  animation: mmAnnFloat 8s ease-in-out infinite;
+}
+@keyframes mmAnnFloat {
+  0%, 100% { transform: translate(-20px, -10px); }
+  50%      { transform: translate(20px, 10px); }
+}
+.mm-ann-version {
+  position: relative;
+  text-align: center;
+  color: #fff;
+}
+.mm-ann-tag {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: .22em;
+  color: #14C8CC;
+  display: inline-block;
+  margin-bottom: 18px;
+  padding: 4px 10px;
+  border: 1px solid rgba(20, 200, 204, .3);
+  border-radius: 999px;
+  background: rgba(20, 200, 204, .08);
+}
+.mm-ann-num {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-weight: 300;
+  font-size: 130px;
+  line-height: 1;
+  letter-spacing: -.04em;
+  background: linear-gradient(180deg, #fff 0%, #9bd9dc 60%, #14C8CC 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 60px rgba(20, 200, 204, .3);
+}
+.mm-ann-num span {
+  font-size: 44px;
+  vertical-align: 14px;
+  color: rgba(155, 217, 220, .7);
+  -webkit-text-fill-color: rgba(155, 217, 220, .7);
+  margin-right: 4px;
+}
+.mm-ann-num i {
+  font-style: normal;
+  color: #F5B049;
+  -webkit-text-fill-color: #F5B049;
+}
+.mm-ann-pulse {
+  display: block;
+  margin: 18px auto 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #5CD68D;
+  box-shadow: 0 0 0 0 rgba(92, 214, 141, .7);
+  animation: mmAnnPulse 2s infinite;
+}
+@keyframes mmAnnPulse {
+  0%   { box-shadow: 0 0 0 0    rgba(92, 214, 141, .7); }
+  70%  { box-shadow: 0 0 0 14px rgba(92, 214, 141, 0); }
+  100% { box-shadow: 0 0 0 0    rgba(92, 214, 141, 0); }
+}
+
+/* right body */
+.mm-ann-body {
+  padding: 36px 38px 26px;
+  overflow-y: auto;
+  min-height: 0;
+  min-width: 0;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color .25s;
+}
+.mm-ann-body:hover { scrollbar-color: rgba(255, 255, 255, .10) transparent; }
+.mm-ann-body::-webkit-scrollbar { width: 5px; }
+.mm-ann-body::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+  transition: background .25s;
+}
+.mm-ann-body::-webkit-scrollbar-thumb:vertical { min-height: 30px; max-height: 60px; }
+.mm-ann-body:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .10); }
+.mm-ann-body::-webkit-scrollbar-thumb:hover { background: #5A6268; }
+.mm-ann-body::-webkit-scrollbar-track { background: transparent; }
+
+.mm-ann-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: #14C8CC;
+  margin-bottom: 14px;
+}
+.mm-ann-eyebrow .d {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #14C8CC;
+  box-shadow: 0 0 0 3px rgba(20, 200, 204, .18);
+}
+.mm-ann-title {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-weight: 400;
+  font-size: 38px;
+  line-height: 1.05;
+  letter-spacing: -.022em;
+  color: #ECEAE4;
+  margin: 0 0 10px;
+}
+.mm-ann-title em {
+  font-style: italic;
+  color: #14C8CC;
+  font-weight: 400;
+}
+.mm-ann-lede {
+  font-size: 14.5px;
+  color: #8A9198;
+  line-height: 1.55;
+  margin: 0 0 22px;
+  max-width: 42ch;
+}
+
+.mm-ann-list {
+  list-style: none;
+  margin: 0 0 22px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.mm-ann-list li {
+  display: flex;
+  gap: 13px;
+  align-items: flex-start;
+}
+.mm-ann-ico {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  background: rgba(20, 200, 204, .1);
+  color: #14C8CC;
+  border: 1px solid rgba(20, 200, 204, .25);
+  display: grid;
+  place-items: center;
+}
+.mm-ann-ico-gold {
+  background: rgba(245, 176, 73, .1);
+  color: #F5B049;
+  border-color: rgba(245, 176, 73, .3);
+}
+.mm-ann-list h4 {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #ECEAE4;
+  margin: 0 0 3px;
+  letter-spacing: -.005em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mm-ann-list p {
+  margin: 0;
+  font-size: 12.5px;
+  color: #5A6268;
+  line-height: 1.55;
+}
+.mm-ann-list p b {
+  color: #8A9198;
+  font-weight: 500;
+}
+.mm-ann-new {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: .12em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(245, 176, 73, .16);
+  color: #F5B049;
+  border: 1px solid rgba(245, 176, 73, .3);
+}
+
+.mm-ann-cta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 24px;
+  flex-wrap: wrap;
+}
+.mm-ann-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 10px 16px;
+  border-radius: 9px;
+  cursor: pointer;
+  border: 0;
+  transition: transform .15s, filter .15s, background .15s;
+}
+.mm-ann-btn.primary {
+  background: linear-gradient(100deg, #14C8CC, #0FA6AE);
+  color: #0A0D0F;
+  font-weight: 600;
+  box-shadow: 0 6px 20px -8px rgba(20, 200, 204, .5);
+}
+.mm-ann-btn.primary:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+
+.mm-ann-foot {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, .06);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  color: #5A6268;
+  letter-spacing: .04em;
+}
+.mm-ann-foot label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+.mm-ann-foot input {
+  accent-color: #14C8CC;
+  width: 13px;
+  height: 13px;
+}
+
+@media (max-width: 760px) {
+  .mm-ann {
+    grid-template-columns: 1fr;
+    grid-template-rows: 200px minmax(0, 1fr);
+    height: 94vh;
+  }
+  .mm-ann-stage {
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, .06);
+  }
+  .mm-ann-num { font-size: 88px; }
+  .mm-ann-num span { font-size: 30px; vertical-align: 10px; }
+  .mm-ann-body { padding: 24px 22px; }
+  .mm-ann-title { font-size: 30px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mm-ann-overlay,
+  .mm-ann,
+  .mm-ann-glow,
+  .mm-ann-pulse {
+    transition: none !important;
+    animation: none !important;
+  }
+}

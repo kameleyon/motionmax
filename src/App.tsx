@@ -9,6 +9,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
 import { AdminOnlyRoute } from "@/components/auth/AdminOnlyRoute";
 import { SubscriptionRenewalModal } from "@/components/workspace/SubscriptionRenewalModal";
+import { V2AnnouncementModal } from "@/components/announcements/V2AnnouncementModal";
 import { lazy, Suspense } from "react";
 import { GlobalErrorBoundary } from "./components/GlobalErrorBoundary";
 import { RouteErrorBoundary } from "./components/RouteErrorBoundary";
@@ -91,6 +92,10 @@ const App = () => (
               still triggers on every authenticated surface. Must live
               INSIDE BrowserRouter — it calls useNavigate(). */}
           <SubscriptionRenewalModal />
+          {/* v2.0 announcement — shows on every login until the user
+              checks "Don't show this again" (per-user flag on profiles).
+              Self-skips on /, /auth, /share/*, /legal/*. */}
+          <V2AnnouncementModal />
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/auth" element={<Auth />} />

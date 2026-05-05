@@ -1,6 +1,8 @@
 ﻿/* Fonts loaded asynchronously via index.html <link> tags.
    No @import here to avoid render-blocking. */
 
+@import "./styles/admin-tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

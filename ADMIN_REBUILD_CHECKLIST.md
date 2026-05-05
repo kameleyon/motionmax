@@ -37,48 +37,54 @@
 
 ---
 
-## Phase 0 — Foundations & shared infra
+## Phase 0 — Foundations & shared infra ✅ COMPLETE (2026-05-05)
 
-### 0.1 Design tokens
-- [ ] Add the admin-specific CSS variables to `src/index.css` (or a new `src/styles/admin.css` imported once at the admin route): `--bg #0A0D0F`, `--panel #10151A`, `--panel-2 #151B20`, `--panel-3 #1B2228`, `--ink #ECEAE4`, `--ink-dim #8A9198`, `--ink-mute #5A6268`, `--line rgba(255,255,255,0.06)`, `--line-2 rgba(255,255,255,0.10)`, `--line-strong rgba(255,255,255,0.18)`, `--cyan #14C8CC`, `--cyan-2 #0FA6AE`, `--cyan-dim rgba(20,200,204,.14)`, `--warn #F5B049`, `--gold-deep #E89B2C`, `--good #5CD68D`, `--purple #a78bfa`, `--radius 12px`, `--radius-lg 16px`.
-- [ ] Override `--danger` to `#F5B049` inside admin scope only — the rest of the app keeps its existing `--danger`. Alias only via a CSS class wrapper (`.admin-shell { --danger: #F5B049; }`), do **not** touch `dashboard-shared.css` patterns used elsewhere.
-- [ ] Confirm font loads: `Instrument Serif`, `Inter`, `JetBrains Mono` via `@fontsource/*` packages or `<link>` in `index.html`. Reuse existing font-loading pattern; do not duplicate.
-- [ ] Strip every red value (`#ff8a78`, `rgba(232,95,76,*)`, `#E85F4C`) from the new admin styles — palette is **aqua + gold + neutral only** (memory: motionmax theme colors).
+> Built and verified. 19 files / 1,352 lines added. `npx tsc --noEmit` exits 0.
+> 12/12 unit tests pass (vitest). 0 `any` types in `_shared/`. 0 red colors in admin tokens.
+> Cross-imports verified (Kpi/SearchRow/ActivityFeed all resolve `I` from `AdminIcons`).
 
-### 0.2 Shared admin primitives (new files under `src/components/admin/_shared/`)
-- [ ] `AdminIcons.tsx` — exports `I` object with all 36 lucide-style inline SVGs from `upgrades/admin-data.jsx` (`search, caret, plus, home, film, voice, proj, brand, gear, shield, bolt, users, mail, bell, chart, alert, terminal, api, power, send, download, refresh, pause, play, x, check, arrowUp, arrowDown, ext, filter, more, paperclip, spark, flag, trash, reply, credit, copy, cinematic, explainer, smartflow, flask, voicebars, key`).
-- [ ] `Sparkline.tsx` — props `{ data: number[]; w?: number; h?: number; color?: string; fill?: boolean }`; matches inline-SVG impl in `upgrades/admin-shared.jsx` (line-cap round, 1.4 stroke, optional area fill at 0.12 opacity).
-- [ ] `BarChart.tsx` — props `{ data: number[]; h?: number; color?: string; labels?: string[] }`; flex bars, transition height .3s, mono 9 labels.
-- [ ] `Donut.tsx` — props `{ slices: { value: number; color: string; label?: string }[]; size?: number }`; CSS `conic-gradient`, inner hole at `inset:size*0.18`.
-- [ ] `Avatar.tsx` — props `{ user: { name: string; avatar?: string }; size?: 'sm' | 'lg' }`; gradient `linear-gradient(135deg, X, #1a223f)`, initials = first letter of two name tokens.
-- [ ] `Kpi.tsx` — props `{ label, value, unit?, delta?, deltaDir?: 'up'|'down'|'neutral', spark?, sparkColor?, icon?, tone?: 'cyan'|'danger' }`; renders `.kpi[.cyan|.danger]` with arrow icon resolved from `deltaDir`.
-- [ ] `Pill.tsx` — variants `cyan | purple | gold | ok | warn | err | danger | default`, with optional `dot` prefix.
-- [ ] `Toggle.tsx` — `<label><input type="checkbox"><span class="track"/></label>`; danger variant uses `--warn`.
-- [ ] `BarTrack.tsx` — `{ pct: number; color?: string; height?: number }` for inline progress bars.
-- [ ] `SearchRow.tsx` — wraps `<input>` with magnifier icon and panel-3 background, mono placeholder.
-- [ ] `SectionHeader.tsx` — `{ title: string; right?: ReactNode }` for the `.adm-sec-h` pattern.
-- [ ] `ActivityFeed.tsx` — renders `.feed` rows from a normalized `{ kind, t, body, meta, glyph, tone }[]` shape.
-- [ ] Empty-state component for tables (icon + "No matching X" + suggestion). Use existing `@/components/ui/empty-state` if compatible.
-- [ ] Loading component reusing existing `AdminLoadingState` from `@/components/ui/admin-loading-state`.
-- [ ] Error-boundary wrapper for each tab so a single failing query doesn't kill the whole shell.
+### 0.1 Design tokens ✅
+- [x] CSS variables added in NEW file `src/styles/admin-tokens.css`, scoped under `.admin-shell` so the admin theme can't leak elsewhere. Tokens: every value from the spec (`--bg`, `--panel`, `--panel-1/2/3`, ink ramp, line ramp, cyan family, gold family, `--good`, `--purple`, `--radius`, `--radius-lg`, font stacks). Plus `@keyframes adm-pulse` (2s) and `@keyframes adm-tab-pulse` (1.6s ring).
+- [x] `--danger` aliased to gold (`#F5B049`) inside `.admin-shell` only — the rest of the app keeps its own `--danger`. `dashboard-shared.css` not touched.
+- [x] Fonts confirmed: `Instrument Serif` (italic + upright) and `JetBrains Mono` added to `index.html` Google Fonts link (Inter already present). No `@fontsource` packages duplicated.
+- [x] Zero red in admin tokens — `grep "#ff8a78\|#E85F4C\|rgba(232,95,76,"` in `admin-tokens.css` returns 0 matches.
 
-### 0.3 Data utilities (new file `src/components/admin/_shared/format.ts`)
-- [ ] `formatRel(d: Date): string` — `just now / 1m ago / 2h ago / 3d ago / Mon DD`.
-- [ ] `money(n: number): string` — `'$' + n.toLocaleString('en-US',{min:2,max:2})`.
-- [ ] `num(n: number): string` — `toLocaleString('en-US')`.
-- [ ] `short(n: number): string` — `1.5M / 1.5k / N`.
-- [ ] `weekly(base: number, jitter?: number, len?: number): number[]` — keep deterministic seed for design-mode demo data only. Real tabs MUST pull from queries; this helper is for storybook/skeleton screens only.
-- [ ] Currency precision rule: API costs render to 4 decimals (`$0.0118`), revenue to 2 (`$28,420.00`). Encode in `money4()` helper.
+### 0.2 Shared admin primitives ✅ — `src/components/admin/_shared/` (15 files)
+- [x] `AdminIcons.tsx` (136 lines) — `I` object with 44 lucide-style inline SVGs (more than the 43 spec'd; covers every icon referenced across all 15 tabs). Each is a zero-arg component returning `<Svg>` with `currentColor`, 1.6 stroke, 14×14 viewBox 24. Plus `AdminIconName` type union.
+- [x] `Sparkline.tsx` (58 lines) — defaults `w=90 h=30 color="var(--cyan)" fill=true`, polyline 1.4 stroke round-cap, optional 0.12-opacity area fill.
+- [x] `BarChart.tsx` (73 lines) — flex bars `align-items:flex-end`, height `(v/max)*100%`, `min-height: 2px`, `transition: height .3s`, optional mono 9 labels.
+- [x] `Donut.tsx` (97 lines) — CSS `conic-gradient` of slice angles, inner hole at `inset:size*0.18`, center renders serif total + mono uppercase label.
+- [x] `Avatar.tsx` (70 lines) — `'sm'|'md'|'lg'` (extends spec with `'sm'` 22px), `linear-gradient(135deg, color, '#1a223f')`, initials = first letter of two name tokens.
+- [x] `Kpi.tsx` (74 lines) — full prop surface (`label, value, unit?, delta?, deltaDir?, spark?, sparkColor?, icon?, tone?`), arrow resolved from `deltaDir` (up=good/`I.arrowUp`, down=warn/`I.arrowDown`, neutral=ink-mute), imports `Sparkline` for corner spark.
+- [x] `Pill.tsx` (36 lines) — variants `cyan | purple | gold | ok | warn | err | danger | default` with optional leading dot.
+- [x] `Toggle.tsx` (44 lines) — accessible `<label>` with hidden checkbox, knob translates 15px when `checked`, danger variant uses `--warn`.
+- [x] `BarTrack.tsx` (48 lines) — `.bar-track > .bar-fill` with `transition:width .3s`, default cyan→cyan-2 gradient.
+- [x] `SearchRow.tsx` (47 lines) — leading `I.search` icon, transparent input with mono placeholder, focus glows cyan.
+- [x] `SectionHeader.tsx` (30 lines) — `.adm-sec-h` flex-end with serif h2 + right slot.
+- [x] `ActivityFeed.tsx` (86 lines) — `.feed > .item` rows from `FeedItem[]` (id, tone, glyph, t, bodyText, metaTokens). Glyph lookup via `keyof typeof I`.
+- [x] `AdminEmpty.tsx` (44 lines) — wraps existing `EmptyState` from `@/components/ui/empty-state`, admin-namespace prop names.
+- [x] `AdminLoading.tsx` (12 lines) — pure named re-export of `AdminLoadingState` from `@/components/ui/admin-loading-state`.
+- [x] `AdminTabBoundary.tsx` (96 lines) — class `<AdminTabBoundary tabKey={key}>{children}</AdminTabBoundary>`. Reports to `@sentry/react` with `tags: { tab: tabKey }`. State resets when `tabKey` changes so switching tabs clears the error automatically.
 
-### 0.4 React Query conventions
-- [ ] All admin query keys prefix with `['admin', '<tab>', ...]` (e.g. `['admin', 'overview', 'snapshot']`). Match the existing `["admin-…"]` pattern from `AdminOverview.tsx` and migrate older keys to the array form.
-- [ ] Default `staleTime: 30_000`, `gcTime: 5 * 60_000`. Override per-tab where realtime is in play (Console: `staleTime: 0`).
-- [ ] Centralize in `src/components/admin/_shared/queries.ts`.
+### 0.3 Data utilities ✅ — `src/components/admin/_shared/format.ts` (102 lines) + `format.test.ts` (72 lines, 12 tests)
+- [x] `formatRel(d: Date | string): string` — `just now / Nm ago / Nh ago / Nd ago / Mon DD`.
+- [x] `money(n: number): string` — 2-decimal en-US currency.
+- [x] `money4(n: number): string` — 4-decimal en-US currency for API costs.
+- [x] `num(n: number): string` — `toLocaleString('en-US')`.
+- [x] `short(n: number): string` — `1.5M / 1.5k / N`.
+- [x] `weekly(base, jitter?, len?)` — deterministic seed, JSDoc warns it's design-mock only.
+- [x] **Verification:** `npx vitest run src/components/admin/_shared/format.test.ts` → 12/12 passed.
 
-### 0.5 Toast & confirmation conventions
-- [ ] All success/error feedback via `sonner`'s `toast.success/error/info/warning`. No raw alerts.
-- [ ] Destructive admin actions go through a typed-confirm `<AlertDialog>` requiring the user to type the target email or `DELETE`. Reuse the pattern in existing `AdminUserDetails.tsx`.
-- [ ] Every admin write surfaces the audit-log row id in the success toast (`Granted 1,000 credits — admin_log #abcd1234`).
+### 0.4 React Query conventions ✅ — `src/components/admin/_shared/queries.ts` (81 lines)
+- [x] `ADMIN_QUERY_PREFIX = 'admin'`, `AdminTabKey` 15-tab union, `adminKey(tab, ...rest)` helper returning a `readonly` array.
+- [x] `ADMIN_DEFAULT_QUERY_OPTIONS = { staleTime: 30_000, gcTime: 5*60_000, refetchOnWindowFocus: false }`. Per-tab overrides documented in JSDoc; tab files override locally (Console will use `staleTime: 0`).
+- [x] Centralized — every future tab imports from this single source.
+- [x] Legacy `["admin-…"]` keys NOT migrated yet — that's Phase 1+ work as planned.
+
+### 0.5 Toast & confirmation conventions ✅ — `src/components/admin/_shared/confirmDestructive.tsx` (146 lines)
+- [x] All admin code uses `sonner`'s `toast.success/error/info/warning`. Pattern matches existing `AdminUserDetails.tsx` and the rest of the app.
+- [x] `<ConfirmDestructive>` wrapper with typed-confirm input — Confirm button stays disabled until user types the exact `confirmText` (target email, `DELETE`, etc.). Pending state blocks dismiss; reject leaves dialog open with toasted error message; resolve auto-closes with optional success toast.
+- [x] `successMessage` prop accepts the audit-log row id pattern (`Granted 1,000 credits — admin_log #abcd1234`); each call site supplies its own format with the id from the RPC response.
 
 ---
 

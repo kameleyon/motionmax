@@ -1,0 +1,64 @@
+/* ════════════════════════════════════════════════════════════════════
+   MotionMax Admin Design Tokens
+   ────────────────────────────────────────────────────────────────────
+   Scoped to .admin-shell so the admin theme does NOT leak into the
+   rest of the marketing/app surface. Mirrors the token contract used
+   by the static admin design (see C:\tmp_design\motionmax\project\
+   MotionMax Admin.html and dashboard-shared.css).
+
+   Rules:
+     - Cyan + gold palette only (NO red — destructive renders as gold).
+     - Surface ramps: --bg → --panel → --panel-2 → --panel-3.
+     - Type stack: serif (Instrument Serif), sans (Inter), mono (JetBrains Mono).
+   ════════════════════════════════════════════════════════════════════ */
+
+.admin-shell {
+  /* Brand cyan */
+  --cyan: #14C8CC;
+  --cyan-2: #0FA6AE;
+  --cyan-dim: rgba(20, 200, 204, 0.14);
+
+  /* Surfaces */
+  --bg: #0A0D0F;
+  --panel: #10151A;
+  --panel-2: #151B20;
+  --panel-3: #1B2228;
+
+  /* Ink (text) */
+  --ink: #ECEAE4;
+  --ink-dim: #8A9198;
+  --ink-mute: #5A6268;
+
+  /* Lines / borders */
+  --line: rgba(255, 255, 255, 0.06);
+  --line-2: rgba(255, 255, 255, 0.10);
+  --line-strong: rgba(255, 255, 255, 0.18);
+
+  /* Status / accents — gold-only, no red */
+  --warn: #F5B049;
+  --gold-deep: #E89B2C;
+  --good: #5CD68D;
+  --purple: #a78bfa;
+  --danger: #F5B049; /* admin-scoped: destructive renders as gold */
+
+  /* Geometry */
+  --radius: 12px;
+  --radius-lg: 16px;
+
+  /* Type stacks */
+  --serif: 'Instrument Serif', Georgia, serif;
+  --sans: 'Inter', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* ── Pulsing-dot keyframes used by the admin design ─────────────────── */
+@keyframes adm-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+
+@keyframes adm-tab-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(92, 214, 141, 0.55); }
+  70%  { box-shadow: 0 0 0 5px rgba(92, 214, 141, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(92, 214, 141, 0); }
+}

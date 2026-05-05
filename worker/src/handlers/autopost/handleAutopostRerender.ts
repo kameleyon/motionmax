@@ -62,9 +62,30 @@ async function submitJob(
   return (data as { id: string }).id;
 }
 
-async function waitForJob(jobId: string, timeoutMs: number, taskType: string): Promise<Record<string, unknown>> {
+/**
+ * Liveness heartbeat for the autopost_rerender coordinator job.
+ * See handleAutopostRun.ts heartbeatJob() for the full rationale —
+ * same stale-claim-reaper problem, same fix.
+ */
+async function heartbeatJob(jobId: string): Promise<void> {
+  try {
+    await supabase
+      .from("video_generation_jobs")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", jobId);
+  } catch { /* swallow — at worst the reaper kicks in 30 min later */ }
+}
+
+async function waitForJob(
+  jobId: string,
+  timeoutMs: number,
+  taskType: string,
+  /** Coordinator id to heartbeat each poll. See handleAutopostRun.ts. */
+  coordinatorJobId?: string,
+): Promise<Record<string, unknown>> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    if (coordinatorJobId) await heartbeatJob(coordinatorJobId);
     const { data, error } = await supabase
       .from("video_generation_jobs")
       .select("status, error_message, payload, result")
@@ -194,7 +215,7 @@ export async function handleAutopostRerender(
     finalizeDeps,
     projectId,
   );
-  await waitForJob(finalizeJobId, PHASE_TIMEOUT_MS, "finalize_generation");
+  await waitForJob(finalizeJobId, PHASE_TIMEOUT_MS, "finalize_generation", jobId);
 
   // Export — assembles final mp4, depends on finalize
   const exportJobId = await submitJob(
@@ -209,7 +230,7 @@ export async function handleAutopostRerender(
     [finalizeJobId],
     projectId,
   );
-  const exportResult = await waitForJob(exportJobId, EXPORT_TIMEOUT_MS, "export_video");
+  const exportResult = await waitForJob(exportJobId, EXPORT_TIMEOUT_MS, "export_video", jobId);
   const finalUrl = (exportResult.finalUrl as string) ?? (exportResult.url as string);
   if (!finalUrl) throw new Error("autopost_rerender: export_video result missing finalUrl");
 

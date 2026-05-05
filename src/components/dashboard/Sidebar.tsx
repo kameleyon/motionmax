@@ -420,7 +420,7 @@ export default function Sidebar() {
                         e.preventDefault();
                         setPendingDeleteId(item.id);
                       }}
-                      className="text-[#E48A8A] focus:text-[#E48A8A] focus:bg-[#E48A8A]/10 cursor-pointer"
+                      className="text-[#E4C875] focus:text-[#E4C875] focus:bg-[#E4C875]/10 cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5 mr-2" />
                       Delete project
@@ -524,7 +524,7 @@ export default function Sidebar() {
                 e.preventDefault();
                 if (pendingDeleteId) deleteProjectMutation.mutate(pendingDeleteId);
               }}
-              className="bg-[#E48A8A] text-[#0A0D0F] hover:bg-[#E48A8A]/90"
+              className="bg-[#E4C875] text-[#0A0D0F] hover:bg-[#E4C875]/90"
             >
               Delete
             </AlertDialogAction>

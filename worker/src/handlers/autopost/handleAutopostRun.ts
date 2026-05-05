@@ -183,6 +183,36 @@ async function setRunProgress(runId: string, pct: number): Promise<void> {
     .eq("id", runId);
 }
 
+/**
+ * Liveness heartbeat for the autopost_render coordinator job.
+ *
+ * The worker's stale-claim reaper (index.ts pollQueue) resets any
+ * 'processing' job whose updated_at is older than STALE_PROCESSING_MS
+ * (30 min) back to 'pending'. autopost_render is a coordinator that
+ * legitimately spends 10-30 min waiting on its child jobs (script,
+ * audio, images, videos, finalize, export) without doing any DB work
+ * itself — so its updated_at stays frozen at claim time and the reaper
+ * sees it as a zombie. When that fires, another worker re-claims and
+ * runs handleAutopostRun AGAIN from scratch, producing a duplicate
+ * project + duplicate generation while the original is still finishing.
+ *
+ * This helper bumps updated_at on the coordinator row so the reaper
+ * leaves it alone as long as the wait loop is actively polling. If the
+ * worker crashes mid-wait (the actual zombie case), heartbeats stop
+ * and the reaper correctly reclaims the job ~30 min later.
+ *
+ * Failures are swallowed: a failed heartbeat is not a reason to fail
+ * the entire generation — at worst the reaper kicks in 30 min later.
+ */
+async function heartbeatJob(jobId: string): Promise<void> {
+  try {
+    await supabase
+      .from("video_generation_jobs")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", jobId);
+  } catch { /* swallow — see comment above */ }
+}
+
 async function submitJob(
   userId: string,
   taskType: string,
@@ -227,10 +257,21 @@ async function waitForJobWithSubProgress(
   runId: string,
   subJobIds: string[],
   totalSubJobs: number,
+  /**
+   * Coordinator (parent) job id whose updated_at should be heartbeated
+   * every poll so the stale-claim reaper doesn't reset it while we
+   * legitimately wait on children. Optional — when omitted, behavior is
+   * identical to the pre-heartbeat version.
+   */
+  coordinatorJobId?: string,
 ): Promise<Record<string, unknown>> {
   const deadline = Date.now() + timeoutMs;
   let lastReportedDone = 0;
+  // Heartbeat on every poll iteration. With POLL_INTERVAL_MS = 5_000ms
+  // and STALE_PROCESSING_MS = 30 min on the worker reaper, even
+  // missing every other heartbeat (DB blip) leaves a wide safety margin.
   while (Date.now() < deadline) {
+    if (coordinatorJobId) await heartbeatJob(coordinatorJobId);
     // Sub-progress poll. Skipped when there are no sub-jobs to track
     // (defensive — totalSubJobs is always > 0 in current call sites).
     if (totalSubJobs > 0) {
@@ -273,9 +314,16 @@ async function waitForJobWithSubProgress(
   throw new Error(`${taskType} job ${jobId} timed out after ${Math.round(timeoutMs / 60000)} min`);
 }
 
-async function waitForJob(jobId: string, timeoutMs: number, taskType: string): Promise<Record<string, unknown>> {
+async function waitForJob(
+  jobId: string,
+  timeoutMs: number,
+  taskType: string,
+  /** See waitForJobWithSubProgress's coordinatorJobId — same liveness contract. */
+  coordinatorJobId?: string,
+): Promise<Record<string, unknown>> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    if (coordinatorJobId) await heartbeatJob(coordinatorJobId);
     const { data, error } = await supabase
       .from("video_generation_jobs")
       .select("status, error_message, payload, result")
@@ -552,7 +600,7 @@ async function runPipeline(
   });
 
   const scriptJobId = await submitJob(userId, "generate_video", scriptPayload, [], projectId);
-  const scriptResult = await waitForJob(scriptJobId, SCRIPT_TIMEOUT_MS, "generate_video");
+  const scriptResult = await waitForJob(scriptJobId, SCRIPT_TIMEOUT_MS, "generate_video", jobId);
 
   const generationId = (scriptResult.generationId as string) ?? (scriptResult.generation_id as string);
   const sceneCount = Number((scriptResult.sceneCount as number) ?? (scriptResult.scene_count as number) ?? 0);
@@ -659,6 +707,7 @@ async function runPipeline(
     runId,
     subJobIds,
     totalSubJobs,
+    jobId, // coordinatorJobId for heartbeat
   );
   await setRunProgress(runId, 80);
 
@@ -745,7 +794,7 @@ async function runPipeline(
     [finalizeJobId],
     projectId,
   );
-  const exportResult = await waitForJob(exportJobId, EXPORT_TIMEOUT_MS, "export_video");
+  const exportResult = await waitForJob(exportJobId, EXPORT_TIMEOUT_MS, "export_video", jobId);
 
   const finalUrl = (exportResult.finalUrl as string) ?? (exportResult.url as string);
   if (!finalUrl) {

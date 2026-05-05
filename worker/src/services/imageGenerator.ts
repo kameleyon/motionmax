@@ -215,11 +215,26 @@ async function tryHyperealGptImage2(
 
   for (let attempt = 1; attempt <= HYPEREAL_GPT_IMAGE2_RETRIES; attempt++) {
     try {
-      const res = await fetch(HYPEREAL_API_URL, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${effectiveKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-      });
+      // Per-attempt 90s client-side timeout. Without this, a stalled
+      // Hypereal upstream (the path that surfaces the E1002 "Request
+      // timed out" 500) can hang Node's fetch for several minutes per
+      // attempt — burning the worker slot while contributing nothing.
+      // 90s comfortably covers the typical 20-40s gpt-image-2 round
+      // trip while letting us bail and try the next attempt (or fall
+      // back to Gemini early) instead of waiting indefinitely.
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 90_000);
+      let res: Response;
+      try {
+        res = await fetch(HYPEREAL_API_URL, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${effectiveKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+          signal: ac.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
 
       if (!res.ok) {
         const err = await res.text();
@@ -235,6 +250,15 @@ async function tryHyperealGptImage2(
         // Same short-circuit tryHypereal (Gemini) uses; kept symmetric.
         if (err.includes("E9999") && attempt >= 2) {
           console.warn(`[ImageGen] gpt-image-2 E9999 sustained — failing over to Gemini early`);
+          return null;
+        }
+        // Hypereal's E1002 ("Request timed out") is the upstream-timeout
+        // counterpart of E9999. When it persists across attempts the
+        // gpt-image-2 backend is overloaded and won't recover within
+        // our retry window — fail over to Gemini after attempt 2 to
+        // avoid eating the full ~4 minutes of (timeouts + backoffs).
+        if (err.includes("E1002") && attempt >= 2) {
+          console.warn(`[ImageGen] gpt-image-2 E1002 sustained — failing over to Gemini early`);
           return null;
         }
         // Exponential backoff with mild jitter: 1s, 2s, 4s, 8s ± 30%.

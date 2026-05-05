@@ -56,32 +56,67 @@ function getContainerMemoryBytes(): number {
   return hostMem;
 }
 
-function detectOptimalConcurrency(): number {
-  const envOverride = process.env.WORKER_CONCURRENCY;
-  if (envOverride) return parseInt(envOverride, 10);
+/**
+ * Pool sizes split by workload type:
+ *   - export pool   → CPU-bound  (FFmpeg encoding, color grade, mux)
+ *   - LLM/IO pool   → memory-bound (await fetch() to Hypereal/Gemini/ElevenLabs)
+ *
+ * The previous formula `min(cpus*4, mem/200)` capped *both* pools at the CPU
+ * count, which crushed parallelism on Render Pro (2 CPUs → 8 total slots).
+ * 95% of MotionMax jobs are I/O-bound API wrappers — they sleep on the
+ * network with negligible CPU, so CPU count is the wrong governor for them.
+ *
+ * New scheme:
+ *   exportSlots = max(1, cpuCount)                  — one FFmpeg per CPU core
+ *   llmSlots    = max(8, floor(availableMb / 120))  — memory-bound, fetch-heavy
+ *   total       = export + llm, hard-capped at 80
+ *
+ * Per-job memory budget dropped 200MB → 120MB: the LLM-pool handlers
+ * stream image/audio bytes through to Supabase Storage rather than
+ * buffering full payloads, so RSS-per-handler in prod sits ~80–100MB
+ * with brief 200MB spikes during PDF parse / pdfjs.
+ */
+interface ConcurrencyBudget { exportSlots: number; llmSlots: number; total: number; }
 
-  const cpuCount = os.cpus().length;
-  const hostMemMb = Math.round(os.totalmem() / 1048576);
+function detectOptimalConcurrency(): ConcurrencyBudget {
+  const cpuCount      = os.cpus().length;
+  const hostMemMb     = Math.round(os.totalmem() / 1048576);
   const containerMemMb = Math.round(getContainerMemoryBytes() / 1048576);
 
-  // Use container memory (not host) for memory-based limit
   // Reserve 768MB for OS/Node.js overhead (FFmpeg + pdfjs occasionally
   // spike past the old 512MB reservation under load).
   const availableMemMb = Math.max(512, containerMemMb - 768);
-  const byMemory = Math.floor(availableMemMb / 200);  // ~200MB per concurrent job
-  const byCpu = cpuCount * 4;                           // 4 jobs per CPU — most jobs are I/O-bound API calls
-  // Cap raised 20 → 60. Pro plan + horizontal scaling means a single
-  // instance can comfortably hold 30+ concurrent LLM/API jobs, and
-  // additional instances scale beyond that. Leaving the floor at 4
-  // for tiny dev environments.
-  const optimal = Math.max(4, Math.min(byCpu, byMemory, 60));
+
+  // Env override path: split a flat WORKER_CONCURRENCY value across
+  // pools using the same 25/75 ratio applyConcurrencyOverride uses,
+  // so manual tuning still gets reasonable pool sizes without two env vars.
+  const envOverride = process.env.WORKER_CONCURRENCY;
+  if (envOverride) {
+    const total = Math.max(4, parseInt(envOverride, 10));
+    const exportSlots = Math.max(1, Math.floor(total * 0.25));
+    const llmSlots    = Math.max(2, total - exportSlots);
+    wlog.info("Concurrency from env override", { total, exportSlots, llmSlots });
+    return { exportSlots, llmSlots, total: exportSlots + llmSlots };
+  }
+
+  // Export pool: one FFmpeg invocation per CPU core. Going wider crashes
+  // the encoder into context-switch hell.
+  const exportSlots = Math.max(1, cpuCount);
+
+  // LLM/IO pool: memory-bound only. Floor of 8 ensures even tiny dev
+  // environments can hold a fan-out wave (master_audio + a handful of
+  // images) without serializing.
+  const llmByMemory = Math.floor(availableMemMb / 120);
+  const llmSlots    = Math.max(8, Math.min(llmByMemory, 80 - exportSlots));
+
+  const total = exportSlots + llmSlots;
 
   wlog.info("Auto-tuned concurrency", {
-    optimal, cpus: cpuCount, hostRamMb: hostMemMb,
+    cpus: cpuCount, hostRamMb: hostMemMb,
     containerRamMb: containerMemMb, availableMb: availableMemMb,
-    byCpu, byMemory,
+    exportSlots, llmSlots, llmByMemory, total,
   });
-  return optimal;
+  return { exportSlots, llmSlots, total };
 }
 
 /* ---- Per-task-type worker pools ----
@@ -107,21 +142,24 @@ function totalActiveJobs(): number {
   return activeExportJobs.size + activeLlmJobs.size;
 }
 
-const _baselineTotalSlots = detectOptimalConcurrency();
+const _baselineBudget = detectOptimalConcurrency();
+const _baselineTotalSlots = _baselineBudget.total;
 
-// FFmpeg is memory-heavy: allocate 25% of total slots, min 1.
-// Remaining slots go to LLM/AI tasks (network-bound, can be more concurrent).
-// These are the BASELINE values from env or auto-tune. The runtime override
-// from app_settings.worker_concurrency_override (poll loop further down)
-// can replace `MAX_CONCURRENT_JOBS` at runtime — when set, we re-derive
-// MAX_EXPORT_SLOTS and MAX_LLM_SLOTS proportionally so the 25%/75% split
-// holds at any total. Vars are `let` so the poll can mutate them.
+// Auto-tune is now pool-aware: detectOptimalConcurrency returns sizes
+// for each pool separately rather than a single total to be split.
+// Per-pool env overrides (WORKER_EXPORT_CONCURRENCY / WORKER_LLM_CONCURRENCY)
+// still take precedence over the auto-tune values for fine-tuning. The
+// runtime override from app_settings.worker_concurrency_override
+// (poll loop further down) can replace `MAX_CONCURRENT_JOBS` at runtime —
+// when set, we re-derive MAX_EXPORT_SLOTS and MAX_LLM_SLOTS proportionally
+// so the same export/LLM ratio holds at any total. Vars are `let` so the
+// poll can mutate them.
 let MAX_EXPORT_SLOTS = process.env.WORKER_EXPORT_CONCURRENCY
   ? parseInt(process.env.WORKER_EXPORT_CONCURRENCY, 10)
-  : Math.max(1, Math.floor(_baselineTotalSlots * 0.25));
+  : _baselineBudget.exportSlots;
 let MAX_LLM_SLOTS = process.env.WORKER_LLM_CONCURRENCY
   ? parseInt(process.env.WORKER_LLM_CONCURRENCY, 10)
-  : Math.max(2, _baselineTotalSlots - MAX_EXPORT_SLOTS);
+  : _baselineBudget.llmSlots;
 let MAX_CONCURRENT_JOBS = MAX_EXPORT_SLOTS + MAX_LLM_SLOTS;
 // The override currently in effect (null = no override; using env/auto-tune).
 let currentConcurrencyOverride: number | null = null;
@@ -137,21 +175,25 @@ function applyConcurrencyOverride(override: number | null) {
 
   const previous = MAX_CONCURRENT_JOBS;
   if (override !== null && Number.isFinite(override) && override > 0) {
-    // Override path. Hold the same 25/75 export/LLM split — never let either
-    // pool go below 1 / 2 (the original floors).
-    const exportSlots = Math.max(1, Math.floor(override * 0.25));
+    // Admin override path. The override value is a TOTAL slot budget;
+    // we re-derive per-pool sizes by holding the export/LLM ratio used
+    // by the auto-tune baseline (typically ~10–15% export / ~85–90% LLM
+    // on Render Pro now that LLM is memory-bound). Floors: 1 export,
+    // 2 LLM — never starve a pool entirely.
+    const baselineRatio = _baselineBudget.exportSlots / Math.max(1, _baselineBudget.total);
+    const exportSlots = Math.max(1, Math.floor(override * baselineRatio));
     const llmSlots    = Math.max(2, override - exportSlots);
     MAX_EXPORT_SLOTS = exportSlots;
     MAX_LLM_SLOTS    = llmSlots;
     MAX_CONCURRENT_JOBS = exportSlots + llmSlots;
   } else {
-    // Revert to baseline.
+    // Revert to baseline (pool-aware: per-pool env overrides still win).
     const exportSlots = process.env.WORKER_EXPORT_CONCURRENCY
       ? parseInt(process.env.WORKER_EXPORT_CONCURRENCY, 10)
-      : Math.max(1, Math.floor(_baselineTotalSlots * 0.25));
+      : _baselineBudget.exportSlots;
     const llmSlots = process.env.WORKER_LLM_CONCURRENCY
       ? parseInt(process.env.WORKER_LLM_CONCURRENCY, 10)
-      : Math.max(2, _baselineTotalSlots - exportSlots);
+      : _baselineBudget.llmSlots;
     MAX_EXPORT_SLOTS = exportSlots;
     MAX_LLM_SLOTS = llmSlots;
     MAX_CONCURRENT_JOBS = exportSlots + llmSlots;

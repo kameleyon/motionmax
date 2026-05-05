@@ -318,76 +318,90 @@ export function EditAutomationDialog({
     },
   });
 
+  // Shared classnames keep the dialog visually consistent without
+  // recomputing them inline. Triggers / inputs share `fieldShell`,
+  // section heading captions share `sectionLabel`, etc.
+  const fieldShell =
+    "bg-[#0A0D0F] border-white/[0.08] text-[#ECEAE4] h-10 hover:border-white/15 focus-visible:border-[#11C4D0]/50 focus-visible:ring-0 transition-colors";
+  const popoverShell =
+    "z-[10000] bg-[#10151A] border-white/10 text-[#ECEAE4] max-h-72";
+  const sectionLabel =
+    "font-mono text-[10px] tracking-[0.16em] uppercase text-[#5A6268]";
+  const fieldLabel = "text-[11.5px] font-medium text-[#ECEAE4]";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[#10151A] border-white/10 text-[#ECEAE4] max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-[#ECEAE4]">Edit instructions</DialogTitle>
-          <DialogDescription className="text-[#8A9198]">
+      <DialogContent className="bg-[#10151A] border-white/10 text-[#ECEAE4] max-w-xl max-h-[90vh] overflow-y-auto p-0">
+        {/* ── Header ── */}
+        <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/[0.06]">
+          <DialogTitle className="font-serif text-[20px] font-medium text-[#ECEAE4]">
+            Edit instructions
+          </DialogTitle>
+          <DialogDescription className="text-[12.5px] text-[#8A9198]">
             Update what this automation generates on its next run.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="auto-edit-name" className="text-[12px] text-[#ECEAE4]">
-              Name
-            </Label>
-            <Input
-              id="auto-edit-name"
-              value={draft.name}
-              onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
-              className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4]"
-            />
-          </div>
+        <div className="px-6 py-5 space-y-7">
+          {/* ── Section: Basics ───────────────────────────────────── */}
+          <section className="space-y-3.5">
+            <h3 className={sectionLabel}>Basics</h3>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="auto-edit-prompt" className="text-[12px] text-[#ECEAE4]">
-              Prompt template
-            </Label>
-            <Textarea
-              id="auto-edit-prompt"
-              value={draft.prompt_template}
-              onChange={e => setDraft(d => ({ ...d, prompt_template: e.target.value }))}
-              rows={4}
-              className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4] resize-none"
-              placeholder="e.g. A 30-second motivational reel about resilience for entrepreneurs"
-            />
-          </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="auto-edit-name" className={fieldLabel}>
+                Name
+              </Label>
+              <Input
+                id="auto-edit-name"
+                value={draft.name}
+                onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
+                className={fieldShell}
+              />
+            </div>
 
-          {/* ── Sources (Wave F) ────────────────────────────────────
-              Persisted into autopost_schedules.source_attachments and
-              re-fed into research + script on every run by the worker
-              (handleAutopostRun.ts → buildAutopostSourcesBlock). PDFs
-              and images are uploaded on save; URLs/YouTube/etc. are
-              re-fetched fresh per run. */}
-          <div className="space-y-1.5">
-            <Label className="text-[12px] text-[#ECEAE4]">
-              Sources
-              <span className="ml-2 text-[10.5px] font-normal text-[#8A9198]">
-                Used as ground truth on every run
-              </span>
-            </Label>
-            <SourcesField
-              attachments={draft.source_attachments}
-              onChange={(next) => setDraft((d) => ({ ...d, source_attachments: next }))}
-            />
-            {draft.source_attachments.length === 0 && (
-              <p className="text-[11px] text-[#5A6268] leading-[1.5]">
-                Add PDFs, web links, YouTube videos, GitHub repos, images, or text. The script writer reads them on every run alongside fresh web search.
-              </p>
-            )}
-          </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="auto-edit-prompt" className={fieldLabel}>
+                Prompt template
+              </Label>
+              <Textarea
+                id="auto-edit-prompt"
+                value={draft.prompt_template}
+                onChange={e => setDraft(d => ({ ...d, prompt_template: e.target.value }))}
+                rows={4}
+                className="bg-[#0A0D0F] border-white/[0.08] text-[#ECEAE4] resize-none hover:border-white/15 focus-visible:border-[#11C4D0]/50 focus-visible:ring-0 transition-colors leading-[1.5]"
+                placeholder="e.g. A 30-second motivational reel about resilience for entrepreneurs"
+              />
+            </div>
 
-          {/* ── Delivery method (Wave E) ── */}
-          <div className="space-y-2">
-            <Label className="text-[12px] text-[#ECEAE4]">Where it goes</Label>
+            {/* Sources — persisted into autopost_schedules.source_attachments
+                and re-fed into research + script on every run by the worker
+                (handleAutopostRun.ts → buildAutopostSourcesBlock). */}
+            <div className="space-y-1.5">
+              <div className="flex items-baseline justify-between gap-2">
+                <Label className={fieldLabel}>Sources</Label>
+                <span className="text-[10.5px] text-[#8A9198]">Used as ground truth on every run</span>
+              </div>
+              <SourcesField
+                attachments={draft.source_attachments}
+                onChange={(next) => setDraft((d) => ({ ...d, source_attachments: next }))}
+              />
+              {draft.source_attachments.length === 0 && (
+                <p className="text-[11px] text-[#5A6268] leading-[1.5]">
+                  Add PDFs, web links, YouTube videos, GitHub repos, images, or text. The script writer reads them on every run alongside fresh web search.
+                </p>
+              )}
+            </div>
+          </section>
+
+          {/* ── Section: Delivery (Wave E) ────────────────────────── */}
+          <section className="space-y-3">
+            <h3 className={sectionLabel}>Delivery</h3>
             <div role="radiogroup" aria-label="Delivery method" className="grid gap-2">
               {[
-                { value: 'social' as const,       label: 'Publish to social media',       Icon: Send,        disabled: true  },
-                { value: 'email' as const,        label: 'Email when each video is ready', Icon: Mail,        disabled: false },
-                { value: 'library_only' as const, label: 'Just save to my library',       Icon: FolderHeart, disabled: false },
-              ].map(({ value, label, Icon, disabled }) => {
+                { value: 'social' as const,       label: 'Publish to social media',       hint: 'Auto-post to your connected accounts',     Icon: Send,        disabled: true  },
+                { value: 'email' as const,        label: 'Email when each video is ready', hint: 'We\u2019ll send a link to your inbox',     Icon: Mail,        disabled: false },
+                { value: 'library_only' as const, label: 'Just save to my library',       hint: 'Appears in Run History, nothing else sent', Icon: FolderHeart, disabled: false },
+              ].map(({ value, label, hint, Icon, disabled }) => {
                 const selected = draft.delivery_method === value;
                 const inputId = `edit-delivery-${value}`;
                 return (
@@ -395,12 +409,12 @@ export function EditAutomationDialog({
                     key={value}
                     htmlFor={inputId}
                     aria-disabled={disabled}
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border transition-colors ${
+                    className={`group relative flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all ${
                       disabled
-                        ? 'border-white/10 bg-[#0A0D0F] opacity-50 cursor-not-allowed'
+                        ? 'border-white/[0.08] bg-[#0A0D0F]/60 opacity-50 cursor-not-allowed'
                         : selected
-                          ? 'border-[#11C4D0]/50 bg-[#11C4D0]/[0.06] cursor-pointer'
-                          : 'border-white/10 bg-[#0A0D0F] hover:border-white/20 cursor-pointer'
+                          ? 'border-[#11C4D0]/40 bg-[#11C4D0]/[0.05] shadow-[0_0_0_1px_rgba(17,196,208,0.18)] cursor-pointer'
+                          : 'border-white/[0.08] bg-[#0A0D0F] hover:border-white/15 hover:bg-[#0E1418] cursor-pointer'
                     }`}
                   >
                     <input
@@ -415,17 +429,29 @@ export function EditAutomationDialog({
                     />
                     <span
                       aria-hidden
-                      className={`w-3 h-3 rounded-full border-2 shrink-0 flex items-center justify-center ${
-                        selected && !disabled ? 'border-[#11C4D0]' : 'border-white/25'
+                      className={`w-3.5 h-3.5 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors ${
+                        selected && !disabled ? 'border-[#11C4D0]' : 'border-white/25 group-hover:border-white/40'
                       }`}
                     >
                       {selected && !disabled && <span className="w-1.5 h-1.5 rounded-full bg-[#11C4D0]" />}
                     </span>
-                    <Icon className="w-3.5 h-3.5 text-[#11C4D0] shrink-0" />
-                    <span className="text-[12.5px] text-[#ECEAE4] truncate">{label}</span>
+                    <span
+                      aria-hidden
+                      className={`w-7 h-7 rounded-md grid place-items-center shrink-0 transition-colors ${
+                        selected && !disabled
+                          ? 'bg-[#11C4D0]/15 text-[#11C4D0]'
+                          : 'bg-white/[0.04] text-[#8A9198] group-hover:text-[#ECEAE4]'
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-[12.5px] text-[#ECEAE4] truncate">{label}</span>
+                      <span className="block text-[10.5px] text-[#5A6268] truncate">{hint}</span>
+                    </span>
                     {disabled && (
-                      <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-[#E4C875] border border-[#E4C875]/30 bg-[#E4C875]/5 rounded px-1.5 py-0.5">
-                        coming soon
+                      <span className="shrink-0 font-mono text-[9.5px] uppercase tracking-[0.14em] text-[#E4C875] border border-[#E4C875]/30 bg-[#E4C875]/5 rounded px-1.5 py-0.5">
+                        Coming soon
                       </span>
                     )}
                   </label>
@@ -434,13 +460,13 @@ export function EditAutomationDialog({
             </div>
 
             {draft.delivery_method === 'email' && (
-              <div className="space-y-1.5">
-                <Label className="text-[11.5px] text-[#8A9198]">Email recipients</Label>
-                <div className="flex flex-wrap items-center gap-1.5 px-2.5 py-2 rounded-md bg-[#0A0D0F] border border-white/10 focus-within:border-[#11C4D0]/40">
+              <div className="space-y-1.5 pt-1">
+                <Label className={fieldLabel}>Email recipients</Label>
+                <div className="flex flex-wrap items-center gap-1.5 px-2.5 py-2 rounded-lg bg-[#0A0D0F] border border-white/[0.08] focus-within:border-[#11C4D0]/40 transition-colors">
                   {draft.email_recipients.map((addr) => (
                     <span
                       key={addr}
-                      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#11C4D0]/10 border border-[#11C4D0]/30 text-[#11C4D0] text-[12px]"
+                      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#11C4D0]/[0.08] border border-[#11C4D0]/25 text-[#11C4D0] text-[12px]"
                     >
                       <Mail className="w-3 h-3" />
                       <span className="truncate max-w-[180px]">{addr}</span>
@@ -464,129 +490,124 @@ export function EditAutomationDialog({
                     className="flex-1 min-w-[160px] bg-transparent border-0 px-1 h-7 text-[12.5px] text-[#ECEAE4] focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-[#5A6268]"
                   />
                 </div>
-                <p className="text-[11px] text-[#5A6268]">Press Enter or comma to add. Backspace removes the last chip.</p>
+                <p className="text-[10.5px] text-[#5A6268]">Press Enter or comma to add · Backspace removes the last chip</p>
               </div>
             )}
+          </section>
 
-            {draft.delivery_method === 'library_only' && (
-              <p className="text-[11px] text-[#5A6268] leading-[1.5] pl-1">
-                Note: videos will appear in your Run History only — nothing is published or emailed.
-              </p>
-            )}
-          </div>
+          {/* ── Section: Output ─────────────────────────────────────
+              Visual style sits in the third row alongside Resolution &
+              Language, Voice & Captions — laid out as a 2-col grid that
+              collapses gracefully on mobile. */}
+          <section className="space-y-3.5">
+            <h3 className={sectionLabel}>Output</h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-[12px] text-[#ECEAE4]">Resolution</Label>
-              <Select
-                value={draft.resolution}
-                onValueChange={v => setDraft(d => ({ ...d, resolution: v }))}
-              >
-                <SelectTrigger className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="z-[10000] bg-[#10151A] border-white/10 text-[#ECEAE4]">
-                  <SelectItem value="1080x1920">1080×1920 (vertical)</SelectItem>
-                  <SelectItem value="1920x1080">1920×1080 (horizontal)</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div className="space-y-1.5">
+                <Label className={fieldLabel}>Resolution</Label>
+                <Select
+                  value={draft.resolution}
+                  onValueChange={v => setDraft(d => ({ ...d, resolution: v }))}
+                >
+                  <SelectTrigger className={fieldShell}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className={popoverShell}>
+                    <SelectItem value="1080x1920">1080×1920 (vertical)</SelectItem>
+                    <SelectItem value="1920x1080">1920×1080 (horizontal)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className={fieldLabel}>Language</Label>
+                <Select
+                  value={draft.language}
+                  onValueChange={(code) => {
+                    // Auto-swap to a default voice for the new language so we
+                    // don't carry a French voice into a Spanish run, etc.
+                    const defaultVoice = getDefaultSpeaker(code);
+                    setDraft(d => ({ ...d, language: code, voice: defaultVoice }));
+                  }}
+                >
+                  <SelectTrigger className={fieldShell}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className={popoverShell}>
+                    {LANGUAGES.map((l) => (
+                      <SelectItem key={l.code} value={l.code}>
+                        {l.flag} {l.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className={fieldLabel}>Voice</Label>
+                <Select
+                  value={draft.voice as string}
+                  onValueChange={(v) => setDraft(d => ({ ...d, voice: v as SpeakerVoice }))}
+                >
+                  <SelectTrigger className={fieldShell}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className={popoverShell}>
+                    {voiceOptions.map((opt) => (
+                      <SelectItem key={opt.id as string} value={opt.id as string}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className={fieldLabel}>Closed caption</Label>
+                <Select
+                  value={draft.caption_style}
+                  onValueChange={(v) => setDraft(d => ({ ...d, caption_style: v }))}
+                >
+                  <SelectTrigger className={fieldShell}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className={popoverShell}>
+                    {CAPTION_STYLES.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Visual style — matches IntakeForm's STYLES list.
+                  saveMutation writes the chosen value to both `style`
+                  (top-level snapshot) and `intake_settings.visualStyle`
+                  for back-compat with legacy worker code paths. */}
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className={fieldLabel}>Visual style</Label>
+                <Select
+                  value={draft.style}
+                  onValueChange={(v) => setDraft(d => ({ ...d, style: v }))}
+                >
+                  <SelectTrigger className={fieldShell}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className={popoverShell}>
+                    {VISUAL_STYLES.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-[12px] text-[#ECEAE4]">Language</Label>
-              <Select
-                value={draft.language}
-                onValueChange={(code) => {
-                  // Auto-swap to a default voice for the new language so we
-                  // don't carry a French voice into a Spanish run, etc.
-                  const defaultVoice = getDefaultSpeaker(code);
-                  setDraft(d => ({ ...d, language: code, voice: defaultVoice }));
-                }}
-              >
-                <SelectTrigger className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="z-[10000] bg-[#10151A] border-white/10 text-[#ECEAE4] max-h-72">
-                  {LANGUAGES.map((l) => (
-                    <SelectItem key={l.code} value={l.code}>
-                      {l.flag} {l.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-[12px] text-[#ECEAE4]">Voice</Label>
-              <Select
-                value={draft.voice as string}
-                onValueChange={(v) => setDraft(d => ({ ...d, voice: v as SpeakerVoice }))}
-              >
-                <SelectTrigger className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="z-[10000] bg-[#10151A] border-white/10 text-[#ECEAE4] max-h-72">
-                  {voiceOptions.map((opt) => (
-                    <SelectItem key={opt.id as string} value={opt.id as string}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-[12px] text-[#ECEAE4]">Closed caption</Label>
-              <Select
-                value={draft.caption_style}
-                onValueChange={(v) => setDraft(d => ({ ...d, caption_style: v }))}
-              >
-                <SelectTrigger className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="z-[10000] bg-[#10151A] border-white/10 text-[#ECEAE4] max-h-72">
-                  {CAPTION_STYLES.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>
-                      {c.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Visual style — matches IntakeForm's STYLES list. The
-                worker reads `style` from the project row inserted by
-                handleAutopostRun, which it sources from
-                config_snapshot.style. saveMutation writes the chosen
-                value to both `style` (top-level) and
-                `intake_settings.visualStyle` for back-compat with any
-                legacy code path that reads the older key. */}
-            <div className="space-y-1.5">
-              <Label className="text-[12px] text-[#ECEAE4]">Visual style</Label>
-              <Select
-                value={draft.style}
-                onValueChange={(v) => setDraft(d => ({ ...d, style: v }))}
-              >
-                <SelectTrigger className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="z-[10000] bg-[#10151A] border-white/10 text-[#ECEAE4] max-h-72">
-                  {VISUAL_STYLES.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          </section>
         </div>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="px-6 py-4 gap-2 border-t border-white/[0.06]">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
@@ -597,7 +618,7 @@ export function EditAutomationDialog({
           <Button
             onClick={() => saveMutation.mutate()}
             disabled={saveMutation.isPending}
-            className="bg-[#11C4D0] text-[#0A0D0F] hover:bg-[#11C4D0]/90"
+            className="bg-[#11C4D0] text-[#0A0D0F] hover:bg-[#11C4D0]/90 font-medium"
           >
             {saveMutation.isPending ? (
               <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />

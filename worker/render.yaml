@@ -15,22 +15,21 @@ services:
     # different jobs without coordination — N projects can render in
     # parallel up to maxInstances.
     #
-    # Why these thresholds: ~95% of jobs are network-bound API wrappers
-    # (Hypereal gpt-image-2, Seedance, Gemini TTS) that sleep on fetch().
-    # CPU graph stays nearly flat under heavy load → CPU-target scaling
-    # at 70% never fires. Drop CPU target to 50% so a sustained queue
-    # backlog (which DOES drive moderate CPU from JSON parsing, Sentry
-    # spans, and Realtime channel maintenance) triggers a new instance.
-    # Memory is the real constraint for the LLM pool; 65% target lets
-    # Render scale out before a single instance hits OOM territory.
-    # maxInstances raised 4 → 6 since the per-instance LLM pool is now
-    # ~24 slots (memory-bound) so a 6-instance fleet handles ~144 LLM
-    # jobs in flight simultaneously.
+    # HOTFIX 2026-05-05: production OOMs at 2GB despite "Pro" plan,
+    # with the 27-slot LLM concurrency from the previous tune. Two
+    # changes here:
+    #   1. targetMemoryPercent dropped 65 → 55 so Render boots a new
+    #      instance well before any single pod approaches OOM.
+    #   2. maxInstances bumped 6 → 8 so the cap doesn't strand jobs
+    #      when memory pressure forces all 6 instances simultaneously.
+    # Per-instance LLM concurrency is now hard-capped at 8 (see
+    # detectOptimalConcurrency in worker/src/index.ts), so an 8-instance
+    # fleet still handles ~64 LLM jobs in flight — plenty of headroom.
     scaling:
       minInstances: 1
-      maxInstances: 6
+      maxInstances: 8
       targetCPUPercent: 50
-      targetMemoryPercent: 65
+      targetMemoryPercent: 55
     buildCommand: npm ci
     startCommand: npm start
     autoDeploy: true

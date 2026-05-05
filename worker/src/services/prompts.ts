@@ -276,6 +276,44 @@ function repairBadEscapes(json: string): string {
   return result;
 }
 
+/** Walk forward from a `{` and return the substring ending at its matching `}`.
+ *
+ *  Why we need this: LLMs (esp. Gemini 3.1 Fast) sometimes emit a valid
+ *  JSON object FOLLOWED by chain-of-thought prose like:
+ *    {"scenes":[...]}
+ *    Validation: Scene 1: "Le 30 juillet 1930..." Count: Le(1) 30(2)... = 30 words. Good.
+ *    But the format requires exactly 15 scenes. If each year gets its own video...
+ *  The previous extractor used `slice(firstBrace, lastBrace+1)` which grabs
+ *  the FIRST `{` to the LAST `}` in that prose — producing concatenated
+ *  garbage that fails every subsequent repair pass.
+ *
+ *  This walker tracks brace depth while respecting JSON string boundaries
+ *  (so a `}` inside `"text"` doesn't close the object) and `\"` escapes.
+ *  Returns the substring `[start, matchingClose]` — everything after is
+ *  dropped reasoning text. */
+function extractFirstBalancedObject(text: string, fromIdx: number): string | null {
+  if (text[fromIdx] !== "{") return null;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = fromIdx; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) { escape = false; continue; }
+    if (inString) {
+      if (ch === "\\") { escape = true; continue; }
+      if (ch === '"') { inString = false; }
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return text.slice(fromIdx, i + 1);
+    }
+  }
+  return null;
+}
+
 /** Return the top-level keys of an object (up to 12) for debug logging. */
 function getTopLevelKeys(value: unknown): string[] {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -315,17 +353,38 @@ export function extractJsonFromLLMResponse(raw: string, label: string): unknown 
       .trim();
   }
 
-  // Step 2: Extract JSON between first { and last }
+  // Step 2: Extract the FIRST balanced JSON object via brace-counting.
+  // The previous slice(firstBrace, lastBrace+1) approach failed when LLMs
+  // (especially Gemini fallback) emitted JSON-then-prose with the prose
+  // containing stray { } chars (e.g. "Count: Le(1) 30(2)..."). The walker
+  // respects string boundaries + escapes so `}` inside `"text"` doesn't
+  // prematurely close the object, and stops at the first matching close
+  // brace — discarding all trailing reasoning text.
   const firstBrace = content.indexOf("{");
-  const lastBrace = content.lastIndexOf("}");
-  if (firstBrace === -1 || lastBrace <= firstBrace) {
+  if (firstBrace === -1) {
     console.error(
       `[JSON_EXTRACT] ${label}: no JSON object found. Raw (first 500 chars):`,
       content.substring(0, 500),
     );
     throw new Error(`Failed to parse ${label}: no JSON object found in response`);
   }
-  content = content.slice(firstBrace, lastBrace + 1);
+  const balanced = extractFirstBalancedObject(content, firstBrace);
+  if (balanced) {
+    content = balanced;
+  } else {
+    // Fall back to the legacy greedy slice when brace-counting can't
+    // find a matching close (truncated mid-object). The downstream
+    // repair passes (Steps 5–7) attempt to recover.
+    const lastBrace = content.lastIndexOf("}");
+    if (lastBrace <= firstBrace) {
+      console.error(
+        `[JSON_EXTRACT] ${label}: unbalanced JSON. Raw (first 500 chars):`,
+        content.substring(0, 500),
+      );
+      throw new Error(`Failed to parse ${label}: unbalanced JSON object in response`);
+    }
+    content = content.slice(firstBrace, lastBrace + 1);
+  }
 
   // Step 3: Fix trailing commas (common LLM issue)
   content = content.replace(/,\s*([\]}])/g, "$1");

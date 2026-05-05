@@ -145,8 +145,8 @@ export async function callHyperealLLM(
   // 1. System prompt prefix (seen first)
   // 2. User prompt suffix (recency bias — models pay attention to the last instruction)
   // 3. Assistant pre-fill starting with "{" (forces model to continue in JSON)
-  const JSON_SYSTEM_PREFIX = `YOU ARE A JSON GENERATOR. Your ENTIRE response must be a single valid JSON object. No thinking, no explanation, no markdown, no \`\`\`json blocks, no text before or after. Start your response with { and end with }. Do NOT use <think> tags.`;
-  const JSON_USER_SUFFIX = `\n\nREMINDER: Return ONLY raw JSON. No markdown, no explanation, no \`\`\`json fences. Start with { and end with }.`;
+  const JSON_SYSTEM_PREFIX = `YOU ARE A JSON GENERATOR. Your ENTIRE response must be a single valid JSON object. No thinking, no explanation, no markdown, no \`\`\`json blocks, no text before or after. Start your response with { and end with }. Do NOT use <think> tags. Do NOT add any validation summary, word count, scene-by-scene check, or commentary AFTER the closing }. The response ENDS with the closing } — anything after that breaks the parser.`;
+  const JSON_USER_SUFFIX = `\n\nREMINDER: Return ONLY raw JSON. No markdown, no explanation, no \`\`\`json fences. Start with { and end with }. ABSOLUTELY NO TEXT AFTER THE CLOSING }: no "Validation:", no "Count: word(1) word(2)...", no "Scene N:" recap, no format-debate commentary. Stop generating the moment you write the final }.`;
 
   const systemPrompt = options.forceJson
     ? `${JSON_SYSTEM_PREFIX}\n\n${prompt.system}`

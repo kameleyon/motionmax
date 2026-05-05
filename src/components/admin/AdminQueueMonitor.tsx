@@ -14,7 +14,19 @@ import {
   TrendingUp,
   AlertTriangle,
   RefreshCw,
+  OctagonX,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { AdminLoadingState } from "@/components/ui/admin-loading-state";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -58,6 +70,7 @@ export function AdminQueueMonitor() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [bulkCancelling, setBulkCancelling] = useState(false);
 
   const fetchQueueData = useCallback(async () => {
     try {
@@ -313,11 +326,88 @@ export function AdminQueueMonitor() {
 
       {/* Active Jobs List */}
       <Card className="bg-[#10151A] border-white/8 shadow-none">
-        <CardHeader>
-          <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Active Jobs</CardTitle>
-          <CardDescription>
-            Currently processing and queued jobs ({jobs.length} total)
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+          <div className="min-w-0">
+            <CardTitle className="font-serif text-[18px] font-medium text-[#ECEAE4]">Active Jobs</CardTitle>
+            <CardDescription>
+              Currently processing and queued jobs ({jobs.length} total)
+            </CardDescription>
+          </div>
+          {jobs.length > 0 && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="shrink-0"
+                  disabled={bulkCancelling}
+                  aria-label="Hard cancel all active jobs"
+                >
+                  <OctagonX className="h-4 w-4 mr-1.5" />
+                  {bulkCancelling ? "Cancelling…" : "Hard cancel all"}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Hard cancel every active job?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This flips every <strong>pending</strong> and <strong>processing</strong> job
+                    (including stuck zombies) to <strong>failed</strong> across all users, refunding
+                    1 credit each. The worker stops claiming them immediately. Any in-flight HTTP/ffmpeg
+                    work currently running will finish its current step but the result is discarded.
+                    <br /><br />
+                    Use this only as a panic button when the queue is wedged or a bad batch needs to be
+                    flushed. This action is logged in admin_logs.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={bulkCancelling}>Keep running</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    disabled={bulkCancelling}
+                    onClick={async () => {
+                      if (!user?.id) {
+                        toast.error("Admin session missing");
+                        return;
+                      }
+                      setBulkCancelling(true);
+                      try {
+                        // SECURITY DEFINER RPC, gated on is_admin().
+                        // See migration 20260505100000_admin_cancel_all_active_jobs.
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const { data, error: rpcError } = await (supabase.rpc as any)(
+                          "admin_cancel_all_active_jobs",
+                          {
+                            p_kill_processing: true,
+                            p_refund_credits:  1,
+                            p_reason:          "Bulk cancelled by admin",
+                          },
+                        );
+                        if (rpcError) {
+                          toast.error(`Bulk cancel failed: ${rpcError.message}`);
+                          return;
+                        }
+                        const result = (data ?? {}) as {
+                          pending_cancelled?: number;
+                          processing_cancelled?: number;
+                          total_cancelled?: number;
+                          total_refunded?: number;
+                        };
+                        toast.success(
+                          `Cancelled ${result.total_cancelled ?? 0} job(s) — ${result.pending_cancelled ?? 0} pending, ${result.processing_cancelled ?? 0} processing. Refunded ${result.total_refunded ?? 0} credit(s).`,
+                        );
+                        await fetchQueueData();
+                      } finally {
+                        setBulkCancelling(false);
+                      }
+                    }}
+                  >
+                    Cancel all jobs
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </CardHeader>
         <CardContent>
           {jobs.length === 0 ? (

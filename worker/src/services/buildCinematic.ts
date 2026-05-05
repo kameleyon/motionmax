@@ -130,9 +130,16 @@ You are writing prompts for a generative video AI that CANNOT do lip-sync.
    - The video AI CANNOT animate lip-sync, so visual prompts must show ACTION, not talking.
    - Characters CAN interact through gestures, body language, and physical contact.
    - The VOICEOVER can be in any perspective the user requests (1st person, 3rd person, etc.) — this rule only restricts the visual descriptions.
-2. **VISUAL-AUDIO SEPARATION:** The visual shows action/reaction, the audio carries the narration.
-   - Bad visualPrompt: "Close up of John explaining the plan."
-   - Good visualPrompt: "Close up of John's eyes narrowing with determination, jaw clenching, fingers gripping the map as rain pelts the window behind him."
+2. **AUDIO-VISUAL ALIGNMENT (MANDATORY — ZERO TOLERANCE FOR DRIFT):**
+   Scene N's visualPrompt MUST literally depict the SUBJECT and EVENT named in scene N's voiceover, IN THAT SAME SCENE — never one or two scenes later.
+   The voiceover and visual are a TIGHTLY COUPLED PAIR: the audio narrates what is happening, the visual SHOWS that exact thing happening. They share the same subject, the same event, the same moment in time.
+   - If voiceover says "Argentina came in a boat" → visualPrompt MUST show the boat arriving at an Argentine port with Argentine flags / immigrants disembarking — IN THIS SCENE. Do NOT save the boat shot for a later scene.
+   - If voiceover says "the factory caught fire in 1943" → visualPrompt MUST show the burning factory in 1943 — IN THIS SCENE.
+   - The ONLY thing the visual omits from the audio is anyone "talking" (the video AI can't lip-sync) — instead show the subject acting, the event unfolding, or the consequence playing out.
+   - Bad: voiceover "Argentina came in a boat" + visualPrompt "A determined man stares out a window" (subject mismatch — the boat never appears in this scene).
+   - Bad: voiceover "John explains the plan" + visualPrompt "Close up of John explaining the plan." (depicts talking).
+   - Good: voiceover "John explains the plan" + visualPrompt "John leans over a war-room map, finger tracing a route across the terrain, his crew gathered close watching the line he draws, lantern light flickering on their faces."
+   - Good: voiceover "Argentina came in a boat" + visualPrompt "A weathered cargo ship glides into a 1900s Buenos Aires harbor at dawn, Argentine flag snapping in the wind from the stern, immigrants crowded along the rails clutching suitcases as dockworkers haul ropes. Camera: Truck left, following the ship's hull along the pier."
 3. **FACIAL EXPRESSIONS (MATCH THE MOOD — BE CREATIVE & DETAILED):**
    - Characters MUST have rich, expressive faces in every scene — never blank or neutral.
    - Match the scene emotion: curiosity (head tilted, brow raised), determination (jaw set, eyes focused), joy (beaming smile, eyes crinkling), surprise (eyes wide, mouth agape), concern (furrowed brow, pursed lips), awe (wide eyes, slight open mouth), hope (soft smile, upward gaze).
@@ -232,7 +239,7 @@ Every visualPrompt MUST be rich, detailed, and cinematic. Be CREATIVE. Think lik
 7. **CHARACTER IN EVERY SCENE:** Include the FULL character description (appearance, clothing, features) in EVERY visualPrompt. Do NOT just say "the protagonist" — describe them EVERY time.
 8. **STYLE CONSISTENCY:** Every visualPrompt must FIT the art style described in the VISUAL STYLE section below — but DO NOT copy the full style description into the visualPrompt itself. The image renderer appends the full style block automatically; embedding it again duplicates text and clutters the Editor's prompt UI. Just describe the scene-specific content (subject, action, framing, lighting, mood) in plain language.
 9. **TEXT & LANGUAGE:** Any text, titles, signs, or written content visible in the scene MUST be in the SAME language as the voiceover.${p.language ? ` All visible text must be in ${p.language === "fr" ? "French" : p.language === "ht" ? "Haitian Creole" : "English"}.` : ""}
-10. **SCENE TRANSITIONS (CRITICAL):** Each scene's video will morph into the NEXT scene's image. Design your visualPrompts so the END state of each scene transitions naturally into the START state of the next scene. Think about visual continuity — matching colors, compositions, or motions that bridge scenes.
+10. **SCENE TRANSITIONS (SECONDARY — never override audio-visual alignment):** Each scene's video will morph into the NEXT scene's image. AFTER you've nailed the subject of scene N (which MUST match scene N's voiceover per rule #2), THEN polish the END state so it bridges naturally into the START of scene N+1 via matching colors, compositions, or motions. Continuity is a finishing touch — it must NEVER be used as an excuse to delay a subject from voiceover[N] into visualPrompt[N+1] or [N+2]. If the voiceover names a subject in this scene, the visual shows that subject in THIS scene, even if the bridge to the next scene is rougher.
 
 === ENVIRONMENT & SETTING (MANDATORY) ===
 EVERY scene MUST include detailed environment/setting that matches the story.

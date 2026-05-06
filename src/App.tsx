@@ -27,6 +27,7 @@ const DashboardLayout = lazy(() => import("./components/dashboard/DashboardLayou
 const CreateNew = lazy(() => import("./pages/CreateNew"));
 const Editor = lazy(() => import("./pages/Editor"));
 const Settings = lazy(() => import("./pages/Settings"));
+const Help = lazy(() => import("./pages/Help"));
 const Usage = lazy(() => import("./pages/Usage"));
 const Pricing = lazy(() => import("./pages/Pricing"));
 const Billing = lazy(() => import("./pages/Billing"));
@@ -166,6 +167,16 @@ const App = () => (
                 <ProtectedRoute>
                   <RouteErrorBoundary routeName="billing">
                     <Billing />
+                  </RouteErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/help"
+              element={
+                <ProtectedRoute>
+                  <RouteErrorBoundary routeName="help">
+                    <Help />
                   </RouteErrorBoundary>
                 </ProtectedRoute>
               }

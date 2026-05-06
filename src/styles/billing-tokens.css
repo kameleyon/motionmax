@@ -1,0 +1,361 @@
+/* ════════════════════════════════════════════════════════════════════
+   MotionMax Billing & Plans — design tokens + scoped styles
+   ────────────────────────────────────────────────────────────────────
+   Ported from MotionMax Billing.html (2026-05-06) and scoped under
+   `.billing-shell` so the theme does NOT leak into the rest of the
+   app surface. Matches the admin-tokens.css pattern.
+
+   Rules:
+     - Cyan + gold ONLY. No red or green.
+     - Use the same surface ramp as admin so the page reads native.
+   ════════════════════════════════════════════════════════════════════ */
+
+.billing-shell {
+  --cyan: #14C8CC;
+  --cyan-2: #0FA6AE;
+  --cyan-dim: rgba(20, 200, 204, 0.14);
+  --gold: #F5B049;
+  --gold-deep: #E89B2C;
+  --gold-dim: rgba(245, 176, 73, 0.14);
+
+  --bg: #0A0D0F;
+  --panel: #10151A;
+  --panel-2: #151B20;
+  --panel-3: #1B2228;
+
+  --ink: #ECEAE4;
+  --ink-dim: #8A9198;
+  --ink-mute: #5A6268;
+
+  --line: rgba(255, 255, 255, 0.06);
+  --line-2: rgba(255, 255, 255, 0.10);
+
+  --radius: 12px;
+  --radius-lg: 16px;
+
+  --serif: 'Instrument Serif', Georgia, serif;
+  --sans: 'Inter', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  font-family: var(--sans);
+  color: var(--ink);
+}
+
+.billing-shell .bill-wrap {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 28px 32px 80px;
+}
+@media (max-width: 720px) { .billing-shell .bill-wrap { padding: 20px 18px 60px; } }
+@media (max-width: 480px) { .billing-shell .bill-wrap { padding: 16px 14px 50px; } }
+
+/* page hero */
+.billing-shell .bill-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 8px; flex-wrap: wrap; }
+.billing-shell .bill-head h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(28px, 4vw, 38px); line-height: 1.05; letter-spacing: -.02em; margin: 0; }
+.billing-shell .bill-head h1 em { font-style: normal; color: var(--cyan); font-weight: 400; }
+.billing-shell .bill-head .lede { font-size: 14px; color: var(--ink-dim); margin: 8px 0 0; max-width: 60ch; }
+.billing-shell .bill-head .who { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-mute); text-align: right; }
+.billing-shell .bill-head .who .pl { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; background: linear-gradient(95deg, rgba(20,200,204,.18), rgba(245,176,73,.18)); color: var(--ink); border: 1px solid rgba(20,200,204,.3); margin-top: 6px; font-size: 10.5px; letter-spacing: .16em; }
+.billing-shell .bill-head .who .pl::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+
+/* tabs */
+.billing-shell .bill-tabs { display: flex; gap: 0; align-items: center; border-bottom: 1px solid var(--line); margin: 28px 0; flex-wrap: wrap; row-gap: 0; overflow-x: auto; }
+.billing-shell .bill-tabs button { display: inline-flex; align-items: center; gap: 8px; padding: 11px 16px; border: 0; background: none; font-family: var(--sans); font-size: 13px; color: var(--ink-mute); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: color .15s, border-color .15s; margin-bottom: -1px; font-weight: 400; }
+.billing-shell .bill-tabs button:hover { color: var(--ink-dim); }
+.billing-shell .bill-tabs button.on { color: var(--ink); border-bottom-color: var(--cyan); font-weight: 500; }
+.billing-shell .bill-tabs button svg { flex-shrink: 0; opacity: .85; }
+.billing-shell .bill-tabs .pill { margin-left: 4px; font-family: var(--mono); font-size: 9.5px; padding: 2px 6px; border-radius: 3px; background: var(--cyan-dim); color: var(--cyan); letter-spacing: .06em; font-weight: 500; }
+
+/* generic cards */
+.billing-shell .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 24px; }
+.billing-shell .card h3 { font-family: var(--serif); font-weight: 500; font-size: 18px; letter-spacing: -.01em; margin: 0 0 14px; }
+.billing-shell .card .h-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 12px; }
+.billing-shell .card .h-row h3 { margin: 0; }
+.billing-shell .card .lbl { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-mute); }
+
+.billing-shell .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.billing-shell .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.billing-shell .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.billing-shell .grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+@media (max-width: 1100px) {
+  .billing-shell .grid-2,
+  .billing-shell .grid-3,
+  .billing-shell .grid-4,
+  .billing-shell .grid-2-1 { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   OVERVIEW — Current plan + KPI tiles
+============================================================ */
+.billing-shell .cp-hero {
+  position: relative; border: 1px solid rgba(20,200,204,.25); border-radius: var(--radius-lg);
+  padding: 28px 30px; overflow: hidden;
+  background:
+    radial-gradient(70% 100% at 100% 0%, rgba(245,176,73,.10), transparent 55%),
+    radial-gradient(60% 100% at 0% 100%, rgba(20,200,204,.14), transparent 55%),
+    var(--panel);
+}
+.billing-shell .cp-hero::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    linear-gradient(0deg, rgba(255,255,255,.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+  background-size: 50px 50px;
+  -webkit-mask-image: radial-gradient(70% 70% at 50% 50%, #000, transparent 80%);
+          mask-image: radial-gradient(70% 70% at 50% 50%, #000, transparent 80%);
+}
+.billing-shell .cp-hero .row { position: relative; display: grid; grid-template-columns: 1.2fr 1fr; gap: 30px; align-items: center; }
+@media (max-width: 900px) { .billing-shell .cp-hero .row { grid-template-columns: 1fr; } }
+.billing-shell .cp-hero .meta { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 14px; }
+.billing-shell .cp-hero .meta .live { display: inline-flex; align-items: center; gap: 6px; color: var(--cyan); }
+.billing-shell .cp-hero .meta .live::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); animation: bill-pulse 1.6s ease-in-out infinite; }
+@keyframes bill-pulse { 50% { opacity: .4; } }
+.billing-shell .cp-hero h2 { font-family: var(--serif); font-weight: 500; font-size: clamp(28px, 4.4vw, 42px); line-height: 1; letter-spacing: -.02em; margin: 0; }
+.billing-shell .cp-hero h2 em { font-style: normal; color: var(--cyan); }
+.billing-shell .cp-hero .price-line { margin-top: 12px; display: flex; align-items: baseline; gap: 10px; font-family: var(--mono); font-size: 13px; color: var(--ink-dim); }
+.billing-shell .cp-hero .price-line b { color: var(--ink); font-weight: 500; font-size: 16px; }
+.billing-shell .cp-hero .actions { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
+.billing-shell .cp-hero .next { position: relative; border-left: 1px solid var(--line); padding-left: 30px; }
+@media (max-width: 900px) { .billing-shell .cp-hero .next { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 22px; } }
+.billing-shell .cp-hero .next .lbl { margin-bottom: 8px; }
+.billing-shell .cp-hero .next .date { font-family: var(--serif); font-weight: 500; font-size: clamp(24px, 3.4vw, 32px); line-height: 1; letter-spacing: -.01em; margin: 0; }
+.billing-shell .cp-hero .next .date .y { color: var(--ink-mute); font-size: 18px; margin-left: 4px; }
+.billing-shell .cp-hero .next .det { margin-top: 10px; font-size: 13px; color: var(--ink-dim); line-height: 1.55; }
+.billing-shell .cp-hero .next .det b { color: var(--ink); font-weight: 500; }
+.billing-shell .cp-hero .next .countdown { margin-top: 14px; display: inline-flex; align-items: center; gap: 8px; padding: 6px 11px; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--line); font-family: var(--mono); font-size: 11.5px; color: var(--ink-dim); }
+.billing-shell .cp-hero .next .countdown b { color: var(--cyan); }
+
+/* btns */
+.billing-shell .btn-cyan { background: linear-gradient(95deg, var(--cyan), var(--cyan-2)); color: #06181a; border: 0; border-radius: 8px; padding: 9px 14px; font-weight: 600; font-size: 13px; font-family: var(--sans); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: transform .12s; }
+.billing-shell .btn-cyan:hover { transform: translateY(-1px); }
+.billing-shell .btn-cyan:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+.billing-shell .btn-ghost { background: transparent; color: var(--ink); border: 1px solid var(--line-2); border-radius: 8px; padding: 9px 14px; font-size: 13px; font-family: var(--sans); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.billing-shell .btn-ghost:hover { border-color: var(--ink-mute); }
+.billing-shell .btn-ghost.danger { color: #F5B049; border-color: rgba(245,176,73,.3); }
+.billing-shell .btn-ghost.danger:hover { border-color: #F5B049; }
+.billing-shell .btn-ghost:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* KPIs */
+.billing-shell .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 18px; }
+@media (max-width: 1100px) { .billing-shell .kpis { grid-template-columns: repeat(2, 1fr); } }
+.billing-shell .kpi { padding: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; display: flex; flex-direction: column; gap: 6px; position: relative; overflow: hidden; }
+.billing-shell .kpi .lbl { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-mute); }
+.billing-shell .kpi .v { font-family: var(--serif); font-weight: 500; font-size: 30px; letter-spacing: -.01em; line-height: 1; }
+.billing-shell .kpi .v .u { font-size: 13px; color: var(--ink-mute); margin-left: 4px; font-family: var(--mono); font-weight: 400; }
+.billing-shell .kpi .d { font-size: 12px; color: var(--ink-dim); display: flex; align-items: center; gap: 6px; }
+.billing-shell .kpi .d.up { color: var(--cyan); }
+.billing-shell .kpi .d.down { color: var(--gold); }
+.billing-shell .kpi .spark { position: absolute; right: 14px; top: 18px; height: 30px; width: 80px; opacity: .5; }
+
+/* progress bars */
+.billing-shell .bar { height: 8px; background: var(--panel-2); border-radius: 99px; overflow: hidden; border: 1px solid var(--line); }
+.billing-shell .bar > i { display: block; height: 100%; background: linear-gradient(95deg, var(--cyan), var(--cyan-2)); border-radius: 99px; transition: width .4s; }
+.billing-shell .bar.gold > i { background: linear-gradient(95deg, var(--gold), var(--gold-deep)); }
+
+/* settings rows */
+.billing-shell .set-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-top: 1px solid var(--line); }
+.billing-shell .set-row:first-of-type { border-top: 0; padding-top: 4px; }
+.billing-shell .set-row .info .t { font-size: 14px; color: var(--ink); font-weight: 500; margin-bottom: 3px; }
+.billing-shell .set-row .info .d { font-size: 12.5px; color: var(--ink-mute); max-width: 50ch; line-height: 1.5; }
+
+/* toggle */
+.billing-shell .tg { position: relative; width: 38px; height: 22px; border-radius: 99px; background: var(--panel-3); border: 1px solid var(--line-2); cursor: pointer; flex-shrink: 0; transition: background .2s; }
+.billing-shell .tg::after { content: ""; position: absolute; left: 2px; top: 1px; width: 16px; height: 16px; border-radius: 50%; background: var(--ink-mute); transition: left .2s, background .2s; }
+.billing-shell .tg.on { background: rgba(20,200,204,.22); border-color: rgba(20,200,204,.4); }
+.billing-shell .tg.on::after { left: 18px; background: var(--cyan); }
+
+/* ============================================================
+   PLANS TAB
+============================================================ */
+.billing-shell .plans-toggle { display: inline-flex; background: var(--panel-2); border: 1px solid var(--line); padding: 4px; border-radius: 99px; gap: 2px; }
+.billing-shell .plans-toggle button { padding: 8px 18px; font-size: 13px; color: var(--ink-mute); border-radius: 99px; font-family: var(--sans); font-weight: 500; background: none; border: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+.billing-shell .plans-toggle button.on { background: var(--panel); color: var(--ink); }
+.billing-shell .plans-toggle button .save { font-size: 11px; color: var(--cyan); font-family: var(--mono); letter-spacing: .06em; }
+.billing-shell .plans-toggle-wrap { display: flex; justify-content: center; margin: 14px 0 28px; }
+
+.billing-shell .plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+@media (max-width: 1100px) { .billing-shell .plans { grid-template-columns: 1fr; } }
+.billing-shell .plan {
+  position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 18px;
+  padding: 28px 26px; display: flex; flex-direction: column; gap: 14px; min-height: 520px;
+  transition: transform .2s, border-color .2s;
+}
+.billing-shell .plan:hover { transform: translateY(-2px); border-color: var(--line-2); }
+.billing-shell .plan.feat {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--panel), var(--panel)) padding-box,
+    linear-gradient(135deg, var(--cyan), var(--gold)) border-box;
+  border: 1px solid transparent;
+  box-shadow: 0 30px 60px -30px rgba(20,200,204,.4), 0 0 0 1px rgba(20,200,204,.1);
+}
+.billing-shell .plan.cur { border-color: rgba(20,200,204,.4); background: linear-gradient(180deg, rgba(20,200,204,.06), transparent 40%), var(--panel); }
+.billing-shell .plan .ribbon { position: absolute; top: -12px; left: 24px; font-family: var(--mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; padding: 5px 11px; border-radius: 99px; background: linear-gradient(95deg, var(--cyan), var(--gold)); color: #0a0d0f; font-weight: 600; }
+.billing-shell .plan .ribbon.cur { background: var(--panel-3); color: var(--cyan); border: 1px solid rgba(20,200,204,.3); }
+.billing-shell .plan h4 { font-family: var(--serif); font-weight: 500; font-size: 28px; letter-spacing: -.01em; margin: 0; }
+.billing-shell .plan .tag { font-size: 13px; color: var(--ink-dim); margin: 0; line-height: 1.5; }
+.billing-shell .plan .price { display: flex; align-items: baseline; gap: 6px; margin-top: 6px; }
+.billing-shell .plan .price .strike { font-family: var(--serif); font-size: 24px; color: var(--ink-mute); text-decoration: line-through; font-style: normal; }
+.billing-shell .plan .price .n { font-family: var(--serif); font-weight: 500; font-size: 54px; line-height: 1; letter-spacing: -.03em; }
+.billing-shell .plan .price .n em { font-style: normal; color: var(--cyan); }
+.billing-shell .plan .price .p { font-size: 13px; color: var(--ink-mute); }
+.billing-shell .plan .billed { font-size: 12.5px; color: var(--ink-mute); font-family: var(--mono); }
+.billing-shell .plan .cta { margin-top: 4px; }
+.billing-shell .plan .cta button {
+  width: 100%; padding: 12px 14px; border-radius: 8px;
+  background: #0a0d0f; color: #fff; border: 1px solid var(--line-2);
+  font-family: var(--sans); font-size: 13px; font-weight: 600; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.billing-shell .plan .cta button:hover { border-color: var(--ink-mute); }
+.billing-shell .plan .cta .sub { font-size: 11px; color: var(--ink-mute); font-weight: 400; }
+.billing-shell .plan.feat .cta button { background: linear-gradient(95deg, var(--cyan), var(--cyan-2)); color: #06181a; border: 0; }
+.billing-shell .plan.cur .cta button { background: var(--panel-2); color: var(--ink); border-color: rgba(20,200,204,.3); }
+
+/* Pack-select dropdown */
+.billing-shell .pack-select { position: relative; width: 100%; }
+.billing-shell .pack-select .btn {
+  width: 100%; padding: 11px 38px 11px 14px; border-radius: 8px; background: var(--panel-2);
+  border: 1px solid var(--line-2); color: var(--ink); font-family: var(--sans); font-size: 13px;
+  cursor: pointer; text-align: left; display: flex; align-items: center; justify-content: space-between;
+}
+.billing-shell .pack-select .btn:hover { border-color: var(--ink-mute); }
+.billing-shell .pack-select .btn .car { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-mute); }
+.billing-shell .pack-select .menu {
+  display: none; position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 30;
+  background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 8px; overflow: hidden;
+  max-height: 260px; overflow-y: auto;
+  box-shadow: 0 20px 60px -20px rgba(0,0,0,.7);
+}
+.billing-shell .pack-select.open .menu { display: block; }
+.billing-shell .pack-select .menu .opt { padding: 10px 14px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.billing-shell .pack-select .menu .opt:hover { background: var(--panel-3); }
+.billing-shell .pack-select .menu .opt.on { background: var(--cyan-dim); color: var(--cyan); }
+.billing-shell .pack-select .menu .opt .pri { color: var(--ink-mute); font-family: var(--mono); font-size: 11px; }
+.billing-shell .pack-select .menu .opt.on .pri { color: var(--cyan); }
+
+.billing-shell .feats { list-style: none; padding: 18px 0 0; margin: 0; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 11px; flex: 1; }
+.billing-shell .plan.feat .feats { border-top-color: rgba(255,255,255,.08); }
+.billing-shell .feats li { display: flex; align-items: flex-start; gap: 10px; font-size: 13.5px; color: var(--ink-dim); line-height: 1.5; }
+.billing-shell .feats li .ck { flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%; background: var(--cyan-dim); color: var(--cyan); display: grid; place-items: center; margin-top: 1px; }
+.billing-shell .feats li b { color: var(--ink); font-weight: 500; }
+.billing-shell .feats li.head { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-mute); padding-bottom: 2px; }
+.billing-shell .feats li.head .ck { display: none; }
+
+/* ============================================================
+   TOP-UP TAB
+============================================================ */
+.billing-shell .tu-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+@media (max-width: 1100px) { .billing-shell .tu-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 600px)  { .billing-shell .tu-grid { grid-template-columns: 1fr; } }
+.billing-shell .tu {
+  position: relative; border: 1px solid var(--line); border-radius: 14px; background: var(--panel);
+  padding: 22px 20px 20px; cursor: pointer; transition: border-color .15s, transform .12s;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.billing-shell .tu:hover { border-color: var(--line-2); transform: translateY(-2px); }
+.billing-shell .tu.on { border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan) inset, 0 12px 30px -10px rgba(20,200,204,.3); }
+.billing-shell .tu .ribbon { position: absolute; top: 10px; right: 10px; font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em; color: var(--cyan); background: var(--cyan-dim); padding: 3px 8px; border-radius: 4px; text-transform: uppercase; }
+.billing-shell .tu .ribbon.gold { color: var(--gold); background: rgba(245,176,73,.14); }
+.billing-shell .tu .credits { font-family: var(--serif); font-weight: 500; font-size: 30px; letter-spacing: -.01em; line-height: 1; }
+.billing-shell .tu .credits .u { font-size: 12px; color: var(--ink-mute); font-family: var(--mono); margin-left: 6px; font-weight: 400; }
+.billing-shell .tu .pri { font-family: var(--mono); font-size: 13px; color: var(--ink-dim); }
+.billing-shell .tu .pri b { color: var(--ink); font-size: 18px; font-weight: 500; font-family: var(--serif); }
+.billing-shell .tu .equiv { font-size: 12px; color: var(--ink-mute); margin-top: 2px; }
+.billing-shell .tu .save { margin-top: 6px; font-size: 11px; color: var(--gold); font-family: var(--mono); letter-spacing: .04em; }
+
+.billing-shell .slider-wrap { padding: 24px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; margin-top: 18px; }
+.billing-shell .slider-wrap .top { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+.billing-shell .slider-wrap h4 { font-family: var(--serif); font-size: 20px; font-weight: 500; margin: 0; letter-spacing: -.01em; }
+.billing-shell .slider-wrap h4 .n { color: var(--cyan); font-style: normal; }
+.billing-shell .slider-wrap .pri-big { font-family: var(--serif); font-size: 36px; font-weight: 500; line-height: 1; letter-spacing: -.02em; }
+.billing-shell .slider-wrap .pri-big .u { font-size: 14px; color: var(--ink-mute); font-family: var(--mono); margin-left: 4px; font-weight: 400; }
+.billing-shell .slider-wrap input[type=range] {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 99px;
+  background: linear-gradient(90deg, var(--cyan) 0%, var(--cyan) var(--p, 40%), var(--panel-3) var(--p, 40%), var(--panel-3) 100%);
+  margin-top: 18px; outline: 0; cursor: pointer;
+}
+.billing-shell .slider-wrap input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 3px solid var(--cyan); cursor: grab; box-shadow: 0 4px 10px rgba(0,0,0,.35); }
+.billing-shell .slider-wrap input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 3px solid var(--cyan); cursor: grab; }
+.billing-shell .slider-wrap .ticks { display: flex; justify-content: space-between; margin-top: 10px; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; color: var(--ink-mute); }
+
+/* ============================================================
+   USAGE TAB
+============================================================ */
+.billing-shell .chart-card { padding: 24px; }
+.billing-shell .chart-svg { width: 100%; height: 240px; display: block; }
+.billing-shell .chart-legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 14px; font-size: 12.5px; color: var(--ink-dim); }
+.billing-shell .chart-legend .lg { display: inline-flex; align-items: center; gap: 8px; }
+.billing-shell .chart-legend .lg .sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+.billing-shell .donut-row { display: grid; grid-template-columns: 200px 1fr; gap: 24px; align-items: center; }
+@media (max-width: 700px) { .billing-shell .donut-row { grid-template-columns: 1fr; justify-items: center; } }
+.billing-shell .donut-legend { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.billing-shell .donut-legend li { display: grid; grid-template-columns: 14px 1fr auto auto; gap: 10px; align-items: center; font-size: 13px; color: var(--ink-dim); }
+.billing-shell .donut-legend li .sw { width: 10px; height: 10px; border-radius: 3px; }
+.billing-shell .donut-legend li .v { font-family: var(--mono); color: var(--ink); font-weight: 500; }
+.billing-shell .donut-legend li .pct { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); min-width: 38px; text-align: right; }
+
+.billing-shell .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.billing-shell .tbl th { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-mute); text-align: left; font-weight: 500; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.billing-shell .tbl td { padding: 13px 14px; border-bottom: 1px solid var(--line); color: var(--ink-dim); vertical-align: middle; }
+.billing-shell .tbl tr:last-child td { border-bottom: 0; }
+.billing-shell .tbl tr:hover td { background: rgba(20,200,204,.03); }
+.billing-shell .tbl td.mono { font-family: var(--mono); font-size: 12px; color: var(--ink); }
+.billing-shell .tbl td.strong { color: var(--ink); font-weight: 500; }
+.billing-shell .tbl td.right { text-align: right; }
+.billing-shell .tbl th.right { text-align: right; }
+.billing-shell .tbl .pill { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 10.5px; padding: 3px 8px; border-radius: 4px; background: var(--panel-2); color: var(--ink-dim); letter-spacing: .06em; border: 1px solid var(--line); }
+.billing-shell .tbl .pill.ok { color: var(--cyan); background: rgba(20,200,204,.1); border-color: rgba(20,200,204,.2); }
+.billing-shell .tbl .pill.warn { color: var(--gold); background: rgba(245,176,73,.1); border-color: rgba(245,176,73,.2); }
+.billing-shell .tbl .ico-btn { padding: 5px; border-radius: 5px; color: var(--ink-mute); background: none; border: 0; cursor: pointer; }
+.billing-shell .tbl .ico-btn:hover { color: var(--cyan); background: var(--cyan-dim); }
+
+/* ============================================================
+   REFERRALS
+============================================================ */
+.billing-shell .ref-hero {
+  position: relative; border: 1px solid var(--line); border-radius: 18px; padding: 34px 32px; overflow: hidden;
+  background:
+    radial-gradient(60% 100% at 100% 0%, rgba(245,176,73,.10), transparent 55%),
+    radial-gradient(50% 100% at 0% 100%, rgba(20,200,204,.12), transparent 55%),
+    var(--panel);
+}
+.billing-shell .ref-hero h2 { font-family: var(--serif); font-weight: 500; font-size: 30px; letter-spacing: -.01em; margin: 0 0 8px; }
+.billing-shell .ref-hero h2 em { font-style: normal; color: var(--cyan); }
+.billing-shell .ref-hero .lede { font-size: 14px; color: var(--ink-dim); margin: 0 0 22px; max-width: 55ch; }
+.billing-shell .ref-link { display: flex; align-items: center; gap: 0; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 10px; overflow: hidden; max-width: 520px; }
+.billing-shell .ref-link .url { flex: 1; padding: 11px 14px; font-family: var(--mono); font-size: 13px; color: var(--ink); background: none; border: 0; outline: 0; letter-spacing: .02em; }
+.billing-shell .ref-link .copy { padding: 11px 16px; background: var(--panel-3); color: var(--ink); border: 0; border-left: 1px solid var(--line); font-family: var(--sans); font-size: 12.5px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.billing-shell .ref-link .copy:hover { background: var(--cyan-dim); color: var(--cyan); }
+.billing-shell .ref-share { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.billing-shell .ref-share button { padding: 9px 14px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; color: var(--ink-dim); font-family: var(--sans); font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.billing-shell .ref-share button:hover { color: var(--ink); border-color: var(--line-2); }
+
+/* ============================================================
+   CANCEL MODAL (retention)
+============================================================ */
+.billing-modal-overlay { position: fixed; inset: 0; background: rgba(4,8,10,.78); z-index: 60; display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(6px); }
+.billing-modal { background: #10151A; border: 1px solid rgba(255,255,255,.1); border-radius: 18px; width: min(560px, 100%); overflow: hidden; box-shadow: 0 30px 80px -20px rgba(0,0,0,.6); position: relative; color: #ECEAE4; font-family: var(--sans); }
+.billing-modal .top { padding: 26px 28px; background: linear-gradient(180deg, rgba(245,176,73,.08), transparent); border-bottom: 1px solid rgba(255,255,255,.06); }
+.billing-modal .top h3 { font-family: var(--serif); font-weight: 500; font-size: 24px; letter-spacing: -.01em; margin: 0 0 6px; }
+.billing-modal .top p { font-size: 13.5px; color: #8A9198; margin: 0; line-height: 1.55; }
+.billing-modal .body { padding: 24px 28px; }
+.billing-modal .offer {
+  display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 12px;
+  border: 1px solid rgba(245,176,73,.3); background: linear-gradient(180deg, rgba(245,176,73,.08), transparent);
+  margin-bottom: 18px;
+}
+.billing-modal .offer .ico { width: 42px; height: 42px; border-radius: 10px; background: rgba(245,176,73,.2); color: #F5B049; display: grid; place-items: center; flex-shrink: 0; }
+.billing-modal .offer .t { font-family: var(--serif); font-size: 18px; font-weight: 500; letter-spacing: -.005em; margin: 0 0 2px; }
+.billing-modal .offer .d { font-size: 12.5px; color: #8A9198; margin: 0; }
+.billing-modal .reasons { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+.billing-modal .reasons label { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: #151B20; border: 1px solid rgba(255,255,255,.06); cursor: pointer; font-size: 13.5px; color: #8A9198; }
+.billing-modal .reasons label:hover { border-color: rgba(255,255,255,.1); color: #ECEAE4; }
+.billing-modal .reasons input { accent-color: var(--cyan); }
+.billing-modal .foot { display: flex; gap: 10px; justify-content: flex-end; padding: 18px 28px; border-top: 1px solid rgba(255,255,255,.06); background: #151B20; }
+.billing-modal .x { position: absolute; top: 14px; right: 14px; width: 32px; height: 32px; border-radius: 8px; background: #151B20; color: #8A9198; border: 1px solid rgba(255,255,255,.06); cursor: pointer; display: grid; place-items: center; }
+.billing-modal .x:hover { color: #ECEAE4; border-color: rgba(255,255,255,.1); }
+
+.billing-shell .muted { color: var(--ink-mute); }
+.billing-shell .tiny { font-size: 11.5px; }

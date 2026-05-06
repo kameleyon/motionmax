@@ -29,6 +29,7 @@ const Editor = lazy(() => import("./pages/Editor"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Usage = lazy(() => import("./pages/Usage"));
 const Pricing = lazy(() => import("./pages/Pricing"));
+const Billing = lazy(() => import("./pages/Billing"));
 const Projects = lazy(() => import("./pages/Projects"));
 const VoiceLab = lazy(() => import("./pages/VoiceLab"));
 const PublicShare = lazy(() => import("./pages/PublicShare"));
@@ -155,6 +156,16 @@ const App = () => (
                 <ProtectedRoute>
                   <RouteErrorBoundary routeName="usage">
                     <Usage />
+                  </RouteErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/billing"
+              element={
+                <ProtectedRoute>
+                  <RouteErrorBoundary routeName="billing">
+                    <Billing />
                   </RouteErrorBoundary>
                 </ProtectedRoute>
               }

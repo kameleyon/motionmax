@@ -3,6 +3,7 @@
 
 @import "./styles/admin-tokens.css";
 @import "./styles/admin-shell.css";
+@import "./styles/autopost-tokens.css";
 
 @tailwind base;
 @tailwind components;

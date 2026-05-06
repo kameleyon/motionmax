@@ -13,7 +13,6 @@ import {
   Receipt,
   Crown,
   Gem,
-  Building2,
   ExternalLink,
   Plus,
   CheckCircle2,
@@ -62,7 +61,6 @@ const planDisplay: Record<PlanTier, { label: string; color: string; icon: Lucide
   free: { label: "Free", color: "bg-muted", icon: Zap },
   creator: { label: "Creator", color: "bg-primary/30", icon: Crown },
   studio: { label: "Studio", color: "bg-primary/40", icon: Gem },
-  enterprise: { label: "Enterprise", color: "bg-primary/50", icon: Building2 },
 };
 
 /** Compute the credit cost for a generation based on project type + length */
@@ -203,10 +201,10 @@ export default function Usage() {
   }, [selectedMonth]);
 
   // `plan` from useSubscription is already normalized to PlanTier
-  // (free | creator | studio | enterprise). PLAN_LIMITS owns the
-  // monthly credit cap; planDisplay owns the display chrome. Both
-  // tables include every PlanTier so this lookup never silently
-  // falls back to "free" for a paid plan again.
+  // (free | creator | studio). PLAN_LIMITS owns the monthly credit
+  // cap; planDisplay owns the display chrome. Both tables include
+  // every PlanTier so this lookup never silently falls back to "free"
+  // for a paid plan again.
   const planTier: PlanTier = (plan as PlanTier);
   const planInfo = planDisplay[planTier] ?? planDisplay.free;
   const PlanIcon = planInfo.icon;

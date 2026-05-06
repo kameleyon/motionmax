@@ -20,7 +20,6 @@ const TIER_LABELS: { id: PlanTier; label: string }[] = [
   { id: "free", label: "Free" },
   { id: "creator", label: "Creator" },
   { id: "studio", label: "Studio" },
-  { id: "enterprise", label: "Enterprise" },
 ];
 
 export default function CreditBreakdownTable() {

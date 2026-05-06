@@ -173,13 +173,13 @@ const App = () => (
             <Route path="/admin" element={<AdminRoute><RouteErrorBoundary routeName="admin"><Admin /></RouteErrorBoundary></AdminRoute>} />
 
             {/* Lab — autopost is now GA for any authenticated user.
-                The plan gate (free vs Creator/Studio/Enterprise) is
-                enforced inside the page itself + at the DB layer via
-                the is_creator_or_studio RLS check, so all we need at
-                the route layer is "must be signed in". /lab itself
-                stays AdminOnlyRoute because LabHome is still the
-                internal sandbox index — only /lab/autopost and its
-                children are user-facing. */}
+                The plan gate (free vs Creator/Studio) is enforced
+                inside the page itself + at the DB layer via the
+                is_creator_or_studio RLS check, so all we need at the
+                route layer is "must be signed in". /lab itself stays
+                AdminOnlyRoute because LabHome is still the internal
+                sandbox index — only /lab/autopost and its children
+                are user-facing. */}
             <Route path="/lab" element={<AdminOnlyRoute><RouteErrorBoundary routeName="lab"><LabHome /></RouteErrorBoundary></AdminOnlyRoute>} />
             <Route path="/lab/autopost" element={<ProtectedRoute><RouteErrorBoundary routeName="lab-autopost"><AutopostHome /></RouteErrorBoundary></ProtectedRoute>} />
             {/* Connect moved to Settings → Integrations (Wave B2). */}

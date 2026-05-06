@@ -43,7 +43,6 @@ export const PLAN_PRICES = {
   free:       { monthly: "$0",     yearly: "$0" },
   creator:    { monthly: "$29",    yearly: "$19" },
   studio:     { monthly: "$99",    yearly: "$66" },
-  enterprise: { monthly: "Custom", yearly: "Custom" },
 } as const;
 
 // Credit pack display prices
@@ -60,7 +59,7 @@ export function yearlyDiscountPercent(): number {
 }
 
 export function getAnnualSavings(plan: keyof typeof PLAN_PRICES): number {
-  if (plan === "free" || plan === "enterprise") return 0;
+  if (plan === "free") return 0;
   const monthly = parseFloat(PLAN_PRICES[plan].monthly.replace("$", ""));
   const yearly = parseFloat(PLAN_PRICES[plan].yearly.replace("$", ""));
   return Math.round((monthly - yearly) * 12);

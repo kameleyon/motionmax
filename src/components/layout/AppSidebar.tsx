@@ -134,7 +134,6 @@ export function AppSidebar() {
     switch (normalizePlanName(plan)) {
       case "creator": return "Creator";
       case "studio": return "Studio";
-      case "enterprise": return "Enterprise";
       default: return "Free Plan";
     }
   };
@@ -373,7 +372,7 @@ export function AppSidebar() {
 
                     {/* Cinematic — with lock for non-pro */}
                     {(() => {
-                      const canAccessCinematic = isAdmin || plan === "studio" || (plan as string) === "professional" || plan === "enterprise" || plan === "creator";
+                      const canAccessCinematic = isAdmin || plan === "studio" || (plan as string) === "professional" || plan === "creator";
                       return (
                         <button
                           onClick={() => canAccessCinematic && navTo("/app/create?mode=cinematic")}

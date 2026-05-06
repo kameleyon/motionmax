@@ -1,10 +1,9 @@
 import { motion } from "framer-motion";
-import { Check, X, Loader2, Info, Mail } from "lucide-react";
+import { Check, X, Loader2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { yearlyDiscountPercent } from "@/config/products";
 import type { PlanDef } from "@/config/pricingPlans";
 
 interface PlanCardGridProps {
@@ -14,7 +13,6 @@ interface PlanCardGridProps {
   loadingPlan: string | null;
   onSubscribe: (planId: string, priceId: string | null) => void;
   onDowngrade: () => void;
-  onEnterprise: () => void;
 }
 
 function getPlanCta(plan: PlanDef, currentPlan: string): string {
@@ -26,7 +24,6 @@ function getPlanCta(plan: PlanDef, currentPlan: string): string {
 function isPlanDisabled(plan: PlanDef, currentPlan: string): boolean {
   if (plan.id === "free") return currentPlan === "free";
   if (plan.id === currentPlan) return true;
-  if (plan.id === "enterprise") return false;
   return false;
 }
 
@@ -37,10 +34,9 @@ export default function PlanCardGrid({
   loadingPlan,
   onSubscribe,
   onDowngrade,
-  onEnterprise,
 }: PlanCardGridProps) {
   return (
-    <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+    <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
       {plans.map((plan, index) => {
         const Icon = plan.icon;
         const isCurrentPlan = plan.id === currentPlan;
@@ -58,18 +54,12 @@ export default function PlanCardGrid({
               className={cn(
                 "relative h-full border-border/50 bg-card/50 shadow-sm transition-all hover:shadow-md flex flex-col",
                 plan.popular && "border-primary/50 bg-gradient-to-b from-primary/5 to-transparent",
-                plan.id === "enterprise" && "border-amber-500/40 bg-gradient-to-b from-amber-500/5 to-transparent dark:from-amber-500/8",
                 isCurrentPlan && "ring-2 ring-primary"
               )}
             >
               {plan.popular && !isCurrentPlan && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                   <Badge className="bg-primary text-primary-foreground">Most Popular</Badge>
-                </div>
-              )}
-              {plan.id === "enterprise" && !isCurrentPlan && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <Badge className="bg-amber-500 text-white">Custom Pricing</Badge>
                 </div>
               )}
               {isCurrentPlan && (
@@ -81,12 +71,10 @@ export default function PlanCardGrid({
                 <div className="flex items-center gap-2 mb-2">
                   <div className={cn(
                     "flex h-8 w-8 items-center justify-center rounded-lg",
-                    plan.id === "enterprise" ? "bg-amber-500/20" :
                     plan.popular || isCurrentPlan ? "bg-primary/20" : "bg-muted"
                   )}>
                     <Icon className={cn(
                       "h-4 w-4",
-                      plan.id === "enterprise" ? "text-amber-600 dark:text-amber-400" :
                       plan.popular || isCurrentPlan ? "text-primary" : "text-muted-foreground"
                     )} />
                   </div>
@@ -96,11 +84,11 @@ export default function PlanCardGrid({
                   <span className="text-2xl sm:text-3xl font-bold">
                     {billingInterval === "yearly" ? plan.yearlyPrice : plan.monthlyPrice}
                   </span>
-                  {plan.id !== "free" && plan.id !== "enterprise" && (
+                  {plan.id !== "free" && (
                     <span className="text-sm text-muted-foreground">/mo</span>
                   )}
                 </div>
-                {billingInterval === "yearly" && plan.id !== "free" && plan.id !== "enterprise" && (
+                {billingInterval === "yearly" && plan.id !== "free" && (
                   <p className="text-xs text-primary">
                     Billed yearly (${(parseFloat(plan.yearlyPrice.replace("$", "")) * 12).toFixed(0)}/yr)
                   </p>
@@ -123,44 +111,34 @@ export default function PlanCardGrid({
                   ))}
                 </ul>
                 <div className="pt-2">
-                  {plan.id === "enterprise" ? (
-                    <Button
-                      className="w-full rounded-full text-sm bg-amber-500 text-white hover:bg-amber-600 gap-1.5"
-                      onClick={onEnterprise}
-                    >
-                      <Mail className="h-3.5 w-3.5" />
-                      Contact Sales
-                    </Button>
-                  ) : (
-                    <Button
-                      className={cn(
-                        "w-full rounded-full text-sm",
-                        plan.popular || isCurrentPlan
-                          ? "bg-primary text-primary-foreground"
-                          : isDisabled
-                            ? "bg-muted text-muted-foreground cursor-not-allowed"
-                            : "bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
-                      )}
-                      disabled={isDisabled || isLoading}
-                      onClick={() => {
-                        if (plan.id === "free" && currentPlan !== "free") {
-                          onDowngrade();
-                        } else {
-                          const priceId = billingInterval === "yearly" ? plan.yearlyPriceId : plan.monthlyPriceId;
-                          if (priceId) onSubscribe(plan.id, priceId);
-                        }
-                      }}
-                    >
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                          Processing...
-                        </>
-                      ) : (
-                        getPlanCta(plan, currentPlan)
-                      )}
-                    </Button>
-                  )}
+                  <Button
+                    className={cn(
+                      "w-full rounded-full text-sm",
+                      plan.popular || isCurrentPlan
+                        ? "bg-primary text-primary-foreground"
+                        : isDisabled
+                          ? "bg-muted text-muted-foreground cursor-not-allowed"
+                          : "bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
+                    )}
+                    disabled={isDisabled || isLoading}
+                    onClick={() => {
+                      if (plan.id === "free" && currentPlan !== "free") {
+                        onDowngrade();
+                      } else {
+                        const priceId = billingInterval === "yearly" ? plan.yearlyPriceId : plan.monthlyPriceId;
+                        if (priceId) onSubscribe(plan.id, priceId);
+                      }
+                    }}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Processing...
+                      </>
+                    ) : (
+                      getPlanCta(plan, currentPlan)
+                    )}
+                  </Button>
                 </div>
                 {plan.id === "free" && currentPlan !== "free" && (
                   <div className="flex items-start gap-1.5 p-2 rounded-md bg-muted/50">

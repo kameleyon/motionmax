@@ -6,7 +6,7 @@
  * Re-edits (image/video/audio regen) are FREE -- no extra credit cost.
  */
 
-export type PlanTier = "free" | "creator" | "studio" | "enterprise";
+export type PlanTier = "free" | "creator" | "studio";
 
 export interface PlanLimits {
   creditsPerMonth: number;
@@ -24,14 +24,16 @@ export interface PlanLimits {
   smartFlowLimit: number;
 }
 
-/** Map legacy plan names to new ones */
+/** Map legacy plan names to new ones.
+ *  Enterprise is no longer a sold tier; legacy enterprise rows fall
+ *  through to studio limits (same monthly cap, no SLA promises). */
 export function normalizePlanName(plan: string): PlanTier {
   switch (plan) {
     case "starter": return "creator";
     case "professional": return "studio";
     case "creator": return "creator";
     case "studio": return "studio";
-    case "enterprise": return "enterprise";
+    case "enterprise": return "studio";
     default: return "free";
   }
 }
@@ -74,21 +76,6 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> & { starter: PlanLimits; 
     allowedFormats: ["landscape", "portrait"],
     maxResolution: "4k",
     voiceClones: 5,
-    allowBrandMark: true,
-    allowCustomStyle: true,
-    allowVoiceCloning: true,
-    allowCharacterConsistency: true,
-    priorityRendering: true,
-    watermark: false,
-    smartFlowLimit: 999999,
-  },
-  enterprise: {
-    creditsPerMonth: 999999,
-    dailyFreeCredits: 999999,
-    allowedLengths: ["short", "brief", "presentation"],
-    allowedFormats: ["landscape", "portrait"],
-    maxResolution: "4k",
-    voiceClones: 999,
     allowBrandMark: true,
     allowCustomStyle: true,
     allowVoiceCloning: true,
@@ -149,7 +136,6 @@ export const AUTOPOST_CREDITS_PER_RUN = 45;
 export const AUTOPOST_ELIGIBLE_PLANS: ReadonlyArray<PlanTier> = [
   "creator",
   "studio",
-  "enterprise",
 ] as const;
 
 export function isAutopostEligible(plan: PlanTier): boolean {

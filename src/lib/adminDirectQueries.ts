@@ -7,13 +7,15 @@ import { supabase } from "@/integrations/supabase/client";
 
 // ── Dashboard Stats ────────────────────────────────────────────────
 
-/** Known subscription prices (monthly) for revenue estimation */
+/** Known subscription prices (monthly) for revenue estimation.
+ *  Enterprise is no longer sold; legacy enterprise rows are billed
+ *  as studio for revenue-estimation purposes. */
 const PLAN_MONTHLY_PRICE: Record<string, number> = {
   creator: 14.99,
   starter: 14.99,
   studio: 39.99,
   professional: 39.99,
-  enterprise: 99.99,
+  enterprise: 39.99,
 };
 
 /** Known credit pack prices */

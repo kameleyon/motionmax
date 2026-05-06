@@ -27,7 +27,7 @@ export function CharacterConsistencyToggle({ enabled, onToggle }: CharacterConsi
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const isStudioPlus = plan === "studio" || (plan as string) === "professional" || plan === "enterprise";
+  const isStudioPlus = plan === "studio" || (plan as string) === "professional";
   const canUseFeature = isStudioPlus;
 
   // Auto-enable for studio+ plans

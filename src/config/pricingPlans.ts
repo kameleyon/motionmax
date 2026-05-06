@@ -1,4 +1,4 @@
-import { Zap, Crown, Gem, Building2, type LucideIcon } from "lucide-react";
+import { Zap, Crown, Gem, type LucideIcon } from "lucide-react";
 import { PLAN_LIMITS } from "@/lib/planLimits";
 import { STRIPE_PLANS, CREDIT_PACKS } from "@/hooks/useSubscription";
 import { PLAN_PRICES, CREDIT_PACK_PRICES } from "@/config/products";
@@ -124,30 +124,5 @@ export const PLANS: PlanDef[] = [
     popular: false,
     monthlyPriceId: STRIPE_PLANS.professional.monthly.priceId,
     yearlyPriceId: STRIPE_PLANS.professional.yearly.priceId,
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    monthlyPrice: PLAN_PRICES.enterprise.monthly,
-    yearlyPrice: PLAN_PRICES.enterprise.yearly,
-    description: "Custom solutions for large teams",
-    icon: Building2,
-    features: [
-      "Unlimited credits (fair use)",
-      "4K+ quality",
-      "Custom style development",
-      "Custom voice training",
-      "Unlimited voice clones",
-      "White-label solution",
-      "SSO/SAML integration",
-      "Custom SLA",
-      "Dedicated account manager",
-      "24/7 premium support",
-    ],
-    excluded: [],
-    cta: "Contact Sales",
-    popular: false,
-    monthlyPriceId: null,
-    yearlyPriceId: null,
   },
 ];

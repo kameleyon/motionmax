@@ -6,6 +6,7 @@
 @import "./styles/autopost-tokens.css";
 @import "./styles/autopost-modal.css";
 @import "./styles/settings-tokens.css";
+@import "./styles/support-tokens.css";
 
 @tailwind base;
 @tailwind components;

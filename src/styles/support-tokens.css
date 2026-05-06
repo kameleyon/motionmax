@@ -1,0 +1,537 @@
+/* ════════════════════════════════════════════════════════════════════
+   MotionMax Help & Support — design tokens + scoped styles
+   ────────────────────────────────────────────────────────────────────
+   Ported from "MotionMax Support.html" (2026-05-06) and scoped under
+   `.support-shell` so the theme does NOT leak into the rest of the
+   app surface. Mirrors the billing-tokens.css / settings-tokens.css
+   patterns.
+
+   Theme rules (hard requirements):
+     - Aqua + gold ONLY. No red. No green.
+     - Template's #F5B049 / #E89B2C (amber) are replaced everywhere
+       with brand gold #E4C875 / deep companion #C9A75A.
+     - Status pills: success → cyan, warning/danger → gold.
+   ════════════════════════════════════════════════════════════════════ */
+
+.support-shell {
+  --cyan: #14C8CC;
+  --cyan-2: #0FA6AE;
+  --cyan-dim: rgba(20, 200, 204, 0.14);
+  --gold: #E4C875;
+  --gold-deep: #C9A75A;
+  --gold-dim: rgba(228, 200, 117, 0.14);
+
+  --bg: #0A0D0F;
+  --panel: #10151A;
+  --panel-2: #151B20;
+  --panel-3: #1B2228;
+
+  --ink: #ECEAE4;
+  --ink-dim: #8A9198;
+  --ink-mute: #5A6268;
+
+  --line: rgba(255, 255, 255, 0.06);
+  --line-2: rgba(255, 255, 255, 0.10);
+
+  --radius: 12px;
+  --radius-lg: 16px;
+
+  --serif: 'Fraunces', 'Instrument Serif', Georgia, serif;
+  --sans: 'Inter', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  font-family: var(--sans);
+  color: var(--ink);
+}
+
+/* page wrap */
+.support-shell .sup-wrap {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 28px 32px 80px;
+}
+@media (max-width: 720px) { .support-shell .sup-wrap { padding: 20px 18px 60px; } }
+@media (max-width: 480px) { .support-shell .sup-wrap { padding: 16px 14px 50px; } }
+
+/* ─── Hero ─────────────────────────────────────────────────────── */
+.support-shell .help-hero {
+  position: relative;
+  border: 1px solid rgba(20, 200, 204, 0.25);
+  border-radius: var(--radius-lg);
+  padding: 36px 36px 30px;
+  overflow: hidden;
+  background:
+    radial-gradient(70% 110% at 100% 0%, rgba(228, 200, 117, 0.10), transparent 55%),
+    radial-gradient(60% 110% at 0% 100%, rgba(20, 200, 204, 0.14), transparent 55%),
+    var(--panel);
+}
+@media (max-width: 600px) { .support-shell .help-hero { padding: 24px 22px; } }
+
+.support-shell .help-hero h2 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: clamp(28px, 4.4vw, 42px);
+  line-height: 1.05;
+  letter-spacing: -.02em;
+  margin: 0 0 10px;
+  font-variation-settings: "opsz" 144;
+}
+.support-shell .help-hero h2 em { font-style: normal; color: var(--cyan); font-weight: 400; }
+.support-shell .help-hero .sub {
+  font-size: 14px;
+  color: var(--ink-dim);
+  max-width: 60ch;
+  line-height: 1.55;
+  margin: 0 0 20px;
+}
+
+.support-shell .help-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  padding: 12px 16px;
+  max-width: 560px;
+}
+.support-shell .help-search input {
+  flex: 1;
+  background: none;
+  border: 0;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14.5px;
+  outline: 0;
+}
+.support-shell .help-search input::placeholder { color: var(--ink-mute); }
+.support-shell .help-search kbd {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-mute);
+  background: var(--panel-3);
+  padding: 3px 7px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+}
+
+/* ─── Quick category cards ─────────────────────────────────────── */
+.support-shell .qg {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-top: 24px;
+}
+@media (max-width: 1000px) { .support-shell .qg { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 520px)  { .support-shell .qg { grid-template-columns: 1fr; } }
+
+.support-shell .q-card {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px;
+  cursor: pointer;
+  transition: border-color .15s, transform .15s, background .15s;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  font-family: inherit;
+  text-align: left;
+  width: 100%;
+}
+.support-shell .q-card:hover {
+  border-color: rgba(20, 200, 204, 0.4);
+  transform: translateY(-2px);
+  background: var(--panel);
+}
+.support-shell .q-card .ico {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: var(--cyan-dim);
+  color: var(--cyan);
+  display: grid;
+  place-items: center;
+  margin-bottom: 12px;
+}
+.support-shell .q-card .t {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 16px;
+  letter-spacing: -.01em;
+  margin-bottom: 4px;
+}
+.support-shell .q-card .d { font-size: 12px; color: var(--ink-mute); line-height: 1.5; }
+
+/* ─── Generic card ─────────────────────────────────────────────── */
+.support-shell .card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+}
+.support-shell .card h3 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 18px;
+  letter-spacing: -.01em;
+  margin: 0 0 14px;
+}
+.support-shell .card .h-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.support-shell .card .h-row h3 { margin: 0; }
+
+/* ─── Status rows ──────────────────────────────────────────────── */
+.support-shell .status-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+.support-shell .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 8px rgba(20, 200, 204, 0.7);
+  flex-shrink: 0;
+}
+/* Warn = brand gold (no red, no amber) */
+.support-shell .status-dot.warn {
+  background: var(--gold);
+  box-shadow: 0 0 8px rgba(228, 200, 117, 0.7);
+}
+.support-shell .status-row .t { flex: 1; font-size: 13.5px; color: var(--ink); }
+.support-shell .status-row .v {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-mute);
+  letter-spacing: .06em;
+}
+
+/* ─── FAQ section ──────────────────────────────────────────────── */
+.support-shell .faq-section { margin-top: 32px; }
+.support-shell .faq-section .head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.support-shell .faq-section h3 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 22px;
+  letter-spacing: -.01em;
+  margin: 0;
+}
+.support-shell .faq-section .count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-mute);
+  letter-spacing: .1em;
+}
+
+.support-shell .faq {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--panel);
+}
+.support-shell .faq-item { border-top: 1px solid var(--line); }
+.support-shell .faq-item:first-child { border-top: 0; }
+.support-shell .faq-q {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 20px;
+  cursor: pointer;
+  font-size: 14.5px;
+  color: var(--ink);
+  font-weight: 500;
+  transition: background .15s;
+  background: none;
+  border: 0;
+  font-family: inherit;
+  text-align: left;
+  width: 100%;
+}
+.support-shell .faq-q:hover { background: var(--panel-2); }
+.support-shell .faq-q .chev {
+  flex-shrink: 0;
+  color: var(--ink-mute);
+  transition: transform .25s;
+}
+.support-shell .faq-item.open .faq-q .chev {
+  transform: rotate(180deg);
+  color: var(--cyan);
+}
+.support-shell .faq-a {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height .3s;
+}
+.support-shell .faq-item.open .faq-a { max-height: 500px; }
+.support-shell .faq-a-inner {
+  padding: 0 20px 18px;
+  font-size: 13.5px;
+  color: var(--ink-dim);
+  line-height: 1.65;
+  max-width: 70ch;
+}
+.support-shell .faq-a-inner code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--panel-2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--cyan);
+}
+.support-shell .faq-a-inner a { color: var(--cyan); }
+.support-shell .faq-a-inner a:hover { text-decoration: underline; }
+
+/* ─── Category tabs ────────────────────────────────────────────── */
+.support-shell .cat-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.support-shell .cat-tabs::-webkit-scrollbar { display: none; }
+.support-shell .cat-tabs button {
+  padding: 7px 14px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  color: var(--ink-dim);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .15s;
+}
+.support-shell .cat-tabs button:hover {
+  color: var(--ink);
+  border-color: var(--line-2);
+}
+.support-shell .cat-tabs button.on {
+  background: var(--cyan-dim);
+  border-color: rgba(20, 200, 204, 0.4);
+  color: var(--cyan);
+  font-weight: 500;
+}
+
+/* Mobile: collapse cat-tabs to icons-only? No icons here — keep
+   pills but compress padding so they squeeze on narrow screens. */
+@media (max-width: 720px) {
+  .support-shell .cat-tabs button { padding: 6px 10px; font-size: 11.5px; }
+}
+
+/* ─── Contact grid ─────────────────────────────────────────────── */
+.support-shell .contact-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 18px;
+}
+@media (max-width: 900px) { .support-shell .contact-grid { grid-template-columns: 1fr; } }
+
+.support-shell .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 860px) { .support-shell .grid-2 { grid-template-columns: 1fr; } }
+
+/* ─── Touch (other ways to reach) rows ─────────────────────────── */
+.support-shell .touch-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  text-decoration: none;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  width: 100%;
+}
+.support-shell .touch-row:hover { border-color: rgba(20, 200, 204, 0.4); }
+.support-shell .touch-row.disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.support-shell .touch-row.disabled:hover { border-color: var(--line); }
+.support-shell .touch-row .ico {
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  background: var(--panel-3);
+  color: var(--cyan);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.support-shell .touch-row .meta { flex: 1; min-width: 0; }
+.support-shell .touch-row .meta .t {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+  margin-bottom: 2px;
+}
+.support-shell .touch-row .meta .d { font-size: 12px; color: var(--ink-mute); }
+.support-shell .touch-row .arr { color: var(--ink-mute); flex-shrink: 0; }
+
+/* ─── Buttons (scoped) ─────────────────────────────────────────── */
+.support-shell .btn-cyan {
+  background: linear-gradient(95deg, var(--cyan), var(--cyan-2));
+  color: #06181a;
+  border: 0;
+  border-radius: 8px;
+  padding: 9px 14px;
+  font-weight: 600;
+  font-size: 13px;
+  font-family: var(--sans);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: transform .12s;
+}
+.support-shell .btn-cyan:hover:not(:disabled) { transform: translateY(-1px); }
+.support-shell .btn-cyan:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+.support-shell .btn-ghost {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  padding: 9px 14px;
+  font-size: 13px;
+  font-family: var(--sans);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.support-shell .btn-ghost:hover:not(:disabled) { border-color: var(--ink-mute); }
+
+/* ─── Fields (form) ────────────────────────────────────────────── */
+.support-shell .fld { display: flex; flex-direction: column; gap: 6px; }
+.support-shell .fld label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.support-shell .fld input,
+.support-shell .fld select,
+.support-shell .fld textarea {
+  padding: 10px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 13.5px;
+  outline: 0;
+  transition: border-color .15s;
+  width: 100%;
+}
+.support-shell .fld input:focus,
+.support-shell .fld select:focus,
+.support-shell .fld textarea:focus { border-color: var(--cyan); }
+.support-shell .fld textarea { resize: vertical; min-height: 120px; line-height: 1.55; }
+.support-shell .fld .hint { font-size: 11.5px; color: var(--ink-mute); margin-top: 2px; }
+
+/* ─── Inline "coming soon" tag (subtle) ────────────────────────── */
+.support-shell .soon-tag {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  color: var(--gold);
+  background: var(--gold-dim);
+  border: 1px solid rgba(228, 200, 117, 0.18);
+  white-space: nowrap;
+}
+
+/* ─── Community card override (tints intentionally use gold rim) ─ */
+.support-shell .community-card {
+  background: linear-gradient(135deg, rgba(20, 200, 204, 0.06), rgba(228, 200, 117, 0.06));
+  border-color: rgba(20, 200, 204, 0.25);
+}
+.support-shell .community-card p {
+  font-size: 13px;
+  color: var(--ink-dim);
+  line-height: 1.55;
+  margin: 0 0 14px;
+}
+
+/* "Average reply" lede strip on the contact form */
+.support-shell .reply-lede {
+  font-size: 13px;
+  color: var(--ink-dim);
+  margin-bottom: 14px;
+}
+.support-shell .reply-lede b { color: var(--cyan); }
+
+/* "FULL STATUS PAGE" link */
+.support-shell .status-cta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--cyan);
+  letter-spacing: .1em;
+  text-decoration: none;
+}
+.support-shell .status-cta:hover { text-decoration: underline; }
+
+/* ─── support-modal chrome ─────────────────────────────────────────
+   Mirrors settings-modal-content / autopost-modal-content (v2-announcement
+   vibe). Use on any AlertDialog or Dialog opened from the support page.
+   ──────────────────────────────────────────────────────────────────── */
+.support-modal-overlay {
+  background: rgba(8, 11, 13, 0.72) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.support-modal-content {
+  background: #10151A !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  border-radius: 18px !important;
+  padding: 26px 28px;
+  box-shadow:
+    0 30px 80px -20px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(20, 200, 204, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+  color: #ECEAE4;
+}
+@media (max-width: 760px) {
+  .support-modal-content {
+    padding: 22px 20px !important;
+    border-radius: 14px !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .support-modal-overlay,
+  .support-modal-content {
+    animation: none !important;
+    transition: none !important;
+  }
+}

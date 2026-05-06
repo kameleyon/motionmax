@@ -91,8 +91,8 @@ export default function TabUsage() {
             <>
               <path d={videoArea} fill="url(#lgVid)" />
               <path d={videoPath} fill="none" stroke="#14C8CC" strokeWidth={2} />
-              <path d={voicePath} fill="none" stroke="#F5B049" strokeWidth={2} strokeDasharray="3 3" />
-              <path d={imagePath} fill="none" stroke="rgba(245,176,73,.6)" strokeWidth={2} strokeDasharray="2 2" />
+              <path d={voicePath} fill="none" stroke="#E4C875" strokeWidth={2} strokeDasharray="3 3" />
+              <path d={imagePath} fill="none" stroke="rgba(228,200,117,.6)" strokeWidth={2} strokeDasharray="2 2" />
               <g fill="rgba(255,255,255,.4)" fontFamily="JetBrains Mono" fontSize="9" textAnchor="middle">
                 {months.map((m, i) => (
                   <text key={i} x={i * stepX} y={H - 4}>{m.month}</text>
@@ -107,8 +107,8 @@ export default function TabUsage() {
         </svg>
         <div className="chart-legend">
           <span className="lg"><span className="sw" style={{ background: "#14C8CC" }} />Video</span>
-          <span className="lg"><span className="sw" style={{ background: "#F5B049" }} />Voice</span>
-          <span className="lg"><span className="sw" style={{ background: "rgba(245,176,73,.5)" }} />Images</span>
+          <span className="lg"><span className="sw" style={{ background: "#E4C875" }} />Voice</span>
+          <span className="lg"><span className="sw" style={{ background: "rgba(228,200,117,.5)" }} />Images</span>
         </div>
       </div>
 
@@ -119,8 +119,8 @@ export default function TabUsage() {
             <DonutSvg pcts={{ video: videoPct, voice: voicePct, image: imagePct, other: otherPct }} totalLabel={num(video + voice + image + other)} />
             <ul className="donut-legend">
               <li><span className="sw" style={{ background: "#14C8CC" }} /><span>Video render</span><span className="v">{num(video)}</span><span className="pct">{Math.round(videoPct)}%</span></li>
-              <li><span className="sw" style={{ background: "#F5B049" }} /><span>Voice / TTS</span><span className="v">{num(voice)}</span><span className="pct">{Math.round(voicePct)}%</span></li>
-              <li><span className="sw" style={{ background: "rgba(245,176,73,.5)" }} /><span>Images</span><span className="v">{num(image)}</span><span className="pct">{Math.round(imagePct)}%</span></li>
+              <li><span className="sw" style={{ background: "#E4C875" }} /><span>Voice / TTS</span><span className="v">{num(voice)}</span><span className="pct">{Math.round(voicePct)}%</span></li>
+              <li><span className="sw" style={{ background: "rgba(228,200,117,.5)" }} /><span>Images</span><span className="v">{num(image)}</span><span className="pct">{Math.round(imagePct)}%</span></li>
               <li><span className="sw" style={{ background: "rgba(255,255,255,.2)" }} /><span>Other</span><span className="v">{num(other)}</span><span className="pct">{Math.round(otherPct)}%</span></li>
             </ul>
           </div>
@@ -186,8 +186,8 @@ function DonutSvg({
     <svg width={200} height={200} viewBox="0 0 42 42">
       <circle cx="21" cy="21" r="15.9155" fill="transparent" stroke="rgba(255,255,255,.05)" strokeWidth={3} />
       {slice(pcts.video, "#14C8CC")}
-      {slice(pcts.voice, "#F5B049")}
-      {slice(pcts.image, "rgba(245,176,73,.5)")}
+      {slice(pcts.voice, "#E4C875")}
+      {slice(pcts.image, "rgba(228,200,117,.5)")}
       {slice(pcts.other, "rgba(255,255,255,.2)")}
       <text x="21" y="20" textAnchor="middle" fill="#fff" fontFamily="Fraunces, Georgia, serif" fontSize="6" fontWeight="500">{totalLabel}</text>
       <text x="21" y="26" textAnchor="middle" fill="rgba(255,255,255,.5)" fontFamily="JetBrains Mono" fontSize="2.5" letterSpacing=".15">CREDITS</text>

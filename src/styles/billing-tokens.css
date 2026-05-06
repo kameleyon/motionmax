@@ -14,9 +14,9 @@
   --cyan: #14C8CC;
   --cyan-2: #0FA6AE;
   --cyan-dim: rgba(20, 200, 204, 0.14);
-  --gold: #F5B049;
-  --gold-deep: #E89B2C;
-  --gold-dim: rgba(245, 176, 73, 0.14);
+  --gold: #E4C875;
+  --gold-deep: #C9A75A;
+  --gold-dim: rgba(228, 200, 117, 0.14);
 
   --bg: #0A0D0F;
   --panel: #10151A;
@@ -55,7 +55,7 @@
 .billing-shell .bill-head h1 em { font-style: normal; color: var(--cyan); font-weight: 400; }
 .billing-shell .bill-head .lede { font-size: 14px; color: var(--ink-dim); margin: 8px 0 0; max-width: 60ch; }
 .billing-shell .bill-head .who { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-mute); text-align: right; }
-.billing-shell .bill-head .who .pl { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; background: linear-gradient(95deg, rgba(20,200,204,.18), rgba(245,176,73,.18)); color: var(--ink); border: 1px solid rgba(20,200,204,.3); margin-top: 6px; font-size: 10.5px; letter-spacing: .16em; }
+.billing-shell .bill-head .who .pl { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; background: linear-gradient(95deg, rgba(20,200,204,.18), rgba(228,200,117,.18)); color: var(--ink); border: 1px solid rgba(20,200,204,.3); margin-top: 6px; font-size: 10.5px; letter-spacing: .16em; }
 .billing-shell .bill-head .who .pl::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
 
 /* tabs */
@@ -101,7 +101,7 @@
   position: relative; border: 1px solid rgba(20,200,204,.25); border-radius: var(--radius-lg);
   padding: 28px 30px; overflow: hidden;
   background:
-    radial-gradient(70% 100% at 100% 0%, rgba(245,176,73,.10), transparent 55%),
+    radial-gradient(70% 100% at 100% 0%, rgba(228,200,117,.10), transparent 55%),
     radial-gradient(60% 100% at 0% 100%, rgba(20,200,204,.14), transparent 55%),
     var(--panel);
 }
@@ -141,8 +141,8 @@
 .billing-shell .btn-cyan:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 .billing-shell .btn-ghost { background: transparent; color: var(--ink); border: 1px solid var(--line-2); border-radius: 8px; padding: 9px 14px; font-size: 13px; font-family: var(--sans); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
 .billing-shell .btn-ghost:hover { border-color: var(--ink-mute); }
-.billing-shell .btn-ghost.danger { color: #F5B049; border-color: rgba(245,176,73,.3); }
-.billing-shell .btn-ghost.danger:hover { border-color: #F5B049; }
+.billing-shell .btn-ghost.danger { color: #E4C875; border-color: rgba(228,200,117,.3); }
+.billing-shell .btn-ghost.danger:hover { border-color: #E4C875; }
 .billing-shell .btn-ghost:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* KPIs */
@@ -266,7 +266,7 @@
 .billing-shell .tu:hover { border-color: var(--line-2); transform: translateY(-2px); }
 .billing-shell .tu.on { border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan) inset, 0 12px 30px -10px rgba(20,200,204,.3); }
 .billing-shell .tu .ribbon { position: absolute; top: 10px; right: 10px; font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em; color: var(--cyan); background: var(--cyan-dim); padding: 3px 8px; border-radius: 4px; text-transform: uppercase; }
-.billing-shell .tu .ribbon.gold { color: var(--gold); background: rgba(245,176,73,.14); }
+.billing-shell .tu .ribbon.gold { color: var(--gold); background: rgba(228,200,117,.14); }
 .billing-shell .tu .credits { font-family: var(--serif); font-weight: 500; font-size: 30px; letter-spacing: -.01em; line-height: 1; }
 .billing-shell .tu .credits .u { font-size: 12px; color: var(--ink-mute); font-family: var(--mono); margin-left: 6px; font-weight: 400; }
 .billing-shell .tu .pri { font-family: var(--mono); font-size: 13px; color: var(--ink-dim); }
@@ -317,7 +317,7 @@
 .billing-shell .tbl th.right { text-align: right; }
 .billing-shell .tbl .pill { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 10.5px; padding: 3px 8px; border-radius: 4px; background: var(--panel-2); color: var(--ink-dim); letter-spacing: .06em; border: 1px solid var(--line); }
 .billing-shell .tbl .pill.ok { color: var(--cyan); background: rgba(20,200,204,.1); border-color: rgba(20,200,204,.2); }
-.billing-shell .tbl .pill.warn { color: var(--gold); background: rgba(245,176,73,.1); border-color: rgba(245,176,73,.2); }
+.billing-shell .tbl .pill.warn { color: var(--gold); background: rgba(228,200,117,.1); border-color: rgba(228,200,117,.2); }
 .billing-shell .tbl .ico-btn { padding: 5px; border-radius: 5px; color: var(--ink-mute); background: none; border: 0; cursor: pointer; }
 .billing-shell .tbl .ico-btn:hover { color: var(--cyan); background: var(--cyan-dim); }
 
@@ -327,7 +327,7 @@
 .billing-shell .ref-hero {
   position: relative; border: 1px solid var(--line); border-radius: 18px; padding: 34px 32px; overflow: hidden;
   background:
-    radial-gradient(60% 100% at 100% 0%, rgba(245,176,73,.10), transparent 55%),
+    radial-gradient(60% 100% at 100% 0%, rgba(228,200,117,.10), transparent 55%),
     radial-gradient(50% 100% at 0% 100%, rgba(20,200,204,.12), transparent 55%),
     var(--panel);
 }
@@ -347,16 +347,16 @@
 ============================================================ */
 .billing-modal-overlay { position: fixed; inset: 0; background: rgba(4,8,10,.78); z-index: 60; display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(6px); }
 .billing-modal { background: #10151A; border: 1px solid rgba(255,255,255,.1); border-radius: 18px; width: min(560px, 100%); overflow: hidden; box-shadow: 0 30px 80px -20px rgba(0,0,0,.6); position: relative; color: #ECEAE4; font-family: var(--sans); }
-.billing-modal .top { padding: 26px 28px; background: linear-gradient(180deg, rgba(245,176,73,.08), transparent); border-bottom: 1px solid rgba(255,255,255,.06); }
+.billing-modal .top { padding: 26px 28px; background: linear-gradient(180deg, rgba(228,200,117,.08), transparent); border-bottom: 1px solid rgba(255,255,255,.06); }
 .billing-modal .top h3 { font-family: var(--serif); font-weight: 500; font-size: 24px; letter-spacing: -.01em; margin: 0 0 6px; }
 .billing-modal .top p { font-size: 13.5px; color: #8A9198; margin: 0; line-height: 1.55; }
 .billing-modal .body { padding: 24px 28px; }
 .billing-modal .offer {
   display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 12px;
-  border: 1px solid rgba(245,176,73,.3); background: linear-gradient(180deg, rgba(245,176,73,.08), transparent);
+  border: 1px solid rgba(228,200,117,.3); background: linear-gradient(180deg, rgba(228,200,117,.08), transparent);
   margin-bottom: 18px;
 }
-.billing-modal .offer .ico { width: 42px; height: 42px; border-radius: 10px; background: rgba(245,176,73,.2); color: #F5B049; display: grid; place-items: center; flex-shrink: 0; }
+.billing-modal .offer .ico { width: 42px; height: 42px; border-radius: 10px; background: rgba(228,200,117,.2); color: #E4C875; display: grid; place-items: center; flex-shrink: 0; }
 .billing-modal .offer .t { font-family: var(--serif); font-size: 18px; font-weight: 500; letter-spacing: -.005em; margin: 0 0 2px; }
 .billing-modal .offer .d { font-size: 12.5px; color: #8A9198; margin: 0; }
 .billing-modal .reasons { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }

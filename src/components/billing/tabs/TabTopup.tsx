@@ -117,7 +117,7 @@ export default function TabTopup() {
             <li>· <b style={{ color: "var(--ink)" }}>AutoPost</b> — flat 45 credits per scheduled run</li>
           </ul>
         </div>
-        <div className="card" style={{ background: "linear-gradient(180deg, rgba(245,176,73,.06), transparent)" }}>
+        <div className="card" style={{ background: "linear-gradient(180deg, rgba(228,200,117,.06), transparent)" }}>
           <h3>Top-up perks</h3>
           <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 10, fontSize: 13, color: "var(--ink-dim)", lineHeight: 1.55 }}>
             <li>· Credits <b style={{ color: "var(--ink)" }}>never expire</b> while your subscription is active</li>

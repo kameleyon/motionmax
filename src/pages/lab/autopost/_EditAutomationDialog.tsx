@@ -331,7 +331,7 @@ export function EditAutomationDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[#10151A] border-white/10 text-[#ECEAE4] max-w-xl max-h-[90vh] overflow-y-auto p-0">
+      <DialogContent className="autopost-modal-content max-w-xl max-h-[90vh] overflow-y-auto p-0">
         {/* ── Header ── */}
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/[0.06]">
           <DialogTitle className="font-serif text-[20px] font-medium text-[#ECEAE4]">

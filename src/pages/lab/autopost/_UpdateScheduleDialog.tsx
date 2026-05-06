@@ -122,7 +122,7 @@ export function UpdateScheduleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[#10151A] border-white/10 text-[#ECEAE4] max-w-md">
+      <DialogContent className="autopost-modal-content max-w-md">
         <DialogHeader>
           <DialogTitle className="text-[#ECEAE4] flex items-center gap-2">
             <Clock className="h-4 w-4 text-[#11C4D0]" />

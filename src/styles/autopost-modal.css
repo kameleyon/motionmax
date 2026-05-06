@@ -1,0 +1,95 @@
+/*
+ * Autopost Lab modal chrome — adopts the v2 announcement modal's
+ * visual language (overlay blur, cyan-rimmed panel, soft shadow,
+ * smooth enter) for the GenerateTopicsDialog, EditAutomationDialog
+ * and UpdateScheduleDialog.
+ *
+ * Source of style: src/components/announcements/v2-announcement.css
+ * (.mm-ann-overlay, .mm-ann). Differences:
+ *   - single-column content (no 340px left stage)
+ *   - palette uses MotionMax brand gold #E4C875 (not template #F5B049)
+ *   - inherits Radix data-state animation timings on shadcn DialogContent
+ *
+ * Apply by adding `autopost-modal-overlay` to the DialogOverlay and
+ * `autopost-modal-content` to the DialogContent — both classNames
+ * stack on top of shadcn defaults via clsx.
+ */
+
+.autopost-modal-overlay {
+  background: rgba(8, 11, 13, 0.72) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.autopost-modal-content {
+  background: #10151A !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  border-radius: 18px !important;
+  /* Padding is intentionally NOT !important — some modals use p-0 because
+     they own internal padding (e.g. _EditAutomationDialog renders its own
+     header strip). When the existing className specifies p-0 / p-6, it wins. */
+  padding: 26px 28px;
+  box-shadow:
+    0 30px 80px -20px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(20, 200, 204, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+  color: #ECEAE4;
+}
+
+/* Backdrop blur on the radix overlay when the open dialog content has
+   our class. Modern :has() + sibling selector — supported in current
+   Chrome/Edge/Safari/Firefox (no IE concerns).
+   Targets `[data-state]` overlays that sit next to a content node
+   containing .autopost-modal-content. */
+[data-state="open"][role="dialog"]:has(.autopost-modal-content) ~ [data-radix-dialog-overlay],
+[data-radix-dialog-overlay]:has(+ [data-state="open"] .autopost-modal-content) {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Title takes the announcement modal's serif treatment with cyan accent */
+.autopost-modal-content [class*="DialogTitle"],
+.autopost-modal-content [data-radix-collection-item] [class*="title"] {
+  font-family: 'Instrument Serif', 'Fraunces', Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.022em;
+}
+
+/* The native shadcn close X — restyle to match .mm-ann-x */
+.autopost-modal-content > button[type="button"][class*="absolute"][class*="right-4"] {
+  top: 14px !important;
+  right: 14px !important;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px !important;
+  background: rgba(10, 13, 15, 0.5) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  color: #8A9198 !important;
+  display: grid;
+  place-items: center;
+  backdrop-filter: blur(4px);
+  opacity: 1 !important;
+  transition: color .15s, background .15s, border-color .15s;
+}
+.autopost-modal-content > button[type="button"][class*="absolute"][class*="right-4"]:hover {
+  color: #ECEAE4 !important;
+  background: #151B20 !important;
+  border-color: rgba(255, 255, 255, 0.10) !important;
+}
+
+/* Mobile: same breakpoint as the announcement modal */
+@media (max-width: 760px) {
+  .autopost-modal-content {
+    padding: 22px 20px !important;
+    border-radius: 14px !important;
+  }
+}
+
+/* Honor reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .autopost-modal-overlay,
+  .autopost-modal-content {
+    animation: none !important;
+    transition: none !important;
+  }
+}

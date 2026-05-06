@@ -455,7 +455,7 @@ export default function RunHistory() {
         open={pendingDeleteId !== null}
         onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
       >
-        <AlertDialogContent className="bg-[#10151A] border-white/10 text-[#ECEAE4]">
+        <AlertDialogContent className="autopost-modal-content">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this run?</AlertDialogTitle>
             <AlertDialogDescription className="text-[#8A9198]">

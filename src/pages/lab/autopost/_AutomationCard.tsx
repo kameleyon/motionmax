@@ -422,7 +422,7 @@ export function AutomationCard({ schedule, lastRunAt }: AutomationCardProps) {
       />
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent className="bg-[#10151A] border-white/10 text-[#ECEAE4]">
+        <AlertDialogContent className="autopost-modal-content">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-[#ECEAE4]">
               Delete "{schedule.name}"?

@@ -525,7 +525,7 @@ export default function AutopostHome() {
       </div>
 
       <AlertDialog open={!!pendingDisable} onOpenChange={open => !open && setPendingDisable(null)}>
-        <AlertDialogContent className="bg-[#10151A] border-white/8 text-[#ECEAE4]">
+        <AlertDialogContent className="autopost-modal-content">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-[#ECEAE4]">
               Disable {pendingDisable ? prettyName(pendingDisable) : ""}?

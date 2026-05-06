@@ -1,43 +1,42 @@
 /**
  * Autopost run history page.
  *
- * Reverse-chronological list of every autopost_runs row that the
- * current admin can see (RLS gates by schedule ownership). Filters
- * across status / schedule / platform / date-range, paginates by 50,
- * groups by day with sticky-feeling section headers, and updates
- * realtime via postgres_changes on autopost_runs and autopost_publish_jobs.
+ * Restyled (2026-05-06) to the Autopost Lab dense-row design:
+ *   - Lab crumb + serif page hero matching AutopostHome.
+ *   - Filter card with 4 native <select> dropdowns themed to the
+ *     dark surface (.fil-grid).
+ *   - Day-bucketed runs lists. Each row is a compact 5-column grid
+ *     (thumbnail / topic + schedule / status pill / timestamp /
+ *     details button or actions slot).
  *
- * The realtime subscription mirrors AdminQueueMonitor: '*' events on
- * the relevant tables, debounced to one refetch per 300ms so a burst
- * of 10 publish-job updates only triggers one round-trip.
+ * All wiring is preserved verbatim from the prior implementation:
+ *   - Cursor-paginated useQuery against autopost_runs (PAGE_SIZE = 50).
+ *   - Cumulative accumulator with dedupe by id.
+ *   - Realtime channel on autopost_runs + autopost_publish_jobs.
+ *   - performDelete / performRegenerate flows are byte-identical.
  *
- * Data shape: each run row carries a precomputed `publish_jobs` array
- * (joined in the same SELECT) holding {platform, status, ...} so the
- * row pills don't need a per-row fetch. Filter logic runs on the
- * server (status/schedule/date) but platform filter happens
- * client-side because it's a function of the joined publish_jobs.
+ * Filter logic still runs server-side (status / schedule / date) with
+ * the platform filter applied client-side because it's a function of
+ * the joined publish_jobs.
  */
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Image as ImageIcon, Inbox, Plus, RefreshCw, RotateCw, Trash2 } from "lucide-react";
+import {
+  Image as ImageIcon, Inbox, Plus, RefreshCw, RotateCw, Trash2, FlaskConical,
+} from "lucide-react";
+import { Helmet } from "react-helmet-async";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { LabLayout } from "../_LabLayout";
+import AppShell from "@/components/dashboard/AppShell";
 import { AutopostNav } from "./_AutopostNav";
 import {
-  StatusPill, PlatformPill, RunProgressBar, isRunStatusActive,
-  relativeTime, dayBucketLabel, dayBucketKey,
+  isRunStatusActive, relativeTime, dayBucketLabel, dayBucketKey,
 } from "./_autopostUi";
 
 const PAGE_SIZE = 50;
@@ -275,157 +274,182 @@ export default function RunHistory() {
   }
 
   return (
-    <LabLayout
-      heading="Run history"
-      title="Run history · Autopost · Lab"
-      description="Every schedule fire and on-demand test render. Click a row to drill into per-platform timelines."
-      breadcrumbs={[
-        { label: "Autopost", to: "/lab/autopost" },
-        { label: "Runs" },
-      ]}
-      actions={
-        <Button
-          variant="outline"
-          size="sm"
-          className="border-white/10 bg-transparent text-[#ECEAE4] hover:bg-white/5"
-          onClick={() => queryClient.invalidateQueries({ queryKey: ["autopost", "runs"] })}
-        >
-          <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${runsQuery.isFetching ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
-      }
-    >
-      <AutopostNav />
+    <AppShell breadcrumb="Lab · Runs">
+      <Helmet>
+        <title>Run history · Autopost · Lab · MotionMax</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
 
-      {/* Filter bar */}
-      <Card className="bg-[#10151A] border-white/8 mb-4">
-        <CardContent className="py-3 sm:py-4">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-            <FilterSelect
-              label="Status"
-              value={statusFilter}
-              onChange={v => setStatusFilter(v as StatusFilter)}
-              options={[
-                { value: "all", label: "All statuses" },
-                { value: "queued", label: "Queued" },
-                { value: "generating", label: "Generating" },
-                { value: "rendered", label: "Rendered" },
-                { value: "publishing", label: "Publishing" },
-                { value: "completed", label: "Completed" },
-                { value: "failed", label: "Failed" },
-                { value: "cancelled", label: "Cancelled" },
-              ]}
-            />
-            <FilterSelect
-              label="Schedule"
-              value={scheduleFilter}
-              onChange={setScheduleFilter}
-              options={[
-                { value: "all", label: "All schedules" },
-                ...(schedulesQuery.data ?? []).map(s => ({ value: s.id, label: s.name })),
-              ]}
-            />
-            <FilterSelect
-              label="Platform"
-              value={platformFilter}
-              onChange={v => setPlatformFilter(v as PlatformFilter)}
-              options={[
-                { value: "all", label: "All platforms" },
-                { value: "youtube", label: "YouTube" },
-                { value: "instagram", label: "Instagram" },
-                { value: "tiktok", label: "TikTok" },
-              ]}
-            />
-            <FilterSelect
-              label="Date"
-              value={dateFilter}
-              onChange={v => setDateFilter(v as DateFilter)}
-              options={[
-                { value: "today", label: "Today" },
-                { value: "7d", label: "Last 7 days" },
-                { value: "30d", label: "Last 30 days" },
-                { value: "all", label: "All time" },
-              ]}
-            />
+      <div className="autopost-shell">
+        <div style={{ maxWidth: 1240, margin: "0 auto", padding: "28px 32px 80px" }}>
+          {/* Lab crumb */}
+          <div className="lab-crumb">
+            <FlaskConical width={13} height={13} />
+            <Link to="/lab">Lab</Link>
+            <span className="sep">›</span>
+            <Link to="/lab/autopost">Autopost</Link>
+            <span className="sep">›</span>
+            <span className="cur">Runs</span>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Body */}
-      {runsQuery.isLoading ? (
-        <ListSkeleton />
-      ) : runsQuery.isError ? (
-        <Card className="bg-[#10151A] border-white/8">
-          <CardContent className="py-10 text-center text-[#E4C875] text-[13px]">
-            Couldn't load runs: {(runsQuery.error as Error)?.message ?? "unknown error"}
-          </CardContent>
-        </Card>
-      ) : grouped.length === 0 ? (
-        <Card className="bg-[#10151A] border-white/8">
-          <CardContent className="py-12 sm:py-16">
-            <div className="flex flex-col items-center text-center max-w-md mx-auto space-y-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#11C4D0]/10">
-                <Inbox className="h-7 w-7 text-[#11C4D0]" />
+          {/* Page hero */}
+          <div className="ap-head">
+            <div>
+              <h1>Run <em>history</em></h1>
+              <p className="lede">
+                Every schedule fire and on-demand test render. Click a row to
+                drill into per-platform timelines.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ["autopost", "runs"] })}
+              disabled={runsQuery.isFetching}
+            >
+              <RefreshCw width={13} height={13} className={runsQuery.isFetching ? "autopost-spin" : undefined} />
+              Refresh
+            </button>
+          </div>
+
+          <AutopostNav />
+
+          {/* Filter bar */}
+          <div className="fil-card">
+            <div className="fil-grid">
+              <div className="fld">
+                <label htmlFor="rh-status">Status</label>
+                <select
+                  id="rh-status"
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value as StatusFilter)}
+                >
+                  <option value="all">All statuses</option>
+                  <option value="queued">Queued</option>
+                  <option value="generating">Generating</option>
+                  <option value="rendered">Rendered</option>
+                  <option value="publishing">Publishing</option>
+                  <option value="completed">Completed</option>
+                  <option value="failed">Failed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
               </div>
-              <div className="space-y-1.5">
-                <h2 className="font-serif text-xl text-[#ECEAE4]">No runs yet</h2>
-                <p className="text-[13px] text-[#8A9198] leading-relaxed">
-                  Once a schedule fires (or a manual test render is triggered), each run lands
-                  here with a thumbnail, status, and per-platform publish state.
+              <div className="fld">
+                <label htmlFor="rh-sched">Schedule</label>
+                <select
+                  id="rh-sched"
+                  value={scheduleFilter}
+                  onChange={e => setScheduleFilter(e.target.value)}
+                >
+                  <option value="all">All schedules</option>
+                  {(schedulesQuery.data ?? []).map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="fld">
+                <label htmlFor="rh-platform">Platform</label>
+                <select
+                  id="rh-platform"
+                  value={platformFilter}
+                  onChange={e => setPlatformFilter(e.target.value as PlatformFilter)}
+                >
+                  <option value="all">All platforms</option>
+                  <option value="youtube">YouTube</option>
+                  <option value="instagram">Instagram</option>
+                  <option value="tiktok">TikTok</option>
+                </select>
+              </div>
+              <div className="fld">
+                <label htmlFor="rh-date">Date</label>
+                <select
+                  id="rh-date"
+                  value={dateFilter}
+                  onChange={e => setDateFilter(e.target.value as DateFilter)}
+                >
+                  <option value="today">Today</option>
+                  <option value="7d">Last 7 days</option>
+                  <option value="30d">Last 30 days</option>
+                  <option value="all">All time</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Body */}
+          {runsQuery.isLoading ? (
+            <ListSkeleton />
+          ) : runsQuery.isError ? (
+            <div className="runs-card" style={{ padding: 40, textAlign: "center" }}>
+              <span style={{ color: "var(--gold)", fontSize: 13 }}>
+                Couldn't load runs: {(runsQuery.error as Error)?.message ?? "unknown error"}
+              </span>
+            </div>
+          ) : grouped.length === 0 ? (
+            <div className="runs-card" style={{ padding: "48px 24px", textAlign: "center" }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+                <div
+                  style={{
+                    width: 56, height: 56, borderRadius: "50%",
+                    background: "rgba(20,200,204,0.1)",
+                    display: "grid", placeItems: "center",
+                    color: "var(--cyan)",
+                  }}
+                >
+                  <Inbox width={28} height={28} />
+                </div>
+                <h2 style={{ fontFamily: "var(--serif)", fontSize: 22, margin: 0, color: "var(--ink)" }}>
+                  No runs yet
+                </h2>
+                <p style={{ color: "var(--ink-dim)", fontSize: 13, maxWidth: 460, margin: 0, lineHeight: 1.55 }}>
+                  Once a schedule fires (or a manual test render is triggered), each run
+                  lands here with a thumbnail, status, and per-platform publish state.
                 </p>
-              </div>
-              <Button asChild size="sm" className="bg-[#11C4D0] text-[#0A0D0F] hover:bg-[#11C4D0]/90">
-                <Link to="/lab/autopost/schedules/new">
-                  <Plus className="h-3.5 w-3.5 mr-1.5" />
+                <Link to="/app/create/new?mode=cinematic" className="btn-cyan" style={{ marginTop: 8 }}>
+                  <Plus width={14} height={14} />
                   Create a schedule
                 </Link>
-              </Button>
+              </div>
             </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-6">
-          {grouped.map(group => (
-            <div key={group.key} className="space-y-2">
-              <h3
-                className="px-1 font-mono text-[11px] uppercase text-[#8A9198]"
-                style={{ letterSpacing: "0.14em" }}
-              >
-                {group.label}
-              </h3>
-              <Card className="bg-[#10151A] border-white/8 overflow-hidden">
-                <ul className="divide-y divide-white/5">
-                  {group.runs.map(run => (
-                    <li key={run.id}>
+          ) : (
+            <>
+              {grouped.map(group => (
+                <div key={group.key} className="day-bucket">
+                  <div className="lbl">
+                    {group.label}
+                    <span className="ct">{group.runs.length} {group.runs.length === 1 ? "run" : "runs"}</span>
+                  </div>
+                  <div className="runs-card">
+                    {group.runs.map(run => (
                       <RunListItem
+                        key={run.id}
                         run={run}
                         onClick={() => handleRowClick(run.id)}
                         onDelete={(id) => setPendingDeleteId(id)}
                         onRegenerate={performRegenerate}
                         regenerating={regeneratingId === run.id}
                       />
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            </div>
-          ))}
+                    ))}
+                  </div>
+                </div>
+              ))}
 
-          {hasMore && (
-            <div className="flex justify-center pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-white/10 bg-transparent text-[#ECEAE4] hover:bg-white/5"
-                onClick={() => setPage(p => p + 1)}
-                disabled={runsQuery.isFetching}
-              >
-                {runsQuery.isFetching ? "Loading…" : "Load more"}
-              </Button>
-            </div>
+              {hasMore && (
+                <div style={{ display: "flex", justifyContent: "center", paddingTop: 8 }}>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    onClick={() => setPage(p => p + 1)}
+                    disabled={runsQuery.isFetching}
+                  >
+                    {runsQuery.isFetching ? "Loading…" : "Load more"}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
-      )}
+      </div>
 
       <AlertDialog
         open={pendingDeleteId !== null}
@@ -457,7 +481,7 @@ export default function RunHistory() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </LabLayout>
+    </AppShell>
   );
 }
 
@@ -470,14 +494,16 @@ export default function RunHistory() {
 function RunThumb({ run }: { run: RunRow }) {
   const active = isRunStatusActive(run.status);
   const failed = run.status === "failed";
+  if (failed && !run.thumbnail_url) {
+    return <div className="thumb fail">!</div>;
+  }
   return (
-    <div className="shrink-0 overflow-hidden rounded bg-black/40 border border-white/8 w-[27px] h-[48px] sm:w-[30px] sm:h-[54px] relative">
+    <div className="thumb">
       {run.thumbnail_url ? (
         <img
           src={run.thumbnail_url}
           alt=""
           loading="lazy"
-          className="h-full w-full object-cover"
           onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
         />
       ) : null}
@@ -485,18 +511,14 @@ function RunThumb({ run }: { run: RunRow }) {
         <div
           aria-hidden
           className="absolute inset-0 animate-shimmer"
-          style={{ background: "linear-gradient(180deg, transparent, rgba(17,196,208,0.35), transparent)" }}
+          style={{
+            position: "absolute", inset: 0,
+            background: "linear-gradient(180deg, transparent, rgba(20,200,204,0.35), transparent)",
+          }}
         />
       )}
-      {!run.thumbnail_url && failed && (
-        <div className="absolute inset-0 flex items-center justify-center text-[#E4C875]">
-          <span className="text-[14px] font-bold">!</span>
-        </div>
-      )}
       {!run.thumbnail_url && !active && !failed && (
-        <div className="absolute inset-0 flex items-center justify-center text-[#3A4248]">
-          <ImageIcon className="h-3.5 w-3.5" />
-        </div>
+        <ImageIcon width={14} height={14} />
       )}
     </div>
   );
@@ -515,138 +537,82 @@ function RunListItem({
   onRegenerate: (run: RunRow) => void;
   regenerating: boolean;
 }) {
-  const [errorOpen, setErrorOpen] = useState(false);
-  const isActive = isRunStatusActive(run.status);
   const isFailed = run.status === "failed";
   const isCompleted = run.status === "completed";
+  const title = run.topic || run.schedule?.name || "(untitled run)";
   return (
-    <>
-      <div
-        className="group flex w-full items-center gap-3 px-3 py-2 transition-colors hover:bg-white/[0.03] sm:px-4 cursor-pointer min-h-[48px]"
-        onClick={onClick}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); }
-        }}
-      >
-        <RunThumb run={run} />
-
-        <div className="min-w-0 flex-1 flex flex-col gap-0.5">
-          <div className="flex items-baseline gap-2 min-w-0">
-            <p className="font-medium text-[13px] text-[#ECEAE4] truncate">
-              {run.topic || run.schedule?.name || "(untitled run)"}
-            </p>
-          </div>
-          {isActive && (
-            <RunProgressBar value={run.progress_pct} className="mt-0.5" />
-          )}
-        </div>
-
-        <div className="hidden sm:flex items-center gap-2 shrink-0">
-          <StatusPill status={run.status} />
-          {run.publish_jobs.slice(0, 3).map((j, i) => (
-            <PlatformPill key={`${j.platform}-${i}`} platform={j.platform} status={j.status} />
-          ))}
-        </div>
-
-        <span className="text-[11px] text-[#5A6268] shrink-0 tabular-nums w-[64px] text-right">
-          {relativeTime(run.fired_at)}
-        </span>
-
+    <div
+      className="run-row"
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); }
+      }}
+    >
+      <RunThumb run={run} />
+      <div className="run-meta">
+        <div className="t" title={title}>{title}</div>
+        <div className="s">{run.schedule?.name ?? "—"}</div>
+      </div>
+      <span className={`run-pill ${run.status}`}>{run.status}</span>
+      <span className="when">{relativeTime(run.fired_at)}</span>
+      <div className="run-actions" onClick={(e) => e.stopPropagation()}>
         {isFailed && run.error_summary && (
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); setErrorOpen(o => !o); }}
-            className="shrink-0 rounded-md px-2 py-1 text-[10px] uppercase tracking-wider border border-[#E4C875]/30 bg-[#E4C875]/5 text-[#E4C875] hover:bg-[#E4C875]/10"
+            className="show-det"
+            onClick={() => onClick()}
             aria-label="Show error details"
-            aria-expanded={errorOpen}
           >
-            {errorOpen ? "Hide details" : "Show details"}
+            DETAILS
           </button>
         )}
-
         {isCompleted && run.video_job_id && (
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); onRegenerate(run); }}
+            onClick={() => onRegenerate(run)}
             disabled={regenerating}
-            className="ml-1 shrink-0 rounded-md p-1.5 text-[#5A6268] opacity-0 transition-opacity hover:bg-[#11C4D0]/10 hover:text-[#11C4D0] group-hover:opacity-100 focus:opacity-100 disabled:opacity-100 disabled:text-[#11C4D0]"
             aria-label="Regenerate run with same script"
             title="Regenerate (keep script, fresh audio + images + videos + export)"
           >
-            <RotateCw className={`h-3.5 w-3.5 ${regenerating ? "animate-spin" : ""}`} />
+            <RotateCw width={13} height={13} className={regenerating ? "autopost-spin" : undefined} />
           </button>
         )}
-
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); onDelete(run.id); }}
-          className="ml-1 shrink-0 rounded-md p-1.5 text-[#5A6268] opacity-0 transition-opacity hover:bg-[#E4C875]/10 hover:text-[#E4C875] group-hover:opacity-100 focus:opacity-100"
+          className="del"
+          onClick={() => onDelete(run.id)}
           aria-label="Delete run"
           title="Delete run"
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Trash2 width={13} height={13} />
         </button>
       </div>
-
-      {isFailed && errorOpen && run.error_summary && (
-        <pre className="mx-3 sm:mx-4 mb-2 mt-1 rounded-md border border-white/8 bg-black/40 px-3 py-2 text-[11px] font-mono text-[#8A9198] whitespace-pre-wrap break-words leading-relaxed">
-          {run.error_summary}
-        </pre>
-      )}
-    </>
-  );
-}
-
-function FilterSelect({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: Array<{ value: string; label: string }>;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-[11px] uppercase tracking-wide text-[#8A9198] block">
-        {label}
-      </label>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4] text-[13px] h-9">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent className="bg-[#10151A] border-white/10 text-[#ECEAE4]">
-          {options.map(o => (
-            <SelectItem key={o.value} value={o.value} className="text-[13px]">
-              {o.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
     </div>
   );
 }
 
 function ListSkeleton() {
   return (
-    <Card className="bg-[#10151A] border-white/8">
-      <CardContent className="py-6 space-y-3">
-        {[0, 1, 2, 3].map(i => (
-          <div key={i} className="flex items-center gap-3 animate-pulse">
-            <div className="h-[107px] w-[60px] sm:h-[160px] sm:w-[90px] rounded-md bg-white/5" />
-            <div className="flex-1 space-y-2">
-              <div className="h-3 w-32 rounded bg-white/5" />
-              <div className="h-2.5 w-48 rounded bg-white/5" />
-              <div className="h-4 w-40 rounded bg-white/5" />
-            </div>
+    <div className="runs-card" style={{ padding: "16px 20px" }}>
+      {[0, 1, 2, 3].map(i => (
+        <div
+          key={i}
+          style={{
+            display: "flex", alignItems: "center", gap: 14, padding: "10px 0",
+            borderTop: i === 0 ? 0 : "1px solid rgba(255,255,255,0.04)",
+          }}
+        >
+          <div style={{ width: 30, height: 54, borderRadius: 4, background: "rgba(255,255,255,0.05)" }} />
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ height: 12, width: "40%", borderRadius: 3, background: "rgba(255,255,255,0.05)" }} />
+            <div style={{ height: 10, width: "25%", borderRadius: 3, background: "rgba(255,255,255,0.05)" }} />
           </div>
-        ))}
-      </CardContent>
-    </Card>
+          <div style={{ height: 18, width: 80, borderRadius: 99, background: "rgba(255,255,255,0.05)" }} />
+        </div>
+      ))}
+    </div>
   );
 }
 

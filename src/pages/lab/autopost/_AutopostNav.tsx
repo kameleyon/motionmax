@@ -3,11 +3,12 @@
  *
  * Lives outside `_LabLayout.tsx` because the subnav is feature-scoped
  * — only Autopost pages need it, and other lab features will get their
- * own. Rendered as a horizontally scrollable strip on mobile and a
- * normal flex row on desktop. Uses `NavLink` so the active tab is
- * styled by react-router, no manual matching.
+ * own. Uses the `.ap-tabs` style from `autopost-tokens.css` so the
+ * mobile rule (`max-width: 720px`) collapses to icons-only with the
+ * `.t-label` text wrapped for hide/show — `aria-label` on each tab
+ * keeps the section named for assistive tech.
  *
- * Post-Wave-B redesign: schedules are now created from the intake form
+ * Post-Wave-B redesign: schedules are created from the intake form
  * (toggle "Run on a schedule" on /app/create/new) and managed inline on
  * the dashboard via cards + modals. Connect lives in /settings under the
  * Integrations tab. So the nav only needs Dashboard and Runs.
@@ -19,12 +20,11 @@
 
 import { NavLink } from "react-router-dom";
 import { LayoutDashboard, History } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 const TABS: ReadonlyArray<{
   to: string;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ width?: number; height?: number; className?: string }>;
   /** end=true means only exact match counts as active; false lets nested routes light it up. */
   end: boolean;
 }> = [
@@ -34,34 +34,22 @@ const TABS: ReadonlyArray<{
 
 export function AutopostNav() {
   return (
-    <nav
-      aria-label="Autopost sections"
-      className="-mx-4 mb-6 overflow-x-auto border-b border-white/8 px-4 sm:mx-0 sm:px-0"
-    >
-      <ul className="flex min-w-max items-center gap-1">
-        {TABS.map(tab => {
-          const Icon = tab.icon;
-          return (
-            <li key={tab.to}>
-              <NavLink
-                to={tab.to}
-                end={tab.end}
-                className={({ isActive }) =>
-                  cn(
-                    "flex items-center gap-2 border-b-2 px-3 py-2.5 text-[13px] font-medium transition-colors",
-                    isActive
-                      ? "border-[#11C4D0] text-[#ECEAE4]"
-                      : "border-transparent text-[#8A9198] hover:text-[#ECEAE4]",
-                  )
-                }
-              >
-                <Icon className="h-4 w-4" />
-                <span>{tab.label}</span>
-              </NavLink>
-            </li>
-          );
-        })}
-      </ul>
+    <nav aria-label="Autopost sections" className="ap-tabs">
+      {TABS.map(tab => {
+        const Icon = tab.icon;
+        return (
+          <NavLink
+            key={tab.to}
+            to={tab.to}
+            end={tab.end}
+            aria-label={tab.label}
+            className={({ isActive }) => (isActive ? "on" : "")}
+          >
+            <Icon width={14} height={14} />
+            <span className="t-label">{tab.label}</span>
+          </NavLink>
+        );
+      })}
     </nav>
   );
 }

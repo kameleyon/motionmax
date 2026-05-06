@@ -212,10 +212,6 @@ function useSystemStatus() {
 
 /* ── Env-driven external links — community + scheduling ─────────────── */
 
-const SUPPORT_CALL_URL = (import.meta.env.VITE_SUPPORT_CALL_URL as string | undefined) || "";
-const SUPPORT_DISCORD_URL = (import.meta.env.VITE_SUPPORT_DISCORD_URL as string | undefined) || "";
-const SUPPORT_GITHUB_URL = (import.meta.env.VITE_SUPPORT_GITHUB_URL as string | undefined) || "";
-const SUPPORT_LINKEDIN_URL = (import.meta.env.VITE_SUPPORT_LINKEDIN_URL as string | undefined) || "";
 
 /* ── Status row — aqua dot for operational, gold for degraded, gold-bordered em-dash for down ── */
 
@@ -516,7 +512,7 @@ export default function Help() {
                   <a
                     className="touch-row"
                     href={`mailto:${SUPPORT_EMAIL}?subject=MotionMax%20support`}
-                    style={SUPPORT_CALL_URL ? undefined : { marginBottom: 0 }}
+                    style={{ marginBottom: 0 }}
                   >
                     <div className="ico">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}>
@@ -532,66 +528,6 @@ export default function Help() {
                       <path d="M9 18l6-6-6-6" />
                     </svg>
                   </a>
-                  {/* Schedule-a-call — env-driven. Hidden entirely
-                      when VITE_SUPPORT_CALL_URL is unset. */}
-                  {SUPPORT_CALL_URL ? (
-                    <a
-                      className="touch-row"
-                      href={SUPPORT_CALL_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ marginBottom: 0 }}
-                    >
-                      <div className="ico">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}>
-                          <rect x="3" y="4" width="18" height="16" rx="2" />
-                          <path d="M8 2v4M16 2v4M3 10h18M9 14h2M14 14h2" />
-                        </svg>
-                      </div>
-                      <div className="meta">
-                        <div className="t">Schedule a call</div>
-                        <div className="d">Studio onboarding · book a slot</div>
-                      </div>
-                      <svg className="arr" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                        <path d="M9 18l6-6-6-6" />
-                      </svg>
-                    </a>
-                  ) : null}
-                </div>
-
-                <div className="card community-card">
-                  <h3 style={{ marginBottom: 8 }}>Community</h3>
-                  <p>Join other creators sharing tips, prompts and tutorials.</p>
-                  {/* Community channels — env-driven. Each button is
-                      shown only when its URL env var is set. If none
-                      are set, the buttons row is empty (hint text
-                      stays visible). */}
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {SUPPORT_DISCORD_URL ? (
-                      <a className="btn-ghost" href={SUPPORT_DISCORD_URL} target="_blank" rel="noopener noreferrer" style={{ padding: "7px 12px", fontSize: 12.5 }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                          <path d="M20 4H6.5a4.5 4.5 0 0 0 0 9H8v5l4-3h6.5a3.5 3.5 0 0 0 3.5-3.5V6a2 2 0 0 0-2-2z" />
-                        </svg>
-                        Discord
-                      </a>
-                    ) : null}
-                    {SUPPORT_GITHUB_URL ? (
-                      <a className="btn-ghost" href={SUPPORT_GITHUB_URL} target="_blank" rel="noopener noreferrer" style={{ padding: "7px 12px", fontSize: 12.5 }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                          <path d="M12 0a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.9 1.2 1.9 1.2 1.1 1.9 2.9 1.4 3.6 1 .1-.8.4-1.4.8-1.7-2.7-.3-5.5-1.3-5.5-6 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 0z" />
-                        </svg>
-                        GitHub
-                      </a>
-                    ) : null}
-                    {SUPPORT_LINKEDIN_URL ? (
-                      <a className="btn-ghost" href={SUPPORT_LINKEDIN_URL} target="_blank" rel="noopener noreferrer" style={{ padding: "7px 12px", fontSize: 12.5 }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                          <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM8.3 18.3H5.7v-8.5h2.6zM7 8.7a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm11.3 9.6h-2.6v-4.1c0-1 0-2.3-1.4-2.3s-1.6 1.1-1.6 2.2v4.2h-2.6v-8.5h2.5v1.2c.4-.7 1.2-1.4 2.5-1.4 2.7 0 3.2 1.8 3.2 4z" />
-                        </svg>
-                        LinkedIn
-                      </a>
-                    ) : null}
-                  </div>
                 </div>
               </div>
             </div>

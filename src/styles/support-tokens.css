@@ -472,17 +472,6 @@
   white-space: nowrap;
 }
 
-/* ─── Community card override (tints intentionally use gold rim) ─ */
-.support-shell .community-card {
-  background: linear-gradient(135deg, rgba(20, 200, 204, 0.06), rgba(228, 200, 117, 0.06));
-  border-color: rgba(20, 200, 204, 0.25);
-}
-.support-shell .community-card p {
-  font-size: 13px;
-  color: var(--ink-dim);
-  line-height: 1.55;
-  margin: 0 0 14px;
-}
 
 /* "Average reply" lede strip on the contact form */
 .support-shell .reply-lede {

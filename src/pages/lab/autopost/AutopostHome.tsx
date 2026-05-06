@@ -1,46 +1,45 @@
 /**
  * My Automations dashboard — `/lab/autopost`.
  *
- * Replaces the old wizard-based hub with an Autonomux-style stacked card
- * list. Each schedule renders as an `<AutomationCard>` that owns its own
- * inline modals (Edit / Generate Topics / Update Schedule), so users
- * never leave this page to manage day-to-day tasks.
+ * Restyled (2026-05-06) to match the Autopost Lab "pulse system" design.
+ * The page now has four bands above the automation grid:
  *
- * Quick action bar (between header and list):
- *   - "+ New Automation"  → /app/create/new?mode=cinematic (intake form;
- *      the "Run on a schedule" toggle inside the intake creates rows
- *      here when the user hits Generate).
- *   - Master + per-platform kill switches  (carried over from the old
- *      dashboard so admins can stop publishing without deleting rows).
- *   - Run history shortcut  → /lab/autopost/runs.
+ *   1. Lab breadcrumb + serif page hero.
+ *   2. Platform health strip — 4 tiles (YT / IG / TT / X) with a 0-100%
+ *      "uptime"-ish ring derived from recent autopost_publish_jobs
+ *      success rate. The "warn" tile turns gold when retries pending.
+ *   3. 24h radar — a horizontal timeline pinning past + upcoming runs.
+ *   4. Action bar (New automation / Run history) and admin kill-row.
  *
- * Realtime: a single Supabase channel listens to autopost_schedules,
- * autopost_runs and autopost_publish_jobs; a 300ms debounce coalesces
- * bursty publish-job updates into one refetch.
+ * The actual schedule list lives in the pulse-grid below — each row is
+ * an AutomationCard rendered as a "pulse" tile. All wiring is preserved:
+ *   - Realtime channels (autopost_schedules, autopost_runs, autopost_
+ *     publish_jobs, app_settings) untouched.
+ *   - Kill-switch upserts to app_settings unchanged.
+ *   - FIFO topic semantics + Save Order + drag-reorder all live in
+ *     `_GenerateTopicsDialog.tsx` which this page does not touch.
  */
 
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Plus, ShieldCheck, History, ArrowRight, CheckCircle2, AlertTriangle, Loader2,
+  Plus, History, ShieldCheck, Calendar, ListChecks, FlaskConical, ChevronRight,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Helmet } from "react-helmet-async";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import AppShell from "@/components/dashboard/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
-import { LabLayout } from "../_LabLayout";
 import { AutopostNav } from "./_AutopostNav";
 import { AutomationCard } from "./_AutomationCard";
 import { platformLabel } from "./_autopostUi";
+import { formatRelativeTime } from "./_utils";
 import type { AutomationSchedule } from "./_automationTypes";
 
 interface KillSwitchState {
@@ -58,6 +57,23 @@ const KILL_KEYS = {
 } as const;
 
 type KillKey = keyof typeof KILL_KEYS;
+
+interface PlatformHealth {
+  pct: number;
+  recentCount: number;
+  lastPushAt: string | null;
+  warn: boolean;
+}
+
+interface RadarEvent {
+  /** Hours from now (negative = past, positive = future). */
+  h: number;
+  schedule: string;
+  topic: string;
+  status: "done" | "fail" | "up";
+  /** Highlights the pin as "next" — used for the very next upcoming run. */
+  next?: boolean;
+}
 
 /** Coerces app_settings.value (Json) into a strict boolean. */
 function readBool(value: unknown, def: boolean): boolean {
@@ -91,6 +107,63 @@ async function fetchLastRuns(): Promise<Record<string, string>> {
   return out;
 }
 
+interface PublishJobLite {
+  platform: string;
+  status: string;
+  created_at: string;
+}
+
+async function fetchPlatformHealth(): Promise<Record<string, PlatformHealth>> {
+  const sinceIso = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const { data, error } = await supabase
+    .from("autopost_publish_jobs")
+    .select("platform, status, created_at")
+    .gte("created_at", sinceIso)
+    .order("created_at", { ascending: false })
+    .limit(2000);
+  if (error) return {};
+  const rows = (data ?? []) as PublishJobLite[];
+  const groups = new Map<string, PublishJobLite[]>();
+  for (const r of rows) {
+    const list = groups.get(r.platform) ?? [];
+    list.push(r);
+    groups.set(r.platform, list);
+  }
+  const out: Record<string, PlatformHealth> = {};
+  for (const [platform, list] of groups) {
+    const finals = list.filter(r => r.status === "published" || r.status === "failed" || r.status === "rejected");
+    const ok = list.filter(r => r.status === "published").length;
+    const pct = finals.length === 0 ? 100 : Math.round((ok / finals.length) * 100);
+    const pending = list.filter(r => r.status === "uploading" || r.status === "processing" || r.status === "pending").length;
+    out[platform] = {
+      pct,
+      recentCount: list.length,
+      lastPushAt: list[0]?.created_at ?? null,
+      warn: pct < 90 || pending > 2,
+    };
+  }
+  return out;
+}
+
+interface RadarRow {
+  fired_at: string;
+  status: string;
+  topic: string | null;
+  schedule: { name: string } | null;
+}
+
+async function fetchRadarRuns(): Promise<RadarRow[]> {
+  const sinceIso = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("autopost_runs")
+    .select("fired_at, status, topic, schedule:autopost_schedules(name)")
+    .gte("fired_at", sinceIso)
+    .order("fired_at", { ascending: true })
+    .limit(40);
+  if (error) return [];
+  return (data ?? []) as unknown as RadarRow[];
+}
+
 export default function AutopostHome() {
   const queryClient = useQueryClient();
   const { isAdmin } = useAdminAuth();
@@ -103,6 +176,18 @@ export default function AutopostHome() {
   const lastRunsQuery = useQuery({
     queryKey: ["autopost", "last-runs"],
     queryFn: fetchLastRuns,
+  });
+
+  const platformHealthQuery = useQuery({
+    queryKey: ["autopost", "platform-health"],
+    queryFn: fetchPlatformHealth,
+    staleTime: 30_000,
+  });
+
+  const radarQuery = useQuery({
+    queryKey: ["autopost", "radar"],
+    queryFn: fetchRadarRuns,
+    staleTime: 30_000,
   });
 
   const switchesQuery = useQuery<KillSwitchState>({
@@ -131,6 +216,8 @@ export default function AutopostHome() {
     const debouncedRefetch = debounce(() => {
       queryClient.invalidateQueries({ queryKey: ["autopost", "schedules-list"] });
       queryClient.invalidateQueries({ queryKey: ["autopost", "last-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["autopost", "platform-health"] });
+      queryClient.invalidateQueries({ queryKey: ["autopost", "radar"] });
     }, 300);
     const channel = supabase
       .channel("lab-autopost-home")
@@ -178,130 +265,264 @@ export default function AutopostHome() {
   const automations = automationsQuery.data ?? [];
   const lastRuns = lastRunsQuery.data ?? {};
   const isLoading = automationsQuery.isLoading;
-
   const hasAutomations = automations.length > 0;
 
-  const newCta = useMemo(
-    () => (
-      <Button
-        asChild
-        size="default"
-        className="h-10 px-4 bg-[#11C4D0] text-[#0A0D0F] hover:bg-[#11C4D0]/90"
-        style={{ backgroundImage: "linear-gradient(180deg, #11C4D0 0%, #0EA8B3 100%)" }}
-      >
-        <Link to="/app/create/new?mode=cinematic">
-          <Plus className="h-4 w-4 mr-1.5" />
-          New Automation
-        </Link>
-      </Button>
-    ),
-    [],
-  );
+  // Compute next-fire countdown across all active schedules.
+  const nextFireSummary = useMemo(() => {
+    const upcoming = automations
+      .filter(s => s.active && s.next_fire_at)
+      .map(s => ({ name: s.name, at: new Date(s.next_fire_at).getTime() }))
+      .filter(s => Number.isFinite(s.at))
+      .sort((a, b) => a.at - b.at);
+    if (upcoming.length === 0) return null;
+    const next = upcoming[0];
+    const diffMs = next.at - Date.now();
+    if (diffMs <= 0) return { text: "now", count: upcoming.length };
+    const totalMin = Math.floor(diffMs / 60_000);
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    const text = h > 0 ? `${h}h ${m}m` : `${m}m`;
+    return { text, count: upcoming.length };
+  }, [automations]);
+
+  // Build radar events from past runs + upcoming schedule fires.
+  const radarEvents = useMemo<RadarEvent[]>(() => {
+    const out: RadarEvent[] = [];
+    const now = Date.now();
+    // Past runs (within last 3h render window).
+    for (const r of radarQuery.data ?? []) {
+      const t = new Date(r.fired_at).getTime();
+      if (!Number.isFinite(t)) continue;
+      const h = (t - now) / 3_600_000;
+      if (h < -3 || h > 0.5) continue;
+      const status: "done" | "fail" =
+        r.status === "failed" || r.status === "cancelled" ? "fail" : "done";
+      out.push({
+        h,
+        schedule: r.schedule?.name ?? "Schedule",
+        topic: r.topic ?? "",
+        status,
+      });
+    }
+    // Upcoming fires from each active schedule's next_fire_at.
+    const upcoming = automations
+      .filter(s => s.active && s.next_fire_at)
+      .map(s => ({
+        name: s.name,
+        topic: (s.topic_pool && s.topic_pool[0]) || "",
+        h: (new Date(s.next_fire_at).getTime() - now) / 3_600_000,
+      }))
+      .filter(s => s.h >= 0 && s.h <= 24)
+      .sort((a, b) => a.h - b.h);
+
+    upcoming.forEach((u, i) => {
+      out.push({
+        h: u.h,
+        schedule: u.name,
+        topic: u.topic,
+        status: "up",
+        next: i === 0,
+      });
+    });
+    return out;
+  }, [radarQuery.data, automations]);
+
+  // YouTube / IG / TikTok / X tile data.
+  const tiles = useMemo(() => {
+    const h = platformHealthQuery.data ?? {};
+    const t = (key: string, label: string, glyph: string, ic: string, suffix: string) => {
+      const data = h[key];
+      const pct = data?.pct ?? 100;
+      const count = data?.recentCount ?? 0;
+      const last = data?.lastPushAt ? formatRelativeTime(data.lastPushAt) : "—";
+      const warn = data?.warn ?? false;
+      return {
+        key, label, glyph, ic, pct, count, last, warn,
+        sub: count > 0 ? `Last push ${last} · ${count} ${suffix} / 30d` : "No publishes yet",
+      };
+    };
+    return [
+      t("youtube", "YouTube", "YT", "plic-yt", "videos"),
+      t("instagram", "Instagram", "IG", "plic-ig", "reels"),
+      t("tiktok", "TikTok", "TT", "plic-tt", "posts"),
+      t("x", "X / Twitter", "X", "plic-x", "posts"),
+    ];
+  }, [platformHealthQuery.data]);
 
   return (
-    <LabLayout
-      heading="My Automations"
-      title="My Automations · Autopost · Lab"
-      description="Recurring video pipelines. Each automation generates a fresh video on a schedule and publishes it to your connected accounts."
-      breadcrumbs={[{ label: "Autopost" }]}
-    >
-      <AutopostNav />
+    <AppShell breadcrumb="Lab · Autopost">
+      <Helmet>
+        <title>Autopost · Lab · MotionMax</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
 
-      {/* Quick action bar */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-        <div className="flex items-center gap-2">
-          {newCta}
-          <Button
-            asChild
-            variant="outline"
-            size="default"
-            className="h-10 px-4 border-white/10 bg-transparent text-[#ECEAE4] hover:bg-white/5"
-          >
-            <Link to="/lab/autopost/runs">
-              <History className="h-4 w-4 mr-1.5" />
-              Run history
-              <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+      <div className="autopost-shell">
+        <div style={{ maxWidth: 1240, margin: "0 auto", padding: "28px 32px 80px" }}>
+          {/* Lab crumb */}
+          <div className="lab-crumb">
+            <FlaskConical width={13} height={13} />
+            <Link to="/lab">Lab</Link>
+            <span className="sep">›</span>
+            <span className="cur">Autopost</span>
+          </div>
+
+          {/* Page hero */}
+          <div className="ap-head">
+            <div>
+              <h1>Autopost <em>lab</em></h1>
+              <p className="lede">
+                Recurring video pipelines firing across your connected channels.
+                Each automation writes a fresh script, renders a video, and publishes —
+                on the schedule you set.
+              </p>
+            </div>
+          </div>
+
+          {/* Platform health strip */}
+          <div className="health-strip">
+            {tiles.map(t => (
+              <div key={t.key} className={`hs-cell${t.warn ? " warn" : ""}`}>
+                <div className="hsh">
+                  <div className={`pl-ic ${t.ic}`}>{t.glyph}</div>
+                  <div className="nm">{t.label}</div>
+                  <div className="dt">{t.warn ? "retrying" : "live"}</div>
+                </div>
+                <div className="num">{t.pct}<span className="u">%</span></div>
+                <div className="sub">{t.sub}</div>
+                <div className="bar"><i style={{ width: `${t.pct}%` }} /></div>
+              </div>
+            ))}
+          </div>
+
+          {/* 24h radar */}
+          <div className="radar">
+            <div className="radar-h">
+              <h2>
+                Next 24 hours <span className="dim">— {radarEvents.filter(e => e.status === "up").length} scheduled</span>
+              </h2>
+              {nextFireSummary && (
+                <div className="stat">
+                  NEXT FIRE IN <b>{nextFireSummary.text}</b>
+                </div>
+              )}
+            </div>
+            <Radar events={radarEvents} />
+            <div className="radar-foot">
+              <span className="lg done">completed</span>
+              <span className="lg fail">failed</span>
+              <span className="lg up">upcoming</span>
+            </div>
+          </div>
+
+          <AutopostNav />
+
+          {/* Action bar */}
+          <div className="act-bar">
+            <Link to="/app/create/new?mode=cinematic" className="btn-cyan">
+              <Plus width={14} height={14} />
+              New automation
             </Link>
-          </Button>
+            <Link to="/lab/autopost/runs" className="btn-ghost">
+              <History width={13} height={13} />
+              Run history
+              <ChevronRight width={13} height={13} />
+            </Link>
+            <Link to="/dashboard?tab=calendar" className="btn-ghost">
+              <Calendar width={13} height={13} />
+              Calendar view
+            </Link>
+            <Link to="/lab" className="btn-ghost">
+              <ListChecks width={13} height={13} />
+              All lab tools
+            </Link>
+          </div>
+
+          {/* Kill switches — admin only */}
+          {isAdmin && (
+            <div className="kill-row">
+              <div className="kt">
+                <ShieldCheck width={14} height={14} />
+                <b>Kill switches</b>
+                <span className="ad">admin</span>
+              </div>
+              <KillToggle
+                label="Master"
+                active={switchesQuery.data?.master ?? false}
+                loading={updatingKey === "master" || switchesQuery.isLoading}
+                onChange={next => handleSwitchChange("master", next)}
+              />
+              <KillToggle
+                label="YT"
+                active={switchesQuery.data?.youtube ?? true}
+                loading={updatingKey === "youtube" || switchesQuery.isLoading}
+                onChange={next => handleSwitchChange("youtube", next)}
+              />
+              <KillToggle
+                label="IG"
+                active={switchesQuery.data?.instagram ?? true}
+                loading={updatingKey === "instagram" || switchesQuery.isLoading}
+                onChange={next => handleSwitchChange("instagram", next)}
+              />
+              <KillToggle
+                label="TT"
+                active={switchesQuery.data?.tiktok ?? true}
+                loading={updatingKey === "tiktok" || switchesQuery.isLoading}
+                onChange={next => handleSwitchChange("tiktok", next)}
+              />
+            </div>
+          )}
+
+          {/* Automation grid (pulse cards) */}
+          {isLoading ? (
+            <div className="pulse-grid">
+              {[0, 1, 2, 3].map(i => (
+                <Skeleton key={i} className="h-72 w-full bg-white/5 rounded-xl" />
+              ))}
+            </div>
+          ) : !hasAutomations ? (
+            <div
+              className="pulse"
+              style={{ padding: "48px 24px", textAlign: "center" }}
+            >
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+                <div
+                  style={{
+                    width: 56, height: 56, borderRadius: "50%",
+                    background: "rgba(20,200,204,0.1)",
+                    display: "grid", placeItems: "center",
+                    color: "var(--cyan)",
+                  }}
+                >
+                  <Plus width={28} height={28} />
+                </div>
+                <h2 style={{
+                  fontFamily: "var(--serif)", fontSize: 22, margin: 0, color: "var(--ink)",
+                }}>
+                  No automations yet
+                </h2>
+                <p style={{ color: "var(--ink-dim)", fontSize: 13, maxWidth: 460, margin: 0, lineHeight: 1.55 }}>
+                  Head to a new project's intake form and toggle "Run on a schedule" at the
+                  bottom to create your first one.
+                </p>
+                <Link to="/app/create/new?mode=cinematic" className="btn-cyan" style={{ marginTop: 8 }}>
+                  <Plus width={14} height={14} />
+                  New automation
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="pulse-grid">
+              {automations.map(s => (
+                <AutomationCard
+                  key={s.id}
+                  schedule={s}
+                  lastRunAt={lastRuns[s.id] ?? null}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Compact kill-switch row — admin only. The card itself is
-          gated, not just its toggles, so non-admins don't see the
-          "admin only" badge or the disabled switches at all. */}
-      {isAdmin && (
-        <Card className="bg-[#10151A] border-white/8 mb-6">
-          <CardHeader className="pb-3">
-            <div className="flex items-start justify-between gap-3">
-              <CardTitle className="text-[#ECEAE4] text-[13px] font-medium flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-[#E4C875]" />
-                Kill switches
-              </CardTitle>
-              <Badge
-                variant="outline"
-                className="self-start border-[#E4C875]/40 bg-[#E4C875]/10 text-[#E4C875] text-[10px]"
-              >
-                admin only
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0 pb-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <CompactSwitch
-              label="Master"
-              isActive={switchesQuery.data?.master ?? false}
-              isLoading={updatingKey === "master" || switchesQuery.isLoading}
-              disabled={!isAdmin}
-              onToggle={next => handleSwitchChange("master", next)}
-            />
-            {(["youtube", "instagram", "tiktok"] as const).map(p => (
-              <CompactSwitch
-                key={p}
-                label={platformLabel(p)}
-                isActive={(switchesQuery.data?.[p]) ?? true}
-                isLoading={updatingKey === p || switchesQuery.isLoading}
-                disabled={!isAdmin}
-                onToggle={next => handleSwitchChange(p, next)}
-              />
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Automation list */}
-      {isLoading ? (
-        <div className="space-y-3">
-          {[0, 1, 2].map(i => (
-            <Skeleton key={i} className="h-32 w-full bg-white/5" />
-          ))}
-        </div>
-      ) : !hasAutomations ? (
-        <Card className="bg-[#10151A] border-white/8">
-          <CardContent className="py-12 sm:py-16">
-            <div className="flex flex-col items-center text-center max-w-md mx-auto space-y-3">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#11C4D0]/10">
-                <Plus className="h-7 w-7 text-[#11C4D0]" />
-              </div>
-              <div className="space-y-1.5">
-                <h2 className="font-serif text-xl text-[#ECEAE4]">No automations yet</h2>
-                <p className="text-[13px] text-[#8A9198] leading-relaxed">
-                  Head to a new project's intake form and toggle "Run on a schedule" at the bottom to create your first one.
-                </p>
-              </div>
-              {newCta}
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {automations.map(s => (
-            <AutomationCard
-              key={s.id}
-              schedule={s}
-              lastRunAt={lastRuns[s.id] ?? null}
-            />
-          ))}
-        </div>
-      )}
 
       <AlertDialog open={!!pendingDisable} onOpenChange={open => !open && setPendingDisable(null)}>
         <AlertDialogContent className="bg-[#10151A] border-white/8 text-[#ECEAE4]">
@@ -331,42 +552,74 @@ export default function AutopostHome() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </LabLayout>
+    </AppShell>
   );
 }
 
-function CompactSwitch({
+/** A single kill-switch toggle for the .kill-row chrome. */
+function KillToggle({
   label,
-  isActive,
-  isLoading,
-  disabled,
-  onToggle,
+  active,
+  loading,
+  onChange,
 }: {
   label: string;
-  isActive: boolean;
-  isLoading: boolean;
-  disabled: boolean;
-  onToggle: (next: boolean) => void;
+  active: boolean;
+  loading: boolean;
+  onChange: (next: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2 rounded-md border border-white/8 px-3 py-2">
-      <div className="min-w-0 flex items-center gap-2">
-        {isLoading ? (
-          <Loader2 className="h-3.5 w-3.5 shrink-0 text-[#8A9198] animate-spin" />
-        ) : isActive ? (
-          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#11C4D0]" />
-        ) : (
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[#E4C875]" />
-        )}
-        <span className="text-[12px] text-[#ECEAE4] truncate">{label}</span>
-      </div>
-      <Switch
-        checked={isActive}
-        onCheckedChange={onToggle}
-        disabled={disabled || isLoading}
+    <div className="ks">
+      {label}
+      <button
+        type="button"
+        className={`ks-tg${active ? " on" : ""}${loading ? " loading" : ""}`}
+        onClick={() => onChange(!active)}
+        disabled={loading}
         aria-label={`Toggle ${label}`}
-        className="scale-90"
+        aria-pressed={active}
       />
+    </div>
+  );
+}
+
+/** 24-hour radar — pure-CSS pin layout. Renders the axis ticks at +0,
+ *  +6h, +12h, +18h, +24h and pins each event proportionally. */
+function Radar({ events }: { events: RadarEvent[] }) {
+  const minH = -3;
+  const maxH = 24;
+  const range = maxH - minH;
+  const pct = (h: number) => ((h - minH) / range) * 100;
+  const ticks = [0, 6, 12, 18, 24];
+  return (
+    <div className="radar-track">
+      <div className="radar-axis">
+        {ticks.map(h => (
+          <span key={h}>
+            <i style={{ left: `${pct(h)}%` }} />
+            <div className="lb" style={{ left: `${pct(h)}%` }}>
+              {h === 0 ? "now" : h === 24 ? "+24h" : `+${h}h`}
+            </div>
+          </span>
+        ))}
+      </div>
+      <div className="radar-now" style={{ left: `${pct(0)}%` }} />
+      {events.map((e, i) => {
+        const cls = `${e.status}${e.next ? " next" : ""}`;
+        const sign = e.h < 0 ? `${Math.abs(e.h).toFixed(1)}h ago` : `+${e.h.toFixed(1)}h`;
+        return (
+          <div
+            key={`${i}-${e.schedule}-${e.h}`}
+            className={`radar-pin ${cls}`}
+            style={{ left: `${pct(e.h)}%` }}
+          >
+            <div className="tt">
+              <b>{e.schedule} · {sign}</b>
+              {e.topic}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

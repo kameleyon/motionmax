@@ -45,6 +45,16 @@
   color: var(--ink);
 }
 
+/* Mobile: shrink the inline padding on the page wrappers (the JSX
+   uses an inline 28px 32px 80px style, so we override it here so we
+   don't have to touch byte-identical wiring). */
+@media (max-width: 720px) {
+  .autopost-shell > div[style*="padding"] { padding: 20px 18px 60px !important; }
+}
+@media (max-width: 480px) {
+  .autopost-shell > div[style*="padding"] { padding: 16px 14px 50px !important; }
+}
+
 /* Page hero — same shape as billing's .bill-head */
 .autopost-shell .ap-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 8px; flex-wrap: wrap; }
 .autopost-shell .ap-head h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(28px, 4vw, 38px); line-height: 1.05; letter-spacing: -.02em; margin: 0; font-variation-settings: "opsz" 144; }
@@ -68,16 +78,16 @@
   margin: 22px 0 18px; overflow: hidden;
 }
 @media (max-width: 780px) { .autopost-shell .health-strip { grid-template-columns: repeat(2, 1fr); } }
-.autopost-shell .hs-cell { padding: 18px 22px; border-right: 1px solid var(--line); position: relative; }
+.autopost-shell .hs-cell { padding: 18px 22px; border-right: 1px solid var(--line); position: relative; min-width: 0; }
 .autopost-shell .hs-cell:last-child { border-right: 0; }
 @media (max-width: 780px) {
   .autopost-shell .hs-cell:nth-child(2n) { border-right: 0; }
   .autopost-shell .hs-cell:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
 }
-.autopost-shell .hs-cell .hsh { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.autopost-shell .hs-cell .hsh { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; min-width: 0; }
 .autopost-shell .hs-cell .hsh .pl-ic { width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: -.02em; flex-shrink: 0; }
-.autopost-shell .hs-cell .hsh .nm { font-size: 13px; color: var(--ink); font-weight: 500; }
-.autopost-shell .hs-cell .hsh .dt { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--cyan); }
+.autopost-shell .hs-cell .hsh .nm { font-size: 13px; color: var(--ink); font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.autopost-shell .hs-cell .hsh .dt { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--cyan); flex-shrink: 0; }
 .autopost-shell .hs-cell .hsh .dt::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 6px var(--cyan); animation: ap-hb 2s infinite; }
 .autopost-shell .hs-cell.warn .hsh .dt { color: var(--gold); }
 .autopost-shell .hs-cell.warn .hsh .dt::before { background: var(--gold); box-shadow: 0 0 6px var(--gold); }
@@ -87,6 +97,21 @@
 .autopost-shell .hs-cell .bar { margin-top: 12px; height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; position: relative; }
 .autopost-shell .hs-cell .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--cyan); border-radius: 2px; }
 .autopost-shell .hs-cell.warn .bar i { background: var(--gold); }
+
+/* Narrow viewports — stack tile header so the live-pill drops below
+   the platform name and never pushes content past the cell edge.
+   Also shrink internal padding + font sizes so 360-420px renders
+   cleanly with no truncation. */
+@media (max-width: 520px) {
+  .autopost-shell .hs-cell { padding: 14px 14px; }
+  .autopost-shell .hs-cell .hsh { flex-wrap: wrap; row-gap: 4px; column-gap: 8px; margin-bottom: 10px; }
+  .autopost-shell .hs-cell .hsh .nm { font-size: 12px; flex: 1 1 auto; min-width: 0; }
+  .autopost-shell .hs-cell .hsh .dt { margin-left: 0; flex-basis: 100%; font-size: 9px; letter-spacing: .12em; }
+  .autopost-shell .hs-cell .num { font-size: 26px; }
+  .autopost-shell .hs-cell .num .u { font-size: 15px; }
+  .autopost-shell .hs-cell .sub { font-size: 11px; }
+  .autopost-shell .hs-cell.soon .num.soon-num { font-size: 22px; }
+}
 
 /* Coming-soon state: platform has no real publishing data yet (or no
    publisher implemented). Tile reads as inactive — no green/cyan pulse,
@@ -171,6 +196,14 @@
 .autopost-shell .kill-row .kt b { font-weight: 500; }
 .autopost-shell .kill-row .kt .ad { font-family: var(--mono); font-size: 9px; letter-spacing: .14em; color: var(--gold); background: rgba(228, 200, 117, .08); border: 1px solid rgba(228, 200, 117, .3); padding: 2px 6px; border-radius: 99px; text-transform: uppercase; margin-left: 4px; }
 .autopost-shell .kill-row .ks { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; letter-spacing: .06em; color: var(--ink-dim); text-transform: uppercase; }
+
+/* Narrow viewports — stack kill-row label above the toggles, then
+   wrap toggles into a tidy two-column grid so they never collide. */
+@media (max-width: 600px) {
+  .autopost-shell .kill-row { gap: 10px 12px; padding: 12px 14px; }
+  .autopost-shell .kill-row .kt { width: 100%; padding-right: 0; padding-bottom: 8px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .autopost-shell .kill-row .ks { flex: 0 0 calc(50% - 6px); justify-content: space-between; }
+}
 
 /* compact toggle (smaller than billing's .tg) */
 .autopost-shell .ks-tg { position: relative; width: 30px; height: 18px; border-radius: 99px; background: var(--panel-3); border: 1px solid var(--line-2); cursor: pointer; flex-shrink: 0; transition: background .2s; appearance: none; padding: 0; }
@@ -283,6 +316,8 @@
 .autopost-shell .fil-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 18px; }
 .autopost-shell .fil-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 @media (max-width: 780px) { .autopost-shell .fil-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { .autopost-shell .fil-grid { grid-template-columns: 1fr; gap: 10px; } }
+.autopost-shell .fil-grid .fld { min-width: 0; }
 .autopost-shell .fil-grid .fld label { display: block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 6px; }
 
 .autopost-shell .day-bucket { margin-bottom: 22px; }
@@ -294,6 +329,23 @@
 @media (max-width: 680px) {
   .autopost-shell .run-row { grid-template-columns: 46px minmax(0, 1fr) 100px 60px; gap: 10px; }
   .autopost-shell .run-row .show-det { display: none; }
+}
+/* Narrow viewports — restructure the row so the status pill drops
+   onto its own line under the title (instead of overlapping the
+   wrapped schedule meta). Thumb spans both rows on the left. */
+@media (max-width: 520px) {
+  .autopost-shell .run-row {
+    grid-template-columns: 46px minmax(0, 1fr) auto;
+    grid-template-areas: "thumb meta when" "thumb pill actions";
+    row-gap: 6px;
+    column-gap: 10px;
+    padding: 12px 14px;
+  }
+  .autopost-shell .run-row > .thumb { grid-area: thumb; align-self: start; }
+  .autopost-shell .run-row > .run-meta { grid-area: meta; }
+  .autopost-shell .run-row > .run-pill { grid-area: pill; justify-self: start; }
+  .autopost-shell .run-row > .when { grid-area: when; justify-self: end; }
+  .autopost-shell .run-row > .run-actions { grid-area: actions; justify-self: end; }
 }
 .autopost-shell .run-row:first-child { border-top: 0; }
 .autopost-shell .run-row:hover { background: rgba(255, 255, 255, .025); }
@@ -331,5 +383,8 @@
 .autopost-shell .run-actions button.del:hover { background: rgba(228, 200, 117, .1); color: var(--gold); }
 
 /* native select restyle inside .fil-grid */
-.autopost-shell .fil-grid select { width: 100%; background: var(--bg); border: 1px solid var(--line-2); color: var(--ink); border-radius: 8px; padding: 9px 12px; font-family: var(--sans); font-size: 13px; appearance: none; -webkit-appearance: none; -moz-appearance: none; cursor: pointer; }
+.autopost-shell .fil-grid select { width: 100%; min-width: 0; background: var(--bg); border: 1px solid var(--line-2); color: var(--ink); border-radius: 8px; padding: 9px 10px; font-family: var(--sans); font-size: 13px; appearance: none; -webkit-appearance: none; -moz-appearance: none; cursor: pointer; text-overflow: ellipsis; }
 .autopost-shell .fil-grid select:focus { outline: 0; border-color: var(--cyan); }
+@media (max-width: 780px) {
+  .autopost-shell .fil-grid select { padding: 9px 8px; font-size: 12.5px; }
+}

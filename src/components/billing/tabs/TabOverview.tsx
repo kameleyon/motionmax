@@ -136,20 +136,12 @@ export default function TabOverview({ onGoTab }: { onGoTab: (t: string) => void 
               <b>{planMonthlyPrice}</b> billed via Stripe<br />
               {monthlyCreditsRender ? <>Refills <b>{num(monthlyCreditsRender * (o?.pack_quantity ?? 1))} credits</b></> : <>No recurring charge on Free plan</>}
             </div>
-            {(() => {
-              if (!o?.period_end) return null;
-              const days = Math.max(0, Math.ceil((new Date(o.period_end).getTime() - Date.now()) / 86400000));
-              // Hide the countdown for far-future placeholders (manual /
-              // comp / lifetime subs whose period_end is set to e.g.
-              // 2099-12-31). 366+ days is meaningless to users.
-              if (days > 366) return null;
-              return (
-                <div className="countdown">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
-                  in <b>{days} days</b>
-                </div>
-              );
-            })()}
+            {o?.period_end ? (
+              <div className="countdown">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+                in <b>{Math.max(0, Math.ceil((new Date(o.period_end).getTime() - Date.now()) / 86400000))} days</b>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

@@ -32,6 +32,8 @@ import { uploadToSupabase, removeFiles } from "./export/storageHelpers.js";
 import { generateAssSubtitles, writeAssFile, normalizeCaptionStyle, type ASRSceneResult } from "../services/captionBuilder.js";
 import { transcribeAllScenes } from "../services/audioASR.js";
 import { getTargetResolution } from "./export/kenBurns.js";
+import { composeFinal } from "./export/composeFinal.js";
+import type { ColorGrade } from "./export/colorGrade.js";
 import {
   initSceneProgress,
   updateSceneProgress,
@@ -79,6 +81,36 @@ const AI_VIDEO_TIMEOUT_MS = parseInt(process.env.EXPORT_AI_VIDEO_TIMEOUT || "300
 const JOB_TIMEOUT_MS = parseInt(process.env.JOB_TIMEOUT_MS || "5400000", 10);
 
 // ── Helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Download a public URL into the temp dir as a local file. Returns the
+ * local path, or null on any failure. Used to stage master audio + music
+ * + sfx for the single-pass composer (which needs local file inputs to
+ * keep the filter graph stable). Failures are non-fatal at the call
+ * site — the caller falls back to the legacy multi-pass path.
+ */
+async function downloadToTemp(
+  url: string | null,
+  tempDir: string,
+  basename: string,
+): Promise<string | null> {
+  if (!url) return null;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.warn(`[ExportVideo] download ${basename} failed: ${res.status}`);
+      return null;
+    }
+    const ext = basename.includes(".") ? "" : ".mp3";
+    const localPath = path.join(tempDir, `${basename}${ext}`);
+    const arrayBuffer = await res.arrayBuffer();
+    fs.writeFileSync(localPath, Buffer.from(arrayBuffer));
+    return localPath;
+  } catch (err) {
+    console.warn(`[ExportVideo] download ${basename} threw: ${(err as Error).message}`);
+    return null;
+  }
+}
 
 /** Fetch scenes from the generations table as a fallback. */
 async function fetchScenesFromDb(projectId: string): Promise<any[]> {
@@ -657,17 +689,147 @@ async function _runExport(
     await supabase.from("video_generation_jobs").update({ progress: 55 }).eq("id", jobId);
     await checkCancelled(jobId);
 
-    // ── 2. Stitch scenes: crossfade or concat ───────────────────────
+    // ── 2. Single-pass compose (fast path) ──────────────────────────
+    // Tries to fold concat/crossfade + master-audio swap + music/sfx
+    // mix + caption burn + color grade + brand mark into ONE ffmpeg
+    // invocation. On any failure (filter graph rejection, missing
+    // input, etc.) falls back to the legacy multi-pass chain below.
+    //
+    // Conditions for the fast path (all must hold):
+    //   - Master audio URL is present (smartflow per-scene audio still
+    //     uses the legacy path).
+    //   - At least one scene clip exists.
+    //   - The scenes have already been encoded to normalised MP4s with
+    //     identical resolution + framerate (true after step 1).
+    //
+    // Estimated speedup vs. legacy: ~5–6× on cinematic 3-min exports.
 
     sceneProgress.overallPhase = "concatenating";
-    sceneProgress.overallMessage = exportConfig.crossfadeDuration > 0
-      ? `Applying crossfade transitions to ${clipPaths.length} clips...`
-      : `Concatenating ${clipPaths.length} scene clips...`;
+    sceneProgress.overallMessage = `Composing final video (${clipPaths.length} clips)...`;
     await flushSceneProgress(jobId);
 
     let usedCrossfade = false;
+    let composedFastPath = false;
 
-    if (exportConfig.crossfadeDuration > 0 && clipPaths.length >= 2) {
+    try {
+      const { data: genRowSP } = await supabase
+        .from("generations")
+        .select("master_audio_url")
+        .eq("project_id", project_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const masterUrlSP = (genRowSP as { master_audio_url?: string | null } | null)?.master_audio_url ?? null;
+
+      const { musicUrl: musicUrlSP, sfxUrl: sfxUrlSP } = await fetchAudioBedUrls(project_id);
+
+      // Probe per-clip durations once (we'll need them whether or not
+      // the fast path lands).
+      const { probeDuration } = await import("./export/ffmpegCmd.js");
+      const clipDurationsSP: number[] = [];
+      for (const cp of clipPaths) clipDurationsSP.push(await probeDuration(cp));
+
+      if (masterUrlSP) {
+        const masterLocal = await downloadToTemp(masterUrlSP, tempDir, "master_audio");
+        const musicLocal = await downloadToTemp(musicUrlSP, tempDir, "bgm");
+        const sfxLocal = await downloadToTemp(sfxUrlSP, tempDir, "sfx");
+
+        if (!masterLocal) {
+          log.warn("Master audio download failed — falling back to legacy stitch path");
+        } else {
+          // ASR for captions runs in parallel; if it's still in flight
+          // we await it here. Generated when caption_style is set.
+          let assPathSP: string | null = null;
+          let fontsDirSP: string | null = null;
+          if (captionStyle !== "none") {
+            try {
+              const asrResults = asrPromise ? await asrPromise : null;
+              const totalForAss = clipDurationsSP.reduce((a, b) => a + b, 0);
+              log.debug("Caption timing (single-pass)", {
+                totalSec: totalForAss.toFixed(1),
+                sceneDurations: clipDurationsSP.map((d) => d.toFixed(1)),
+              });
+              const assContent = generateAssSubtitles(
+                scenes, captionStyle, exportConfig.width, exportConfig.height,
+                clipDurationsSP, asrResults || undefined,
+              );
+              if (assContent) {
+                assPathSP = await writeAssFile(assContent, tempDir);
+                fontsDirSP = path.resolve(
+                  path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1")),
+                  "../../fonts",
+                );
+              }
+            } catch (errCap) {
+              log.warn("Caption generation failed in single-pass — continuing without captions", {
+                error: (errCap as Error).message,
+              });
+            }
+          }
+
+          await writeSystemLog({
+            jobId, projectId: project_id, userId,
+            category: "system_info",
+            eventType: "export_compose_single_pass_started",
+            message: `Single-pass compose: ${clipPaths.length} clips, master=${!!masterLocal}, music=${!!musicLocal}, sfx=${!!sfxLocal}, captions=${!!assPathSP}, grade=${exportConfig.colorGrade ?? "none"}`,
+          });
+
+          try {
+            await composeFinal({
+              clipPaths,
+              clipDurations: clipDurationsSP,
+              outputPath: finalOutputPath,
+              width: exportConfig.width,
+              height: exportConfig.height,
+              fps: exportConfig.fps,
+              crossfadeDuration: exportConfig.crossfadeDuration,
+              crossfadeType: exportConfig.crossfadeType,
+              masterAudioPath: masterLocal,
+              musicPath: musicLocal,
+              sfxPath: sfxLocal,
+              assPath: assPathSP,
+              fontsDir: fontsDirSP,
+              colorGrade: (exportConfig.colorGrade ?? null) as ColorGrade | null,
+              brandMark: effectiveBrandMark ?? null,
+            });
+            composedFastPath = true;
+            usedCrossfade = exportConfig.crossfadeDuration > 0 && clipPaths.length >= 2;
+            if (assPathSP) removeFiles(assPathSP);
+            await writeSystemLog({
+              jobId, projectId: project_id, userId,
+              category: "system_info",
+              eventType: "export_compose_single_pass_completed",
+              message: "Single-pass compose succeeded",
+            });
+          } catch (errSP) {
+            const msg = errSP instanceof Error ? errSP.message : String(errSP);
+            log.warn("Single-pass compose failed — falling back to legacy multi-pass", { error: msg });
+            await writeSystemLog({
+              jobId, projectId: project_id, userId,
+              category: "system_warning",
+              eventType: "export_compose_single_pass_fallback",
+              message: `Single-pass compose failed, falling back: ${msg.slice(0, 240)}`,
+            });
+            if (assPathSP) { try { removeFiles(assPathSP); } catch { /* ignore */ } }
+          }
+        }
+      }
+    } catch (probeErr) {
+      log.warn("Single-pass pre-flight failed — falling back to legacy stitch path", {
+        error: (probeErr as Error).message,
+      });
+    }
+
+    // ── 2-LEGACY. Stitch scenes (multi-pass fallback) ───────────────
+    if (!composedFastPath) {
+      sceneProgress.overallMessage = exportConfig.crossfadeDuration > 0
+        ? `Applying crossfade transitions to ${clipPaths.length} clips...`
+        : `Concatenating ${clipPaths.length} scene clips...`;
+      await flushSceneProgress(jobId);
+    }
+
+
+    if (!composedFastPath && exportConfig.crossfadeDuration > 0 && clipPaths.length >= 2) {
       await writeSystemLog({
         jobId,
         projectId: project_id,
@@ -713,7 +875,7 @@ async function _runExport(
         log.info("Applying watermark to crossfade output");
         await applyWatermarkOverlay(finalOutputPath, effectiveBrandMark, tempDir);
       }
-    } else {
+    } else if (!composedFastPath) {
       // No crossfade — probe clips, then concat (with or without captions in ONE pass)
 
       // Probe each individual scene clip for exact durations BEFORE anything else
@@ -806,8 +968,9 @@ async function _runExport(
     //
     // Skipped when master_audio_url is null (smartflow's per-scene
     // path, or pre-master-audio rows) — those need their per-scene
-    // audio preserved.
-    try {
+    // audio preserved. Also skipped when composedFastPath is true —
+    // the single-pass composer already handled master + beds.
+    if (!composedFastPath) try {
       const { data: genRow } = await supabase
         .from("generations")
         .select("master_audio_url")
@@ -857,7 +1020,8 @@ async function _runExport(
     // or both can be present — mixBackgroundMusic handles any
     // combination. Video stream is copied (no re-encode); only audio
     // is remuxed, adding ~5-10s per bed. Non-fatal on failure.
-    try {
+    // Skipped when composedFastPath is true — beds were folded in.
+    if (!composedFastPath) try {
       const { musicUrl, sfxUrl } = await fetchAudioBedUrls(project_id);
       if (musicUrl || sfxUrl) {
         const beds = [musicUrl && "music", sfxUrl && "SFX"].filter(Boolean).join(" + ");

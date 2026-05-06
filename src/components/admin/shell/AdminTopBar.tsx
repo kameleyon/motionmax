@@ -14,6 +14,9 @@ export interface AdminTopBarProps {
   onToggleLive: () => void;
   /** Optional gear-button click — wire to user dropdown when available. */
   onOpenSettings?: () => void;
+  /** Mobile-only: opens the sidebar drawer (Sheet) so the user can
+   *  navigate back to other parts of the app. Hidden on >=md. */
+  onOpenSidebar?: () => void;
 }
 
 /**
@@ -33,6 +36,7 @@ export function AdminTopBar({
   live,
   onToggleLive,
   onOpenSettings,
+  onOpenSidebar,
 }: AdminTopBarProps) {
   const queryClient = useQueryClient();
 
@@ -51,6 +55,23 @@ export function AdminTopBar({
 
   return (
     <div className="topbar">
+      {/* Mobile-only hamburger — opens the sidebar drawer so the user
+       *  can leave the admin section. Hidden on >=md where the desktop
+       *  sidebar is always visible in column 1. */}
+      {onOpenSidebar ? (
+        <button
+          type="button"
+          onClick={onOpenSidebar}
+          className="md:hidden w-10 h-10 -ml-1 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors shrink-0"
+          aria-label="Open sidebar"
+          title="Menu"
+        >
+          <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 12h18M3 6h18M3 18h18" />
+          </svg>
+        </button>
+      ) : null}
+
       <div className="crumbs" aria-label="breadcrumb">
         <span>Operations</span>
         <span className="sep">·</span>

@@ -1,8 +1,9 @@
-import { lazy, Suspense, useCallback, useMemo } from "react";
+import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import Sidebar from "@/components/dashboard/Sidebar";
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { AdminCommandPalette } from "@/components/admin/AdminCommandPalette";
 import { AdminRecentActions } from "@/components/admin/AdminRecentActions";
 import { AdminLoading } from "@/components/admin/_shared/AdminLoading";
@@ -204,6 +205,9 @@ export default function Admin() {
 
   const toggleLive = useCallback(() => setLive(!live), [live, setLive]);
 
+  // Mobile sidebar drawer — opens via the hamburger in AdminTopBar.
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
   // Sanity-check exhaustiveness against `TAB_KEYS` at module-eval time
   // — guarantees the route can render every key the tab strip emits.
   if (!TAB_KEYS.includes(tab)) {
@@ -221,13 +225,38 @@ export default function Admin() {
         <meta name="robots" content="noindex, nofollow" />
       </Helmet>
 
-      <Sidebar />
+      {/* Desktop sidebar in grid column 1. Hidden on <md so admin's
+       *  responsive single-column layout doesn't push content off-screen.
+       *  Mobile users open the same Sidebar via the hamburger Sheet below. */}
+      <div className="hidden md:contents">
+        <Sidebar />
+      </div>
+
+      {/* Mobile sidebar drawer — same Sheet pattern as AppShell so the
+       *  user can navigate out of the admin section on small screens. */}
+      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <SheetContent
+          side="left"
+          className="w-[280px] p-0 bg-[#10151A] border-white/10 md:hidden [&>button]:text-[#ECEAE4]"
+          style={{ height: "100dvh" }}
+        >
+          <SheetTitle className="sr-only">Navigation menu</SheetTitle>
+          <SheetDescription className="sr-only">Workspace navigation and account controls.</SheetDescription>
+          <div
+            className="h-full overflow-y-auto [&_aside]:flex [&_aside]:w-full [&_aside]:border-r-0 [&_aside]:h-auto [&_aside]:min-h-full [&_aside]:overflow-visible [&_aside_nav]:overflow-visible"
+            style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+          >
+            <Sidebar />
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <div className="main">
         <AdminTopBar
           activeTab={tab}
           live={live}
           onToggleLive={toggleLive}
+          onOpenSidebar={() => setDrawerOpen(true)}
         />
         <div className="body">
           <div className="adm-content">

@@ -1,6 +1,8 @@
 import { Helmet } from "react-helmet-async";
 import { useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import AppShell from "@/components/dashboard/AppShell";
 import {
   AlertDialog,
@@ -13,11 +15,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 
 /** Support email — ground truth lives in HelpPopover.tsx and this
- *  must stay in sync with that one source. Email-based for now: until a
- *  ticket backend ships, "Send message" composes a `mailto:` from the
- *  filled form so the team still gets the report in their inbox. */
+ *  must stay in sync with that one source. Used as the fallback
+ *  mailto: target if the edge fn submission fails. */
 const SUPPORT_EMAIL = "support@motionmax.io";
 
 type Category = "all" | "started" | "billing" | "voice" | "render" | "account" | "api";
@@ -167,22 +169,75 @@ const CATS: { id: Category; label: string }[] = [
   { id: "api", label: "API" },
 ];
 
-type ContactTopic =
-  | "General question"
-  | "Billing & refunds"
-  | "Bug report"
-  | "Feature request"
-  | "Voice cloning support"
-  | "Account / login";
+/** Topic IDs for the contact form. These must match the
+ *  `support_tickets.topic` CHECK constraint in the migration:
+ *  ('billing','render','voice','account','api','other'). */
+type ContactTopic = "billing" | "render" | "voice" | "account" | "api" | "other";
 
-const TOPICS: ContactTopic[] = [
-  "General question",
-  "Billing & refunds",
-  "Bug report",
-  "Feature request",
-  "Voice cloning support",
-  "Account / login",
+const TOPICS: { id: ContactTopic; label: string }[] = [
+  { id: "other", label: "General question" },
+  { id: "billing", label: "Billing & refunds" },
+  { id: "render", label: "Rendering / bug report" },
+  { id: "voice", label: "Voice cloning support" },
+  { id: "account", label: "Account / login" },
+  { id: "api", label: "API / integrations" },
 ];
+
+/* ── System status types & query ────────────────────────────────────── */
+
+type StatusKind = "operational" | "degraded" | "down";
+interface StatusBucket { status: StatusKind; detail: string }
+interface SystemStatusPayload {
+  render_queue: StatusBucket;
+  voice_synthesis: StatusBucket;
+  media_pipeline: StatusBucket;
+  api_webhooks: StatusBucket;
+}
+
+async function fetchSystemStatus(): Promise<SystemStatusPayload> {
+  const { data, error } = await supabase.rpc("support_system_status" as never);
+  if (error) throw new Error(error.message);
+  return (data ?? null) as unknown as SystemStatusPayload;
+}
+
+function useSystemStatus() {
+  return useQuery({
+    queryKey: ["help", "system-status"],
+    queryFn: fetchSystemStatus,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+}
+
+/* ── Env-driven external links — community + scheduling ─────────────── */
+
+const SUPPORT_CALL_URL = (import.meta.env.VITE_SUPPORT_CALL_URL as string | undefined) || "";
+const SUPPORT_DISCORD_URL = (import.meta.env.VITE_SUPPORT_DISCORD_URL as string | undefined) || "";
+const SUPPORT_GITHUB_URL = (import.meta.env.VITE_SUPPORT_GITHUB_URL as string | undefined) || "";
+const SUPPORT_LINKEDIN_URL = (import.meta.env.VITE_SUPPORT_LINKEDIN_URL as string | undefined) || "";
+
+/* ── Status row — aqua dot for operational, gold for degraded, gold-bordered em-dash for down ── */
+
+function StatusRow({ label, bucket, last }: { label: string; bucket: StatusBucket | undefined; last?: boolean }) {
+  const status = bucket?.status ?? "operational";
+  const detail = bucket?.detail ?? "—";
+  const dotStyle: React.CSSProperties =
+    status === "operational"
+      ? { background: "#14C8CC", boxShadow: "0 0 8px rgba(20,200,204,.7)" }
+      : status === "degraded"
+        ? { background: "#E4C875", boxShadow: "0 0 8px rgba(228,200,117,.7)" }
+        : { background: "transparent", border: "1px solid #E4C875", boxShadow: "0 0 6px rgba(228,200,117,.5)" };
+  return (
+    <div className="status-row" style={last ? { marginBottom: 0 } : undefined}>
+      <span className="status-dot" aria-hidden="true" style={dotStyle} />
+      <span className="t">{label}</span>
+      <span className="v" title={detail} style={{ textTransform: "uppercase" }}>
+        {status === "down" ? "—" : detail}
+      </span>
+    </div>
+  );
+}
 
 export default function Help() {
   const { user } = useAuth();
@@ -196,12 +251,16 @@ export default function Help() {
   // Contact form
   const [name, setName] = useState("");
   const [email, setEmail] = useState(user?.email ?? "");
-  const [topic, setTopic] = useState<ContactTopic>("General question");
+  const [topic, setTopic] = useState<ContactTopic>("other");
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
   const [attachLogs, setAttachLogs] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSentDialog, setShowSentDialog] = useState(false);
+  const [sentTicketId, setSentTicketId] = useState<string | null>(null);
+
+  // Live system status — refreshed every 60s while the page is open.
+  const status = useSystemStatus();
 
   // Filter FAQs by category + search query
   const visibleFaqs = useMemo(() => {
@@ -223,31 +282,57 @@ export default function Help() {
     });
   }
 
-  // Submit form via mailto: until a real ticket backend exists.
-  // Keeps message routed to the same SUPPORT_EMAIL the rest of the app
-  // already advertises (HelpPopover, Settings deletion fallback, etc.).
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim() || !email.trim() || !subject.trim() || !description.trim()) return;
-    setIsSubmitting(true);
-    const body =
+  // Mailto fallback for when the edge fn fails — keeps the user
+  // unblocked even if the ticket backend is down.
+  function openMailtoFallback(): void {
+    const topicLabel = TOPICS.find((t) => t.id === topic)?.label ?? topic;
+    const bodyText =
       `From: ${name} <${email}>\n` +
-      `Topic: ${topic}\n` +
+      `Topic: ${topicLabel}\n` +
       (attachLogs ? `Attach diagnostic logs: yes\n` : "") +
       `\n${description}\n`;
     const url =
       `mailto:${SUPPORT_EMAIL}` +
-      `?subject=${encodeURIComponent(`[${topic}] ${subject}`)}` +
-      `&body=${encodeURIComponent(body)}`;
-    // Open the user's mail client. Setting window.location is the
-    // most reliable cross-browser approach for mailto: handoff.
+      `?subject=${encodeURIComponent(`[${topicLabel}] ${subject}`)}` +
+      `&body=${encodeURIComponent(bodyText)}`;
     window.location.href = url;
-    // Show confirmation dialog after a short delay so the mailto handoff
-    // has a beat to take effect.
-    window.setTimeout(() => {
-      setIsSubmitting(false);
+  }
+
+  /** Submit via the `submit-support-ticket` edge fn. On failure
+   *  (network, auth, rate-limit, validation), we degrade to a
+   *  pre-filled mailto: so the user is never stranded. */
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || !email.trim() || !subject.trim() || !description.trim()) return;
+    setIsSubmitting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke<{ ok?: boolean; id?: string; error?: string }>(
+        "submit-support-ticket",
+        {
+          body: {
+            name: name.trim(),
+            email: email.trim(),
+            subject: subject.trim(),
+            body: description.trim(),
+            topic,
+          },
+        },
+      );
+      if (error || !data?.ok || !data.id) {
+        const message = (data?.error as string | undefined) ?? error?.message ?? "Couldn't reach the ticket service.";
+        throw new Error(message);
+      }
+      setSentTicketId(data.id);
+      const short = data.id.slice(0, 6);
+      toast.success(`Ticket #${short}… submitted — we'll reply within one business day.`);
       setShowSentDialog(true);
-    }, 300);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Submission failed";
+      toast.error(`${message}. Opening your email client as a fallback.`);
+      openMailtoFallback();
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   const totalArticles = FAQS.length;
@@ -320,40 +405,219 @@ export default function Help() {
                   </svg>
                 </div>
                 <div className="t">Contact us</div>
-                <div className="d">Email-based support · 1 business day</div>
+                <div className="d">Tickets · 1 business day reply</div>
               </a>
             </div>
           </div>
 
+          {/* ─── Contact ───────────────────────────────────────── */}
+          <div className="faq-section" id="contact" style={{ marginTop: 32 }}>
+            <div className="head">
+              <h3>Still need help?</h3>
+            </div>
+            <div className="contact-grid">
+              {/* Posts to the `submit-support-ticket` edge fn. Falls
+                  back to mailto: if the API call fails. */}
+              <form className="card" onSubmit={handleSubmit}>
+                <h3>Send us a message</h3>
+                <div className="reply-lede">
+                  Replies typically arrive within <b>one business day</b>.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div className="grid-2">
+                    <div className="fld">
+                      <label htmlFor="sup-name">Your name</label>
+                      <input
+                        id="sup-name"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="Your name"
+                        required
+                      />
+                    </div>
+                    <div className="fld">
+                      <label htmlFor="sup-email">Email</label>
+                      <input
+                        id="sup-email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="fld">
+                    <label htmlFor="sup-topic">Topic</label>
+                    <select
+                      id="sup-topic"
+                      value={topic}
+                      onChange={(e) => setTopic(e.target.value as ContactTopic)}
+                    >
+                      {TOPICS.map((t) => (
+                        <option key={t.id} value={t.id}>{t.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="fld">
+                    <label htmlFor="sup-subject">Subject</label>
+                    <input
+                      id="sup-subject"
+                      value={subject}
+                      onChange={(e) => setSubject(e.target.value)}
+                      placeholder="One-line summary of your issue"
+                      required
+                    />
+                  </div>
+                  <div className="fld">
+                    <label htmlFor="sup-desc">Description</label>
+                    <textarea
+                      id="sup-desc"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Include steps to reproduce, project IDs, screenshots if helpful…"
+                      required
+                    />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "var(--ink-dim)", cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={attachLogs}
+                        onChange={(e) => setAttachLogs(e.target.checked)}
+                        style={{ accentColor: "#14C8CC" }}
+                      />
+                      Attach diagnostic logs
+                    </label>
+                    <button type="submit" className="btn-cyan" disabled={isSubmitting}>
+                      {isSubmitting ? <Loader2 size={14} className="animate-spin" /> : null}
+                      Send message
+                    </button>
+                  </div>
+                </div>
+              </form>
+
+              <div>
+                <div className="card" style={{ marginBottom: 14 }}>
+                  <h3>Other ways to reach us</h3>
+                  {/* Live chat — not implemented; mark "Coming soon". */}
+                  <div className="touch-row disabled" aria-disabled="true">
+                    <div className="ico">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}>
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                      </svg>
+                    </div>
+                    <div className="meta">
+                      <div className="t">Live chat</div>
+                      <div className="d">Coming soon · email us in the meantime</div>
+                    </div>
+                    <span className="soon-tag">Soon</span>
+                  </div>
+                  <a
+                    className="touch-row"
+                    href={`mailto:${SUPPORT_EMAIL}?subject=MotionMax%20support`}
+                    style={SUPPORT_CALL_URL ? undefined : { marginBottom: 0 }}
+                  >
+                    <div className="ico">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}>
+                        <rect x="2" y="4" width="20" height="16" rx="2" />
+                        <path d="M22 7l-10 6L2 7" />
+                      </svg>
+                    </div>
+                    <div className="meta">
+                      <div className="t">{SUPPORT_EMAIL}</div>
+                      <div className="d">For account &amp; billing</div>
+                    </div>
+                    <svg className="arr" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                      <path d="M9 18l6-6-6-6" />
+                    </svg>
+                  </a>
+                  {/* Schedule-a-call — env-driven. Hidden entirely
+                      when VITE_SUPPORT_CALL_URL is unset. */}
+                  {SUPPORT_CALL_URL ? (
+                    <a
+                      className="touch-row"
+                      href={SUPPORT_CALL_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ marginBottom: 0 }}
+                    >
+                      <div className="ico">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}>
+                          <rect x="3" y="4" width="18" height="16" rx="2" />
+                          <path d="M8 2v4M16 2v4M3 10h18M9 14h2M14 14h2" />
+                        </svg>
+                      </div>
+                      <div className="meta">
+                        <div className="t">Schedule a call</div>
+                        <div className="d">Studio onboarding · book a slot</div>
+                      </div>
+                      <svg className="arr" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                        <path d="M9 18l6-6-6-6" />
+                      </svg>
+                    </a>
+                  ) : null}
+                </div>
+
+                <div className="card community-card">
+                  <h3 style={{ marginBottom: 8 }}>Community</h3>
+                  <p>Join other creators sharing tips, prompts and tutorials.</p>
+                  {/* Community channels — env-driven. Each button is
+                      shown only when its URL env var is set. If none
+                      are set, the buttons row is empty (hint text
+                      stays visible). */}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {SUPPORT_DISCORD_URL ? (
+                      <a className="btn-ghost" href={SUPPORT_DISCORD_URL} target="_blank" rel="noopener noreferrer" style={{ padding: "7px 12px", fontSize: 12.5 }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                          <path d="M20 4H6.5a4.5 4.5 0 0 0 0 9H8v5l4-3h6.5a3.5 3.5 0 0 0 3.5-3.5V6a2 2 0 0 0-2-2z" />
+                        </svg>
+                        Discord
+                      </a>
+                    ) : null}
+                    {SUPPORT_GITHUB_URL ? (
+                      <a className="btn-ghost" href={SUPPORT_GITHUB_URL} target="_blank" rel="noopener noreferrer" style={{ padding: "7px 12px", fontSize: 12.5 }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                          <path d="M12 0a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.9 1.2 1.9 1.2 1.1 1.9 2.9 1.4 3.6 1 .1-.8.4-1.4.8-1.7-2.7-.3-5.5-1.3-5.5-6 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 0z" />
+                        </svg>
+                        GitHub
+                      </a>
+                    ) : null}
+                    {SUPPORT_LINKEDIN_URL ? (
+                      <a className="btn-ghost" href={SUPPORT_LINKEDIN_URL} target="_blank" rel="noopener noreferrer" style={{ padding: "7px 12px", fontSize: 12.5 }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                          <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM8.3 18.3H5.7v-8.5h2.6zM7 8.7a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm11.3 9.6h-2.6v-4.1c0-1 0-2.3-1.4-2.3s-1.6 1.1-1.6 2.2v4.2h-2.6v-8.5h2.5v1.2c.4-.7 1.2-1.4 2.5-1.4 2.7 0 3.2 1.8 3.2 4z" />
+                        </svg>
+                        LinkedIn
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* ─── System status ─────────────────────────────────────
-              Status values are illustrative until we wire an actual
-              status feed. Marking the section "Status overview" with
-              a "Coming soon" tag keeps it honest — see scope rule #4. */}
+              Live: derived from video_generation_jobs / system_logs /
+              generations via the `support_system_status` RPC. */}
           <div className="card" style={{ marginTop: 24 }}>
             <div className="h-row">
               <h3>System status</h3>
-              <span className="soon-tag">Coming soon</span>
+              <span
+                className="soon-tag"
+                style={{
+                  color: "#14C8CC",
+                  background: "rgba(20,200,204,.12)",
+                  borderColor: "rgba(20,200,204,.28)",
+                }}
+              >
+                LIVE
+              </span>
             </div>
-            <div className="status-row">
-              <span className="status-dot" aria-hidden="true" />
-              <span className="t">Render queue</span>
-              <span className="v">PENDING WIRE-UP</span>
-            </div>
-            <div className="status-row">
-              <span className="status-dot" aria-hidden="true" />
-              <span className="t">Voice synthesis</span>
-              <span className="v">PENDING WIRE-UP</span>
-            </div>
-            <div className="status-row">
-              <span className="status-dot" aria-hidden="true" />
-              <span className="t">Stock library</span>
-              <span className="v">PENDING WIRE-UP</span>
-            </div>
-            <div className="status-row" style={{ marginBottom: 0 }}>
-              <span className="status-dot" aria-hidden="true" />
-              <span className="t">API &amp; webhooks</span>
-              <span className="v">PENDING WIRE-UP</span>
-            </div>
+            <StatusRow label="Render queue" bucket={status.data?.render_queue} />
+            <StatusRow label="Voice synthesis" bucket={status.data?.voice_synthesis} />
+            <StatusRow label="Media pipeline" bucket={status.data?.media_pipeline} />
+            <StatusRow label="API & webhooks" bucket={status.data?.api_webhooks} last />
           </div>
 
           {/* ─── FAQ ───────────────────────────────────────────── */}
@@ -418,194 +682,27 @@ export default function Help() {
               )}
             </div>
           </div>
-
-          {/* ─── Contact ───────────────────────────────────────── */}
-          <div className="faq-section" id="contact">
-            <div className="head">
-              <h3>Still need help?</h3>
-            </div>
-            <div className="contact-grid">
-              {/* Email-based for now: until a ticket backend exists, this
-                  form composes a mailto: to SUPPORT_EMAIL on submit. */}
-              <form className="card" onSubmit={handleSubmit}>
-                <h3>Send us a message</h3>
-                <div className="reply-lede">
-                  Replies typically arrive within <b>one business day</b>.
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                  <div className="grid-2">
-                    <div className="fld">
-                      <label htmlFor="sup-name">Your name</label>
-                      <input
-                        id="sup-name"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder="Your name"
-                        required
-                      />
-                    </div>
-                    <div className="fld">
-                      <label htmlFor="sup-email">Email</label>
-                      <input
-                        id="sup-email"
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="you@example.com"
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="fld">
-                    <label htmlFor="sup-topic">Topic</label>
-                    <select
-                      id="sup-topic"
-                      value={topic}
-                      onChange={(e) => setTopic(e.target.value as ContactTopic)}
-                    >
-                      {TOPICS.map((t) => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="fld">
-                    <label htmlFor="sup-subject">Subject</label>
-                    <input
-                      id="sup-subject"
-                      value={subject}
-                      onChange={(e) => setSubject(e.target.value)}
-                      placeholder="One-line summary of your issue"
-                      required
-                    />
-                  </div>
-                  <div className="fld">
-                    <label htmlFor="sup-desc">Description</label>
-                    <textarea
-                      id="sup-desc"
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      placeholder="Include steps to reproduce, project IDs, screenshots if helpful…"
-                      required
-                    />
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-                    <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "var(--ink-dim)", cursor: "pointer" }}>
-                      <input
-                        type="checkbox"
-                        checked={attachLogs}
-                        onChange={(e) => setAttachLogs(e.target.checked)}
-                        style={{ accentColor: "#14C8CC" }}
-                      />
-                      Attach diagnostic logs
-                    </label>
-                    <button type="submit" className="btn-cyan" disabled={isSubmitting}>
-                      {isSubmitting ? <Loader2 size={14} className="animate-spin" /> : null}
-                      Send message
-                    </button>
-                  </div>
-                </div>
-              </form>
-
-              <div>
-                <div className="card" style={{ marginBottom: 14 }}>
-                  <h3>Other ways to reach us</h3>
-                  {/* Live chat — not implemented; mark "Coming soon". */}
-                  <div className="touch-row disabled" aria-disabled="true">
-                    <div className="ico">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}>
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                      </svg>
-                    </div>
-                    <div className="meta">
-                      <div className="t">Live chat</div>
-                      <div className="d">Coming soon · email us in the meantime</div>
-                    </div>
-                    <span className="soon-tag">Soon</span>
-                  </div>
-                  <a
-                    className="touch-row"
-                    href={`mailto:${SUPPORT_EMAIL}?subject=MotionMax%20support`}
-                  >
-                    <div className="ico">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}>
-                        <rect x="2" y="4" width="20" height="16" rx="2" />
-                        <path d="M22 7l-10 6L2 7" />
-                      </svg>
-                    </div>
-                    <div className="meta">
-                      <div className="t">{SUPPORT_EMAIL}</div>
-                      <div className="d">For account &amp; billing</div>
-                    </div>
-                    <svg className="arr" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                      <path d="M9 18l6-6-6-6" />
-                    </svg>
-                  </a>
-                  {/* Schedule-a-call — not implemented; mark Coming soon. */}
-                  <div className="touch-row disabled" aria-disabled="true" style={{ marginBottom: 0 }}>
-                    <div className="ico">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}>
-                        <rect x="3" y="4" width="18" height="16" rx="2" />
-                        <path d="M8 2v4M16 2v4M3 10h18M9 14h2M14 14h2" />
-                      </svg>
-                    </div>
-                    <div className="meta">
-                      <div className="t">Schedule a call</div>
-                      <div className="d">Studio onboarding — coming soon</div>
-                    </div>
-                    <span className="soon-tag">Soon</span>
-                  </div>
-                </div>
-
-                <div className="card community-card">
-                  <h3 style={{ marginBottom: 8 }}>Community</h3>
-                  <p>Join other creators sharing tips, prompts and tutorials.</p>
-                  {/* Community channels — not yet open to public. Marked
-                      Coming soon so we don't ship dead links. */}
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button type="button" className="btn-ghost" disabled style={{ padding: "7px 12px", fontSize: 12.5 }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                        <path d="M20 4H6.5a4.5 4.5 0 0 0 0 9H8v5l4-3h6.5a3.5 3.5 0 0 0 3.5-3.5V6a2 2 0 0 0-2-2z" />
-                      </svg>
-                      Discord
-                    </button>
-                    <button type="button" className="btn-ghost" disabled style={{ padding: "7px 12px", fontSize: 12.5 }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                        <path d="M12 0a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.9 1.2 1.9 1.2 1.1 1.9 2.9 1.4 3.6 1 .1-.8.4-1.4.8-1.7-2.7-.3-5.5-1.3-5.5-6 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 0z" />
-                      </svg>
-                      GitHub
-                    </button>
-                    <button type="button" className="btn-ghost" disabled style={{ padding: "7px 12px", fontSize: 12.5 }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                        <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM8.3 18.3H5.7v-8.5h2.6zM7 8.7a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm11.3 9.6h-2.6v-4.1c0-1 0-2.3-1.4-2.3s-1.6 1.1-1.6 2.2v4.2h-2.6v-8.5h2.5v1.2c.4-.7 1.2-1.4 2.5-1.4 2.7 0 3.2 1.8 3.2 4z" />
-                      </svg>
-                      LinkedIn
-                    </button>
-                    <span className="soon-tag" style={{ alignSelf: "center" }}>Soon</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* Submission confirmation — uses support-modal chrome (cyan-rim,
-          blur backdrop). Mirrors v2-announcement vibe. */}
+      {/* Submission confirmation. Replaces the previous mailto-only
+          dialog with a real ticket-id receipt. */}
       <AlertDialog open={showSentDialog} onOpenChange={setShowSentDialog}>
         <AlertDialogContent className="support-modal-content">
           <AlertDialogHeader>
             <AlertDialogTitle style={{ fontFamily: "'Fraunces', serif", fontWeight: 500, fontSize: 20, letterSpacing: "-0.01em", color: "#ECEAE4" }}>
-              Message handed off
+              Ticket submitted
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div style={{ display: "flex", flexDirection: "column", gap: 10, color: "#8A9198", fontSize: 13.5, lineHeight: 1.55 }}>
                 <p style={{ margin: 0 }}>
-                  Your default mail app should have opened with a pre-filled draft to{" "}
-                  <strong style={{ color: "#ECEAE4" }}>{SUPPORT_EMAIL}</strong>. Hit send there and we'll get back to you within one business day.
+                  Thanks — we received your message{sentTicketId ? <> as ticket{" "}
+                    <strong style={{ color: "#ECEAE4", fontFamily: "var(--mono)" }}>#{sentTicketId.slice(0, 6)}…</strong></> : ""}.
+                  We'll reply to{" "}
+                  <strong style={{ color: "#ECEAE4" }}>{email || "your email"}</strong> within one business day.
                 </p>
                 <p style={{ margin: 0, fontSize: 12, color: "#5A6268" }}>
-                  No mail client opened? Email{" "}
-                  <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: "#14C8CC" }}>{SUPPORT_EMAIL}</a> directly.
+                  Need to add more context? Just reply to our email when it arrives.
                 </p>
               </div>
             </AlertDialogDescription>
@@ -617,6 +714,7 @@ export default function Help() {
             <AlertDialogAction
               onClick={() => {
                 setShowSentDialog(false);
+                setSentTicketId(null);
                 setName("");
                 setSubject("");
                 setDescription("");

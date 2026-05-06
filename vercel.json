@@ -28,6 +28,8 @@
     { "source": "/settings", "destination": "/app-shell.html" },
     { "source": "/settings/:path*", "destination": "/app-shell.html" },
     { "source": "/usage", "destination": "/app-shell.html" },
+    { "source": "/billing", "destination": "/app-shell.html" },
+    { "source": "/billing/:path*", "destination": "/app-shell.html" },
     { "source": "/pricing", "destination": "/app-shell.html" },
     { "source": "/pricing/:path*", "destination": "/app-shell.html" },
     { "source": "/voice-lab", "destination": "/app-shell.html" },

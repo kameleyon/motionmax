@@ -9,7 +9,12 @@ export interface PackOption {
 
 /** Pack-multiplier dropdown ported from the design HTML.
  *  Selection writes into Stripe via the update-pack-quantity edge fn
- *  (caller wires the onChange handler — this component is purely UI). */
+ *  (caller wires the onChange handler — this component is purely UI).
+ *
+ *  `disabled` no longer prevents opening the menu — it just disables
+ *  the row click handler. This lets users browse alternate pack tiers
+ *  on plans they're not currently subscribed to (the parent toasts
+ *  "Switch to this plan first" when they try to pick one). */
 export function PackSelect({
   options,
   value,
@@ -39,8 +44,7 @@ export function PackSelect({
       <button
         type="button"
         className="btn"
-        onClick={() => !disabled && setOpen((o) => !o)}
-        disabled={disabled}
+        onClick={() => setOpen((o) => !o)}
       >
         <span>
           <b style={{ color: "var(--ink)", fontWeight: 500 }}>{current.credits.toLocaleString()}</b>

@@ -66,6 +66,7 @@
     var(--panel);
 }
 @media (max-width: 600px) { .support-shell .help-hero { padding: 24px 22px; } }
+@media (max-width: 420px) { .support-shell .help-hero { padding: 20px 16px; } }
 
 .support-shell .help-hero h2 {
   font-family: var(--serif);
@@ -169,7 +170,9 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   padding: 24px;
+  min-width: 0;
 }
+@media (max-width: 480px) { .support-shell .card { padding: 18px 16px; } }
 .support-shell .card h3 {
   font-family: var(--serif);
   font-weight: 500;
@@ -197,6 +200,7 @@
   border: 1px solid var(--line);
   border-radius: 10px;
   margin-bottom: 8px;
+  flex-wrap: wrap;
 }
 .support-shell .status-dot {
   width: 8px;
@@ -211,12 +215,19 @@
   background: var(--gold);
   box-shadow: 0 0 8px rgba(228, 200, 117, 0.7);
 }
-.support-shell .status-row .t { flex: 1; font-size: 13.5px; color: var(--ink); }
+.support-shell .status-row .t { flex: 1; min-width: 0; font-size: 13.5px; color: var(--ink); }
 .support-shell .status-row .v {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--ink-mute);
   letter-spacing: .06em;
+  text-align: right;
+  word-break: break-word;
+  max-width: 60%;
+}
+@media (max-width: 480px) {
+  .support-shell .status-row { gap: 8px; padding: 10px 12px; }
+  .support-shell .status-row .v { font-size: 10.5px; max-width: 50%; }
 }
 
 /* ─── FAQ section ──────────────────────────────────────────────── */
@@ -267,6 +278,12 @@
   font-family: inherit;
   text-align: left;
   width: 100%;
+  min-width: 0;
+}
+.support-shell .faq-q > span { min-width: 0; flex: 1; }
+@media (max-width: 480px) {
+  .support-shell .faq-q { padding: 14px 16px; font-size: 13.5px; gap: 10px; }
+  .support-shell .faq-a-inner { padding: 0 16px 14px; font-size: 13px; }
 }
 .support-shell .faq-q:hover { background: var(--panel-2); }
 .support-shell .faq-q .chev {

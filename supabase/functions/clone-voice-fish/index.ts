@@ -94,8 +94,9 @@ export async function handler(req: Request): Promise<Response> {
     // Enforce plan voice-clone limit. The subscriptions table column
     // is `plan_name` (was reading `plan` previously which is undefined
     // → every user got bucketed as "free" → 0 voice limit → 402).
-    // Manual / enterprise rows still use plan_name='studio' so the
-    // existing PLAN_VOICE_LIMITS map covers them.
+    // Manual / comp rows use plan_name='studio' so the existing
+    // PLAN_VOICE_LIMITS map covers them. (Enterprise is not a sold
+    // tier — legacy enterprise rows fall through to studio limits.)
     const { data: sub } = await supabase
       .from("subscriptions")
       .select("plan_name, status")

@@ -841,10 +841,11 @@ export async function handler(req: Request): Promise<Response> {
       });
     }
 
-    // Verify plan access: Professional, Enterprise, or Admin
+    // Verify plan access: Studio (formerly "professional") or Admin.
+    // Enterprise is no longer sold; legacy enterprise rows are
+    // treated as studio (same gate, same limits).
     const { data: isAdmin } = await supabase.rpc("is_admin", { _user_id: user.id });
 
-    // Check subscription plan if not admin
     if (!isAdmin) {
       const { data: subData } = await supabase
         .from("subscriptions")
@@ -854,9 +855,10 @@ export async function handler(req: Request): Promise<Response> {
         .single();
 
       const userPlan = subData?.plan_name || "free";
-      if (userPlan !== "professional" && userPlan !== "enterprise") {
+      const allowed = ["professional", "studio", "enterprise"];
+      if (!allowed.includes(userPlan)) {
         return jsonResponse(corsHeaders,
-          { error: "Cinematic generation requires a Professional or Enterprise plan." },
+          { error: "Cinematic generation requires a Studio plan." },
           { status: 403 },
         );
       }

@@ -838,8 +838,10 @@ const TEXT_OVERLAY_STYLES = ["minimalist", "doodle", "stick"];
 // These styles require higher quality rendering regardless of subscription tier
 const PREMIUM_REQUIRED_STYLES = ["sketch"]; // Papercut 3D style
 
-// Pro/Enterprise tiers that get Replicate nano-banana-2 access (fallback only; Hypereal uses gemini-3-1-flash-t2i for all)
-const PRO_TIER_PLANS = ["professional", "enterprise"];
+// Pro/Studio tiers that get Replicate nano-banana-2 access (fallback only; Hypereal uses gemini-3-1-flash-t2i for all).
+// Legacy enterprise rows fall through to the same access (kept in the
+// list so existing comp/manual subs don't lose access).
+const PRO_TIER_PLANS = ["professional", "studio", "enterprise"];
 
 // ============= SUBSCRIPTION TIER CHECK =============
 async function isProOrEnterpriseTier(supabase: any, userId: string): Promise<boolean> {
@@ -5171,13 +5173,16 @@ export async function handler(req: Request): Promise<Response> {
         );
       }
 
-      // Check daily generation limit based on plan
+      // Check daily generation limit based on plan.
+      // Enterprise is no longer sold; legacy enterprise rows fall
+      // through to the studio (formerly "professional") daily cap.
       const PLAN_DAILY_LIMITS: Record<string, number> = {
         free: 5,
         starter: 15,
         creator: 50,
         professional: 100,
-        enterprise: 999,
+        studio: 100,
+        enterprise: 100,
       };
 
       const subscriptionData = subscriptionResult.data;
@@ -5242,12 +5247,14 @@ export async function handler(req: Request): Promise<Response> {
         );
       }
 
-      // Check plan restrictions for length
+      // Check plan restrictions for length. Enterprise is no longer
+      // sold; legacy enterprise rows get the same length set as studio.
       const PLAN_ALLOWED_LENGTHS: Record<string, string[]> = {
         free: ["short"],
         starter: ["short", "brief"],
         creator: ["short", "brief", "presentation"],
         professional: ["short", "brief", "presentation"],
+        studio: ["short", "brief", "presentation"],
         enterprise: ["short", "brief", "presentation"],
       };
       const allowedLengths = PLAN_ALLOWED_LENGTHS[userPlan] || PLAN_ALLOWED_LENGTHS.free;
@@ -5301,12 +5308,14 @@ export async function handler(req: Request): Promise<Response> {
         );
       }
 
-      // Check monthly infographic limit for paid plans
+      // Check monthly infographic limit for paid plans.
+      // Enterprise → studio (unlimited) for any legacy rows.
       if (projectType === "smartflow" && userPlan !== "free") {
         const infographicLimits: Record<string, number> = {
           starter: 10,
           creator: 50,
           professional: 999999,
+          studio: 999999,
           enterprise: 999999,
         };
         const monthlyLimit = infographicLimits[userPlan] ?? 10;

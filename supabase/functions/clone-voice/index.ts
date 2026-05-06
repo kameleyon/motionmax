@@ -71,13 +71,16 @@ export async function handler(req: Request): Promise<Response> {
       .eq("status", "active")
       .maybeSingle();
 
+    // Enterprise is no longer sold; legacy enterprise rows fall
+    // through to the studio (formerly "professional") voice-clone limit.
     const planName = subData?.plan_name ?? "free";
     const VOICE_CLONE_LIMITS: Record<string, number> = {
       free: 0,
       starter: 0,
       creator: 1,
       professional: 3,
-      enterprise: Number.MAX_SAFE_INTEGER,
+      studio: 3,
+      enterprise: 3,
     };
     const voiceCloneLimit = VOICE_CLONE_LIMITS[planName] ?? 0;
 

@@ -79,7 +79,7 @@ export async function handler(req: Request): Promise<Response> {
 
     const creditsBalance = creditData?.credits_balance || 0;
 
-    // Check for manual/enterprise subscriptions first
+    // Check for manual / comp subscriptions first (no Stripe customer)
     const { data: dbSubscription } = await supabaseAdmin
       .from("subscriptions")
       .select("plan_name, status, current_period_end, cancel_at_period_end, is_manual_subscription")
@@ -88,7 +88,7 @@ export async function handler(req: Request): Promise<Response> {
       .single();
 
     if (dbSubscription?.is_manual_subscription) {
-      logStep("Found manual enterprise subscription", {
+      logStep("Found manual / comp subscription", {
         plan: dbSubscription.plan_name,
         subscriptionEnd: dbSubscription.current_period_end,
       });

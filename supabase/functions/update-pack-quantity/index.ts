@@ -68,6 +68,16 @@ export async function handler(req: Request): Promise<Response> {
       throw new UserFacingError("No active Stripe subscription. Pick a plan first.");
     }
 
+    // Manual / legacy subscriptions (admin grants, comp accounts, ported
+    // enterprise rows) have a synthetic id like `manual_*` that doesn't
+    // exist in Stripe. Pack add-ons require a real Stripe sub — bail
+    // with a clear message instead of a 500 from stripe.subscriptions.retrieve.
+    if (sub.stripe_subscription_id.startsWith("manual_")) {
+      throw new UserFacingError(
+        "This account is on a manual / comp subscription. Pack add-ons require a paid Stripe subscription — contact support to convert.",
+      );
+    }
+
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", { apiVersion: "2024-12-18.acacia" });
 
     // qty=1 means remove the add-on entirely (delete the SI if present)

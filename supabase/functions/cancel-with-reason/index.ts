@@ -73,6 +73,17 @@ export async function handler(req: Request): Promise<Response> {
       .eq("status", "active")
       .maybeSingle();
     if (!sub?.stripe_subscription_id) throw new UserFacingError("No active subscription");
+    if (sub.stripe_subscription_id.startsWith("manual_")) {
+      // Manual / comp accounts don't have a Stripe sub to cancel. Just
+      // record the intent so the dashboard reflects it; ops can revoke
+      // the manual grant out-of-band.
+      await supabaseClient.from("cancellation_reasons").insert({
+        user_id: user.id, reason: (body?.reason as string | undefined)?.slice(0, 200) ?? null, kept_with_offer: false,
+      });
+      return new Response(JSON.stringify({ ok: true, manual: true, message: "Recorded — your account is on a comp plan; contact support to revoke." }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200,
+      });
+    }
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", { apiVersion: "2024-12-18.acacia" });
 

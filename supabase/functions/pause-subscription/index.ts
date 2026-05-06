@@ -64,6 +64,11 @@ export async function handler(req: Request): Promise<Response> {
       .eq("status", "active")
       .maybeSingle();
     if (!sub?.stripe_subscription_id) throw new UserFacingError("No active subscription");
+    if (sub.stripe_subscription_id.startsWith("manual_")) {
+      throw new UserFacingError(
+        "This account is on a manual / comp subscription. Pause is only available for paid Stripe subscriptions — contact support.",
+      );
+    }
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", { apiVersion: "2024-12-18.acacia" });
 

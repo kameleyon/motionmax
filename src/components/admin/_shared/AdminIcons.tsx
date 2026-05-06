@@ -80,6 +80,7 @@ const SPECS: Record<string, IconSpec> = {
   flask: { body: () => <path d="M9 3h6M10 3v6L4 19a2 2 0 0 0 1.7 3h12.6A2 2 0 0 0 20 19l-6-10V3" /> },
   voicebars: { body: () => <path d="M8 4v16M16 4v16M4 8h4M16 8h4M4 16h4M16 16h4" /> },
   key: { body: () => <g><circle cx="8" cy="15" r="4" /><path d="m11 12 9-9 3 3-3 3 3 3-3 3-3-3-3 3" /></g> },
+  lifebuoy: { body: () => <g><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" /><path d="m4.93 4.93 4.24 4.24M14.83 14.83l4.24 4.24M14.83 9.17l4.24-4.24M14.83 9.17l3.53-3.53M4.93 19.07l4.24-4.24" /></g> },
 };
 
 function makeIcon(spec: IconSpec): IconComponent {
@@ -131,6 +132,7 @@ export const I = {
   flask: makeIcon(SPECS.flask),
   voicebars: makeIcon(SPECS.voicebars),
   key: makeIcon(SPECS.key),
+  lifebuoy: makeIcon(SPECS.lifebuoy),
 } as const;
 
 export type AdminIconName = keyof typeof I;

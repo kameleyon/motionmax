@@ -36,6 +36,7 @@ export type AdminTabKey =
   | "errors"
   | "console"
   | "messages"
+  | "support"
   | "notifs"
   | "news"
   | "announce"

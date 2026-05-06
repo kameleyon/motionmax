@@ -47,6 +47,11 @@ const TabMessages = lazy(() =>
     default: m.TabMessages,
   })),
 );
+const TabSupport = lazy(() =>
+  import("@/components/admin/tabs/TabSupport").then((m) => ({
+    default: m.TabSupport,
+  })),
+);
 const TabApi = lazy(() =>
   import("@/components/admin/tabs/TabApi").then((m) => ({
     default: m.TabApi,
@@ -129,6 +134,8 @@ function renderTabContent(tab: AdminTabKey) {
       return <TabConsole />;
     case "messages":
       return <TabMessages />;
+    case "support":
+      return <TabSupport />;
     case "notifs":
       return <TabNotifications />;
     case "news":

@@ -214,7 +214,7 @@ function StatusPill({ status }: { status: string }) {
         ? "bg-[#E4C875]/15 text-[#E4C875] border-[#E4C875]/30"
         : status === "error"
           ? "bg-[#E4C875]/15 text-[#E4C875] border-[#E4C875]/30"
-          : "bg-red-500/15 text-red-400 border-red-500/30";
+          : "bg-[#E4C875]/15 text-[#E4C875] border-[#E4C875]/30";
   return (
     <Badge
       variant="outline"
@@ -300,7 +300,7 @@ function AccountRow({
               size="sm"
               variant="ghost"
               disabled={isBusy}
-              className="shrink-0 text-[#8A9198] hover:text-red-400 hover:bg-red-500/10"
+              className="shrink-0 text-[#8A9198] hover:text-[#E4C875] hover:bg-[#E4C875]/10"
               aria-label={`Disconnect ${account.display_name}`}
             >
               {isBusy ? (
@@ -313,7 +313,7 @@ function AccountRow({
               )}
             </Button>
           </AlertDialogTrigger>
-          <AlertDialogContent className="bg-[#10151A] border-white/10 text-[#ECEAE4]">
+          <AlertDialogContent className="settings-modal-content">
             <AlertDialogHeader>
               <AlertDialogTitle>
                 Disconnect {account.display_name}?
@@ -330,7 +330,7 @@ function AccountRow({
               </AlertDialogCancel>
               <AlertDialogAction
                 onClick={() => onDisconnect(account.id)}
-                className="bg-red-500 text-white hover:bg-red-500/90"
+                className="bg-[#E4C875] text-[#0A0D0F] hover:bg-[#C9A75A]"
               >
                 Disconnect
               </AlertDialogAction>

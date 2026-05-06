@@ -87,6 +87,20 @@
 .autopost-shell .hs-cell .bar { margin-top: 12px; height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; position: relative; }
 .autopost-shell .hs-cell .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--cyan); border-radius: 2px; }
 .autopost-shell .hs-cell.warn .bar i { background: var(--gold); }
+
+/* Coming-soon state: platform has no real publishing data yet (or no
+   publisher implemented). Tile reads as inactive — no green/cyan pulse,
+   no bar, em-dash where the % would be, muted "soon" pill. */
+.autopost-shell .hs-cell.soon { opacity: .68; }
+.autopost-shell .hs-cell.soon .hsh .dt { color: var(--ink-mute); letter-spacing: .14em; }
+.autopost-shell .hs-cell.soon .hsh .dt::before {
+  background: var(--ink-mute);
+  box-shadow: none;
+  animation: none;
+}
+.autopost-shell .hs-cell.soon .num.soon-num { color: var(--ink-mute); font-size: 26px; }
+.autopost-shell .hs-cell.soon .sub { color: var(--ink-mute); font-style: italic; }
+
 @keyframes ap-hb { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
 
 /* Platform icon palettes — gold for YT (was orange in template). */

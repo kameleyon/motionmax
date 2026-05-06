@@ -328,24 +328,31 @@ export default function AutopostHome() {
   }, [radarQuery.data, automations]);
 
   // YouTube / IG / TikTok / X tile data.
+  // `comingSoon` policy: a platform is shown as "Coming soon" if it either
+  // has no real-publisher implementation (X/Twitter) OR has zero recorded
+  // publish jobs to date (autopost_publish_jobs is empty for that key).
+  // The 100% / "live" treatment only applies once real publish data lands.
   const tiles = useMemo(() => {
     const h = platformHealthQuery.data ?? {};
-    const t = (key: string, label: string, glyph: string, ic: string, suffix: string) => {
+    const t = (key: string, label: string, glyph: string, ic: string, suffix: string, hardComingSoon = false) => {
       const data = h[key];
-      const pct = data?.pct ?? 100;
       const count = data?.recentCount ?? 0;
+      const comingSoon = hardComingSoon || count === 0;
+      const pct = comingSoon ? 0 : (data?.pct ?? 100);
       const last = data?.lastPushAt ? formatRelativeTime(data.lastPushAt) : "—";
-      const warn = data?.warn ?? false;
+      const warn = comingSoon ? false : (data?.warn ?? false);
       return {
-        key, label, glyph, ic, pct, count, last, warn,
-        sub: count > 0 ? `Last push ${last} · ${count} ${suffix} / 30d` : "No publishes yet",
+        key, label, glyph, ic, pct, count, last, warn, comingSoon,
+        sub: comingSoon ? "Publishing coming soon" : `Last push ${last} · ${count} ${suffix} / 30d`,
       };
     };
     return [
       t("youtube", "YouTube", "YT", "plic-yt", "videos"),
       t("instagram", "Instagram", "IG", "plic-ig", "reels"),
       t("tiktok", "TikTok", "TT", "plic-tt", "posts"),
-      t("x", "X / Twitter", "X", "plic-x", "posts"),
+      // X/Twitter has no publisher in worker/src/handlers/autopost/publishers.ts —
+      // hard-flag as Coming soon regardless of data.
+      t("x", "X / Twitter", "X", "plic-x", "posts", true),
     ];
   }, [platformHealthQuery.data]);
 
@@ -381,15 +388,24 @@ export default function AutopostHome() {
           {/* Platform health strip */}
           <div className="health-strip">
             {tiles.map(t => (
-              <div key={t.key} className={`hs-cell${t.warn ? " warn" : ""}`}>
+              <div
+                key={t.key}
+                className={`hs-cell${t.warn ? " warn" : ""}${t.comingSoon ? " soon" : ""}`}
+              >
                 <div className="hsh">
                   <div className={`pl-ic ${t.ic}`}>{t.glyph}</div>
                   <div className="nm">{t.label}</div>
-                  <div className="dt">{t.warn ? "retrying" : "live"}</div>
+                  <div className="dt">
+                    {t.comingSoon ? "soon" : t.warn ? "retrying" : "live"}
+                  </div>
                 </div>
-                <div className="num">{t.pct}<span className="u">%</span></div>
+                {t.comingSoon ? (
+                  <div className="num soon-num">—</div>
+                ) : (
+                  <div className="num">{t.pct}<span className="u">%</span></div>
+                )}
                 <div className="sub">{t.sub}</div>
-                <div className="bar"><i style={{ width: `${t.pct}%` }} /></div>
+                {!t.comingSoon && <div className="bar"><i style={{ width: `${t.pct}%` }} /></div>}
               </div>
             ))}
           </div>

@@ -81,37 +81,37 @@ export default function Billing() {
           </div>
 
           <div className="bill-tabs" id="billTabs" role="tablist">
-            <TabBtn id="overview" active={activeTab} onClick={goTab}>
+            <TabBtn id="overview" active={activeTab} onClick={goTab} ariaLabel="Overview">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}>
                 <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
                 <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
               </svg>
-              Overview
+              <span className="t-label">Overview</span>
             </TabBtn>
-            <TabBtn id="plans" active={activeTab} onClick={goTab}>
+            <TabBtn id="plans" active={activeTab} onClick={goTab} ariaLabel="Plans">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}><path d="M12 2l3 7h7l-5.5 4.5L18 22l-6-4-6 4 1.5-8.5L2 9h7z" /></svg>
-              Plans
+              <span className="t-label">Plans</span>
             </TabBtn>
-            <TabBtn id="topup" active={activeTab} onClick={goTab}>
+            <TabBtn id="topup" active={activeTab} onClick={goTab} ariaLabel="Top-up packs">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" /></svg>
-              Top-up <span className="pill">PACKS</span>
+              <span className="t-label">Top-up <span className="pill">PACKS</span></span>
             </TabBtn>
-            <TabBtn id="usage" active={activeTab} onClick={goTab}>
+            <TabBtn id="usage" active={activeTab} onClick={goTab} ariaLabel="Usage">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}><path d="M3 3v18h18" /><path d="M7 14l4-4 4 4 5-7" /></svg>
-              Usage
+              <span className="t-label">Usage</span>
             </TabBtn>
-            <TabBtn id="invoices" active={activeTab} onClick={goTab}>
+            <TabBtn id="invoices" active={activeTab} onClick={goTab} ariaLabel="Invoices">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}>
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                 <path d="M14 2v6h6M9 13h6M9 17h6" />
               </svg>
-              Invoices
+              <span className="t-label">Invoices</span>
             </TabBtn>
-            <TabBtn id="referrals" active={activeTab} onClick={goTab}>
+            <TabBtn id="referrals" active={activeTab} onClick={goTab} ariaLabel="Referrals">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}>
                 <path d="M16 11a4 4 0 1 0-8 0M3 21v-1a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v1" />
               </svg>
-              Referrals <span className="pill">EARN</span>
+              <span className="t-label">Referrals <span className="pill">EARN</span></span>
             </TabBtn>
           </div>
 
@@ -134,12 +134,14 @@ export default function Billing() {
 }
 
 function TabBtn({
-  id, active, onClick, children,
+  id, active, onClick, children, ariaLabel,
 }: {
   id: TabKey;
   active: TabKey;
   onClick: (t: string) => void;
   children: React.ReactNode;
+  /** Accessible label exposed when the visual `.t-label` is hidden at narrow widths. */
+  ariaLabel?: string;
 }) {
   return (
     <button
@@ -148,6 +150,7 @@ function TabBtn({
       onClick={() => onClick(id)}
       role="tab"
       aria-selected={active === id}
+      aria-label={ariaLabel}
       data-t={id}
     >
       {children}

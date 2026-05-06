@@ -99,7 +99,7 @@ export default function TabOverview({ onGoTab }: { onGoTab: (t: string) => void 
               <span>·</span>
               <span>{planLabel}{o?.paused_until ? " · Paused" : ""}</span>
               <span>·</span>
-              <span>{o?.paused_until ? `Paused until ${shortDate(o.paused_until)}` : "Renews automatically"}</span>
+              <span>{o?.paused_until ? `Paused until ${shortDate(o.paused_until)}` : "Auto renew"}</span>
             </div>
             <h2>{planLabel} <em>Plan</em></h2>
             <div className="price-line">

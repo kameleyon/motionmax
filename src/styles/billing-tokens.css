@@ -65,6 +65,16 @@
 .billing-shell .bill-tabs button.on { color: var(--ink); border-bottom-color: var(--cyan); font-weight: 500; }
 .billing-shell .bill-tabs button svg { flex-shrink: 0; opacity: .85; }
 .billing-shell .bill-tabs .pill { margin-left: 4px; font-family: var(--mono); font-size: 9.5px; padding: 2px 6px; border-radius: 3px; background: var(--cyan-dim); color: var(--cyan); letter-spacing: .06em; font-weight: 500; }
+.billing-shell .bill-tabs .t-label { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Mobile: collapse tabs to icons-only so all 6 fit one row.
+   `.t-label` wraps the visual text + any inline pill, hidden together.
+   `aria-label` on each button keeps the tab named for assistive tech. */
+@media (max-width: 720px) {
+  .billing-shell .bill-tabs { flex-wrap: nowrap; justify-content: space-around; overflow-x: visible; }
+  .billing-shell .bill-tabs button { padding: 10px 6px; flex: 1 1 0; justify-content: center; }
+  .billing-shell .bill-tabs button .t-label { display: none; }
+}
 
 /* generic cards */
 .billing-shell .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 24px; }

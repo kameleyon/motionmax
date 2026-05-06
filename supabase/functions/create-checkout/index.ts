@@ -91,18 +91,25 @@ export async function handler(req: Request): Promise<Response> {
     });
 
     // Dynamic validation: fetch the price from Stripe and verify it is active
-    // and belongs to one of our known products (product IDs are stable).
-    const price = await stripe.prices.retrieve(priceId);
+    // and belongs to one of our known products (product IDs are stable),
+    // OR has `metadata.motionmax_sku` set (the new 2026-05-06 SKU catalog
+    // created by scripts/stripe-create-billing-products.ts).
+    const price = await stripe.prices.retrieve(priceId, { expand: ["product"] });
     if (!price || !price.active) {
       throw new UserFacingError("Price is no longer active. Please refresh and try again.");
     }
 
     const productId = typeof price.product === "string" ? price.product : price.product?.id;
-    if (!productId || !VALID_PRODUCT_IDS.has(productId)) {
+    const productMeta = typeof price.product === "object" && price.product !== null
+      ? (price.product as { metadata?: Record<string, string> }).metadata ?? {}
+      : {};
+    const hasMotionmaxSku = !!productMeta.motionmax_sku;
+
+    if (!productId || (!VALID_PRODUCT_IDS.has(productId) && !hasMotionmaxSku)) {
       throw new UserFacingError("Invalid product for this price");
     }
 
-    logStep("Price validated", { priceId, productId, active: price.active });
+    logStep("Price validated", { priceId, productId, active: price.active, sku: productMeta.motionmax_sku });
 
     // Check for existing Stripe customer
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
@@ -120,8 +127,8 @@ export async function handler(req: Request): Promise<Response> {
       client_reference_id: user.id,
       line_items: [{ price: priceId, quantity: 1 }],
       mode: mode || "subscription",
-      success_url: `${origin}/usage?success=true`,
-      cancel_url: `${origin}/pricing?canceled=true`,
+      success_url: `${origin}/billing?success=true`,
+      cancel_url: `${origin}/billing?canceled=true`,
       metadata: {
         user_id: user.id,
       },

@@ -2,7 +2,7 @@
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
-import { creditPackProducts, subscriptionProducts, monthlyCredits } from "../_shared/stripeProducts.ts";
+import { creditPackProducts, subscriptionProducts, monthlyCredits, newTopupSkuToCredits, packAddonSkuToCredits } from "../_shared/stripeProducts.ts";
 import { sendWelcomeEmail, sendPaymentFailedEmail, sendCancellationEmail } from "../_shared/resend.ts";
 import { writeSystemLog } from "../_shared/log.ts";
 
@@ -220,12 +220,21 @@ export async function handler(req: Request): Promise<Response> {
             }
           }
 
-          const lineItems = await stripe.checkout.sessions.listLineItems(session.id);
+          const lineItems = await stripe.checkout.sessions.listLineItems(session.id, { expand: ["data.price.product"] });
           for (const item of lineItems.data) {
             const productRaw = item.price?.product;
             const productId = typeof productRaw === "string" ? productRaw : (productRaw as any)?.id ?? "";
-            const credits = creditPackProducts[productId];
-            
+            // Resolve credits via legacy product map first, then via the
+            // new SKU map (read from product.metadata.motionmax_sku).
+            let credits = creditPackProducts[productId];
+            if (!credits) {
+              const productObj = typeof productRaw === "object" && productRaw !== null ? productRaw as { metadata?: Record<string, string> } : null;
+              const sku = productObj?.metadata?.motionmax_sku;
+              if (sku && newTopupSkuToCredits[sku]) {
+                credits = newTopupSkuToCredits[sku];
+              }
+            }
+
             if (credits) {
               logStep("Adding credits", { userId, credits, productId });
               
@@ -331,14 +340,38 @@ export async function handler(req: Request): Promise<Response> {
           .single();
 
         if (subData) {
-          const productRaw = subscription.items.data[0].price.product;
+          // The base plan is always the FIRST item in the subscription
+          // (see stripeProducts.subscriptionProducts mapping). Pack
+          // add-ons are additional SubscriptionItems whose price has
+          // metadata.motionmax_sku === "pack_addon_*".
+          const baseItem = subscription.items.data[0];
+          const productRaw = baseItem.price.product;
           const productId = typeof productRaw === "string" ? productRaw : (productRaw as any)?.id ?? "";
-          const planName = subscriptionProducts[productId] || "starter";
+          let planName = subscriptionProducts[productId] || "starter";
+
+          // Look for a pack add-on SI to sync pack_quantity
+          let packQuantity = 1;
+          let packSubscriptionItemId: string | null = null;
+          for (const item of subscription.items.data) {
+            const itemProdRaw = item.price.product as unknown;
+            const itemProd = typeof itemProdRaw === "object" && itemProdRaw !== null ? itemProdRaw as { metadata?: Record<string, string> } : null;
+            const sku = itemProd?.metadata?.motionmax_sku;
+            // Fall back: if product is just an id, fetch metadata via lookup_key on the price
+            const lookupKey = (item.price as unknown as { lookup_key?: string | null })?.lookup_key ?? null;
+            const effectiveSku = sku ?? (lookupKey && packAddonSkuToCredits[lookupKey] ? lookupKey : null);
+            if (effectiveSku && packAddonSkuToCredits[effectiveSku]) {
+              packQuantity = (item.quantity ?? 0) + 1;
+              packSubscriptionItemId = item.id;
+              if (planName === "starter" || planName === "free") {
+                planName = packAddonSkuToCredits[effectiveSku].plan;
+              }
+            }
+          }
 
           // Map Stripe status to our status
           // Handle past_due specially - we want to track this
           let dbStatus = subscription.status as any;
-          
+
           await supabaseAdmin
             .from("subscriptions")
             .update({
@@ -347,6 +380,8 @@ export async function handler(req: Request): Promise<Response> {
               current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
               current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
               cancel_at_period_end: subscription.cancel_at_period_end,
+              pack_quantity: packQuantity,
+              pack_subscription_item_id: packSubscriptionItemId,
             })
             .eq("stripe_customer_id", customerId);
 
@@ -441,10 +476,30 @@ export async function handler(req: Request): Promise<Response> {
             .single();
 
           if (subData) {
-            const credits = monthlyCredits[subData.plan_name] || 0;
+            const baseCredits = monthlyCredits[subData.plan_name] || 0;
 
+            // Walk the invoice line items for any pack-addon SKUs and
+            // grant their per-quantity credits on top of the base plan.
+            let addonCredits = 0;
+            try {
+              for (const line of invoice.lines.data) {
+                const priceObj = line.price as unknown as { lookup_key?: string | null; product?: unknown };
+                const productRaw = priceObj?.product;
+                const productObj = typeof productRaw === "object" && productRaw !== null ? productRaw as { metadata?: Record<string, string> } : null;
+                const sku = productObj?.metadata?.motionmax_sku ?? priceObj?.lookup_key ?? null;
+                if (sku && packAddonSkuToCredits[sku]) {
+                  const perUnit = packAddonSkuToCredits[sku].perUnit;
+                  const qty = line.quantity ?? 0;
+                  addonCredits += perUnit * qty;
+                }
+              }
+            } catch (e) {
+              logStep("addon line scan failed (continuing with base credits)", { error: String(e) });
+            }
+
+            const credits = baseCredits + addonCredits;
             if (credits > 0) {
-              // Grant monthly credits
+              // Grant monthly credits (base + add-ons)
               const { error: creditError } = await supabaseAdmin.rpc("increment_user_credits", {
                 p_user_id: subData.user_id,
                 p_credits: credits,
@@ -458,9 +513,11 @@ export async function handler(req: Request): Promise<Response> {
                   user_id: subData.user_id,
                   amount: credits,
                   transaction_type: "monthly_renewal",
-                  description: `Monthly ${subData.plan_name} plan renewal: ${credits} credits`,
+                  description: addonCredits > 0
+                    ? `Monthly ${subData.plan_name} plan renewal: ${baseCredits} + ${addonCredits} pack add-on = ${credits} credits`
+                    : `Monthly ${subData.plan_name} plan renewal: ${credits} credits`,
                 });
-                logStep("Monthly credits granted", { userId: subData.user_id, plan: subData.plan_name, credits });
+                logStep("Monthly credits granted", { userId: subData.user_id, plan: subData.plan_name, base: baseCredits, addon: addonCredits });
               }
             }
           }

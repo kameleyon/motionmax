@@ -48,3 +48,29 @@ export const monthlyCredits: Record<string, number> = {
   starter: 500,
   professional: 2500,
 };
+
+// ============================================================
+// 2026-05-06 Billing & Plans rebuild — new SKU catalog.
+// ------------------------------------------------------------
+// These maps are looked up alongside the legacy ones in the
+// webhook (creditPackProducts) and create-checkout (VALID_PRODUCT_IDS).
+// Real product/price IDs are written by scripts/stripe-create-billing-products.ts
+// into stripeProductsGenerated.ts; until that runs in production the
+// SKU label is enough for the webhook to route.
+// ============================================================
+
+/** New top-up SKUs created 2026-05-06. SKU -> credits granted. */
+export const newTopupSkuToCredits: Record<string, number> = {
+  topup_500: 500,
+  topup_2000: 2000,
+  topup_10000: 10000,
+  topup_50000: 50000,
+};
+
+/** New pack add-on SKUs (recurring). SKU -> credits granted PER quantity unit. */
+export const packAddonSkuToCredits: Record<string, { plan: "creator" | "studio"; perUnit: number }> = {
+  pack_addon_creator_monthly: { plan: "creator", perUnit: 500 },
+  pack_addon_creator_yearly:  { plan: "creator", perUnit: 500 },
+  pack_addon_studio_monthly:  { plan: "studio",  perUnit: 2500 },
+  pack_addon_studio_yearly:   { plan: "studio",  perUnit: 2500 },
+};

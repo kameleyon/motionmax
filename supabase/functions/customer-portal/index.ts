@@ -101,7 +101,7 @@ export async function handler(req: Request): Promise<Response> {
     const origin = req.headers.get("origin") || "https://motionmax.io";
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: customerId,
-      return_url: `${origin}/usage`,
+      return_url: `${origin}/billing`,
     });
     
     logStep("Portal session created", { sessionId: portalSession.id });

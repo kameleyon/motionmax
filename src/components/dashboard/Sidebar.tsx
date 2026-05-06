@@ -6,7 +6,7 @@ import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { Settings as SettingsIcon, History, Shield, LogOut, Video, FlaskConical, MoreHorizontal, Trash2 } from 'lucide-react';
+import { Settings as SettingsIcon, History, Shield, LogOut, Video, FlaskConical, MoreHorizontal, Trash2, LifeBuoy } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -417,6 +417,10 @@ export default function Sidebar() {
             <History className="w-4 h-4 opacity-85" />
             <span>Billing &amp; plans</span>
           </a>
+          <a href="/help" className="flex items-center gap-2.5 px-3 py-3 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline">
+            <LifeBuoy className="w-4 h-4 opacity-85" />
+            <span>Help &amp; support</span>
+          </a>
           {isAdmin && (
             <a href="/admin" className="flex items-center gap-2.5 px-3 py-3 my-px rounded-lg text-[13.5px] text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] cursor-pointer transition-colors no-underline">
               <Shield className="w-4 h-4 opacity-85" />
@@ -556,6 +560,13 @@ export default function Sidebar() {
             >
               <History className="mr-2 h-4 w-4 text-[#8A9198]" />
               <span>Billing &amp; plans</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="cursor-pointer rounded-lg text-[#ECEAE4] focus:bg-white/5 focus:text-[#ECEAE4]"
+              onClick={() => navigate('/help')}
+            >
+              <LifeBuoy className="mr-2 h-4 w-4 text-[#8A9198]" />
+              <span>Help &amp; support</span>
             </DropdownMenuItem>
             {isAdmin && (
               <DropdownMenuItem

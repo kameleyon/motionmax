@@ -8,7 +8,6 @@ import { AdminRecentActions } from "@/components/admin/AdminRecentActions";
 import { AdminLoading } from "@/components/admin/_shared/AdminLoading";
 import { AdminTabBoundary } from "@/components/admin/_shared/AdminTabBoundary";
 import {
-  TAB_DEFINITIONS,
   TAB_KEYS,
   parseTabKey,
 } from "@/components/admin/_shared/adminTabs";
@@ -28,19 +27,24 @@ const AdminOverview = lazy(() =>
     default: m.TabOverview,
   })),
 );
-const AdminSubscribers = lazy(() =>
-  import("@/components/admin/AdminSubscribers").then((m) => ({
-    default: m.AdminSubscribers,
+const TabUsers = lazy(() =>
+  import("@/components/admin/tabs/TabUsers").then((m) => ({
+    default: m.TabUsers,
   })),
 );
-const AdminGenerations = lazy(() =>
-  import("@/components/admin/AdminGenerations").then((m) => ({
-    default: m.AdminGenerations,
+const TabGenerations = lazy(() =>
+  import("@/components/admin/tabs/TabGenerations").then((m) => ({
+    default: m.TabGenerations,
   })),
 );
-const AdminLogs = lazy(() =>
-  import("@/components/admin/AdminLogs").then((m) => ({
-    default: m.AdminLogs,
+const TabConsole = lazy(() =>
+  import("@/components/admin/tabs/TabConsole").then((m) => ({
+    default: m.TabConsole,
+  })),
+);
+const TabMessages = lazy(() =>
+  import("@/components/admin/tabs/TabMessages").then((m) => ({
+    default: m.TabMessages,
   })),
 );
 const TabApi = lazy(() =>
@@ -48,9 +52,14 @@ const TabApi = lazy(() =>
     default: m.TabApi,
   })),
 );
-const AdminPerformanceMetrics = lazy(() =>
-  import("@/components/admin/AdminPerformanceMetrics").then((m) => ({
-    default: m.AdminPerformanceMetrics,
+const TabPerformance = lazy(() =>
+  import("@/components/admin/tabs/TabPerformance").then((m) => ({
+    default: m.TabPerformance,
+  })),
+);
+const TabErrors = lazy(() =>
+  import("@/components/admin/tabs/TabErrors").then((m) => ({
+    default: m.TabErrors,
   })),
 );
 const TabAnalytics = lazy(() =>
@@ -68,41 +77,26 @@ const TabApiKeys = lazy(() =>
     default: m.TabApiKeys,
   })),
 );
-
-/** Inline placeholder for tabs whose rebuild lands in a later phase. */
-function ComingSoon({ phase, tab }: { phase: string; tab: string }) {
-  const label = TAB_DEFINITIONS.find((t) => t.key === tab)?.label ?? tab;
-  return (
-    <div
-      className="rounded-xl border bg-[var(--panel-2)] p-8 text-center"
-      style={{ borderColor: "var(--line)" }}
-    >
-      <p
-        className="font-mono uppercase mb-2"
-        style={{
-          color: "var(--ink-mute)",
-          fontSize: 10,
-          letterSpacing: "0.16em",
-        }}
-      >
-        {label}
-      </p>
-      <p
-        className="font-serif"
-        style={{ color: "var(--ink)", fontSize: 22, fontWeight: 400 }}
-      >
-        Coming in {phase}
-      </p>
-      <p
-        className="mt-2 text-sm"
-        style={{ color: "var(--ink-dim)" }}
-      >
-        This tab is being rebuilt in the admin overhaul. Existing data is
-        still accessible via the legacy tabs while the new view is wired up.
-      </p>
-    </div>
-  );
-}
+const TabNotifications = lazy(() =>
+  import("@/components/admin/tabs/TabNotifications").then((m) => ({
+    default: m.TabNotifications,
+  })),
+);
+const TabNewsletter = lazy(() =>
+  import("@/components/admin/tabs/TabNewsletter").then((m) => ({
+    default: m.TabNewsletter,
+  })),
+);
+const TabAnnouncements = lazy(() =>
+  import("@/components/admin/tabs/TabAnnouncements").then((m) => ({
+    default: m.TabAnnouncements,
+  })),
+);
+const TabKillSwitches = lazy(() =>
+  import("@/components/admin/tabs/TabKillSwitches").then((m) => ({
+    default: m.TabKillSwitches,
+  })),
+);
 
 /**
  * Lookup `?tab=<key>` content. Each existing component is wrapped in
@@ -124,25 +118,25 @@ function renderTabContent(tab: AdminTabKey) {
     case "apikeys":
       return <TabApiKeys />;
     case "users":
-      return <AdminSubscribers />;
+      return <TabUsers />;
     case "gens":
-      return <AdminGenerations />;
+      return <TabGenerations />;
     case "perf":
-      return <AdminPerformanceMetrics />;
+      return <TabPerformance />;
     case "errors":
-      return <ComingSoon phase="Phase 11" tab="errors" />;
+      return <TabErrors />;
     case "console":
-      return <AdminLogs />;
+      return <TabConsole />;
     case "messages":
-      return <ComingSoon phase="Phase 13" tab="messages" />;
+      return <TabMessages />;
     case "notifs":
-      return <ComingSoon phase="Phase 14" tab="notifs" />;
+      return <TabNotifications />;
     case "news":
-      return <ComingSoon phase="Phase 15" tab="news" />;
+      return <TabNewsletter />;
     case "announce":
-      return <ComingSoon phase="Phase 16" tab="announce" />;
+      return <TabAnnouncements />;
     case "kill":
-      return <ComingSoon phase="Phase 17" tab="kill" />;
+      return <TabKillSwitches />;
     default: {
       // Exhaustiveness check — `tab` should be `never` here.
       const _exhaustive: never = tab;

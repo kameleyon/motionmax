@@ -446,7 +446,20 @@ All in `20260505200000_admin_phase2_auth_helpers.sql` (126 lines):
 
 ---
 
-## Phase 8 — Tab: Users (+ drawer)
+## Phase 8 — Tab: Users (+ drawer) ✅ COMPLETE (2026-05-05)
+
+> Files: `tabs/TabUsers.tsx` (421 lines), `users/UserDrawer.tsx` (466 lines).
+> Backend RPCs (live in migration `20260505230000_admin_phase8_10_rpcs.sql`):
+> `admin_users_kpis`, `admin_users_list`, `admin_user_full_detail`,
+> `admin_set_user_status`, `admin_bulk_grant_credits`, `admin_bulk_suspend`.
+> Drawer reuses existing `admin_grant_credits`, `admin_resolve_all_flags`,
+> edge fns `admin-force-signout` + `admin-hard-delete-user`.
+>
+> 4 KPI tiles, search + plan/status chip filters, multi-select bulk-action bar
+> (typed-confirm for suspend, prompt for credit grant), URL state, lazy-loaded
+> drawer with 5 sub-tabs (Overview/Activity/Billing/Communicate/Danger),
+> 14-day usage BarChart, Activity feed via `admin_activity_feed`, Pause/Force
+> sign-out/Delete actions all working with audit logs.
 
 ### 8.1 RPCs
 - [ ] `admin_users_list(p_search text, p_plan text, p_status text, p_flag_state text, p_page int, p_limit int)` — push filter + join into a SECURITY DEFINER plpgsql RPC. Replaces the client-side fan-out in `admin-stats/subscribers_list`.
@@ -515,7 +528,18 @@ All in `20260505200000_admin_phase2_auth_helpers.sql` (126 lines):
 
 ---
 
-## Phase 9 — Tab: Generations
+## Phase 9 — Tab: Generations ✅ COMPLETE (2026-05-05)
+
+> File: `tabs/TabGenerations.tsx` (390 lines). Backend RPCs (live):
+> `admin_generations_kpis`, `admin_generations_list`, `admin_force_complete_job`,
+> `admin_requeue_dead_letter` plus existing `admin_retry_generation` and
+> `admin_cancel_job_with_refund`.
+>
+> 4 KPI tiles, by-type cols-3 placeholder cards (real per-type breakdown
+> deferred to Phase 18), Recent generations table with realtime
+> `video_generation_jobs` subscription, inline drilldown payload + Retry +
+> Cancel + Force-complete actions, dead-letter table from direct
+> `dead_letter_jobs` read with Requeue action.
 
 ### 9.1 Status enum normalization
 - [ ] Worker writes `'completed'` and `'failed'`; this UI must filter on those (NOT the legacy `'complete'`/`'error'` strings flagged in chat3.md). Sweep `AdminGenerations.tsx` and any helpers.
@@ -561,7 +585,18 @@ All in `20260505200000_admin_phase2_auth_helpers.sql` (126 lines):
 
 ---
 
-## Phase 10 — Tab: Performance
+## Phase 10 — Tab: Performance ✅ COMPLETE (2026-05-05)
+
+> File: `tabs/TabPerformance.tsx` (366 lines). Backend RPCs (live):
+> `admin_perf_kpis`, `admin_perf_phase_timing`, `admin_workers_list`,
+> `admin_request_worker_restart`, `admin_perf_throughput_14d`. Existing
+> `admin_set_worker_concurrency_override` + `admin_get_app_setting`.
+>
+> 6 KPI tiles, concurrency slider 0-60, cols-2-1 (Pipeline phase timing
+> with BarTrack widths + p95 warn-color, Workers cards with status pill +
+> 3-col Jobs/Mem/Up grid + per-worker Restart with typed-confirm for dead
+> workers), 14-day stacked Throughput chart with success-rate footer.
+> Realtime channel on `worker_heartbeats` invalidates KPIs + workers list.
 
 ### 10.1 KPI grid (6 tiles)
 - [ ] `Worker concurrency` — `app_settings.worker_concurrency_override` or auto-tuned default. Sub-label `N idle`.
@@ -613,7 +648,19 @@ CREATE TABLE public.worker_heartbeats (
 
 ---
 
-## Phase 11 — Tab: Errors
+## Phase 11 — Tab: Errors ✅ COMPLETE (2026-05-05)
+
+> File: `tabs/TabErrors.tsx` (429 lines). Backend RPCs (live in
+> `20260505240000_admin_phase11_17_rpcs.sql`): `admin_errors_kpis`,
+> `admin_error_groups`, `admin_resolve_error_group`.
+>
+> 4 KPI tiles, period chip group (24h/7d/30d), error groups table from
+> `admin_error_groups` with mono `#FFD18C` signature, severity pill
+> (high>30 / medium>10 / low events), Stack action expands inline drilldown
+> with sample message + jsonb details, Resolve action via typed-confirm
+> `<ConfirmDestructive>` calling `admin_resolve_error_group`. Errors-by-surface
+> cols-3 cards classify groups client-side. Realtime channel on `system_logs`
+> filtered to `category=eq.system_error`.
 
 ### 11.1 KPI grid (4 tiles)
 - [ ] `Errors · 1h` — `count from system_logs where category='system_error' and created_at > now()-1h`.
@@ -667,7 +714,18 @@ CREATE TABLE public.worker_heartbeats (
 
 ---
 
-## Phase 12 — Tab: Console
+## Phase 12 — Tab: Console ✅ COMPLETE (2026-05-05)
+
+> File: `tabs/TabConsole.tsx` (388 lines). Reads directly from `system_logs`
+> (admin RLS gates the realtime channel). No new RPCs needed.
+>
+> Live tail with realtime INSERT subscription + 500-row buffer, 6-level chip
+> filter (All/OK/Info/Debug/Warn/Error), grep input parsing
+> `user:<uuid>` / `level:<lvl>` / `src:<event_type_prefix>` / `"phrase"`.
+> Pause/Resume with "N new since paused" banner, auto-scroll suspends on
+> manual scroll, click-to-expand row with `JSON.stringify(details)` + Copy +
+> cross-tab links by generation_id. cols-3 summary cards (by level, top
+> sources, grep tip).
 
 ### 12.1 Live tail
 - [ ] Realtime subscription on `system_logs` (admin RLS gates it). Buffer 500 most-recent rows in client state.
@@ -700,7 +758,21 @@ CREATE TABLE public.worker_heartbeats (
 
 ---
 
-## Phase 13 — Tab: Messages
+## Phase 13 — Tab: Messages ✅ COMPLETE (2026-05-05)
+
+> File: `tabs/TabMessages.tsx` (500 lines). Tables `admin_message_threads` +
+> `admin_messages` from Phase 2.5 (already live, admin RLS, realtime
+> publication). Backend RPCs (live in `20260505240000_*.sql`):
+> `admin_messages_kpis`, `admin_open_thread`, `admin_post_reply`,
+> `admin_close_thread`, `admin_mark_message_read`.
+>
+> 4 KPI tiles, 6 filter chips (All/Unread functional; Billing/Bugs/Sales/Churn
+> deferred to Phase 18 thread-tag schema), 2-pane inbox grid `340px / 1fr`
+> at 640px height with mobile stack, unread cyan-dot, selected row cyan
+> inset shadow, latest message body with "Show full thread" expander,
+> attachments chips, reply textarea + Mark-resolved + Send wired to
+> `admin_post_reply`. Realtime channel on `admin_messages` invalidates list +
+> open thread + KPIs.
 
 ### 13.1 New schema
 - [ ] `admin_message_threads (id, user_id, subject, status, last_message_at, created_at, closed_at, closed_by)` per Phase 2.5.
@@ -751,7 +823,21 @@ CREATE TABLE public.worker_heartbeats (
 
 ---
 
-## Phase 14 — Tab: Notifications
+## Phase 14 — Tab: Notifications ✅ COMPLETE (2026-05-05)
+
+> File: `tabs/TabNotifications.tsx` (441 lines). Tables `notification_templates`
+> + `user_notifications` from Phase 2.5 (live). Backend RPCs (live):
+> `admin_notifications_kpis`, `admin_send_notification`,
+> `admin_send_notification_to_segment`, `admin_schedule_notification`.
+>
+> 4 KPI tiles, live feed via direct `user_notifications` filtered to
+> `sent_by_admin_id IS NOT NULL`, 5 severity filter chips + Mark-all-read,
+> severity-tiled rows with Acknowledge/View/Snooze actions, send-notification
+> dialog with segment chips + title/body/CTA/severity radio + Schedule
+> toggle, calls `admin_send_notification_to_segment` (or
+> `admin_schedule_notification` when scheduled). Channels and Routing rules
+> sections rendered as placeholder cards (deferred to Phase 18).
+> Realtime channel on `user_notifications` invalidates list + KPIs.
 
 ### 14.1 New schema
 - [ ] `notification_templates (id, slug, title_template, body_template, cta_url_template, icon, severity, created_at, updated_at)`.
@@ -792,7 +878,25 @@ CREATE TABLE public.worker_heartbeats (
 
 ---
 
-## Phase 15 — Tab: Newsletter
+## Phase 15 — Tab: Newsletter ✅ COMPLETE (2026-05-05)
+
+> File: `tabs/TabNewsletter.tsx` (426 lines). Tables `newsletter_campaigns` +
+> `newsletter_sends` from Phase 2.5 (live). Backend RPCs (live):
+> `admin_newsletter_kpis`, `admin_create_campaign`, `admin_schedule_campaign`,
+> `admin_cancel_campaign`.
+>
+> 4 KPI tiles (subscribers + delta, last-send open %, last-send click %),
+> cols-1-2 composer with Audience radio (All/Studio/Pro/Free) + Content card
+> (Subject + char counter, Headline, Body textarea, CTA label + URL) + light
+> paper Preview (`#fafaf6` bg, Georgia serif, brand wordmark, dark CTA),
+> toolbar Save draft (`admin_create_campaign`), Send test (TODO toast),
+> Schedule (datetime picker → `admin_schedule_campaign`).
+> Recent campaigns table from `newsletter_campaigns` with status pill colors
+> (draft=default / scheduled=cyan / sending=warn / sent=ok / cancelled=muted).
+>
+> **Worker handler `handleNewsletterSend` + Resend webhook receiver are
+> still pending (Phase 15.3 from the original spec) — the campaign DB rows
+> are created and scheduled but not yet dispatched. Defer to Phase 18.**
 
 ### 15.1 New schema
 - [ ] `newsletter_campaigns` and `newsletter_sends` per Phase 2.5.
@@ -848,7 +952,27 @@ CREATE TABLE public.worker_heartbeats (
 
 ---
 
-## Phase 16 — Tab: Announcements
+## Phase 16 — Tab: Announcements ✅ COMPLETE (2026-05-05)
+
+> File: `tabs/TabAnnouncements.tsx` (484 lines). Tables `announcements` +
+> `announcement_dismissals` from Phase 2.5 (live). Backend RPCs (live):
+> `admin_announcements_kpis`, `admin_create_announcement`,
+> `admin_archive_announcement`. Plus user-side `current_announcements_for_me()`
+> + `dismiss_announcement(p_id)`.
+>
+> 4 KPI tiles, cols-1-2 composer with Channel radio (banner/modal/toast/email/push)
+> + Title + Message textarea + CTA label/URL + Severity radio + Targeting chip
+> group → audience jsonb. Right-pane preview switches mockup by channel
+> (banner/modal/toast/email/push). Toolbar: Schedule datetime + cyan
+> Publish now → `admin_create_announcement`. Live announcements cols-2 cards
+> with End now via typed-confirm `<ConfirmDestructive>` calling
+> `admin_archive_announcement`. Realtime channel on `announcements`
+> invalidates queries.
+>
+> **Front-end client-side banner integration (the `current_announcements_for_me`
+> consumer that renders the active banner globally) is still pending — the
+> RPC + dismiss flow exists in DB and is callable. Defer banner rendering to
+> Phase 18.**
 
 ### 16.1 New schema
 - [ ] `announcements (id, title, body_md, severity, cta_label, cta_url, audience jsonb, starts_at, ends_at, active, created_by, created_at, updated_at)` per Phase 2.5.
@@ -898,7 +1022,27 @@ CREATE TABLE public.worker_heartbeats (
 
 ---
 
-## Phase 17 — Tab: Kill switches
+## Phase 17 — Tab: Kill switches ✅ COMPLETE (2026-05-05)
+
+> File: `tabs/TabKillSwitches.tsx` (445 lines). Backend RPCs (live):
+> `admin_kill_switches_kpis`, `admin_set_feature_flag`,
+> `admin_set_master_kill_switch`, `admin_feature_flags_list`. Master kill row
+> seeded in `app_settings` (key `master_kill_switch`).
+>
+> Master kill panel: gold-gradient card with 54×54 power icon + danger Toggle
+> gated by typed-confirm `<ConfirmDestructive>` requiring "ENGAGE"/"DISENGAGE".
+> Calls `admin_set_master_kill_switch` which atomically also runs
+> `admin_cancel_all_active_jobs` on transition false→true. Conditional
+> "MAINTENANCE MODE" banner with Restore button when engaged.
+> 8 subsystem cards (auto-fit 280px) for `maint`, `signups_disabled`,
+> `video_generation`, `image_generation`, `voice_generation`, `payments`,
+> `autopost`, `newsletter` calling `admin_set_feature_flag`. Feature flags
+> table from `admin_feature_flags_list`. Realtime channels on `feature_flags`
+> + `app_settings` invalidate KPIs + flags table.
+>
+> **Worker side still needs to honor `master_kill_switch` in its main loop
+> (read from `app_settings` and stop claiming when enabled). Wired in DB
+> + UI; worker integration is a small follow-up.**
 
 ### 17.1 RLS hardening
 - [ ] Add admin SELECT on `feature_flags`. Writes stay RPC-only.

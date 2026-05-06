@@ -35,7 +35,7 @@ type RpcFn = <T>(
   fn: string,
   args?: Record<string, unknown>,
 ) => Promise<{ data: T | null; error: { message: string } | null }>;
-const rpc = (supabase.rpc as unknown) as RpcFn;
+const rpc = supabase.rpc.bind(supabase) as unknown as RpcFn;
 
 interface GenKpis {
   gens_today: number; gens_yesterday: number;

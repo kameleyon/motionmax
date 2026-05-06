@@ -107,7 +107,7 @@ function toFeedItem(row: FeedRow): FeedItem {
 }
 
 type RpcCall = (fn: string, params: Record<string, unknown>) => Promise<{ data: unknown; error: Error | null }>;
-const rpcUntyped = supabase.rpc as unknown as RpcCall;
+const rpcUntyped = supabase.rpc.bind(supabase) as unknown as RpcCall;
 
 async function fetchFeedPage(args: { since: string; userId: string | null; eventTypes: string[] | null; limit: number }): Promise<FeedRow[]> {
   const { data, error } = await rpcUntyped("admin_activity_feed", {

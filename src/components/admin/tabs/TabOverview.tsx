@@ -59,7 +59,7 @@ type RpcFn = <T>(
   fn: string,
   args?: Record<string, unknown>,
 ) => Promise<{ data: T | null; error: { message: string } | null }>;
-const rpc = (supabase.rpc as unknown) as RpcFn;
+const rpc = supabase.rpc.bind(supabase) as unknown as RpcFn;
 
 const GEN_EVENT_TYPES: readonly string[] = [
   "gen.started", "gen.completed", "gen.failed", "gen.queued",
@@ -140,13 +140,19 @@ function pctDelta(cur: number, prior: number): { text: string; dir: "up" | "down
 
 async function fetchSnapshot(): Promise<OverviewSnapshot> {
   const { data, error } = await rpc<OverviewSnapshot>("admin_overview_snapshot");
-  if (error) throw new Error(error.message);
+  if (error) {
+    console.error("[admin] admin_overview_snapshot failed", error);
+    throw new Error(error.message || "admin_overview_snapshot failed");
+  }
   if (!data) throw new Error("admin_overview_snapshot returned no data");
   return data;
 }
 async function fetchCostSplit(): Promise<CostSplitRow[]> {
   const { data, error } = await rpc<CostSplitRow[]>("admin_overview_cost_split");
-  if (error) throw new Error(error.message);
+  if (error) {
+    console.error("[admin] admin_overview_cost_split failed", error);
+    throw new Error(error.message || "admin_overview_cost_split failed");
+  }
   return data ?? [];
 }
 async function fetchTopUsers(): Promise<TopUserRow[]> {
@@ -154,7 +160,10 @@ async function fetchTopUsers(): Promise<TopUserRow[]> {
   const { data, error } = await rpc<TopUserRow[]>("admin_top_users_by_spend", {
     p_since: since, p_limit: 5,
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    console.error("[admin] admin_top_users_by_spend failed", error);
+    throw new Error(error.message || "admin_top_users_by_spend failed");
+  }
   return data ?? [];
 }
 async function fetchFeed(filter: ActivityFilter): Promise<ActivityFeedRow[]> {
@@ -165,7 +174,10 @@ async function fetchFeed(filter: ActivityFilter): Promise<ActivityFeedRow[]> {
     p_event_types: eventTypesFor(filter),
     p_limit: 10,
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    console.error("[admin] admin_activity_feed failed", error, { since, filter });
+    throw new Error(error.message || "admin_activity_feed failed");
+  }
   return data ?? [];
 }
 
@@ -213,10 +225,11 @@ export function TabOverview(): JSX.Element {
   });
 
   useEffect(() => {
-    if (snapshot.error) toast.error("Overview snapshot failed", { id: "ovr-snap" });
-    if (costSplit.error) toast.error("Cost split failed", { id: "ovr-cost" });
-    if (topUsers.error) toast.error("Top users failed", { id: "ovr-top" });
-    if (feed.error) toast.error("Activity feed failed", { id: "ovr-feed" });
+    const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+    if (snapshot.error) toast.error("Overview snapshot failed", { id: "ovr-snap", description: msg(snapshot.error) });
+    if (costSplit.error) toast.error("Cost split failed", { id: "ovr-cost", description: msg(costSplit.error) });
+    if (topUsers.error) toast.error("Top users failed", { id: "ovr-top", description: msg(topUsers.error) });
+    if (feed.error) toast.error("Activity feed failed", { id: "ovr-feed", description: msg(feed.error) });
   }, [snapshot.error, costSplit.error, topUsers.error, feed.error]);
 
   useEffect(() => {

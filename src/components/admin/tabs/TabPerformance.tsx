@@ -43,7 +43,7 @@ interface WorkerRow {
 interface ThroughputRow { day: string; completed: number; failed: number }
 
 type RpcFn = <T>(fn: string, args?: Record<string, unknown>) => Promise<{ data: T | null; error: { message: string } | null }>;
-const rpc = supabase.rpc as unknown as RpcFn;
+const rpc = supabase.rpc.bind(supabase) as unknown as RpcFn;
 
 const PHASE_COLOR: Record<string, string> = {
   script: "#7ad6e6", voiceover: "#a78bfa", audio: "#a78bfa", tts: "#a78bfa",

@@ -46,7 +46,7 @@ interface SendRpcResult { sent: number }
 interface ScheduleRpcResult { scheduled: number; scheduled_for: string }
 
 type RpcFn = <T>(fn: string, args?: Record<string, unknown>) => Promise<{ data: T | null; error: { message: string } | null }>;
-const rpc = (supabase.rpc as unknown) as RpcFn;
+const rpc = supabase.rpc.bind(supabase) as unknown as RpcFn;
 
 /* ── Fetchers ──────────────────────────────────────────────────────── */
 

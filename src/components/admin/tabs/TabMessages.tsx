@@ -59,7 +59,7 @@ const FILTER_CHIPS: ReadonlyArray<{ key: FilterChip; label: string }> = [
  *  types yet. Mirrors the pattern from `TabApiKeys.tsx`. */
 type RpcFn = <T>(fn: string, args?: Record<string, unknown>) =>
   Promise<{ data: T | null; error: { message: string } | null }>;
-const rpc = (supabase.rpc as unknown) as RpcFn;
+const rpc = supabase.rpc.bind(supabase) as unknown as RpcFn;
 
 /* ── Fetchers ──────────────────────────────────────────────────────── */
 

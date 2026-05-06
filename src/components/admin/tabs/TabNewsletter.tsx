@@ -61,7 +61,7 @@ interface ScheduleRpcResult { id: string; status: string; scheduled_for: string 
 type RpcFn = <T>(
   fn: string, args?: Record<string, unknown>,
 ) => Promise<{ data: T | null; error: { message: string } | null }>;
-const rpc = (supabase.rpc as unknown) as RpcFn;
+const rpc = supabase.rpc.bind(supabase) as unknown as RpcFn;
 
 const AUDIENCE_OPTIONS: ReadonlyArray<{ k: AudienceKey; l: string; d: string; rpcArg: string }> = [
   { k: "all", l: "All subscribers", d: "Full opt-in list", rpcArg: "all_opted_in" },

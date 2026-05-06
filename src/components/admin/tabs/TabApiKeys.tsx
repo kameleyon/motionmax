@@ -64,7 +64,7 @@ interface RevokeRpcResult { id: string; status: string }
 type RpcFn = <T>(
   fn: string, args?: Record<string, unknown>,
 ) => Promise<{ data: T | null; error: { message: string } | null }>;
-const rpc = (supabase.rpc as unknown) as RpcFn;
+const rpc = supabase.rpc.bind(supabase) as unknown as RpcFn;
 
 const SCOPE_OPTIONS = ["full", "render", "edge", "logs.read", "video.gen", "sandbox"] as const;
 type ScopeOption = typeof SCOPE_OPTIONS[number];

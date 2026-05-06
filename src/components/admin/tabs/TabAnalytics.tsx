@@ -128,7 +128,7 @@ export function TabAnalytics(): JSX.Element {
   const cohortQuery = useQuery({
     queryKey: adminKey("analytics", "cohort"),
     queryFn: async (): Promise<CohortRow[]> => {
-      const rpc = supabase.rpc as unknown as (
+      const rpc = supabase.rpc.bind(supabase) as unknown as (
         fn: string,
       ) => Promise<{ data: unknown; error: unknown }>;
       const { data, error } = await rpc("admin_analytics_cohort_retention");

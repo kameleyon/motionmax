@@ -43,7 +43,7 @@ export async function fetchDashboardStats() {
     supabase.from("generations").select("*", { count: "exact", head: true }),
     supabase.from("generation_archives").select("*", { count: "exact", head: true }),
     supabase.from("user_flags").select("*").is("resolved_at", null),
-    (supabase.rpc as unknown as (fn: string) => Promise<{ data: Record<string, unknown> | null; error: unknown }>)("get_generation_costs_summary"),
+    (supabase.rpc.bind(supabase) as unknown as (fn: string) => Promise<{ data: Record<string, unknown> | null; error: unknown }>)("get_generation_costs_summary"),
     supabase.from("credit_transactions").select("amount, transaction_type").eq("transaction_type", "purchase"),
   ]);
 

@@ -100,10 +100,17 @@ export function GenerateTopicsDialog({
       setExcludedCount(initialSkipped.length);
       setLocalQueueOrder(null);
       cancelRef.current = false;
+      // Force-refresh the schedules-list query each time the dialog
+      // opens so any topics that were head-popped by autopost runs
+      // (via the autopost_runs_pop_topic trigger) drop off the visible
+      // queue immediately. Without this, the cached `schedule.topic_pool`
+      // can show topics that have already been generated, confusing
+      // users about which topic fires next.
+      void queryClient.invalidateQueries({ queryKey: ["autopost", "schedules-list"] });
     } else {
       cancelRef.current = true;
     }
-  }, [open, initialSkipped.length]);
+  }, [open, initialSkipped.length, queryClient]);
 
   // Local override for the queue array so drag-and-drop reorders feel
   // instant. We clear it whenever the dialog reopens (because the
@@ -283,8 +290,14 @@ export function GenerateTopicsDialog({
       if (error) throw error;
     },
     onSuccess: () => {
-      setLocalQueueOrder(null);
+      // NOTE: we keep `localQueueOrder` set here so the rendered list
+      // doesn't flicker to the server cache while the schedules-list
+      // query refetches. The next prop refresh from the parent will
+      // bring `schedule.topic_pool` in line with the local order, at
+      // which point the next reseed effect (open-dialog or schedule-id
+      // change) clears localQueueOrder back to null.
       void queryClient.invalidateQueries({ queryKey: ["autopost", "schedules-list"] });
+      toast.success("Topic order saved");
     },
     onError: (err: unknown) => {
       // Roll back the optimistic reorder so the user sees the previous
@@ -294,14 +307,29 @@ export function GenerateTopicsDialog({
     },
   });
 
-  /** Move queue[from] to position `to` and persist. */
+  /** Move queue[from] to position `to`. PURELY LOCAL — no server write
+   *  until the user clicks "Save order". This was previously auto-saving
+   *  on every drop, which (a) gave no visible feedback and (b) raced
+   *  with rapid successive drags. The explicit Save button puts the
+   *  user in control + makes the persistence point obvious. */
   const reorderQueue = (from: number, to: number) => {
     if (from === to || from < 0 || to < 0 || from >= queue.length || to >= queue.length) return;
     const next = [...queue];
     const [moved] = next.splice(from, 1);
     next.splice(to, 0, moved);
     setLocalQueueOrder(next);
-    reorderMutation.mutate(next);
+  };
+
+  /** True when the user has dragged but not yet saved. The Save button
+   *  enables only in this state — matches the design's "save changes"
+   *  affordance from the EditAutomationDialog. */
+  const hasPendingReorder =
+    localQueueOrder !== null &&
+    JSON.stringify(localQueueOrder) !== JSON.stringify(schedule.topic_pool ?? []);
+
+  const saveOrder = () => {
+    if (!localQueueOrder) return;
+    reorderMutation.mutate(localQueueOrder);
   };
 
   const allSelected = useMemo(
@@ -529,6 +557,22 @@ export function GenerateTopicsDialog({
           >
             Close
           </Button>
+          {/* Save order — visible only after the user drags. Lives next
+              to Close so the user gets explicit confirmation that their
+              new order has been persisted. */}
+          {hasPendingReorder && (
+            <Button
+              variant="outline"
+              onClick={saveOrder}
+              disabled={reorderMutation.isPending}
+              className="border-[#11C4D0]/40 bg-[#11C4D0]/[0.08] text-[#11C4D0] hover:bg-[#11C4D0]/[0.16] w-full md:w-auto"
+            >
+              {reorderMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-1.5 animate-spin shrink-0" />
+              ) : null}
+              Save order
+            </Button>
+          )}
           <Button
             onClick={() => addMutation.mutate()}
             disabled={selected.size === 0 || addMutation.isPending}

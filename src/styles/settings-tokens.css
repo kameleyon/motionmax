@@ -82,11 +82,14 @@
 }
 
 /* generic cards */
-.settings-shell .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 24px; }
+.settings-shell .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 24px; min-width: 0; }
 .settings-shell .card h3 { font-family: var(--serif); font-weight: 500; font-size: 18px; letter-spacing: -.01em; margin: 0 0 14px; }
 .settings-shell .card .h-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 12px; flex-wrap: wrap; }
 .settings-shell .card .h-row h3 { margin: 0; }
 .settings-shell .card .lbl { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-mute); }
+@media (max-width: 480px) {
+  .settings-shell .card { padding: 18px 16px; }
+}
 
 .settings-shell .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 860px) { .settings-shell .grid-2 { grid-template-columns: 1fr; } }
@@ -105,9 +108,16 @@
 /* settings rows */
 .settings-shell .set-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-top: 1px solid var(--line); }
 .settings-shell .set-row:first-of-type { border-top: 0; padding-top: 4px; }
+.settings-shell .set-row .info { min-width: 0; flex: 1; }
 .settings-shell .set-row .info .t { font-size: 14px; color: var(--ink); font-weight: 500; margin-bottom: 3px; }
 .settings-shell .set-row .info .d { font-size: 12.5px; color: var(--ink-mute); max-width: 50ch; line-height: 1.5; }
 .settings-shell .set-row .info .t.warn { color: var(--gold); }
+/* Narrow viewports — let set-row wrap so trailing button/pill never
+   pushes the description text off-canvas. */
+@media (max-width: 520px) {
+  .settings-shell .set-row { flex-wrap: wrap; gap: 10px; }
+  .settings-shell .set-row .info { flex: 1 1 100%; }
+}
 
 /* toggle (visual only — informational; no wiring yet) */
 .settings-shell .tg { position: relative; width: 38px; height: 22px; border-radius: 99px; background: var(--panel-3); border: 1px solid var(--line-2); cursor: default; flex-shrink: 0; transition: background .2s; opacity: .55; }
@@ -166,11 +176,14 @@
 
 /* activity list (existing wiring; visual refresh) */
 .settings-shell .act-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; }
-.settings-shell .act-list li { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.settings-shell .act-list li { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 13px; flex-wrap: wrap; }
 .settings-shell .act-list li:first-child { border-top: 0; }
 .settings-shell .act-list .ev-name { color: var(--ink); font-weight: 500; text-transform: capitalize; }
 .settings-shell .act-list .ev-msg { color: var(--ink-mute); font-size: 12px; margin-top: 2px; line-height: 1.5; }
 .settings-shell .act-list .when { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); white-space: nowrap; flex-shrink: 0; }
+@media (max-width: 520px) {
+  .settings-shell .act-list .when { padding-left: 24px; }
+}
 .settings-shell .act-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 32px 0; color: var(--ink-mute); font-size: 13px; }
 
 /* deletion banner (existing wiring; gold instead of red destructive) */

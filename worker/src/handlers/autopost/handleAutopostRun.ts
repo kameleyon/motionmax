@@ -167,7 +167,13 @@ interface AutopostRunRow {
 
 const POLL_INTERVAL_MS = 5_000;
 const SCRIPT_TIMEOUT_MS = 8 * 60 * 1000;
-const PHASE_TIMEOUT_MS = 30 * 60 * 1000;
+// Finalize wait covers ALL upstream scene jobs (audio + image + cinematic_video)
+// completing, not just the finalize handler itself (which is fast — DB writes).
+// Under Hypereal queue pressure each cinematic scene can spend up to ~6 min in
+// 429 backoff alone, so a 15-scene job at llm-pool=3 can legitimately need
+// 45+ min. 60 min gives headroom; the stale-claim reaper still covers genuine
+// worker death at STALE_PROCESSING_MS = 30 min.
+const PHASE_TIMEOUT_MS = 60 * 60 * 1000;
 const EXPORT_TIMEOUT_MS = 15 * 60 * 1000;
 
 async function setRunStatus(runId: string, status: string, extra: Record<string, unknown> = {}): Promise<void> {

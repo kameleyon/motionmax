@@ -30,6 +30,37 @@ function backoffDelay(consecutive429: number): number {
   return Math.min(30_000 * Math.pow(2, consecutive429), 120_000);
 }
 
+/**
+ * POST with built-in 429 retry. Hypereal returns 429 with
+ * `{"error":{"message":"Your request is currently queued due to high
+ * demand on your plan. Please retry shortly."}}` when their async pool is
+ * saturated — that's a SUBMIT-time queueing signal, not a true rate limit.
+ * The dispatcher's withTransientRetry is too short (3 × 2/4/8s ≈ 14s)
+ * for this; Hypereal needs ~30–120s to drain. Up to 5 streak ≈ 6 min
+ * total before bailing, then the dispatcher's 3 attempts cover anything
+ * past that.
+ */
+async function hyperealPostWithRateLimit(
+  url: string,
+  options: RequestInit,
+  label: string,
+): Promise<Response> {
+  const max429Streak = 5;
+  let consecutive429 = 0;
+  while (true) {
+    const response = await hyperealFetch(url, options);
+    if (response.status !== 429) return response;
+    consecutive429++;
+    if (consecutive429 >= max429Streak) {
+      console.warn(`[Hypereal] ${label} submit — ${max429Streak} consecutive 429s, surfacing to caller`);
+      return response;
+    }
+    const delay = backoffDelay(consecutive429 - 1);
+    console.log(`[Hypereal] ${label} submit — 429 queued, backoff ${Math.round(delay / 1000)}s (streak: ${consecutive429})`);
+    await sleepWithJitter(delay);
+  }
+}
+
 // ── Image generation ───────────────────────────────────────────────
 
 export async function generateImage(prompt: string, apiKey: string, aspectRatio = "16:9") {
@@ -412,14 +443,14 @@ export async function generateSeedance2FastI2V(
   const bodyJson = JSON.stringify(requestBody);
   console.log(`[Hypereal] Seedance 2.0 body (${bodyJson.length} chars): ${truncate(bodyJson)}`);
 
-  const response = await hyperealFetch(HYPEREAL_VIDEO_URL, {
+  const response = await hyperealPostWithRateLimit(HYPEREAL_VIDEO_URL, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: bodyJson,
-  });
+  }, "seedance-2-0-fast-i2v");
 
   if (!response.ok) {
     const errorText = await response.text();

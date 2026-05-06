@@ -35,7 +35,9 @@ interface AutopostRerenderResult {
 }
 
 const POLL_INTERVAL_MS = 5_000;
-const PHASE_TIMEOUT_MS = 30 * 60 * 1000;
+// Same headroom as handleAutopostRun: finalize wait spans the whole scene
+// dependency chain, which can take 45+ min under Hypereal queue pressure.
+const PHASE_TIMEOUT_MS = 60 * 60 * 1000;
 const EXPORT_TIMEOUT_MS = 15 * 60 * 1000;
 
 async function submitJob(

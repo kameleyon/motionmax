@@ -116,7 +116,10 @@
 }
 .billing-shell .cp-hero .row { position: relative; display: grid; grid-template-columns: 1.2fr 1fr; gap: 30px; align-items: center; }
 @media (max-width: 900px) { .billing-shell .cp-hero .row { grid-template-columns: 1fr; } }
-.billing-shell .cp-hero .meta { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 14px; }
+.billing-shell .cp-hero .meta { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 14px; flex-wrap: wrap; row-gap: 4px; }
+@media (max-width: 480px) {
+  .billing-shell .cp-hero .meta { font-size: 10px; letter-spacing: .1em; gap: 7px; }
+}
 .billing-shell .cp-hero .meta .live { display: inline-flex; align-items: center; gap: 6px; color: var(--cyan); }
 .billing-shell .cp-hero .meta .live::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); animation: bill-pulse 1.6s ease-in-out infinite; }
 @keyframes bill-pulse { 50% { opacity: .4; } }
@@ -125,6 +128,12 @@
 .billing-shell .cp-hero .price-line { margin-top: 12px; display: flex; align-items: baseline; gap: 10px; font-family: var(--mono); font-size: 13px; color: var(--ink-dim); }
 .billing-shell .cp-hero .price-line b { color: var(--ink); font-weight: 500; font-size: 16px; }
 .billing-shell .cp-hero .actions { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
+@media (max-width: 520px) {
+  .billing-shell .cp-hero { padding: 22px 18px; }
+  .billing-shell .cp-hero .actions { gap: 8px; }
+  .billing-shell .cp-hero .actions .btn-cyan,
+  .billing-shell .cp-hero .actions .btn-ghost { flex: 1 1 calc(50% - 4px); justify-content: center; padding: 10px 10px; font-size: 12.5px; }
+}
 .billing-shell .cp-hero .next { position: relative; border-left: 1px solid var(--line); padding-left: 30px; }
 @media (max-width: 900px) { .billing-shell .cp-hero .next { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 22px; } }
 .billing-shell .cp-hero .next .lbl { margin-bottom: 8px; }
@@ -148,6 +157,7 @@
 /* KPIs */
 .billing-shell .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 18px; }
 @media (max-width: 1100px) { .billing-shell .kpis { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px)  { .billing-shell .kpis { grid-template-columns: 1fr; } }
 .billing-shell .kpi { padding: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; display: flex; flex-direction: column; gap: 6px; position: relative; overflow: hidden; }
 .billing-shell .kpi .lbl { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-mute); }
 .billing-shell .kpi .v { font-family: var(--serif); font-weight: 500; font-size: 30px; letter-spacing: -.01em; line-height: 1; }

@@ -36,7 +36,7 @@ import {
 import AppShell from "@/components/dashboard/AppShell";
 import { AutopostNav } from "./_AutopostNav";
 import {
-  isRunStatusActive, relativeTime, dayBucketLabel, dayBucketKey,
+  isRunStatusActive, relativeTime, dayBucketLabel, dayBucketKey, RunProgressBar,
 } from "./_autopostUi";
 
 const PAGE_SIZE = 50;
@@ -539,6 +539,7 @@ function RunListItem({
 }) {
   const isFailed = run.status === "failed";
   const isCompleted = run.status === "completed";
+  const isActive = isRunStatusActive(run.status);
   const title = run.topic || run.schedule?.name || "(untitled run)";
   return (
     <div
@@ -554,6 +555,9 @@ function RunListItem({
       <div className="run-meta">
         <div className="t" title={title}>{title}</div>
         <div className="s">{run.schedule?.name ?? "—"}</div>
+        {isActive ? (
+          <RunProgressBar value={run.progress_pct} className="mt-1" />
+        ) : null}
       </div>
       <span className={`run-pill ${run.status}`}>{run.status}</span>
       <span className="when">{relativeTime(run.fired_at)}</span>

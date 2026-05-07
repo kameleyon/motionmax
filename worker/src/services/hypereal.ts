@@ -369,32 +369,31 @@ export async function generateKlingV3ProVideo(
   return pollHyperealJob(jobId, apiKey, model, pollUrl);
 }
 
-// ── Seedance 2.0 Turbo I2V (active scene renderer) ──────────────
-// ByteDance Seedance 2.0 Turbo image-to-video via the Hypereal proxy.
-// Active scene-renderer model (from 69 credits/scene, dynamic pricing).
-// Upgraded 2026-05-07 fast → regular → turbo: turbo is the fastest
-// Seedance variant, supports 1080p + 21:9, and accepts an optional
-// ending frame for continuation. No `generate_audio` param — the
-// turbo model doesn't synthesize audio. Voiceover stays muxed at export.
+// ── Seedance 2.0 I2V (active scene renderer) ────────────────────
+// ByteDance Seedance 2.0 image-to-video via the Hypereal proxy.
+// Active scene-renderer model (from 58 credits/scene, dynamic pricing).
+// Reverted from Turbo 2026-05-07: regular Seedance 2.0 has cheaper
+// floor pricing and supports `generate_audio` (we keep it false; voice
+// is muxed at export).
 
-export type SeedanceAspectRatio = "16:9" | "4:3" | "1:1" | "3:4" | "9:16" | "21:9";
-export type SeedanceResolution = "720p" | "1080p";
+export type SeedanceAspectRatio = "16:9" | "4:3" | "1:1" | "3:4" | "9:16";
+export type SeedanceResolution = "480p" | "720p";
 
 const SEEDANCE_MAX_PROMPT_CHARS = 2400;
 
 /**
- * Generate video via Seedance 2.0 Turbo I2V (`seedance-2-0-turbo-i2v`).
+ * Generate video via Seedance 2.0 I2V (`seedance-2-0-i2v`).
  *
- *  duration:     4–15s (clamped; default 10)
- *  resolution:   "720p" | "1080p" (default "720p")
- *  aspectRatio:  "16:9" | "9:16" | "1:1" | "4:3" | "3:4" | "21:9" (default "16:9")
- *  endImageUrl:  optional last frame for start→end interpolation
- *  enableWebSearch: false (we never want web-search grounding for
- *                   pre-scripted scene prompts)
+ *  duration:      5–10s (clamped; default 10)
+ *  resolution:    "480p" | "720p" (default "720p")
+ *  aspectRatio:   "16:9" | "9:16" | "1:1" | "4:3" | "3:4" (default "16:9")
+ *  endImageUrl:   optional last frame for start→end interpolation
+ *  generateAudio: false (voiceover is muxed by the export pipeline —
+ *                 overriding to true is rarely what you want)
  *
  * Returns the rendered video URL after polling the Hypereal job.
  */
-export async function generateSeedance2TurboI2V(
+export async function generateSeedance2I2V(
   imageUrl: string,
   prompt: string,
   apiKey: string,
@@ -402,24 +401,24 @@ export async function generateSeedance2TurboI2V(
   endImageUrl?: string,
   aspectRatio: SeedanceAspectRatio = "16:9",
   resolution: SeedanceResolution = "720p",
-  enableWebSearch: boolean = false,
+  generateAudio: boolean = false,
 ): Promise<string> {
-  const model = "seedance-2-0-turbo-i2v";
+  const model = "seedance-2-0-i2v";
 
-  // Duration: turbo accepts 4–15s. Clamp + warn if outside.
-  const clampedDuration = Math.min(15, Math.max(4, Math.round(duration)));
+  // Duration: spec range 5–10s. Clamp + warn if outside.
+  const clampedDuration = Math.min(10, Math.max(5, Math.round(duration)));
   if (clampedDuration !== duration) {
-    console.warn(`[Hypereal] Seedance Turbo duration ${duration}s out of range — clamped to ${clampedDuration}s`);
+    console.warn(`[Hypereal] Seedance 2.0 duration ${duration}s out of range — clamped to ${clampedDuration}s`);
   }
 
   const clampedPrompt = truncateKlingPrompt(prompt); // share the same 2400-char ceiling
   if (clampedPrompt.length < prompt.length) {
-    console.warn(`[Hypereal] Seedance Turbo prompt truncated ${prompt.length} → ${clampedPrompt.length} chars`);
+    console.warn(`[Hypereal] Seedance 2.0 prompt truncated ${prompt.length} → ${clampedPrompt.length} chars`);
   }
 
   console.log(
-    `[Hypereal] Starting Seedance 2.0 Turbo I2V — ${clampedDuration}s, ${resolution}, ${aspectRatio}` +
-    `${endImageUrl ? " (start→end)" : ""}`,
+    `[Hypereal] Starting Seedance 2.0 I2V — ${clampedDuration}s, ${resolution}, ${aspectRatio}` +
+    `${endImageUrl ? " (start→end)" : ""}${generateAudio ? " +audio" : ""}`,
   );
   console.log(`[Hypereal] IMAGE: ${imageUrl.substring(0, 80)}...`);
   if (endImageUrl) console.log(`[Hypereal] LAST IMAGE: ${endImageUrl.substring(0, 80)}...`);
@@ -430,7 +429,7 @@ export async function generateSeedance2TurboI2V(
     duration: clampedDuration,
     resolution,
     aspect_ratio: aspectRatio,
-    enable_web_search: enableWebSearch,
+    generate_audio: generateAudio,
   };
   if (endImageUrl) {
     inputPayload.last_image = endImageUrl;
@@ -438,7 +437,7 @@ export async function generateSeedance2TurboI2V(
 
   const requestBody = { model, input: inputPayload };
   const bodyJson = JSON.stringify(requestBody);
-  console.log(`[Hypereal] Seedance Turbo body (${bodyJson.length} chars): ${truncate(bodyJson)}`);
+  console.log(`[Hypereal] Seedance 2.0 body (${bodyJson.length} chars): ${truncate(bodyJson)}`);
 
   const response = await hyperealPostWithRateLimit(HYPEREAL_VIDEO_URL, {
     method: "POST",
@@ -447,16 +446,16 @@ export async function generateSeedance2TurboI2V(
       "Content-Type": "application/json",
     },
     body: bodyJson,
-  }, "seedance-2-0-turbo-i2v");
+  }, "seedance-2-0-i2v");
 
   if (!response.ok) {
     const errorText = await response.text();
     if (/insufficient_credits|insufficient\s+credits/i.test(errorText)) {
       throw new Error(
-        `[PROVIDER_CREDITS_EXHAUSTED] Hypereal account out of credits — Seedance 2.0 Turbo I2V cannot generate. Detail: ${errorText.slice(0, 300)}`,
+        `[PROVIDER_CREDITS_EXHAUSTED] Hypereal account out of credits — Seedance 2.0 I2V cannot generate. Detail: ${errorText.slice(0, 300)}`,
       );
     }
-    throw new Error(`Hypereal Seedance 2.0 Turbo I2V API Error: ${response.status} - ${errorText}`);
+    throw new Error(`Hypereal Seedance 2.0 I2V API Error: ${response.status} - ${errorText}`);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -464,18 +463,18 @@ export async function generateSeedance2TurboI2V(
   const jobId = data.jobId;
   const pollUrl = data.pollUrl || null;
 
-  console.log(`[Hypereal] Seedance Turbo job created: ${jobId} (credits: ${data.creditsUsed})`);
+  console.log(`[Hypereal] Seedance 2.0 job created: ${jobId} (credits: ${data.creditsUsed})`);
 
   if (!jobId) {
-    throw new Error(`No jobId from Seedance Turbo — response: ${JSON.stringify(data)}`);
+    throw new Error(`No jobId from Seedance 2.0 — response: ${JSON.stringify(data)}`);
   }
 
   return pollHyperealJob(jobId, apiKey, model, pollUrl);
 }
 
 // ── Kling V3.0 Pro I2V (Seedance fallback) ──────────────────────
-// Cheaper than Seedance Turbo (39 cr vs 69), supports negative_prompt
-// + cfg_scale. Used as the fallback when Seedance Turbo fails twice
+// Cheaper than Seedance 2.0 (39 cr vs ~58+), supports negative_prompt
+// + cfg_scale. Used as the fallback when Seedance fails twice
 // per scene (see handleCinematicVideo for the chain).
 //
 // Note: the existing `generateKlingV3Video` above uses the STANDARD

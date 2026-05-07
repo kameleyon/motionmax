@@ -30,7 +30,7 @@ import {
   // generateKlingV3Video,        // V3.0 Std — skipped; Pro variant below is used instead
   // generateVeo31Video,          // Veo 3.1 — doesn't follow prompts, generates unwanted audio/lip sync
   // generateKlingV26Video,       // Kling V2.6 Pro — retired, superseded by V3.0 Pro
-  generateSeedance2TurboI2V,      // Primary — Seedance 2.0 Turbo I2V (seedance-2-0-turbo-i2v, ~69 cr). Upgraded fast → regular → turbo 2026-05-07.
+  generateSeedance2I2V,           // Primary — Seedance 2.0 I2V (seedance-2-0-i2v, from 58 cr). Reverted from Turbo 2026-05-07.
   generateKlingV3ProI2V,          // Fallback — Kling V3.0 Pro I2V (kling-3-0-pro-i2v, 39 cr). Tried after 2 failed Seedance attempts.
   // generateGrokVideo,           // Grok Video I2V — status-lookup failures on Hypereal, rolled back
 } from "../services/hypereal.js";
@@ -289,7 +289,7 @@ async function _runCinematicVideo(
 
   const cameraName = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("\u2014")[0].trim();
   console.log(
-    `[CinematicVideo] Scene ${sceneIndex}: Seedance 2.0 Turbo I2V${regenerate ? " (regen)" : ""}, ` +
+    `[CinematicVideo] Scene ${sceneIndex}: Seedance 2.0 I2V${regenerate ? " (regen)" : ""}, ` +
     `camera=${cameraName}, prompt=${finalPrompt.length} chars`
   );
 
@@ -351,7 +351,7 @@ async function _runCinematicVideo(
   // already supports it without changes. We surface the choice via
   // the return payload so handleAutopostRun can stamp error_summary
   // ("scene N held as still frame: Kling moderation").
-  provider = "Seedance 2.0 Turbo I2V";
+  provider = "Seedance 2.0 I2V";
   let heldFrameReason: string | null = null;
 
   // Build a Kling-style negative prompt by extracting the AVOID list
@@ -366,7 +366,7 @@ async function _runCinematicVideo(
     "faces rotated opposite to torso, limbs bending in unnatural directions" +
     (styleNegative ? `, ${styleNegative}` : "");
 
-  // Per-scene try chain: try Seedance Turbo up to 2 times, then fall
+  // Per-scene try chain: try Seedance up to 2 times, then fall
   // back to Kling V3 Pro. Moderation rejection is permanent (held-frame
   // path below). Provider-credits exhaustion on Seedance jumps straight
   // to Kling — Kling is cheaper (39 cr vs 69), so it can succeed on a
@@ -378,7 +378,7 @@ async function _runCinematicVideo(
 
     for (let attempt = 1; attempt <= SEEDANCE_TRIES; attempt++) {
       try {
-        videoUrl = await generateSeedance2TurboI2V(
+        videoUrl = await generateSeedance2I2V(
           imageUrl,
           `${finalPrompt}\n\n${motionGuardrails}`,
           apiKey,
@@ -406,13 +406,13 @@ async function _runCinematicVideo(
         if (innerMsg.startsWith("[PROVIDER_CREDITS_EXHAUSTED]")) {
           seedanceCreditsExhausted = true;
           console.warn(
-            `[CinematicVideo] Scene ${sceneIndex}: Seedance Turbo credits exhausted on attempt ${attempt} — falling back to Kling V3.0 Pro`,
+            `[CinematicVideo] Scene ${sceneIndex}: Seedance credits exhausted on attempt ${attempt} — falling back to Kling V3.0 Pro`,
           );
           break;
         }
 
         console.warn(
-          `[CinematicVideo] Scene ${sceneIndex}: Seedance Turbo attempt ${attempt}/${SEEDANCE_TRIES} failed: ${innerMsg.slice(0, 200)}`,
+          `[CinematicVideo] Scene ${sceneIndex}: Seedance attempt ${attempt}/${SEEDANCE_TRIES} failed: ${innerMsg.slice(0, 200)}`,
         );
       }
     }
@@ -420,14 +420,14 @@ async function _runCinematicVideo(
     // Fallback to Kling V3 Pro if Seedance never produced a videoUrl.
     if (!videoUrl) {
       console.log(
-        `[CinematicVideo] Scene ${sceneIndex}: falling back to Kling V3.0 Pro after Seedance Turbo failures` +
+        `[CinematicVideo] Scene ${sceneIndex}: falling back to Kling V3.0 Pro after Seedance failures` +
         `${seedanceCreditsExhausted ? " (credits exhausted on Seedance)" : ""}`,
       );
       await writeSystemLog({
         jobId, projectId, userId, generationId,
         category: "system_warning",
         eventType: "cinematic_video_kling_fallback",
-        message: `Scene ${sceneIndex}: Seedance Turbo failed — falling back to Kling V3.0 Pro`,
+        message: `Scene ${sceneIndex}: Seedance failed — falling back to Kling V3.0 Pro`,
         details: {
           sceneIndex,
           seedance_tries: SEEDANCE_TRIES,
@@ -467,8 +467,8 @@ async function _runCinematicVideo(
         jobId, projectId, userId, generationId,
         category: "system_error",
         eventType: "provider_credits_exhausted",
-        message: `Hypereal credits exhausted — scene ${sceneIndex} could not render on Seedance Turbo OR Kling V3 Pro`,
-        details: { sceneIndex, provider: "seedance-2-0-turbo-i2v + kling-3-0-pro-i2v fallback", raw: errMsg.slice(0, 400) },
+        message: `Hypereal credits exhausted — scene ${sceneIndex} could not render on Seedance OR Kling V3 Pro`,
+        details: { sceneIndex, provider: "seedance-2-0-i2v + kling-3-0-pro-i2v fallback", raw: errMsg.slice(0, 400) },
       });
       throw err;
     }
@@ -491,7 +491,7 @@ async function _runCinematicVideo(
       message: `Scene ${sceneIndex}: provider moderation rejected — using still image as held frame`,
       details: {
         sceneIndex,
-        provider: "seedance-2-0-turbo-i2v + kling-3-0-pro-i2v fallback",
+        provider: "seedance-2-0-i2v + kling-3-0-pro-i2v fallback",
         reason: errMsg,
         fallback: "hold_frame",
       },
@@ -510,7 +510,7 @@ async function _runCinematicVideo(
         : {};
       meta.heldFrame = {
         reason: errMsg.slice(0, 240),
-        provider: "seedance-2-0-turbo-i2v + kling-3-0-pro-i2v fallback",
+        provider: "seedance-2-0-i2v + kling-3-0-pro-i2v fallback",
         at: new Date().toISOString(),
       };
       freshScenes2[sceneIndex] = { ...freshScenes2[sceneIndex], videoUrl: null, _meta: meta };

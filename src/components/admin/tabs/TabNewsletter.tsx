@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AdminEmpty } from "@/components/admin/_shared/AdminEmpty";
 import { AdminLoading } from "@/components/admin/_shared/AdminLoading";
+import { ConfirmDestructive } from "@/components/admin/_shared/confirmDestructive";
 import { I } from "@/components/admin/_shared/AdminIcons";
 import { Kpi } from "@/components/admin/_shared/Kpi";
 import { Pill, type PillVariant } from "@/components/admin/_shared/Pill";
@@ -226,6 +227,75 @@ export function TabNewsletter(): JSX.Element {
     toast.info("Send test → me — TODO Phase 18 (Resend stub)");
   };
 
+  // Send-now state — confirmation modal + dispatch via edge fn.
+  const [pendingSend, setPendingSend] = useState<CampaignRow | null>(null);
+
+  async function dispatchCampaign(id: string): Promise<void> {
+    const { data, error } = await supabase.functions.invoke<{
+      ok: boolean;
+      sent?: number;
+      failed?: number;
+      recipients?: number;
+      already_sent?: boolean;
+      warning?: string;
+      error?: string;
+    }>("admin-send-newsletter", { body: { newsletter_id: id } });
+    if (error) {
+      // supabase-js wraps non-2xx into FunctionsHttpError, message has the upstream JSON.
+      throw new Error(error.message || "Failed to dispatch newsletter");
+    }
+    if (data?.error) {
+      throw new Error(data.error);
+    }
+    if (data?.warning) {
+      toast.warning(data.warning);
+    }
+  }
+
+  // Recipient-count estimator used by the confirmation dialog. Mirrors the
+  // edge fn's audience resolution (all_opted_in | plan:<name>) so the
+  // admin's "Send to N recipients?" prompt is honest.
+  async function estimateRecipients(audience: string): Promise<number> {
+    if (audience === "all_opted_in" || audience === "all") {
+      const { count } = await supabase
+        .from("profiles")
+        .select("user_id", { count: "exact", head: true })
+        .eq("marketing_opt_in", true)
+        .is("deleted_at", null)
+        .is("newsletter_unsubscribed_at", null);
+      return count ?? 0;
+    }
+    if (audience.startsWith("plan:")) {
+      const planName = audience.slice(5);
+      const { data: subs } = await supabase
+        .from("subscriptions")
+        .select("user_id")
+        .eq("status", "active")
+        .ilike("plan_name", planName);
+      const ids = Array.from(new Set((subs ?? []).map((s) => s.user_id as string)));
+      if (ids.length === 0) return 0;
+      const { count } = await supabase
+        .from("profiles")
+        .select("user_id", { count: "exact", head: true })
+        .in("user_id", ids)
+        .eq("marketing_opt_in", true)
+        .is("deleted_at", null)
+        .is("newsletter_unsubscribed_at", null);
+      return count ?? 0;
+    }
+    return 0;
+  }
+
+  const [pendingSendCount, setPendingSendCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (!pendingSend) { setPendingSendCount(null); return; }
+    let cancelled = false;
+    void estimateRecipients(pendingSend.audience).then((n) => {
+      if (!cancelled) setPendingSendCount(n);
+    });
+    return () => { cancelled = true; };
+  }, [pendingSend]);
+
   if (kpis.isLoading && campaigns.isLoading) return <AdminLoading />;
 
   const k = kpis.data;
@@ -254,6 +324,24 @@ export function TabNewsletter(): JSX.Element {
           </button>
           <button type="button" className="btn-ghost" onClick={sendTest}>
             Send test → me
+          </button>
+          <button type="button" className="btn-ghost"
+            disabled={saveDraftMut.isPending}
+            onClick={async () => {
+              try {
+                const draft = await saveDraftMut.mutateAsync();
+                // Re-load row to satisfy ConfirmDestructive shape.
+                const { data } = await supabase
+                  .from("newsletter_campaigns")
+                  .select("id,subject,audience,status,scheduled_for,sent_at,created_at")
+                  .eq("id", draft.id)
+                  .maybeSingle();
+                if (data) setPendingSend(data as CampaignRow);
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : "Failed to save draft");
+              }
+            }}>
+            <I.send /> Save & send now
           </button>
           <button type="button" className="btn-cyan"
             onClick={() => scheduleMut.mutate()} disabled={scheduleMut.isPending}>
@@ -388,6 +476,7 @@ export function TabNewsletter(): JSX.Element {
                   <th style={{ textAlign: "right" }}>Click</th>
                   <th style={{ textAlign: "right" }}>Unsubs</th>
                   <th>Status</th>
+                  <th style={{ width: 120 }} />
                 </tr>
               </thead>
               <tbody>
@@ -414,6 +503,14 @@ export function TabNewsletter(): JSX.Element {
                       </td>
                       <td className="num" style={{ textAlign: "right" }}>—</td>
                       <td><Pill variant={statusPillVariant(c.status)} dot>{c.status}</Pill></td>
+                      <td>
+                        {(c.status === "draft" || c.status === "scheduled") && !c.sent_at ? (
+                          <button type="button" className="btn-mini"
+                            onClick={() => setPendingSend(c)}>
+                            <I.send /> Send now
+                          </button>
+                        ) : null}
+                      </td>
                     </tr>
                   );
                 })}
@@ -421,6 +518,30 @@ export function TabNewsletter(): JSX.Element {
             </table>
           )}
       </div>
+
+      {pendingSend && (
+        <ConfirmDestructive
+          open={!!pendingSend}
+          onOpenChange={(o) => { if (!o) setPendingSend(null); }}
+          title={`Send "${pendingSend.subject}"`}
+          description={
+            <span>
+              {pendingSendCount === null
+                ? "Resolving recipient count…"
+                : `Dispatch this campaign to ${pendingSendCount.toLocaleString()} recipient${pendingSendCount === 1 ? "" : "s"}.`}{" "}
+              Audience: <code className="mono">{pendingSend.audience}</code>. This is final — once sent, the campaign cannot be unsent.
+            </span>
+          }
+          confirmText="SEND"
+          actionLabel="Dispatch newsletter"
+          successMessage="Newsletter dispatched"
+          onConfirm={async () => {
+            const target = pendingSend;
+            await dispatchCampaign(target.id);
+            qc.invalidateQueries({ queryKey: ["admin", "news"] });
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -61,22 +61,38 @@ export function useSceneRegen(state: EditorState | null) {
     return !!(data && data.length > 0);
   }, []);
 
+  /** Atomic per-field update via the worker's `update_scene_field` RPC.
+   *  Replaces the legacy read-modify-write of the entire scenes array,
+   *  which could blank the whole array if React state was briefly stale
+   *  (incident 2026-05-07: regenerate flow nuked 15 scenes). The DB now
+   *  also has a one-way ratchet trigger that rejects N→0 writes, but
+   *  using the atomic RPC means we never even ATTEMPT a destructive
+   *  write. */
   const updateScenePrompt = useCallback(async (index: number, nextPrompt: string) => {
     if (!state?.generation) { toast.error('No generation loaded.'); return false; }
-    const scenes = (state.generation.scenes as Array<Record<string, unknown>> | null) ?? [];
-    const patched = scenes.map((s, i) =>
-      i === index
-        ? { ...s, visualPrompt: nextPrompt, visual_prompt: nextPrompt }
-        : s,
+    const genId = state.generation.id;
+    // Update both casings — visualPrompt (camelCase) is what every new
+    // handler reads; visual_prompt (snake_case) is the legacy key some
+    // older code paths still touch. Both atomic, no array overwrite.
+    const r1 = await (supabase.rpc as unknown as (
+      fn: string,
+      args: Record<string, unknown>,
+    ) => Promise<{ data: unknown; error: { message: string } | null }>)(
+      'update_scene_field',
+      { p_generation_id: genId, p_scene_index: index, p_field: 'visualPrompt', p_value: nextPrompt },
     );
-    const { error } = await supabase
-      .from('generations')
-      .update({ scenes: patched as unknown as never })
-      .eq('id', state.generation.id);
-    if (error) {
-      toast.error(`Couldn't save prompt: ${error.message}`);
+    if (r1.error) {
+      toast.error(`Couldn't save prompt: ${r1.error.message}`);
       return false;
     }
+    // Best-effort second key — failure here doesn't block the regen.
+    await (supabase.rpc as unknown as (
+      fn: string,
+      args: Record<string, unknown>,
+    ) => Promise<{ data: unknown; error: { message: string } | null }>)(
+      'update_scene_field',
+      { p_generation_id: genId, p_scene_index: index, p_field: 'visual_prompt', p_value: nextPrompt },
+    );
     return true;
   }, [state?.generation]);
 
@@ -87,16 +103,19 @@ export function useSceneRegen(state: EditorState | null) {
    *  jobs run serialised via depends_on. */
   const updateSceneMeta = useCallback(async (index: number, patch: Record<string, unknown>) => {
     if (!state?.generation) return false;
+    // Atomic _meta merge via the worker's update_scene_meta_merge RPC.
+    // Same race-safety reasoning as updateScenePrompt above — never
+    // overwrite the whole scenes array from a possibly-stale React state.
     const scenes = (state.generation.scenes as Array<Record<string, unknown>> | null) ?? [];
-    const patched = scenes.map((s, i) => {
-      if (i !== index) return s;
-      const meta = (s._meta as Record<string, unknown> | undefined) ?? {};
-      return { ...s, _meta: { ...meta, ...patch } };
-    });
-    const { error } = await supabase
-      .from('generations')
-      .update({ scenes: patched as unknown as never })
-      .eq('id', state.generation.id);
+    const existingMeta = (scenes[index]?._meta as Record<string, unknown> | undefined) ?? {};
+    const merged = { ...existingMeta, ...patch };
+    const { error } = await (supabase.rpc as unknown as (
+      fn: string,
+      args: Record<string, unknown>,
+    ) => Promise<{ data: unknown; error: { message: string } | null }>)(
+      'update_scene_field_json',
+      { p_generation_id: state.generation.id, p_scene_index: index, p_field: '_meta', p_value: merged },
+    );
     if (error) { toast.error(`Couldn't save: ${error.message}`); return false; }
     // Invalidate the editor-state cache so the Inspector's derived state
     // (active grade pill, per-scene transition highlight, etc.) reflects

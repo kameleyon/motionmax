@@ -35,11 +35,11 @@
   --line-strong: rgba(255, 255, 255, 0.18);
 
   /* Status / accents — gold-only, no red */
-  --warn: #F5B049;
-  --gold-deep: #E89B2C;
+  --warn: #E4C875;
+  --gold-deep: #C9A75A;
   --good: #5CD68D;
   --purple: #a78bfa;
-  --danger: #F5B049; /* admin-scoped: destructive renders as gold */
+  --danger: #E4C875; /* admin-scoped: destructive renders as gold */
 
   /* Geometry */
   --radius: 12px;

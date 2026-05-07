@@ -22,10 +22,10 @@
  *   - Calls dismiss_announcement so the row is hidden on this user's
  *     other devices via the RPC's NOT EXISTS predicate.
  *
- * Theme: aqua + gold only (per docs/feedback_motionmax_theme_colors.md).
+ * Theme: aqua + brand gold only.
  *   - info / feature  → cyan accent (#14C8CC)
- *   - warn / critical → gold accent (#F5B049)
- *   - No red, no green.
+ *   - warn / critical → brand gold accent (#E4C875)
+ *   - No red, no green, no template orange.
  *
  * Mounted from `AppShell.tsx` at the topBanner slot. Composes with any
  * page-level topBanner so the existing pattern is preserved.
@@ -75,10 +75,10 @@ function severityAccent(s: Severity): { bg: string; text: string; dot: string; b
   // (high-attention). Stays inside the aqua/gold/neutral palette.
   if (s === "warn" || s === "critical") {
     return {
-      bg: "linear-gradient(90deg,rgba(245,176,73,.16),rgba(245,176,73,.04))",
-      text: "#FFD18C",
-      dot: "#F5B049",
-      border: "rgba(245,176,73,.3)",
+      bg: "linear-gradient(90deg,rgba(228,200,117,.16),rgba(228,200,117,.04))",
+      text: "#F0DCAA",
+      dot: "#E4C875",
+      border: "rgba(228,200,117,.3)",
     };
   }
   return {

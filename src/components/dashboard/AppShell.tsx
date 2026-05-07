@@ -4,6 +4,7 @@ import NotificationsPopover from './NotificationsPopover';
 import HelpPopover from './HelpPopover';
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import motionmaxLogo from '@/assets/motionmax-logo.webp';
+import AdminAnnouncementBanner from '@/components/announcements/AdminAnnouncementBanner';
 
 /** Shared app shell — sidebar + topbar + scrollable main column.
  *  Both DashboardLayout (home) and the All-projects page mount this so
@@ -25,6 +26,12 @@ export default function AppShell({
 
   return (
     <div className="flex flex-col h-[100dvh] bg-[#0A0D0F] text-[#ECEAE4] font-sans overflow-hidden">
+      {/* Global admin announcement bar — composes ABOVE any page-supplied
+          topBanner so a page-specific banner is unaffected and an admin
+          announcement still surfaces at the very top of every shell. */}
+      <div className="shrink-0">
+        <AdminAnnouncementBanner />
+      </div>
       {topBanner ? <div className="shrink-0">{topBanner}</div> : null}
       <div className="flex flex-1 relative overflow-hidden">
       {/* Skip-to-content for keyboard / screen-reader users so they bypass

@@ -261,11 +261,26 @@ export function TabMessages(): JSX.Element {
 
       <SectionHeader title="Inbox" right={
         <div className="flex flex-wrap items-center gap-1">
-          {FILTER_CHIPS.map((c) => (
-            <button key={c.key} type="button" aria-pressed={filter === c.key}
-              className={"btn-ghost" + (filter === c.key ? " active" : "")}
-              onClick={() => setFilter(c.key)}>{c.label}</button>
-          ))}
+          {FILTER_CHIPS.map((c) => {
+            // billing/bugs/sales/churn require a thread.tag column we don't
+            // have yet — toast the admin so the chip isn't a silent no-op.
+            const isWired = c.key === "all" || c.key === "unread";
+            return (
+              <button key={c.key} type="button" aria-pressed={filter === c.key}
+                className={"btn-ghost" + (filter === c.key ? " active" : "")}
+                onClick={() => {
+                  if (!isWired) {
+                    toast.info(`${c.label} filter — coming soon`, {
+                      description: "Thread tagging lands with the admin_message_threads.tag schema.",
+                    });
+                    return;
+                  }
+                  setFilter(c.key);
+                }}>
+                {c.label}
+              </button>
+            );
+          })}
         </div>
       } />
 
@@ -399,9 +414,26 @@ function ThreadDetail(props: ThreadDetailProps): JSX.Element {
           </div>
         </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-          <button type="button" className="btn-mini" title="Reply"><I.reply /> Reply</button>
-          <button type="button" className="btn-mini" title="Flag"><I.flag /> Flag</button>
-          <button type="button" className="btn-mini" title="Trash"><I.trash /></button>
+          <button type="button" className="btn-mini" title="Reply"
+            onClick={() => {
+              // Focus the reply textarea — it lives in the same panel.
+              const ta = document.querySelector<HTMLTextAreaElement>("textarea[placeholder^='Reply to']");
+              ta?.focus();
+            }}>
+            <I.reply /> Reply
+          </button>
+          <button type="button" className="btn-mini" title="Flag"
+            onClick={() => toast.info("Thread flagging — coming soon", {
+              description: "Flag-on-thread persists once admin_flag_thread RPC ships.",
+            })}>
+            <I.flag /> Flag
+          </button>
+          <button type="button" className="btn-mini" title="Trash"
+            onClick={() => toast.info("Trash — coming soon", {
+              description: "Soft-delete uses the close action for now.",
+            })}>
+            <I.trash />
+          </button>
         </div>
       </div>
 
@@ -475,9 +507,24 @@ function ThreadDetail(props: ThreadDetailProps): JSX.Element {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
           marginTop: 10, gap: 8, flexWrap: "wrap" }}>
           <div style={{ display: "flex", gap: 6 }}>
-            <button type="button" className="btn-mini" title="Attach file"><I.paperclip /></button>
-            <button type="button" className="btn-mini">Templates</button>
-            <button type="button" className="btn-mini"><I.credit /> Add credits</button>
+            <button type="button" className="btn-mini" title="Attach file"
+              onClick={() => toast.info("Attachments — coming soon", {
+                description: "File upload requires the storage bucket + admin_message_attachments table.",
+              })}>
+              <I.paperclip />
+            </button>
+            <button type="button" className="btn-mini"
+              onClick={() => toast.info("Templates — coming soon", {
+                description: "Reply templates UI lands once support_reply_templates is wired.",
+              })}>
+              Templates
+            </button>
+            <button type="button" className="btn-mini"
+              onClick={() => toast.info("Open the user drawer to grant credits", {
+                description: "Use Users tab → user → Billing → Adjust credits.",
+              })}>
+              <I.credit /> Add credits
+            </button>
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer",

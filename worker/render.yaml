@@ -29,7 +29,15 @@ services:
       minInstances: 1
       maxInstances: 8
       targetCPUPercent: 50
-      targetMemoryPercent: 55
+      # Lowered 55 → 40 (2026-05-07): Render Pro's advertised 4 GB is
+      # cgroup-enforced closer to ~2 GB at runtime, so a single pod
+      # under 55% (~1.1 GB) was still able to OOM during FFmpeg export
+      # spikes (the export handler's restart-resilience kicked in and
+      # disabled crossfade + Ken Burns to recover, costing video
+      # quality). At 40% (~800 MB) the autoscaler boots a sibling pod
+      # with enough headroom that no single pod approaches the 2 GB
+      # cliff during export memory bursts.
+      targetMemoryPercent: 40
     buildCommand: npm ci
     startCommand: npm start
     autoDeploy: true

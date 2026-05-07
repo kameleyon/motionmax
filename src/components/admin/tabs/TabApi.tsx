@@ -25,7 +25,6 @@ import { I } from "@/components/admin/_shared/AdminIcons";
 import { Kpi } from "@/components/admin/_shared/Kpi";
 import { Pill, type PillVariant } from "@/components/admin/_shared/Pill";
 import { SectionHeader } from "@/components/admin/_shared/SectionHeader";
-import { Sparkline } from "@/components/admin/_shared/Sparkline";
 import { money, money4, num as fmtNum, short } from "@/components/admin/_shared/format";
 import { ADMIN_DEFAULT_QUERY_OPTIONS, adminKey } from "@/components/admin/_shared/queries";
 
@@ -76,7 +75,8 @@ function fmtLatency(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 function errColor(p: number): string {
-  return p > 1.5 ? "var(--warn)" : p > 0.8 ? "#F5B049" : "var(--good)";
+  // Aqua/gold palette only — no green-warning ramp.
+  return p > 0.8 ? "#E4C875" : "var(--ink-dim)";
 }
 function eomForecast(mtd: number): number {
   const now = new Date();
@@ -225,7 +225,7 @@ export function TabApi(): JSX.Element {
         />
         <Kpi
           label="API spend · MTD"
-          sparkColor="#F5B049"
+          sparkColor="#E4C875"
           value={kpis ? money(kpis.api_spend_mtd) : dash}
           delta={kpis ? `${money4(kpis.avg_cost_per_gen)} / generation avg` : undefined}
           deltaDir="neutral"
@@ -280,12 +280,6 @@ export function TabApi(): JSX.Element {
               ) : visibleRows.map((row) => {
                 const k = kindFor(row.label);
                 const perCall = row.calls > 0 ? row.spend / row.calls : 0;
-                const perDay = row.calls / Math.max(PERIOD_DAYS[period], 1);
-                const trend = Array.from({ length: 14 }, (_, i) => {
-                  const seed = ((i * 17 + 7) % 100) / 100;
-                  return Math.max(0, perDay * (1 + (seed - 0.5) * 0.5));
-                });
-                const trendColor = row.err_pct > 1.5 ? "#F5B049" : "var(--cyan)";
                 return (
                   <tr key={row.label}>
                     <td>
@@ -302,8 +296,10 @@ export function TabApi(): JSX.Element {
                     <td className="num" style={{ textAlign: "right", color: errColor(row.err_pct) }}>
                       {row.err_pct.toFixed(1)}%
                     </td>
+                    {/* Per-row 14d trend needs a per-provider time-series RPC; the design-mode
+                        placeholder was producing fake sparklines from a deterministic seed. */}
                     <td style={{ textAlign: "right" }}>
-                      <Sparkline data={trend} w={120} h={26} color={trendColor} />
+                      <Pill variant="default">Coming soon</Pill>
                     </td>
                     <td>
                       <button type="button" className="btn-mini" onClick={onActionClick} aria-label="Open detail">
@@ -332,7 +328,7 @@ export function TabApi(): JSX.Element {
               const k = kindFor(r.label);
               const color = k === "Video" ? "#14C8CC"
                 : k === "Voice" ? "#a78bfa"
-                : k === "Image" ? "#F5B049"
+                : k === "Image" ? "#E4C875"
                 : "#7ad6e6";
               return (
                 <div key={r.label}>

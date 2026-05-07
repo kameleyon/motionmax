@@ -27,7 +27,6 @@ import { I } from "@/components/admin/_shared/AdminIcons";
 import { Kpi } from "@/components/admin/_shared/Kpi";
 import { Pill, type PillVariant } from "@/components/admin/_shared/Pill";
 import { SectionHeader } from "@/components/admin/_shared/SectionHeader";
-import { Sparkline } from "@/components/admin/_shared/Sparkline";
 import { formatRel, num as fmtNum } from "@/components/admin/_shared/format";
 import { ADMIN_DEFAULT_QUERY_OPTIONS, adminKey } from "@/components/admin/_shared/queries";
 
@@ -135,7 +134,7 @@ function surfaceOf(row: ErrorGroupRow): "web" | "worker" | "edge" {
 
 const SURFACE_META: Record<"web" | "worker" | "edge", { label: string; color: string }> = {
   web: { label: "Web app", color: "#14C8CC" },
-  worker: { label: "Worker · render", color: "#F5B049" },
+  worker: { label: "Worker · render", color: "#E4C875" },
   edge: { label: "Edge functions", color: "#a78bfa" },
 };
 
@@ -163,7 +162,7 @@ function ErrorRow({
     <>
       <tr>
         <td>
-          <div className="strong mono" style={{ color: "#FFD18C", fontSize: 12 }}>
+          <div className="strong mono" style={{ color: "#E4C875", fontSize: 12 }}>
             {row.event_type}
           </div>
           <div className="mono muted" style={{ fontSize: 10.5, letterSpacing: ".04em" }}>
@@ -304,7 +303,7 @@ export function TabErrors(): JSX.Element {
     <div>
       <div className="kpi-grid">
         <Kpi
-          label="Errors · 1h" tone="danger" sparkColor="#F5B049"
+          label="Errors · 1h" tone="danger" sparkColor="#E4C875"
           value={k ? fmtNum(k.errors_1h) : dash}
           delta={k ? `↓ from ${fmtNum(k.errors_peak_24h)} peak` : undefined}
           deltaDir={k && k.errors_1h <= k.errors_peak_24h ? "down" : "up"}
@@ -391,18 +390,19 @@ export function TabErrors(): JSX.Element {
         {(["web", "worker", "edge"] as const).map((s) => {
           const meta = SURFACE_META[s];
           const events = bySurface[s];
-          // Sparkline placeholder: deterministic shape from events count.
-          const data = Array.from({ length: 14 }, (_, i) => {
-            const seed = ((i * 17 + 5) % 100) / 100;
-            return Math.max(0, Math.round((events / 14) * (1 + (seed - 0.5) * 0.8)));
-          });
           return (
             <div className="card" key={s}>
               <div className="card-h">
-                <div className="t">{meta.label}</div>
-                <span className="lbl mono">{fmtNum(events)} events</span>
+                <div className="t" style={{ color: meta.color }}>{meta.label}</div>
+                <Pill variant="default">Trend coming soon</Pill>
               </div>
-              <Sparkline data={data} w={300} h={48} color={meta.color} />
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "12px 0" }}>
+                <span className="num strong" style={{ fontSize: 22, color: "var(--ink)" }}>{fmtNum(events)}</span>
+                <span className="muted mono" style={{ fontSize: 11, letterSpacing: ".04em" }}>events · {period}</span>
+              </div>
+              {/* Per-surface time-series sparkline waits on a per-bucket
+                  RPC (admin_errors_surface_timeseries) — the design-mode
+                  placeholder produced fake numbers from a deterministic seed. */}
             </div>
           );
         })}

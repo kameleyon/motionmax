@@ -701,9 +701,76 @@ async function processJob(job: Job) {
 
 let pollCount = 0;
 
+/* ---- Master kill-switch (admin tab → app_settings.master_kill_switch) ----
+ * The Admin → Kill Switches UI flips a row in `app_settings` with key
+ * `master_kill_switch` and value `{ enabled, message, set_by, set_at }`.
+ * When enabled, this worker MUST stop claiming new generation jobs so the
+ * site enters a true read-only maintenance state.
+ *
+ * Cached with a 10s TTL so the worker doesn't add a per-tick DB hit while
+ * the switch is off — which is the steady-state. Logging is throttled to
+ * once per 60s while the kill is engaged so the worker logs surface the
+ * state without flooding when polling cadence is short.
+ */
+const MASTER_KILL_TTL_MS = 10_000;
+let masterKillCache: { engaged: boolean; fetchedAt: number } = { engaged: false, fetchedAt: 0 };
+let lastMasterKillLogAt = 0;
+
+async function isMasterKillEngaged(): Promise<boolean> {
+  const now = Date.now();
+  if (now - masterKillCache.fetchedAt < MASTER_KILL_TTL_MS) {
+    return masterKillCache.engaged;
+  }
+  try {
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "master_kill_switch")
+      .maybeSingle();
+    if (error) {
+      // Fail-open on read errors — never let a flaky DB lookup wedge the
+      // worker. Log + use the previous cached value (defaults to false).
+      wlog.warn("master_kill_switch read failed", { error: error.message });
+      masterKillCache = { engaged: masterKillCache.engaged, fetchedAt: now };
+      return masterKillCache.engaged;
+    }
+    const v = (data as { value?: { enabled?: unknown } } | null)?.value ?? null;
+    const engaged = v !== null && v.enabled === true;
+    masterKillCache = { engaged, fetchedAt: now };
+    return engaged;
+  } catch (err) {
+    wlog.warn("master_kill_switch poll exception", { err: String(err) });
+    masterKillCache = { engaged: masterKillCache.engaged, fetchedAt: now };
+    return masterKillCache.engaged;
+  }
+}
+
 async function pollQueue() {
   // Do not pick up new jobs if shutting down
   if (isShuttingDown) return;
+
+  // Master kill switch — flipping this in the admin tab should quiesce
+  // the worker within ~10s (cache TTL). Active jobs continue to drain
+  // naturally since we only gate new claims, never kill in-flight work.
+  if (await isMasterKillEngaged()) {
+    const now = Date.now();
+    if (now - lastMasterKillLogAt > 60_000) {
+      lastMasterKillLogAt = now;
+      wlog.warn("Master kill switch engaged — skipping job claim", {
+        activeExportJobs: activeExportJobs.size,
+        activeLlmJobs: activeLlmJobs.size,
+      });
+      // Mirror to system_logs so the admin tab's activity feed surfaces
+      // the worker's response. Fire-and-forget; never block the tick.
+      writeSystemLog({
+        category: "system_warning",
+        eventType: "kill_switch.master.observed",
+        message: "Worker observed master kill switch engaged — claim loop paused",
+        details: { workerId: WORKER_ID },
+      }).catch(() => { /* non-fatal */ });
+    }
+    return;
+  }
 
   pollCount++;
   try {

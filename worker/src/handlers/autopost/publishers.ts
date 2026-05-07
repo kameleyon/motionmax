@@ -32,6 +32,59 @@ function stubModeEnabled(): boolean {
   return typeof v === "string" && v.toLowerCase() === "true";
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Per-platform kill switch (belt-and-suspenders)
+// The dispatcher in dispatcher.ts already gates on app_settings.autopost_<plat>_enabled
+// before claiming a publish job. We re-check here at the publish call site
+// so a switch flipped *between* claim and POST (or under a race) still
+// short-circuits cleanly. The error message is prefixed with [KILL_SWITCH]
+// so the dispatcher's retryPolicy.classifyError() treats it as
+// non-retryable: pausing a platform in the admin UI must NOT burn the
+// publish job's retry budget.
+// ──────────────────────────────────────────────────────────────────────────
+type PlatKey = "youtube" | "instagram" | "tiktok";
+
+async function isPlatformKilled(platform: PlatKey): Promise<boolean> {
+  try {
+    const { data } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", `autopost_${platform}_enabled`)
+      .maybeSingle();
+    if (!data) return false; // default-on if missing (matches dispatcher)
+    const v = (data as { value: unknown }).value;
+    if (v === false) return true;
+    if (typeof v === "string" && v === "false") return true;
+    return false;
+  } catch {
+    // Read errors fail-open — never wedge a publish on a flaky DB lookup.
+    return false;
+  }
+}
+
+async function killSwitchGuard(
+  platform: PlatKey,
+  ctx: PublishContext,
+): Promise<PublishResult | null> {
+  if (!(await isPlatformKilled(platform))) return null;
+  const message = `[KILL_SWITCH] Publishing to ${platform} is paused by admin`;
+  // Best-effort system_log row for the activity feed. Fire-and-forget so
+  // a logging failure never masks the kill switch result.
+  void writeSystemLog({
+    jobId: ctx.job?.id,
+    category: "system_warning",
+    eventType: `autopost.kill_switch.${platform}`,
+    message,
+    details: { jobId: ctx.job?.id, platform, runId: ctx.job?.run_id },
+  }).catch(() => { /* non-fatal */ });
+  return {
+    ok: false,
+    errorCode: `${platform}_kill_switch`,
+    errorMessage: message,
+    retryable: false,
+  };
+}
+
 async function stubResult(prefix: string, urlBuilder: (id: string) => string): Promise<PublishResult> {
   await new Promise((r) => setTimeout(r, 2000));
   const id = `stub-${prefix}-${Date.now()}`;
@@ -156,6 +209,10 @@ export async function publishYouTube(ctx: PublishContext): Promise<PublishResult
   if (stubModeEnabled()) {
     return stubResult("yt", (id) => `https://youtube.com/shorts/${id}`);
   }
+
+  // Per-platform kill switch — see killSwitchGuard() rationale above.
+  const killed = await killSwitchGuard("youtube", ctx);
+  if (killed) return killed;
 
   const { account, caption, videoUrl, job } = ctx;
 
@@ -381,6 +438,9 @@ export async function publishInstagram(ctx: PublishContext): Promise<PublishResu
   if (stubModeEnabled()) {
     return stubResult("ig", (id) => `https://instagram.com/reel/${id}`);
   }
+
+  const killed = await killSwitchGuard("instagram", ctx);
+  if (killed) return killed;
 
   const { account, caption, videoUrl, job } = ctx;
   const igUserId = account.platform_account_id;
@@ -625,6 +685,9 @@ export async function publishTikTok(ctx: PublishContext): Promise<PublishResult>
   if (stubModeEnabled()) {
     return stubResult("tt", (id) => `https://tiktok.com/@stub/video/${id}`);
   }
+
+  const killed = await killSwitchGuard("tiktok", ctx);
+  if (killed) return killed;
 
   const { account, caption, videoUrl, job } = ctx;
 

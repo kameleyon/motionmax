@@ -314,7 +314,10 @@ function BillingPanel({ userId, d, onChanged }: { userId: string; d: UserFullDet
       </div>
 
       <div className="card" style={{ padding: 14 }}>
-        <div className="card-h"><div className="t">Refund</div></div>
+        <div className="card-h">
+          <div className="t">Refund</div>
+          <Pill variant="default">Coming soon</Pill>
+        </div>
         <div style={{ fontSize: 12, color: "var(--ink-dim)" }}>
           Stripe charge lookup ships in Phase 8.6.3 — refund button TODO.
         </div>
@@ -421,8 +424,8 @@ function DangerPanel({ userId, email, onChanged }: { userId: string; email: stri
         action={<button type="button" className="btn-mini" onClick={forceSignOut} disabled={pending}>
           <I.power /> Sign out
         </button>} />
-      <DangerRow label="Reset password" hint="Sends a magic-link reset email."
-        action={<button type="button" className="btn-mini"
+      <DangerRow label="Reset password" hint="Sends a magic-link reset email. (Coming soon — Phase 8.6.5.)"
+        action={<button type="button" className="btn-mini" disabled
           onClick={() => toast("Password reset edge fn ships in Phase 8.6.5")}>Send link</button>} />
       <DangerRow label="Delete account" hint="Hard-delete: profile + auth + all generations. Type-confirm by email."
         action={<button type="button" className="btn-mini danger" onClick={() => setDeleteOpen(true)}>

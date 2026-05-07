@@ -225,22 +225,31 @@ export function TabNotifications(): JSX.Element {
       </div>
 
       <SectionHeader title="Notification routing" right={
-        <button type="button" className="btn-ghost"
-          onClick={() => toast.info("Routing rule editor — TODO Phase 18")}>
-          <I.plus /> New rule
-        </button>
+        <>
+          <Pill variant="default">Coming soon</Pill>
+          <button type="button" className="btn-ghost"
+            onClick={() => toast.info("Routing rule editor — TODO Phase 18")}>
+            <I.plus /> New rule
+          </button>
+        </>
       } />
 
       <div className="cols-2">
         <div className="card">
-          <div className="card-h"><div className="t">Channels</div></div>
+          <div className="card-h">
+            <div className="t">Channels</div>
+            <Pill variant="default">preview · backend pending</Pill>
+          </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
             {CHANNELS.map((c) => <ChannelRow key={c.k} k={c.k} d={c.d} on={c.on} />)}
           </div>
         </div>
 
         <div className="card">
-          <div className="card-h"><div className="t">Routing rules</div></div>
+          <div className="card-h">
+            <div className="t">Routing rules</div>
+            <Pill variant="default">preview · backend pending</Pill>
+          </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {ROUTING_RULES.map((r) => (
               <div key={r.n} className="card" style={{ padding: 11, background: "var(--panel-3)" }}>
@@ -268,9 +277,9 @@ export function TabNotifications(): JSX.Element {
 
 function NotificationRow({ n, onAck }: { n: NotifRow; onAck: () => void }): JSX.Element {
   const bucket = severityBucket(n.severity);
-  const tileBg = bucket === "high" ? "rgba(245,176,73,.12)" : bucket === "med" ? "rgba(245,176,73,.1)" : "var(--panel-3)";
+  const tileBg = bucket === "high" ? "rgba(228,200,117,.12)" : bucket === "med" ? "rgba(228,200,117,.1)" : "var(--panel-3)";
   const tileColor = bucket === "low" ? "var(--ink-dim)" : "var(--warn)";
-  const tileBorder = "1px solid " + (bucket === "low" ? "var(--line)" : "rgba(245,176,73,.3)");
+  const tileBorder = "1px solid " + (bucket === "low" ? "var(--line)" : "rgba(228,200,117,.3)");
   const Icon = bucket === "high" ? I.alert : bucket === "med" ? I.bell : I.check;
   const ack = !!n.read_at;
   const src = n.template_slug ?? "admin.send";

@@ -175,8 +175,10 @@ export function TabApiKeys(): JSX.Element {
           value={lastRot ? lastRot.replace(" ago", "") : dash}
           unit={lastRot ? "ago" : undefined}
           delta="next due in 90d" deltaDir="neutral" />
-        <Kpi label="Suspicious requests" value="0"
-          delta="last 7 days" deltaDir="neutral" sparkColor="#5CD68D" />
+        {/* Suspicious-request anomaly detection ships in Phase 18 — surfaced
+            as Coming soon so the tile isn't a silent hard-coded zero. */}
+        <Kpi label="Suspicious requests" value="—"
+          delta="anomaly detection coming soon" deltaDir="neutral" />
       </div>
 
       <SectionHeader title="Internal API keys" right={

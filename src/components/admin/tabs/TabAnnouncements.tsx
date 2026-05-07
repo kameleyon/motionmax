@@ -464,8 +464,9 @@ function LiveCard({ row, onEdit, onEnd }: {
       }}>
         {stat("Channel", channel)}
         {stat("Audience", audienceLabel)}
-        {stat("Views", "—")}
-        {stat("Clicks", "—")}
+        {/* Views + Clicks impressions wait on Phase 16.4 announcement_impressions table. */}
+        {stat("Views", <Pill variant="default">soon</Pill>)}
+        {stat("Clicks", <Pill variant="default">soon</Pill>)}
       </div>
       <div style={{
         display: "flex", justifyContent: "space-between", alignItems: "center",

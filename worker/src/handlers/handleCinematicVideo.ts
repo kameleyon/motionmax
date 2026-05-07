@@ -30,8 +30,8 @@ import {
   // generateKlingV3Video,        // V3.0 Std — skipped; Pro variant below is used instead
   // generateVeo31Video,          // Veo 3.1 — doesn't follow prompts, generates unwanted audio/lip sync
   // generateKlingV26Video,       // Kling V2.6 Pro — retired, superseded by V3.0 Pro
-  // generateKlingV3ProVideo,     // Retired — replaced by Seedance 2.0 I2V.
-  generateSeedance2I2V,           // Active model — Seedance 2.0 I2V (seedance-2-0-i2v). Upgraded from -fast variant 2026-05-07.
+  generateSeedance2TurboI2V,      // Primary — Seedance 2.0 Turbo I2V (seedance-2-0-turbo-i2v, ~69 cr). Upgraded fast → regular → turbo 2026-05-07.
+  generateKlingV3ProI2V,          // Fallback — Kling V3.0 Pro I2V (kling-3-0-pro-i2v, 39 cr). Tried after 2 failed Seedance attempts.
   // generateGrokVideo,           // Grok Video I2V — status-lookup failures on Hypereal, rolled back
 } from "../services/hypereal.js";
 
@@ -289,7 +289,7 @@ async function _runCinematicVideo(
 
   const cameraName = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("\u2014")[0].trim();
   console.log(
-    `[CinematicVideo] Scene ${sceneIndex}: Seedance 2.0 I2V${regenerate ? " (regen)" : ""}, ` +
+    `[CinematicVideo] Scene ${sceneIndex}: Seedance 2.0 Turbo I2V${regenerate ? " (regen)" : ""}, ` +
     `camera=${cameraName}, prompt=${finalPrompt.length} chars`
   );
 
@@ -302,7 +302,10 @@ async function _runCinematicVideo(
     : "16:9";
 
   // ── Generate video ────────────────────────────────────────────────
-  let videoUrl: string;
+  // Nullable string so the retry-then-fallback chain can use `if (!videoUrl)`
+  // to detect "still need to try Kling" without TS complaining about
+  // possibly-uninitialized access.
+  let videoUrl: string | null = null;
   let provider: string;
   // Seedance has no negative_prompt slot, so fold the prohibitions
   // directly into the positive prompt as a hard "AVOID" trailer.
@@ -348,41 +351,124 @@ async function _runCinematicVideo(
   // already supports it without changes. We surface the choice via
   // the return payload so handleAutopostRun can stamp error_summary
   // ("scene N held as still frame: Kling moderation").
-  provider = "Seedance 2.0 I2V";
+  provider = "Seedance 2.0 Turbo I2V";
   let heldFrameReason: string | null = null;
 
+  // Build a Kling-style negative prompt by extracting the AVOID list
+  // from the motion guardrails. Kling V3 Pro supports negative_prompt
+  // natively (Seedance does not, which is why guardrails are folded into
+  // the positive prompt above).
+  const klingNegativePrompt =
+    "blurry, low quality, watermark, text, UI elements, slow motion, sluggish, " +
+    "nudity, naked, exposed body parts, extra limbs, body contortion, distorted anatomy, " +
+    "lip sync, talking, mouth movement, speaking, " +
+    "characters changing clothes mid-shot, characters clipping through furniture or props, " +
+    "faces rotated opposite to torso, limbs bending in unnatural directions" +
+    (styleNegative ? `, ${styleNegative}` : "");
+
+  // Per-scene try chain: try Seedance Turbo up to 2 times, then fall
+  // back to Kling V3 Pro. Moderation rejection is permanent (held-frame
+  // path below). Provider-credits exhaustion on Seedance jumps straight
+  // to Kling — Kling is cheaper (39 cr vs 69), so it can succeed on a
+  // balance that Seedance can't.
   try {
-    // Seedance accepts no negative_prompt or cfg_scale — those were
-    // Kling-specific knobs. Anti-realism / motion guardrails live in
-    // the positive prompt that the script + visual builders compose
-    // (buildCinematic.ts negative-style block + the global directives
-    // injected by the prompt assembler).
-    videoUrl = await generateSeedance2I2V(
-      imageUrl,
-      `${finalPrompt}\n\n${motionGuardrails}`,
-      apiKey,
-      10,             // duration: 10 seconds per scene
-      endImageUrl,
-      seedanceAspect, // aspect_ratio: derived from project format (portrait/square/landscape)
-      "720p",         // resolution
-      false,          // generate_audio: voiceover is muxed at export, never on the video
-    );
+    const SEEDANCE_TRIES = 2;
+    let lastSeedanceErr: Error | null = null;
+    let seedanceCreditsExhausted = false;
+
+    for (let attempt = 1; attempt <= SEEDANCE_TRIES; attempt++) {
+      try {
+        videoUrl = await generateSeedance2TurboI2V(
+          imageUrl,
+          `${finalPrompt}\n\n${motionGuardrails}`,
+          apiKey,
+          10,             // duration: 10 seconds per scene
+          endImageUrl,
+          seedanceAspect, // aspect_ratio: derived from project format
+          "720p",         // resolution
+          false,          // enable_web_search: never for pre-scripted prompts
+        );
+        break; // success — exit retry loop
+      } catch (innerErr) {
+        const innerMsg = innerErr instanceof Error ? innerErr.message : String(innerErr);
+
+        // Moderation rejection is permanent for that exact prompt — bubble
+        // up to the outer catch so the held-frame path runs. Same regex
+        // covers both Seedance and Kling moderation responses.
+        if (/risk control|content[_ ]?violation|blocked.*content|moderation/i.test(innerMsg)) {
+          throw innerErr;
+        }
+
+        lastSeedanceErr = innerErr instanceof Error ? innerErr : new Error(innerMsg);
+
+        // Credits exhausted on Seedance? Don't waste the 2nd attempt —
+        // jump straight to Kling (cheaper).
+        if (innerMsg.startsWith("[PROVIDER_CREDITS_EXHAUSTED]")) {
+          seedanceCreditsExhausted = true;
+          console.warn(
+            `[CinematicVideo] Scene ${sceneIndex}: Seedance Turbo credits exhausted on attempt ${attempt} — falling back to Kling V3.0 Pro`,
+          );
+          break;
+        }
+
+        console.warn(
+          `[CinematicVideo] Scene ${sceneIndex}: Seedance Turbo attempt ${attempt}/${SEEDANCE_TRIES} failed: ${innerMsg.slice(0, 200)}`,
+        );
+      }
+    }
+
+    // Fallback to Kling V3 Pro if Seedance never produced a videoUrl.
+    if (!videoUrl) {
+      console.log(
+        `[CinematicVideo] Scene ${sceneIndex}: falling back to Kling V3.0 Pro after Seedance Turbo failures` +
+        `${seedanceCreditsExhausted ? " (credits exhausted on Seedance)" : ""}`,
+      );
+      await writeSystemLog({
+        jobId, projectId, userId, generationId,
+        category: "system_warning",
+        eventType: "cinematic_video_kling_fallback",
+        message: `Scene ${sceneIndex}: Seedance Turbo failed — falling back to Kling V3.0 Pro`,
+        details: {
+          sceneIndex,
+          seedance_tries: SEEDANCE_TRIES,
+          seedance_credits_exhausted: seedanceCreditsExhausted,
+          last_seedance_error: (lastSeedanceErr?.message ?? "").slice(0, 240),
+        },
+      });
+
+      try {
+        videoUrl = await generateKlingV3ProI2V(
+          imageUrl,
+          finalPrompt,
+          apiKey,
+          10,                  // duration: 10s (Kling supports 3/5/10/15)
+          endImageUrl,
+          klingNegativePrompt,
+          0.5,                 // cfg_scale
+        );
+        provider = "Kling V3.0 Pro I2V";
+      } catch (klingErr) {
+        // If Kling ALSO fails — surface the Kling error (more recent,
+        // most actionable signal). The outer catch below classifies
+        // PROVIDER_CREDITS_EXHAUSTED / moderation as before.
+        throw klingErr;
+      }
+    }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
 
-    // Provider credits exhausted on OUR Hypereal account — the run cannot
-    // make progress on ANY subsequent scene either, so held-frame fallback
-    // would just produce a slideshow nobody wants. Bail fast with a
-    // distinct admin log so ops sees it in the Errors tab and can refill
-    // the upstream account. The dispatcher's normal fail path will refund
-    // the user's MotionMax credits.
+    // Provider credits exhausted on BOTH Seedance AND Kling — nothing
+    // more we can do at the worker level. Bail with a distinct admin
+    // log so ops sees it in the Errors tab and can refill the upstream
+    // account. The dispatcher's normal fail path will refund the user's
+    // MotionMax credits.
     if (errMsg.startsWith("[PROVIDER_CREDITS_EXHAUSTED]")) {
       await writeSystemLog({
         jobId, projectId, userId, generationId,
         category: "system_error",
         eventType: "provider_credits_exhausted",
-        message: `Hypereal credits exhausted — scene ${sceneIndex} could not render`,
-        details: { sceneIndex, provider: "seedance-2-0-i2v", raw: errMsg.slice(0, 400) },
+        message: `Hypereal credits exhausted — scene ${sceneIndex} could not render on Seedance Turbo OR Kling V3 Pro`,
+        details: { sceneIndex, provider: "seedance-2-0-turbo-i2v + kling-3-0-pro-i2v fallback", raw: errMsg.slice(0, 400) },
       });
       throw err;
     }
@@ -396,16 +482,16 @@ async function _runCinematicVideo(
     if (!isModerationReject) {
       throw err;
     }
-    heldFrameReason = `Seedance moderation rejected scene ${sceneIndex}; held still image as frame`;
+    heldFrameReason = `Provider moderation rejected scene ${sceneIndex}; held still image as frame`;
     console.warn(`[CinematicVideo] Scene ${sceneIndex}: ${heldFrameReason} — ${errMsg}`);
     await writeSystemLog({
       jobId, projectId, userId, generationId,
       category: "system_warning",
       eventType: "cinematic_video_held_frame_fallback",
-      message: `Scene ${sceneIndex}: Seedance rejected — using still image as held frame`,
+      message: `Scene ${sceneIndex}: provider moderation rejected — using still image as held frame`,
       details: {
         sceneIndex,
-        provider: "Seedance 2.0 I2V",
+        provider: "seedance-2-0-turbo-i2v + kling-3-0-pro-i2v fallback",
         reason: errMsg,
         fallback: "hold_frame",
       },
@@ -424,7 +510,7 @@ async function _runCinematicVideo(
         : {};
       meta.heldFrame = {
         reason: errMsg.slice(0, 240),
-        provider: "seedance-2-0-i2v",
+        provider: "seedance-2-0-turbo-i2v + kling-3-0-pro-i2v fallback",
         at: new Date().toISOString(),
       };
       freshScenes2[sceneIndex] = { ...freshScenes2[sceneIndex], videoUrl: null, _meta: meta };
@@ -463,6 +549,16 @@ async function _runCinematicVideo(
   //   const aspectRatio = format === "portrait" ? "9:16" as const : "16:9" as const;
   //   provider = "Grok Video I2V";
   //   videoUrl = await generateGrokVideo(imageUrl, finalPrompt, apiKey, aspectRatio, 10, "1080P");
+
+  // Defensive: if we reach this point with no videoUrl, the catch
+  // block above misclassified an error path. Should never trip in
+  // practice but throwing here is safer than passing null into the
+  // upload helper (which would mask the real bug).
+  if (!videoUrl) {
+    throw new Error(
+      `[CinematicVideo] Scene ${sceneIndex}: reached upload step with null videoUrl — provider chain misclassified an error`,
+    );
+  }
 
   // Upload to Supabase storage
   let finalVideoUrl = await uploadVideoToStorage(videoUrl, projectId, generationId, sceneIndex);

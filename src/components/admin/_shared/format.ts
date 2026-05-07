@@ -33,13 +33,29 @@ export function formatRel(d: Date | string): string {
 }
 
 /**
- * USD currency at 2 decimal places — for revenue, MRR, payouts, refunds.
- * Example: `money(28420) === '$28,420.00'`.
+ * Coerce RPC values that may be null/undefined/string ("12.5") into a
+ * finite number for downstream `.toLocaleString()` calls. Postgres
+ * returns NULL as `null` (becomes `undefined` after JSON), and numeric
+ * columns sometimes arrive as strings — both used to crash the admin
+ * with "Cannot read properties of undefined (reading 'toLocaleString')".
  */
-export function money(n: number): string {
+function toFiniteNum(n: unknown): number {
+  if (typeof n === "number" && Number.isFinite(n)) return n;
+  if (typeof n === "string") {
+    const parsed = Number(n);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
+}
+
+/**
+ * USD currency at 2 decimal places — for revenue, MRR, payouts, refunds.
+ * Example: `money(28420) === '$28,420.00'`. Null/undefined → `$0.00`.
+ */
+export function money(n: number | null | undefined): string {
   return (
     "$" +
-    n.toLocaleString("en-US", {
+    toFiniteNum(n).toLocaleString("en-US", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })
@@ -48,13 +64,12 @@ export function money(n: number): string {
 
 /**
  * USD currency at 4 decimal places — for per-call API costs which are
- * routinely sub-cent (e.g. `$0.0118`).
- * Example: `money4(0.01184) === '$0.0118'`.
+ * routinely sub-cent (e.g. `$0.0118`). Null/undefined → `$0.0000`.
  */
-export function money4(n: number): string {
+export function money4(n: number | null | undefined): string {
   return (
     "$" +
-    n.toLocaleString("en-US", {
+    toFiniteNum(n).toLocaleString("en-US", {
       minimumFractionDigits: 4,
       maximumFractionDigits: 4,
     })
@@ -63,10 +78,10 @@ export function money4(n: number): string {
 
 /**
  * Locale-formatted integer (en-US thousand separators).
- * Example: `num(1500000) === '1,500,000'`.
+ * Example: `num(1500000) === '1,500,000'`. Null/undefined → `0`.
  */
-export function num(n: number): string {
-  return n.toLocaleString("en-US");
+export function num(n: number | null | undefined): string {
+  return toFiniteNum(n).toLocaleString("en-US");
 }
 
 /**
@@ -74,12 +89,13 @@ export function num(n: number): string {
  *   >= 1e6 -> 'X.XM'
  *   >= 1e3 -> 'X.Xk'
  *   else   -> raw integer string
- * Example: `short(1500) === '1.5k'`, `short(1_500_000) === '1.5M'`.
+ * Example: `short(1500) === '1.5k'`. Null/undefined → `0`.
  */
-export function short(n: number): string {
-  if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
-  if (n >= 1e3) return (n / 1e3).toFixed(1) + "k";
-  return "" + n;
+export function short(n: number | null | undefined): string {
+  const v = toFiniteNum(n);
+  if (v >= 1e6) return (v / 1e6).toFixed(1) + "M";
+  if (v >= 1e3) return (v / 1e3).toFixed(1) + "k";
+  return "" + v;
 }
 
 /**

@@ -457,6 +457,16 @@ export async function generateSeedance2I2V(
 
   if (!response.ok) {
     const errorText = await response.text();
+    // Detect the provider's "out of credits on the upstream account" signal
+    // and tag the error with a sentinel prefix so handleCinematicVideo can
+    // (a) skip the moderation-rejection held-frame branch, (b) emit a
+    // distinct admin log line, and (c) the dispatcher's retry classifier
+    // never burns retries on something that won't fix itself.
+    if (/insufficient_credits|insufficient\s+credits/i.test(errorText)) {
+      throw new Error(
+        `[PROVIDER_CREDITS_EXHAUSTED] Hypereal account out of credits — Seedance 2.0 I2V cannot generate. Detail: ${errorText.slice(0, 300)}`,
+      );
+    }
     throw new Error(`Hypereal Seedance 2.0 I2V API Error: ${response.status} - ${errorText}`);
   }
 

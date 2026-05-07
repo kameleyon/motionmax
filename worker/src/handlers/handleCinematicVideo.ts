@@ -369,6 +369,24 @@ async function _runCinematicVideo(
     );
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
+
+    // Provider credits exhausted on OUR Hypereal account — the run cannot
+    // make progress on ANY subsequent scene either, so held-frame fallback
+    // would just produce a slideshow nobody wants. Bail fast with a
+    // distinct admin log so ops sees it in the Errors tab and can refill
+    // the upstream account. The dispatcher's normal fail path will refund
+    // the user's MotionMax credits.
+    if (errMsg.startsWith("[PROVIDER_CREDITS_EXHAUSTED]")) {
+      await writeSystemLog({
+        jobId, projectId, userId, generationId,
+        category: "system_error",
+        eventType: "provider_credits_exhausted",
+        message: `Hypereal credits exhausted — scene ${sceneIndex} could not render`,
+        details: { sceneIndex, provider: "seedance-2-0-i2v", raw: errMsg.slice(0, 400) },
+      });
+      throw err;
+    }
+
     // Treat moderation rejection as a permanent per-scene failure —
     // never retry and never bubble. Anything else (transient API,
     // timeout, etc.) we re-throw so the dispatcher's retry policy

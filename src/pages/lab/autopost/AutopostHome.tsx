@@ -410,7 +410,11 @@ export default function AutopostHome() {
             ))}
           </div>
 
-          {/* 24h radar */}
+          {/* 24h radar — hidden per user direction. Re-enable by removing
+              the comment wrapper if/when the calendar visualization is
+              wanted back. The underlying `radarQuery` + `radarEvents` +
+              `nextFireSummary` are left wired so this is a one-line undo. */}
+          {/*
           <div className="radar">
             <div className="radar-h">
               <h2>
@@ -429,6 +433,7 @@ export default function AutopostHome() {
               <span className="lg up">upcoming</span>
             </div>
           </div>
+          */}
 
           <AutopostNav />
 

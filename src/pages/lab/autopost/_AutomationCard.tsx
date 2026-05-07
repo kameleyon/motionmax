@@ -293,6 +293,13 @@ export function AutomationCard({ schedule, lastRunAt }: AutomationCardProps) {
       onClick: () => toggleMutation.mutate(),
       loading: toggleMutation.isPending,
     },
+    {
+      key: "del",
+      icon: Trash2,
+      label: "Delete",
+      onClick: () => setDeleteOpen(true),
+      className: "del",
+    },
   ];
 
   return (
@@ -371,37 +378,6 @@ export function AutomationCard({ schedule, lastRunAt }: AutomationCardProps) {
               </button>
             );
           })}
-        </div>
-
-        {/* Inline destructive button — kept reachable but visually
-            secondary to the primary 5-button rail above. */}
-        <div style={{ display: "flex", justifyContent: "flex-end", padding: "8px 16px", borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-          <button
-            type="button"
-            onClick={() => setDeleteOpen(true)}
-            aria-label="Delete automation"
-            title="Delete automation"
-            style={{
-              background: "transparent",
-              border: 0,
-              padding: "4px 8px",
-              borderRadius: 6,
-              color: "var(--ink-mute)",
-              cursor: "pointer",
-              fontFamily: "var(--mono)",
-              fontSize: 9.5,
-              letterSpacing: "0.12em",
-              textTransform: "uppercase",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-            }}
-            onMouseEnter={e => { e.currentTarget.style.color = "#E4C875"; }}
-            onMouseLeave={e => { e.currentTarget.style.color = "var(--ink-mute)"; }}
-          >
-            <Trash2 width={11} height={11} />
-            Delete
-          </button>
         </div>
       </div>
 

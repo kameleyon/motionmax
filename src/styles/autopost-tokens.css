@@ -234,7 +234,7 @@
   background: linear-gradient(180deg, var(--gold), transparent); opacity: .6;
 }
 
-.autopost-shell .pulse-h { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 18px 20px 12px; }
+.autopost-shell .pulse-h { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 16px 8px; }
 .autopost-shell .pulse-h .ttl { flex: 1; min-width: 0; }
 .autopost-shell .pulse-h .flow { font-family: var(--mono); font-size: 9.5px; letter-spacing: .18em; color: var(--cyan); text-transform: uppercase; margin-bottom: 6px; line-height: 1; }
 .autopost-shell .pulse.paused .pulse-h .flow { color: var(--gold); }
@@ -253,12 +253,27 @@
 .autopost-shell .status-pill.idle { background: rgba(255, 255, 255, .04); border-color: var(--line-2); color: var(--ink-mute); }
 .autopost-shell .status-pill.idle::before { background: var(--ink-mute); }
 
-/* sparkline of recent runs (14 bars) */
-.autopost-shell .spark { display: flex; align-items: flex-end; gap: 3px; padding: 0 20px 14px; height: 42px; }
-.autopost-shell .spark .b { flex: 1; background: var(--cyan); border-radius: 2px 2px 0 0; min-height: 6px; opacity: .85; cursor: pointer; transition: opacity .15s; }
-.autopost-shell .spark .b:hover { opacity: 1; }
-.autopost-shell .spark .b.fail { background: var(--gold); }
-.autopost-shell .spark .b.skip { background: var(--line-2); opacity: .5; }
+/* sparkline of recent runs (14 bars) — refined: smoother gradient,
+   tighter footprint, gentler hover. */
+.autopost-shell .spark { display: flex; align-items: flex-end; gap: 2px; padding: 0 16px 10px; height: 32px; }
+.autopost-shell .spark .b {
+  flex: 1;
+  background: linear-gradient(180deg, var(--cyan) 0%, rgba(20, 200, 204, 0.55) 100%);
+  border-radius: 2px;
+  min-height: 4px;
+  opacity: 0.78;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.autopost-shell .spark .b:hover { opacity: 1; transform: translateY(-1px); }
+.autopost-shell .spark .b.fail {
+  background: linear-gradient(180deg, var(--gold) 0%, rgba(228, 200, 117, 0.55) 100%);
+}
+.autopost-shell .spark .b.skip {
+  background: var(--line-2);
+  opacity: 0.35;
+  min-height: 3px;
+}
 
 /* timeline strip: previous → next */
 .autopost-shell .tl { display: grid; grid-template-columns: 1fr 1px 1fr; gap: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--panel-2); }
@@ -272,7 +287,7 @@
 .autopost-shell .tl .tm.cd { font-family: var(--mono); color: var(--cyan); letter-spacing: .04em; }
 .autopost-shell .pulse.paused .tl .tm.cd { color: var(--gold); }
 
-.autopost-shell .pulse-foot { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; gap: 14px; flex-wrap: wrap; }
+.autopost-shell .pulse-foot { display: flex; align-items: center; justify-content: space-between; padding: 9px 16px; gap: 12px; flex-wrap: wrap; }
 .autopost-shell .pulse-foot .meta { display: flex; align-items: center; gap: 14px; font-size: 11.5px; color: var(--ink-mute); font-family: var(--mono); letter-spacing: .04em; flex-wrap: wrap; }
 .autopost-shell .pulse-foot .meta b { color: var(--ink-dim); font-weight: 500; }
 .autopost-shell .pulse-foot .meta .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--line-2); }
@@ -280,12 +295,27 @@
 .autopost-shell .pulse-foot .platforms span { width: 18px; height: 18px; border-radius: 5px; display: grid; place-items: center; font-family: var(--mono); font-size: 8.5px; font-weight: 700; }
 
 .autopost-shell .pulse-actions { display: flex; align-items: center; gap: 1px; border-top: 1px solid var(--line); background: var(--panel-2); }
-.autopost-shell .pulse-actions button { flex: 1; padding: 11px 8px; border: 0; background: transparent; color: var(--ink-mute); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-family: var(--sans); font-size: 11.5px; letter-spacing: .02em; transition: all .12s; border-right: 1px solid var(--line); }
+.autopost-shell .pulse-actions button { flex: 1; padding: 9px 6px; border: 0; background: transparent; color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-family: var(--sans); font-size: 11.5px; font-weight: 500; letter-spacing: 0.01em; transition: background 0.12s; border-right: 1px solid var(--line); min-width: 0; }
 .autopost-shell .pulse-actions button:last-child { border-right: 0; }
-.autopost-shell .pulse-actions button:hover { background: rgba(255, 255, 255, .025); color: var(--ink); }
-.autopost-shell .pulse-actions button.zap:hover { color: var(--cyan); background: var(--cyan-dim); }
-.autopost-shell .pulse-actions button.del:hover { color: var(--gold); background: rgba(228, 200, 117, .06); }
-.autopost-shell .pulse-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+.autopost-shell .pulse-actions button:hover { background: rgba(255, 255, 255, 0.04); }
+.autopost-shell .pulse-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Persistent icon tints — Run-now is aqua at all times, every other
+   action icon is brand gold. Hover changes the row background but
+   leaves the icon color untouched. */
+.autopost-shell .pulse-actions button svg { color: var(--gold); flex-shrink: 0; transition: transform 0.12s; }
+.autopost-shell .pulse-actions button.zap svg { color: var(--cyan); }
+.autopost-shell .pulse-actions button:hover svg { transform: scale(1.08); }
+.autopost-shell .pulse-actions button.zap:hover { background: var(--cyan-dim); }
+.autopost-shell .pulse-actions button.del:hover { background: rgba(228, 200, 117, 0.06); }
+
+/* Truncate label so it never breaks the row width. At narrow viewports
+   we hide labels entirely and the rail collapses to icon-only. */
+.autopost-shell .pulse-actions button .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+@media (max-width: 720px) {
+  .autopost-shell .pulse-actions button { padding: 10px 4px; }
+  .autopost-shell .pulse-actions button .lbl { display: none; }
+}
 .autopost-shell .pulse-actions button svg { flex-shrink: 0; opacity: .85; }
 .autopost-shell .pulse-actions button .lbl { display: inline; }
 @media (max-width: 600px) {

@@ -30,8 +30,8 @@ import {
   // generateKlingV3Video,        // V3.0 Std — skipped; Pro variant below is used instead
   // generateVeo31Video,          // Veo 3.1 — doesn't follow prompts, generates unwanted audio/lip sync
   // generateKlingV26Video,       // Kling V2.6 Pro — retired, superseded by V3.0 Pro
-  // generateKlingV3ProVideo,     // Retired — replaced by Seedance 2.0 Fast I2V (cheaper + audio-capable).
-  generateSeedance2FastI2V,       // Active model — Seedance 2.0 Fast I2V (seedance-2-0-fast-i2v).
+  // generateKlingV3ProVideo,     // Retired — replaced by Seedance 2.0 I2V.
+  generateSeedance2I2V,           // Active model — Seedance 2.0 I2V (seedance-2-0-i2v). Upgraded from -fast variant 2026-05-07.
   // generateGrokVideo,           // Grok Video I2V — status-lookup failures on Hypereal, rolled back
 } from "../services/hypereal.js";
 
@@ -289,7 +289,7 @@ async function _runCinematicVideo(
 
   const cameraName = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("\u2014")[0].trim();
   console.log(
-    `[CinematicVideo] Scene ${sceneIndex}: Seedance 2.0 Fast I2V${regenerate ? " (regen)" : ""}, ` +
+    `[CinematicVideo] Scene ${sceneIndex}: Seedance 2.0 I2V${regenerate ? " (regen)" : ""}, ` +
     `camera=${cameraName}, prompt=${finalPrompt.length} chars`
   );
 
@@ -348,7 +348,7 @@ async function _runCinematicVideo(
   // already supports it without changes. We surface the choice via
   // the return payload so handleAutopostRun can stamp error_summary
   // ("scene N held as still frame: Kling moderation").
-  provider = "Seedance 2.0 Fast I2V";
+  provider = "Seedance 2.0 I2V";
   let heldFrameReason: string | null = null;
 
   try {
@@ -357,15 +357,15 @@ async function _runCinematicVideo(
     // the positive prompt that the script + visual builders compose
     // (buildCinematic.ts negative-style block + the global directives
     // injected by the prompt assembler).
-    videoUrl = await generateSeedance2FastI2V(
+    videoUrl = await generateSeedance2I2V(
       imageUrl,
       `${finalPrompt}\n\n${motionGuardrails}`,
       apiKey,
-      10,
+      10,             // duration: 10 seconds per scene
       endImageUrl,
-      seedanceAspect,
-      "720p",
-      false,
+      seedanceAspect, // aspect_ratio: derived from project format (portrait/square/landscape)
+      "720p",         // resolution
+      false,          // generate_audio: voiceover is muxed at export, never on the video
     );
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
@@ -387,7 +387,7 @@ async function _runCinematicVideo(
       message: `Scene ${sceneIndex}: Seedance rejected — using still image as held frame`,
       details: {
         sceneIndex,
-        provider: "Seedance 2.0 Fast I2V",
+        provider: "Seedance 2.0 I2V",
         reason: errMsg,
         fallback: "hold_frame",
       },
@@ -406,7 +406,7 @@ async function _runCinematicVideo(
         : {};
       meta.heldFrame = {
         reason: errMsg.slice(0, 240),
-        provider: "seedance-2-0-fast-i2v",
+        provider: "seedance-2-0-i2v",
         at: new Date().toISOString(),
       };
       freshScenes2[sceneIndex] = { ...freshScenes2[sceneIndex], videoUrl: null, _meta: meta };

@@ -369,10 +369,13 @@ export async function generateKlingV3ProVideo(
   return pollHyperealJob(jobId, apiKey, model, pollUrl);
 }
 
-// ── Seedance 2.0 Fast I2V (active scene renderer) ────────────────
-// ByteDance Seedance 2.0 Fast image-to-video via the Hypereal proxy.
-// Active scene-renderer model (~53 credits/scene, vs Kling 3.0 Pro's
-// ~57). Same Hypereal envelope as Kling — { model, input } posted to
+// ── Seedance 2.0 I2V (active scene renderer) ────────────────────
+// ByteDance Seedance 2.0 image-to-video via the Hypereal proxy.
+// Active scene-renderer model (from 58 credits/scene, dynamic pricing).
+// Upgraded 2026-05-07 from `seedance-2-0-fast-i2v` → `seedance-2-0-i2v`
+// — same envelope, higher-fidelity output, supports audio generation
+// (we still keep generate_audio=false since voiceover is muxed at export).
+// Same Hypereal envelope as Kling — { model, input } posted to
 // HYPEREAL_VIDEO_URL — only the model id and input keys differ.
 //
 // Audio: we always pass generate_audio=false. Motionmax produces
@@ -386,7 +389,7 @@ export type SeedanceResolution = "480p" | "720p";
 const SEEDANCE_MAX_PROMPT_CHARS = 2400;
 
 /**
- * Generate video via Seedance 2.0 Fast I2V (`seedance-2-0-fast-i2v`).
+ * Generate video via Seedance 2.0 I2V (`seedance-2-0-i2v`).
  *
  *  duration:     5–10s (clamped; default 10)
  *  resolution:   "480p" | "720p" (default "720p")
@@ -397,7 +400,7 @@ const SEEDANCE_MAX_PROMPT_CHARS = 2400;
  *
  * Returns the rendered video URL after polling the Hypereal job.
  */
-export async function generateSeedance2FastI2V(
+export async function generateSeedance2I2V(
   imageUrl: string,
   prompt: string,
   apiKey: string,
@@ -407,7 +410,7 @@ export async function generateSeedance2FastI2V(
   resolution: SeedanceResolution = "720p",
   generateAudio: boolean = false,
 ): Promise<string> {
-  const model = "seedance-2-0-fast-i2v";
+  const model = "seedance-2-0-i2v";
 
   // Duration: spec range 5–10s (continuous). Clamp + warn if outside.
   const clampedDuration = Math.min(10, Math.max(5, Math.round(duration)));
@@ -421,7 +424,7 @@ export async function generateSeedance2FastI2V(
   }
 
   console.log(
-    `[Hypereal] Starting Seedance 2.0 Fast I2V — ${clampedDuration}s, ${resolution}, ${aspectRatio}` +
+    `[Hypereal] Starting Seedance 2.0 I2V — ${clampedDuration}s, ${resolution}, ${aspectRatio}` +
     `${endImageUrl ? " (start→end)" : ""}${generateAudio ? " +audio" : ""}`,
   );
   console.log(`[Hypereal] IMAGE: ${imageUrl.substring(0, 80)}...`);
@@ -450,11 +453,11 @@ export async function generateSeedance2FastI2V(
       "Content-Type": "application/json",
     },
     body: bodyJson,
-  }, "seedance-2-0-fast-i2v");
+  }, "seedance-2-0-i2v");
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Hypereal Seedance 2.0 Fast I2V API Error: ${response.status} - ${errorText}`);
+    throw new Error(`Hypereal Seedance 2.0 I2V API Error: ${response.status} - ${errorText}`);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

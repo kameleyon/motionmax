@@ -99,7 +99,7 @@ function glyphFor(e: string | null): IconKey {
 const PROVIDER_COLOR: Record<string, string> = {
   "Replicate · Video": "#14C8CC",
   "ElevenLabs": "#a78bfa",
-  "Replicate · Image": "#F5B049",
+  "Replicate · Image": "#E4C875",
   "OpenAI": "#5CD68D",
   "Other": "#5A6268",
 };
@@ -269,10 +269,10 @@ export function TabOverview(): JSX.Element {
         <Kpi label="Generations · today" icon={<I.spark />}
           value={snap ? fmtNum(snap.gens_today) : dash}
           delta={gD?.text} deltaDir={gD?.dir} spark={snap?.gens_spark} />
-        <Kpi label="API spend · MTD" sparkColor="#F5B049"
+        <Kpi label="API spend · MTD" sparkColor="#E4C875"
           value={snap ? money(snap.mtd_spend) : dash}
           spark={snap?.mtd_spend_spark} />
-        <Kpi label="Errors · 1h" tone="danger" sparkColor="#F5B049"
+        <Kpi label="Errors · 1h" tone="danger" sparkColor="#E4C875"
           value={snap ? fmtNum(snap.errors_1h) : dash}
           delta={snap ? `↓ from ${fmtNum(snap.errors_24h_peak)} peak` : undefined}
           deltaDir={snap && snap.errors_1h <= snap.errors_24h_peak ? "down" : "up"} />

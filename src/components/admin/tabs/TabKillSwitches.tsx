@@ -219,17 +219,17 @@ export function TabKillSwitches(): JSX.Element {
       {/* Master kill panel (gold gradient when engaged) */}
       <div className={"master-kill" + (killAll ? " armed" : "")}
         style={killAll ? {
-          borderColor: "rgba(245,176,73,.6)",
-          background: "linear-gradient(135deg,rgba(245,176,73,.16),rgba(245,176,73,.04))",
+          borderColor: "rgba(228,200,117,.6)",
+          background: "linear-gradient(135deg,rgba(228,200,117,.16),rgba(228,200,117,.04))",
         } : {
-          background: "linear-gradient(135deg,rgba(245,176,73,.05),rgba(245,176,73,.01))",
-          borderColor: "rgba(245,176,73,.18)",
+          background: "linear-gradient(135deg,rgba(228,200,117,.05),rgba(228,200,117,.01))",
+          borderColor: "rgba(228,200,117,.18)",
         }}>
         <div className="ico" style={{
           width: 54, height: 54, borderRadius: 12,
-          background: "rgba(245,176,73,.15)", color: "var(--warn)",
+          background: "rgba(228,200,117,.15)", color: "var(--warn)",
           display: "grid", placeItems: "center",
-          border: "1px solid rgba(245,176,73,.3)",
+          border: "1px solid rgba(228,200,117,.3)",
         }}><I.power /></div>
         <div className="body" style={{ flex: 1 }}>
           <div className="t" style={{
@@ -250,16 +250,16 @@ export function TabKillSwitches(): JSX.Element {
 
       {killAll && (
         <div className="card" style={{
-          borderColor: "rgba(245,176,73,.4)",
-          background: "linear-gradient(180deg,rgba(245,176,73,.04),transparent),var(--panel-2)",
+          borderColor: "rgba(228,200,117,.4)",
+          background: "linear-gradient(180deg,rgba(228,200,117,.04),transparent),var(--panel-2)",
           marginBottom: 18,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <div style={{
               width: 42, height: 42, borderRadius: 10,
-              background: "rgba(245,176,73,.15)", color: "var(--warn)",
+              background: "rgba(228,200,117,.15)", color: "var(--warn)",
               display: "grid", placeItems: "center", flexShrink: 0,
-              border: "1px solid rgba(245,176,73,.3)",
+              border: "1px solid rgba(228,200,117,.3)",
             }}><I.alert /></div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14, color: "var(--ink)", fontWeight: 600 }}>
@@ -300,7 +300,7 @@ export function TabKillSwitches(): JSX.Element {
             <div key={s.flag} className={"kill-card" + (armed ? " armed" : "")}
               style={{
                 background: "var(--panel-2)",
-                border: "1px solid " + (armed ? "rgba(245,176,73,.4)" : "var(--line)"),
+                border: "1px solid " + (armed ? "rgba(228,200,117,.4)" : "var(--line)"),
                 borderRadius: 12, padding: 14,
                 opacity: pending ? 0.7 : 1,
                 transition: "opacity 120ms",
@@ -315,7 +315,7 @@ export function TabKillSwitches(): JSX.Element {
                 }}>
                   <span className="ico" style={{
                     width: 28, height: 28, borderRadius: 7,
-                    background: armed ? "rgba(245,176,73,.15)" : "var(--panel-3)",
+                    background: armed ? "rgba(228,200,117,.15)" : "var(--panel-3)",
                     color: armed ? "var(--warn)" : "var(--ink-dim)",
                     display: "grid", placeItems: "center", flexShrink: 0,
                   }}><s.icon /></span>

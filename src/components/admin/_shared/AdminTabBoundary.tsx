@@ -66,7 +66,7 @@ export class AdminTabBoundary extends Component<AdminTabBoundaryProps, State> {
         style={{ maxWidth: 560 }}
       >
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[rgba(245,176,73,0.12)] text-[var(--warn)]">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[rgba(228,200,117,0.12)] text-[var(--warn)]">
             <AlertTriangle className="h-4 w-4" />
           </div>
           <div>

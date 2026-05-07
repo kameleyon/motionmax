@@ -37,8 +37,8 @@ const LEVEL_COLORS: Record<LogLevel, { lvl: string; msg: string }> = {
   ok:    { lvl: "#5CD68D", msg: "var(--ink-dim)" },
   info:  { lvl: "#7ad6e6", msg: "var(--ink-dim)" },
   debug: { lvl: "#a78bfa", msg: "var(--ink-dim)" },
-  warn:  { lvl: "#F5B049", msg: "var(--ink)" },
-  error: { lvl: "#F5B049", msg: "#FFD18C" },
+  warn:  { lvl: "#E4C875", msg: "var(--ink)" },
+  error: { lvl: "#E4C875", msg: "#F5DCAA" },
 };
 
 /* ── Helpers ───────────────────────────────────────────────────────── */
@@ -247,7 +247,7 @@ export function TabConsole(): JSX.Element {
 
       {!live && pausedNew > 0 && (
         <div className="rounded-md px-3 py-2 text-xs"
-          style={{ background: "rgba(245,176,73,.10)", border: "1px solid rgba(245,176,73,.30)",
+          style={{ background: "rgba(228,200,117,.10)", border: "1px solid rgba(228,200,117,.30)",
             color: "var(--warn)", fontFamily: "var(--mono)" }}>
           Stream paused — {pausedNew} new since paused
         </div>

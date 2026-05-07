@@ -125,8 +125,8 @@ function statusVariant(s: string | null): "ok" | "warn" | "err" {
   return "err";
 }
 function errorsColor(n: number): string {
-  if (n > 3) return "var(--warn)";
-  if (n > 0) return "#F5B049";
+  // Brand gold (#E4C875) for any errors; --ink-dim when zero. Aqua/gold only.
+  if (n > 0) return "#E4C875";
   return "var(--ink-dim)";
 }
 

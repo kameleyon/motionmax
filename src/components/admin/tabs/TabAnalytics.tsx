@@ -44,7 +44,7 @@ type CohortRow = {
 const PLAN_COLORS: Record<string, string> = {
   Studio: "#14C8CC", Pro: "#a78bfa", Free: "#5A6268",
 };
-const FEATURE_SWATCHES = ["#14C8CC", "#7ad6e6", "#5CD68D", "#F5B049", "#a78bfa", "#5A6268"];
+const FEATURE_SWATCHES = ["#14C8CC", "#7ad6e6", "#5CD68D", "#E4C875", "#a78bfa", "#5A6268"];
 const MUTED_INFO_STYLE: React.CSSProperties = {
   padding: "18px 4px", fontSize: 12, color: "var(--ink-mute)",
   fontFamily: "var(--mono)", letterSpacing: ".04em",
@@ -178,7 +178,7 @@ export function TabAnalytics(): JSX.Element {
       { label: "Completed sign-up", n: funnel.signups, pctOfTop: 100, annot: pctFmt(pct(funnel.signups, top)) + " complete", color: "#14C8CC" },
       { label: "First generation", n: funnel.first_gen, pctOfTop: pct(funnel.first_gen, top), annot: pctFmt(pct(funnel.first_gen, top)) + " activate", color: "#5CD68D" },
       { label: "Returned next day", n: funnel.returned, pctOfTop: pct(funnel.returned, top), annot: pctFmt(pct(funnel.returned, top)) + " retention", color: "#a78bfa" },
-      { label: "Upgraded to paid", n: funnel.paid, pctOfTop: pct(funnel.paid, top), annot: pctFmt(pct(funnel.paid, top)) + " conversion", color: "#F5B049" },
+      { label: "Upgraded to paid", n: funnel.paid, pctOfTop: pct(funnel.paid, top), annot: pctFmt(pct(funnel.paid, top)) + " conversion", color: "#E4C875" },
     ];
   }, [funnel]);
 

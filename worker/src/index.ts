@@ -325,8 +325,13 @@ let realtimeStatus: string = 'unknown';
 let totalJobsProcessed = 0;
 let totalJobsFailed = 0;
 
-/** Maximum time (ms) to wait for active jobs to drain during shutdown. */
-const SHUTDOWN_DRAIN_TIMEOUT_MS = parseInt(process.env.SHUTDOWN_DRAIN_TIMEOUT || "300000", 10); // 5 minutes
+/** Maximum time (ms) to wait for active jobs to drain during shutdown.
+ *  Default: 60 s. Anything still running past this is released back to
+ *  'pending' so the new worker can re-claim within seconds (vs. the
+ *  10-min stale-claim threshold). Resumable handlers (e.g.
+ *  handleCinematicVideo) read their saved checkpoint and skip
+ *  external-API re-submits, so the in-flight work isn't lost. */
+const SHUTDOWN_DRAIN_TIMEOUT_MS = parseInt(process.env.SHUTDOWN_DRAIN_TIMEOUT || "60000", 10); // 60s
 
 /* ---- Transient-error retry helpers ---- */
 // isTransientError and retryDelayMs imported from ./lib/retryClassifier.js
@@ -1256,12 +1261,38 @@ async function gracefulShutdown(signal: string) {
           console.error(
             `[Worker] ⚠️  Shutdown drain timeout after ${SHUTDOWN_DRAIN_TIMEOUT_MS / 1000}s — ` +
             `${stillActive.length} job(s) still active: ${stillActive.join(", ")}. ` +
-            `Leaving as 'processing' — startup diagnostic will re-queue on next start.`
+            `Releasing them back to 'pending' so a sibling/successor worker can re-claim.`,
           );
-          // Jobs are idempotent: the startup diagnostic in startupDiagnostic() already
-          // rescues orphaned 'processing' rows and resets them to 'pending' on the next
-          // startup. Resetting here would cause duplicate work if the job handler is
-          // mid-execution and the new worker picks it up immediately.
+          // Release the still-running jobs to 'pending' so the new worker
+          // instance picks them up within seconds via realtime, instead of
+          // waiting for the 10-min stale-claim reaper. Resumable handlers
+          // (handleCinematicVideo) consult their saved checkpoint and
+          // skip the external-API re-submit, preserving Hypereal credits.
+          // Race window: this old worker may finish a few more in-flight
+          // ms of work after release; the checkpoint mechanism makes that
+          // safe (last-write-wins on scene fields; no duplicate provider
+          // submissions because the new worker resumes polling).
+          (async () => {
+            try {
+              const { error: relErr } = await supabase
+                .from("video_generation_jobs")
+                .update({
+                  status: "pending",
+                  worker_id: null,
+                  error_message: null,
+                  updated_at: new Date().toISOString(),
+                })
+                .in("id", stillActive)
+                .eq("status", "processing");
+              if (relErr) {
+                console.error(`[Worker] Failed to release jobs on drain timeout:`, relErr.message);
+              } else {
+                console.log(`[Worker] ✅ Released ${stillActive.length} job(s) to 'pending' for fast hand-off`);
+              }
+            } catch (err) {
+              console.error(`[Worker] Exception releasing jobs:`, (err as Error).message);
+            }
+          })();
           resolve();
           return;
         }

@@ -402,6 +402,11 @@ export async function generateSeedance2I2V(
   aspectRatio: SeedanceAspectRatio = "16:9",
   resolution: SeedanceResolution = "720p",
   generateAudio: boolean = false,
+  /** Optional: invoked synchronously between submit and poll, with the
+   *  provider jobId + pollUrl. Handlers use this to persist a resume
+   *  checkpoint so a worker restart can re-poll instead of re-charging
+   *  Hypereal credits for a duplicate submission. */
+  onSubmitted?: (info: { providerJobId: string; pollUrl: string | null; model: string }) => Promise<void>,
 ): Promise<string> {
   const model = "seedance-2-0-i2v";
 
@@ -469,6 +474,11 @@ export async function generateSeedance2I2V(
     throw new Error(`No jobId from Seedance 2.0 — response: ${JSON.stringify(data)}`);
   }
 
+  if (onSubmitted) {
+    try { await onSubmitted({ providerJobId: jobId, pollUrl, model }); }
+    catch (err) { console.warn(`[Hypereal] Seedance onSubmitted callback failed (non-fatal):`, (err as Error).message); }
+  }
+
   return pollHyperealJob(jobId, apiKey, model, pollUrl);
 }
 
@@ -501,6 +511,8 @@ export async function generateKlingV3ProI2V(
   endImageUrl?: string,
   negativePrompt: string = "blurry, low quality, watermark, text, UI elements",
   cfgScale: number = 0.5,
+  /** See generateSeedance2I2V — same resume-checkpoint hook. */
+  onSubmitted?: (info: { providerJobId: string; pollUrl: string | null; model: string }) => Promise<void>,
 ): Promise<string> {
   const model = "kling-3-0-pro-i2v";
   const validDurations = [3, 5, 10, 15];
@@ -564,6 +576,11 @@ export async function generateKlingV3ProI2V(
 
   if (!jobId) {
     throw new Error(`No jobId from Kling V3 Pro — response: ${JSON.stringify(data)}`);
+  }
+
+  if (onSubmitted) {
+    try { await onSubmitted({ providerJobId: jobId, pollUrl, model }); }
+    catch (err) { console.warn(`[Hypereal] Kling V3 Pro onSubmitted callback failed (non-fatal):`, (err as Error).message); }
   }
 
   return pollHyperealJob(jobId, apiKey, model, pollUrl);
@@ -726,7 +743,10 @@ export async function generateKlingV26Video(
  * Poll a Hypereal video generation job until completion.
  * Works for Grok, Kling V3, Kling V2.6 — same polling API.
  */
-async function pollHyperealJob(
+// Exported so handlers with a saved provider jobId from a checkpoint
+// can resume polling directly after a worker restart, skipping the
+// submit step (which would re-charge Hypereal credits).
+export async function pollHyperealJob(
   jobId: string,
   apiKey: string,
   model: string,

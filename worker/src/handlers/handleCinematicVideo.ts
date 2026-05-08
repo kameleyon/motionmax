@@ -33,7 +33,9 @@ import {
   generateSeedance2I2V,           // Primary — Seedance 2.0 I2V (seedance-2-0-i2v, from 58 cr). Reverted from Turbo 2026-05-07.
   generateKlingV3ProI2V,          // Fallback — Kling V3.0 Pro I2V (kling-3-0-pro-i2v, 39 cr). Tried after 2 failed Seedance attempts.
   // generateGrokVideo,           // Grok Video I2V — status-lookup failures on Hypereal, rolled back
+  pollHyperealJob,                // Resume-from-checkpoint poll for an already-submitted Hypereal job.
 } from "../services/hypereal.js";
+import { saveCheckpoint, readCheckpointKey, clearCheckpointKey } from "../lib/checkpoint.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -369,6 +371,37 @@ async function _runCinematicVideo(
     "faces rotated opposite to torso, limbs bending in unnatural directions" +
     (styleNegative ? `, ${styleNegative}` : "");
 
+  // ── Resume from checkpoint ─────────────────────────────────────────
+  // If a previous worker died after submitting a Hypereal job but before
+  // polling completed, the provider jobId was saved to the checkpoint.
+  // Resume polling directly — skips the prompt build + re-submit, which
+  // would re-charge Hypereal credits for a job that's already running.
+  const checkpointKey = `scene_${sceneIndex}`;
+  const cp = await readCheckpointKey<{
+    stage?: string;
+    providerJobId?: string;
+    pollUrl?: string | null;
+    model?: string;
+  }>(jobId, checkpointKey);
+  if (cp?.stage === "polling" && typeof cp.providerJobId === "string" && typeof cp.model === "string") {
+    console.log(
+      `[CinematicVideo] Scene ${sceneIndex}: resuming Hypereal poll from checkpoint ` +
+      `(model=${cp.model}, jobId=${cp.providerJobId})`,
+    );
+    try {
+      videoUrl = await pollHyperealJob(cp.providerJobId, apiKey, cp.model, cp.pollUrl ?? null);
+      provider = cp.model.includes("kling") ? "Kling V3.0 Pro I2V" : "Seedance 2.0 I2V";
+    } catch (resumeErr) {
+      // Resume failed — clear the stale checkpoint and fall through to a
+      // fresh submit so the job isn't permanently wedged on a stuck poll.
+      console.warn(
+        `[CinematicVideo] Scene ${sceneIndex}: poll resume failed (${(resumeErr as Error).message}) — ` +
+        `clearing checkpoint and re-submitting`,
+      );
+      await clearCheckpointKey(jobId, checkpointKey);
+    }
+  }
+
   // Per-scene try chain: try Seedance up to 2 times, then fall
   // back to Kling V3 Pro. Moderation rejection is permanent (held-frame
   // path below). Provider-credits exhaustion on Seedance jumps straight
@@ -379,7 +412,7 @@ async function _runCinematicVideo(
     let lastSeedanceErr: Error | null = null;
     let seedanceCreditsExhausted = false;
 
-    for (let attempt = 1; attempt <= SEEDANCE_TRIES; attempt++) {
+    for (let attempt = 1; videoUrl === null && attempt <= SEEDANCE_TRIES; attempt++) {
       try {
         videoUrl = await generateSeedance2I2V(
           imageUrl,
@@ -390,6 +423,15 @@ async function _runCinematicVideo(
           seedanceAspect, // aspect_ratio: derived from project format
           "720p",         // resolution
           false,          // enable_web_search: never for pre-scripted prompts
+          // onSubmitted: persist provider jobId + pollUrl as a resume
+          // checkpoint immediately after Hypereal returns. If the worker
+          // dies during polling, the next worker reads this and skips
+          // the re-submit.
+          async ({ providerJobId, pollUrl, model }) => {
+            await saveCheckpoint(jobId, checkpointKey, {
+              stage: "polling", providerJobId, pollUrl, model,
+            });
+          },
         );
         break; // success — exit retry loop
       } catch (innerErr) {
@@ -448,6 +490,11 @@ async function _runCinematicVideo(
           endImageUrl,
           klingNegativePrompt,
           0.5,                 // cfg_scale
+          async ({ providerJobId, pollUrl, model }) => {
+            await saveCheckpoint(jobId, checkpointKey, {
+              stage: "polling", providerJobId, pollUrl, model,
+            });
+          },
         );
         provider = "Kling V3.0 Pro I2V";
       } catch (klingErr) {
@@ -528,6 +575,9 @@ async function _runCinematicVideo(
       details: { provider, hasTransition: !!endImageUrl, cost: 0, fallback: "hold_frame", reason: errMsg },
     });
 
+    // Held-frame is a terminal status — no resume needed.
+    await clearCheckpointKey(jobId, checkpointKey);
+
     return {
       success: true,
       status: "held_frame",
@@ -603,11 +653,16 @@ async function _runCinematicVideo(
     const freshImageUrl = ((freshGen?.scenes as any[]) ?? [])[sceneIndex]?.imageUrl;
     if (freshImageUrl && freshImageUrl !== sourceImageUrl) {
       console.warn(`[CinematicVideo] Scene ${sceneIndex}: image changed — discarding stale video`);
+      await clearCheckpointKey(jobId, checkpointKey);
       return { success: true, status: "stale_discarded", videoUrl: null, sceneIndex };
     }
   }
 
   await updateSceneField(generationId, sceneIndex, "videoUrl", finalVideoUrl);
+  // Scene's videoUrl is durably committed — drop the resume checkpoint
+  // so a future re-claim of this row (manual retry, requeue) starts
+  // fresh instead of resuming a stale provider jobId.
+  await clearCheckpointKey(jobId, checkpointKey);
 
   await writeSystemLog({
     jobId, projectId, userId, generationId,

@@ -462,69 +462,70 @@ All in `20260505200000_admin_phase2_auth_helpers.sql` (126 lines):
 > sign-out/Delete actions all working with audit logs.
 
 ### 8.1 RPCs
-- [ ] `admin_users_list(p_search text, p_plan text, p_status text, p_flag_state text, p_page int, p_limit int)` — push filter + join into a SECURITY DEFINER plpgsql RPC. Replaces the client-side fan-out in `admin-stats/subscribers_list`.
-- [ ] `admin_user_full_detail(p_user_id uuid)` — single round-trip aggregate (replaces 8-query `user_details` action). Returns jsonb with profile, subscription, credits, recent generations, recent api_call_logs, flags, recent system_logs (user_activity).
-- [ ] `admin_bulk_suspend(p_user_ids uuid[], p_reason text)`, `admin_bulk_grant_credits(p_user_ids uuid[], p_amount int, p_reason text)` — bulk admin actions.
+- [x] `admin_users_list(p_search text, p_plan text, p_status text, p_flag_state text, p_page int, p_limit int)` — push filter + join into a SECURITY DEFINER plpgsql RPC. Replaces the client-side fan-out in `admin-stats/subscribers_list`.
+- [x] `admin_user_full_detail(p_user_id uuid)` — single round-trip aggregate (replaces 8-query `user_details` action). Returns jsonb with profile, subscription, credits, recent generations, recent api_call_logs, flags, recent system_logs (user_activity).
+- [x] `admin_bulk_suspend(p_user_ids uuid[], p_reason text)`, `admin_bulk_grant_credits(p_user_ids uuid[], p_amount int, p_reason text)` — bulk admin actions.
 
 ### 8.2 Last-active tracking
-- [ ] Either nightly job: `UPDATE profiles SET last_active_at = sl.last FROM (SELECT user_id, max(created_at) AS last FROM system_logs WHERE category='user_activity' GROUP BY user_id) sl WHERE profiles.user_id = sl.user_id;` OR live RPC `bump_my_last_active()` called by client on focus + every 60 s.
-- [ ] Pick: live RPC (lower latency for "active now" hero counter). Cron job is a fallback for users not in browser.
+- [x] Live RPC `bump_my_last_active()` (migration `20260508120000_admin_phase8_bump_last_active.sql`). Client calls it from `AuthProvider` on auth, on `visibilitychange → 'visible'`, and every 60 s. Cron-job fallback intentionally not wired up — can be added later if dashboards show large gaps.
+- [x] Pick: live RPC (lower latency for "active now" hero counter). Cron job is a fallback for users not in browser.
 
 ### 8.3 KPI grid (4 tiles)
-- [ ] `Total users` — `count from profiles where deleted_at is null`. Spark from `admin_mv_daily_signups`.
-- [ ] `Paying` — `count from subscriptions where status='active'`. Sub-label conversion %.
-- [ ] `Studio plan` — `count from subscriptions where plan_id='studio'`. Delta from prior week.
-- [ ] `Flagged` — `count from user_flags where resolved_at is null`. Sub-label `<auto> auto · <manual> manual`.
+- [x] `Total users` — `count from profiles where deleted_at is null`. Spark from `admin_mv_daily_signups`.
+- [x] `Paying` — `count from subscriptions where status='active'`. Sub-label conversion %.
+- [x] `Studio plan` — `count from subscriptions where plan_id='studio'`. Delta from prior week.
+- [x] `Flagged` — `count from user_flags where resolved_at is null`. Sub-label `<auto> auto · <manual> manual`.
 
 ### 8.4 Directory toolbar
-- [ ] Search input (`q` state, 200 ms debounce, min 2 chars). Searches name, email, user_id.
-- [ ] Plan chip group: All / Studio / Pro / Free.
-- [ ] Status chip group: All / active / flagged / paused.
-- [ ] Export CSV button → calls `admin_users_list` with current filters and writes via `exportRowsAsCsv`.
+- [x] Search input (`q` state, 200 ms debounce, min 2 chars). Searches name, email, user_id.
+- [x] Plan chip group: All / Studio / Pro / Free.
+- [x] Status chip group: All / active / flagged / paused.
+- [x] Export CSV button → calls `admin_users_list` with current filters and writes via `exportRowsAsCsv`.
 
 ### 8.5 Users table
-- [ ] Columns per design: User · Plan · Status · Last sign-in (sortable) · Generations (sortable) · Lifetime spent (sortable) · Credits · Errors (sortable) · Location · Actions.
-- [ ] Row click → `openUser(u)`. `e.stopPropagation()` on actions cell.
-- [ ] Action cell: 3 mini buttons — Mail (opens drawer Communicate tab), Credit (opens drawer Billing tab), More (opens drawer Overview tab).
-- [ ] Errors cell color: `>3` warn, `>0` gold, else ink-dim.
-- [ ] `.scroll` wrapper with `maxHeight: 600` and sticky header.
-- [ ] Pagination: server-side via `p_page` / `p_limit`. Default 50/page. Show `Showing 1–50 of 12,842` footer.
+- [x] Columns per design: User · Plan · Status · Last sign-in (sortable) · Generations (sortable) · Lifetime spent (sortable) · Credits · Errors (sortable) · Location · Actions.
+- [x] Row click → `openUser(u)`. `e.stopPropagation()` on actions cell.
+- [x] Action cell: 3 mini buttons — Mail (opens drawer Communicate tab), Credit (opens drawer Billing tab), More (opens drawer Overview tab).
+- [x] Errors cell color: `>3` warn, `>0` gold, else ink-dim.
+- [x] `.scroll` wrapper with `maxHeight: 600` and sticky header.
+- [x] Pagination: server-side via `p_page` / `p_limit`. Default 50/page. Show `Showing 1–50 of 12,842` footer.
 
 ### 8.6 User drawer (`UserDrawer`)
-- [ ] Right-side panel, 640 px max 100vw, slide-in 250 ms cubic-bezier. Overlay 50 % black + 2 px backdrop blur.
-- [ ] Top: large avatar 54×54, serif 20 name, mono `email · id`, X close button.
-- [ ] Tabs (drawer-internal): Overview, Activity, Billing, Communicate, Danger.
+- [x] Right-side panel, 640 px max 100vw, slide-in 250 ms cubic-bezier. Overlay 50 % black + 2 px backdrop blur.
+- [x] Top: large avatar 54×54, serif 20 name, mono `email · id`, X close button.
+- [x] Tabs (drawer-internal): Overview, Activity, Billing, Communicate, Danger.
 
 #### 8.6.1 Overview
-- [ ] 3 mini KPIs: Plan / Total spent (lifetime) / Credits remaining.
-- [ ] Profile card 2-col grid: Joined, Last sign-in (+ device), Location, Generations · errors.
-- [ ] Usage trend BarChart (last 14 d gens/day from `admin_user_full_detail`).
+- [x] 3 mini KPIs: Plan / Total spent (lifetime) / Credits remaining.
+- [x] Profile card 2-col grid: Joined, Last sign-in (+ device), Location, Generations · errors.
+- [x] Usage trend BarChart (last 14 d gens/day from `admin_user_full_detail`).
 
 #### 8.6.2 Activity
-- [ ] Reuse `<ActivityFeed>` filtered to `admin_activity_feed(p_user_id => user.id)` last 30 d.
+- [x] Reuse `<ActivityFeed>` filtered to `admin_activity_feed(p_user_id => user.id)` last 30 d.
 
 #### 8.6.3 Billing
-- [ ] Table: Date, Description, Amount (right), Status. Source: `credit_transactions` for this user where `txn_type IN ('purchase','subscription_grant','refund')`.
-- [ ] Adjust credits card: amount input (mono, `+/-`) + reason input + Apply button → `admin_grant_credits` (existing RPC) with reason.
-- [ ] Refund card: most recent Stripe charge id (from edge fn `admin-stats/user_details` Stripe-side fetch) + Refund button → new edge fn `admin-refund-charge(charge_id)` calling Stripe.
+- [x] Table: Date, Description, Amount (right), Status. Source: `credit_transactions` for this user where `txn_type IN ('purchase','subscription_grant','refund')`.
+- [x] Adjust credits card: amount input (mono, `+/-`) + reason input + Apply button → `admin_grant_credits` (existing RPC) with reason.
+- [ ] **Deferred:** Refund card requires `admin-refund-charge` edge fn (Stripe-side) + most-recent-charge-id lookup. UI placeholder is in place; tracker bug to ship in Phase 18 alongside the Stripe webhook hardening.
 
 #### 8.6.4 Communicate
-- [ ] Subject + Message (textarea) → submit → `admin_open_thread(user_id, subject, body)` (Phase 13.2).
-- [ ] Email-copy toggle (default on) → triggers edge fn `notify-user-of-message`.
-- [ ] Push toggle → fires `admin_send_notification([user_id], title, body, ...)` (Phase 14.2).
-- [ ] Push-only headline field → `admin_send_notification([user_id], headline, '', null, 'info')`.
+- [x] Subject + Message (textarea) → submit → `admin_open_thread(user_id, subject, body)` (Phase 13.2). Soft-fails with toast notice when the RPC isn't yet deployed.
+- [x] Email-copy toggle (default on) → triggers edge fn `notify-user-of-message`. Channel helper soft-fails if the edge fn isn't deployed yet (returns a `ChannelResult` reason that the orchestrator surfaces in the summary toast).
+- [x] Push toggle → fires `admin_send_notification([user_id], title, body, ...)` (Phase 14.2).
+- [x] Send orchestration: `Promise.allSettled` across enabled channels with a single summary toast (`"Sent (N/M)"` on full success; `"Sent N/M — <channels> failed"` with per-channel reasons on partial). Rejected promises are normalised to `ChannelResult` so SDK throws and soft-fails report uniformly.
+- [x] Push-only headline field → `admin_send_notification([user_id], headline, '', null, 'info')`.
 
 #### 8.6.5 Danger
-- [ ] Pause account → `admin_set_user_status(p_user_id, 'paused', reason)` (new RPC; flips a column on profiles or a flag in user_flags; reuses the existing soft-delete plumbing).
-- [ ] Force sign-out → existing edge fn `admin-force-signout`.
-- [ ] Reset password → triggers Supabase `auth.admin.updateUserById` with `password_reset_token` (or generates a magic link). New edge fn `admin-send-reset-link`.
-- [ ] Delete account → typed-confirm dialog requiring email; calls existing edge fn `admin-hard-delete-user` (super_admin gated).
+- [x] Pause account → `admin_set_user_status(p_user_id, 'paused', reason)` (new RPC; flips a column on profiles or a flag in user_flags; reuses the existing soft-delete plumbing).
+- [x] Force sign-out → existing edge fn `admin-force-signout`.
+- [x] Reset password → new edge fn `admin-send-reset-link` calls `auth.admin.generateLink({type:'recovery'})`; GoTrue's SMTP integration mails the link.
+- [x] Delete account → typed-confirm dialog requiring email; calls existing edge fn `admin-hard-delete-user` (super_admin gated).
 
 ### 8.7 Acceptance
-- [ ] Search returns within 300 ms p95 across 12k users.
-- [ ] Drawer opens in <200 ms after click; slide animation completes at 60 fps on a Chromebook-class device.
-- [ ] Every action emits an `admin_logs` row with the admin's id and the target user's id.
-- [ ] Bulk suspend + credit-grant operate on selected rows (multi-select via row checkboxes — add new state for selected_ids).
+- [ ] Search returns within 300 ms p95 across 12k users. *(perf measurement deferred to Phase 18 load test)*
+- [ ] Drawer opens in <200 ms after click; slide animation completes at 60 fps on a Chromebook-class device. *(perf measurement deferred to Phase 18)*
+- [x] Every action emits an `admin_logs` row with the admin's id and the target user's id.
+- [x] Bulk suspend + credit-grant operate on selected rows (multi-select via row checkboxes — add new state for selected_ids).
 
 ---
 

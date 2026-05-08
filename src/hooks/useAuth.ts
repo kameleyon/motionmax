@@ -93,6 +93,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Phase 8.2 — last-active heartbeat. Live RPC keeps the admin
+  // "active now" counter accurate to ~1 min without a nightly cron.
+  // We fire on every transition to a signed-in user, on tab focus
+  // (window.visibilitychange → 'visible'), and on a 60 s interval.
+  // Errors are swallowed: this is best-effort telemetry, never block
+  // the auth path on it.
+  useEffect(() => {
+    if (!user) return;
+    const bump = (): void => {
+      // Fire-and-forget; ignore failures (offline, expired token, etc.).
+      void supabase.rpc("bump_my_last_active" as never).then(() => {}, () => {});
+    };
+    bump();
+    const onVis = (): void => { if (document.visibilityState === "visible") bump(); };
+    document.addEventListener("visibilitychange", onVis);
+    const interval = window.setInterval(bump, 60_000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.clearInterval(interval);
+    };
+  }, [user]);
+
   const signUp = useCallback(async (email: string, password: string) => {
     const redirectUrl = import.meta.env.VITE_APP_URL || window.location.origin;
     const utmParams = getStoredUtm();

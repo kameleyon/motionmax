@@ -28,7 +28,7 @@ import { ConfirmDestructive } from "@/components/admin/_shared/confirmDestructiv
 import { I } from "@/components/admin/_shared/AdminIcons";
 import { Pill } from "@/components/admin/_shared/Pill";
 import { Toggle } from "@/components/admin/_shared/Toggle";
-import { formatRel, money, num as fmtNum } from "@/components/admin/_shared/format";
+import { formatRel, num as fmtNum } from "@/components/admin/_shared/format";
 import { ADMIN_DEFAULT_QUERY_OPTIONS, adminKey } from "@/components/admin/_shared/queries";
 
 type RpcFn = <T>(
@@ -41,27 +41,27 @@ interface UserFullDetail {
   profile: {
     user_id: string;
     display_name: string | null;
-    email: string | null;
     avatar_url: string | null;
-    location: string | null;
+    last_active_at: string | null;
+  } | null;
+  auth: {
+    email: string | null;
     created_at: string | null;
     last_sign_in_at: string | null;
-    last_sign_in_device: string | null;
-    status: string | null;
-  };
-  subscription: { plan: string | null; status: string | null } | null;
-  credits: { balance: number; lifetime_spent: number };
-  generations_total: number;
-  errors_24h: number;
-  gen_history: { day: string; count: number }[];
+    country: string | null;
+  } | null;
+  subscription: { plan_name: string | null; status: string | null } | null;
+  credits: { credits_balance: number | null; total_purchased: number | null } | null;
+  total_generations: number | null;
+  errors_24h: number | null;
+  usage_14d: { day: string; daily: number }[] | null;
   recent_transactions: {
     id: string;
     created_at: string;
     description: string | null;
     amount: number;
-    txn_type: string | null;
-    status: string | null;
-  }[];
+    transaction_type: string | null;
+  }[] | null;
 }
 interface ActivityFeedRow {
   created_at: string;
@@ -152,17 +152,19 @@ export function UserDrawer({ userId, onClose }: UserDrawerProps): JSX.Element {
 
   const d = detail.data;
   const p = d.profile;
-  const name = p.display_name ?? "Unknown";
-  const planLabel = d.subscription?.plan ?? "Free";
+  const a = d.auth;
+  const name = p?.display_name ?? "Unknown";
+  const planLabel = d.subscription?.plan_name ?? "Free";
+  const email = a?.email ?? "—";
 
   return (
     <DrawerShell onClose={onClose}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "20px 22px", borderBottom: "1px solid var(--line)" }}>
-        <Avatar user={{ name, avatar: p.avatar_url ?? undefined }} size="lg" />
+        <Avatar user={{ name, avatar: p?.avatar_url ?? undefined }} size="lg" />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: "var(--serif)", fontSize: 20, color: "var(--ink)" }}>{name}</div>
           <div className="mono" style={{ fontSize: 11, color: "var(--ink-dim)", marginTop: 4 }}>
-            {p.email ?? "—"} · {p.user_id.slice(0, 8)}
+            {email} · {userId.slice(0, 8)}
           </div>
         </div>
         <button type="button" className="btn-mini" onClick={onClose} aria-label="Close drawer"><I.x /></button>
@@ -182,7 +184,7 @@ export function UserDrawer({ userId, onClose }: UserDrawerProps): JSX.Element {
         {tab === "activity" && <ActivityPanel rows={activity.data ?? []} loading={activity.isLoading} />}
         {tab === "billing" && <BillingPanel userId={userId} d={d} onChanged={invalidate} />}
         {tab === "communicate" && <CommunicatePanel userId={userId} />}
-        {tab === "danger" && <DangerPanel userId={userId} email={p.email ?? ""} onChanged={() => { invalidate(); onClose(); }} />}
+        {tab === "danger" && <DangerPanel userId={userId} email={a?.email ?? ""} onChanged={() => { invalidate(); onClose(); }} />}
       </div>
     </DrawerShell>
   );
@@ -217,23 +219,25 @@ function MiniKpi({ label, value }: { label: string; value: string }): JSX.Elemen
 }
 
 function OverviewPanel({ d, planLabel }: { d: UserFullDetail; planLabel: string }): JSX.Element {
-  const p = d.profile;
-  const days = d.gen_history.map((g) => g.count);
+  const a = d.auth;
+  const days = (d.usage_14d ?? []).map((g) => g.daily);
+  const lifetimeSpent = d.credits?.total_purchased ?? 0;
+  const creditsBalance = d.credits?.credits_balance ?? 0;
   return (
     <div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
         <MiniKpi label="Plan" value={planLabel} />
-        <MiniKpi label="Lifetime spent" value={money(d.credits.lifetime_spent)} />
-        <MiniKpi label="Credits remaining" value={fmtNum(d.credits.balance)} />
+        <MiniKpi label="Lifetime purchased" value={fmtNum(lifetimeSpent)} />
+        <MiniKpi label="Credits remaining" value={fmtNum(creditsBalance)} />
       </div>
 
       <div className="card" style={{ padding: 14, marginBottom: 14 }}>
         <div className="card-h"><div className="t">Profile</div></div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 18px", fontSize: 12.5, color: "var(--ink-dim)" }}>
-          <div><span className="muted">Joined · </span><span className="mono" style={{ color: "var(--ink)" }}>{p.created_at ? formatRel(p.created_at) : "—"}</span></div>
-          <div><span className="muted">Last sign-in · </span><span className="mono" style={{ color: "var(--ink)" }}>{p.last_sign_in_at ? formatRel(p.last_sign_in_at) : "—"}</span></div>
-          <div><span className="muted">Location · </span><span style={{ color: "var(--ink)" }}>{p.location ?? "—"}</span></div>
-          <div><span className="muted">Generations · </span><span className="mono" style={{ color: "var(--ink)" }}>{fmtNum(d.generations_total)} · {d.errors_24h} err</span></div>
+          <div><span className="muted">Joined · </span><span className="mono" style={{ color: "var(--ink)" }}>{a?.created_at ? formatRel(a.created_at) : "—"}</span></div>
+          <div><span className="muted">Last sign-in · </span><span className="mono" style={{ color: "var(--ink)" }}>{a?.last_sign_in_at ? formatRel(a.last_sign_in_at) : "—"}</span></div>
+          <div><span className="muted">Location · </span><span style={{ color: "var(--ink)" }}>{a?.country || "—"}</span></div>
+          <div><span className="muted">Generations · </span><span className="mono" style={{ color: "var(--ink)" }}>{fmtNum(d.total_generations ?? 0)} · {d.errors_24h ?? 0} err</span></div>
         </div>
       </div>
 
@@ -286,17 +290,17 @@ function BillingPanel({ userId, d, onChanged }: { userId: string; d: UserFullDet
   return (
     <div>
       <div className="card" style={{ padding: 14, marginBottom: 14 }}>
-        <div className="card-h"><div className="t">Recent transactions</div><span className="lbl">{d.recent_transactions.length}</span></div>
-        {d.recent_transactions.length === 0 ? <AdminEmpty title="No billing history" /> : (
+        <div className="card-h"><div className="t">Recent transactions</div><span className="lbl">{(d.recent_transactions ?? []).length}</span></div>
+        {(d.recent_transactions ?? []).length === 0 ? <AdminEmpty title="No billing history" /> : (
           <table className="tbl"><thead><tr>
-            <th>Date</th><th>Description</th><th style={{ textAlign: "right" }}>Amount</th><th>Status</th>
+            <th>Date</th><th>Description</th><th style={{ textAlign: "right" }}>Amount</th><th>Type</th>
           </tr></thead><tbody>
-            {d.recent_transactions.map((t) => (
+            {(d.recent_transactions ?? []).map((t) => (
               <tr key={t.id}>
                 <td className="mono">{formatRel(t.created_at)}</td>
-                <td>{t.description ?? t.txn_type ?? "—"}</td>
-                <td className="num strong" style={{ textAlign: "right" }}>{money(t.amount)}</td>
-                <td><Pill variant={t.status === "completed" ? "ok" : t.status === "failed" ? "err" : "warn"} dot>{t.status ?? "—"}</Pill></td>
+                <td>{t.description ?? t.transaction_type ?? "—"}</td>
+                <td className="num strong" style={{ textAlign: "right" }}>{fmtNum(t.amount)}</td>
+                <td><Pill variant="default">{t.transaction_type ?? "—"}</Pill></td>
               </tr>
             ))}
           </tbody></table>

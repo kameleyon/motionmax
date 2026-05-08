@@ -153,6 +153,11 @@ export async function generateGeminiTTS(
   sceneNumber: number,
   googleApiKeys: string[],
   projectId: string,
+  /** Gemini Flash 2.5 voice name. Defaults to Enceladus (male, the
+   *  long-standing HC voice). Pass a female name (e.g. "Aoede") for
+   *  female narration; the same voice works across all 11 supported
+   *  languages because Gemini Flash TTS is multilingual natively. */
+  voiceName: string = "Enceladus",
 ): Promise<{ url: string | null; durationSeconds?: number; provider?: string; error?: string; pcmBytes?: Uint8Array }> {
   for (let round = 0; round < KEY_ROTATION_ROUNDS; round++) {
     if (round > 0) await sleep(3000 * round);
@@ -182,7 +187,7 @@ export async function generateGeminiTTS(
                 contents: [{ parts: [{ text: `[Speak with natural enthusiasm, warmth, and varied pacing. Use a conversational storytelling tone — sometimes faster with excitement, sometimes slower for emphasis. Sound like a captivating documentary narrator.] ${voiceoverText}` }] }],
                 generationConfig: {
                   responseModalities: ["AUDIO"],
-                  speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Enceladus" } } },
+                  speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } },
                 },
               }),
             },
@@ -210,8 +215,8 @@ export async function generateGeminiTTS(
           const wav = pcmToWav(pcm, 24000, 1, 16);
           const url = await uploadAudio(wav, "audio/wav", projectId, sceneNumber);
           const durationSeconds = Math.max(1, pcm.length / (24000 * 2));
-          console.log(`[TTS-Gemini] Scene ${sceneNumber} ✅ ${model.label}`);
-          return { url, durationSeconds, provider: `Gemini ${model.label}` };
+          console.log(`[TTS-Gemini] Scene ${sceneNumber} ✅ ${model.label} voice=${voiceName}`);
+          return { url, durationSeconds, provider: `Gemini ${model.label} (${voiceName})` };
         } catch (err: any) {
           if (err?.quotaExhausted) break;
         }

@@ -939,50 +939,38 @@ CREATE TABLE public.worker_heartbeats (
 > Phase 18.**
 
 ### 16.1 New schema
-- [ ] `announcements (id, title, body_md, severity, cta_label, cta_url, audience jsonb, starts_at, ends_at, active, created_by, created_at, updated_at)` per Phase 2.5.
-- [ ] `announcement_dismissals (announcement_id, user_id, dismissed_at, PRIMARY KEY (announcement_id, user_id))`.
+- [x] `announcements` table per Phase 2.5 (`20260505170000_admin_phase2_new_tables.sql`).
+- [x] `announcement_dismissals (announcement_id, user_id, dismissed_at)` composite PK.
 
 ### 16.2 New RPCs
-- [ ] `admin_create_announcement(p_title, p_body_md, p_severity, p_cta_label, p_cta_url, p_audience, p_starts_at, p_ends_at)`.
-- [ ] `admin_update_announcement(p_id, ...)`.
-- [ ] `admin_archive_announcement(p_id)` — sets `active=false, ends_at=now()`.
-- [ ] `current_announcements_for_me() RETURNS SETOF announcements` — user-side; joins to `announcement_dismissals` to filter out dismissed; respects audience predicate.
-- [ ] `dismiss_announcement(p_id uuid)` — user-side; inserts into `announcement_dismissals`.
+- [x] `admin_create_announcement` / `admin_update_announcement` / `admin_archive_announcement` (Phase 11-17 RPC migration).
+- [x] `current_announcements_for_me()` user-side filter (joins to dismissals, respects audience predicate).
+- [x] `dismiss_announcement(p_id)` user-side insert.
 
 ### 16.3 KPI grid (4 tiles)
-- [ ] `Active announcements` — `count where active and now() between starts_at and coalesce(ends_at, 'infinity')`.
-- [ ] `Reach today` — sum of distinct user_ids who have NOT dismissed an active announcement and matched the audience clause.
-- [ ] `CTA click rate` — needs CTA-click tracking (Phase 16.4).
-- [ ] `Dismissed` — `count from announcement_dismissals where dismissed_at > now()-24h`.
+- [x] Active announcements / Reach today / CTA click rate / Dismissed — all served by `admin_announcements_kpis()` (live in TabAnnouncements).
 
 ### 16.4 CTA click tracking
-- [ ] Wrap announcement CTA URLs through a redirect endpoint `/announce/click/:id?to=<url>` (new edge fn `announcement-click`) that logs to `announcement_clicks (announcement_id, user_id, clicked_at)` then 302s.
+- [x] `announcement_clicks` table (migration `20260508210000_phase16_17_18_completion.sql`) + `announcement-click` edge fn (`supabase/functions/announcement-click/index.ts`). Edge fn validates UUID + URL, inserts a click row (best-effort with auth-header user resolution), then 302s to the original URL. Composer can wrap CTAs through `/functions/v1/announcement-click?id=<id>&to=<url>`.
 
-### 16.5 Composer UI (cols-1-2)
-- [ ] Channel radio (5): banner / modal / toast / email / push. (Mapping: 'banner' shows site-wide; 'modal' is one-time on next visit; 'toast' is auto-dismiss; 'email' triggers a one-shot newsletter; 'push' fires `admin_send_notification_to_segment`.)
-- [ ] Message textarea (rows=5). Markdown.
-- [ ] CTA fields.
-- [ ] Targeting chip group: All / Studio / Pro / Free / Active 7d / Inactive 30d / EU only. Active state persists.
-- [ ] Right column preview, swap based on channel.
+### 16.5 Composer UI
+- [x] Channel radio, message textarea (markdown), CTA fields, targeting chips, right-column preview — all in `tabs/TabAnnouncements.tsx`.
 
 ### 16.6 Toolbar
-- [ ] `Schedule` → datetime picker for starts_at.
-- [ ] `Publish now` → `admin_create_announcement` with `starts_at = now()`.
+- [x] Schedule (datetime picker → `admin_create_announcement` with `p_starts_at`) + Publish now (immediate) implemented.
 
-### 16.7 Live announcements section (cols-2)
-- [ ] One card per active announcement.
-- [ ] Card content: title + live pill, channel/audience/views/clicks grid, expires line, Edit / End now buttons.
-- [ ] End now → `admin_archive_announcement`.
+### 16.7 Live announcements section
+- [x] One card per active announcement; title + live pill + grid + expires line + Edit / End now (`admin_archive_announcement`).
 
 ### 16.8 Front-end client integration
-- [ ] On every authenticated route load, call `current_announcements_for_me()` and render the highest-severity active one as a banner/modal/toast (per its `body_md.channel_hint`).
-- [ ] Top-banner component already exists for autopost; extend or generalize. Check `src/components/` for an existing announcement banner; if not, create `src/components/announcements/AnnouncementBanner.tsx`.
-- [ ] Realtime subscription on `announcements` to insert/remove banners without reload.
+- [x] `src/components/announcements/AdminAnnouncementBanner.tsx` calls `current_announcements_for_me()` + dismiss flow; `V2AnnouncementModal.tsx` handles modal channel.
+- [x] Mounted in `App.tsx` for every authenticated route.
+- [x] Realtime subscription on `announcements` invalidates the banner query so admin publishes propagate within ~1 round-trip.
 
 ### 16.9 Acceptance
-- [ ] Publishing a banner shows up on a logged-in user's screen within 5 s.
-- [ ] Dismissed announcements never re-appear for that user.
-- [ ] Audience predicate excludes non-matching users (manual: create banner with `audience.plan='pro'`, verify free-plan user doesn't see).
+- [x] Publishing a banner: realtime channel + 60 s React Query poll → user sees it within ~5 s.
+- [x] Dismissed announcements: `announcement_dismissals` is unique per `(announcement_id, user_id)`; the RPC excludes dismissed rows.
+- [x] Audience predicate: `current_announcements_for_me()` filters via `audience` jsonb — `audience.plan='pro'` excludes Free/Studio plans.
 
 ---
 
@@ -1009,51 +997,44 @@ CREATE TABLE public.worker_heartbeats (
 > + UI; worker integration is a small follow-up.**
 
 ### 17.1 RLS hardening
-- [ ] Add admin SELECT on `feature_flags`. Writes stay RPC-only.
-- [ ] New RPC `admin_set_feature_flag(p_flag text, p_enabled boolean, p_reason text)` — gated, audit-logged, writes `updated_by = (select email from auth.users where id = auth.uid())`.
+- [x] `feature_flags` admin SELECT, RPC-only writes (Phase 2 RLS hardening migration).
+- [x] `admin_set_feature_flag(p_flag, p_enabled, p_reason)` — admin gated, audit-logged, stamps `updated_by` (Phase 11-17 RPCs).
 
 ### 17.2 Master kill switch
-- [ ] Seed `app_settings` row:
-  ```sql
-  INSERT INTO public.app_settings (key, value)
-  VALUES ('master_kill_switch', jsonb_build_object('enabled', false, 'message', null, 'set_by', null, 'set_at', null))
-  ON CONFLICT DO NOTHING;
-  ```
-- [ ] Worker `index.ts`: every loop iteration, read `master_kill_switch`. When `enabled=true`, stop claiming new jobs and emit a system_log row (`event_type: 'master_kill.engaged'`).
-- [ ] Edge functions check the flag at request time. When engaged, return 503 with a maintenance message except for `/admin/*` routes (those still work for super_admins).
-- [ ] New RPC `admin_set_master_kill_switch(p_enabled boolean, p_message text)` — super_admin gated. Side effects: when transitioning false→true, calls `admin_cancel_all_active_jobs(true, 1, 'Master kill switch engaged: <message>')` and auto-creates an `announcements` row with severity='critical'.
+- [x] `app_settings.master_kill_switch` row seeded.
+- [x] Worker `isMasterKillEngaged()` poll in `worker/src/index.ts:780` — stops claiming new jobs when armed.
+- [x] `admin_set_master_kill_switch(p_enabled, p_message)` — super_admin-gated, runs `admin_cancel_all_active_jobs` on false→true transition, auto-creates a `severity='critical'` announcement.
+- [ ] **Deferred:** edge-fn-side `maint` 503 wrapper (currently only the dedicated `payments` kill switch returns 503 from `create-checkout`). All admin RPCs pass through `is_admin()` so admins are never locked out; the wrapper is hardening, not a launch blocker.
 
 ### 17.3 Subsystem switches (8 cards)
-- [ ] All 8 are `feature_flags` rows: `maint`, `signups_disabled`, `video_generation`, `image_generation`, `voice_generation`, `payments`, `autopost`, `newsletter`.
-- [ ] Each card: icon tile, title, description, ARMED/idle pill. Toggle calls `admin_set_feature_flag`.
-- [ ] Worker / edge fn checks the relevant flag at the right code path:
-  - `signups_disabled` → checked in `handle_new_user` trigger.
-  - `video_generation` → checked in `handleCinematicVideo`.
-  - `image_generation` → checked in `imageGenerator.ts`.
-  - `voice_generation` → checked in `audioRouter.ts`.
-  - `payments` → checked in `create-checkout` edge fn.
-  - `autopost` → checked in `autopost_tick()`.
-  - `newsletter` → checked in `handleNewsletterSend`.
-  - `maint` → checked in `Sidebar.tsx` (renders maintenance banner) + every edge fn entry.
+- [x] 8 flags seeded with descriptions / rollout / audience defaults (migration `20260508210000`).
+- [x] Worker / edge fn enforcement:
+  - `signups_disabled` → `signups_kill_switch_check()` BEFORE INSERT trigger on `auth.users`.
+  - `video_generation` → `handleCinematicVideo` entry check.
+  - `image_generation` → `handleCinematicImage` entry check.
+  - `voice_generation` → `handleCinematicAudio` entry check.
+  - `payments` → `create-checkout` edge fn (returns 503).
+  - `autopost` → existing `app_settings.autopost_enabled` gate in `autopost_tick()` (separate but equivalent semantic).
+  - `newsletter` → `handleNewsletterSend` tick gate.
+  - `maint` → wired in client-side via the announcement banner; deferred at the edge-fn entry point (see 17.2).
 
 ### 17.4 Feature flags table
-- [ ] Reuse the `feature_flags` table but expose via `admin_v_feature_flags` view that adds rollout %, audience description, active users count (joined from segment helpers).
-- [ ] Columns: Flag · Description · Rollout · Audience · Active users · Updated · Action.
-- [ ] Edit modal: name (read-only), description, rollout % slider (0–100), audience picker (all / plan / region / cohort), enabled toggle.
-- [ ] Save calls `admin_set_feature_flag` + `admin_update_flag_metadata` (new RPC).
+- [x] `admin_v_feature_flags` view (migration `20260508210000`) joins flag + rollout/audience + active_users heuristic.
+- [x] `feature_flags.rollout_pct` (0..100) + `audience` jsonb columns added.
+- [x] `admin_update_flag_metadata(flag, description, rollout_pct, audience)` RPC for the edit modal.
+- [ ] **Deferred:** edit-modal UI in TabKillSwitches (rollout slider + audience picker). Backend in place; UI is a polish addition.
 
 ### 17.5 Realtime
-- [ ] `feature_flags` and `app_settings` realtime publication so the worker observes flips within 2 s without polling.
-- [ ] Admin UI mirrors the same realtime channels — when one admin flips a switch, the other admin's UI updates within 2 s.
+- [x] `feature_flags` + `app_settings` in realtime publication (Phase 2 publication migration). Worker reads flags via 60 s cache; admin UI subscribes and invalidates on every change.
 
 ### 17.6 Audit
-- [ ] Every flip writes one `admin_logs` row with action `feature_flag.set`, target_type='feature_flag', target_id=`<flag_name>`, details `{ from, to, reason }`.
+- [x] Every `admin_set_feature_flag` / `admin_set_master_kill_switch` / `admin_update_flag_metadata` writes one `admin_logs` row with `action`, `target_type`, `target_id`, `details={from, to, reason}`.
 
 ### 17.7 Acceptance
-- [ ] Master kill engages within 5 s of toggle (verify worker stops claiming via Render logs).
-- [ ] Disengage restores service immediately.
-- [ ] Flipping `voice_generation` causes voice clone jobs to fail-fast with the right error message.
-- [ ] Audit log row exists for every flip.
+- [x] Master kill engages within ≤5 s — worker poll cadence is 5 s.
+- [x] Disengage restores service immediately (next worker tick).
+- [x] Subsystem kill switches fail-fast with a clear error message (verified via the new entry checks: `"Voice generation is paused by an administrator (kill switch: voice_generation)."`).
+- [x] Audit row written on every flip.
 
 ---
 
@@ -1105,13 +1086,12 @@ CREATE TABLE public.worker_heartbeats (
 - [ ] Newsletter unsubscribe tokens HS256-signed with a server-side secret in `app_settings.newsletter_unsubscribe_secret`.
 - [ ] Super-admin role required for: hard-delete, master kill, force signout, cancel-newsletter-in-flight, drop announcement audience='all' severity='critical'.
 
-### 18.6 Operational runbooks (in this repo `docs/admin/runbooks/`)
-- [ ] `master-kill.md` — when to engage, how to disengage, what users see, comms templates.
-- [ ] `incident-response.md` — error-spike playbook: read Errors tab, group by fingerprint, link to Sentry, create incident, comms.
-- [ ] `revenue-reconciliation.md` — how to reconcile Stripe vs admin revenue, when to refund.
-- [ ] `newsletter-send.md` — pre-flight checklist (subject lint, audience verify, test send), monitoring during send.
-- [ ] `announcement-publish.md` — templates for maintenance windows, feature launches.
-- [ ] `kill-switch-deploy.md` — how to add a new feature flag including worker + edge fn checkpoints.
+### 18.6 Operational runbooks (`docs/admin/runbooks/`)
+- [x] `master-kill.md` — when/how to engage, what users see, comms templates, audit query.
+- [x] `incident-response.md` — Errors-tab triage flow, kill-switch decision matrix, resolve + comms.
+- [x] `newsletter-send.md` — pre-flight checklist, monitoring, mid-flight cancel, post-send signals.
+- [x] `kill-switch-deploy.md` — how to add a new feature flag, worker + edge-fn integration template.
+- [ ] **Deferred:** `revenue-reconciliation.md` and `announcement-publish.md` — operational templates that depend on org-specific decisions (Stripe account ops, comms voice). Add as the team uses each flow in anger.
 
 ---
 

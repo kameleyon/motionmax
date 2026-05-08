@@ -58,6 +58,23 @@ export async function handler(req: Request): Promise<Response> {
   try {
     logStep("Function started");
 
+    // Phase 17.3 kill-switch — admin can block all new Stripe
+    // checkout sessions. Existing subscriptions / customer-portal
+    // access are untouched.
+    {
+      const { data: flagRow } = await supabaseClient
+        .from("feature_flags")
+        .select("enabled")
+        .eq("flag_name", "payments")
+        .maybeSingle();
+      if ((flagRow as { enabled?: boolean } | null)?.enabled === true) {
+        return new Response(
+          JSON.stringify({ error: "Purchases are temporarily disabled by an administrator. Please try again later." }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 503 },
+        );
+      }
+    }
+
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("No authorization header provided");
 

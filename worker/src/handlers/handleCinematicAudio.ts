@@ -111,6 +111,12 @@ export async function handleCinematicAudio(
 ) {
   const { generationId, projectId, sceneIndex } = payload;
 
+  // Phase 17.3 kill-switch — admin pauses voice/TTS generation.
+  const { isKillSwitchArmed } = await import("../lib/featureFlags.js");
+  if (await isKillSwitchArmed("voice_generation")) {
+    throw new Error("Voice generation is paused by an administrator (kill switch: voice_generation).");
+  }
+
   await audit("voice.tts_started", {
     jobId, projectId, userId, generationId,
     message: `Cinematic audio started for scene ${sceneIndex}`,

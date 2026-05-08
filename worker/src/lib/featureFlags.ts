@@ -71,3 +71,18 @@ export async function isEnabled(flagName: string, defaultValue = true): Promise<
   const flags = await getFlags();
   return flagName in flags ? flags[flagName] : defaultValue;
 }
+
+/**
+ * Kill-switch semantics: returns true when the named flag is set to
+ * enabled=true (i.e. the kill switch is ARMED and the feature should
+ * be blocked). Flag absent → false (fail-open, feature operational).
+ *
+ * Mirrors the 8 subsystem switches the admin Kill Switches tab
+ * renders: maint, signups_disabled, video_generation, image_generation,
+ * voice_generation, payments, autopost, newsletter. Each handler that
+ * implements one of those features calls this on entry and aborts
+ * with a clear error message when armed.
+ */
+export async function isKillSwitchArmed(flagName: string): Promise<boolean> {
+  return await isEnabled(flagName, false);
+}

@@ -25,6 +25,12 @@ export async function handleCinematicImage(
 ) {
   const { generationId, projectId, sceneIndex } = payload;
 
+  // Phase 17.3 kill-switch — admin pauses image generation.
+  const { isKillSwitchArmed } = await import("../lib/featureFlags.js");
+  if (await isKillSwitchArmed("image_generation")) {
+    throw new Error("Image generation is paused by an administrator (kill switch: image_generation).");
+  }
+
   await audit("image.gen_started", {
     jobId, projectId, userId, generationId,
     message: `Cinematic image started for scene ${sceneIndex}`,

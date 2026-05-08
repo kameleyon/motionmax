@@ -36,6 +36,7 @@ import {
   pollHyperealJob,                // Resume-from-checkpoint poll for an already-submitted Hypereal job.
 } from "../services/hypereal.js";
 import { saveCheckpoint, readCheckpointKey, clearCheckpointKey } from "../lib/checkpoint.js";
+import { isKillSwitchArmed } from "../lib/featureFlags.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -70,6 +71,14 @@ export async function handleCinematicVideo(
   userId?: string,
 ) {
   const { generationId, projectId, sceneIndex, regenerate } = payload;
+
+  // Phase 17.3 kill-switch — admins can pause cinematic video
+  // generation via the admin Kill Switches tab. Fail-fast at handler
+  // entry so the queue surfaces the reason in error_message instead
+  // of running through the full prompt + Hypereal submit path.
+  if (await isKillSwitchArmed("video_generation")) {
+    throw new Error("Cinematic video generation is paused by an administrator (kill switch: video_generation).");
+  }
 
   await audit("video.gen_started", {
     jobId, projectId, userId, generationId,

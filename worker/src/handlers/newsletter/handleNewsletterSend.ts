@@ -23,6 +23,7 @@
  */
 import { supabase } from "../../lib/supabase.js";
 import { writeSystemLog } from "../../lib/logger.js";
+import { isKillSwitchArmed } from "../../lib/featureFlags.js";
 
 const RESEND_API_URL = "https://api.resend.com/emails";
 const POLL_INTERVAL_MS = 30_000;
@@ -228,6 +229,10 @@ export function startNewsletterSender(): void {
   running = true;
   const tick = async (): Promise<void> => {
     try {
+      // Phase 17.3 kill-switch — admin can pause the dispatcher
+      // without cancelling scheduled campaigns. They stay in
+      // 'scheduled' status; we just don't claim while armed.
+      if (await isKillSwitchArmed("newsletter")) return;
       const campaign = await claimNextCampaign();
       if (campaign) await dispatchCampaign(campaign);
     } catch (err) {

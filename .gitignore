@@ -1,6 +1,7 @@
-# Markdown docs (internal — keep only README.md)
+# Markdown docs (internal — keep only README.md + admin runbooks)
 *.md
 !README.md
+!docs/admin/runbooks/*.md
 
 # Design template drops (large standalone HTML mockups, not part of the app)
 MotionMax*.html

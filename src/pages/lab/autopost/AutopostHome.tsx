@@ -268,6 +268,7 @@ export default function AutopostHome() {
   const hasAutomations = automations.length > 0;
 
   // Compute next-fire countdown across all active schedules.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const nextFireSummary = useMemo(() => {
     const upcoming = automations
       .filter(s => s.active && s.next_fire_at)
@@ -286,6 +287,7 @@ export default function AutopostHome() {
   }, [automations]);
 
   // Build radar events from past runs + upcoming schedule fires.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const radarEvents = useMemo<RadarEvent[]>(() => {
     const out: RadarEvent[] = [];
     const now = Date.now();
@@ -606,6 +608,7 @@ function KillToggle({
 
 /** 24-hour radar — pure-CSS pin layout. Renders the axis ticks at +0,
  *  +6h, +12h, +18h, +24h and pins each event proportionally. */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function Radar({ events }: { events: RadarEvent[] }) {
   const minH = -3;
   const maxH = 24;

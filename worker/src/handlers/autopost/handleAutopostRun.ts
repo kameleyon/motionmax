@@ -287,9 +287,26 @@ async function waitForJobWithSubProgress(
         .select("id, status")
         .in("id", subJobIds);
       if (Array.isArray(subRows)) {
-        const done = (subRows as Array<{ status: string }>).filter(
-          (r) => r.status === "completed" || r.status === "failed",
-        ).length;
+        // Fail-fast on any sub-job failure. The depends_on chain does
+        // NOT auto-cascade failures to finalize — finalize stays in
+        // 'pending' forever, which is what was burning the full 60 min
+        // PHASE_TIMEOUT_MS before. Pull the underlying error_message so
+        // the surfaced run-level error names the real culprit instead
+        // of a generic timeout.
+        const typedRows = subRows as Array<{ id: string; status: string }>;
+        const failedSub = typedRows.find((r) => r.status === "failed");
+        if (failedSub) {
+          const { data: failedDetail } = await supabase
+            .from("video_generation_jobs")
+            .select("task_type, error_message")
+            .eq("id", failedSub.id)
+            .maybeSingle();
+          const detail = failedDetail as { task_type?: string; error_message?: string } | null;
+          throw new Error(
+            `${taskType} job ${jobId} aborted: dependency ${detail?.task_type ?? "sub-job"} ${failedSub.id} failed: ${detail?.error_message ?? "unknown error"}`,
+          );
+        }
+        const done = typedRows.filter((r) => r.status === "completed").length;
         if (done !== lastReportedDone) {
           lastReportedDone = done;
           // 35 → 78 spread (43-pt range), reserve 78→80 for finalize.

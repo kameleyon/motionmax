@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 
 import Sidebar from "@/components/dashboard/Sidebar";
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -16,6 +17,7 @@ import type { AdminTabKey } from "@/components/admin/_shared/queries";
 import { AdminHero } from "@/components/admin/shell/AdminHero";
 import { AdminTabStrip } from "@/components/admin/shell/AdminTabStrip";
 import { AdminTopBar } from "@/components/admin/shell/AdminTopBar";
+import { supabase } from "@/integrations/supabase/client";
 
 /* ── Lazy tab content ─────────────────────────────────────────────────
  * Each existing tab component is split out into its own chunk so the
@@ -208,11 +210,39 @@ export default function Admin() {
   // Mobile sidebar drawer — opens via the hamburger in AdminTopBar.
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  // Live badge counts — single React Query polling 4 KPI RPCs in
+  // parallel + counting api_keys rows. 60 s refetch keeps the strip
+  // fresh without spamming the DB. Errors fall through to the static
+  // values in TAB_DEFINITIONS so a transient RPC failure doesn't
+  // erase the strip's badge UI. (Lives ABOVE the TAB_KEYS sanity
+  // check so the rules-of-hooks order stays stable.)
+  const { data: badges } = useQuery({
+    queryKey: ["admin", "tab-badges"],
+    queryFn: async (): Promise<Partial<Record<AdminTabKey, number | null>>> => {
+      type RpcFn = <T>(fn: string, args?: Record<string, unknown>) => Promise<{ data: T | null; error: { message: string } | null }>;
+      const rpc = supabase.rpc.bind(supabase) as unknown as RpcFn;
+      const [errorsKpi, msgsKpi, notifKpi, annKpi, apiKeysCount] = await Promise.all([
+        rpc<{ open_signatures: number }>("admin_errors_kpis"),
+        rpc<{ unread: number }>("admin_messages_kpis"),
+        rpc<{ unread_alerts: number }>("admin_notifications_kpis"),
+        rpc<{ active: number }>("admin_announcements_kpis"),
+        supabase.from("internal_api_keys").select("id", { count: "exact", head: true }).eq("status", "active"),
+      ]);
+      return {
+        errors:   errorsKpi.data?.open_signatures ?? null,
+        messages: msgsKpi.data?.unread ?? null,
+        notifs:   notifKpi.data?.unread_alerts ?? null,
+        announce: annKpi.data?.active ?? null,
+        apikeys:  apiKeysCount.count ?? null,
+      };
+    },
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
   // Sanity-check exhaustiveness against `TAB_KEYS` at module-eval time
   // — guarantees the route can render every key the tab strip emits.
   if (!TAB_KEYS.includes(tab)) {
-    // Shouldn't be reachable — `parseTabKey()` already coerces unknown
-    // values to `'overview'`. This branch keeps TypeScript honest.
     return null;
   }
 
@@ -261,7 +291,7 @@ export default function Admin() {
         <div className="body">
           <div className="adm-content">
             <AdminHero onTabChange={setTab} onSetLive={setLive} />
-            <AdminTabStrip activeTab={tab} onTabChange={setTab} />
+            <AdminTabStrip activeTab={tab} onTabChange={setTab} liveBadges={badges} />
             <AdminTabBoundary tabKey={tab}>
               <Suspense fallback={<AdminLoading />}>{tabContent}</Suspense>
             </AdminTabBoundary>

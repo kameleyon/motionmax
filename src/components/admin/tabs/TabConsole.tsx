@@ -218,6 +218,37 @@ export function TabConsole(): JSX.Element {
     return { byLevel, top, total: logs.length };
   }, [logs]);
 
+  const exportCsv = useCallback((): void => {
+    if (filtered.length === 0) return;
+    // Buffered + filtered rows, oldest first so the CSV reads top-to-
+    // bottom chronologically (the live tail appends; we reverse here).
+    const rows = [...filtered].reverse();
+    const header = ["timestamp", "level", "category", "event_type", "user_id", "generation_id", "job_id", "worker_id", "fingerprint", "message", "details"];
+    const escape = (v: unknown): string => {
+      if (v === null || v === undefined) return "";
+      const s = typeof v === "string" ? v : JSON.stringify(v);
+      // RFC 4180: quote any field containing comma, quote, or newline; escape internal quotes.
+      if (/[,"\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
+    const lines = rows.map(({ row, lvl }) => [
+      row.created_at, lvl, row.category, row.event_type,
+      row.user_id ?? "", row.generation_id ?? "",
+      (row.details && typeof row.details === "object" && "worker_job_id" in row.details)
+        ? String((row.details as Record<string, unknown>).worker_job_id ?? "") : "",
+      row.worker_id ?? "", row.fingerprint ?? "",
+      row.message, row.details,
+    ].map(escape).join(","));
+    const csv = [header.join(","), ...lines].join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `console-${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [filtered]);
+
   const toolbarRight = (
     <div className="flex flex-wrap items-center gap-2">
       <div className="flex items-center gap-1">
@@ -238,6 +269,11 @@ export function TabConsole(): JSX.Element {
         className="rounded-md px-2 py-1.5 text-xs"
         style={{ fontFamily: "var(--mono)", background: "var(--panel-3)",
           border: "1px solid var(--line)", color: "var(--ink)", minWidth: 240 }} />
+      <button type="button" className="btn-ghost" onClick={exportCsv}
+        title={`Export ${filtered.length} buffered + filtered row(s) as CSV`}
+        disabled={filtered.length === 0}>
+        <I.download /> Export
+      </button>
     </div>
   );
 

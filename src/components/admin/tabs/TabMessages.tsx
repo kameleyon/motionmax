@@ -384,6 +384,19 @@ interface ThreadDetailProps {
   markResolved: boolean; onChangeMarkResolved: (v: boolean) => void;
 }
 
+/** The 5 tags admins can toggle on a thread. Backed by
+ *  admin_message_threads.tags text[] (migration 20260508190000). The
+ *  filter chip group above the inbox list reads the same column. */
+const FLAG_TAGS: ReadonlyArray<{ key: string; label: string }> = [
+  { key: "billing", label: "Billing" },
+  { key: "bug",     label: "Bug" },
+  { key: "sales",   label: "Sales" },
+  { key: "churn",   label: "Churn" },
+  { key: "urgent",  label: "Urgent" },
+];
+
+interface SupportTemplate { slug: string; title: string; body: string }
+
 function ThreadDetail(props: ThreadDetailProps): JSX.Element {
   const { thread, messages, latest, showFullThread, onToggleFullThread,
     reply, onChangeReply, onSend, sending, markResolved, onChangeMarkResolved } = props;
@@ -394,6 +407,79 @@ function ThreadDetail(props: ThreadDetailProps): JSX.Element {
     for (const m of messages) for (const a of m.attachments ?? []) out.push(a);
     return out;
   }, [messages]);
+
+  // ── Flag / Templates / Add credits state ─────────────────────────
+  const queryClient = useQueryClient();
+  const [flagOpen, setFlagOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [creditsOpen, setCreditsOpen] = useState(false);
+  const [creditsAmount, setCreditsAmount] = useState("100");
+  const [creditsReason, setCreditsReason] = useState("");
+
+  // Fetch tags for this thread on demand. Stays in sync with the row
+  // each time the flag panel opens (DB is source of truth, not a
+  // local cache) so a sibling admin's tag change is reflected.
+  const tagsQuery = useQuery({
+    enabled: flagOpen,
+    queryKey: ["admin", "messages", "tags", thread.id],
+    queryFn: async (): Promise<string[]> => {
+      const { data, error } = await supabase
+        .from("admin_message_threads")
+        .select("tags")
+        .eq("id", thread.id)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return ((data as { tags?: string[] | null } | null)?.tags ?? []) as string[];
+    },
+  });
+
+  const templatesQuery = useQuery({
+    enabled: templatesOpen,
+    queryKey: ["admin", "messages", "templates"],
+    queryFn: async (): Promise<SupportTemplate[]> => {
+      const { data, error } = await supabase
+        .from("support_templates")
+        .select("slug, title, body")
+        .order("title", { ascending: true });
+      if (error) throw new Error(error.message);
+      return (data ?? []) as SupportTemplate[];
+    },
+  });
+
+  async function toggleTag(tag: string): Promise<void> {
+    const current = tagsQuery.data ?? [];
+    const next = current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag];
+    const { error } = await rpc<unknown>("admin_flag_thread", { p_thread_id: thread.id, p_flags: next });
+    if (error) { toast.error(error.message); return; }
+    void queryClient.invalidateQueries({ queryKey: ["admin", "messages", "tags", thread.id] });
+    void queryClient.invalidateQueries({ queryKey: adminKey("messages", "list") });
+  }
+
+  function pasteTemplate(t: SupportTemplate): void {
+    // {{display_name}} / {{plan_name}} substitution. plan_name isn't
+    // on ThreadRow yet — fall back to "your plan" so the body still
+    // reads naturally if the field is missing.
+    const filled = t.body
+      .replace(/\{\{\s*display_name\s*\}\}/g, displayName.split(/\s+/)[0])
+      .replace(/\{\{\s*plan_name\s*\}\}/g, "your plan");
+    onChangeReply(reply ? `${reply}\n\n${filled}` : filled);
+    setTemplatesOpen(false);
+  }
+
+  async function applyCredits(): Promise<void> {
+    const amt = Number.parseInt(creditsAmount, 10);
+    if (!Number.isFinite(amt) || amt === 0) { toast.error("Enter a non-zero amount"); return; }
+    const { error } = await rpc<unknown>("admin_grant_credits", {
+      target_user_id: thread.user_id,
+      credits_amount: amt,
+      reason: creditsReason || `Manual grant via Messages thread ${thread.id.slice(0, 8)}`,
+    });
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Granted ${amt} credits to ${displayName}`);
+    setCreditsOpen(false);
+    setCreditsAmount("100");
+    setCreditsReason("");
+  }
 
   return (
     <>
@@ -422,10 +508,8 @@ function ThreadDetail(props: ThreadDetailProps): JSX.Element {
             }}>
             <I.reply /> Reply
           </button>
-          <button type="button" className="btn-mini" title="Flag"
-            onClick={() => toast.info("Thread flagging — coming soon", {
-              description: "Flag-on-thread persists once admin_flag_thread RPC ships.",
-            })}>
+          <button type="button" className={"btn-mini" + (flagOpen ? " active" : "")} title="Flag"
+            onClick={() => { setFlagOpen((v) => !v); setTemplatesOpen(false); }}>
             <I.flag /> Flag
           </button>
           <button type="button" className="btn-mini" title="Trash"
@@ -497,6 +581,86 @@ function ThreadDetail(props: ThreadDetailProps): JSX.Element {
         )}
       </div>
 
+      {/* Flag popover — anchored above the reply footer */}
+      {flagOpen && (
+        <div style={{ borderTop: "1px solid var(--line)", padding: "10px 14px", background: "var(--panel-2)", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 11, color: "var(--ink-mute)", letterSpacing: ".08em", textTransform: "uppercase", marginRight: 6 }}>
+            Flags
+          </span>
+          {FLAG_TAGS.map((t) => {
+            const on = (tagsQuery.data ?? []).includes(t.key);
+            return (
+              <button key={t.key} type="button"
+                onClick={() => void toggleTag(t.key)}
+                className={"btn-mini" + (on ? " active" : "")}
+                style={on ? { color: "var(--cyan)", borderColor: "rgba(20,200,204,.3)", background: "var(--cyan-dim)" } : undefined}>
+                {t.label}
+              </button>
+            );
+          })}
+          <span style={{ flex: 1 }} />
+          <button type="button" className="btn-mini" onClick={() => setFlagOpen(false)}>Close</button>
+        </div>
+      )}
+
+      {/* Templates picker — anchored above the reply footer */}
+      {templatesOpen && (
+        <div style={{ borderTop: "1px solid var(--line)", padding: 12, background: "var(--panel-2)", maxHeight: 220, overflowY: "auto" }}>
+          {templatesQuery.isLoading ? (
+            <div style={{ fontSize: 12, color: "var(--ink-dim)" }}>Loading templates…</div>
+          ) : (templatesQuery.data ?? []).length === 0 ? (
+            <div style={{ fontSize: 12, color: "var(--ink-dim)" }}>No templates yet — seed the support_templates table.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {(templatesQuery.data ?? []).map((t) => (
+                <button key={t.slug} type="button"
+                  onClick={() => pasteTemplate(t)}
+                  style={{ textAlign: "left", padding: "8px 10px", background: "var(--panel-3)", border: "1px solid var(--line)", borderRadius: 6, color: "var(--ink)", fontSize: 12, cursor: "pointer" }}>
+                  <div style={{ fontWeight: 500, marginBottom: 2 }}>{t.title}</div>
+                  <div style={{ color: "var(--ink-mute)", fontSize: 10.5, fontFamily: "var(--mono)" }}>
+                    {t.body.split("\n")[0].slice(0, 80)}{t.body.length > 80 ? "…" : ""}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Add credits modal */}
+      {creditsOpen && (
+        <div role="dialog" aria-modal="true"
+          style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div onClick={() => setCreditsOpen(false)}
+            style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.55)", backdropFilter: "blur(2px)" }} />
+          <div className="card" style={{ position: "relative", width: 420, maxWidth: "calc(100vw - 32px)", padding: 18 }}>
+            <div className="card-h" style={{ marginBottom: 12 }}>
+              <div className="t">Grant credits to {displayName}</div>
+            </div>
+            <div style={{ display: "grid", gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--ink-mute)", marginBottom: 4 }}>Amount</div>
+                <input type="number" value={creditsAmount} onChange={(e) => setCreditsAmount(e.target.value)}
+                  className="font-mono" autoFocus
+                  style={{ width: "100%", padding: 8, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--ink)", borderRadius: 6 }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--ink-mute)", marginBottom: 4 }}>Reason (audit log)</div>
+                <input type="text" value={creditsReason} onChange={(e) => setCreditsReason(e.target.value)}
+                  placeholder={`Manual grant via thread ${thread.id.slice(0, 8)}`}
+                  style={{ width: "100%", padding: 8, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--ink)", borderRadius: 6 }} />
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 6 }}>
+                <button type="button" className="btn-mini" onClick={() => setCreditsOpen(false)}>Cancel</button>
+                <button type="button" className="btn-cyan sm" onClick={() => void applyCredits()}>
+                  <I.credit /> Apply
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Reply footer */}
       <div style={{ borderTop: "1px solid var(--line)", padding: 12, background: "var(--panel)" }}>
         <textarea value={reply} onChange={(e) => onChangeReply(e.target.value)}
@@ -513,16 +677,12 @@ function ThreadDetail(props: ThreadDetailProps): JSX.Element {
               })}>
               <I.paperclip />
             </button>
-            <button type="button" className="btn-mini"
-              onClick={() => toast.info("Templates — coming soon", {
-                description: "Reply templates UI lands once support_reply_templates is wired.",
-              })}>
+            <button type="button" className={"btn-mini" + (templatesOpen ? " active" : "")}
+              onClick={() => { setTemplatesOpen((v) => !v); setFlagOpen(false); }}>
               Templates
             </button>
             <button type="button" className="btn-mini"
-              onClick={() => toast.info("Open the user drawer to grant credits", {
-                description: "Use Users tab → user → Billing → Adjust credits.",
-              })}>
+              onClick={() => setCreditsOpen(true)}>
               <I.credit /> Add credits
             </button>
           </div>

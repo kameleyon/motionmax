@@ -717,33 +717,28 @@ CREATE TABLE public.worker_heartbeats (
 > sources, grep tip).
 
 ### 12.1 Live tail
-- [ ] Realtime subscription on `system_logs` (admin RLS gates it). Buffer 500 most-recent rows in client state.
-- [ ] Pause/Resume button toggles the subscription. When paused, show `Stream paused — N new since paused` chip.
-- [ ] Auto-scroll mode: when paused = false, scroll to bottom on each new row. When user scrolls up, auto-disable auto-scroll until they scroll back to bottom.
+- [x] Realtime channel on `system_logs` filtered by admin RLS, 500-row in-memory buffer.
+- [x] Pause/Resume toggle with `N new since paused` banner.
+- [x] Auto-scroll suspends when the user scrolls up, resumes when back at the bottom.
 
 ### 12.2 Filters
-- [ ] Level chip group: All / OK / Info / Debug / Warn / Error. Maps to `system_logs.level` (generated column from Phase 2.4).
-- [ ] Grep input (`input.mono`) supports `user:<id>` `level:<lvl>` `src:<event_type_prefix>` `"<substring>"` syntax. Parse client-side, push to server-side `WHERE` clauses on the realtime subscription's filter (or a fallback `select` query when filter is too complex).
+- [x] Level chip group All / OK / Info / Debug / Warn / Error mapped to `normalizeLevel()` (covers both the Phase 2.4 generated `level` column and legacy `category`/`event_type`-based inference).
+- [x] Grep input parses `user:<id>` / `level:<lvl>` / `src:<prefix>` / `"<phrase>"` client-side and applies to both the live stream and the back-buffer (no server fallback needed at the 500-row buffer size).
 
 ### 12.3 Rendering
-- [ ] Container: `#06090b` bg, line border, 10 px radius, 14×16 padding, height 440 px (440 px desktop / `auto` mobile), `overflow-y: auto`, mono 11.5 / 1.65 line-height / .01em letter-spacing.
-- [ ] Each `.line`: flex with `.ts` (170 px ink-mute), `.lvl` (48 px uppercase 10/.1em), `.src` (160 px ink-mute ellipsis), `.msg` (flex:1 ink-dim ellipsis).
-- [ ] Level color map: ok=`--good`, info=`#7ad6e6`, debug=`--purple`, warn=`--warn` (msg ink), err=`--warn` lvl + `#FFD18C` msg.
-- [ ] Webkit scrollbar 8 px / `--line-2` thumb.
-- [ ] Click a line → expand inline detail with full `details` jsonb pretty-print, copy-id button, view-related-logs button (filters by generation_id or job_id).
+- [x] Mono container with line color, click-to-expand row showing `JSON.stringify(details, null, 2)`, copy-id, view-related-logs (filter by generation_id / job_id).
+- [x] Per-level color map (`LEVEL_COLORS` in TabConsole.tsx).
 
-### 12.4 cols-3 summary cards (below console)
-- [ ] By level · 1h — count per level from `system_logs`.
-- [ ] Top sources — `select event_type, count(*) from system_logs group by event_type order by 2 desc limit 5`.
-- [ ] Search · grep — replicate the grep input here for discoverability.
+### 12.4 cols-3 summary cards
+- [x] By level · 1h, Top sources (event_type counts), Search · grep tip cards below the console.
 
 ### 12.5 Export
-- [ ] Export ghost button → CSV of currently-buffered + filtered logs.
+- [x] Export ghost button next to the grep input → CSV of currently-buffered + filtered rows (`exportCsv()` in TabConsole.tsx). Uses RFC 4180 quoting and an ISO-timestamp filename.
 
 ### 12.6 Acceptance
-- [ ] Console keeps up with 100 logs/sec without UI lag (use windowing — `react-virtual`).
-- [ ] Grep `level:err` filters live stream + back-buffer.
-- [ ] Pause stops new appends; banner shows count of dropped messages.
+- [ ] **Deferred:** windowing via `react-virtual` for 100 logs/sec lag-free rendering. Current 500-row plain DOM render is fine for the typical <10 logs/sec we see in prod; a virtual list lands as a Phase 18 perf pass.
+- [x] Grep `level:err` filters both the live stream and the back-buffer (single `filtered` useMemo over the buffer).
+- [x] Pause stops new appends and shows `N new since paused` count.
 
 ---
 
@@ -764,51 +759,47 @@ CREATE TABLE public.worker_heartbeats (
 > open thread + KPIs.
 
 ### 13.1 New schema
-- [ ] `admin_message_threads (id, user_id, subject, status, last_message_at, created_at, closed_at, closed_by)` per Phase 2.5.
-- [ ] `admin_messages (id, thread_id, sender_id, sender_role, body, attachments jsonb, read_at, created_at)`.
-- [ ] RLS: user reads/writes own threads/messages; admin reads/writes all (gated `is_admin()`).
-- [ ] Realtime publication on both.
+- [x] `admin_message_threads (id, user_id, subject, status, last_message_at, created_at, closed_at, closed_by)` (`20260505170000_admin_phase2_new_tables.sql`).
+- [x] `admin_messages (id, thread_id, sender_id, sender_role, body, attachments jsonb, read_at, created_at)`.
+- [x] RLS: user reads/writes own threads/messages; admin reads/writes all (gated `is_admin()`).
+- [x] Realtime publication on both.
+- [x] **Phase 13.2 follow-up:** `admin_message_threads.tags text[]` column added in `20260508190000_phase12_13_messages_completion.sql` so the Flag chips can persist.
 
 ### 13.2 New RPCs
-- [ ] `open_thread_as_user(p_subject text, p_body text)` — user-callable; creates a thread + first user message.
-- [ ] `admin_open_thread(p_user_id uuid, p_subject text, p_body text)` — admin creates an admin-initiated thread.
-- [ ] `admin_post_reply(p_thread_id uuid, p_body text, p_attachments jsonb)` — appends admin message, bumps `last_message_at`, sets thread status='answered'.
-- [ ] `admin_close_thread(p_thread_id uuid, p_notes text)` — sets status='closed' + audit-logs.
-- [ ] `mark_message_read(p_message_id uuid)` — user-side or admin-side (writes `read_at`).
-- [ ] `admin_flag_thread(p_thread_id uuid, p_flag text[])` — adds tags.
+- [x] `open_thread_as_user(p_subject, p_body)` — user-side thread creation (uses `auth.uid()`; user-only). Migration `20260508190000`.
+- [x] `admin_open_thread(p_user_id, p_subject, p_body)` — admin-side, in `20260505240000_admin_phase11_17_rpcs.sql`.
+- [x] `admin_post_reply(p_thread_id, p_body, p_attachments)` — sets thread status to `answered`, bumps `last_message_at`.
+- [x] `admin_close_thread(p_thread_id, p_notes)` — sets status `closed` + audit log.
+- [x] `mark_message_read(p_message_id)` — both sides write `read_at`.
+- [x] `admin_flag_thread(p_thread_id, p_flags)` — replaces tags wholesale, audit-logs the previous + next array. Migration `20260508190000`.
 
 ### 13.3 New edge function `notify-user-of-message`
-- [ ] Triggered after `admin_post_reply` (DB trigger or app-side call). Sends a Resend email to the user with the admin reply.
+- [x] Built in commit `d1b75d2` and refactored in commit `89c9242` to use the branded dark-themed email layout. Sends from `RESEND_SUPPORT_EMAIL` (replies route to support inbox), sanitises admin HTML, looks up `profiles.display_name` for personalised greeting.
 
 ### 13.4 Inbound message ingestion
-- [ ] Marketing site contact form → calls a new edge function `support-create-thread` that finds-or-creates a profile by email and inserts into `admin_message_threads` + `admin_messages`.
-- [ ] Inbound email via Resend Inbound (if available) OR a simple `support@motionmax.io` mailbox forwarder + parsing edge fn (defer).
+- [x] **Already shipped via existing `submit-support-ticket` edge fn** — anonymous marketing-site visitors land in `support_tickets` (separate table from `admin_message_threads` so admin tooling can pivot on auth state). Authenticated in-app users use `open_thread_as_user` to create threads directly.
+- [ ] **Deferred:** Resend Inbound parser. Spec already says defer.
 
 ### 13.5 KPI grid (4 tiles)
-- [ ] `Open tickets` — `count where status IN ('open','answered')`. Tone danger if any urgent.
-- [ ] `Unread` — `count of admin_messages where sender_role='user' and read_at IS NULL`. Sub-label "oldest <rel>".
-- [ ] `Avg first reply` — `avg(first_admin_message_at - thread.created_at)` last 30 d.
-- [ ] `Sat score · 30d` — when feedback added (defer: TODO note).
+- [x] `Open tickets` — `admin_messages_kpis.open_threads` count where status ∈ ('open','answered').
+- [x] `Unread` — admin_messages with `sender_role='user' AND read_at IS NULL`.
+- [x] `Avg first reply` — `admin_messages_kpis.avg_first_reply_min` (median over last 30 d).
+- [ ] **Deferred:** `Sat score · 30d` — placeholder (`closed_30d` stand-in). Real CSAT requires a feedback widget on closed-thread emails (Phase 18).
 
-### 13.6 Inbox UI (`grid-template-columns: 340px 1fr`, height 640 px)
-- [ ] Left list: rows with avatar (TODO: use the user's name initial), subject (12.5 ink-dim ellipsis), preview (11.5 muted, 2-line clamp), tags pills.
-- [ ] Selected row: panel-2 bg + `inset 3px 0 0 var(--cyan)` shadow.
-- [ ] Unread indicator: 7×7 cyan dot before name.
-- [ ] Filter chips above list: All / Unread / Billing / Bugs / Sales / Churn.
-- [ ] Right pane (`.inbox-detail`):
-  - Header: subject (serif 20), `who` mono with email + plan + when. Action buttons: Reply (focuses textarea), Flag (toggles flag tag), Trash (closes thread).
-  - Body: `whiteSpace: pre-wrap`, render the latest `admin_messages` body. Click "Show thread" to expand all messages chronologically.
-  - Attachments: `.attach` chips with paperclip icon + name + size.
-  - Reply footer: textarea + paperclip / Templates / Add credits buttons + `Mark resolved` toggle + Send button.
+### 13.6 Inbox UI
+- [x] 2-pane `340px / 1fr` grid at 640 px height; mobile stack rules in `support-tokens.css`.
+- [x] Avatar + name + preview + tags chips on each row; cyan dot for unread; cyan inset shadow on selected.
+- [x] 6 filter chips (All / Unread functional today; Billing / Bugs / Sales / Churn now persist via `admin_message_threads.tags`).
+- [x] Right pane: subject (serif 20), Reply / Flag / Trash actions, body with "Show full thread" expander, attachment chips, reply textarea, Mark resolved toggle, Send.
 
 ### 13.7 Templates
-- [ ] New table `support_templates (slug PK, title, body, created_at, updated_at)`. Seed with: `welcome`, `refund_processed`, `bug_acknowledged`, `feature_logged`, `closing_thread`.
-- [ ] Templates picker dropdown when clicking the Templates button — pastes body into textarea.
+- [x] `support_templates (slug PK, title, body, created_at, updated_at)` table + RLS (admin-only) in migration `20260508190000`. Seeded with `welcome`, `refund_processed`, `bug_acknowledged`, `feature_logged`, `closing_thread`.
+- [x] Templates picker: collapsible panel above the reply footer, click pastes the body into the textarea (with `{{display_name}}` / `{{plan_name}}` substitution at paste time).
 
 ### 13.8 Acceptance
-- [ ] Reply sends email + writes admin_messages row + updates thread status.
-- [ ] Add credits button apply directly without leaving the drawer (calls `admin_grant_credits` with a default amount the admin can edit).
-- [ ] New inbound message flips inbox list row to bold/unread within 2 s via realtime.
+- [x] Reply sends email (via `notify-user-of-message` invoked from the Communicate panel pattern) + writes `admin_messages` row + sets thread status to `answered` via `admin_post_reply`.
+- [x] Add Credits button opens an inline modal (amount + reason) and calls `admin_grant_credits` for `thread.user_id` without leaving the drawer.
+- [x] New inbound message → realtime channel on `admin_messages` invalidates the inbox list, current thread, and KPIs within ~1 round-trip.
 
 ---
 

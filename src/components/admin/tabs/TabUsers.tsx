@@ -319,7 +319,7 @@ export function TabUsers(): JSX.Element {
                 <input type="checkbox" checked={allChecked} onChange={toggleAll} aria-label="Select all" />
               </th>
               <th>User</th><th>Plan</th><th>Status</th>
-              <th>Last sign-in</th>
+              <th>Last active</th>
               <th style={{ textAlign: "right" }}>Generations</th>
               <th style={{ textAlign: "right" }}>Lifetime spent</th>
               <th style={{ textAlign: "right" }}>Credits</th>
@@ -351,7 +351,7 @@ export function TabUsers(): JSX.Element {
                   </td>
                   <td><Pill variant={planVariant(u.plan_name)}>{planLabel(u.plan_name)}</Pill></td>
                   <td><Pill variant={statusVariant(u.status)} dot>{u.status ?? "active"}</Pill></td>
-                  <td className="mono">{u.last_sign_in ? formatRel(u.last_sign_in) : "—"}</td>
+                  <td className="mono">{u.last_active_at ? formatRel(u.last_active_at) : (u.last_sign_in ? formatRel(u.last_sign_in) : "—")}</td>
                   <td className="num strong" style={{ textAlign: "right" }}>{fmtNum(u.generations)}</td>
                   <td className="num strong" style={{ textAlign: "right" }}>{money(u.lifetime_spent)}</td>
                   <td className="num" style={{ textAlign: "right" }}>{short(u.credits_balance)}</td>

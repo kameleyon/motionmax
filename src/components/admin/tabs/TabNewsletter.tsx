@@ -223,9 +223,23 @@ export function TabNewsletter(): JSX.Element {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const sendTest = (): void => {
-    toast.info("Send test → me — TODO Phase 18 (Resend stub)");
-  };
+  // Phase 15.7 — Send test → me.
+  // Saves the current draft (or reuses an existing one with the same
+  // subject), then calls admin_send_test_to_self to enqueue a single
+  // newsletter_sends row keyed to the calling admin. The worker's
+  // handleNewsletterSend loop picks it up on its next 30 s tick and
+  // delivers via Resend. The admin sees the actual rendered email
+  // (footer link + branding) without spamming the real audience.
+  const sendTestMut = useMutation({
+    mutationFn: async (): Promise<void> => {
+      const draft = await saveDraftMut.mutateAsync();
+      const { error } = await rpc<unknown>("admin_send_test_to_self", { p_campaign_id: draft.id });
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => toast.success("Test queued — check your inbox in ~30 s"),
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const sendTest = (): void => { sendTestMut.mutate(); };
 
   // Send-now state — confirmation modal + dispatch via edge fn.
   const [pendingSend, setPendingSend] = useState<CampaignRow | null>(null);

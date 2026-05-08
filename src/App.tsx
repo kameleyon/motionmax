@@ -34,6 +34,7 @@ const Billing = lazy(() => import("./pages/Billing"));
 const Projects = lazy(() => import("./pages/Projects"));
 const VoiceLab = lazy(() => import("./pages/VoiceLab"));
 const PublicShare = lazy(() => import("./pages/PublicShare"));
+const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
 const Terms = lazy(() => import("./pages/Terms"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const AcceptableUse = lazy(() => import("./pages/AcceptableUse"));
@@ -103,6 +104,9 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             {/* Public share page - no auth required */}
             <Route path="/share/:token" element={<PublicShare />} />
+            {/* Newsletter unsubscribe — anon-callable RPC, no auth required.
+                Reached from the ?t=<token> link in newsletter footers. */}
+            <Route path="/unsubscribe" element={<Unsubscribe />} />
 
             {/* Legacy /app/* routes — all redirect now that the
                 BetaRebuild banner has expired and the legacy AppShell

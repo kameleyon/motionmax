@@ -17,6 +17,8 @@ import {
   startTokenRefresher,
   startAutopostDailySummary,
 } from "./handlers/autopost/index.js";
+import { startNewsletterSender } from "./handlers/newsletter/handleNewsletterSend.js";
+import { startScheduledNotificationDispatcher } from "./handlers/notification/handleScheduledNotifications.js";
 import { writeSystemLog } from "./lib/logger.js";
 import { wlog } from "./lib/workerLogger.js";
 import { isTransientError, retryDelayMs } from "./lib/retryClassifier.js";
@@ -1560,6 +1562,11 @@ startupDiagnostic().then((hadOrphans) => {
  */
 startAutopostDispatcher();
 startTokenRefresher();
+// Phase 14.3 + 15.3 — newsletter sender + scheduled-notification
+// dispatcher. Both are independent polling loops on their own tables;
+// they don't claim video_generation_jobs rows.
+startNewsletterSender();
+startScheduledNotificationDispatcher();
 // Wave 4: daily summary report. Hourly tick, gated to fire at 09:00 UTC.
 // Logs a structured summary entry per active user (no email transport yet).
 startAutopostDailySummary();

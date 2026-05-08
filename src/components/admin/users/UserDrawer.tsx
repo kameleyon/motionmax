@@ -15,7 +15,7 @@
  * 250 ms slide-in. Focus trapped to the drawer while open.
  */
 
-import { useEffect, useRef, useState, type JSX, type ReactNode } from "react";
+import { useEffect, useState, type JSX, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,6 +28,7 @@ import { ConfirmDestructive } from "@/components/admin/_shared/confirmDestructiv
 import { I } from "@/components/admin/_shared/AdminIcons";
 import { Pill } from "@/components/admin/_shared/Pill";
 import { Toggle } from "@/components/admin/_shared/Toggle";
+import { RichEditor } from "@/components/admin/_shared/RichEditor";
 import { formatRel, num as fmtNum } from "@/components/admin/_shared/format";
 import { ADMIN_DEFAULT_QUERY_OPTIONS, adminKey } from "@/components/admin/_shared/queries";
 
@@ -382,70 +383,6 @@ async function sendPush(userId: string, title: string, body: string): Promise<Ch
   });
   if (error) return { channel: "push", ok: false, reason: error.message };
   return { channel: "push", ok: true };
-}
-
-/** Toolbar button for the rich-text editor. execCommand is deprecated
- *  in spec but still supported in every major browser; trading away
- *  forward-compat for ~50 lines instead of pulling in TipTap. */
-function RtbButton({ cmd, label, title }: { cmd: string; label: string; title: string }): JSX.Element {
-  return (
-    <button
-      type="button"
-      title={title}
-      onMouseDown={(e) => { e.preventDefault(); document.execCommand(cmd); }}
-      style={{
-        padding: "4px 10px", fontSize: 12, lineHeight: 1,
-        background: "var(--panel-3)", border: "1px solid var(--line)",
-        color: "var(--ink)", borderRadius: 4, cursor: "pointer",
-        fontWeight: cmd === "bold" ? 700 : 400,
-        fontStyle: cmd === "italic" ? "italic" : "normal",
-        textDecoration: cmd === "underline" ? "underline" : "none",
-      }}
-    >{label}</button>
-  );
-}
-
-function RichEditor({ value, onChange }: { value: string; onChange: (html: string) => void }): JSX.Element {
-  const ref = useRef<HTMLDivElement | null>(null);
-  // Keep DOM in sync only when the parent's value diverges (e.g. after
-  // a Send clears it); never on every keystroke or the caret jumps.
-  useEffect(() => {
-    if (ref.current && ref.current.innerHTML !== value) ref.current.innerHTML = value;
-  }, [value]);
-
-  return (
-    <div>
-      <div style={{ display: "flex", gap: 4, marginBottom: 4 }}>
-        <RtbButton cmd="bold" label="B" title="Bold (Ctrl+B)" />
-        <RtbButton cmd="italic" label="I" title="Italic (Ctrl+I)" />
-        <RtbButton cmd="underline" label="U" title="Underline (Ctrl+U)" />
-        <button type="button" title="Link"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            const url = window.prompt("Link URL");
-            if (url) document.execCommand("createLink", false, url);
-          }}
-          style={{ padding: "4px 10px", fontSize: 12, lineHeight: 1, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--cyan)", borderRadius: 4, cursor: "pointer" }}
-        >Link</button>
-        <span style={{ flex: 1 }} />
-        <button type="button" title="Clear formatting"
-          onMouseDown={(e) => { e.preventDefault(); document.execCommand("removeFormat"); }}
-          style={{ padding: "4px 10px", fontSize: 11, lineHeight: 1, background: "transparent", border: "1px solid var(--line)", color: "var(--ink-dim)", borderRadius: 4, cursor: "pointer" }}
-        >Clear</button>
-      </div>
-      <div
-        ref={ref}
-        contentEditable
-        suppressContentEditableWarning
-        onInput={(e) => onChange((e.currentTarget as HTMLDivElement).innerHTML)}
-        style={{
-          minHeight: 140, padding: 10, background: "var(--panel-3)",
-          border: "1px solid var(--line)", color: "var(--ink)",
-          borderRadius: 6, fontSize: 13.5, lineHeight: 1.55, outline: "none",
-        }}
-      />
-    </div>
-  );
 }
 
 function CommunicatePanel({ userId }: { userId: string }): JSX.Element {

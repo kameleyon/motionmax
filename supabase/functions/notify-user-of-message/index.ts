@@ -22,16 +22,22 @@ const UUID_REGEX =
 
 // Lightweight sanitiser: strip <script>, <iframe>, <style>, and inline
 // event handlers (on…=), since the body comes from an admin who's
-// already been auth-gated, but defense-in-depth is cheap. Keeps the
-// formatting tags the rich-text editor produces (b, i, u, br, p, a).
+// already been auth-gated, but defense-in-depth is cheap. Tags the
+// TipTap RichEditor emits (StarterKit + Underline + Link) are all
+// allowed: p, br, strong, em, u, s, code, pre, blockquote, ul, ol,
+// li, h1-h3, hr, a. We don't whitelist explicitly — instead we strip
+// the dangerous tags and event handlers, which covers TipTap's full
+// output without breaking on extension upgrades that add new safe
+// tags (e.g. mark, sub/sup if Superscript/Subscript get added).
 function sanitizeAdminHtml(s: string): string {
   return s
-    .replace(/<\s*(script|style|iframe|object|embed|link|meta)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, "")
-    .replace(/<\s*(script|style|iframe|object|embed|link|meta)[^>]*\/?>/gi, "")
+    .replace(/<\s*(script|style|iframe|object|embed|link|meta|form|input|button)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, "")
+    .replace(/<\s*(script|style|iframe|object|embed|link|meta|form|input|button)[^>]*\/?>/gi, "")
     .replace(/\son\w+\s*=\s*"[^"]*"/gi, "")
     .replace(/\son\w+\s*=\s*'[^']*'/gi, "")
     .replace(/\son\w+\s*=\s*[^\s>]+/gi, "")
-    .replace(/javascript:/gi, "");
+    .replace(/javascript:/gi, "")
+    .replace(/data:text\/html/gi, "");
 }
 
 export async function handler(req: Request): Promise<Response> {

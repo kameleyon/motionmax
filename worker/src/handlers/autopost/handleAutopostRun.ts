@@ -166,7 +166,14 @@ interface AutopostRunRow {
 }
 
 const POLL_INTERVAL_MS = 5_000;
-const SCRIPT_TIMEOUT_MS = 8 * 60 * 1000;
+// Script generation timeout. OpenRouter's own timeout is 5 min base +
+// 1 min per 2000 tokens above 4000, plus a 3 s retry sleep on the
+// fetch retry. For a 6000-token script call that's ~6 min worst case
+// before the LLM call itself aborts; bump the coordinator wait to
+// 12 min so a single legitimate slow call doesn't trip the parent.
+// (Was 8 min — caused autopost runs to fail on healthy-but-slow LLM
+// calls; e.g. autopost_run 5cdbb67e on 2026-05-07.)
+const SCRIPT_TIMEOUT_MS = 12 * 60 * 1000;
 // Finalize wait covers ALL upstream scene jobs (audio + image + cinematic_video)
 // completing, not just the finalize handler itself (which is fast — DB writes).
 // Under Hypereal queue pressure each cinematic scene can spend up to ~6 min in
@@ -335,7 +342,32 @@ async function waitForJobWithSubProgress(
     }
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
   }
+  await markRunawayJobFailed(jobId, taskType, timeoutMs);
   throw new Error(`${taskType} job ${jobId} timed out after ${Math.round(timeoutMs / 60000)} min`);
+}
+
+/** Mark a sub-job as failed when its coordinator gives up waiting. Without
+ *  this the orphan stays in 'processing' forever (or until the 30-min
+ *  stale-claim reaper resets it), and a worker that returns from a hang
+ *  will keep churning on a run that's already been declared dead. */
+async function markRunawayJobFailed(
+  jobId: string,
+  taskType: string,
+  timeoutMs: number,
+): Promise<void> {
+  try {
+    await supabase
+      .from("video_generation_jobs")
+      .update({
+        status: "failed",
+        error_message: `Coordinator gave up after ${Math.round(timeoutMs / 60000)} min — sub-job marked failed by parent.`,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", jobId)
+      .in("status", ["pending", "processing"]);
+  } catch (err) {
+    console.warn(`[handleAutopostRun] markRunawayJobFailed(${taskType}, ${jobId}) failed:`, (err as Error).message);
+  }
 }
 
 async function waitForJob(
@@ -366,6 +398,7 @@ async function waitForJob(
     }
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
   }
+  await markRunawayJobFailed(jobId, taskType, timeoutMs);
   throw new Error(`${taskType} job ${jobId} timed out after ${Math.round(timeoutMs / 60000)} min`);
 }
 

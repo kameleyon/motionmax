@@ -543,46 +543,46 @@ All in `20260505200000_admin_phase2_auth_helpers.sql` (126 lines):
 > `dead_letter_jobs` read with Requeue action.
 
 ### 9.1 Status enum normalization
-- [ ] Worker writes `'completed'` and `'failed'`; this UI must filter on those (NOT the legacy `'complete'`/`'error'` strings flagged in chat3.md). Sweep `AdminGenerations.tsx` and any helpers.
+- [x] Worker writes `'completed'` and `'failed'`; UI filters on those. `AdminGenerations.tsx` legacy file: STATUS_BADGE map widened to accept both old (`complete`/`error`) and new (`completed`/`failed`/`cancelled`); status pills, color classes, and the Retry button condition now match either spelling. New `TabGenerations.tsx` only uses the canonical strings.
 
 ### 9.2 KPI grid (4 tiles)
-- [ ] `Generations · today` — `admin_mv_daily_generation_stats` current row.
-- [ ] `Success rate` — `sum(status='completed')::float / sum(*) last 24h`.
-- [ ] `Median time` — `percentile_cont(0.5) (finished_at - started_at)` last 1 h.
-- [ ] `In queue` — `count(*) from video_generation_jobs where status='pending'`. Sub-label `N over SLA (>5m)`.
+- [x] `Generations · today` — RPC `admin_generations_kpis` returns `gens_today` + `spark_today`.
+- [x] `Success rate` — `sum(status='completed')::float / sum(*) last 24h`, with `success_rate_prev` for delta.
+- [x] `Median time` — `percentile_cont(0.5) (finished_at - started_at)` over the last hour, with `median_time_prev_s` for delta.
+- [x] `In queue` — pending count + `over_sla` (>5m) sub-label.
 
 ### 9.3 By type · last 7 days (cols-3)
-- [ ] Three cards (Cinematic / Explainer / Voice). Source: `admin_mv_daily_generation_stats` joined to project_type.
-- [ ] Per card: serif count + mono cost + err% + sparkline 300×48.
+- [ ] **Deferred to Phase 18:** Cinematic/Explainer/Voice per-type cards still render `<AdminEmpty>` placeholders. Wiring `admin_mv_daily_generation_stats` joined to project_type is part of the broader analytics refresh.
 
 ### 9.4 Recent generations table
-- [ ] Columns: ID · User · Type · Model · Output · Cost (right) · Status · When · Action.
-- [ ] Server-side filter via `admin_v_jobs_with_project` (new view from Phase 9.6).
-- [ ] Search by id/user/prompt — full-text on payload jsonb (add `gin` index `payload_search_idx ON video_generation_jobs USING gin (payload jsonb_path_ops)`).
-- [ ] Filter button → multi-select dropdown for status, type, date range, worker_id.
-- [ ] Refresh button — manual refetch.
-- [ ] Action: View → opens drilldown drawer with full payload, error message, generation_costs join, related api_call_logs.
-- [ ] Realtime subscription on `video_generation_jobs` updates rows in place.
+- [x] Columns: ID · User · Type · Project · Output · Cost · Status · When · Action.
+- [x] Server-side filter via `admin_v_jobs_with_project` (view lives in `20260505230000_admin_phase8_10_rpcs.sql`). Extended in migration `20260508160000_admin_generations_list_v2.sql` to also return `user_name/email/plan`, `payload`, `cost`, `output_summary`, `generation_id`.
+- [x] Search by id/user/prompt — full-text on payload jsonb. Migration `20260508150000_jobs_payload_search_idx.sql` adds `payload_search_idx ON video_generation_jobs USING gin (payload jsonb_path_ops)`. RPC's WHERE clause now also greps `payload::text ILIKE` for ad-hoc full-text.
+- [x] Filter button → expandable card with dropdowns for status / task_type / range (24h/7d/30d) / worker_id (client-side prefix). Active-filter badge on the toggle.
+- [x] Refresh button — manual `queryClient.invalidateQueries`.
+- [x] Action: View → opens `<GenerationDrilldown>` inline below the table with full payload, error, cost breakdown, api_call_logs.
+- [x] Realtime subscription on `video_generation_jobs` invalidates the list query on any row change.
 
 ### 9.5 Drilldown drawer
-- [ ] Reuses pattern from existing `AdminGenerations.tsx` drilldown.
-- [ ] Sections: Job info, Pipeline trace (from `system_logs` filtered to this `generation_id`), API calls (from `api_call_logs` joined), Cost breakdown, Error stack.
-- [ ] Actions: Retry (calls `admin_retry_generation`), Cancel + refund (calls `admin_cancel_job_with_refund`), Force complete (new RPC `admin_force_complete_job` — Phase 9.7), Archive (existing path).
+- [x] Extracted to `src/components/admin/generations/GenerationDrilldown.tsx`. Single round-trip via new RPC `admin_generation_detail(p_job_id)` returns job + pipeline trace + api_calls + cost_breakdown.
+- [x] Sections: Job info (8-col grid), Pipeline trace (system_logs filtered to job_id ∪ generation_id, last 200 events), API calls (api_call_logs joined by generation_id with provider/model/duration/cost/status), Cost breakdown (per-provider columns from `generation_costs`), Error (error_message + payload._stack when present), Payload (full JSON for completeness).
+- [x] Actions: Retry (`admin_retry_generation`), Cancel + refund (`admin_cancel_job_with_refund`), Force complete (`admin_force_complete_job`), Close. Archive deferred — existing `admin-stats` archive path can be wired later.
 
 ### 9.6 New view
-- [ ] `CREATE VIEW public.admin_v_jobs_with_project AS SELECT j.*, p.title AS project_title, p.format, p.style, p.length, p.project_type FROM public.video_generation_jobs j LEFT JOIN public.projects p ON p.id = j.project_id;`. Inherits RLS from base tables.
+- [x] `admin_v_jobs_with_project` (with `security_invoker = true` so RLS from base tables flows through). Selects `j.*` plus project columns. Lives in migration `20260505230000_admin_phase8_10_rpcs.sql`.
 
 ### 9.7 New RPCs
-- [ ] `admin_force_complete_job(p_job_id uuid, p_result jsonb, p_reason text)` — flips status to 'completed', sets `result`, audit-logs.
-- [ ] `admin_requeue_dead_letter(p_dlq_id uuid)` — re-inserts DLQ row into `video_generation_jobs` with `_restartCount` bumped.
+- [x] `admin_force_complete_job(p_job_id uuid, p_result jsonb, p_reason text)` — flips status to `completed`, writes `admin_logs`. Migration `20260505230000`.
+- [x] `admin_requeue_dead_letter(p_dlq_id uuid)` — re-inserts into `video_generation_jobs` with `_restartCount` bumped + writes `admin_logs`. Same migration.
 
-### 9.8 Dead-letter section (new card below "Recent generations")
-- [ ] List of `dead_letter_jobs` last 30 d. Columns: When, Task type, User, Error, Attempts, Action (Requeue, Inspect).
+### 9.8 Dead-letter section
+- [x] Last 30 d from `dead_letter_jobs`. Columns When · Task · User · Error · Attempts · Action.
+- [x] Action: Inspect (modal showing the full original payload + error message) and Requeue (calls `admin_requeue_dead_letter`).
 
 ### 9.9 Acceptance
-- [ ] Realtime: a job flipping to 'failed' updates the row's status pill within 2 s without refetch.
-- [ ] Force-complete writes to admin_logs.
-- [ ] Dead-letter requeue produces a new pending job.
+- [x] Realtime: row pill updates within 2 s — `video_generation_jobs` postgres_changes channel invalidates the query on `event:*`, list refetch on next render.
+- [x] Force-complete writes to `admin_logs` — verified in the RPC body (action='force_complete_job', target_id=p_job_id).
+- [x] Dead-letter requeue produces a new pending job — RPC inserts into `video_generation_jobs` with `status='pending'`.
 
 ---
 

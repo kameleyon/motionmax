@@ -64,11 +64,17 @@ const STATUS_COLORS = {
 
 const LIST_PAGE_SIZE = 20;
 
+// Worker writes 'completed' / 'failed' (Phase 9.1 enum normalization).
+// Legacy 'complete' / 'error' kept as keys ONLY for back-compat with rows
+// written before the worker switch — both spellings render the same pill.
 const STATUS_BADGE: Record<string, string> = {
+  completed: "bg-primary/15 text-primary",
   complete: "bg-primary/15 text-primary",
   processing: "bg-secondary/20 text-secondary-foreground",
   pending: "bg-muted text-muted-foreground",
+  failed: "bg-destructive/15 text-destructive",
   error: "bg-destructive/15 text-destructive",
+  cancelled: "bg-muted text-muted-foreground",
 };
 
 export function AdminGenerations() {
@@ -493,7 +499,7 @@ export function AdminGenerations() {
               </DropdownMenu>
             </div>
             <div className="flex gap-2 flex-wrap">
-              {["all", "complete", "processing", "pending", "error"].map(s => (
+              {["all", "completed", "processing", "pending", "failed", "cancelled"].map(s => (
                 <button
                   key={s}
                   onClick={() => { setListStatus(s); setListPage(0); }}
@@ -574,9 +580,9 @@ export function AdminGenerations() {
                       const leftPct = ((start - windowStart) / windowSize) * 100;
                       const widthPct = Math.max(0.5, ((end - start) / windowSize) * 100);
                       const colorClass =
-                        row.status === "complete" ? "bg-primary/80" :
+                        row.status === "completed" || row.status === "complete" ? "bg-primary/80" :
                         row.status === "processing" ? "bg-secondary/80" :
-                        row.status === "error" ? "bg-destructive/80" :
+                        row.status === "failed" || row.status === "error" ? "bg-destructive/80" :
                         "bg-muted-foreground/40";
                       const durationS = Math.round((end - start) / 1000);
                       return (
@@ -656,7 +662,7 @@ export function AdminGenerations() {
                         {row.error_message ?? "—"}
                       </td>
                       <td className="px-4 py-2.5 text-right">
-                        {row.status === "error" ? (
+                        {row.status === "failed" || row.status === "error" ? (
                           <Button
                             size="sm"
                             variant="outline"

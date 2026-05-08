@@ -496,11 +496,44 @@ async function runPipeline(
   // Load run + schedule. service_role bypasses RLS.
   const { data: runData, error: runErr } = await supabase
     .from("autopost_runs")
-    .select("id, schedule_id, topic, prompt_resolved, status")
+    .select("id, schedule_id, topic, prompt_resolved, status, progress_pct, video_job_id")
     .eq("id", runId)
     .single();
   if (runErr || !runData) throw new Error(`autopost_render: run not found: ${runErr?.message}`);
-  const run = runData as AutopostRunRow;
+  const run = runData as AutopostRunRow & { progress_pct: number | null; video_job_id: string | null };
+
+  // ── Idempotence gate (Hybrid: completed = return; partial = fail-closed) ──
+  // The reaper is already supposed to mark zombie autopost_render jobs
+  // as failed (worker/index.ts), but if anything slipped past — manual
+  // requeue, RPC retry, etc. — refuse to re-run a partial pipeline.
+  // Re-running spends credits twice (verified 2026-05-08: a stale
+  // Uruguay run got revived and produced a duplicate $6+ generation).
+  if (run.video_job_id || run.status === "completed" || run.status === "rendered") {
+    // The handler only sets video_job_id at the very end (after export
+    // + thumbnail). If it's set, the previous attempt completed.
+    console.log(`[autopost_render] Run ${runId} already finished (status=${run.status}, video_job_id=${run.video_job_id ?? "null"}) — returning without re-running`);
+    return {
+      projectId: "",
+      generationId: "",
+      title: "",
+      sceneCount: 0,
+      autopost_run_id: runId,
+    };
+  }
+  if (run.status === "failed" || run.status === "cancelled") {
+    throw new Error(`autopost_render: run ${runId} already in terminal status=${run.status}; refusing to re-run`);
+  }
+  // progress_pct > 0 means a prior attempt advanced past the initial
+  // setup. Even at 5 % it has already incremented credit-burning
+  // counters via setRunProgress; >= 25 % means a script was generated;
+  // >= 35 % means image / audio / video children were submitted. Any
+  // of those represents real spend we won't re-do.
+  if ((run.progress_pct ?? 0) > 0) {
+    const msg = `Orphaned autopost render — prior attempt reached progress_pct=${run.progress_pct}; refusing to restart from scratch (would double-spend Hypereal/LLM credits)`;
+    console.warn(`[autopost_render] ${msg}`);
+    await markRunFailed(runId, new Error(msg), jobId, userId);
+    throw new Error(msg);
+  }
 
   const { data: schedData, error: schedErr } = await supabase
     .from("autopost_schedules")

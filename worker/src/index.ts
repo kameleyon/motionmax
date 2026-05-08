@@ -862,11 +862,52 @@ async function pollQueue() {
     const STALE_PROCESSING_MS = 30 * 60 * 1000;
     if (pollCount % 12 === 0) {
       const cutoff = new Date(Date.now() - STALE_PROCESSING_MS).toISOString();
+
+      // ── Fail-closed for autopost orchestrators ─────────────────────
+      // autopost_render / autopost_rerender are non-idempotent: they
+      // create projects, generate scripts, and submit child jobs. Re-
+      // running from scratch on a stale-revive double-spends Hypereal
+      // credits + LLM calls (verified 2026-05-08: a single revived
+      // run produced two full Uruguay scripts + image/video batches).
+      // Mark them failed instead so the user-visible run row stops
+      // showing GENERATING and we don't burn a second pass of credits.
+      // The handler's defensive check then catches any orchestrator
+      // that slipped past this gate.
+      const { data: orphanedOrchestrators, error: orchErr } = await supabase
+        .from("video_generation_jobs")
+        .update({
+          status: "failed",
+          error_message: "Orchestrator orphaned (worker died mid-pipeline). Failed-closed by stale-claim reaper to prevent duplicate spend on retry.",
+        })
+        .eq("status", "processing")
+        .lt("updated_at", cutoff)
+        .in("task_type", ["autopost_render", "autopost_rerender"])
+        .select("id, task_type, payload");
+      if (orchErr) {
+        console.warn(`[Worker] Orchestrator fail-closed reaper error: ${orchErr.message}`);
+      } else if (orphanedOrchestrators && orphanedOrchestrators.length > 0) {
+        // Mirror the failure to autopost_runs so the dashboard updates.
+        for (const j of orphanedOrchestrators as Array<{ payload: { autopost_run_id?: string } | null }>) {
+          const runId = j?.payload?.autopost_run_id;
+          if (typeof runId === "string") {
+            await supabase.from("autopost_runs")
+              .update({ status: "failed", error_summary: "Orchestrator orphaned by worker restart (refused to retry)", progress_pct: null })
+              .eq("id", runId)
+              .neq("status", "completed");
+          }
+        }
+        console.warn(`[Worker] Failed-closed ${orphanedOrchestrators.length} orphaned orchestrator(s)`);
+      }
+
+      // ── Revive everything else ─────────────────────────────────────
+      // Idempotent task types (cinematic_video has resume checkpoints,
+      // image gen / TTS are single API calls that retry cleanly).
       const { data: reclaimed, error: reapErr } = await supabase
         .from("video_generation_jobs")
         .update({ status: "pending", worker_id: null })
         .eq("status", "processing")
         .lt("updated_at", cutoff)
+        .not("task_type", "in", "(autopost_render,autopost_rerender)")
         .select("id, task_type");
       if (reapErr) {
         console.warn(`[Worker] Stale-claim reaper failed: ${reapErr.message}`);

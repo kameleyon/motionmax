@@ -322,7 +322,20 @@ async function _runCinematicVideo(
   // snap.
   const motionGuardrails =
     "Camera motion is SMOOTH and continuous; transitions are SMOOTH (no jump cuts within the clip). " +
+    // STYLE LOCK — the model receives a start image (and sometimes an
+    // end image) that's already rendered in a specific art style:
+    // realistic photo, paper-cutout, sketch, anime, watercolour, etc.
+    // Hypereal occasionally re-renders these into glossy 3D — which
+    // breaks visual continuity with surrounding scenes. Hard-lock the
+    // style here. The instruction is repeated three different ways
+    // because Kling's prompt parser weighs the strongest negative
+    // associations more than positive descriptions.
+    "PRESERVE the EXACT art style of the source image — same medium, same brush/line/shade rendering, same color palette, same level of stylisation. " +
+    "DO NOT convert 2D / illustrated / paper / sketch / flat / cel-shaded / stylised images into 3D, photoreal, CGI, glossy, or volumetric renders. " +
+    "If the start image is paper-cutout, keep paper-cutout. If it is hand-drawn or watercolour, keep hand-drawn or watercolour. " +
+    "When transitioning from start image to end image, the in-between frames MUST stay in the same art style as both endpoints — no style morphing, no rendering-engine switch, no \"upgrade\" to realism. " +
     "AVOID: blurry, low quality, watermark, text, UI elements, slow motion, sluggish; " +
+    "AVOID 3D-render look, CGI gloss, volumetric lighting, photorealistic conversion, plastic-doll faces, or any change in art style across the clip; " +
     "no nudity / naked / exposed body parts; no extra limbs, body contortion, or distorted anatomy; " +
     "no lip sync, talking, mouth movement, or speaking; " +
     "characters MUST NOT change clothes or outfits mid-shot; " +
@@ -365,6 +378,9 @@ async function _runCinematicVideo(
   // the positive prompt above).
   const klingNegativePrompt =
     "blurry, low quality, watermark, text, UI elements, slow motion, sluggish, " +
+    "3D render, CGI, photorealistic conversion, glossy plastic, volumetric lighting, " +
+    "art style change mid-clip, style morphing between frames, rendering-engine switch, " +
+    "upgrading 2D illustration to 3D, paper-cutout becoming photoreal, sketch becoming CGI, " +
     "nudity, naked, exposed body parts, extra limbs, body contortion, distorted anatomy, " +
     "lip sync, talking, mouth movement, speaking, " +
     "characters changing clothes mid-shot, characters clipping through furniture or props, " +

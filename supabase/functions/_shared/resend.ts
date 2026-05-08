@@ -1,3 +1,5 @@
+import { buildEmail } from "./emailTemplate.ts";
+
 const RESEND_API_URL = "https://api.resend.com/emails";
 const DEFAULT_FROM = "MotionMax <noreply@motionmax.io>";
 const DEFAULT_SUPPORT = "MotionMax Support <support@motionmax.io>";
@@ -48,68 +50,93 @@ async function sendEmail(payload: EmailPayload): Promise<void> {
   }
 }
 
-export async function sendWelcomeEmail(to: string, planName: string): Promise<void> {
-  await sendEmail({
-    to,
-    subject: "Welcome to MotionMax — your subscription is active",
-    html: `
-      <h2>You're all set!</h2>
-      <p>Your <strong>${planName}</strong> plan is now active. Head to your
-      <a href="https://motionmax.io/dashboard">dashboard</a> to start creating.</p>
-      <p>Questions? Reply to this email — we're here to help.</p>
+const greetingFor = (name?: string): string =>
+  name?.trim() ? `Hi ${name.trim()},` : "Hi there,";
+
+// ── Welcome on subscription activation (Stripe webhook) ───────────────
+export async function sendWelcomeEmail(to: string, planName: string, displayName?: string): Promise<void> {
+  const html = buildEmail({
+    preheader: `Your ${planName} plan is active — start creating.`,
+    greeting: greetingFor(displayName),
+    headline: "You're all set",
+    bodyHtml: `
+      <p>Your <strong style="color:#E4C875;">${planName}</strong> plan is now active. Head to your dashboard to start creating.</p>
+      <p>Need a hand? Just reply to this email — we read every message.</p>
     `,
+    cta: { label: "Open dashboard", href: "https://motionmax.io/app" },
   });
+  await sendEmail({ to, subject: `Welcome to MotionMax — ${planName} plan active`, html });
 }
 
-export async function sendPaymentFailedEmail(to: string): Promise<void> {
-  await sendEmail({
-    to,
-    subject: "Action required: payment failed on your MotionMax subscription",
-    html: `
-      <h2>We couldn't process your payment</h2>
-      <p>Please update your payment method in your
-      <a href="https://motionmax.io/settings">account settings</a> to keep your subscription active.</p>
-      <p>Your account will remain accessible for a short grace period.</p>
-    `,
-  });
-}
-
+// ── Generic signup welcome (free + paid) ──────────────────────────────
 export async function sendSignupWelcomeEmail(to: string, displayName?: string): Promise<void> {
-  const greeting = displayName?.trim() ? `Hi ${displayName.trim()}` : "Welcome";
-  await sendEmail({
-    to,
-    subject: "Welcome to MotionMax",
-    html: `
-      <div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.55">
-        <h1 style="font-size:22px;margin:0 0 12px">${greeting} 👋</h1>
-        <p>Thanks for joining MotionMax. Your account is ready — head to your
-        <a href="https://motionmax.io/app" style="color:#14C8CC;font-weight:600">dashboard</a>
-        to create your first video.</p>
-        <p style="margin-top:18px">A few things to try first:</p>
-        <ul>
-          <li>Pick a style and length, drop in a topic, and hit generate.</li>
-          <li>Bring your own brand colors and voice for a consistent look.</li>
-          <li>Schedule auto-posts so a steady stream of content goes out without daily effort (Creator plan).</li>
-        </ul>
-        <p style="margin-top:24px">Questions? Just reply to this email and our team will help you out.</p>
-        <p style="color:#777;font-size:12px;margin-top:32px">— The MotionMax team</p>
-      </div>
+  const html = buildEmail({
+    preheader: "Your MotionMax account is ready — start creating.",
+    greeting: greetingFor(displayName),
+    headline: "Welcome to MotionMax",
+    bodyHtml: `
+      <p>Thanks for joining. Your account is ready — head to the dashboard to create your first video.</p>
+      <p style="margin-top:18px;">A few things to try first:</p>
+      <ul style="padding-left:20px;margin:8px 0 0 0;color:#C8CCCE;">
+        <li style="margin-bottom:6px;">Pick a style and length, drop in a topic, hit generate.</li>
+        <li style="margin-bottom:6px;">Bring your own brand colors and voice for a consistent look.</li>
+        <li style="margin-bottom:6px;">Schedule auto-posts so a steady stream of content goes out without daily effort <span style="color:#E4C875;">(Creator plan)</span>.</li>
+      </ul>
     `,
+    cta: { label: "Open dashboard", href: "https://motionmax.io/app" },
   });
+  await sendEmail({ to, subject: "Welcome to MotionMax", html });
 }
 
-export async function sendSupportEmail(to: string, subject: string, html: string, replyTo?: string): Promise<void> {
-  await sendEmail({ to, subject, html, from: supportFromAddress(), replyTo });
+// ── Payment failed ────────────────────────────────────────────────────
+export async function sendPaymentFailedEmail(to: string, displayName?: string): Promise<void> {
+  const html = buildEmail({
+    preheader: "Action required: update your payment method.",
+    greeting: greetingFor(displayName),
+    headline: "Payment failed",
+    bodyHtml: `
+      <p>We couldn't process your most recent payment. Update your payment method to keep your subscription active —
+      your account stays accessible during a short grace period.</p>
+    `,
+    cta: { label: "Update payment", href: "https://motionmax.io/settings/billing" },
+  });
+  await sendEmail({ to, subject: "Action required: payment failed", html });
 }
 
-export async function sendCancellationEmail(to: string): Promise<void> {
+// ── Cancellation ──────────────────────────────────────────────────────
+export async function sendCancellationEmail(to: string, displayName?: string): Promise<void> {
+  const html = buildEmail({
+    preheader: "Your subscription has been cancelled.",
+    greeting: greetingFor(displayName),
+    headline: "Subscription cancelled",
+    bodyHtml: `
+      <p>Your subscription has been cancelled. You'll keep access until the end of your current billing period.</p>
+      <p>Want to come back? You can resubscribe any time.</p>
+    `,
+    cta: { label: "View pricing", href: "https://motionmax.io/pricing" },
+  });
+  await sendEmail({ to, subject: "Your MotionMax subscription has been cancelled", html });
+}
+
+// ── Generic support email — used by admin Communicate panel ──────────
+export async function sendSupportEmail(
+  to: string,
+  subject: string,
+  bodyHtml: string,
+  opts?: { displayName?: string; replyTo?: string; preheader?: string },
+): Promise<void> {
+  const html = buildEmail({
+    preheader: opts?.preheader ?? subject,
+    greeting: greetingFor(opts?.displayName),
+    headline: subject,
+    bodyHtml,
+    footerNote: "Replying to this email reaches MotionMax support.",
+  });
   await sendEmail({
     to,
-    subject: "Your MotionMax subscription has been cancelled",
-    html: `
-      <h2>Subscription cancelled</h2>
-      <p>Your subscription has been cancelled. You'll retain access until the end of your current billing period.</p>
-      <p>Want to come back? <a href="https://motionmax.io/pricing">Resubscribe any time.</a></p>
-    `,
+    subject,
+    html,
+    from: supportFromAddress(),
+    replyTo: opts?.replyTo,
   });
 }

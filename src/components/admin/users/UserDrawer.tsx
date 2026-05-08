@@ -15,7 +15,7 @@
  * 250 ms slide-in. Focus trapped to the drawer while open.
  */
 
-import { useEffect, useState, type JSX, type ReactNode } from "react";
+import { useEffect, useRef, useState, type JSX, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -384,6 +384,70 @@ async function sendPush(userId: string, title: string, body: string): Promise<Ch
   return { channel: "push", ok: true };
 }
 
+/** Toolbar button for the rich-text editor. execCommand is deprecated
+ *  in spec but still supported in every major browser; trading away
+ *  forward-compat for ~50 lines instead of pulling in TipTap. */
+function RtbButton({ cmd, label, title }: { cmd: string; label: string; title: string }): JSX.Element {
+  return (
+    <button
+      type="button"
+      title={title}
+      onMouseDown={(e) => { e.preventDefault(); document.execCommand(cmd); }}
+      style={{
+        padding: "4px 10px", fontSize: 12, lineHeight: 1,
+        background: "var(--panel-3)", border: "1px solid var(--line)",
+        color: "var(--ink)", borderRadius: 4, cursor: "pointer",
+        fontWeight: cmd === "bold" ? 700 : 400,
+        fontStyle: cmd === "italic" ? "italic" : "normal",
+        textDecoration: cmd === "underline" ? "underline" : "none",
+      }}
+    >{label}</button>
+  );
+}
+
+function RichEditor({ value, onChange }: { value: string; onChange: (html: string) => void }): JSX.Element {
+  const ref = useRef<HTMLDivElement | null>(null);
+  // Keep DOM in sync only when the parent's value diverges (e.g. after
+  // a Send clears it); never on every keystroke or the caret jumps.
+  useEffect(() => {
+    if (ref.current && ref.current.innerHTML !== value) ref.current.innerHTML = value;
+  }, [value]);
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+        <RtbButton cmd="bold" label="B" title="Bold (Ctrl+B)" />
+        <RtbButton cmd="italic" label="I" title="Italic (Ctrl+I)" />
+        <RtbButton cmd="underline" label="U" title="Underline (Ctrl+U)" />
+        <button type="button" title="Link"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            const url = window.prompt("Link URL");
+            if (url) document.execCommand("createLink", false, url);
+          }}
+          style={{ padding: "4px 10px", fontSize: 12, lineHeight: 1, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--cyan)", borderRadius: 4, cursor: "pointer" }}
+        >Link</button>
+        <span style={{ flex: 1 }} />
+        <button type="button" title="Clear formatting"
+          onMouseDown={(e) => { e.preventDefault(); document.execCommand("removeFormat"); }}
+          style={{ padding: "4px 10px", fontSize: 11, lineHeight: 1, background: "transparent", border: "1px solid var(--line)", color: "var(--ink-dim)", borderRadius: 4, cursor: "pointer" }}
+        >Clear</button>
+      </div>
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        onInput={(e) => onChange((e.currentTarget as HTMLDivElement).innerHTML)}
+        style={{
+          minHeight: 140, padding: 10, background: "var(--panel-3)",
+          border: "1px solid var(--line)", color: "var(--ink)",
+          borderRadius: 6, fontSize: 13.5, lineHeight: 1.55, outline: "none",
+        }}
+      />
+    </div>
+  );
+}
+
 function CommunicatePanel({ userId }: { userId: string }): JSX.Element {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -393,7 +457,10 @@ function CommunicatePanel({ userId }: { userId: string }): JSX.Element {
   const [pending, setPending] = useState(false);
 
   async function sendThreadMessage(): Promise<void> {
-    if (!subject.trim() || !body.trim()) {
+    // body is HTML — strip tags before checking emptiness so an empty
+    // editor (which still contains a stray <br>) counts as empty.
+    const plain = body.replace(/<[^>]*>/g, "").trim();
+    if (!subject.trim() || !plain) {
       toast.error("Subject and message are required"); return;
     }
     setPending(true);
@@ -405,7 +472,9 @@ function CommunicatePanel({ userId }: { userId: string }): JSX.Element {
       // summary line treats SDK throws and channel soft-fails uniformly.
       const tasks: Promise<ChannelResult>[] = [openThread(userId, subject, body)];
       if (emailCopy) tasks.push(sendEmailCopy(userId, subject, body));
-      if (pushAlong) tasks.push(sendPush(userId, subject, body));
+      // Push notifications are plain-text only — strip tags so the user
+      // doesn't see literal "<b>" markers on their lock screen.
+      if (pushAlong) tasks.push(sendPush(userId, subject, plain));
 
       const results: ChannelResult[] = (await Promise.allSettled(tasks)).map((r) =>
         r.status === "fulfilled"
@@ -448,8 +517,7 @@ function CommunicatePanel({ userId }: { userId: string }): JSX.Element {
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <input type="text" placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)}
             style={{ padding: 8, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--ink)", borderRadius: 6 }} />
-          <textarea placeholder="Message" value={body} onChange={(e) => setBody(e.target.value)} rows={6}
-            style={{ padding: 8, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--ink)", borderRadius: 6, resize: "vertical" }} />
+          <RichEditor value={body} onChange={setBody} />
 
           <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12, color: "var(--ink-dim)" }}>
             <Toggle checked={emailCopy} onChange={setEmailCopy} ariaLabel="Email a copy" />

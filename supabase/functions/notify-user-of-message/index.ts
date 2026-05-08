@@ -20,10 +20,18 @@ const logStep = (step: string, details?: unknown) => {
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function escapeHtml(s: string): string {
+// Lightweight sanitiser: strip <script>, <iframe>, <style>, and inline
+// event handlers (on…=), since the body comes from an admin who's
+// already been auth-gated, but defense-in-depth is cheap. Keeps the
+// formatting tags the rich-text editor produces (b, i, u, br, p, a).
+function sanitizeAdminHtml(s: string): string {
   return s
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    .replace(/<\s*(script|style|iframe|object|embed|link|meta)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, "")
+    .replace(/<\s*(script|style|iframe|object|embed|link|meta)[^>]*\/?>/gi, "")
+    .replace(/\son\w+\s*=\s*"[^"]*"/gi, "")
+    .replace(/\son\w+\s*=\s*'[^']*'/gi, "")
+    .replace(/\son\w+\s*=\s*[^\s>]+/gi, "")
+    .replace(/javascript:/gi, "");
 }
 
 export async function handler(req: Request): Promise<Response> {
@@ -99,14 +107,16 @@ export async function handler(req: Request): Promise<Response> {
     }
     const targetEmail = target.user.email;
 
-    const html = `
-      <div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.55">
-        <h2 style="font-size:18px;margin:0 0 12px">${escapeHtml(subject)}</h2>
-        <div style="white-space:pre-wrap">${escapeHtml(messageBody)}</div>
-        <p style="color:#777;font-size:12px;margin-top:24px">Replying to this email reaches MotionMax support.</p>
-      </div>
-    `;
-    await sendSupportEmail(targetEmail, subject, html);
+    // Look up display_name so the greeting is personalised, not generic.
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("display_name")
+      .eq("user_id", targetUserId)
+      .maybeSingle();
+    const displayName = (profile as { display_name?: string | null } | null)?.display_name ?? undefined;
+
+    const safeBody = sanitizeAdminHtml(messageBody);
+    await sendSupportEmail(targetEmail, subject, safeBody, { displayName: displayName ?? undefined });
     logStep("Email sent", { from_admin: caller.id, to: targetUserId });
 
     await supabaseAdmin.from("admin_logs").insert({

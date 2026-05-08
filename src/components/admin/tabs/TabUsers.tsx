@@ -45,15 +45,13 @@ const rpc = supabase.rpc.bind(supabase) as unknown as RpcFn;
 
 interface UsersKpis {
   total_users: number;
-  paying: number;
-  studio_plan: number;
+  signups_7d: number | null;
+  paying_users: number;
+  studio_users: number;
+  studio_delta_7d: number | null;
   flagged: number;
-  conversion_pct: number | null;
-  paying_delta_wk: number | null;
-  studio_delta_wk: number | null;
   flagged_auto: number | null;
   flagged_manual: number | null;
-  total_users_spark: number[] | null;
 }
 
 interface UserRow {
@@ -61,14 +59,16 @@ interface UserRow {
   display_name: string | null;
   email: string | null;
   avatar_url: string | null;
-  plan: string | null;
+  plan_name: string | null;
   status: string | null;
-  last_sign_in_at: string | null;
-  generations_count: number;
+  last_sign_in: string | null;
+  last_active_at: string | null;
+  generations: number;
   lifetime_spent: number;
-  credits: number;
+  credits_balance: number;
   errors_24h: number;
-  location: string | null;
+  country: string | null;
+  joined: string | null;
   total_count: number;
 }
 
@@ -104,7 +104,7 @@ async function fetchList(
 ): Promise<UserRow[]> {
   const { data, error } = await rpc<UserRow[]>("admin_users_list", {
     p_search: q.length >= 2 ? q : null,
-    p_plan: plan === "All" ? null : plan,
+    p_plan: plan === "All" ? null : plan.toLowerCase(),
     p_status: status === "All" ? null : status,
     p_flag_state: null,
     p_page: page,
@@ -115,9 +115,16 @@ async function fetchList(
 }
 
 function planVariant(plan: string | null): "cyan" | "purple" | "default" {
-  if (plan === "Studio") return "cyan";
-  if (plan === "Pro") return "purple";
+  const p = (plan ?? "").toLowerCase();
+  if (p.includes("studio")) return "cyan";
+  if (p.includes("pro")) return "purple";
   return "default";
+}
+function planLabel(plan: string | null): string {
+  const p = (plan ?? "").toLowerCase();
+  if (p.includes("studio")) return "Studio";
+  if (p.includes("pro")) return "Pro";
+  return "Free";
 }
 function statusVariant(s: string | null): "ok" | "warn" | "err" {
   if (s === "active") return "ok";
@@ -131,10 +138,10 @@ function errorsColor(n: number): string {
 }
 
 function exportCsv(rows: UserRow[]): void {
-  const header = ["id", "name", "email", "plan", "status", "last_sign_in", "generations", "spent", "credits", "errors", "location"];
+  const header = ["id", "name", "email", "plan", "status", "last_sign_in", "generations", "spent", "credits", "errors", "country"];
   const lines = rows.map((r) => [
-    r.user_id, r.display_name ?? "", r.email ?? "", r.plan ?? "", r.status ?? "",
-    r.last_sign_in_at ?? "", r.generations_count, r.lifetime_spent, r.credits, r.errors_24h, r.location ?? "",
+    r.user_id, r.display_name ?? "", r.email ?? "", r.plan_name ?? "", r.status ?? "",
+    r.last_sign_in ?? "", r.generations, r.lifetime_spent, r.credits_balance, r.errors_24h, r.country ?? "",
   ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","));
   const csv = [header.join(","), ...lines].join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -235,16 +242,20 @@ export function TabUsers(): JSX.Element {
       <div className="kpi-grid">
         <Kpi label="Total users" icon={<I.users />}
           value={k ? short(k.total_users) : dash}
-          delta={k && k.total_users_spark ? `${fmtNum(k.total_users)} total` : undefined}
-          deltaDir="up" spark={k?.total_users_spark ?? undefined} />
+          delta={k && k.signups_7d != null ? `+${fmtNum(k.signups_7d)} this week` : undefined}
+          deltaDir="up" />
         <Kpi label="Paying" sparkColor="#5CD68D"
-          value={k ? fmtNum(k.paying) : dash}
-          delta={k && k.conversion_pct !== null ? `${k.conversion_pct.toFixed(1)}% conversion` : undefined}
+          value={k ? fmtNum(k.paying_users) : dash}
+          delta={k && k.total_users > 0
+            ? `${((k.paying_users / k.total_users) * 100).toFixed(1)}% conversion`
+            : undefined}
           deltaDir="up" />
         <Kpi label="Studio plan"
-          value={k ? fmtNum(k.studio_plan) : dash}
-          delta={k && k.studio_delta_wk !== null ? `${k.studio_delta_wk >= 0 ? "+" : ""}${k.studio_delta_wk} wk` : undefined}
-          deltaDir={k && (k.studio_delta_wk ?? 0) >= 0 ? "up" : "down"} />
+          value={k ? fmtNum(k.studio_users) : dash}
+          delta={k && k.studio_delta_7d != null
+            ? `${k.studio_delta_7d >= 0 ? "+" : ""}${k.studio_delta_7d} wk`
+            : undefined}
+          deltaDir={k && (k.studio_delta_7d ?? 0) >= 0 ? "up" : "down"} />
         <Kpi label="Flagged" tone="danger" icon={<I.flag />}
           value={k ? fmtNum(k.flagged) : dash}
           delta={k ? `${k.flagged_auto ?? 0} auto · ${k.flagged_manual ?? 0} manual` : undefined}
@@ -338,14 +349,14 @@ export function TabUsers(): JSX.Element {
                       </div>
                     </div>
                   </td>
-                  <td><Pill variant={planVariant(u.plan)}>{u.plan ?? "Free"}</Pill></td>
+                  <td><Pill variant={planVariant(u.plan_name)}>{planLabel(u.plan_name)}</Pill></td>
                   <td><Pill variant={statusVariant(u.status)} dot>{u.status ?? "active"}</Pill></td>
-                  <td className="mono">{u.last_sign_in_at ? formatRel(u.last_sign_in_at) : "—"}</td>
-                  <td className="num strong" style={{ textAlign: "right" }}>{fmtNum(u.generations_count)}</td>
+                  <td className="mono">{u.last_sign_in ? formatRel(u.last_sign_in) : "—"}</td>
+                  <td className="num strong" style={{ textAlign: "right" }}>{fmtNum(u.generations)}</td>
                   <td className="num strong" style={{ textAlign: "right" }}>{money(u.lifetime_spent)}</td>
-                  <td className="num" style={{ textAlign: "right" }}>{short(u.credits)}</td>
+                  <td className="num" style={{ textAlign: "right" }}>{short(u.credits_balance)}</td>
                   <td className="num" style={{ textAlign: "right", color: errorsColor(u.errors_24h) }}>{u.errors_24h}</td>
-                  <td className="muted" style={{ fontSize: 11.5 }}>{u.location ?? "—"}</td>
+                  <td className="muted" style={{ fontSize: 11.5 }}>{u.country || "—"}</td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
                       <button type="button" className="btn-mini" title="Message"

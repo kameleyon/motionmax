@@ -77,11 +77,17 @@ function accentForId(id: string, languageCode: string): string {
 
 function providerForId(id: string): CatalogVoice["provider"] {
   if (id.startsWith("gm:")) return "gemini";
-  if (id.startsWith("sm:") || id.startsWith("sm2:")) return "smallest";
-  // Adam / River = LemonFox; the Pierre/Marie/Jacques/Camille/Carlos/
-  // Isabella legacy voices route through Fish Audio.
-  if (id === "Adam" || id === "River") return "lemonfox";
-  return "fish";
+  // Smallest removed — legacy sm:*/sm2:* ids now remap to Gemini in
+  // the worker, but the Voice Lab UI still groups them under "gemini"
+  // so the avatar tint reflects where the audio actually comes from.
+  if (id.startsWith("sm:") || id.startsWith("sm2:")) return "gemini";
+  // Adam = LemonFox (English Male only). All other legacy named
+  // speakers (River, Pierre, Marie, Jacques, Camille, Carlos, Isabella)
+  // are remapped to Gemini in the worker — surface them as "gemini"
+  // here too so the Voice Lab UI doesn't claim Fish/ElevenLabs paths
+  // that no longer run.
+  if (id === "Adam") return "lemonfox";
+  return "gemini";
 }
 
 /** Pull "Male" / "Female" from the description. The selector strings

@@ -301,20 +301,33 @@ async function _runCinematicAudio(
       return { success: true, status: "complete", sceneIndex, audioUrl: result.url };
     }
 
-    // ── Smallest.ai (ADDITIVE) — English + Spanish voice variety ──
-    // Speaker IDs prefixed with `sm:` route to the new Smallest provider.
-    // Note: `sm2:*` (Lightning v2) voices were removed because quality was
-    // poor — Google's Gemini Flash voices (gm:*) replaced them. Any legacy
-    // saved project referencing a `sm2:*` voice still matches here and will
-    // fail cleanly through generateSmallestTTS with a clear error.
+    // ── Smallest.ai retired — sm:*/sm2:* voices remap to Gemini ──
+    // Smallest provider was removed. Legacy projects whose voice_name
+    // is a sm:* / sm2:* id are remapped to a Gemini voice based on the
+    // perceived gender from the Smallest catalog metadata, then routed
+    // through the same Gemini Flash TTS path as gm:* picks.
     if (voiceName.startsWith("sm:") || voiceName.startsWith("sm2:")) {
-      console.log(`[CinematicAudio] Scene ${sceneIndex}: ${voiceName} → Smallest TTS (lang=${resolvedLanguage})`);
-      result = await generateSmallestTTS({
+      const perceivedFemale = /(?:sm:)(avery|brooke|dina|elizabeth|ella|hannah|harper|jessica|kevin|lauren|mia|nicole|olivia|quinn|rachel|sandra|sophia|vanessa|camilla|daniella|gabriela|lucia|mariana|claire|adele|maria|adriana|isabel)/i.test(voiceName);
+      const remappedVoice = perceivedFemale ? "gm:Aoede" : "gm:Enceladus";
+      console.log(`[CinematicAudio] Scene ${sceneIndex}: legacy ${voiceName} → remap to ${remappedVoice} (Gemini)`);
+      const googleApiKeys = [
+        process.env.GOOGLE_TTS_API_KEY_3,
+        process.env.GOOGLE_TTS_API_KEY_2,
+        process.env.GOOGLE_TTS_API_KEY,
+      ].filter(Boolean) as string[];
+      const styleInstruction = inferStyleInstruction(voiceover);
+      result = await generateGeminiFlashTTS({
         text: voiceover,
         sceneNumber: sceneIndex + 1,
         projectId,
-        voiceId: voiceName,
+        voiceName: remappedVoice,
         language: resolvedLanguage,
+        apiKeys: googleApiKeys,
+        directives: {
+          style: styleInstruction,
+          pacing: "natural human conversational tone pace, varied — push forward in hook/action beats, soften into reflective moments",
+          accent: undefined,
+        },
       });
 
       if (!result.url) {

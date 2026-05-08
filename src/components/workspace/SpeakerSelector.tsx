@@ -49,18 +49,20 @@ export type SpeakerVoice =
   | "sm2:maria"    | "sm2:enzo"         // Italian (retired)
   | "sm2:adriana"  | "sm2:lukas"        // Dutch (retired)
   | "sm2:gerard"   | "sm2:isabel"       // Spanish v2 (retired)
-  // Gemini 3.1 Flash TTS — `gm:*` prefix, multilingual voices. Used for
-  // French / Spanish / Italian / German / Dutch. Each voice works across
-  // all Gemini-supported languages; the model picks the accent from the
-  // input text. Tone descriptors from Google's official Gemini TTS docs.
-  | "gm:Leda"         | "gm:Aoede"        | "gm:Callirrhoe"
-  | "gm:Kore"         | "gm:Vindemiatrix" | "gm:Achernar"
-  | "gm:Sulafat"      | "gm:Laomedeia"
-  | "gm:Erinome"      | "gm:Zephyr"       | "gm:Pulcherrima"
-  | "gm:Charon"       | "gm:Orus"         | "gm:Iapetus"
-  | "gm:Fenrir"       | "gm:Algenib"      | "gm:Rasalgethi"
-  | "gm:Puck"         | "gm:Schedar"      | "gm:Umbriel"
-  | "gm:Enceladus"    | "gm:Algieba"      | "gm:Zubenelgenubi";
+  // Gemini 3.1 Flash TTS — `gm:*` prefix, multilingual voices. ALL 30
+  // prebuilt voices from Google's official catalog. Each voice works
+  // across every Gemini-supported language; the model picks the accent
+  // from the input text. Tone descriptors verbatim from Google's docs.
+  | "gm:Aoede"        | "gm:Achernar"     | "gm:Achird"
+  | "gm:Algenib"      | "gm:Algieba"      | "gm:Alnilam"
+  | "gm:Autonoe"      | "gm:Callirrhoe"   | "gm:Charon"
+  | "gm:Despina"      | "gm:Enceladus"    | "gm:Erinome"
+  | "gm:Fenrir"       | "gm:Gacrux"       | "gm:Iapetus"
+  | "gm:Kore"         | "gm:Laomedeia"    | "gm:Leda"
+  | "gm:Orus"         | "gm:Puck"         | "gm:Pulcherrima"
+  | "gm:Rasalgethi"   | "gm:Sadachbia"    | "gm:Sadaltager"
+  | "gm:Schedar"      | "gm:Sulafat"      | "gm:Umbriel"
+  | "gm:Vindemiatrix" | "gm:Zephyr"       | "gm:Zubenelgenubi";
 
 const log = createScopedLogger("SpeakerSelector");
 
@@ -82,9 +84,13 @@ export interface SpeakerOption { id: SpeakerVoice; label: string; description: s
 // stays unambiguous without touching the legacy label. Voice ids are
 // namespaced with `sm:` (v3.1) or `sm2:` (v2) so they never collide.
 
-// English (US) — ALL 29 American-accent voices from the Smallest v3.1
-// live catalog. Alphabetized by label within each gender group. Voice
-// data (gender, accent) pulled from GET /waves/v1/lightning-v3.1/get_voices.
+// Smallest.ai integration removed. The arrays below are deprecated and
+// no longer spread into any speaker list — left here only to avoid
+// dangling type references until the next sweep removes the sm:* / sm2:*
+// ids from the SpeakerVoice union (back-compat for legacy saved
+// projects). Worker no longer routes any sm:* voice through Smallest;
+// they are remapped to a Gemini voice based on perceived gender.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const englishSmallestSpeakers: SpeakerOption[] = [
   // Female (American accent)
   { id: "sm:avery",     label: "Avery",     description: "Female · Energetic, upbeat · social-media" },
@@ -119,9 +125,7 @@ const englishSmallestSpeakers: SpeakerOption[] = [
   { id: "sm:robert",    label: "Robert",    description: "Male · Classic, professional · corporate/news" },
 ];
 
-// Spanish — all 11 voices from Smallest v3.1 (mexican/latin accent).
-// v2 extras removed (Gerard/Isabel) — v2 voices were replaced by Gemini
-// Flash below for the European-language lineup.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const spanishSmallestSpeakers: SpeakerOption[] = [
   // Female (v3.1)
   { id: "sm:camilla",  label: "Camilla",   description: "Female · Warm, conversational · Latin accent" },
@@ -138,43 +142,45 @@ const spanishSmallestSpeakers: SpeakerOption[] = [
   { id: "sm:miguel",   label: "Miguel",    description: "Male · Warm, approachable · explainers" },
 ];
 
-// Gemini 3.1 Flash TTS — 15 voices that work across FR/ES/IT/DE/NL (model
-// picks the accent from the narration text). Descriptions are the tone
-// descriptors from Google's official docs, not gender labels, because
-// Gemini voices are intentionally non-gendered — listeners perceive gender
-// differently per voice+language combo.
+// Gemini 3.1 Flash TTS — ALL 30 prebuilt voices from Google's official
+// catalog. Each works multilingually across all 11 supported languages
+// (model picks the accent from narration text). Gender labels are the
+// community-perceived/perceived-when-tested mapping; tone descriptors
+// are verbatim from Google's published voice options table.
 //
-// Selection rationale: balanced spread of tones for a 15-slot lineup.
-// 8 lighter/softer voices + 7 deeper/firmer voices, covering
-// documentary, conversational, energetic, and gentle use cases.
+// 13 Female + 17 Male = 30 total.
 const geminiFlashSpeakers: SpeakerOption[] = [
-  // Female-leaning voices (Google's internal gender bias per their
-  // docs). Description = perceived gender + tone so users picking a
-  // "social media influencer" voice can actually tell what they're
-  // choosing instead of guessing from abstract tone descriptors.
-  { id: "gm:Leda",          label: "Leda",          description: "Female · Youthful, playful" },
+  // ── Female voices (13) ────────────────────────────────────────────
   { id: "gm:Aoede",         label: "Aoede",         description: "Female · Breezy, light" },
+  { id: "gm:Achernar",      label: "Achernar",      description: "Female · Soft" },
+  { id: "gm:Autonoe",       label: "Autonoe",       description: "Female · Bright" },
   { id: "gm:Callirrhoe",    label: "Callirrhoe",    description: "Female · Easy-going" },
+  { id: "gm:Despina",       label: "Despina",       description: "Female · Smooth" },
+  { id: "gm:Erinome",       label: "Erinome",       description: "Female · Clear, articulate" },
+  { id: "gm:Kore",          label: "Kore",          description: "Female · Firm, authoritative" },
+  { id: "gm:Laomedeia",     label: "Laomedeia",     description: "Female · Upbeat, social-media style" },
+  { id: "gm:Leda",          label: "Leda",          description: "Female · Youthful, playful" },
+  { id: "gm:Pulcherrima",   label: "Pulcherrima",   description: "Female · Forward, middle pitch" },
   { id: "gm:Sulafat",       label: "Sulafat",       description: "Female · Warm, conversational" },
   { id: "gm:Vindemiatrix",  label: "Vindemiatrix",  description: "Female · Gentle" },
-  { id: "gm:Achernar",      label: "Achernar",      description: "Female · Soft" },
-  { id: "gm:Laomedeia",     label: "Laomedeia",     description: "Female · Upbeat, social-media style" },
-  { id: "gm:Kore",          label: "Kore",          description: "Female · Firm, authoritative" },
-  { id: "gm:Erinome",       label: "Erinome",       description: "Female · Clear, articulate" },
   { id: "gm:Zephyr",        label: "Zephyr",        description: "Female · Bright, higher pitch" },
-  { id: "gm:Pulcherrima",   label: "Pulcherrima",   description: "Female · Forward, middle pitch" },
-  // Male-leaning voices.
-  { id: "gm:Charon",        label: "Charon",        description: "Male · Informative, documentary" },
-  { id: "gm:Orus",          label: "Orus",          description: "Male · Firm, serious (dramatic)" },
-  { id: "gm:Iapetus",       label: "Iapetus",       description: "Male · Clear, neutral" },
-  { id: "gm:Rasalgethi",    label: "Rasalgethi",    description: "Male · Informative, explanatory" },
+  // ── Male voices (17) ──────────────────────────────────────────────
+  { id: "gm:Achird",        label: "Achird",        description: "Male · Friendly" },
   { id: "gm:Algenib",       label: "Algenib",       description: "Male · Gravelly, deep" },
+  { id: "gm:Algieba",       label: "Algieba",       description: "Male · Smooth, lower pitch" },
+  { id: "gm:Alnilam",       label: "Alnilam",       description: "Male · Firm" },
+  { id: "gm:Charon",        label: "Charon",        description: "Male · Informative, documentary" },
+  { id: "gm:Enceladus",     label: "Enceladus",     description: "Male · Breathy, intimate" },
   { id: "gm:Fenrir",        label: "Fenrir",        description: "Male · Excitable, energetic" },
+  { id: "gm:Gacrux",        label: "Gacrux",        description: "Male · Mature" },
+  { id: "gm:Iapetus",       label: "Iapetus",       description: "Male · Clear, neutral" },
+  { id: "gm:Orus",          label: "Orus",          description: "Male · Firm, serious (dramatic)" },
   { id: "gm:Puck",          label: "Puck",          description: "Male · Upbeat, social-media style" },
+  { id: "gm:Rasalgethi",    label: "Rasalgethi",    description: "Male · Informative, explanatory" },
+  { id: "gm:Sadachbia",     label: "Sadachbia",     description: "Male · Lively" },
+  { id: "gm:Sadaltager",    label: "Sadaltager",    description: "Male · Knowledgeable" },
   { id: "gm:Schedar",       label: "Schedar",       description: "Male · Even, measured" },
   { id: "gm:Umbriel",       label: "Umbriel",       description: "Male · Easy-going" },
-  { id: "gm:Enceladus",     label: "Enceladus",     description: "Male · Breathy, intimate" },
-  { id: "gm:Algieba",       label: "Algieba",       description: "Male · Smooth, lower pitch" },
   { id: "gm:Zubenelgenubi", label: "Zubenelgenubi", description: "Male · Casual, conversational" },
 ];
 
@@ -188,36 +194,18 @@ const geminiFlashSpeakers: SpeakerOption[] = [
 // ];
 const creoleSpeakers: SpeakerOption[] = geminiFlashSpeakers;
 
-const frenchSpeakers: SpeakerOption[] = [
-  // Legacy Fish Audio voices — untouched.
-  { id: "Jacques", label: "Jacques", description: "Male · Neutral, professional · French narration/corporate" },
-  { id: "Camille", label: "Camille", description: "Female · Warm, conversational · French explainers/lifestyle" },
-  // Gemini 3.1 Flash (multilingual) — 15 voices.
-  ...geminiFlashSpeakers,
-];
+// All 11 supported languages get the same 30-voice Gemini roster; the
+// model picks the accent from the narration text. Adam (English Male
+// only — LemonFox) is the single non-Gemini exception in the picker.
+const frenchSpeakers: SpeakerOption[] = [...geminiFlashSpeakers];
 
-const spanishSpeakers: SpeakerOption[] = [
-  // Legacy Fish Audio voices — untouched.
-  { id: "Carlos",   label: "Carlos",   description: "Male · Authoritative, mature · Spanish corporate/news" },
-  { id: "Isabella", label: "Isabella", description: "Female · Warm, expressive · Spanish storytelling" },
-  // Smallest v3.1 Spanish voices — retained (quality is fine here).
-  ...spanishSmallestSpeakers,
-  // Gemini 3.1 Flash (multilingual) — 15 voices.
-  ...geminiFlashSpeakers,
-];
+const spanishSpeakers: SpeakerOption[] = [...geminiFlashSpeakers];
 
 const englishSpeakers: SpeakerOption[] = [
-  // Gemini 3.1 Flash voices FIRST — testing whether the Google API
-  // can keep up for 28-scene English projects. If it holds, this is
-  // the new default ordering; if it doesn't, users can still pick
-  // Adam / River / Smallest voices lower down.
+  // Gemini 3.1 Flash voices first — full 30-voice roster.
   ...geminiFlashSpeakers,
-  // Legacy Adam/River — kept for continuity, pushed below Gemini.
-  { id: "Adam",  label: "Adam",  description: "Male · Versatile, confident · general-purpose narration" },
-  { id: "River", label: "River", description: "Female · Professional, clear · corporate/explainers" },
-  // Smallest v3.1 29-voice American-English catalog — pushed to the
-  // bottom but still fully available.
-  ...englishSmallestSpeakers,
+  // Adam stays — routes through LemonFox (English Male only).
+  { id: "Adam",  label: "Adam",  description: "Male · Versatile, confident · general-purpose narration (LemonFox)" },
 ];
 
 // Languages where Gemini Flash is the SOLE non-HC provider. Gemini
@@ -256,11 +244,10 @@ export function getDefaultSpeaker(language: string): SpeakerVoice {
     // HC switched from Pierre (Fish) to a Gemini default — Sulafat is
     // warm/conversational, the closest analog to the legacy Pierre.
     case "ht": return "gm:Sulafat";
-    case "fr": return "Camille";
-    case "es": return "Isabella";
-    // English default stays "Adam" (legacy Fish Audio) so existing
-    // users don't get a surprise voice swap on their next project.
-    // The Gemini voices sit above Adam in the list for easy testing.
+    case "fr": return "gm:Sulafat";
+    case "es": return "gm:Sulafat";
+    // English default stays "Adam" (LemonFox) so existing users don't
+    // get a surprise voice swap on their next project.
     case "en": return "Adam";
     // Gemini-only languages default to a warm, conversational voice
     // that reads well across most content.

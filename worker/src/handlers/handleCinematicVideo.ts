@@ -106,9 +106,12 @@ async function _runCinematicVideo(
     throw new Error(`Generation not found: ${genError?.message}`);
   }
 
-  const scenes = generation.scenes as any[];
+  const scenes = (generation.scenes ?? null) as any[] | null;
+  if (!Array.isArray(scenes) || scenes.length === 0) {
+    throw new Error(`Generation ${generationId} has no scenes (got ${scenes === null ? "null" : typeof scenes})`);
+  }
   const scene = scenes[sceneIndex];
-  if (!scene) throw new Error(`Scene ${sceneIndex} not found`);
+  if (!scene) throw new Error(`Scene ${sceneIndex} not found (have ${scenes.length} scenes)`);
 
   const totalScenes = scenes.length;
   const isLastScene = sceneIndex === totalScenes - 1;

@@ -221,23 +221,55 @@ export default function Admin() {
     queryFn: async (): Promise<Partial<Record<AdminTabKey, number | null>>> => {
       type RpcFn = <T>(fn: string, args?: Record<string, unknown>) => Promise<{ data: T | null; error: { message: string } | null }>;
       const rpc = supabase.rpc.bind(supabase) as unknown as RpcFn;
-      const [errorsKpi, msgsKpi, notifKpi, annKpi, apiKeysCount] = await Promise.all([
+
+      // Promise.allSettled — one failing RPC must NOT blank all 5
+      // badges. The earlier Promise.all version had this bug: when
+      // any single RPC threw, useQuery saw an error and returned
+      // data: undefined, so AdminTabStrip fell back to TAB_DEFINITIONS
+      // static seeds (6 / 14 / 2 / 3 / 2). Now each failure is
+      // isolated to its own badge, which becomes null → pill hidden.
+      const settled = await Promise.allSettled([
         rpc<{ open_signatures: number }>("admin_errors_kpis"),
         rpc<{ unread: number }>("admin_messages_kpis"),
         rpc<{ unread_alerts: number }>("admin_notifications_kpis"),
         rpc<{ active: number }>("admin_announcements_kpis"),
         supabase.from("internal_api_keys").select("id", { count: "exact", head: true }).eq("status", "active"),
       ]);
+
+      const pickRpc = <K extends string>(idx: number, key: K): number | null => {
+        const r = settled[idx];
+        if (r.status !== "fulfilled") return null;
+        const v = (r.value as { data?: Record<string, unknown> | null }).data;
+        if (!v) return null;
+        const n = (v as Record<string, unknown>)[key];
+        return typeof n === "number" ? n : null;
+      };
+      const apiCountResult = settled[4];
+      const apiCount = apiCountResult.status === "fulfilled"
+        ? ((apiCountResult.value as { count?: number | null }).count ?? null)
+        : null;
+
+      // Telemetry — surface partial failures in the console so we
+      // know if a tab badge is permanently silent.
+      settled.forEach((r, i) => {
+        if (r.status === "rejected") {
+          console.warn(`[tab-badges] query ${i} failed:`, r.reason);
+        } else if ("error" in r.value && (r.value as { error?: { message?: string } | null }).error) {
+          console.warn(`[tab-badges] query ${i} error:`, (r.value as { error: { message: string } }).error.message);
+        }
+      });
+
       return {
-        errors:   errorsKpi.data?.open_signatures ?? null,
-        messages: msgsKpi.data?.unread ?? null,
-        notifs:   notifKpi.data?.unread_alerts ?? null,
-        announce: annKpi.data?.active ?? null,
-        apikeys:  apiKeysCount.count ?? null,
+        errors:   pickRpc(0, "open_signatures"),
+        messages: pickRpc(1, "unread"),
+        notifs:   pickRpc(2, "unread_alerts"),
+        announce: pickRpc(3, "active"),
+        apikeys:  apiCount,
       };
     },
     refetchInterval: 60_000,
     staleTime: 30_000,
+    retry: 1,
   });
 
   // Sanity-check exhaustiveness against `TAB_KEYS` at module-eval time

@@ -86,6 +86,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
               .is("accepted_policy_version", null)
               .then(() => {});
           }
+
+          // Fire-and-forget welcome email on first sign-in. The edge fn
+          // is idempotent (atomic claim on profiles.welcome_email_sent_at)
+          // so calling it on every SIGNED_IN is safe — the second call
+          // returns sent:false without re-emailing.
+          const url = `${import.meta.env.VITE_SUPABASE_URL ?? ""}/functions/v1/notify-signup-welcome`;
+          void fetch(url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+          }).catch(() => { /* welcome email is best-effort */ });
         }
       }
     );

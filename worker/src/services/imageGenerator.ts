@@ -7,12 +7,18 @@
  *      landscape | "1024x1536" portrait), accepts an optional
  *      `reference_images: string[]` for character-consistency
  *      image-to-image renders. NOT `aspect_ratio`.
- *   2. Hypereal `gemini-3-1-flash-t2i` — backup. Uses `aspect_ratio`.
- *      Text-only — no reference-image support.
- *   3. Replicate `nano-banana-2` — last-resort tertiary, also the
- *      pre-existing reference-image path. Now superseded by
- *      gpt-image-2 for reference renders but kept in the chain as
- *      a safety net.
+ *   2. OpenRouter `openai/gpt-5.4-image-2` — middle fallback. Calls
+ *      OpenAI's gpt-5.4 image model via the chat-completions surface
+ *      with `modalities: ["image","text"]`. Returns a base64 data
+ *      URL inside `choices[0].message.images[0].image_url.url`.
+ *      Pricier than Hypereal (~$0.22 vs ~$0.024/image) — only fires
+ *      when the Hypereal gpt-image-2 model is dark.
+ *   3. Hypereal `gemini-3-1-flash-t2i` — last fallback. Uses
+ *      `aspect_ratio`. Text-only — no reference-image support.
+ *
+ * `tryReplicate` is retained for `editImage` (reference-image edit
+ * path) but is NOT in the generation chain — production runs against
+ * the three providers above.
  *
  * IMPORTANT: Hypereal CDN URLs (r2.dev) have hotlink protection —
  * browsers sending a Referer from motionmax.io get blocked.
@@ -51,6 +57,14 @@ const HYPEREAL_GPT_IMAGE2_RETRIES = 4;
 // Hypereal endpoint but uses `aspect_ratio` instead of `size`.
 const HYPEREAL_MODEL = "gemini-3-1-flash-t2i";
 const HYPEREAL_RETRIES = 4;
+
+// OpenRouter middle fallback — calls openai/gpt-5.4-image-2 via the
+// chat-completions API. Read at module scope so handlers don't have
+// to thread it through; matches the HYPEREAL_IMAGE_KEY pattern.
+const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_MODEL = "openai/gpt-5.4-image-2";
+const OPENROUTER_API_KEY = (process.env.OPENROUTER_API_KEY || "").trim();
+const OPENROUTER_RETRIES = 3;
 
 const REPLICATE_API_URL = "https://api.replicate.com/v1/models/google/nano-banana-2/predictions";
 const REPLICATE_POLL_URL = "https://api.replicate.com/v1/predictions";
@@ -395,6 +409,108 @@ async function tryHypereal(
   return null;
 }
 
+// ── OpenRouter — openai/gpt-5.4-image-2 (middle fallback) ─────────
+
+/** Generate from OpenRouter's openai/gpt-5.4-image-2. Returns raw
+ *  PNG bytes (decoded from the data URL the chat API returns). The
+ *  chat-completions surface doesn't take an aspect/size param, so we
+ *  bake a format hint into the user message — the upstream model
+ *  honours it for portrait/landscape framing without us having to
+ *  resize after the fact. */
+async function tryOpenRouterGptImage2(
+  prompt: string,
+  format: string,
+): Promise<Uint8Array | null> {
+  if (!OPENROUTER_API_KEY) {
+    console.warn("[ImageGen] OpenRouter skipped — OPENROUTER_API_KEY not set");
+    return null;
+  }
+
+  const aspectHint =
+    format === "portrait" ? "vertical 9:16 portrait orientation"
+    : format === "square" ? "square 1:1 aspect ratio"
+    : "widescreen 16:9 landscape orientation";
+
+  // Same 3900-char cap as the gpt-image-2 path. The chat-completions
+  // surface is more forgiving on prompt length than the Images API,
+  // but very long prompts inflate completion tokens (image_tokens are
+  // billed at the OpenAI image-token rate ~$30/Mtok) so cap defensively.
+  const PROMPT_CAP = 3900;
+  const trimmed = prompt.length > PROMPT_CAP ? prompt.slice(0, PROMPT_CAP) : prompt;
+  const userContent = `${trimmed}\n\n[Render at ${aspectHint}]`;
+
+  for (let attempt = 1; attempt <= OPENROUTER_RETRIES; attempt++) {
+    try {
+      // 120s timeout — image gen via chat-completions is slower than
+      // the Images API (typical 15-40s). Keep loose so we don't kill
+      // a generation that's actually working.
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 120_000);
+      let res: Response;
+      try {
+        res = await fetch(OPENROUTER_API_URL, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: OPENROUTER_MODEL,
+            messages: [{ role: "user", content: userContent }],
+            modalities: ["image", "text"],
+          }),
+          signal: ac.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+
+      if (!res.ok) {
+        const err = await res.text();
+        console.warn(`[ImageGen] OpenRouter attempt ${attempt} failed (${res.status}): ${err.substring(0, 200)}`);
+        // 4xx (except 429) means the request shape itself is wrong —
+        // retrying won't help. Same convention as the other providers.
+        if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+          return null;
+        }
+        if (attempt < OPENROUTER_RETRIES) {
+          const base = 1000 * Math.pow(2, attempt - 1);
+          const jitter = base * (0.7 + Math.random() * 0.6);
+          await sleep(Math.round(jitter));
+        }
+        continue;
+      }
+
+      const data = await res.json() as any;
+      // Response shape:
+      //   choices[0].message.images[0].image_url.url
+      // → "data:image/png;base64,iVBORw0KGgo..."
+      const dataUrl = data?.choices?.[0]?.message?.images?.[0]?.image_url?.url as string | undefined;
+      if (!dataUrl || !dataUrl.startsWith("data:image/")) {
+        console.warn(`[ImageGen] OpenRouter attempt ${attempt}: no image data URL in response`);
+        if (attempt < OPENROUTER_RETRIES) await sleep(1500 * attempt);
+        continue;
+      }
+
+      const commaIdx = dataUrl.indexOf(",");
+      if (commaIdx < 0) {
+        console.warn(`[ImageGen] OpenRouter attempt ${attempt}: malformed data URL (no comma)`);
+        continue;
+      }
+
+      const b64 = dataUrl.slice(commaIdx + 1);
+      const bytes = Uint8Array.from(Buffer.from(b64, "base64"));
+      console.log(`[ImageGen] OpenRouter ✅ attempt ${attempt} — ${bytes.length} bytes (model: ${data?.model || OPENROUTER_MODEL})`);
+      return bytes;
+    } catch (err) {
+      console.warn(`[ImageGen] OpenRouter attempt ${attempt} threw: ${err}`);
+      if (attempt < OPENROUTER_RETRIES) await sleep(1500 * attempt);
+    }
+  }
+
+  return null;
+}
+
 // ── Replicate ──────────────────────────────────────────────────────
 
 async function tryReplicate(
@@ -554,19 +670,17 @@ async function _generateImageUncached(
     throw new Error("Image generation is disabled via feature flag (image_generation=false)");
   }
 
-  const replicateEnabled = await isEnabled("image_provider_replicate");
-
   // Hypereal master kill-switch + per-model flags. The Hypereal
   // concurrency limiter is shared across both routes since they hit
   // the same upstream account / rate-limit pool.
   const hyperealEnabled = await isEnabled("image_provider_hypereal");
   const gptImage2Enabled = await isEnabled("image_provider_gpt_image2", true);
   const geminiEnabled = await isEnabled("image_provider_gemini", true);
+  const openRouterEnabled = await isEnabled("image_provider_openrouter", true);
 
-  // ── Primary: Hypereal gpt-image-2 ─────────────────────────────────
+  // ── 1. Hypereal gpt-image-2 (primary) ─────────────────────────────
   // gpt-image-2 supports the optional `reference_images` array, so
-  // character-consistency renders go through this path too — no
-  // separate Replicate detour for refs.
+  // character-consistency renders go through this path too.
   if (hyperealApiKey && hyperealEnabled && gptImage2Enabled) {
     await acquireHypereal();
     const bytes = await tryHyperealGptImage2(prompt, hyperealApiKey, format, referenceImages).finally(releaseHypereal);
@@ -575,15 +689,32 @@ async function _generateImageUncached(
       writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: HYPEREAL_GPT_IMAGE2_MODEL, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
       return url;
     }
-    console.warn("[ImageGen] gpt-image-2 exhausted — falling back to Gemini 3.1 Flash");
+    console.warn("[ImageGen] gpt-image-2 exhausted — falling back to OpenRouter gpt-5.4-image-2");
   } else if (!gptImage2Enabled) {
-    console.warn("[ImageGen] gpt-image-2 disabled via feature flag — skipping to Gemini");
+    console.warn("[ImageGen] gpt-image-2 disabled via feature flag — skipping to OpenRouter");
   }
 
-  // ── Backup: Hypereal Gemini 3.1 Flash ─────────────────────────────
+  // ── 2. OpenRouter openai/gpt-5.4-image-2 (middle fallback) ────────
+  // Different upstream from Hypereal (calls OpenAI directly via
+  // OpenRouter), so a Hypereal gpt-image-2 outage doesn't take this
+  // path out with it. Pricier (~$0.22/img vs ~$0.024/img) so it only
+  // fires when Hypereal's primary fails.
+  if (openRouterEnabled) {
+    const bytes = await tryOpenRouterGptImage2(prompt, format);
+    if (bytes) {
+      const url = await uploadToStorage(bytes, projectId);
+      writeApiLog({ userId: undefined, generationId: undefined, provider: "openrouter", model: OPENROUTER_MODEL, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
+      return url;
+    }
+    console.warn("[ImageGen] OpenRouter exhausted — falling back to Gemini 3.1 Flash");
+  } else {
+    console.warn("[ImageGen] OpenRouter disabled via feature flag");
+  }
+
+  // ── 3. Hypereal Gemini 3.1 Flash (last) ───────────────────────────
   // Text-only — no reference-image support. If the caller has refs,
-  // we still try this path; the result will be a fresh render that
-  // ignores the refs. That's strictly better than failing the scene.
+  // we still try this path; the result is a fresh render that ignores
+  // the refs. Strictly better than failing the scene.
   if (hyperealApiKey && hyperealEnabled && geminiEnabled) {
     await acquireHypereal();
     const bytes = await tryHypereal(prompt, hyperealApiKey, format).finally(releaseHypereal);
@@ -592,25 +723,19 @@ async function _generateImageUncached(
       writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: HYPEREAL_MODEL, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
       return url;
     }
-    console.warn("[ImageGen] Gemini 3.1 Flash exhausted — last-resort tertiary will run");
+    console.warn("[ImageGen] Gemini 3.1 Flash exhausted — chain fully exhausted");
   } else if (!hyperealEnabled) {
     console.warn("[ImageGen] Hypereal disabled via feature flag");
   } else if (!geminiEnabled) {
     console.warn("[ImageGen] Gemini 3.1 Flash disabled via feature flag");
   }
 
-  // ── Last-resort tertiary fallback (untouched legacy path) ────────
-  if (replicateApiKey && replicateEnabled) {
-    const url = await tryReplicate(prompt, replicateApiKey, format, projectId, referenceImages);
-    if (url) {
-      writeApiLog({ userId: undefined, generationId: undefined, provider: "replicate", model: "nano-banana-2", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
-      return url;
-    }
-  } else if (!replicateEnabled) {
-    console.warn("[ImageGen] Replicate disabled via feature flag");
-  }
+  // replicateApiKey is accepted for backwards-compat (still used by
+  // editImage below) but the production generation chain no longer
+  // routes through Replicate. Reference the param so TS doesn't warn.
+  void replicateApiKey;
 
-  const err = new Error("Image generation failed: gpt-image-2, Gemini 3.1 Flash, and tertiary fallback all exhausted");
+  const err = new Error("Image generation failed: gpt-image-2, OpenRouter gpt-5.4-image-2, and Gemini 3.1 Flash all exhausted");
   writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: HYPEREAL_GPT_IMAGE2_MODEL, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
   throw err;
 }

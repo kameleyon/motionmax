@@ -57,6 +57,51 @@ function getContainerMemoryBytes(): number {
 }
 
 /**
+ * Get the CPU quota allocated to this container, in whole-CPU units.
+ * `os.cpus().length` returns HOST cores even inside a container — on
+ * Render's multi-tenant infra that means a 2-vCPU Pro pod reports 16
+ * cores, which is what previously caused MAX_EXPORT_SLOTS to balloon
+ * to 16 and oversubscribe the cgroup. We read the actual quota from
+ * the cgroup CPU controller instead.
+ */
+function getContainerCpuCount(): number {
+  const hostCpus = Math.max(1, os.cpus().length);
+
+  // cgroup v2: /sys/fs/cgroup/cpu.max → "<quota> <period>" or "max <period>"
+  try {
+    const raw = fs.readFileSync("/sys/fs/cgroup/cpu.max", "utf-8").trim();
+    const [quotaStr, periodStr] = raw.split(/\s+/);
+    if (quotaStr !== "max") {
+      const quota = parseInt(quotaStr, 10);
+      const period = parseInt(periodStr, 10);
+      if (quota > 0 && period > 0) {
+        const cpus = Math.max(1, Math.round(quota / period));
+        if (cpus < hostCpus) return cpus;
+      }
+    }
+  } catch { /* not cgroup v2 */ }
+
+  // cgroup v1: separate quota + period files
+  try {
+    const quota = parseInt(
+      fs.readFileSync("/sys/fs/cgroup/cpu/cpu.cfs_quota_us", "utf-8").trim(),
+      10,
+    );
+    const period = parseInt(
+      fs.readFileSync("/sys/fs/cgroup/cpu/cpu.cfs_period_us", "utf-8").trim(),
+      10,
+    );
+    if (quota > 0 && period > 0) {
+      const cpus = Math.max(1, Math.round(quota / period));
+      if (cpus < hostCpus) return cpus;
+    }
+  } catch { /* not cgroup v1 */ }
+
+  // Fallback: host count (non-containerized or unrestricted cgroup)
+  return hostCpus;
+}
+
+/**
  * Pool sizes split by workload type:
  *   - export pool   → CPU-bound  (FFmpeg encoding, color grade, mux)
  *   - LLM/IO pool   → memory-bound (await fetch() to Hypereal/Gemini/ElevenLabs)
@@ -92,9 +137,10 @@ function getContainerMemoryBytes(): number {
 interface ConcurrencyBudget { exportSlots: number; llmSlots: number; total: number; }
 
 function detectOptimalConcurrency(): ConcurrencyBudget {
-  const cpuCount      = os.cpus().length;
-  const hostMemMb     = Math.round(os.totalmem() / 1048576);
-  const containerMemMb = Math.round(getContainerMemoryBytes() / 1048576);
+  const hostCpuCount    = os.cpus().length;
+  const containerCpus   = getContainerCpuCount();
+  const hostMemMb       = Math.round(os.totalmem() / 1048576);
+  const containerMemMb  = Math.round(getContainerMemoryBytes() / 1048576);
 
   // Reserve 768MB for OS/Node.js overhead (FFmpeg + pdfjs occasionally
   // spike past the old 512MB reservation under load).
@@ -112,9 +158,14 @@ function detectOptimalConcurrency(): ConcurrencyBudget {
     return { exportSlots, llmSlots, total: exportSlots + llmSlots };
   }
 
-  // Export pool: one FFmpeg invocation per CPU core. Going wider crashes
-  // the encoder into context-switch hell.
-  const exportSlots = Math.max(1, cpuCount);
+  // Export pool: bound by BOTH cgroup CPU quota AND memory headroom.
+  // Each ffmpeg child with xfade+Ken Burns runs 500-700MB resident, so
+  // even on a 2-vCPU pod with "enough" cores the 2GB cgroup can only
+  // safely host 1-2 simultaneous exports. Hard ceiling of 4 per instance
+  // — beyond that, scale horizontally.
+  const exportByCpu    = Math.max(1, containerCpus);
+  const exportByMemory = Math.max(1, Math.floor(availableMemMb / 700));
+  const exportSlots    = Math.max(1, Math.min(exportByCpu, exportByMemory, 4));
 
   // LLM/IO pool: memory-bound, CONSERVATIVE 350MB/job to cover spikes.
   // Hard ceiling of 8 per instance — any further parallelism comes
@@ -122,12 +173,15 @@ function detectOptimalConcurrency(): ConcurrencyBudget {
   const llmByMemory = Math.floor(availableMemMb / 350);
   const llmSlots    = Math.max(2, Math.min(llmByMemory, 8));
 
-  const total = Math.min(exportSlots + llmSlots, 12);
+  const total = exportSlots + llmSlots;
 
   wlog.info("Auto-tuned concurrency", {
-    cpus: cpuCount, hostRamMb: hostMemMb,
-    containerRamMb: containerMemMb, availableMb: availableMemMb,
-    exportSlots, llmSlots, llmByMemory, total,
+    hostCpus: hostCpuCount, containerCpus,
+    hostRamMb: hostMemMb, containerRamMb: containerMemMb,
+    availableMb: availableMemMb,
+    exportSlots, exportByCpu, exportByMemory,
+    llmSlots, llmByMemory,
+    total,
   });
   return { exportSlots, llmSlots, total };
 }

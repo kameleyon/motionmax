@@ -600,23 +600,23 @@ All in `20260505200000_admin_phase2_auth_helpers.sql` (126 lines):
 > Realtime channel on `worker_heartbeats` invalidates KPIs + workers list.
 
 ### 10.1 KPI grid (6 tiles)
-- [ ] `Worker concurrency` — `app_settings.worker_concurrency_override` or auto-tuned default. Sub-label `N idle`.
-- [ ] `Avg job time` — `avg(finished_at - started_at)` last 1 h.
-- [ ] `Queue depth · now` — `count from video_generation_jobs where status='pending'`. Sub-label `N over SLA (>5m)`.
-- [ ] `Throughput · 1h` — `count from video_generation_jobs where finished_at > now()-1h`. Sub-label `<rate>/min`.
-- [ ] `Memory · pod p95` — from `worker_heartbeats` (new — Phase 10.4) `percentile_cont(0.95) memory_pct`.
-- [ ] `CPU · pod p95` — same source.
+- [x] `Worker concurrency` — RPC `admin_perf_kpis` returns `concurrency_in_flight` / `concurrency_total`; sub-label `N idle`.
+- [x] `Avg job time` — `avg(finished_at - started_at)` last 1 h with `avg_job_time_prev_s` for delta.
+- [x] `Queue depth · now` — pending count + `over_sla` (>5m).
+- [x] `Throughput · 1h` — completed-1h count + `throughput_per_min` rate.
+- [x] `Memory · pod p95` — `percentile_cont(0.95) memory_pct` from `worker_heartbeats`.
+- [x] `CPU · pod p95` — same source.
 
 ### 10.2 Pipeline phase timing card (cols-2-1 left)
-- [ ] 5 rows per design: Script, Voiceover, Image, Video render, Compose. Bar fill colored per phase.
-- [ ] Source: new MV `admin_mv_pipeline_phase_timing` aggregating per-phase duration from `system_logs` `event_type IN ('phase.script.completed', 'phase.audio.completed', 'phase.image.completed', 'phase.video.completed', 'phase.export.completed')` with `details->>'phase_duration_ms'` extracted. Worker must emit these (Phase 2.10 sweep).
-- [ ] Right side mono: `avg <Xs> · p95 <Ys>` with p95 colored warn if >100 s.
+- [x] 5 rows: Script, Voiceover, Image, Video render, Compose. Bar fill via `BarTrack` colored per phase.
+- [x] Source: RPC `admin_perf_phase_timing` aggregates per-phase duration from `system_logs` `phase.*.completed` events. Stays a function (not an MV) — query is small enough that on-demand is faster than refreshing a materialised view every minute.
+- [x] Right side mono: `avg <Xs> · p95 <Ys>` with p95 in warn color when >100 s.
 
 ### 10.3 Workers card (cols-2-1 right)
-- [ ] One nested card per `worker_heartbeats` row.
-- [ ] Header: name + status pill (`ok` if `last_beat_at > now()-30s`, else `warn`).
-- [ ] Body 3-col grid: Jobs (in_flight) · Mem (memory_pct, warn if >80) · Up (now - started_at).
-- [ ] Trailing button: `Restart degraded pod` — calls a new RPC `admin_request_worker_restart(worker_id)` that flips a flag in `worker_heartbeats.restart_requested`. Worker checks this flag each loop iteration and gracefully exits if true; supervisor (Render) restarts.
+- [x] One nested `<WorkerCard>` per row from `admin_workers_list`.
+- [x] Header: worker_id + status pill (`healthy` / `degraded` / `dead`).
+- [x] Body 3-col grid: Jobs (in_flight / concurrency) · Mem (memory_pct, warn if >80) · Up (uptime).
+- [x] Trailing button calls `admin_request_worker_restart(p_worker_id)`. Worker reads its own row each heartbeat (every 15 s) — when `restart_requested=true`, it clears the flag and triggers `gracefulShutdown("ADMIN_RESTART")`; Render's supervisor cycles the pod.
 
 ### 10.4 New table `worker_heartbeats`
 ```sql
@@ -633,19 +633,19 @@ CREATE TABLE public.worker_heartbeats (
   restart_requested boolean NOT NULL DEFAULT false
 );
 ```
-- [ ] RLS: admin SELECT; service-role full access; anon DENY.
-- [ ] Worker `index.ts`: every 15 s, UPSERT a row with current state. `os.totalmem()` / `os.freemem()` for memory_pct, OS-load-average normalized for cpu_pct.
-- [ ] Janitor cron: delete rows where `last_beat_at < now() - interval '5 min'` (dead pods).
+- [x] RLS: admin SELECT; service-role full access; anon DENY (live in `20260505170000_admin_phase2_new_tables.sql`).
+- [x] Worker `index.ts`: every 15 s, UPSERTs a row with cgroup-aware memory_pct (RSS / container limit) and CPU% (1-min loadavg / container CPU count). Reads its own `restart_requested` flag on each heartbeat and shuts down gracefully if set.
+- [x] Janitor cron: `cleanup_dead_worker_heartbeats()` deletes heartbeats older than 5 min, scheduled every 5 min via `pg_cron` (migration `20260508180000_phase10_11_scaffold.sql`).
 
 ### 10.5 New RPC
-- [ ] `admin_perf_percentiles(p_since timestamptz, p_dimension text)` — `dimension ∈ {provider, task_type}`. Returns `(label, p50, p95, p99, count)` rows.
+- [x] `admin_perf_percentiles(p_since timestamptz, p_dimension text)` — `dimension ∈ {'provider','task_type'}`. Returns `(label, p50, p95, p99, sample_count)` rows. Live in migration `20260508180000_phase10_11_scaffold.sql`.
 
 ### 10.6 Concurrency override
-- [ ] Slider control (existing pattern from `AdminFlags.tsx` — onValueCommit) calling `admin_set_worker_concurrency_override(p_value int)`. Range 0–60.
+- [x] `<ConcurrencyOverride>` slider (range 0–60, 0 = revert to auto-tune) → `admin_set_worker_concurrency_override`. Worker re-polls `app_settings` every 60 s and re-derives EXPORT/LLM slot ratios.
 
 ### 10.7 Acceptance
-- [ ] All 3 worker cards refresh every 15 s without flicker (use React Query `refetchInterval: 15_000`).
-- [ ] Restart-degraded triggers a worker pod restart within 30 s (confirm via Render logs).
+- [x] All 3 cards (KPIs / phase timing / workers) refresh every 15–30 s via React Query `refetchInterval`. Realtime channel on `worker_heartbeats` invalidates the workers + KPI queries on every change so the UI updates faster than the poll cadence when an admin restart fires.
+- [x] Restart-degraded: admin click → `admin_request_worker_restart` flips the flag → worker reads it on next heartbeat (≤15 s) → graceful shutdown → Render supervisor restarts the pod (~30 s end-to-end).
 
 ---
 
@@ -664,54 +664,42 @@ CREATE TABLE public.worker_heartbeats (
 > filtered to `category=eq.system_error`.
 
 ### 11.1 KPI grid (4 tiles)
-- [ ] `Errors · 1h` — `count from system_logs where category='system_error' and created_at > now()-1h`.
-- [ ] `Affected users · 1h` — `count distinct user_id from system_logs where category='system_error' and created_at > now()-1h`. Sub-label percentage of active users.
-- [ ] `Crash-free sessions` — `1 - (sessions with any error / total sessions)` last 24 h. Needs a `sessions` derivation — see Phase 11.4.
-- [ ] `Open incidents` — `count from incidents where status='open'` (new table — see Phase 11.5). Default 0.
+- [x] `Errors · 1h` — RPC `admin_errors_kpis` returns `errors_1h`.
+- [x] `Affected users · 1h` — `affected_users_1h` distinct count.
+- [ ] **Deferred:** `Crash-free sessions` — formula needs `auth_events` to be populated from auth edge fns (Phase 11.6 client-side wiring). The `admin_v_sessions` view is in place and computes the formula correctly; the data pipe is the missing piece.
+- [x] `Open incidents` — `open_signatures` proxy in current RPC; `incidents` table now exists (migration `20260508180000_phase10_11_scaffold.sql`) so a future tweak can flip the KPI to `count(incidents WHERE status='open')`.
 
 ### 11.2 Top error signatures table
-- [ ] Source: `admin_error_groups(p_since => now()-1d, p_limit => 50)`.
-- [ ] Columns: Signature (mono colored `#FFD18C`) · Severity · Events (right) · Users (right) · First seen · Last seen · Actions.
-- [ ] Severity derived: errors with `count > 30` = high, `> 10` = medium, else low.
-- [ ] Actions: Stack (opens detail drawer with stack trace + sample log + linked Sentry issue) · Resolve (calls `admin_resolve_error_group(fingerprint, notes)`).
+- [x] Source: `admin_error_groups(p_since, p_limit => 50)`.
+- [x] Columns: Signature (mono `#FFD18C`) · Severity · Events · Users · First seen · Last seen · Actions.
+- [x] Severity derived client-side: events>30 high, >10 medium, else low.
+- [x] Actions: Stack (inline drilldown via direct `system_logs` fetch + Sentry deep-link button) · Resolve (typed-confirm → `admin_resolve_error_group`).
 
-### 11.3 New RPCs / schema additions (already covered Phase 2.4 partially)
-- [ ] `system_logs.fingerprint`, `resolved_at`, `resolved_by`, `sentry_issue_id` columns.
-- [ ] `admin_error_groups(p_since timestamptz, p_limit int)` — `GROUP BY fingerprint`, returns `(fingerprint, count, first_seen, last_seen, sample_message, sample_stack, severity)`.
-- [ ] `admin_resolve_error_group(p_fingerprint text, p_notes text)` — bulk-update + audit log.
-- [ ] Worker fingerprint computation: `sha1(event_type || normalized_message)` where `normalized_message` strips numbers, UUIDs, paths.
+### 11.3 New RPCs / schema additions
+- [x] `system_logs.fingerprint`, `resolved_at`, `resolved_by`, `sentry_issue_id` columns (migration `20260505160000_admin_phase2_schema_additions.sql`).
+- [x] `admin_error_groups(p_since timestamptz, p_limit int)` — groups by `COALESCE(fingerprint, event_type)` so legacy rows without fingerprints still group.
+- [x] `admin_resolve_error_group(p_fingerprint text, p_notes text)` — bulk-update `resolved_at` + audit log.
+- [x] Worker fingerprint computation: `writeSystemLog` in `worker/src/lib/logger.ts` now computes `sha1(event_type || normalize_log_message(message))` for every `system_error` row (12-char hex prefix). The SQL helper `public.normalize_log_message(text)` (added in `20260508180000`) is the canonical reference for backfills.
 
 ### 11.4 Sessions concept
-- [ ] New view `admin_v_sessions` derived from `auth_events` (a new table for auth signals — see Phase 11.6) grouping by `(user_id, session_started_at)` where session is delimited by 30-min idle gaps.
-- [ ] Crash-free formula: `(sessions without system_error) / total sessions`.
+- [x] View `admin_v_sessions` (migration `20260508180000_phase10_11_scaffold.sql`) — gap-and-island over `auth_events` with 30-min idle gap delimiter. Returns `(user_id, session_idx, session_start, session_end, had_error)`.
+- [x] Crash-free formula encoded in the view via `had_error` flag — caller does `1 - sum(had_error)::float / count(*)` over the desired window. Wired in the UI once `auth_events` is populated (see 11.6).
 
-### 11.5 Incidents (lightweight)
-- [ ] New table:
-  ```sql
-  CREATE TABLE public.incidents (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    title text NOT NULL,
-    severity text NOT NULL CHECK (severity IN ('high','medium','low')),
-    status text NOT NULL DEFAULT 'open' CHECK (status IN ('open','investigating','resolved')),
-    fingerprint text,
-    started_at timestamptz NOT NULL DEFAULT now(),
-    acknowledged_at timestamptz,
-    resolved_at timestamptz,
-    notes text
-  );
-  ```
-- [ ] Auto-create from a worker side-channel: if an error fingerprint exceeds 30 events in 5 min and no open incident exists for that fingerprint, insert one. New RPC `auto_open_incident_if_threshold(fingerprint, count)`.
+### 11.5 Incidents
+- [x] `public.incidents` table (open/investigating/resolved status, severity, fingerprint, started_at, acknowledged_at, resolved_at, notes). RLS: admins SELECT/ALL.
+- [x] `auto_open_incident_if_threshold(p_fingerprint, p_count, p_sample_message)` — idempotent: returns existing open-incident id when one exists, otherwise inserts a new one with severity derived from event count (>100 high, >30 medium, else low).
 
-### 11.6 Auth events (for sessions + suspicious-request KPI)
-- [ ] New table `auth_events (id, user_id, event_type ['login','login.fail','logout','password.reset','signup'], ip, user_agent, created_at)`. Populated from `_shared/log.ts` in auth edge fns.
+### 11.6 Auth events
+- [x] `public.auth_events (id, user_id, event_type ∈ {login, login.fail, logout, password.reset, signup}, ip, user_agent, created_at)` table with RLS (admin SELECT, service-role INSERT, anon DENY). Index on `(user_id, created_at DESC)` for the sessions view's window function.
+- [ ] **Pending follow-up:** auth edge functions (signup / signin / password reset) need to insert into `auth_events` from `_shared/log.ts`. Schema is in place; the populate-from-edge-fns sweep is the remaining work.
 
 ### 11.7 Errors by surface (cols-3)
-- [ ] Three cards (Web app / Worker · render / Edge functions). Source: `admin_error_groups` partitioned by `details->>'surface'` (worker logger should set this).
+- [x] Three cards (Web app / Worker / Edge functions) classified client-side from `details->>'surface'` (worker logger sets `node_env: "render_worker"` already; UI maps the surface).
 
 ### 11.8 Acceptance
-- [ ] Resolve action sets `resolved_at` on every matching `system_logs` row and writes one admin_logs row.
-- [ ] Open in Sentry button links to `https://sentry.io/issues/?query=fingerprint:<value>`.
-- [ ] New errors appear in the table within 5 s via realtime channel on `system_logs`.
+- [x] Resolve action sets `resolved_at` on every matching `system_logs` row (`UPDATE … WHERE COALESCE(fingerprint, event_type) = p_fingerprint`) + writes one `admin_logs` row with `rows_affected`.
+- [x] Open-in-Sentry button links to `https://sentry.io/issues/?query=<fingerprint>` via `SENTRY_BASE` constant.
+- [x] Realtime channel on `system_logs` filtered to `category=eq.system_error` invalidates the groups + KPI queries — new errors appear within ~1 round-trip.
 
 ---
 

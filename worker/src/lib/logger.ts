@@ -1,7 +1,34 @@
 import * as os from "os";
+import { createHash } from "crypto";
 import { supabase } from "../lib/supabase.js";
 import { v4 as uuidv4 } from "uuid";
 import * as Sentry from "@sentry/node";
+
+/**
+ * Strip runtime-variable bits (uuids, numbers, paths) from an error
+ * message so two errors that only differ by an id/timestamp collapse
+ * to the same fingerprint. Mirrors public.normalize_log_message in
+ * SQL — keep them in sync if either side gains rules.
+ */
+function normalizeLogMessage(msg: string): string {
+  return (msg || "")
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "<uuid>")
+    .replace(/\b\d+\b/g, "<n>")
+    .replace(/\/[A-Za-z0-9_./-]+/g, "<path>");
+}
+
+/**
+ * sha1(event_type || normalized_message) — Phase 11.3. Only computed
+ * for system_error rows so the Errors tab can group identical failures
+ * across users / time. Returns 12-char hex prefix (collision-safe at
+ * MotionMax scale; reduces row width vs. the full 40 chars).
+ */
+function computeFingerprint(eventType: string, message: string): string {
+  return createHash("sha1")
+    .update(`${eventType}|${normalizeLogMessage(message)}`)
+    .digest("hex")
+    .slice(0, 12);
+}
 
 /**
  * Stable per-process worker identifier. Phase 2.4 added `worker_id`
@@ -79,6 +106,13 @@ export async function writeSystemLog(payload: LogPayload) {
   const level = categoryToLevel(payload.category);
   emitStructuredConsoleLog(level, payload);
 
+  // Compute a fingerprint for system_error rows so the Errors tab can
+  // group identical failures. Skipped for non-error categories (would
+  // be noisy + most non-error rows aren't grouped by signature).
+  const fingerprint = payload.category === "system_error"
+    ? computeFingerprint(payload.eventType, payload.message)
+    : null;
+
   try {
     await supabase.from("system_logs").insert({
       id: uuidv4(),
@@ -89,6 +123,7 @@ export async function writeSystemLog(payload: LogPayload) {
       event_type: payload.eventType,
       message: payload.message,
       worker_id: WORKER_ID,
+      fingerprint,
       details: {
         ...payload.details,
         worker_job_id: payload.jobId,

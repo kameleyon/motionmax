@@ -1438,6 +1438,64 @@ pollConcurrencyOverride().then(() => {
   setInterval(pollConcurrencyOverride, 60_000);
 });
 
+// ── Phase 10.4 — worker heartbeat writer ────────────────────────────
+// Every 15 s, UPSERT a row into worker_heartbeats so the admin
+// Performance tab can see this pod (concurrency / in-flight / memory /
+// CPU / version / uptime). Also polls our row's restart_requested
+// flag — if an admin clicked Restart in TabPerformance, we exit
+// cleanly and Render's supervisor cycles the pod.
+const WORKER_STARTED_AT = new Date().toISOString();
+const HEARTBEAT_INTERVAL_MS = 15_000;
+async function writeHeartbeat(): Promise<void> {
+  try {
+    // Memory: prefer cgroup-aware container limit (set on Render),
+    // fall back to process RSS / host total. cpu_pct uses 1-min
+    // loadavg normalised by container CPU count — > 100 % is over-
+    // saturated, so the UI's >80 % warn threshold catches it early.
+    const memTotal = getContainerMemoryBytes();
+    const memUsed  = process.memoryUsage().rss;
+    const memoryPct = memTotal > 0 ? Math.min(100, (memUsed / memTotal) * 100) : 0;
+    const cpuCount = getContainerCpuCount();
+    const load1    = os.loadavg()[0];
+    const cpuPct   = cpuCount > 0 ? Math.min(999, (load1 / cpuCount) * 100) : 0;
+
+    const { data: row, error } = await supabase
+      .from("worker_heartbeats")
+      .upsert({
+        worker_id: WORKER_ID,
+        host: os.hostname(),
+        last_beat_at: new Date().toISOString(),
+        in_flight: totalActiveJobs(),
+        concurrency: MAX_CONCURRENT_JOBS,
+        memory_pct: Math.round(memoryPct * 10) / 10,
+        cpu_pct: Math.round(cpuPct * 10) / 10,
+        version: process.env.RENDER_GIT_COMMIT?.slice(0, 7) ?? process.env.npm_package_version ?? null,
+        started_at: WORKER_STARTED_AT,
+      }, { onConflict: "worker_id" })
+      .select("restart_requested")
+      .single();
+
+    if (error) {
+      console.warn(`[Heartbeat] write failed:`, error.message);
+      return;
+    }
+    if ((row as { restart_requested?: boolean } | null)?.restart_requested && !isShuttingDown) {
+      console.log(`[Worker] 🔄 restart_requested flag set by admin — initiating graceful shutdown`);
+      // Clear the flag so the new pod doesn't immediately restart again.
+      await supabase
+        .from("worker_heartbeats")
+        .update({ restart_requested: false })
+        .eq("worker_id", WORKER_ID);
+      void gracefulShutdown("ADMIN_RESTART");
+    }
+  } catch (err) {
+    console.warn(`[Heartbeat] exception:`, (err as Error).message);
+  }
+}
+// Fire once on boot so the row appears immediately, then on interval.
+void writeHeartbeat();
+setInterval(writeHeartbeat, HEARTBEAT_INTERVAL_MS);
+
 startupDiagnostic().then((hadOrphans) => {
   const startPolling = () => {
     subscribeToQueue();

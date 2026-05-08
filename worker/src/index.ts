@@ -1055,8 +1055,14 @@ async function pollQueue() {
 const FALLBACK_POLL_INTERVAL_MS = 30_000;
 
 // Per-task-type hard timeouts. Export jobs run ffmpeg (CPU-bound, can be long);
-// LLM/API jobs should fail fast if a provider hangs.
+// cinematic video polling can run very long under Hypereal queue pressure
+// (Seedance/Kling jobs occasionally sit in 'processing' for 20–30 min);
+// pure-LLM jobs should fail fast if a provider hangs.
 const EXPORT_JOB_TIMEOUT_MS  = parseInt(process.env.EXPORT_JOB_TIMEOUT_MS  || "5400000",  10); // 90 min
+// Cinematic video polling: Hypereal-side queue + actual rendering can
+// legitimately need 30+ min on a single 10s scene (provider-side queue
+// depth varies). Bumped 15 → 45 min after launch-readiness check.
+const CINEMATIC_VIDEO_TIMEOUT_MS = parseInt(process.env.CINEMATIC_VIDEO_TIMEOUT_MS || "2700000", 10); // 45 min
 const LLM_JOB_TIMEOUT_MS     = parseInt(process.env.LLM_JOB_TIMEOUT_MS     || "900000",   10); // 15 min
 // Autopost orchestrator runs the FULL pipeline (script → audio → images →
 // [video] → finalize → export) inline by polling each child job. The
@@ -1070,6 +1076,7 @@ const JOB_TIMEOUT_MS         = parseInt(process.env.JOB_TIMEOUT_MS          || "
 function getJobTimeoutMs(taskType: string): number {
   if (process.env.JOB_TIMEOUT_MS) return JOB_TIMEOUT_MS; // honour explicit override
   if (taskType === "autopost_render" || taskType === "autopost_rerender") return AUTOPOST_JOB_TIMEOUT_MS;
+  if (taskType === "cinematic_video") return CINEMATIC_VIDEO_TIMEOUT_MS;
   return isExportTask(taskType) ? EXPORT_JOB_TIMEOUT_MS : LLM_JOB_TIMEOUT_MS;
 }
 

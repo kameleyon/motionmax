@@ -757,7 +757,13 @@ export async function pollHyperealJob(
   if (cached) return cached;
 
   const pollStartTime = Date.now();
-  const maxAttempts = 40;
+  // Bumped 40 → 95 to match the 45-min worker hard timeout for
+  // cinematic_video (was 15 min, raised because Seedance/Kling jobs can
+  // legitimately sit in 'processing' for 30+ min under provider load).
+  // With a 30 s steady-state backoff, 95 polls covers roughly 47 min —
+  // intentionally a hair past the worker cap so the outer hard-timeout
+  // surfaces a clearer error than the inner attempt-count throw.
+  const maxAttempts = 95;
   const max429Streak = 4;
   let consecutive429 = 0;
 

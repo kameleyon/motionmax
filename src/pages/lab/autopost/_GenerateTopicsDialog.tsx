@@ -307,29 +307,25 @@ export function GenerateTopicsDialog({
     },
   });
 
-  /** Move queue[from] to position `to`. PURELY LOCAL — no server write
-   *  until the user clicks "Save order". This was previously auto-saving
-   *  on every drop, which (a) gave no visible feedback and (b) raced
-   *  with rapid successive drags. The explicit Save button puts the
-   *  user in control + makes the persistence point obvious. */
+  /** Move queue[from] to position `to`. AUTOSAVES via a 400 ms debounce
+   *  so rapid successive drags coalesce into a single server write
+   *  (this was the original race-on-rapid-drags concern that pushed
+   *  the explicit Save button — debounce solves it without the extra
+   *  click). Success toast from `reorderMutation.onSuccess` provides
+   *  the visible feedback. */
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
+  }, []);
+
   const reorderQueue = (from: number, to: number) => {
     if (from === to || from < 0 || to < 0 || from >= queue.length || to >= queue.length) return;
     const next = [...queue];
     const [moved] = next.splice(from, 1);
     next.splice(to, 0, moved);
     setLocalQueueOrder(next);
-  };
-
-  /** True when the user has dragged but not yet saved. The Save button
-   *  enables only in this state — matches the design's "save changes"
-   *  affordance from the EditAutomationDialog. */
-  const hasPendingReorder =
-    localQueueOrder !== null &&
-    JSON.stringify(localQueueOrder) !== JSON.stringify(schedule.topic_pool ?? []);
-
-  const saveOrder = () => {
-    if (!localQueueOrder) return;
-    reorderMutation.mutate(localQueueOrder);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => { reorderMutation.mutate(next); }, 400);
   };
 
   const allSelected = useMemo(
@@ -455,8 +451,14 @@ export function GenerateTopicsDialog({
 
         {queue.length > 0 && (
           <div className="space-y-1.5 pt-1">
-            <p className="text-[11px] uppercase tracking-wider text-[#5A6268]">
-              Current queue ({queue.length})
+            <p className="text-[11px] uppercase tracking-wider text-[#5A6268] flex items-center gap-2">
+              <span>Current queue ({queue.length})</span>
+              {reorderMutation.isPending ? (
+                <span className="inline-flex items-center gap-1 normal-case tracking-normal text-[#11C4D0]">
+                  <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                  Saving order…
+                </span>
+              ) : null}
             </p>
             <div
               className="rounded-md border border-white/8 overflow-y-auto overscroll-contain"
@@ -557,22 +559,8 @@ export function GenerateTopicsDialog({
           >
             Close
           </Button>
-          {/* Save order — visible only after the user drags. Lives next
-              to Close so the user gets explicit confirmation that their
-              new order has been persisted. */}
-          {hasPendingReorder && (
-            <Button
-              variant="outline"
-              onClick={saveOrder}
-              disabled={reorderMutation.isPending}
-              className="border-[#11C4D0]/40 bg-[#11C4D0]/[0.08] text-[#11C4D0] hover:bg-[#11C4D0]/[0.16] w-full md:w-auto"
-            >
-              {reorderMutation.isPending ? (
-                <Loader2 className="h-4 w-4 mr-1.5 animate-spin shrink-0" />
-              ) : null}
-              Save order
-            </Button>
-          )}
+          {/* Order autosaves on drop (debounced 400 ms). Tiny pending
+              indicator lives in the queue header above; no Save button. */}
           <Button
             onClick={() => addMutation.mutate()}
             disabled={selected.size === 0 || addMutation.isPending}

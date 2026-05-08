@@ -508,24 +508,24 @@ async function runPipeline(
   // requeue, RPC retry, etc. — refuse to re-run a partial pipeline.
   // Re-running spends credits twice (verified 2026-05-08: a stale
   // Uruguay run got revived and produced a duplicate $6+ generation).
-  if (run.video_job_id || run.status === "completed" || run.status === "rendered") {
-    // The handler only sets video_job_id at the very end (after export
-    // + thumbnail). If it's set, the previous attempt completed —
-    // throw instead of returning an empty result. Why: returning a
-    // result causes the dispatcher to mark THIS job 'completed',
-    // which fires `autopost_on_video_completed` and queues a SECOND
-    // email_delivery job whose payload.video_job_id points at this
-    // (now-empty) row → email_delivery fails on missing finalUrl →
-    // 2026-05-08 incident: 280 credits wrongly refunded. Throwing
-    // marks this row 'failed' instead, the trigger predicate
-    // (NEW.status='completed') never fires, no duplicate email,
-    // no spurious refund (refundCreditsOnFailure now whitelists
-    // only generate_video/generate_cinematic/autopost_render-with-
-    // creditsDeducted as refundable).
-    const msg = `autopost_render: run ${runId} already finished (status=${run.status}, video_job_id=${run.video_job_id ?? "null"}); refusing duplicate run`;
+  // Terminal-success states: a sibling render finished, the video
+  // is delivered. Throw so the dispatcher marks THIS row 'failed' and
+  // the autopost_on_video_completed trigger does NOT fire a second
+  // email_delivery (which previously caused 280-credit wrongful
+  // refunds when delivery couldn't find finalUrl on the empty row).
+  if (run.status === "rendered" || run.status === "publishing" || run.status === "completed") {
+    const msg = `autopost_render: run ${runId} already finished (status=${run.status}); refusing duplicate run`;
     console.log(`[autopost_render] ${msg}`);
     throw new Error(msg);
   }
+  // Note: we deliberately do NOT check run.video_job_id here.
+  // autopost_tick / autopost_fire_now sets video_job_id to the NEWLY
+  // INSERTED render job's id at fire-time, not at completion. So the
+  // first claim of a fresh run will see video_job_id === <our jobId>;
+  // treating that as "already finished" was the 2026-05-08 21:29:58
+  // incident where every fresh autopost_render rejected on first
+  // claim. The progress_pct > 0 check below handles the real
+  // duplicate case (stale-revive of a partially-completed row).
   if (run.status === "failed" || run.status === "cancelled") {
     throw new Error(`autopost_render: run ${runId} already in terminal status=${run.status}; refusing to re-run`);
   }

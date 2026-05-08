@@ -373,9 +373,26 @@ function getCreditCost(projectType: string, length: string): number {
   return Math.ceil(secs * mult);
 }
 
+// Task types that ARE the credit-deduction point. Everything else
+// (delivery, finalize, export, voice preview, etc.) is a downstream
+// step funded by an upstream deduction, so a failure should NOT
+// trigger a refund here. The 2026-05-08 incident: autopost_email_
+// delivery failed because of a stale orchestrator + missing finalUrl,
+// and the refund handler happily reimbursed 280 credits as if the
+// generation itself had failed.
+const REFUNDABLE_TASK_TYPES = new Set<string>([
+  "generate_video",
+  "generate_cinematic",
+  "autopost_render",   // gated further below by creditsDeducted check
+]);
+
 async function refundCreditsOnFailure(job: Job) {
   if (!job.user_id) {
     console.log(`[Refund] Skipping refund for job ${job.id} - no user_id`);
+    return;
+  }
+  if (!REFUNDABLE_TASK_TYPES.has(job.task_type as string)) {
+    console.log(`[Refund] Skipping refund for job ${job.id} — task_type "${job.task_type}" is downstream-only (not a credit-deduction point).`);
     return;
   }
 
@@ -384,14 +401,7 @@ async function refundCreditsOnFailure(job: Job) {
     const projectType = payload.projectType || "doc2video";
     const length = payload.length || "brief";
 
-    // Autopost-specific guard. The autopost_render task type does NOT
-    // deduct credits at edge-function entry — deduction now happens
-    // inside autopost_tick / autopost_fire_now via deduct_credits_securely
-    // and the actual amount is stamped onto payload.creditsDeducted.
-    // If creditsDeducted is missing (older queued rows pre-deduction
-    // migration), refund nothing — falling back to getCreditCost(...)
-    // would refund a phantom 280-credit "brief" allowance against a
-    // zero-deduction basis and silently inflate user balances.
+    // Autopost-specific guards.
     if (job.task_type === "autopost_render" as any) {
       const deducted = typeof payload.creditsDeducted === "number" && payload.creditsDeducted > 0
         ? payload.creditsDeducted
@@ -399,6 +409,27 @@ async function refundCreditsOnFailure(job: Job) {
       if (deducted === 0) {
         console.log(`[Refund] Skipping autopost refund for job ${job.id} — no creditsDeducted on payload (pre-deduction row)`);
         return;
+      }
+      // 2026-05-08 incident: a duplicate autopost_render row failed
+      // (idempotence gate threw because the run was already complete).
+      // The original render had already consumed the credits and
+      // delivered. Refunding the duplicate would credit the user a
+      // second time. Look at the autopost_run state — if it's already
+      // 'rendered' / 'completed' / 'publishing', the credits were
+      // consumed by a successful sibling render; skip refund.
+      const runId = (payload as { autopost_run_id?: string }).autopost_run_id;
+      if (typeof runId === "string") {
+        const { data: runRow } = await supabase
+          .from("autopost_runs")
+          .select("status, video_job_id")
+          .eq("id", runId)
+          .maybeSingle();
+        const status = (runRow as { status?: string; video_job_id?: string | null } | null)?.status;
+        const finishedStates = new Set(["rendered", "publishing", "completed"]);
+        if (status && (finishedStates.has(status) || (runRow as { video_job_id?: string | null } | null)?.video_job_id)) {
+          console.log(`[Refund] Skipping refund for job ${job.id} — autopost_run ${runId} already in status '${status}' (sibling render already consumed credits).`);
+          return;
+        }
       }
     }
 

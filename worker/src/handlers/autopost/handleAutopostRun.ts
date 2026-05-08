@@ -510,15 +510,21 @@ async function runPipeline(
   // Uruguay run got revived and produced a duplicate $6+ generation).
   if (run.video_job_id || run.status === "completed" || run.status === "rendered") {
     // The handler only sets video_job_id at the very end (after export
-    // + thumbnail). If it's set, the previous attempt completed.
-    console.log(`[autopost_render] Run ${runId} already finished (status=${run.status}, video_job_id=${run.video_job_id ?? "null"}) — returning without re-running`);
-    return {
-      projectId: "",
-      generationId: "",
-      title: "",
-      sceneCount: 0,
-      autopost_run_id: runId,
-    };
+    // + thumbnail). If it's set, the previous attempt completed —
+    // throw instead of returning an empty result. Why: returning a
+    // result causes the dispatcher to mark THIS job 'completed',
+    // which fires `autopost_on_video_completed` and queues a SECOND
+    // email_delivery job whose payload.video_job_id points at this
+    // (now-empty) row → email_delivery fails on missing finalUrl →
+    // 2026-05-08 incident: 280 credits wrongly refunded. Throwing
+    // marks this row 'failed' instead, the trigger predicate
+    // (NEW.status='completed') never fires, no duplicate email,
+    // no spurious refund (refundCreditsOnFailure now whitelists
+    // only generate_video/generate_cinematic/autopost_render-with-
+    // creditsDeducted as refundable).
+    const msg = `autopost_render: run ${runId} already finished (status=${run.status}, video_job_id=${run.video_job_id ?? "null"}); refusing duplicate run`;
+    console.log(`[autopost_render] ${msg}`);
+    throw new Error(msg);
   }
   if (run.status === "failed" || run.status === "cancelled") {
     throw new Error(`autopost_render: run ${runId} already in terminal status=${run.status}; refusing to re-run`);

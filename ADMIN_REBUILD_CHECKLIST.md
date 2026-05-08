@@ -1004,7 +1004,7 @@ CREATE TABLE public.worker_heartbeats (
 - [x] `app_settings.master_kill_switch` row seeded.
 - [x] Worker `isMasterKillEngaged()` poll in `worker/src/index.ts:780` — stops claiming new jobs when armed.
 - [x] `admin_set_master_kill_switch(p_enabled, p_message)` — super_admin-gated, runs `admin_cancel_all_active_jobs` on false→true transition, auto-creates a `severity='critical'` announcement.
-- [ ] **Deferred:** edge-fn-side `maint` 503 wrapper (currently only the dedicated `payments` kill switch returns 503 from `create-checkout`). All admin RPCs pass through `is_admin()` so admins are never locked out; the wrapper is hardening, not a launch blocker.
+- [x] Edge-fn-side `maint` 503 wrapper: shared `_shared/killSwitch.ts` helper consults `master_kill_switch` and an optional per-feature flag. Admins are exempt (it checks `is_admin(uid)` from the JWT). Wired into `create-checkout` (consults `payments`) and `generate-cinematic` (consults `video_generation`). Other edge fns can adopt it via a one-line import.
 
 ### 17.3 Subsystem switches (8 cards)
 - [x] 8 flags seeded with descriptions / rollout / audience defaults (migration `20260508210000`).
@@ -1022,7 +1022,7 @@ CREATE TABLE public.worker_heartbeats (
 - [x] `admin_v_feature_flags` view (migration `20260508210000`) joins flag + rollout/audience + active_users heuristic.
 - [x] `feature_flags.rollout_pct` (0..100) + `audience` jsonb columns added.
 - [x] `admin_update_flag_metadata(flag, description, rollout_pct, audience)` RPC for the edit modal.
-- [ ] **Deferred:** edit-modal UI in TabKillSwitches (rollout slider + audience picker). Backend in place; UI is a polish addition.
+- [x] Edit modal in TabKillSwitches: description textarea + rollout slider (0..100, 5-step) + audience preset chips (Everyone / Studio / Pro / Free / Custom JSON). Calls `admin_update_flag_metadata` and re-fetches via the realtime channel. Flags table now reads from `admin_v_feature_flags` view directly so rollout/audience/active_users surface inline.
 
 ### 17.5 Realtime
 - [x] `feature_flags` + `app_settings` in realtime publication (Phase 2 publication migration). Worker reads flags via 60 s cache; admin UI subscribes and invalidates on every change.
@@ -1091,7 +1091,8 @@ CREATE TABLE public.worker_heartbeats (
 - [x] `incident-response.md` — Errors-tab triage flow, kill-switch decision matrix, resolve + comms.
 - [x] `newsletter-send.md` — pre-flight checklist, monitoring, mid-flight cancel, post-send signals.
 - [x] `kill-switch-deploy.md` — how to add a new feature flag, worker + edge-fn integration template.
-- [ ] **Deferred:** `revenue-reconciliation.md` and `announcement-publish.md` — operational templates that depend on org-specific decisions (Stripe account ops, comms voice). Add as the team uses each flow in anger.
+- [x] `revenue-reconciliation.md` — daily check, deep reconcile flow, common Stripe-vs-DB disagreements, monthly close.
+- [x] `announcement-publish.md` — channel selection, audience templates, four canned announcement templates (maintenance / launch / incident / billing), monitoring, audit trail.
 
 ---
 

@@ -38,6 +38,9 @@ interface FeatureFlag {
   flag_name: string;
   enabled: boolean;
   description: string | null;
+  rollout_pct: number | null;
+  audience: Record<string, unknown> | null;
+  active_users: number | null;
   updated_at: string;
   updated_by: string | null;
 }
@@ -107,9 +110,20 @@ async function fetchKpis(): Promise<KillSwitchKpis> {
 }
 
 async function fetchFlags(): Promise<FeatureFlag[]> {
-  const { data, error } = await rpc<FeatureFlag[]>("admin_feature_flags_list");
+  // admin_v_feature_flags adds rollout_pct, audience, and active_users
+  // beyond the original admin_feature_flags_list RPC. View has admin
+  // SELECT — no RPC wrapper needed. Falls back to the RPC if the view
+  // hasn't been deployed yet (older envs).
+  const { data: viewData, error: viewErr } = await supabase
+    .from("admin_v_feature_flags")
+    .select("flag_name, enabled, description, rollout_pct, audience, active_users, updated_at, updated_by")
+    .order("flag_name", { ascending: true });
+  if (!viewErr && viewData) return viewData as FeatureFlag[];
+  // View missing — fall back to the RPC. Pad with defaults for the
+  // newer columns so the table still renders.
+  const { data, error } = await rpc<Array<Omit<FeatureFlag, "rollout_pct" | "audience" | "active_users">>>("admin_feature_flags_list");
   if (error) throw new Error(error.message);
-  return data ?? [];
+  return (data ?? []).map((r) => ({ ...r, rollout_pct: 100, audience: { all: true }, active_users: null }));
 }
 
 async function fetchMasterKill(): Promise<MasterKillRow> {
@@ -132,6 +146,7 @@ export function TabKillSwitches(): JSX.Element {
   const [masterConfirm, setMasterConfirm] = useState<null | "engage" | "disengage">(null);
   const [pendingFlag, setPendingFlag] = useState<string | null>(null);
   const [confirmFlag, setConfirmFlag] = useState<{ spec: SubsystemSpec; nextEnabled: boolean } | null>(null);
+  const [editFlag, setEditFlag] = useState<FeatureFlag | null>(null);
 
   const kpis = useQuery({
     ...ADMIN_DEFAULT_QUERY_OPTIONS,
@@ -382,8 +397,7 @@ export function TabKillSwitches(): JSX.Element {
                   </td>
                   <td className="mono">{formatRel(f.updated_at)}</td>
                   <td>
-                    <button type="button" className="btn-mini"
-                      onClick={() => toast.info("Flag editor coming Phase 18")}>
+                    <button type="button" className="btn-mini" onClick={() => setEditFlag(f)}>
                       Edit
                     </button>
                   </td>
@@ -440,6 +454,124 @@ export function TabKillSwitches(): JSX.Element {
             qc.invalidateQueries({ queryKey: ["admin", "kill"] });
           }} />
       )}
+
+      {editFlag && (
+        <FlagEditModal flag={editFlag} onClose={() => setEditFlag(null)}
+          onSaved={() => { qc.invalidateQueries({ queryKey: ["admin", "kill"] }); setEditFlag(null); }} />
+      )}
+    </div>
+  );
+}
+
+/* ── Flag editor modal (rollout slider + audience picker) ──────────── */
+function FlagEditModal({
+  flag, onClose, onSaved,
+}: { flag: FeatureFlag; onClose: () => void; onSaved: () => void }): JSX.Element {
+  const [description, setDescription] = useState<string>(flag.description ?? "");
+  const [rolloutPct, setRolloutPct] = useState<number>(flag.rollout_pct ?? 100);
+  // Audience presets cover the common cases; "custom" lets the admin
+  // edit the raw jsonb so rare segmentation isn't blocked by missing
+  // UI affordances.
+  const presets: Array<{ key: string; label: string; audience: Record<string, unknown> }> = [
+    { key: "all",    label: "Everyone",       audience: { all: true } },
+    { key: "studio", label: "Studio plan",    audience: { plan: "studio" } },
+    { key: "pro",    label: "Pro plan",       audience: { plan: "pro" } },
+    { key: "free",   label: "Free plan",      audience: { plan: "free" } },
+  ];
+  const initialPresetKey = (() => {
+    const a = flag.audience ?? {};
+    if (a.all === true) return "all";
+    if (a.plan === "studio") return "studio";
+    if (a.plan === "pro") return "pro";
+    if (a.plan === "free") return "free";
+    return "custom";
+  })();
+  const [presetKey, setPresetKey] = useState<string>(initialPresetKey);
+  const [customJson, setCustomJson] = useState<string>(JSON.stringify(flag.audience ?? { all: true }, null, 2));
+  const [saving, setSaving] = useState(false);
+
+  async function save(): Promise<void> {
+    let audience: Record<string, unknown>;
+    if (presetKey === "custom") {
+      try { audience = JSON.parse(customJson); }
+      catch (err) { toast.error(`Audience JSON invalid: ${(err as Error).message}`); return; }
+    } else {
+      audience = presets.find((p) => p.key === presetKey)?.audience ?? { all: true };
+    }
+    setSaving(true);
+    try {
+      const { error } = await rpc<unknown>("admin_update_flag_metadata", {
+        p_flag: flag.flag_name,
+        p_description: description.trim() || null,
+        p_rollout_pct: rolloutPct,
+        p_audience: audience,
+      });
+      if (error) throw new Error(error.message);
+      toast.success("Flag updated");
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <div role="dialog" aria-modal="true"
+      style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div onClick={onClose}
+        style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.55)", backdropFilter: "blur(2px)" }} />
+      <div className="card" style={{ position: "relative", width: 480, maxWidth: "calc(100vw - 32px)", padding: 18 }}>
+        <div className="card-h" style={{ marginBottom: 14 }}>
+          <div className="t">Edit flag · <span className="mono" style={{ color: "var(--cyan)" }}>{flag.flag_name}</span></div>
+          <button type="button" className="btn-mini" onClick={onClose}><I.x /></button>
+        </div>
+        <div style={{ display: "grid", gap: 14 }}>
+          <div>
+            <div style={{ fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--ink-mute)", marginBottom: 4 }}>Description</div>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)}
+              rows={2}
+              style={{ width: "100%", padding: 8, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--ink)", borderRadius: 6, fontSize: 12, resize: "vertical", fontFamily: "inherit" }} />
+          </div>
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+              <span style={{ fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--ink-mute)" }}>Rollout</span>
+              <span className="mono" style={{ fontSize: 12, color: "var(--cyan)" }}>{rolloutPct}%</span>
+            </div>
+            <input type="range" min={0} max={100} step={5} value={rolloutPct}
+              onChange={(e) => setRolloutPct(Number(e.target.value))}
+              style={{ width: "100%" }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--ink-mute)", marginBottom: 4 }}>Audience</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+              {presets.map((p) => (
+                <button key={p.key} type="button"
+                  className={"btn-mini" + (presetKey === p.key ? " active" : "")}
+                  style={presetKey === p.key ? { color: "var(--cyan)", borderColor: "rgba(20,200,204,.3)", background: "var(--cyan-dim)" } : undefined}
+                  onClick={() => setPresetKey(p.key)}>
+                  {p.label}
+                </button>
+              ))}
+              <button type="button"
+                className={"btn-mini" + (presetKey === "custom" ? " active" : "")}
+                style={presetKey === "custom" ? { color: "var(--cyan)", borderColor: "rgba(20,200,204,.3)", background: "var(--cyan-dim)" } : undefined}
+                onClick={() => setPresetKey("custom")}>
+                Custom JSON
+              </button>
+            </div>
+            {presetKey === "custom" && (
+              <textarea value={customJson} onChange={(e) => setCustomJson(e.target.value)}
+                rows={4} className="mono"
+                style={{ width: "100%", padding: 8, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--ink)", borderRadius: 6, fontSize: 11, resize: "vertical" }} />
+            )}
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
+            <button type="button" className="btn-mini" onClick={onClose}>Cancel</button>
+            <button type="button" className="btn-cyan sm" onClick={() => void save()} disabled={saving}>
+              {saving ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

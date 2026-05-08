@@ -34,6 +34,7 @@ interface ThreadRow {
   user_name: string | null; user_avatar: string | null;
   last_body: string | null; last_sender_role: SenderRole | null;
   last_read_at: string | null; last_created_at: string | null;
+  tags: string[];
 }
 interface MessageRow {
   id: string; thread_id: string; sender_id: string; sender_role: SenderRole;
@@ -43,6 +44,7 @@ interface ProfileLite { user_id: string; display_name: string | null; avatar_url
 interface RawThread {
   id: string; user_id: string; subject: string; status: ThreadStatus;
   last_message_at: string; created_at: string; closed_at: string | null; closed_by: string | null;
+  tags: string[] | null;
 }
 interface RawMessage {
   id: string; thread_id: string; body: string;
@@ -73,7 +75,7 @@ async function fetchKpis(): Promise<MessagesKpis> {
 async function fetchThreads(): Promise<ThreadRow[]> {
   const tRes = await supabase
     .from("admin_message_threads" as never)
-    .select("id, user_id, subject, status, last_message_at, created_at, closed_at, closed_by")
+    .select("id, user_id, subject, status, last_message_at, created_at, closed_at, closed_by, tags")
     .order("last_message_at", { ascending: false }) as unknown as {
       data: RawThread[] | null; error: { message: string } | null;
     };
@@ -117,6 +119,7 @@ async function fetchThreads(): Promise<ThreadRow[]> {
       user_name: prof?.display_name ?? null, user_avatar: prof?.avatar_url ?? null,
       last_body: last?.body ?? null, last_sender_role: last?.sender_role ?? null,
       last_read_at: last?.read_at ?? null, last_created_at: last?.created_at ?? null,
+      tags: Array.isArray(t.tags) ? t.tags : [],
     };
   });
 }
@@ -231,10 +234,21 @@ export function TabMessages(): JSX.Element {
     });
   }, [reply, replyMut, markResolved, sel, closeMut]);
 
-  // Non-"all"/"unread" chips are visual placeholders for Phase 18 backend tagging.
+  // Filter chips. "billing" / "bugs" / "sales" / "churn" filter on
+  // admin_message_threads.tags (text[]). The Flag chip group in
+  // ThreadDetail writes to that column via admin_flag_thread; here
+  // we just check membership. Tag stored singular ("bug"); chip key
+  // is plural ("bugs") — we normalise via the FILTER_TO_TAG map.
+  const FILTER_TO_TAG: Record<string, string> = {
+    billing: "billing", bugs: "bug", sales: "sales", churn: "churn",
+  };
   const filteredThreads = useMemo(() => {
     const all = threadsQ.data ?? [];
     if (filter === "unread") return all.filter((t) => t.last_sender_role === "user" && t.last_read_at === null);
+    if (filter !== "all") {
+      const tag = FILTER_TO_TAG[filter];
+      if (tag) return all.filter((t) => t.tags.includes(tag));
+    }
     return all;
   }, [threadsQ.data, filter]);
 
@@ -261,26 +275,13 @@ export function TabMessages(): JSX.Element {
 
       <SectionHeader title="Inbox" right={
         <div className="flex flex-wrap items-center gap-1">
-          {FILTER_CHIPS.map((c) => {
-            // billing/bugs/sales/churn require a thread.tag column we don't
-            // have yet — toast the admin so the chip isn't a silent no-op.
-            const isWired = c.key === "all" || c.key === "unread";
-            return (
-              <button key={c.key} type="button" aria-pressed={filter === c.key}
-                className={"btn-ghost" + (filter === c.key ? " active" : "")}
-                onClick={() => {
-                  if (!isWired) {
-                    toast.info(`${c.label} filter — coming soon`, {
-                      description: "Thread tagging lands with the admin_message_threads.tag schema.",
-                    });
-                    return;
-                  }
-                  setFilter(c.key);
-                }}>
-                {c.label}
-              </button>
-            );
-          })}
+          {FILTER_CHIPS.map((c) => (
+            <button key={c.key} type="button" aria-pressed={filter === c.key}
+              className={"btn-ghost" + (filter === c.key ? " active" : "")}
+              onClick={() => setFilter(c.key)}>
+              {c.label}
+            </button>
+          ))}
         </div>
       } />
 
@@ -305,7 +306,9 @@ export function TabMessages(): JSX.Element {
               showFullThread={showFullThread} onToggleFullThread={() => setShowFullThread((p) => !p)}
               reply={reply} onChangeReply={setReply} onSend={handleSend}
               sending={replyMut.isPending}
-              markResolved={markResolved} onChangeMarkResolved={setMarkResolved} />
+              markResolved={markResolved} onChangeMarkResolved={setMarkResolved}
+              onSoftDelete={() => closeMut.mutate()}
+              softDeleting={closeMut.isPending} />
           )}
         </div>
       </div>
@@ -382,6 +385,7 @@ interface ThreadDetailProps {
   reply: string; onChangeReply: (v: string) => void;
   onSend: () => void; sending: boolean;
   markResolved: boolean; onChangeMarkResolved: (v: boolean) => void;
+  onSoftDelete: () => void; softDeleting: boolean;
 }
 
 /** The 5 tags admins can toggle on a thread. Backed by
@@ -399,7 +403,8 @@ interface SupportTemplate { slug: string; title: string; body: string }
 
 function ThreadDetail(props: ThreadDetailProps): JSX.Element {
   const { thread, messages, latest, showFullThread, onToggleFullThread,
-    reply, onChangeReply, onSend, sending, markResolved, onChangeMarkResolved } = props;
+    reply, onChangeReply, onSend, sending, markResolved, onChangeMarkResolved,
+    onSoftDelete, softDeleting } = props;
   const displayName = thread.user_name ?? thread.user_id.slice(0, 8);
   const firstName = displayName.split(/\s+/)[0];
   const allAttachments: ThreadAttachment[] = useMemo(() => {
@@ -512,10 +517,13 @@ function ThreadDetail(props: ThreadDetailProps): JSX.Element {
             onClick={() => { setFlagOpen((v) => !v); setTemplatesOpen(false); }}>
             <I.flag /> Flag
           </button>
-          <button type="button" className="btn-mini" title="Trash"
-            onClick={() => toast.info("Trash — coming soon", {
-              description: "Soft-delete uses the close action for now.",
-            })}>
+          <button type="button" className="btn-mini" title="Soft-delete (close thread)"
+            onClick={() => {
+              if (window.confirm(`Close thread "${thread.subject}"? It can be re-opened by the user replying.`)) {
+                onSoftDelete();
+              }
+            }}
+            disabled={softDeleting || thread.status === "closed"}>
             <I.trash />
           </button>
         </div>

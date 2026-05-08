@@ -63,7 +63,12 @@ type FromAny = (table: string) => {
     }>;
   };
 };
-const fromAny = (supabase.from as unknown) as FromAny;
+// `supabase.from` is a method that reads `this.rest` internally; passing
+// the bare reference loses `this` and crashes with
+// "Cannot read properties of undefined (reading 'rest')". Bind the
+// builder to the client first, then cast — same pattern as the rpc
+// shim above.
+const fromAny = supabase.from.bind(supabase) as unknown as FromAny;
 
 const CHANNEL_OPTIONS: ReadonlyArray<{ k: Channel; l: string; d: string }> = [
   { k: "banner", l: "Top banner", d: "Slim bar at top of app" },

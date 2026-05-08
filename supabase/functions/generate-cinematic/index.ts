@@ -813,6 +813,15 @@ export async function handler(req: Request): Promise<Response> {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Phase 17.2 + 17.3 — master_kill_switch + video_generation gate.
+    // Admins are exempt; everything else gets a 503 with the
+    // admin-set message.
+    {
+      const { rejectIfMaintenanceOrKilled } = await import("../_shared/killSwitch.ts");
+      const blocked = await rejectIfMaintenanceOrKilled(supabase, "video_generation", corsHeaders, req);
+      if (blocked) return blocked;
+    }
+
     // Verify user via getClaims (local JWT validation — no network round-trip, no service-role mismatch)
     const token = sanitizeBearer(authHeader);
     const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {

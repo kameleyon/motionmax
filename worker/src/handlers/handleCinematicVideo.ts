@@ -76,8 +76,11 @@ export async function handleCinematicVideo(
   // generation via the admin Kill Switches tab. Fail-fast at handler
   // entry so the queue surfaces the reason in error_message instead
   // of running through the full prompt + Hypereal submit path.
-  if (await isKillSwitchArmed("video_generation")) {
-    throw new Error("Cinematic video generation is paused by an administrator (kill switch: video_generation).");
+  // Renamed 2026-05-08 from "video_generation" → "pause_video" to
+  // avoid collision with the legacy positive-semantic flag of the
+  // same name. See migration 20260508240000.
+  if (await isKillSwitchArmed("pause_video")) {
+    throw new Error("Cinematic video generation is paused by an administrator (kill switch: pause_video).");
   }
 
   await audit("video.gen_started", {

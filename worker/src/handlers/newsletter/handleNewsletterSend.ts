@@ -232,7 +232,7 @@ export function startNewsletterSender(): void {
       // Phase 17.3 kill-switch — admin can pause the dispatcher
       // without cancelling scheduled campaigns. They stay in
       // 'scheduled' status; we just don't claim while armed.
-      if (await isKillSwitchArmed("newsletter")) return;
+      if (await isKillSwitchArmed("pause_newsletter")) return;
       const campaign = await claimNextCampaign();
       if (campaign) await dispatchCampaign(campaign);
     } catch (err) {

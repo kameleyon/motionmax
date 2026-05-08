@@ -113,8 +113,11 @@ export async function handleCinematicAudio(
 
   // Phase 17.3 kill-switch — admin pauses voice/TTS generation.
   const { isKillSwitchArmed } = await import("../lib/featureFlags.js");
-  if (await isKillSwitchArmed("voice_generation")) {
-    throw new Error("Voice generation is paused by an administrator (kill switch: voice_generation).");
+  // Renamed 2026-05-08 from "voice_generation" → "pause_voice" to
+  // avoid collision with the legacy positive-semantic feature flag
+  // of the same name. See migration 20260508240000.
+  if (await isKillSwitchArmed("pause_voice")) {
+    throw new Error("Voice generation is paused by an administrator (kill switch: pause_voice).");
   }
 
   await audit("voice.tts_started", {

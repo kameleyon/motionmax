@@ -68,30 +68,35 @@ interface SubsystemSpec {
   destructive: boolean;
 }
 
+// Renamed 2026-05-08 — the prior flag names (image_generation,
+// video_generation, voice_generation, etc.) collided with legacy
+// positive-semantic flags of the same name. The new pause_* /
+// maintenance_mode names are unambiguously kill-switches: enabled=true
+// means subsystem BLOCKED. See migration 20260508240000.
 const SUBSYSTEMS: ReadonlyArray<SubsystemSpec> = [
-  { flag: "maint", title: "Site maintenance mode",
+  { flag: "maintenance_mode", title: "Site maintenance mode",
     desc: "Show maintenance page to all non-admin users. Admins keep full access.",
     icon: I.power, destructive: true },
-  { flag: "signups_disabled", title: "Disable new sign-ups",
+  { flag: "pause_signups", title: "Disable new sign-ups",
     desc: "Existing users sign in normally. New registrations are blocked at the auth layer.",
     icon: I.users, destructive: false },
-  { flag: "video_generation", title: "Pause video generation",
-    desc: "Hailuo + Veo workers stop accepting jobs. In-flight jobs finish; refunds queue automatically.",
+  { flag: "pause_video", title: "Pause video generation",
+    desc: "Hypereal Seedance/Kling stop accepting jobs. In-flight jobs finish; refunds queue automatically.",
     icon: I.film, destructive: false },
-  { flag: "image_generation", title: "Pause image generation",
-    desc: "Flux + SDXL endpoints disabled. Editor falls back to placeholders.",
+  { flag: "pause_image", title: "Pause image generation",
+    desc: "Cinematic image handler entry blocks. Editor falls back to placeholders.",
     icon: I.spark, destructive: false },
-  { flag: "voice_generation", title: "Pause voice (TTS + clone)",
-    desc: "ElevenLabs + Fish Speech disabled. Clone training also pauses.",
+  { flag: "pause_voice", title: "Pause voice (TTS + clone)",
+    desc: "Gemini / LemonFox / Fish stop dispatching. Clone training also pauses.",
     icon: I.voice, destructive: false },
-  { flag: "payments", title: "Disable purchases",
+  { flag: "pause_payments", title: "Disable purchases",
     desc: "Stripe checkout returns 'temporarily unavailable'. Subscriptions still renew.",
     icon: I.credit, destructive: true },
-  { flag: "autopost", title: "Pause autopost",
+  { flag: "pause_autopost", title: "Pause autopost",
     desc: "Stop publishing to TikTok / IG / YouTube on user behalf.",
     icon: I.send, destructive: false },
-  { flag: "newsletter", title: "Pause outbound email",
-    desc: "Block transactional + marketing email at the SendGrid layer.",
+  { flag: "pause_newsletter", title: "Pause outbound email",
+    desc: "Block transactional + marketing email at the Resend layer.",
     icon: I.mail, destructive: false },
 ];
 

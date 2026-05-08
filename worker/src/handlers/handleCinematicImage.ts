@@ -27,8 +27,12 @@ export async function handleCinematicImage(
 
   // Phase 17.3 kill-switch — admin pauses image generation.
   const { isKillSwitchArmed } = await import("../lib/featureFlags.js");
-  if (await isKillSwitchArmed("image_generation")) {
-    throw new Error("Image generation is paused by an administrator (kill switch: image_generation).");
+  // Renamed 2026-05-08 from "image_generation" → "pause_image" to
+  // avoid collision with the legacy positive-semantic feature flag
+  // of the same name (which the imageGenerator service still reads
+  // via isEnabled). See migration 20260508240000.
+  if (await isKillSwitchArmed("pause_image")) {
+    throw new Error("Image generation is paused by an administrator (kill switch: pause_image).");
   }
 
   await audit("image.gen_started", {

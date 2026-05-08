@@ -818,7 +818,7 @@ export async function handler(req: Request): Promise<Response> {
     // admin-set message.
     {
       const { rejectIfMaintenanceOrKilled } = await import("../_shared/killSwitch.ts");
-      const blocked = await rejectIfMaintenanceOrKilled(supabase, "video_generation", corsHeaders, req);
+      const blocked = await rejectIfMaintenanceOrKilled(supabase, "pause_video", corsHeaders, req);
       if (blocked) return blocked;
     }
 

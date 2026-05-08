@@ -62,7 +62,7 @@ export async function handler(req: Request): Promise<Response> {
     // Admins are exempt so admin-side reconciliation tools keep
     // working during a maintenance window.
     const { rejectIfMaintenanceOrKilled } = await import("../_shared/killSwitch.ts");
-    const blocked = await rejectIfMaintenanceOrKilled(supabaseClient, "payments", corsHeaders, req);
+    const blocked = await rejectIfMaintenanceOrKilled(supabaseClient, "pause_payments", corsHeaders, req);
     if (blocked) return blocked;
 
     const authHeader = req.headers.get("Authorization");

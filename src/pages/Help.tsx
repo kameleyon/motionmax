@@ -529,31 +529,38 @@ export default function Help() {
                     </svg>
                   </a>
                 </div>
+
+                {/* ─── System status ─────────────────────────────────
+                    Live: derived from video_generation_jobs /
+                    system_logs / generations via the
+                    `support_system_status` RPC. Lives under "Other
+                    ways to reach us" in the right column so the
+                    contact form claims the wider 1.4fr slot — the
+                    contact-grid collapses to a single column below
+                    900 px (already in support-tokens.css), so on
+                    mobile the status card just stacks under the
+                    reach-us card without extra rules. */}
+                <div className="card">
+                  <div className="h-row">
+                    <h3>System status</h3>
+                    <span
+                      className="soon-tag"
+                      style={{
+                        color: "#14C8CC",
+                        background: "rgba(20,200,204,.12)",
+                        borderColor: "rgba(20,200,204,.28)",
+                      }}
+                    >
+                      LIVE
+                    </span>
+                  </div>
+                  <StatusRow label="Render queue" bucket={status.data?.render_queue} />
+                  <StatusRow label="Voice synthesis" bucket={status.data?.voice_synthesis} />
+                  <StatusRow label="Media pipeline" bucket={status.data?.media_pipeline} />
+                  <StatusRow label="API & webhooks" bucket={status.data?.api_webhooks} last />
+                </div>
               </div>
             </div>
-          </div>
-
-          {/* ─── System status ─────────────────────────────────────
-              Live: derived from video_generation_jobs / system_logs /
-              generations via the `support_system_status` RPC. */}
-          <div className="card" style={{ marginTop: 24 }}>
-            <div className="h-row">
-              <h3>System status</h3>
-              <span
-                className="soon-tag"
-                style={{
-                  color: "#14C8CC",
-                  background: "rgba(20,200,204,.12)",
-                  borderColor: "rgba(20,200,204,.28)",
-                }}
-              >
-                LIVE
-              </span>
-            </div>
-            <StatusRow label="Render queue" bucket={status.data?.render_queue} />
-            <StatusRow label="Voice synthesis" bucket={status.data?.voice_synthesis} />
-            <StatusRow label="Media pipeline" bucket={status.data?.media_pipeline} />
-            <StatusRow label="API & webhooks" bucket={status.data?.api_webhooks} last />
           </div>
 
           {/* ─── FAQ ───────────────────────────────────────────── */}

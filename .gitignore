@@ -1,6 +1,7 @@
-# Markdown docs (internal — keep only README.md + admin runbooks)
+# Markdown docs (internal — keep only README.md + admin runbooks + admin index)
 *.md
 !README.md
+!docs/admin/README.md
 !docs/admin/runbooks/*.md
 
 # Design template drops (large standalone HTML mockups, not part of the app)
@@ -38,6 +39,10 @@ marketing-dist
 marketing/.astro
 *.local
 *.md
+!README.md
+!docs/admin/README.md
+!docs/admin/runbooks/*.md
+!ADMIN_REBUILD_CHECKLIST.md
 
 # Source maps (never commit — may contain original source; Sentry uploads them from CI only)
 dist/assets/*.js.map

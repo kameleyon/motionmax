@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -18,6 +18,7 @@ import { AdminHero } from "@/components/admin/shell/AdminHero";
 import { AdminTabStrip } from "@/components/admin/shell/AdminTabStrip";
 import { AdminTopBar } from "@/components/admin/shell/AdminTopBar";
 import { supabase } from "@/integrations/supabase/client";
+import { breadcrumbAdminTabOpen } from "@/lib/sentryBreadcrumbs";
 
 /* ── Lazy tab content ─────────────────────────────────────────────────
  * Each existing tab component is split out into its own chunk so the
@@ -209,6 +210,13 @@ export default function Admin() {
 
   // Mobile sidebar drawer — opens via the hamburger in AdminTopBar.
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Phase 18.4 — drop a Sentry breadcrumb when the active tab changes
+  // (incl. on direct deep-link load). Tab key only; no user IDs or
+  // record-level data so we don't bloat error reports with PII.
+  useEffect(() => {
+    breadcrumbAdminTabOpen(tab);
+  }, [tab]);
 
   // Live badge counts — single React Query polling 4 KPI RPCs in
   // parallel + counting api_keys rows. 60 s refetch keeps the strip

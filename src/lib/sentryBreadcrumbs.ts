@@ -47,3 +47,15 @@ export function breadcrumbExport(opts: {
     data: opts,
   });
 }
+
+/** Record that an admin opened a tab. Per Phase 18.4, low-PII so we
+ *  only record the tab key — no user_id, no record IDs. The Sentry
+ *  user context already carries the actor identity. */
+export function breadcrumbAdminTabOpen(tabKey: string): void {
+  Sentry.addBreadcrumb({
+    category: "admin",
+    message: `Admin tab: ${tabKey}`,
+    level: "info",
+    data: { tab: tabKey },
+  });
+}

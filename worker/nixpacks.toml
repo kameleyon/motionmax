@@ -1,0 +1,35 @@
+# Nixpacks build config for the motionmax worker on Railway.
+#
+# Two things Railway's auto-detection won't get right by default:
+#
+#   1. ffmpeg — the export pipeline shells out to ffmpeg for crossfade,
+#      Ken Burns, audio mixing, and chunked single-pass encodes. Render
+#      bundled ffmpeg in its Node base image; Nixpacks does not. We
+#      explicitly add the ffmpeg-full nix package so the binary is on
+#      PATH at runtime.
+#
+#   2. Node version pinning — the worker uses Node 24.x features
+#      (verified in earlier worker startup logs: `Node.js v24.15.0`).
+#      Without an explicit pin, Nixpacks could land on Node 20 LTS and
+#      we'd hit syntax errors that compiled fine locally.
+#
+# Build phase installs from package-lock.json; start phase runs
+# `npm start` which is `tsx src/index.ts` per package.json.
+
+[phases.setup]
+# nodejs_24 = current; ffmpeg-full includes all codecs (libx264, aac,
+# webp, etc.) the export pipeline needs.
+nixPkgs = ["nodejs_24", "ffmpeg-full"]
+
+[phases.install]
+# `npm ci` is faster + more deterministic than `npm install`. Fails if
+# package-lock.json is missing or out of sync — desirable for prod.
+cmds = ["npm ci"]
+
+[phases.build]
+# No build step — the worker uses tsx for runtime TS compilation. If
+# we ever add `tsc --build`, swap this to `npm run build`.
+cmds = []
+
+[start]
+cmd = "npm start"

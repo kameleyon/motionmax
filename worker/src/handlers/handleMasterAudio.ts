@@ -167,10 +167,26 @@ async function _runMasterAudio(
   const voiceName = generation.projects?.voice_name || "Nova";
   const presenterFocus: string = generation.projects?.presenter_focus || "";
   const pfLower = presenterFocus.toLowerCase();
+  // The text-based isHaitianCreole() detector misclassifies French
+  // (and to a lesser extent Spanish/Italian) as Haitian Creole because
+  // its indicator list contains words common to multiple Romance
+  // languages — "ou", "sa", "pa", "se", "te", "si", "tout", "men", "lè"
+  // all appear in French texts and trip the 3-match threshold. When the
+  // user has explicitly set a non-Haitian language (voice_inclination =
+  // "fr" / "en" / etc.) we trust that signal over the heuristic.
+  // Verified 2026-05-09: a French Pelé-history project with
+  // voice_name="gm:Gacrux" was being routed to the Haitian-Creole
+  // branch, which forces voiceGender="female" and lands every
+  // generation on Aoede regardless of the chosen voice.
+  const explicitNonHaitianLanguage =
+    typeof resolvedLanguage === "string" &&
+    resolvedLanguage.length > 0 &&
+    resolvedLanguage !== "ht" &&
+    resolvedLanguage !== "auto";
   const isHC = resolvedLanguage === "ht" ||
     pfLower.includes("haitian") || pfLower.includes("kreyòl") ||
     pfLower.includes("kreyol") || pfLower.includes("creole") ||
-    isHaitianCreole(masterText);
+    (!explicitNonHaitianLanguage && isHaitianCreole(masterText));
 
   let result: { url: string | null; durationSeconds?: number; provider?: string; error?: string } =
     { url: null };

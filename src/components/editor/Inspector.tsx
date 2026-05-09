@@ -209,7 +209,11 @@ function Inspector({
   // Local draft state keeps the toggle / dropdown instantly responsive
   // — we flush to Supabase asynchronously, so the UI doesn't wait on
   // the round-trip.
-  const savedCaptionStyle = (state.intake.captionStyle as CaptionStyle | undefined) ?? 'cleanPop';
+  // Default to 'none' for projects that never stored a captionStyle —
+  // matches IntakeForm's new default. Only the cleanPop "turn-on"
+  // shortcut below uses cleanPop as the activation style; this fallback
+  // governs the OFF state for legacy / autopost projects.
+  const savedCaptionStyle = (state.intake.captionStyle as CaptionStyle | undefined) ?? 'none';
   const [captionStyleDraft, setCaptionStyleDraft] = useState<CaptionStyle>(savedCaptionStyle);
   useEffect(() => { setCaptionStyleDraft(savedCaptionStyle); }, [savedCaptionStyle]);
   const captionsOn = captionStyleDraft !== 'none';

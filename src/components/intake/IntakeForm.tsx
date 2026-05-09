@@ -187,7 +187,10 @@ export default function IntakeForm({
   const [voice, setVoice] = useState<SpeakerVoice>(
     (initialVoice as SpeakerVoice) || getDefaultSpeaker(initialLanguage),
   );
-  const [caption, setCaption] = useState<CaptionStyle>('cleanPop');
+  // Default to 'none' so projects don't bake captions into the export
+  // unless the user explicitly opts in. Captions can be enabled in
+  // Editor → Inspector at any time without re-running the export.
+  const [caption, setCaption] = useState<CaptionStyle>('none');
   const [brand, setBrand] = useState('');
 
   const [styleId, setStyleId] = useState('realistic');

@@ -48,10 +48,13 @@ export function AdminTabStrip({ activeTab, onTabChange, liveBadges }: AdminTabSt
             <button
               type="button"
               role="tab"
+              id={`admin-tab-${def.key}`}
               aria-selected={isActive}
+              aria-controls={`admin-tabpanel-${def.key}`}
               aria-label={def.label}
               data-label={def.label}
               title={def.label}
+              tabIndex={isActive ? 0 : -1}
               onClick={() => onTabChange(def.key)}
               className={isActive ? "on" : undefined}
             >

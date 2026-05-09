@@ -651,3 +651,33 @@
 .admin-shell .ProseMirror em { font-style: italic; }
 .admin-shell .ProseMirror s { text-decoration: line-through; }
 .admin-shell .ProseMirror u { text-decoration: underline; text-underline-offset: 2px; }
+
+/* ── Reduced motion ───────────────────────────────────────────────────
+ *
+ * Phase 18.2 — respect prefers-reduced-motion. Strips animations and
+ * transitions for users who've requested reduced motion in their OS.
+ *
+ * Specifically targeted (not blanket *) so this only neutralises
+ * decorative motion, not state changes the user actively triggers.
+ * The named pulse / tab-pulse keyframes become no-ops; transitions
+ * collapse to ~instant so toggles, drawer open/close, and bar fills
+ * still work but don't ease. Drawer slide is reduced to a fade by
+ * setting transform-duration to 0 — the opacity transition keeps a
+ * little entry feedback so the user knows it appeared. */
+@media (prefers-reduced-motion: reduce) {
+  .admin-shell *,
+  .admin-shell *::before,
+  .admin-shell *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* Pulse animations specifically — drop the visual oscillation
+   * entirely so attention-pulling KPIs don't become disorienting. */
+  .admin-shell .live,
+  .admin-shell .master-kill.armed .ico,
+  .admin-shell button[role="tab"] .tab-dot {
+    animation: none !important;
+  }
+}

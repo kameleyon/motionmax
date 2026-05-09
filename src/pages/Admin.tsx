@@ -324,9 +324,16 @@ export default function Admin() {
           <div className="adm-content">
             <AdminHero onTabChange={setTab} onSetLive={setLive} />
             <AdminTabStrip activeTab={tab} onTabChange={setTab} liveBadges={badges} />
-            <AdminTabBoundary tabKey={tab}>
-              <Suspense fallback={<AdminLoading />}>{tabContent}</Suspense>
-            </AdminTabBoundary>
+            <div
+              role="tabpanel"
+              id={`admin-tabpanel-${tab}`}
+              aria-labelledby={`admin-tab-${tab}`}
+              tabIndex={0}
+            >
+              <AdminTabBoundary tabKey={tab}>
+                <Suspense fallback={<AdminLoading />}>{tabContent}</Suspense>
+              </AdminTabBoundary>
+            </div>
           </div>
         </div>
       </div>

@@ -43,6 +43,7 @@ marketing/.astro
 !docs/admin/README.md
 !docs/admin/runbooks/*.md
 !docs/admin/security-audit.md
+!docs/admin/perf-verification.md
 !ADMIN_REBUILD_CHECKLIST.md
 !supabase/migrations/README.md
 

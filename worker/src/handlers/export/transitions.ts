@@ -12,6 +12,8 @@
  *
  * Video gets the visual xfade transition (fadeblack, dissolve, etc.)
  */
+import path from "node:path";
+import { promises as fs } from "node:fs";
 import { runFfmpeg, probeDuration, X264_MEM_FLAGS } from "./ffmpegCmd.js";
 import { concatFiles } from "./concatScenes.js";
 
@@ -48,6 +50,26 @@ const DEFAULT_OPTIONS: CrossfadeOptions = {
 
 /** Duration of audio fade-out / fade-in at transition points. */
 const AUDIO_FADE_SECONDS = 0.3;
+
+/**
+ * Maximum clip count we'll feed into a single ffmpeg `-filter_complex`
+ * graph. ffmpeg's xfade implementation buffers the full transition
+ * window for every input stream simultaneously, so a 15-clip render
+ * peaks well over the 1.2 GB worker budget on a 2 GB Render instance
+ * (verified 2026-05-08 OOM during a 15-scene autopost cinematic).
+ *
+ * We cap each invocation at 5 clips and chunk larger renders, then
+ * single-pass the chunk outputs in a final round. Memory peak then
+ * scales with chunk size (~constant) instead of total clip count.
+ *
+ * 5 was picked empirically: chunks of 5 stay comfortably under
+ * ~400 MB peak in our tests, leaving room for the worker process
+ * overhead, a parallel TTS job in another slot, and Render's own
+ * sidecar processes. Lowering further increases ffmpeg invocations
+ * (slightly slower); raising risks OOMs again on memory-constrained
+ * instances.
+ */
+const MAX_SINGLE_PASS_CLIPS = 5;
 
 // ── Public API ───────────────────────────────────────────────────────
 
@@ -88,7 +110,7 @@ export async function concatWithCrossfade(
   );
 
   try {
-    await singlePassCrossfade(clipPaths, durations, outputPath, opts);
+    await chunkedSinglePassCrossfade(clipPaths, durations, outputPath, opts);
 
     const totalReduction = opts.duration * (clipPaths.length - 1);
     console.log(
@@ -101,6 +123,87 @@ export async function concatWithCrossfade(
     console.error(`[Transitions] Crossfade failed — falling back to concat: ${msg}`);
     await concatFiles(clipPaths, outputPath, false);
     return false;
+  }
+}
+
+// ── Chunked Single-Pass (memory-bounded) ─────────────────────────────
+//
+// Wraps singlePassCrossfade with a clip-count cap. For projects within
+// the cap, behaviour is identical to the legacy fast path. Above the
+// cap, splits into chunks of MAX_SINGLE_PASS_CLIPS, single-passes each
+// chunk into an intermediate file, then recurses on the intermediates.
+//
+// Why this is correct (audio math): single-pass treats each clip as
+// "first / middle / last" for atrim purposes. When we chunk, each
+// chunk's first/last clips skip the leading/trailing X/2 trim — but
+// when the final-round single-pass merges the chunks, it re-applies
+// the first/last/middle logic at the chunk boundaries. The boundary
+// trim that was skipped within each chunk is reinstated at the chunk
+// level. Net atrim per original clip ends up identical to a flat
+// single-pass call.
+//
+// Worked example (15 clips, MAX=5):
+//   Round 1 — 3 ffmpeg calls, 5 clips each, ≤400 MB peak
+//   Round 2 — 1 ffmpeg call,  3 chunks,    ≤200 MB peak
+//   Total: 4 calls vs 1 single-pass (14 vs simple-pairwise).
+
+async function chunkedSinglePassCrossfade(
+  clipPaths: string[],
+  durations: number[],
+  finalOutput: string,
+  opts: CrossfadeOptions,
+): Promise<void> {
+  if (clipPaths.length <= MAX_SINGLE_PASS_CLIPS) {
+    return singlePassCrossfade(clipPaths, durations, finalOutput, opts);
+  }
+
+  const tmpDir = path.dirname(finalOutput);
+  const intermediates: { path: string; duration: number; isTemporary: boolean }[] = [];
+
+  for (let start = 0; start < clipPaths.length; start += MAX_SINGLE_PASS_CLIPS) {
+    const end = Math.min(start + MAX_SINGLE_PASS_CLIPS, clipPaths.length);
+    const chunkClips = clipPaths.slice(start, end);
+    const chunkDurations = durations.slice(start, end);
+
+    if (chunkClips.length === 1) {
+      // Lone trailing clip — nothing to xfade within this chunk; the
+      // clip flows straight into the next round's input list as-is.
+      intermediates.push({ path: chunkClips[0], duration: chunkDurations[0], isTemporary: false });
+      continue;
+    }
+
+    const chunkOut = path.join(tmpDir, `xfade_chunk_${start}.mp4`);
+    await singlePassCrossfade(chunkClips, chunkDurations, chunkOut, opts);
+
+    // Output duration of a single-pass chunk = sum(input durations) -
+    // (n-1)*X. Computed instead of re-probed to avoid a second pass
+    // through the encoded file; deviation from actual is sub-frame.
+    const chunkDuration =
+      chunkDurations.reduce((a, b) => a + b, 0) - opts.duration * (chunkClips.length - 1);
+    intermediates.push({ path: chunkOut, duration: chunkDuration, isTemporary: true });
+  }
+
+  console.log(
+    `[Transitions] Chunked single-pass: ${clipPaths.length} clips → ${intermediates.length} chunks ` +
+    `(max ${MAX_SINGLE_PASS_CLIPS}/chunk), recursing for final merge`,
+  );
+
+  try {
+    await chunkedSinglePassCrossfade(
+      intermediates.map((i) => i.path),
+      intermediates.map((i) => i.duration),
+      finalOutput,
+      opts,
+    );
+  } finally {
+    // Best-effort cleanup. A leaked tmp file is recoverable by the
+    // export job's outer cleanup; failing here would mask the encode
+    // error.
+    for (const i of intermediates) {
+      if (i.isTemporary) {
+        try { await fs.unlink(i.path); } catch { /* ignore */ }
+      }
+    }
   }
 }
 

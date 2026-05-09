@@ -8,6 +8,44 @@
 
 import { writeApiLog } from "../lib/logger.js";
 
+// ── OpenRouter concurrency limiter ─────────────────────────────────
+// Caps simultaneous outbound OpenRouter calls process-wide. Without
+// this, 3 generate_video jobs claimed in parallel each fire their own
+// OpenRouter request, slamming the per-key rate limiter — verified
+// 2026-05-09 09:00 UTC: a 3-fire autopost batch ("8 Of Clubs", "FIFA",
+// "1958 Pelé") all hit the parent's 12-min coordinator-timeout
+// simultaneously because OpenRouter throttled them into the multi-
+// minute hang range, then the Hypereal fallback couldn't finish
+// before parent gave up (chain budget = 7 min OR + 7 min Hypereal
+// = 14 min worst case, > 12 min parent budget).
+//
+// Cap=2 lets one big batch keep two requests flowing without piling
+// onto the rate limiter. The limiter is local to the worker process
+// — separate worker instances aren't coordinated, but in production
+// there's typically one worker so single-process coverage is enough.
+// Mirrors the acquireHypereal/releaseHypereal pattern in
+// imageGenerator.ts:92-110.
+
+const OPENROUTER_MAX_CONCURRENT = 2;
+let _openrouterActive = 0;
+const _openrouterQueue: Array<() => void> = [];
+
+function acquireOpenRouter(): Promise<void> {
+  if (_openrouterActive < OPENROUTER_MAX_CONCURRENT) {
+    _openrouterActive++;
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    _openrouterQueue.push(() => { _openrouterActive++; resolve(); });
+  });
+}
+
+function releaseOpenRouter(): void {
+  _openrouterActive--;
+  const next = _openrouterQueue.shift();
+  if (next) next();
+}
+
 // ── Re-exports ─────────────────────────────────────────────────────
 
 export { buildDoc2VideoPrompt } from "./buildDoc2Video.js";
@@ -38,6 +76,29 @@ export async function callOpenRouterLLM(
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
 
+  // Wait for an OpenRouter slot before starting the request. Time spent
+  // here doesn't count against the per-call timeout because the
+  // AbortController is set up after we acquire — that's intentional, so
+  // a queued caller doesn't time itself out before its turn.
+  const queueStart = Date.now();
+  await acquireOpenRouter();
+  const queueWaitMs = Date.now() - queueStart;
+  if (queueWaitMs > 1000) {
+    console.log(`[OpenRouter] Waited ${Math.round(queueWaitMs / 1000)}s in concurrency queue (cap ${OPENROUTER_MAX_CONCURRENT})`);
+  }
+
+  try {
+    return await _callOpenRouterLLMInner(prompt, options, apiKey);
+  } finally {
+    releaseOpenRouter();
+  }
+}
+
+async function _callOpenRouterLLMInner(
+  prompt: { system: string; user: string },
+  options: { maxTokens: number; model?: string; forceJson?: boolean; temperature?: number },
+  apiKey: string,
+): Promise<string> {
   const model = options.model || "anthropic/claude-sonnet-4.6";
   const temperature = options.temperature ?? 0.7;
   const startTime = Date.now();

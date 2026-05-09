@@ -8,6 +8,7 @@
  * (JSON.stringify + Copy + view-related links).
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { supabase } from "@/integrations/supabase/client";
 import { I } from "@/components/admin/_shared/AdminIcons";
@@ -205,6 +206,25 @@ export function TabConsole(): JSX.Element {
     if (atTop !== autoScroll) setAutoScroll(atTop);
   }, [autoScroll]);
 
+  // Phase 18.3 — virtualized row rendering. Buffer cap is 500 rows
+   // and at peak load (live tail + 100 logs/sec) DOM-rendering all of
+   // them tanked Console interactivity. The virtualizer keeps only
+   // ~viewport-height rows mounted (~20 at the default 440px height +
+   // overscan), and `measureElement` adapts to the variable-height
+   // expanded detail rows.
+  const rowVirtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => scrollRef.current,
+    // 24 ≈ 11.5px font * 1.65 line-height + 4px row padding = collapsed
+    // line height. Expanded rows measure their actual height via
+    // measureElement (estimateSize is just the warm-up guess).
+    estimateSize: () => 24,
+    overscan: 8,
+    // The expanded ConsoleDetail row changes height at runtime — let
+    // the virtualizer remeasure when the user expands one.
+    measureElement: (el) => el.getBoundingClientRect().height,
+  });
+
   const summary = useMemo(() => {
     const byLevel: Record<LogLevel, number> = { ok: 0, info: 0, debug: 0, warn: 0, error: 0 };
     const sources = new Map<string, number>();
@@ -299,33 +319,56 @@ export function TabConsole(): JSX.Element {
         ) : filtered.length === 0 ? (
           <div style={{ color: "var(--ink-mute)", padding: "8px 0" }}>No logs match the current filters.</div>
         ) : (
-          filtered.map(({ row, lvl }) => {
-            const colors = LEVEL_COLORS[lvl];
-            const expanded = expandedId === row.id;
-            return (
-              <div key={row.id}>
-                <button type="button" aria-expanded={expanded}
-                  onClick={() => setExpandedId(expanded ? null : row.id)}
-                  style={{ background: "none", border: 0, padding: 0, width: "100%",
-                    textAlign: "left", color: "inherit", cursor: "pointer", font: "inherit",
-                    display: "flex", alignItems: "flex-start", gap: 8 }}>
-                  <span style={{ width: 170, flexShrink: 0, color: "var(--ink-mute)" }}>{formatTs(row.created_at)}</span>
-                  <span style={{ width: 48, flexShrink: 0, textTransform: "uppercase",
-                    fontWeight: 500, fontSize: 10, letterSpacing: ".1em", color: colors.lvl }}>
-                    {lvl === "error" ? "err" : lvl}
-                  </span>
-                  <span style={{ width: 160, flexShrink: 0, color: "var(--ink-mute)",
-                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    [{row.event_type}]
-                  </span>
-                  <span style={{ flex: 1, color: colors.msg, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                    {row.message}
-                  </span>
-                </button>
-                {expanded && <ConsoleDetail row={row} onClose={() => setExpandedId(null)} />}
-              </div>
-            );
-          })
+          // The virtualizer needs an inner element of total-content
+          // height with `position: relative`. Each visible row is
+          // absolutely positioned at its computed offset.
+          <div style={{
+            height: `${rowVirtualizer.getTotalSize()}px`,
+            width: "100%",
+            position: "relative",
+          }}>
+            {rowVirtualizer.getVirtualItems().map((virtualItem) => {
+              const item = filtered[virtualItem.index];
+              if (!item) return null;
+              const { row, lvl } = item;
+              const colors = LEVEL_COLORS[lvl];
+              const expanded = expandedId === row.id;
+              return (
+                <div
+                  key={row.id}
+                  data-index={virtualItem.index}
+                  ref={rowVirtualizer.measureElement}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    transform: `translateY(${virtualItem.start}px)`,
+                  }}
+                >
+                  <button type="button" aria-expanded={expanded}
+                    onClick={() => setExpandedId(expanded ? null : row.id)}
+                    style={{ background: "none", border: 0, padding: 0, width: "100%",
+                      textAlign: "left", color: "inherit", cursor: "pointer", font: "inherit",
+                      display: "flex", alignItems: "flex-start", gap: 8 }}>
+                    <span style={{ width: 170, flexShrink: 0, color: "var(--ink-mute)" }}>{formatTs(row.created_at)}</span>
+                    <span style={{ width: 48, flexShrink: 0, textTransform: "uppercase",
+                      fontWeight: 500, fontSize: 10, letterSpacing: ".1em", color: colors.lvl }}>
+                      {lvl === "error" ? "err" : lvl}
+                    </span>
+                    <span style={{ width: 160, flexShrink: 0, color: "var(--ink-mute)",
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      [{row.event_type}]
+                    </span>
+                    <span style={{ flex: 1, color: colors.msg, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                      {row.message}
+                    </span>
+                  </button>
+                  {expanded && <ConsoleDetail row={row} onClose={() => setExpandedId(null)} />}
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 

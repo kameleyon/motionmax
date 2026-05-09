@@ -466,9 +466,14 @@ async function _runCinematicVideo(
         const innerMsg = innerErr instanceof Error ? innerErr.message : String(innerErr);
 
         // Moderation rejection is permanent for that exact prompt — bubble
-        // up to the outer catch so the held-frame path runs. Same regex
-        // covers both Seedance and Kling moderation responses.
-        if (/risk control|content[_ ]?violation|blocked.*content|moderation/i.test(innerMsg)) {
+        // up to the outer catch so the held-frame path runs. Retrying just
+        // resubmits the same prompt and burns another 61 credits (verified
+        // 2026-05-08 incident: Sun-Sextile-Jupiter run lost ~14 jobs ×
+        // 61 credits to this exact retry loop). The "potentially sensitive"
+        // phrasing comes from Hypereal's Seedance 2.0 backend; the original
+        // patterns ("risk control", "content violation", etc.) cover Kling
+        // and earlier Seedance versions.
+        if (/risk control|content[_ ]?violation|blocked.*content|moderation|potentially sensitive|flagged.*sensitive/i.test(innerMsg)) {
           throw innerErr;
         }
 

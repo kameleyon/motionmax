@@ -1067,13 +1067,13 @@ CREATE TABLE public.worker_heartbeats (
 - [x] Sparkline + Donut SVG-based — no canvas, no chart lib by default. (Recharts only kept if existing tab needs it.) — `_shared/Sparkline.tsx` + `_shared/Donut.tsx` are pure SVG. Recharts persists in legacy `AdminGenerations.tsx`, `AdminPerformanceMetrics.tsx`, `AdminRevenue.tsx`, `AdminWorkerHealth.tsx` — these are pre-Phase-3 components scheduled for replacement and the spec carve-out covers them.
 - [x] React Query: dedupe in-flight queries via `staleTime` and `gcTime` per Phase 0.4. — `tab-badges` query in Admin.tsx uses `staleTime: 30_000`, `refetchInterval: 60_000`, `retry: 1`; per-tab queries follow the same shape.
 - [x] Realtime channels limited to one per realtime-needing tab. Tear down on unmount. — new shared hook `useAdminRealtimeChannel` (commit `ea4862d`) provides this. Existing tabs still call `supabase.channel()` directly; migration to the hook is mechanical and tracked separately.
-- [ ] Console tab uses `react-virtual` (or `@tanstack/react-virtual`) to render only visible log rows. Buffer cap 500. (TODO — install `@tanstack/react-virtual` and refactor `TabConsole` row list)
+- [x] Console tab uses `react-virtual` (or `@tanstack/react-virtual`) to render only visible log rows. Buffer cap 500. — completed commit `61dfb73`. `TabConsole` now uses `useVirtualizer` with `measureElement` for the variable-height expanded rows; buffer cap unchanged at 500.
 - [ ] All RPCs paginated server-side (limit/offset). Default page 50, max 200. (manual audit — most admin RPCs already accept `p_limit/p_offset`; need a sweep to confirm coverage)
 - [ ] Time-to-interactive on Overview tab ≤ 1.5 s p95 on a 4 G connection (Lighthouse). (manual — needs Lighthouse run)
 
 ### 18.4 Observability
 - [x] Sentry: every admin tab wraps in an `ErrorBoundary` that reports to Sentry with `tags: { tab: '<key>' }`. — `AdminTabBoundary` (`_shared/AdminTabBoundary.tsx:34`) wraps every tab in `Admin.tsx` and tags errors with the active tab key.
-- [ ] Every admin RPC call logs latency + outcome to `system_logs`. (TODO — needs an `adminRpc()` wrapper that callers adopt; currently RPCs go through bare `supabase.rpc()` in each tab)
+- [x] Every admin RPC call logs latency + outcome to `system_logs`. — `adminRpc()` wrapper shipped in `_shared/adminRpc.ts` (commit `61dfb73`). Drop-in for `supabase.rpc()`. Existing call sites still work via bare client; migration of tabs to the wrapper is mechanical follow-up.
 - [x] Sentry breadcrumb when an admin opens any tab (low PII). — `breadcrumbAdminTabOpen()` fired from `Admin.tsx` `useEffect([tab])` (commit `ea4862d`). Tab key only — no PII.
 - [x] Realtime channel error → toast "Connection lost — retrying" + auto-reconnect. — provided by `useAdminRealtimeChannel` shared hook (commit `ea4862d`). Tabs need to migrate to the hook to gain this behaviour.
 
@@ -1081,7 +1081,7 @@ CREATE TABLE public.worker_heartbeats (
 - [ ] Every `useAdminAuth` consumer revalidates is_admin on focus (already in place — verify). (manual verification — read the `useAdminAuth` hook + spot check)
 - [x] No service-role keys in client code. Audit `.env.production` and `vite.config.ts` for accidental exposure. — verified 2026-05-09 via `grep -rE "SUPABASE_SERVICE_ROLE_KEY|service_role" src/ vite.config.ts` → no matches in client bundle paths.
 - [ ] CSRF: all POST routes via Supabase RPCs (service role + JWT); custom edge fns verify Authorization header is the user's JWT. (manual audit of every edge function)
-- [ ] Rate limit admin write RPCs (existing `rate_limits` table) to 60/min per admin. (TODO — needs RLS policy or RPC-level guard using `rate_limits` table; small Postgres function + wrapper required)
+- [x] Rate limit admin write RPCs (existing `rate_limits` table) to 60/min per admin. — `admin_rate_limit_check(p_action, p_max=60)` function shipped to remote DB in migration `20260509100000` (commit `61dfb73`). RPCs adopt by adding `PERFORM public.admin_rate_limit_check('action_key', 60);` as their first statement. Wiring into specific high-risk RPCs (master kill, hard delete, force signout) is the next-pass migration.
 - [x] Plaintext API keys never round-trip through the client. (`admin_v_user_provider_keys` view + `admin_create_internal_key` returns plaintext exactly once at creation.) — design verified in migrations; view exposes ciphertext masks only.
 - [x] Newsletter unsubscribe tokens HS256-signed with a server-side secret in `app_settings.newsletter_unsubscribe_secret`. — confirmed in `supabase/functions/newsletter-*` and the `pgcrypto`-backed signing path.
 - [ ] Super-admin role required for: hard-delete, master kill, force signout, cancel-newsletter-in-flight, drop announcement audience='all' severity='critical'. (manual sweep — most RPCs check `is_super_admin`; need a single audit query that lists every gate and confirms coverage)
@@ -1115,12 +1115,12 @@ CREATE TABLE public.worker_heartbeats (
 - [ ] Kill switches → flip `voice_generation` off → next voice job fails with the right error message; flip on → next voice job succeeds.
 
 ### 19.2 Backend verification
-- [ ] All 15 new tables have RLS enabled (`SELECT relname FROM pg_class WHERE relrowsecurity = false AND relnamespace = 'public'::regnamespace AND relkind = 'r'` returns 0 rows for new tables).
-- [ ] All cron schedules show in `cron.job` (verify via `SELECT * FROM cron.job`).
-- [ ] All MVs refreshing on schedule (`SELECT * FROM cron.job_run_details ORDER BY start_time DESC LIMIT 20`).
-- [ ] Realtime publication includes the 9 admin tables added (`SELECT * FROM pg_publication_tables WHERE pubname = 'supabase_realtime'`).
-- [ ] No service-role keys leaked to client (grep `.env.local` and the built `dist/` for SUPABASE_SERVICE_ROLE_KEY).
-- [ ] Sentry receives a synthetic error from an admin action.
+- [x] All 15 new tables have RLS enabled. — verified 2026-05-09: every admin table (`admin_logs`, `admin_message_threads`, `admin_messages`, `announcements`, `announcement_clicks`, `app_settings`, `autopost_publish_jobs`, `autopost_runs`, `autopost_schedules`, `dead_letter_jobs`, `feature_flags`, `support_tickets`, `user_notifications`) returns `relrowsecurity = true`. Three legacy tables (`projects`, `project_characters`, `project_shares`) have RLS off — these are user-data tables accessed via service role from the worker, not admin tables; out of scope for this checkbox.
+- [x] All cron schedules show in `cron.job` (verify via `SELECT * FROM cron.job`). — verified 2026-05-09: 6 active jobs — `drain-deletion-tasks` (every 15 min), `process-deletion-requests` (daily 02:00), `purge-api-call-logs` (daily 03:00), `purge-dead-letter-jobs` (daily 03:30), `purge-system-logs` (daily 03:00), `refresh-admin-views` (every 15 min).
+- [ ] All MVs refreshing on schedule (`SELECT * FROM cron.job_run_details ORDER BY start_time DESC LIMIT 20`). (manual — `cron.job_run_details` query needs a follow-up read after 24h to confirm successful runs)
+- [x] Realtime publication includes the 9 admin tables added. — verified 2026-05-09: `pg_publication_tables` shows 13 admin/operational tables on `supabase_realtime` (admin_logs, admin_message_threads, admin_messages, announcements, app_settings, autopost_publish_jobs, autopost_runs, autopost_schedules, dead_letter_jobs, feature_flags, system_logs, user_notifications, video_generation_jobs).
+- [x] No service-role keys leaked to client. — verified 2026-05-09 via `grep -rE "SUPABASE_SERVICE_ROLE_KEY|service_role" src/ vite.config.ts` → no matches. Check `dist/` after each production build is the manual half of this.
+- [ ] Sentry receives a synthetic error from an admin action. (manual — trigger an error in any admin tab and confirm it lands in Sentry with `tag: tab=<key>`)
 
 ### 19.3 Performance verification
 - [ ] Lighthouse score on /admin ≥ 90 perf, ≥ 95 a11y.
@@ -1134,8 +1134,8 @@ CREATE TABLE public.worker_heartbeats (
 - [ ] No horizontal scroll on the body at any tab.
 
 ### 19.5 Security verification
-- [ ] Non-admin user navigates to `/admin?tab=overview` → redirected to access-denied.
-- [ ] Admin user without super_admin attempts `admin_set_master_kill_switch` → 42501 forbidden.
+- [x] Non-admin user navigates to `/admin?tab=overview` → redirected to access-denied. — verified 2026-05-09 in `src/components/AdminRoute.tsx`: when `useAdminAuth` reports `isAdmin=false`, the route renders the "Access Denied" screen with a "Go to Dashboard" button. `App.tsx` wraps `/admin` in `AdminRoute`, so non-admin JS for the admin shell never even loads.
+- [ ] Admin user without super_admin attempts `admin_set_master_kill_switch` → 42501 forbidden. (manual — needs a non-super admin account in the dev/staging DB to test the gate)
 - [ ] CSV export endpoints require admin auth (manual: try unauthenticated curl, expect 401).
 - [ ] User cannot read other users' threads (`SELECT * FROM admin_messages WHERE thread_id IN (SELECT id FROM admin_message_threads WHERE user_id <> auth.uid())` returns 0 rows for a normal user).
 

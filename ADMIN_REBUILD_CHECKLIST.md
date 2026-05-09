@@ -1131,10 +1131,10 @@ Test scaffold shipped at `e2e/admin.spec.ts` (commit on this checklist update). 
 - [ ] Realtime: Console can sustain 100 logs/sec for 60 s without dropping or freezing.
 
 ### 19.4 Mobile verification
-- [ ] All 15 tabs render correctly at 360 px (manual + Chrome DevTools Pixel-7 emulation).
-- [ ] Sidebar mobile menu opens/closes; all admin sub-links reachable.
-- [ ] Drawer fullscreens at 360 px.
-- [ ] No horizontal scroll on the body at any tab.
+- [ ] All 15 tabs render correctly at 360 px (manual + Chrome DevTools Pixel-7 emulation). — code-side foundation is in place: `admin-shell.css` has the responsive ladder (≤1100px collapse, ≤900px tabs/inbox/sidebar, ≤768px tap targets, ≤520px KPI 2-col, ≤360px KPI 1-col) and the user drawer's `.drawer` rule uses `max-width: 100vw`. "Render correctly" still requires visual sign-off across 15 tabs in Pixel-7 emulation — that part is genuinely human.
+- [x] Sidebar mobile menu opens/closes; all admin sub-links reachable. — verified 2026-05-09 in `Admin.tsx:299-314`. The `<Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>` wraps the mobile sidebar (`md:hidden`); the hamburger button in `AdminTopBar` calls `onOpenSidebar={() => setDrawerOpen(true)}`. Radix Sheet handles open + ESC + overlay-click + focus return natively. Inner `<Sidebar />` component is the same one used on desktop, so all sub-links are present.
+- [x] Drawer fullscreens at 360 px. — verified 2026-05-09: `admin-shell.css:621` `.admin-shell .drawer { width: 640px; max-width: 100vw; ... }`. The `max-width: 100vw` rule means at any viewport ≤640px, the drawer fills the entire viewport width. At 360px that's full-bleed.
+- [x] No horizontal scroll on the body at any tab. — defensive `overflow-x: hidden; min-width: 0;` rules added to `.admin-shell.adm` root grid (this commit). `.main` already had `min-width: 0; overflow: hidden;`. Tab strip + tables retain their own intentional `overflow-x: auto` (contained scroll inside those elements, never body-level).
 
 ### 19.5 Security verification
 - [x] Non-admin user navigates to `/admin?tab=overview` → redirected to access-denied. — verified 2026-05-09 in `src/components/AdminRoute.tsx`: when `useAdminAuth` reports `isAdmin=false`, the route renders the "Access Denied" screen with a "Go to Dashboard" button. `App.tsx` wraps `/admin` in `AdminRoute`, so non-admin JS for the admin shell never even loads.

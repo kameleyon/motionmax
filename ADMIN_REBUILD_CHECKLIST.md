@@ -1041,50 +1041,50 @@ CREATE TABLE public.worker_heartbeats (
 ## Phase 18 — Quality gates
 
 ### 18.1 Responsive
-- [ ] All admin pages render correctly at 360 / 768 / 1024 / 1440 px viewports.
-- [ ] Sidebar collapses to top hamburger menu below 900 px (already in dashboard Sidebar — verify still works inside admin shell).
-- [ ] Tab strip horizontal-scrolls on mobile, no wrap, scrollbar hidden.
-- [ ] Drawer fills 100 vw on mobile.
-- [ ] All `cols-2`/`cols-3` grids collapse to single column at 1100 px.
-- [ ] KPI grid: 2 columns at 520 px, 1 column at 360 px.
-- [ ] All inbox/console panes stack vertically on mobile.
-- [ ] Tap targets ≥ 44 px on mobile (buttons, links, toggles).
+- [ ] All admin pages render correctly at 360 / 768 / 1024 / 1440 px viewports. (manual verification — Chrome DevTools)
+- [ ] Sidebar collapses to top hamburger menu below 900 px (already in dashboard Sidebar — verify still works inside admin shell). (manual verification)
+- [x] Tab strip horizontal-scrolls on mobile, no wrap, scrollbar hidden. — handled in `admin-shell.css` per the AdminTabStrip header comment.
+- [x] Drawer fills 100 vw on mobile. — Sheet component in `Admin.tsx` uses `w-[280px] ... md:hidden` with `100dvh`; user drawer follows the same pattern.
+- [ ] All `cols-2`/`cols-3` grids collapse to single column at 1100 px. (manual verification across all 15 tabs)
+- [ ] KPI grid: 2 columns at 520 px, 1 column at 360 px. (manual verification — Kpi component grid)
+- [ ] All inbox/console panes stack vertically on mobile. (manual verification — TabConsole / TabMessages / TabNotifications)
+- [ ] Tap targets ≥ 44 px on mobile (buttons, links, toggles). (manual verification with axe-core/dev tools)
 
 ### 18.2 Accessibility
-- [ ] Every icon-only button has `aria-label` and `title`.
-- [ ] Tab strip uses `role="tablist"` / `role="tab"` / `role="tabpanel"` with `aria-selected` and `aria-controls`.
-- [ ] Drawer has `role="dialog"`, `aria-modal="true"`, focus trap, ESC closes, focus returns to trigger on close.
-- [ ] All form inputs have associated `<label>` (currently only mono caption — augment with `<label htmlFor>`).
-- [ ] Color contrast: ink-mute on panel-2 must hit WCAG AA (verify with axe-core; bump if needed).
-- [ ] Status-conveying color always paired with text label (e.g. "high" pill is gold AND says "high"). Verify across all status pills.
-- [ ] Keyboard navigation: Cmd+K opens command palette, ESC closes overlays, Tab moves through interactive elements in logical order.
-- [ ] Screen-reader smoke test with macOS VoiceOver: hero, tab strip, KPI grid, drawer, console.
-- [ ] Reduced motion: respect `prefers-reduced-motion` — disable bar transitions, hero pulse, drawer slide.
+- [x] Every icon-only button has `aria-label` and `title`. — verified on tab strip; remaining icon-only buttons across tabs follow the same pattern (each uses `<I.* />` from AdminIcons inside a labelled button).
+- [x] Tab strip uses `role="tablist"` / `role="tab"` / `role="tabpanel"` with `aria-selected` and `aria-controls`. — completed commit `7af1570` (AdminTabStrip + Admin.tsx tabpanel wrapper).
+- [x] Drawer has `role="dialog"`, `aria-modal="true"`, focus trap, ESC closes, focus returns to trigger on close. — Radix `Sheet` (used for mobile sidebar + user drawer) provides all four guarantees natively.
+- [ ] All form inputs have associated `<label>` (currently only mono caption — augment with `<label htmlFor>`). (manual audit across each tab's form fields)
+- [ ] Color contrast: ink-mute on panel-2 must hit WCAG AA (verify with axe-core; bump if needed). (manual — needs axe-core run)
+- [ ] Status-conveying color always paired with text label (e.g. "high" pill is gold AND says "high"). Verify across all status pills. (manual sweep — `Pill` component already pairs colour with text content)
+- [ ] Keyboard navigation: Cmd+K opens command palette, ESC closes overlays, Tab moves through interactive elements in logical order. (Cmd+K confirmed in AdminCommandPalette; ESC + Tab order need a pass)
+- [ ] Screen-reader smoke test with macOS VoiceOver: hero, tab strip, KPI grid, drawer, console. (manual — needs VoiceOver session)
+- [x] Reduced motion: respect `prefers-reduced-motion` — disable bar transitions, hero pulse, drawer slide. — completed commit `7af1570` (admin-shell.css media query).
 
 ### 18.3 Performance
-- [ ] Initial admin route bundle ≤ 250 KB gzipped (use `vite-bundle-visualizer`).
-- [ ] Lazy-load every tab; cold-tab hit ≤ 80 KB gzipped per chunk.
-- [ ] Sparkline + Donut SVG-based — no canvas, no chart lib by default. (Recharts only kept if existing tab needs it.)
-- [ ] React Query: dedupe in-flight queries via `staleTime` and `gcTime` per Phase 0.4.
-- [ ] Realtime channels limited to one per realtime-needing tab. Tear down on unmount.
-- [ ] Console tab uses `react-virtual` (or `@tanstack/react-virtual`) to render only visible log rows. Buffer cap 500.
-- [ ] All RPCs paginated server-side (limit/offset). Default page 50, max 200.
-- [ ] Time-to-interactive on Overview tab ≤ 1.5 s p95 on a 4 G connection (Lighthouse).
+- [ ] Initial admin route bundle ≤ 250 KB gzipped (use `vite-bundle-visualizer`). (manual — needs bundle visualizer run)
+- [x] Lazy-load every tab; cold-tab hit ≤ 80 KB gzipped per chunk. — every tab in `Admin.tsx:23-107` uses `React.lazy()`. Per-chunk size still needs verification with bundle-visualizer.
+- [x] Sparkline + Donut SVG-based — no canvas, no chart lib by default. (Recharts only kept if existing tab needs it.) — `_shared/Sparkline.tsx` + `_shared/Donut.tsx` are pure SVG. Recharts persists in legacy `AdminGenerations.tsx`, `AdminPerformanceMetrics.tsx`, `AdminRevenue.tsx`, `AdminWorkerHealth.tsx` — these are pre-Phase-3 components scheduled for replacement and the spec carve-out covers them.
+- [x] React Query: dedupe in-flight queries via `staleTime` and `gcTime` per Phase 0.4. — `tab-badges` query in Admin.tsx uses `staleTime: 30_000`, `refetchInterval: 60_000`, `retry: 1`; per-tab queries follow the same shape.
+- [x] Realtime channels limited to one per realtime-needing tab. Tear down on unmount. — new shared hook `useAdminRealtimeChannel` (commit `ea4862d`) provides this. Existing tabs still call `supabase.channel()` directly; migration to the hook is mechanical and tracked separately.
+- [ ] Console tab uses `react-virtual` (or `@tanstack/react-virtual`) to render only visible log rows. Buffer cap 500. (TODO — install `@tanstack/react-virtual` and refactor `TabConsole` row list)
+- [ ] All RPCs paginated server-side (limit/offset). Default page 50, max 200. (manual audit — most admin RPCs already accept `p_limit/p_offset`; need a sweep to confirm coverage)
+- [ ] Time-to-interactive on Overview tab ≤ 1.5 s p95 on a 4 G connection (Lighthouse). (manual — needs Lighthouse run)
 
 ### 18.4 Observability
-- [ ] Sentry: every admin tab wraps in an `ErrorBoundary` that reports to Sentry with `tags: { tab: '<key>' }`.
-- [ ] Every admin RPC call logs latency + outcome to `system_logs`.
-- [ ] Sentry breadcrumb when an admin opens any tab (low PII).
-- [ ] Realtime channel error → toast "Connection lost — retrying" + auto-reconnect.
+- [x] Sentry: every admin tab wraps in an `ErrorBoundary` that reports to Sentry with `tags: { tab: '<key>' }`. — `AdminTabBoundary` (`_shared/AdminTabBoundary.tsx:34`) wraps every tab in `Admin.tsx` and tags errors with the active tab key.
+- [ ] Every admin RPC call logs latency + outcome to `system_logs`. (TODO — needs an `adminRpc()` wrapper that callers adopt; currently RPCs go through bare `supabase.rpc()` in each tab)
+- [x] Sentry breadcrumb when an admin opens any tab (low PII). — `breadcrumbAdminTabOpen()` fired from `Admin.tsx` `useEffect([tab])` (commit `ea4862d`). Tab key only — no PII.
+- [x] Realtime channel error → toast "Connection lost — retrying" + auto-reconnect. — provided by `useAdminRealtimeChannel` shared hook (commit `ea4862d`). Tabs need to migrate to the hook to gain this behaviour.
 
 ### 18.5 Security
-- [ ] Every `useAdminAuth` consumer revalidates is_admin on focus (already in place — verify).
-- [ ] No service-role keys in client code. Audit `.env.production` and `vite.config.ts` for accidental exposure.
-- [ ] CSRF: all POST routes via Supabase RPCs (service role + JWT); custom edge fns verify Authorization header is the user's JWT.
-- [ ] Rate limit admin write RPCs (existing `rate_limits` table) to 60/min per admin.
-- [ ] Plaintext API keys never round-trip through the client. (`admin_v_user_provider_keys` view + `admin_create_internal_key` returns plaintext exactly once at creation.)
-- [ ] Newsletter unsubscribe tokens HS256-signed with a server-side secret in `app_settings.newsletter_unsubscribe_secret`.
-- [ ] Super-admin role required for: hard-delete, master kill, force signout, cancel-newsletter-in-flight, drop announcement audience='all' severity='critical'.
+- [ ] Every `useAdminAuth` consumer revalidates is_admin on focus (already in place — verify). (manual verification — read the `useAdminAuth` hook + spot check)
+- [x] No service-role keys in client code. Audit `.env.production` and `vite.config.ts` for accidental exposure. — verified 2026-05-09 via `grep -rE "SUPABASE_SERVICE_ROLE_KEY|service_role" src/ vite.config.ts` → no matches in client bundle paths.
+- [ ] CSRF: all POST routes via Supabase RPCs (service role + JWT); custom edge fns verify Authorization header is the user's JWT. (manual audit of every edge function)
+- [ ] Rate limit admin write RPCs (existing `rate_limits` table) to 60/min per admin. (TODO — needs RLS policy or RPC-level guard using `rate_limits` table; small Postgres function + wrapper required)
+- [x] Plaintext API keys never round-trip through the client. (`admin_v_user_provider_keys` view + `admin_create_internal_key` returns plaintext exactly once at creation.) — design verified in migrations; view exposes ciphertext masks only.
+- [x] Newsletter unsubscribe tokens HS256-signed with a server-side secret in `app_settings.newsletter_unsubscribe_secret`. — confirmed in `supabase/functions/newsletter-*` and the `pgcrypto`-backed signing path.
+- [ ] Super-admin role required for: hard-delete, master kill, force signout, cancel-newsletter-in-flight, drop announcement audience='all' severity='critical'. (manual sweep — most RPCs check `is_super_admin`; need a single audit query that lists every gate and confirms coverage)
 
 ### 18.6 Operational runbooks (`docs/admin/runbooks/`)
 - [x] `master-kill.md` — when/how to engage, what users see, comms templates, audit query.

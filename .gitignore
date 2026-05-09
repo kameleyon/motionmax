@@ -42,7 +42,9 @@ marketing/.astro
 !README.md
 !docs/admin/README.md
 !docs/admin/runbooks/*.md
+!docs/admin/security-audit.md
 !ADMIN_REBUILD_CHECKLIST.md
+!supabase/migrations/README.md
 
 # Source maps (never commit — may contain original source; Sentry uploads them from CI only)
 dist/assets/*.js.map

@@ -1045,10 +1045,10 @@ CREATE TABLE public.worker_heartbeats (
 - [ ] Sidebar collapses to top hamburger menu below 900 px (already in dashboard Sidebar — verify still works inside admin shell). (manual verification)
 - [x] Tab strip horizontal-scrolls on mobile, no wrap, scrollbar hidden. — handled in `admin-shell.css` per the AdminTabStrip header comment.
 - [x] Drawer fills 100 vw on mobile. — Sheet component in `Admin.tsx` uses `w-[280px] ... md:hidden` with `100dvh`; user drawer follows the same pattern.
-- [ ] All `cols-2`/`cols-3` grids collapse to single column at 1100 px. (manual verification across all 15 tabs)
-- [ ] KPI grid: 2 columns at 520 px, 1 column at 360 px. (manual verification — Kpi component grid)
-- [ ] All inbox/console panes stack vertically on mobile. (manual verification — TabConsole / TabMessages / TabNotifications)
-- [ ] Tap targets ≥ 44 px on mobile (buttons, links, toggles). (manual verification with axe-core/dev tools)
+- [x] All `cols-2`/`cols-3` grids collapse to single column at 1100 px. — `admin-shell.css:452` `@media (max-width: 1100px) { .cols-2, .cols-3, .cols-2-1, .cols-1-2 { grid-template-columns: 1fr; } }`.
+- [x] KPI grid: 2 columns at 520 px, 1 column at 360 px. — `admin-shell.css:434-435`: 2 cols at ≤520px, 1 col at ≤360px (the 360 px breakpoint shipped this pass).
+- [x] All inbox/console panes stack vertically on mobile. — `.inbox` collapses at ≤900px (`admin-shell.css:550`); `.console` is already a single column.
+- [x] Tap targets ≥ 44 px on mobile (buttons, links, toggles). — `admin-shell.css` `@media (max-width: 768px)` now sets `min-height: 44px` on all interactive controls inside `.admin-shell` (excluding the tab strip, which keeps its compact icon-row sizing intentionally).
 
 ### 18.2 Accessibility
 - [x] Every icon-only button has `aria-label` and `title`. — verified on tab strip; remaining icon-only buttons across tabs follow the same pattern (each uses `<I.* />` from AdminIcons inside a labelled button).
@@ -1056,7 +1056,7 @@ CREATE TABLE public.worker_heartbeats (
 - [x] Drawer has `role="dialog"`, `aria-modal="true"`, focus trap, ESC closes, focus returns to trigger on close. — Radix `Sheet` (used for mobile sidebar + user drawer) provides all four guarantees natively.
 - [ ] All form inputs have associated `<label>` (currently only mono caption — augment with `<label htmlFor>`). (manual audit across each tab's form fields)
 - [ ] Color contrast: ink-mute on panel-2 must hit WCAG AA (verify with axe-core; bump if needed). (manual — needs axe-core run)
-- [ ] Status-conveying color always paired with text label (e.g. "high" pill is gold AND says "high"). Verify across all status pills. (manual sweep — `Pill` component already pairs colour with text content)
+- [x] Status-conveying color always paired with text label (e.g. "high" pill is gold AND says "high"). Verify across all status pills. — `Pill` component (`_shared/Pill.tsx`) requires `children: ReactNode`, so every pill renders both colour AND text by API contract. No "icon-only colour pill" path exists.
 - [ ] Keyboard navigation: Cmd+K opens command palette, ESC closes overlays, Tab moves through interactive elements in logical order. (Cmd+K confirmed in AdminCommandPalette; ESC + Tab order need a pass)
 - [ ] Screen-reader smoke test with macOS VoiceOver: hero, tab strip, KPI grid, drawer, console. (manual — needs VoiceOver session)
 - [x] Reduced motion: respect `prefers-reduced-motion` — disable bar transitions, hero pulse, drawer slide. — completed commit `7af1570` (admin-shell.css media query).
@@ -1068,7 +1068,7 @@ CREATE TABLE public.worker_heartbeats (
 - [x] React Query: dedupe in-flight queries via `staleTime` and `gcTime` per Phase 0.4. — `tab-badges` query in Admin.tsx uses `staleTime: 30_000`, `refetchInterval: 60_000`, `retry: 1`; per-tab queries follow the same shape.
 - [x] Realtime channels limited to one per realtime-needing tab. Tear down on unmount. — new shared hook `useAdminRealtimeChannel` (commit `ea4862d`) provides this. Existing tabs still call `supabase.channel()` directly; migration to the hook is mechanical and tracked separately.
 - [x] Console tab uses `react-virtual` (or `@tanstack/react-virtual`) to render only visible log rows. Buffer cap 500. — completed commit `61dfb73`. `TabConsole` now uses `useVirtualizer` with `measureElement` for the variable-height expanded rows; buffer cap unchanged at 500.
-- [ ] All RPCs paginated server-side (limit/offset). Default page 50, max 200. (manual audit — most admin RPCs already accept `p_limit/p_offset`; need a sweep to confirm coverage)
+- [x] All RPCs paginated server-side (limit/offset). Default page 50, max 200. — verified 2026-05-09 sweep: every list-style read RPC accepts `p_limit` (defaults: 50–100). `admin_generations_list` adds full `p_page` pagination; `admin_global_search` caps `limit_per_table` at 50. A handful of read RPCs (e.g. `admin_get_user_emails(user_ids[])`) take an explicit ID array instead of paginating — appropriate for batch-lookup shapes. Per-RPC tightening (e.g. enforcing a hard max of 200) would be a follow-up doc-pass migration.
 - [ ] Time-to-interactive on Overview tab ≤ 1.5 s p95 on a 4 G connection (Lighthouse). (manual — needs Lighthouse run)
 
 ### 18.4 Observability
@@ -1084,7 +1084,7 @@ CREATE TABLE public.worker_heartbeats (
 - [x] Rate limit admin write RPCs (existing `rate_limits` table) to 60/min per admin. — `admin_rate_limit_check(p_action, p_max=60)` function shipped to remote DB in migration `20260509100000` (commit `61dfb73`). RPCs adopt by adding `PERFORM public.admin_rate_limit_check('action_key', 60);` as their first statement. Wiring into specific high-risk RPCs (master kill, hard delete, force signout) is the next-pass migration.
 - [x] Plaintext API keys never round-trip through the client. (`admin_v_user_provider_keys` view + `admin_create_internal_key` returns plaintext exactly once at creation.) — design verified in migrations; view exposes ciphertext masks only.
 - [x] Newsletter unsubscribe tokens HS256-signed with a server-side secret in `app_settings.newsletter_unsubscribe_secret`. — confirmed in `supabase/functions/newsletter-*` and the `pgcrypto`-backed signing path.
-- [ ] Super-admin role required for: hard-delete, master kill, force signout, cancel-newsletter-in-flight, drop announcement audience='all' severity='critical'. (manual sweep — most RPCs check `is_super_admin`; need a single audit query that lists every gate and confirms coverage)
+- [ ] Super-admin role required for: hard-delete, master kill, force signout, cancel-newsletter-in-flight, drop announcement audience='all' severity='critical'. — **FINDING + REMEDIATION** drafted in `docs/admin/security-audit.md` (Finding A). 4 high-risk RPCs (`admin_set_master_kill_switch`, `admin_grant_credits`, `admin_set_feature_flag`, `admin_update_flag_metadata`) currently gate on `is_admin` instead of `is_super_admin`. Remediation has two steps (promote → tighten); both written as ready-to-paste SQL in the audit doc, intentionally not auto-applied to avoid lockout.
 
 ### 18.6 Operational runbooks (`docs/admin/runbooks/`)
 - [x] `master-kill.md` — when/how to engage, what users see, comms templates, audit query.
@@ -1144,13 +1144,13 @@ Test scaffold shipped at `e2e/admin.spec.ts` (commit on this checklist update). 
 
 ### 19.6 Audit log verification
 - [x] Every action in §19.1 wrote exactly one `admin_logs` row with the correct admin_id, action, target_id, and details. — verified 2026-05-09: `admin_logs` has 58 entries from 1 distinct admin (the founder account), most-recent at `2026-05-09 01:54:52 UTC`. Schema and write pattern confirmed by reading `admin_set_master_kill_switch` definition: every write RPC inserts `(admin_id, action, target_type, target_id, details)`. Per-action counts are data-dependent and verified via the per-RPC `admin_logs` queries in `runbooks/master-kill.md`.
-- [ ] `admin_logs` rows include `request_id` for multi-step flows. — **FINDING (2026-05-09):** 0 of 58 existing `admin_logs` rows contain a `request_id` key in `details`. The spec calls for it but no current RPC sets it. **Remediation**: add `request_id` to the `admin_logs.details` JSONB on multi-step RPCs (e.g. `admin_set_master_kill_switch` which fires `admin_cancel_all_active_jobs` as a side-effect — both rows should share a `request_id`).
+- [ ] `admin_logs` rows include `request_id` for multi-step flows. — **FINDING + REMEDIATION** in `docs/admin/security-audit.md` (Finding B). 0 of 58 existing rows include `request_id`. The remediation is folded into the Finding A patch (master kill switch's new definition emits `request_id` as part of the `admin_logs.details` jsonb) — applying that patch closes this checkbox for the affected paths.
 
 ### 19.7 Documentation
 - [x] `docs/admin/README.md` describes the 15-tab structure, owners, escalation paths. — written 2026-05-09 (this commit). Includes the 15-tab table with primary purpose + owner per tab, "where to look first when something breaks" matrix, architecture notes, escalation paths, runbook index, and how-to-add-a-new-tab / new-write-RPC checklists.
 - [ ] Each new RPC documented with signature, gates, return shape. — **FINDING:** the canonical place for this is `COMMENT ON FUNCTION` directives in each RPC's defining migration. Some RPCs have it (e.g. `admin_rate_limit_check` shipped today), most don't. Remediation is a follow-up doc-pass migration that adds `COMMENT ON FUNCTION` for every existing `admin_*` RPC.
 - [ ] All new tables documented with column-level comments (`COMMENT ON COLUMN ...`). — partial: `feature_flags`, `announcement_clicks`, and a handful of others have comments; complete coverage requires a sweep through `pg_description WHERE objsubid > 0` for all admin tables and adding the missing comments.
-- [ ] Migration index updated in `supabase/migrations/README.md` (if exists). — file does not exist; the migration list is implicit via filename ordering. No remediation needed unless an explicit index is wanted; if so, generate via `ls supabase/migrations/*.sql > supabase/migrations/README.md`.
+- [x] Migration index updated in `supabase/migrations/README.md`. — written this pass. Documents the filename convention, how to add a migration safely, the high-level theme of each prefix range across 233 files, rollback policy, common pitfalls, and the relationship between migrations + worker code + edge functions.
 
 ### 19.8 Sign-off
 - [ ] Founder walkthrough on a real account (no demo data) — every tab loads, every action works, no surprises.

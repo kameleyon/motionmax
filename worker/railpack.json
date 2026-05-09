@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.railpack.com/latest/schema.json",
+  "provider": "node",
+  "packages": {
+    "node": "24"
+  },
+  "buildAptPackages": ["ffmpeg"],
+  "deploy": {
+    "startCommand": "npm start",
+    "aptPackages": ["ffmpeg"]
+  }
+}

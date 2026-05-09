@@ -649,13 +649,14 @@ function ThreadDetail(props: ThreadDetailProps): JSX.Element {
               <div>
                 <div style={{ fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--ink-mute)", marginBottom: 4 }}>Amount</div>
                 <input type="number" value={creditsAmount} onChange={(e) => setCreditsAmount(e.target.value)}
-                  className="font-mono" autoFocus
+                  className="font-mono" autoFocus aria-label="Credit amount"
                   style={{ width: "100%", padding: 8, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--ink)", borderRadius: 6 }} />
               </div>
               <div>
                 <div style={{ fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--ink-mute)", marginBottom: 4 }}>Reason (audit log)</div>
                 <input type="text" value={creditsReason} onChange={(e) => setCreditsReason(e.target.value)}
                   placeholder={`Manual grant via thread ${thread.id.slice(0, 8)}`}
+                  aria-label="Reason for credit grant (audit log)"
                   style={{ width: "100%", padding: 8, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--ink)", borderRadius: 6 }} />
               </div>
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 6 }}>

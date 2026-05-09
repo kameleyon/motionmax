@@ -312,8 +312,10 @@ function BillingPanel({ userId, d, onChanged }: { userId: string; d: UserFullDet
         <div className="card-h"><div className="t">Adjust credits</div></div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr auto", gap: 8 }}>
           <input type="number" placeholder="±amount" value={amount} onChange={(e) => setAmount(e.target.value)}
+            aria-label="Credit adjustment amount"
             className="font-mono" style={{ padding: 8, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--ink)", borderRadius: 6 }} />
           <input type="text" placeholder="Reason (audit log)" value={reason} onChange={(e) => setReason(e.target.value)}
+            aria-label="Reason for credit adjustment"
             style={{ padding: 8, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--ink)", borderRadius: 6 }} />
           <button type="button" className="btn-cyan sm" onClick={apply} disabled={pending}>Apply</button>
         </div>
@@ -453,6 +455,7 @@ function CommunicatePanel({ userId }: { userId: string }): JSX.Element {
         <div className="card-h"><div className="t">Open a thread</div></div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <input type="text" placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)}
+            aria-label="Thread subject"
             style={{ padding: 8, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--ink)", borderRadius: 6 }} />
           <RichEditor value={body} onChange={setBody} />
 
@@ -481,6 +484,7 @@ function CommunicatePanel({ userId }: { userId: string }): JSX.Element {
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
           <input type="text" placeholder="Headline" value={headline} onChange={(e) => setHeadline(e.target.value)}
+            aria-label="Push notification headline"
             style={{ padding: 8, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--ink)", borderRadius: 6 }} />
           <button type="button" className="btn-cyan sm" onClick={sendPushOnly} disabled={pending}>
             <I.send /> Push
@@ -573,6 +577,7 @@ function DangerPanel({ userId, email, onChanged }: { userId: string; email: stri
       <div style={{ marginTop: 4 }}>
         <input type="text" placeholder="Reason (used by Pause)" value={reason}
           onChange={(e) => setReason(e.target.value)}
+          aria-label="Pause reason (audit log)"
           style={{ width: "100%", padding: 8, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--ink)", borderRadius: 6 }} />
       </div>
 

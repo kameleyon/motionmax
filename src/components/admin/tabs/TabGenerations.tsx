@@ -312,6 +312,7 @@ export function TabGenerations(): JSX.Element {
             <input type="text" value={workerFilter}
               onChange={(e) => setParam("gworker", e.target.value)}
               placeholder="prefix or full id"
+              aria-label="Filter generations by worker ID"
               className="mono"
               style={{ width: "100%", padding: 6, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--ink)", borderRadius: 4, fontSize: 11.5 }} />
           </div>

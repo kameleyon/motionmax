@@ -395,9 +395,9 @@ export function TabUsers(): JSX.Element {
           <div className="space-y-2">
             <div>Apply a credit adjustment to every selected user. Use a negative value to debit.</div>
             <input type="number" value={bulkAmount} onChange={(e) => setBulkAmount(e.target.value)}
-              placeholder="Amount" className="font-mono" style={{ width: "100%", padding: 8, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--ink)", borderRadius: 6 }} />
+              placeholder="Amount" aria-label="Bulk credit amount" className="font-mono" style={{ width: "100%", padding: 8, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--ink)", borderRadius: 6 }} />
             <input type="text" value={bulkReason} onChange={(e) => setBulkReason(e.target.value)}
-              placeholder="Reason (audit log)" style={{ width: "100%", padding: 8, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--ink)", borderRadius: 6 }} />
+              placeholder="Reason (audit log)" aria-label="Bulk grant reason (audit log)" style={{ width: "100%", padding: 8, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--ink)", borderRadius: 6 }} />
           </div>
         }
         confirmText="BULK"
@@ -413,7 +413,7 @@ export function TabUsers(): JSX.Element {
           <div className="space-y-2">
             <div>Each selected user will be paused. They can be reactivated from the user drawer.</div>
             <input type="text" value={bulkReason} onChange={(e) => setBulkReason(e.target.value)}
-              placeholder="Reason (audit log)" style={{ width: "100%", padding: 8, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--ink)", borderRadius: 6 }} />
+              placeholder="Reason (audit log)" aria-label="Bulk suspend reason (audit log)" style={{ width: "100%", padding: 8, background: "var(--panel-3)", border: "1px solid var(--line)", color: "var(--ink)", borderRadius: 6 }} />
           </div>
         }
         confirmText="BULK"

@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { Helmet } from "react-helmet-async";
 import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
 import {
@@ -11,10 +12,17 @@ import {
   VolumeX,
   Maximize,
   Wand2,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { ThemedLogo } from "@/components/ThemedLogo";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -483,8 +491,48 @@ export default function PublicShare() {
     );
   }
 
+  // EU AI Act Article 50 (effective 2026-08-02) disclosure metadata.
+  // - <meta name="ai-generated"> is the de-facto signal indexers + crawlers
+  //   use to detect synthetic media on a page.
+  // - JSON-LD VideoObject with contentRating: "AI-Generated" is the
+  //   structured-data form that Google/Bing/social previews can read.
+  const aiActJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "VideoObject",
+    name: project?.title ?? "AI-generated video",
+    description:
+      project?.description ??
+      "AI-generated video created with motionmax. Synthetic origin disclosed per EU AI Act Article 50.",
+    contentRating: "AI-Generated",
+    creator: { "@type": "Organization", name: "motionmax" },
+    additionalProperty: [
+      {
+        "@type": "PropertyValue",
+        name: "isAIGenerated",
+        value: "true",
+      },
+      {
+        "@type": "PropertyValue",
+        name: "disclosure",
+        value: "EU AI Act Article 50",
+      },
+    ],
+    ...(sharedVideoUrl ? { contentUrl: sharedVideoUrl } : {}),
+  };
+
   return (
     <div className="min-h-screen bg-background">
+      {/* EU AI Act Art. 50 disclosure — meta tags + JSON-LD */}
+      <Helmet>
+        <meta name="ai-generated" content="true" />
+        <meta name="ai-disclosure" content="EU AI Act Article 50" />
+        <meta name="content-classification" content="AI-Generated" />
+        <meta property="og:video:ai_generated" content="true" />
+        <script type="application/ld+json">
+          {JSON.stringify(aiActJsonLd)}
+        </script>
+      </Helmet>
+
       {/* Hidden audio element (used only in per-scene fallback mode) */}
       <audio ref={audioRef} />
 
@@ -512,6 +560,30 @@ export default function PublicShare() {
               </p>
             )}
           </div>
+
+          {/* EU AI Act Art. 50 disclosure badge — always visible above the
+              video, regardless of subscription tier. */}
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  role="note"
+                  aria-label="AI-generated content notice"
+                  className="mx-auto flex w-fit items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary cursor-help"
+                  data-testid="ai-act-disclosure-badge"
+                >
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>AI-generated content</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs text-center">
+                <p>
+                  This video was generated using AI. Per EU AI Act Article 50,
+                  motionmax discloses its synthetic origin.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
 
           {/* Player */}
           <div

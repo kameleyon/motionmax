@@ -12,7 +12,7 @@ const useCases = [
     icon: "✦",
   },
   {
-    quote: "Internal training videos that used to take a week now take an afternoon. Multi-language support makes global rollouts straightforward.",
+    quote: "Internal training videos that used to take a week now take an afternoon. Multilingual narration makes global rollouts straightforward.",
     role: "Learning & Development Teams",
     icon: "✦",
   },

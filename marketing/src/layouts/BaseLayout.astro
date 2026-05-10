@@ -1,5 +1,10 @@
 ---
 import "../styles/global.css";
+// B-NEW-10 / TONGUE-10 — every marketing page must mount the cookie
+// banner so EU visitors are not tracked before consent. Banner ships
+// hidden if the user already consented (record rehydrated from the
+// shared `.motionmax.io` cookie written by the React app).
+import CookieBanner from "../components/CookieBanner.astro";
 
 interface Props {
   title: string;
@@ -27,6 +32,14 @@ const {
   breadcrumbs,
   documentVersion,
 } = Astro.props;
+
+// B-NEW-10 — GA measurement ID is exposed to the client via a meta tag
+// rather than baked into the bundle, so rotating the ID on Vercel does
+// NOT require a marketing rebuild. Only `PUBLIC_*` env vars are visible
+// at Astro render time. If unset (or set to the placeholder from
+// .env.example) the analytics module short-circuits and never loads
+// gtag.
+const gaMeasurementId = import.meta.env.PUBLIC_GA_MEASUREMENT_ID ?? "";
 
 const structuredData = breadcrumbs
   ? JSON.stringify({
@@ -56,6 +69,14 @@ const structuredData = breadcrumbs
     }
     <link rel="canonical" href={canonical} />
     {documentVersion && <meta name="document-version" content={documentVersion} />}
+
+    {/*
+      B-NEW-10 — GA ID for marketingAnalytics.js to read at runtime. The
+      analytics module only fires gtag if the user has granted analytics
+      consent AND this meta is present with a non-placeholder G-XXXXXX
+      value. No script is loaded otherwise.
+    */}
+    {gaMeasurementId && <meta name="motionmax-ga-id" content={gaMeasurementId} />}
 
     <meta property="og:type" content="website" />
     <meta property="og:url" content={canonical} />
@@ -88,5 +109,13 @@ const structuredData = breadcrumbs
   </head>
   <body>
     <slot />
+    {/*
+      B-NEW-10 — every marketing page renders the consent banner. It
+      ships hidden and reveals itself on DOMContentLoaded only when the
+      user has not answered under the current policy version (or
+      revoked via the footer link). The banner script also kicks the
+      analytics loader, which is gated on per-category consent.
+    */}
+    <CookieBanner />
   </body>
 </html>

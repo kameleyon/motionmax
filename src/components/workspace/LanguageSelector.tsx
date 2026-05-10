@@ -36,9 +36,13 @@ export function LanguageSelector({ value, onChange }: LanguageSelectorProps) {
 
   return (
     <div className="space-y-2">
+      {/* B-NEW-11 (2026-05-10): label clarified from "Language" to
+          "Narration language" so users don't mistake this picker for a
+          UI-translation switch — the dashboard UI is English-only (no
+          i18n runtime); this dropdown selects the voice/TTS language. */}
       <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70 flex items-center gap-1.5">
         <Globe className="h-3.5 w-3.5" />
-        Language
+        Narration language
       </h3>
       <Select value={value} onValueChange={(v) => onChange(v as Language)}>
         <SelectTrigger className="w-full sm:w-48">

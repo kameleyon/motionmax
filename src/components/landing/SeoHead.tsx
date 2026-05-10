@@ -34,11 +34,11 @@ export default function SeoHead() {
       <title>MotionMax &#x2013; AI Video Generator | Turn Text into Cinematic Videos</title>
       <meta
         name="description"
-        content="Create stunning AI-generated cinematic videos, explainers, and visual stories from any text. AI scriptwriting, voiceover, image-to-video with 25+ caption styles. Multi-language. Start free."
+        content="Create stunning AI-generated cinematic videos, explainers, and visual stories from any text. AI scriptwriting, multilingual voiceover, image-to-video with 25+ caption styles. Start free."
       />
       <meta
         name="keywords"
-        content="AI video generator, text to video, cinematic video maker, AI explainer videos, document to video, AI narration, voice cloning, video storytelling, automated video production, AI video editor, TikTok video maker, YouTube Shorts generator, AI captions, image to video, Kling video, AI voiceover, multi-language video, MotionMax"
+        content="AI video generator, text to video, cinematic video maker, AI explainer videos, document to video, AI narration, voice cloning, video storytelling, automated video production, AI video editor, TikTok video maker, YouTube Shorts generator, AI captions, image to video, Kling video, AI voiceover, multilingual voiceover, MotionMax"
       />
       <link rel="canonical" href={SITE_URL} />
 

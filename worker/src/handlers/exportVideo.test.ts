@@ -276,7 +276,10 @@ describe("handleExportVideo", () => {
       expect(result).toMatchObject({ success: true });
     });
 
-    it("should not apply watermark for a user on a paid plan", async () => {
+    it("should ALWAYS apply watermark for paid users at the 'paid' tier (EU AI Act Art. 50)", async () => {
+      // EU AI Act Art. 50 (effective 2026-08-02) requires AI-disclosure on
+      // every export regardless of subscription tier. Paid users still get
+      // a watermark — just smaller / lower opacity / corner-only ("paid" tier).
       const { supabase } = await import("../lib/supabase.js");
 
       for (const plan of ["creator", "starter", "professional", "studio", "enterprise"]) {
@@ -308,9 +311,14 @@ describe("handleExportVideo", () => {
 
         // Export completes successfully.
         expect(result).toMatchObject({ success: true });
-        // concatWithBrandMark should NOT have been called (no watermark for paid users).
+        // concatWithBrandMark MUST be called even for paid users — Art. 50.
         const { concatWithBrandMark } = await import("./export/concatScenes.js");
-        expect(concatWithBrandMark).not.toHaveBeenCalled();
+        expect(concatWithBrandMark).toHaveBeenCalled();
+        // Last positional arg should be the "paid" tier marker.
+        const lastCall = vi.mocked(concatWithBrandMark).mock.calls.at(-1);
+        expect(lastCall?.[4]).toBe("paid");
+        // The visible mark text must be the AI-disclosure string.
+        expect(lastCall?.[1]).toContain("AI-generated");
       }
     });
 

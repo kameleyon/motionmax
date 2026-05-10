@@ -1070,7 +1070,7 @@ export default function IntakeForm({
       {/* Language / Voice / Captions / Brand */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
         <div>
-          <IntakeLabel htmlFor="intake-language">Language</IntakeLabel>
+          <IntakeLabel htmlFor="intake-language">Narration language</IntakeLabel>
           <select
             id="intake-language"
             value={language}

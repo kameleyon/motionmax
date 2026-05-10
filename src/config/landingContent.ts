@@ -40,9 +40,15 @@ export const LANDING_FEATURES: FeatureItem[] = [
     icon: Subtitles,
   },
   {
-    title: "11 Languages",
+    // B-NEW-11 (2026-05-10): claim de-risked from "11 languages" to
+    // "Multilingual" — the UI is English-only (no i18n runtime), and
+    // this card is about voice/narration coverage. Specific per-locale
+    // counts removed because we don't formally QA every locale; the
+    // multilingual TTS model (Gemini Flash) handles the actual voice
+    // generation across many languages.
+    title: "Multilingual Voiceover",
     description:
-      "English, French, Spanish, Portuguese, German, Italian, Russian, Chinese, Japanese, Korean, Haitian Creole.",
+      "AI narration in multiple languages — including English, French, Spanish, and Haitian Creole. The narration language is selectable per project.",
     icon: Globe,
   },
   {
@@ -76,8 +82,11 @@ export const TRUST_INDICATORS: TrustItem[] = [
   },
   {
     icon: Globe,
-    label: "11 Languages Supported",
-    detail: "Create videos in English, French, Spanish, and 8 more languages",
+    // B-NEW-11 (2026-05-10): swapped specific number ("11") for
+    // "Multilingual" — the dashboard is English-only (no i18n runtime),
+    // so this badge now refers strictly to voice/narration output.
+    label: "Multilingual Narration",
+    detail: "Generate voiceovers in multiple languages — narration language is set per project.",
   },
 ];
 

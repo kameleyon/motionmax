@@ -1,5 +1,6 @@
 import { useMemo, useEffect } from "react";
 import type { Experiment } from "@/lib/experiments";
+import { hasCategoryConsent } from "@/lib/cookieConsent";
 
 const ASSIGNMENTS_KEY = "mm_experiments";
 const VISITOR_KEY = "mm_visitor_id";
@@ -38,6 +39,11 @@ function writeAssignment(experimentId: string, variant: string): void {
 type GtagFn = (command: string, event: string, params: Record<string, string>) => void;
 
 function fireGtag(experimentId: string, variant: string): void {
+  // Only emit experiment_impression events to GA4 when the user has
+  // granted analytics consent. The experiment assignment itself stays
+  // local (necessary for the UI to be deterministic) but the analytics
+  // ping is gated.
+  if (!hasCategoryConsent("analytics")) return;
   if (typeof window !== "undefined" && typeof (window as Window & { gtag?: GtagFn }).gtag === "function") {
     (window as Window & { gtag: GtagFn }).gtag("event", "experiment_impression", {
       experiment_id: experimentId,

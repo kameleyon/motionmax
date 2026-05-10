@@ -18,7 +18,7 @@ MotionMax takes any text input (articles, topics, ideas, documents) and generate
 - AI-written scripts (Claude Sonnet 4.6) with narrative arcs and character bibles
 - AI-generated scene images (Hypereal/Gemini Flash) with style consistency
 - AI image-to-video conversion (Kling V2.5/V2.6 Pro) with seamless scene transitions
-- AI voiceover narration (Qwen3 TTS, Fish Audio, ElevenLabs, LemonFox) in 11 languages
+- AI voiceover narration (Gemini Flash TTS, Fish Audio, LemonFox) — multilingual; the dashboard UI itself is in English
 - 25+ caption/subtitle styles burned into the video
 - Server-side video rendering with FFmpeg
 
@@ -34,8 +34,8 @@ MotionMax takes any text input (articles, topics, ideas, documents) and generate
 - AI topic research for factual accuracy (character appearances, cultural context)
 - Scene-by-scene editing (image edit, audio regen, video regen)
 - Image editing with natural language (Nano Banana Edit)
-- Voice cloning (ElevenLabs)
-- Multi-language: English, French, Spanish, Portuguese, German, Italian, Russian, Chinese, Japanese, Korean, Haitian Creole
+- Voice cloning (Fish Audio s2-pro)
+- Multilingual narration: AI voiceover in multiple languages — including English, French, Spanish, and Haitian Creole. The dashboard UI is English only.
 - Social media sharing with OG meta previews
 - Mobile-friendly with native share sheet for downloads
 
@@ -76,10 +76,10 @@ A: Most videos complete in 3–10 minutes depending on length and style.
 A: Yes. Scene-by-scene editing lets you regenerate individual images, audio, or video clips without using extra credits.
 
 **Q: Does MotionMax support my language?**
-A: Yes — 11 languages including English, French, Spanish, Portuguese, German, Italian, Russian, Chinese, Japanese, Korean, and Haitian Creole.
+A: The dashboard UI is English. Voice narration is multilingual — pick the narration language per project. Languages confirmed by users include English, French, Spanish, and Haitian Creole; the underlying TTS model handles many additional languages, but per-language quality is not formally QA'd.
 
 **Q: Can I use my own voice?**
-A: Yes. Voice cloning via ElevenLabs lets you clone your own voice for consistent narration across videos.
+A: Yes. Voice cloning via Fish Audio s2-pro lets you clone your own voice for consistent narration across videos.
 
 **Q: Is there an enterprise plan?**
 A: Yes — unlimited credits with custom pricing, SLA, and a dedicated account manager. Contact sales@motionmax.io.

@@ -1,4 +1,5 @@
 import motionmaxLogo from "@/assets/motionmax-logo.webp";
+import { revokeConsent } from "@/lib/cookieConsent";
 
 const footerLinks = {
   product: [
@@ -82,6 +83,19 @@ export default function LandingFooter() {
                   </a>
                 </li>
               ))}
+              {/* GDPR Art. 7(3) — withdrawal as easy as consent. Clears
+                  the stored consent record so the banner re-appears, and
+                  the user can pick fresh categories. */}
+              <li>
+                <button
+                  type="button"
+                  onClick={() => revokeConsent()}
+                  className="text-sm text-muted-foreground hover:text-foreground hover:underline transition-colors text-left bg-transparent border-0 p-0 cursor-pointer"
+                  aria-label="Manage cookie preferences — re-open the cookie banner"
+                >
+                  Manage cookie preferences
+                </button>
+              </li>
             </ul>
           </div>
         </div>

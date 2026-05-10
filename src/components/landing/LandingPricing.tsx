@@ -119,7 +119,7 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
             popular
             icon={Crown}
             onCta={() => onCtaClick("Start with Creator")}
-            extras={["1080p quality", "All formats (16:9, 9:16)", "11 languages"]}
+            extras={["1080p quality", "All formats (16:9, 9:16)", "Multilingual voiceover"]}
           />
           <LandingPlanCard
             planId="studio"

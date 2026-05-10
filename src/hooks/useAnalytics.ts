@@ -42,9 +42,18 @@ export function getStoredUtm(): Record<string, string> {
 
 type EventParams = Record<string, string | number | boolean>;
 
-/** Safely push an event to gtag or dataLayer */
+/** Safely push an event to gtag or dataLayer.
+ *  Gated on the user's analytics-category cookie consent — no events
+ *  leave the browser unless the user opted in (B-NEW-9 / GDPR Art. 7). */
 function sendEvent(name: string, params?: EventParams) {
   try {
+    if (!hasAnalyticsConsent()) {
+      // Dev visibility into what we're suppressing for compliance.
+      if (import.meta.env.DEV) {
+        console.debug("[analytics:skipped — no consent]", name, params);
+      }
+      return;
+    }
     // Google Analytics 4 via gtag.js
     if (typeof window !== "undefined" && typeof window.gtag === "function") {
       window.gtag("event", name, params);

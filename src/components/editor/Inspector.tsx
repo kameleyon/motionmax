@@ -764,7 +764,7 @@ function Inspector({
               re-render. The current voice stays visible as a stale
               fallback so users notice they need to switch. */}
           <section>
-            <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">Language</h5>
+            <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">Narration language</h5>
             <select
               value={language}
               onChange={(e) => {

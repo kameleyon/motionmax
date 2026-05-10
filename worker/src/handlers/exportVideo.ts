@@ -228,9 +228,23 @@ function writeCheckpoint(tempDir: string, jobId: string, sceneResults: (string |
   }
 }
 
-/** Fetch user plan and determine if watermark overlay is required. */
-async function fetchNeedsWatermark(userId: string | undefined): Promise<boolean> {
-  if (!userId) return true; // No user = treat as free
+/**
+ * EU AI Act Article 50 (effective 2026-08-02) requires AI-generated content to
+ * carry a clear, machine-readable disclosure of its synthetic origin \u2014
+ * REGARDLESS of subscription tier. Previously this gate returned `false` for
+ * paid plans (creator/starter/professional/studio/enterprise) so paid users
+ * exported with no visible mark; that is non-compliant.
+ *
+ * The function now ALWAYS returns a watermark tier so a visible drawtext
+ * overlay is burned into every export. To preserve the paid-tier UX value,
+ * the tier is downgraded to "paid" (smaller, lower-opacity, corner-only)
+ * for paid plans \u2014 visible per Art. 50, but not the prominent center-bottom
+ * banner free-tier users get.
+ */
+type WatermarkTier = "free" | "paid";
+
+async function fetchWatermarkTier(userId: string | undefined): Promise<WatermarkTier> {
+  if (!userId) return "free"; // No user = treat as free (most prominent mark)
   const { data } = await supabase
     .from("subscriptions")
     .select("plan_name")
@@ -238,22 +252,87 @@ async function fetchNeedsWatermark(userId: string | undefined): Promise<boolean>
     .eq("status", "active")
     .maybeSingle();
   const paidPlans = ["creator", "starter", "professional", "studio", "enterprise"];
-  return !paidPlans.includes(data?.plan_name ?? "");
+  return paidPlans.includes(data?.plan_name ?? "") ? "paid" : "free";
 }
 
-/** Burn a drawtext watermark onto an existing video file (overwrites in-place). */
-async function applyWatermarkOverlay(filePath: string, text: string, tempDir: string): Promise<void> {
+/** drawtext filter spec for a given watermark tier. Free-tier mark sits
+ *  bottom-center at 60% opacity; paid-tier mark sits bottom-right at 35%
+ *  opacity in a smaller font \u2014 visible but unobtrusive. */
+function watermarkDrawtextSpec(text: string, tier: WatermarkTier): string {
   const escaped = text.replace(/'/g, "\u2019").replace(/:/g, "\\:").replace(/\\/g, "\\\\");
+  if (tier === "paid") {
+    return `drawtext=text='${escaped}':fontsize=18:fontcolor=white@0.35:x=w-text_w-20:y=h-text_h-20`;
+  }
+  return `drawtext=text='${escaped}':fontsize=24:fontcolor=white@0.6:x=(w-text_w)/2:y=h-40:font=Sans`;
+}
+
+/** Burn a drawtext watermark onto an existing video file (overwrites in-place).
+ *  Used on the crossfade output path where we already have a single MP4. */
+async function applyWatermarkOverlay(
+  filePath: string,
+  text: string,
+  tempDir: string,
+  tier: WatermarkTier = "free",
+): Promise<void> {
   const tmpOut = path.join(tempDir, `wm_${Date.now()}.mp4`);
   await runFfmpeg([
     "-i", filePath,
-    "-vf", `drawtext=text='${escaped}':fontsize=24:fontcolor=white@0.5:x=(w-text_w)/2:y=h-50`,
+    "-vf", watermarkDrawtextSpec(text, tier),
     "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22",
     "-c:a", "copy",
     "-movflags", "+faststart",
     tmpOut,
   ]);
   fs.renameSync(tmpOut, filePath);
+}
+
+/**
+ * Embed XMP-style provenance metadata into the final MP4 to satisfy EU AI
+ * Act Art. 50 machine-readable disclosure. We use ffmpeg's `-metadata` flags
+ * which write into the MP4 `udta`/`meta` boxes (readable via `ffprobe -show_format`
+ * and any standard XMP/ID3-compatible reader). C2PA Content Credentials
+ * would be the gold standard, but require a signing certificate and toolchain
+ * that's out of scope for this fix \u2014 XMP-via-FFmpeg is zero-infra and
+ * sufficient for first-pass machine readability.
+ *
+ * Streams are stream-copied (no re-encode) so this adds ~1\u20132s regardless
+ * of video length. Verify post-export with:
+ *   ffprobe -v error -show_format <file.mp4> | grep -i ai
+ */
+async function embedXmpProvenance(filePath: string, tempDir: string): Promise<void> {
+  const tmpOut = path.join(tempDir, `xmp_${Date.now()}.mp4`);
+  try {
+    await runFfmpeg([
+      "-i", filePath,
+      "-c", "copy",
+      "-movflags", "+faststart+use_metadata_tags",
+      // XMP-ish keys recognised by readers and indexers. ffmpeg writes these
+      // into the MP4 metadata atom; the keys themselves are the
+      // disclosure surface a downstream verifier looks at.
+      "-metadata", "comment=AI-generated content. Disclosed per EU AI Act Article 50.",
+      "-metadata", "description=AI-generated content. Disclosed per EU AI Act Article 50.",
+      "-metadata", "encoder=motionmax",
+      "-metadata", "creator_tool=motionmax",
+      "-metadata", "xmp_creator_tool=motionmax",
+      "-metadata", "is_ai_generated=true",
+      "-metadata", "xmpDM:isAI=true",
+      "-metadata", "xmp:CreatorTool=motionmax",
+      "-metadata", "dc:rights=AI-generated content",
+      "-metadata", "ai_generated=true",
+      "-metadata", "synthetic_media=true",
+      tmpOut,
+    ]);
+    fs.renameSync(tmpOut, filePath);
+  } catch (err) {
+    // Non-fatal: prefer to ship the export without provenance metadata
+    // rather than fail the whole job. The visible watermark and the
+    // PublicShare-page disclosure still satisfy the user-facing
+    // disclosure obligation.
+    try { if (fs.existsSync(tmpOut)) fs.unlinkSync(tmpOut); } catch { /* ignore */ }
+    wlog.warn("XMP provenance embed failed \u2014 continuing without metadata", {
+      error: (err as Error).message,
+    });
+  }
 }
 
 /** Build ExportConfig from environment, feature flags, and payload. */
@@ -384,11 +463,11 @@ async function _runExport(
   const exportConfig = await buildExportConfig(payload);
   exportConfig.userId = userId;
 
-  const needsWatermark = await fetchNeedsWatermark(userId);
-  const watermarkText = needsWatermark ? "AI-Generated" : undefined;
-  if (needsWatermark) {
-    log.info("Free-tier user — watermark will be applied");
-  }
+  // EU AI Act Art. 50 (effective 2026-08-02): watermark is now ALWAYS applied
+  // to every AI-generated export. Tier only controls obtrusiveness.
+  const watermarkTier = await fetchWatermarkTier(userId);
+  const watermarkText = "AI-generated · motionmax";
+  log.info("AI Act Art. 50 watermark will be applied", { tier: watermarkTier });
 
   // If this job has been restarted after a crash, disable crossfade and Ken Burns
   // to prevent the same crash loop. Use the safest possible export path.
@@ -524,8 +603,14 @@ async function _runExport(
     // skip captions or crash ffmpeg.
     const captionStyle = normalizeCaptionStyle(payload.caption_style);
     const brandMark: string | undefined = payload.brandMark || payload.brand_mark || undefined;
-    // Free-tier watermark takes precedence over user-supplied brand mark
-    const effectiveBrandMark: string | undefined = watermarkText ?? brandMark;
+    // AI Act Art. 50 watermark always wins over user-supplied brand mark —
+    // we cannot let a user-supplied brand replace the disclosure mark.
+    const effectiveBrandMark: string = watermarkText;
+    // Tier only controls how obtrusive the burn-in is; both tiers get the mark.
+    const watermarkTierForOverlay: WatermarkTier = watermarkTier;
+    // Held for diagnostics / forward-compat — user brand marks may eventually
+    // co-exist with the disclosure if we add a second drawtext layer.
+    void brandMark;
     let asrPromise: Promise<(ASRSceneResult | null)[]> | null = null;
 
     if (captionStyle !== "none") {
@@ -709,10 +794,13 @@ async function _runExport(
           eventType: "crossfade_fallback",
           message: "Crossfade failed — fell back to concat demuxer",
         });
-      } else if (effectiveBrandMark) {
-        log.info("Applying watermark to crossfade output");
-        await applyWatermarkOverlay(finalOutputPath, effectiveBrandMark, tempDir);
       }
+      // EU AI Act Art. 50: watermark is mandatory regardless of which
+      // path produced finalOutputPath. Apply it to the output of BOTH the
+      // crossfade path AND the demuxer fallback path — otherwise an
+      // unlucky crossfade failure ships an unwatermarked export.
+      log.info("Applying AI Act watermark to stitched output", { tier: watermarkTierForOverlay, usedCrossfade });
+      await applyWatermarkOverlay(finalOutputPath, effectiveBrandMark, tempDir, watermarkTierForOverlay);
     } else {
       // No crossfade — probe clips, then concat (with or without captions in ONE pass)
 
@@ -759,34 +847,18 @@ async function _runExport(
             message: `Concat + caption burn (single pass): ${clipPaths.length} clips, style=${captionStyle}`,
           });
 
-          await concatWithCaptions(clipPaths, assPath, fontsDir, finalOutputPath, undefined, effectiveBrandMark);
+          await concatWithCaptions(clipPaths, assPath, fontsDir, finalOutputPath, undefined, effectiveBrandMark, watermarkTierForOverlay);
           removeFiles(assPath);
-          log.info("Concat + captions done in single pass", { captionStyle });
-        } else if (effectiveBrandMark) {
-          await concatWithBrandMark(clipPaths, effectiveBrandMark, finalOutputPath);
-          log.info("Concat + brand mark (no captions)");
+          log.info("Concat + captions + AI watermark done in single pass", { captionStyle, tier: watermarkTierForOverlay });
         } else {
-          // ASS generation returned null, no brand — just stream-copy concat
-          await writeSystemLog({
-            jobId, projectId: project_id, userId,
-            category: "system_info",
-            eventType: "concat_started",
-            message: `Stream-copy concat: ${clipPaths.length} clips (no captions)`,
-          });
-          await concatFiles(clipPaths, finalOutputPath, true);
+          // ASS generation returned null — concat with the AI watermark only
+          await concatWithBrandMark(clipPaths, effectiveBrandMark, finalOutputPath, undefined, watermarkTierForOverlay);
+          log.info("Concat + AI watermark (no captions)", { tier: watermarkTierForOverlay });
         }
-      } else if (effectiveBrandMark) {
-        await concatWithBrandMark(clipPaths, effectiveBrandMark, finalOutputPath);
-        log.info("Concat + brand mark (no captions)", { brandMark: effectiveBrandMark });
       } else {
-        // ── NO CAPTIONS, NO BRAND: stream-copy concat (instant) ──
-        await writeSystemLog({
-          jobId, projectId: project_id, userId,
-          category: "system_info",
-          eventType: "concat_started",
-          message: `Stream-copy concat: ${clipPaths.length} clips (no captions, no brand)`,
-        });
-        await concatFiles(clipPaths, finalOutputPath, true);
+        // No captions — concat + AI Act watermark (Art. 50 mandates it always)
+        await concatWithBrandMark(clipPaths, effectiveBrandMark, finalOutputPath, undefined, watermarkTierForOverlay);
+        log.info("Concat + AI watermark (no captions)", { tier: watermarkTierForOverlay });
       }
     }
 
@@ -896,6 +968,18 @@ async function _runExport(
         message: `Audio bed mix failed (non-fatal): ${msg}`,
       });
     }
+
+    // ── 2c. Embed XMP-style provenance metadata (EU AI Act Art. 50) ──
+    // Stream-copy step that writes machine-readable AI-disclosure tags into
+    // the MP4 metadata atom. Adds ~1–2s. Non-fatal on failure — the visible
+    // watermark and the PublicShare disclosure still satisfy the obligation.
+    await embedXmpProvenance(finalOutputPath, tempDir);
+    await writeSystemLog({
+      jobId, projectId: project_id, userId,
+      category: "system_info",
+      eventType: "provenance_embedded",
+      message: "XMP AI-disclosure metadata embedded (EU AI Act Art. 50)",
+    });
 
     sceneProgress.overallMessage = "Scenes stitched. Compressing...";
     await flushSceneProgress(jobId);

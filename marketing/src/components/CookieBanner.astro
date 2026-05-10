@@ -1,0 +1,394 @@
+---
+/**
+ * CookieBanner — marketing-site cookie consent banner.
+ *
+ * B-NEW-10 / TONGUE-10. Mirrors the React app's CookieConsent.tsx
+ * (B-NEW-9) shape: same 3 user-toggleable categories (Functional,
+ * Analytics, Marketing), Necessary always-on, three equally-prominent
+ * action buttons (Accept all / Reject all / Save preferences) per GDPR
+ * Art. 7(3).
+ *
+ * ── CSP constraints ───────────────────────────────────────────────────
+ * The site CSP (vercel.json) is `script-src 'self' https://js.stripe.com
+ * https://www.googletagmanager.com` with no 'unsafe-inline', no nonce,
+ * no hash. That blocks:
+ *
+ *   • Inline `<script>` blocks.
+ *   • Inline event handlers (`onclick="..."`).
+ *   • Astro's small-script auto-inlining (worked around globally in
+ *     astro.config.mjs by setting assetsInlineLimit: 0).
+ *
+ * Therefore: no event handlers in markup, no inline JS. All wiring lives
+ * in /src/scripts/cookieBanner.js, imported via a `<script>` tag with a
+ * `src` attribute that Astro emits as a hashed /_astro/*.js file.
+ *
+ * ── Theme ─────────────────────────────────────────────────────────────
+ * Aqua #14C8CC + gold #E4C875 only — no red/green per the motionmax
+ * brand guide. Matches the React app banner so a user who came from
+ * app.motionmax.io and now sees the marketing site recognises it.
+ *
+ * ── Hydration ─────────────────────────────────────────────────────────
+ * Banner ships hidden (display:none), then the script reveals it on DOM
+ * ready iff `hasAnswered()` is false. This avoids a flash-of-banner on
+ * pages where the user already consented on app.motionmax.io and the
+ * record was rehydrated from the shared `.motionmax.io` cookie.
+ */
+---
+
+<div
+  id="cookie-banner"
+  role="dialog"
+  aria-modal="false"
+  aria-labelledby="cookie-banner-title"
+  aria-describedby="cookie-banner-desc"
+  class="cookie-banner"
+  hidden
+>
+  <div class="cookie-banner__card">
+    <div class="cookie-banner__row">
+      <div class="cookie-banner__body">
+        <p id="cookie-banner-title" class="cookie-banner__title">Cookie preferences</p>
+        <p id="cookie-banner-desc" class="cookie-banner__desc">
+          We use cookies for essential site features, and (with your permission) for
+          analytics. You can change your choices any time from the
+          <button type="button" id="cookie-banner-customize" class="cookie-banner__link-btn">
+            Customize
+          </button>
+          option below or the &quot;Cookie preferences&quot; link in the footer.
+          <a href="/privacy" class="cookie-banner__link">Privacy policy</a>.
+        </p>
+
+        <div id="cookie-banner-details" class="cookie-banner__details" hidden>
+          <div class="cookie-banner__cat">
+            <label for="cc-necessary">
+              <span class="cookie-banner__cat-title">
+                Necessary
+                <span class="cookie-banner__pill">Always on</span>
+              </span>
+              <span class="cookie-banner__cat-desc">
+                Auth, security, billing. Required for the site to work.
+              </span>
+            </label>
+            <button
+              type="button"
+              role="switch"
+              id="cc-necessary"
+              aria-checked="true"
+              aria-label="Necessary cookies"
+              disabled
+              class="cookie-banner__switch is-on is-locked"
+              data-category="necessary"
+            >
+              <span class="cookie-banner__thumb"></span>
+            </button>
+          </div>
+          <div class="cookie-banner__cat">
+            <label for="cc-functional">
+              <span class="cookie-banner__cat-title">Functional</span>
+              <span class="cookie-banner__cat-desc">
+                Language preference, theme persistence.
+              </span>
+            </label>
+            <button
+              type="button"
+              role="switch"
+              id="cc-functional"
+              aria-checked="false"
+              aria-label="Functional cookies"
+              class="cookie-banner__switch"
+              data-category="functional"
+            >
+              <span class="cookie-banner__thumb"></span>
+            </button>
+          </div>
+          <div class="cookie-banner__cat">
+            <label for="cc-analytics">
+              <span class="cookie-banner__cat-title">Analytics</span>
+              <span class="cookie-banner__cat-desc">
+                Anonymised usage stats and Sentry session replay on errors.
+              </span>
+            </label>
+            <button
+              type="button"
+              role="switch"
+              id="cc-analytics"
+              aria-checked="false"
+              aria-label="Analytics cookies"
+              class="cookie-banner__switch"
+              data-category="analytics"
+            >
+              <span class="cookie-banner__thumb"></span>
+            </button>
+          </div>
+          <div class="cookie-banner__cat">
+            <label for="cc-marketing">
+              <span class="cookie-banner__cat-title">Marketing</span>
+              <span class="cookie-banner__cat-desc">
+                Pixel tracking and retargeting. Reserved &mdash; currently unused.
+              </span>
+            </label>
+            <button
+              type="button"
+              role="switch"
+              id="cc-marketing"
+              aria-checked="false"
+              aria-label="Marketing cookies"
+              class="cookie-banner__switch"
+              data-category="marketing"
+            >
+              <span class="cookie-banner__thumb"></span>
+            </button>
+          </div>
+        </div>
+
+        <div class="cookie-banner__actions">
+          <button type="button" id="cookie-banner-accept" class="cookie-banner__btn cookie-banner__btn--primary">
+            Accept all
+          </button>
+          <button type="button" id="cookie-banner-reject" class="cookie-banner__btn cookie-banner__btn--outline">
+            Reject all
+          </button>
+          <button type="button" id="cookie-banner-save" class="cookie-banner__btn cookie-banner__btn--gold" hidden>
+            Save preferences
+          </button>
+        </div>
+        <p class="cookie-banner__version">Policy version 2026.05.10-v1</p>
+      </div>
+      <button
+        type="button"
+        id="cookie-banner-close"
+        aria-label="Reject all cookies and close"
+        class="cookie-banner__x"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 6 6 18"></path>
+          <path d="m6 6 12 12"></path>
+        </svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // External-module import keeps the bundle out of the inline-script
+  // class that the CSP blocks. Astro emits this as a hashed
+  // /_astro/*.js, served same-origin (script-src 'self').
+  import "../scripts/cookieBanner.js";
+</script>
+
+<style>
+  .cookie-banner {
+    position: fixed;
+    bottom: 1rem;
+    left: 1rem;
+    right: 1rem;
+    z-index: 80;
+    animation: cb-slide-up 280ms ease-out both;
+  }
+  @media (min-width: 640px) {
+    .cookie-banner {
+      left: auto;
+      right: 1rem;
+      max-width: 28rem;
+    }
+  }
+  @keyframes cb-slide-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .cookie-banner__card {
+    border: 1px solid rgba(228, 200, 117, 0.3);
+    background: rgba(15, 17, 18, 0.95);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    padding: 1rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    color: #f8fafc;
+  }
+  .cookie-banner__row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  .cookie-banner__body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .cookie-banner__title {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #f8fafc;
+    margin: 0;
+  }
+  .cookie-banner__desc {
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: #94a3b8;
+    margin: 0;
+  }
+  .cookie-banner__link {
+    color: #14C8CC;
+    text-decoration: none;
+  }
+  .cookie-banner__link:hover { text-decoration: underline; }
+  .cookie-banner__link-btn {
+    background: none;
+    border: 0;
+    padding: 0;
+    color: #E4C875;
+    cursor: pointer;
+    font: inherit;
+  }
+  .cookie-banner__link-btn:hover { text-decoration: underline; }
+  .cookie-banner__details {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 0.5rem;
+    padding: 0.25rem 0.75rem;
+    margin-top: 0.25rem;
+  }
+  .cookie-banner__cat {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.625rem 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .cookie-banner__cat:first-child { border-top: 0; }
+  .cookie-banner__cat label {
+    flex: 1;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+  .cookie-banner__cat-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #f8fafc;
+  }
+  .cookie-banner__cat-desc {
+    font-size: 0.71875rem;
+    line-height: 1.5;
+    color: #94a3b8;
+  }
+  .cookie-banner__pill {
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: rgba(255, 255, 255, 0.08);
+    color: #94a3b8;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+  }
+  .cookie-banner__switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    height: 1.25rem;
+    width: 2.25rem;
+    border-radius: 9999px;
+    border: 0;
+    cursor: pointer;
+    transition: background-color 150ms ease;
+    background: rgba(255, 255, 255, 0.15);
+    margin-top: 0.25rem;
+    padding: 0;
+  }
+  .cookie-banner__switch:focus-visible {
+    outline: 2px solid #14C8CC;
+    outline-offset: 2px;
+  }
+  .cookie-banner__switch.is-on {
+    background: #14C8CC;
+  }
+  .cookie-banner__switch.is-locked {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+  .cookie-banner__thumb {
+    display: inline-block;
+    height: 1rem;
+    width: 1rem;
+    border-radius: 9999px;
+    background: #0F1112;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    transition: transform 150ms ease;
+    transform: translateX(0.125rem);
+  }
+  .cookie-banner__switch.is-on .cookie-banner__thumb {
+    transform: translateX(1rem);
+  }
+  .cookie-banner__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding-top: 0.25rem;
+  }
+  .cookie-banner__btn {
+    min-height: 44px;
+    padding: 0 1rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 0.5rem;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: opacity 150ms ease, background-color 150ms ease;
+    font-family: inherit;
+  }
+  .cookie-banner__btn:focus-visible {
+    outline: 2px solid #14C8CC;
+    outline-offset: 2px;
+  }
+  .cookie-banner__btn--primary {
+    background: #14C8CC;
+    color: #0A0D0F;
+  }
+  .cookie-banner__btn--primary:hover { background: #0FA6AE; }
+  .cookie-banner__btn--outline {
+    background: transparent;
+    color: #f8fafc;
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+  .cookie-banner__btn--outline:hover { background: rgba(255, 255, 255, 0.05); }
+  .cookie-banner__btn--gold {
+    background: transparent;
+    color: #E4C875;
+    border-color: rgba(228, 200, 117, 0.5);
+  }
+  .cookie-banner__btn--gold:hover { background: rgba(228, 200, 117, 0.1); }
+  .cookie-banner__version {
+    font-size: 0.625rem;
+    color: rgba(148, 163, 184, 0.7);
+    margin: 0.125rem 0 0;
+  }
+  .cookie-banner__x {
+    background: transparent;
+    border: 0;
+    color: #94a3b8;
+    cursor: pointer;
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.5rem;
+    flex-shrink: 0;
+  }
+  .cookie-banner__x:hover { color: #f8fafc; }
+  .cookie-banner__x:focus-visible {
+    outline: 2px solid #14C8CC;
+    outline-offset: 2px;
+  }
+</style>

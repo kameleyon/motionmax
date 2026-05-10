@@ -14,6 +14,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import IntegrationsTab from "@/components/settings/IntegrationsTab";
 import DataExportSection from "@/components/settings/DataExportSection";
+import CookiePreferencesSection from "@/components/settings/CookiePreferencesSection";
+import AITrainingOptInSection from "@/components/settings/AITrainingOptInSection";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { PasswordStrengthMeter, getPasswordStrength } from "@/components/ui/password-strength";
@@ -530,6 +532,8 @@ export default function Settings() {
                 <DataExportSection />
               </div>
 
+              <div style={{ marginTop: 18 }}><CookiePreferencesSection /></div>
+
               <div className="card" style={{ marginTop: 18 }}>
                 <h3>Password</h3>
                 <p style={{ fontSize: 13, color: "var(--ink-dim)", margin: "0 0 14px", lineHeight: 1.55 }}>
@@ -604,6 +608,8 @@ export default function Settings() {
                   use your account email's reset flow to invalidate elsewhere.
                 </p>
               </div>
+
+              <div style={{ marginTop: 18 }}><AITrainingOptInSection /></div>
             </section>
           )}
 

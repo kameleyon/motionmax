@@ -146,11 +146,27 @@ export async function handler(req: Request): Promise<Response> {
         .limit(500),
     ]);
 
+    // B-NEW-14 (Comply L-B-03) — Surface the user's AI training opt-in
+    // state and last-changed timestamp at the top level of the export
+    // so users can verify their consent state without having to dig
+    // into the full profile blob. Default OPT-OUT (FALSE) — see
+    // supabase/migrations/20260510150000_ai_training_opt_in.sql.
+    const profileRow = (profileRes.data ?? null) as
+      | (Record<string, unknown> & {
+          ai_training_opt_in?: boolean | null;
+          ai_training_opt_in_changed_at?: string | null;
+        })
+      | null;
+    const aiTrainingOptIn = Boolean(profileRow?.ai_training_opt_in ?? false);
+    const aiTrainingOptInChangedAt = profileRow?.ai_training_opt_in_changed_at ?? null;
+
     const exportData = {
       exported_at: new Date().toISOString(),
       user_id: userId,
       email: user.email,
-      profile: profileRes.data ?? null,
+      ai_training_opt_in: aiTrainingOptIn,
+      ai_training_opt_in_changed_at: aiTrainingOptInChangedAt,
+      profile: profileRow,
       projects: projectsRes.data ?? [],
       generations: generationsRes.data ?? [],
       subscriptions: subscriptionsRes.data ?? [],

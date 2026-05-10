@@ -23,9 +23,17 @@ export const LEGAL_VERSIONS = {
   // restated with the new Creator/Studio tier prices, credit allotments
   // and top-up pack ladder. Existing users get the TermsUpdateModal on
   // next sign-in (B-NEW-13 hook compares profiles.tos_version_accepted
-  // against this constant). Privacy + AUP unchanged this round.
+  // against this constant).
+  // B-NEW-14 (2026-05-10): bumped privacy to v2 — §3 and §4 promised an
+  // "AI training opt-in (if you explicitly enable it)" toggle that did
+  // not exist in the product. The matching Settings toggle now ships
+  // (src/components/settings/AITrainingOptInSection.tsx) backed by
+  // profiles.ai_training_opt_in (default FALSE — opt-out posture).
+  // Bumping the version forces existing users through TermsUpdateModal
+  // so they re-read the policy now that the affordance is real, which
+  // closes the FTC §5 strict-liability gap. AUP unchanged this round.
   tos: '2026.05.10-v2',
-  privacy: '2026.05.10-v1',
+  privacy: '2026.05.10-v2',
   aup: '2026.05.10-v1',
 } as const;
 

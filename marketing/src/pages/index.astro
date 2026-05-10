@@ -43,9 +43,12 @@ const features = [
     description: "From Classic to Karaoke word-by-word. Captions burned directly into the video. Pick your style, change it anytime.",
   },
   {
+    // B-NEW-11 (2026-05-10): UI is English-only (no i18n runtime), so the
+    // "11 Languages" claim was de-risked to "Multilingual Voiceover" — this
+    // card is strictly about narration coverage, not UI translation.
     icon: "🌍",
-    title: "11 Languages",
-    description: "English, French, Spanish, Portuguese, German, Italian, Russian, Chinese, Japanese, Korean, Haitian Creole.",
+    title: "Multilingual Voiceover",
+    description: "AI narration in multiple languages — including English, French, Spanish, and Haitian Creole. Set the narration language per project.",
   },
   {
     icon: "✏️",
@@ -96,11 +99,12 @@ const jsonLd = {
   applicationCategory: "MultimediaApplication",
   operatingSystem: "Web",
   offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  inLanguage: "en",
   featureList: [
     "AI Cinematic Video Generation",
     "AI Explainer Video Creation",
     "25+ Caption Styles",
-    "11 Languages",
+    "Multilingual Voiceover Narration",
     "Voice Cloning",
     "Scene-by-Scene Editing",
     "AI Scriptwriting",
@@ -121,7 +125,7 @@ const faqJsonLd = {
 
 <BaseLayout
   title="MotionMax — AI Video Generator | Turn Text into Cinematic Videos"
-  description="Create stunning AI-generated cinematic videos, explainers, and infographics from any text. AI scriptwriting, voiceover, image-to-video with 25+ caption styles. Multi-language. Start free."
+  description="Create stunning AI-generated cinematic videos, explainers, and infographics from any text. AI scriptwriting, multilingual voiceover, image-to-video with 25+ caption styles. Start free."
   canonical="https://motionmax.io"
   darkMode={true}
 >
@@ -428,8 +432,8 @@ const faqJsonLd = {
           </div>
           <div>
             <div class="text-3xl mb-2">🌍</div>
-            <h3 class="font-semibold text-foreground">11 Languages</h3>
-            <p class="mt-1 text-sm text-muted-foreground">Create videos in English, French, Spanish, and 8 more languages</p>
+            <h3 class="font-semibold text-foreground">Multilingual Narration</h3>
+            <p class="mt-1 text-sm text-muted-foreground">Generate voiceovers in multiple languages — narration language is set per project.</p>
           </div>
         </div>
       </div>
@@ -502,6 +506,20 @@ const faqJsonLd = {
             <li><a href="/terms" class="hover:text-foreground transition-colors">Terms of Service</a></li>
             <li><a href="/privacy" class="hover:text-foreground transition-colors">Privacy Policy</a></li>
             <li><a href="/acceptable-use" class="hover:text-foreground transition-colors">Acceptable Use</a></li>
+            {/* B-NEW-10 / TONGUE-10 — withdrawing consent must be as easy as
+                granting it (GDPR Art. 7(3)). The data-cookie-action attribute
+                is picked up by the delegated click handler in
+                marketing/src/scripts/cookieBanner.js, which calls
+                revokeConsent() and re-shows the banner. href="#" + the
+                handler's preventDefault() keeps the control keyboard-
+                accessible without a page jump. */}
+            <li>
+              <a
+                href="#"
+                data-cookie-action="reopen"
+                class="hover:text-foreground transition-colors"
+              >Cookie preferences</a>
+            </li>
           </ul>
         </div>
         <div>

@@ -7,6 +7,12 @@ import AppShell from "@/components/dashboard/AppShell";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchBillingOverview } from "@/components/billing/_shared/billingApi";
 import "@/styles/billing-tokens.css";
+// B-NEW-7 (Lens B) — closes the funnel: paid_plan_selected was fired
+// on Pricing.tsx, signup_completed in useAuth, this event lands when
+// Stripe redirects back to /billing?success=true (or ?checkout=success
+// for forward-compat).
+import { trackEvent } from "@/hooks/useAnalytics";
+import { getStoredUtms } from "@/lib/utm";
 
 /* Lazy-load each tab so a user that only views Overview doesn't pay
    the bundle cost of the chart-heavy Usage tab. */
@@ -31,10 +37,33 @@ export default function Billing() {
 
   // Toast on returning from Stripe checkout
   useEffect(() => {
-    if (params.get("success") === "true") {
+    // B-NEW-7 (Lens B) — accept either ?success=true (the existing
+    // Stripe success_url shape from create-checkout) or
+    // ?checkout=success (forward-compat alias). Both close the funnel.
+    const isSuccess =
+      params.get("success") === "true" || params.get("checkout") === "success";
+    if (isSuccess) {
       toast.success("Payment received — credits will appear shortly.");
+      // Funnel closure event. UTMs ride along so attribution flows
+      // through to the conversion in GA.
+      try {
+        const utms = getStoredUtms();
+        const utmEvt = utms
+          ? {
+              ...(utms.source   ? { utm_source: utms.source } : {}),
+              ...(utms.medium   ? { utm_medium: utms.medium } : {}),
+              ...(utms.campaign ? { utm_campaign: utms.campaign } : {}),
+              ...(utms.term     ? { utm_term: utms.term } : {}),
+              ...(utms.content  ? { utm_content: utms.content } : {}),
+              ...(utms.gclid    ? { gclid: utms.gclid } : {}),
+              ...(utms.fbclid   ? { fbclid: utms.fbclid } : {}),
+            }
+          : {};
+        trackEvent("checkout_completed", utmEvt);
+      } catch { /* analytics non-critical */ }
       const next = new URLSearchParams(params);
       next.delete("success");
+      next.delete("checkout");
       setParams(next, { replace: true });
     } else if (params.get("canceled") === "true") {
       toast("Checkout cancelled.", { description: "Nothing was charged." });

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark light" />
+  <meta name="supported-color-schemes" content="dark light" />
+  <title>{{subject}}</title>
+</head>
+<body style="margin:0;padding:0;background:#0a0e10;color:#ECEAE4;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;">
+  <span style="display:none!important;visibility:hidden;mso-hide:all;font-size:1px;color:#0a0e10;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">{{preheader}}</span>
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+         style="background:#0a0e10;background-image:radial-gradient(60% 70% at 30% 20%, rgba(20,200,204,.18), transparent 65%), radial-gradient(50% 60% at 80% 85%, rgba(228,200,117,.14), transparent 60%), linear-gradient(160deg,#0d1416,#0a0e10);">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600"
+               style="max-width:600px;width:100%;background:rgba(21,27,32,.85);border:1px solid rgba(255,255,255,.06);border-radius:16px;overflow:hidden;">
+          <!-- Header -->
+          <tr>
+            <td align="center" style="padding:28px 32px 8px 32px;border-bottom:1px solid rgba(255,255,255,.05);">
+              <a href="https://motionmax.io" style="text-decoration:none;">
+                <img src="https://motionmax.io/momaxlogo.png" width="140" alt="MotionMax"
+                     style="display:block;border:0;outline:none;height:auto;max-width:140px;" />
+              </a>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td style="padding:28px 36px 8px 36px;">
+              <h1 style="margin:0 0 16px 0;font-family:Georgia,'Playfair Display',serif;font-size:24px;line-height:1.25;color:#ECEAE4;font-weight:600;">{{headline}}</h1>
+              <p style="margin:0 0 18px 0;font-size:15px;color:#ECEAE4;">{{greeting}}</p>
+              <div style="font-size:14.5px;line-height:1.6;color:#C8CCCE;">
+                {{body_html}}
+              </div>
+            </td>
+          </tr>
+          <!-- CTA -->
+          <tr>
+            <td align="center" style="padding:8px 0 24px 0;">
+              <a href="{{cta_href}}"
+                 style="display:inline-block;padding:13px 26px;border-radius:10px;background:linear-gradient(135deg,#E4C875 0%,#caa552 100%);color:#0a0e10;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;font-size:14px;letter-spacing:.2px;text-decoration:none;border:1px solid rgba(228,200,117,.45);">{{cta_label}}</a>
+            </td>
+          </tr>
+          <!-- Footer (CAN-SPAM compliant: physical address + unsubscribe + ToS version) -->
+          <tr>
+            <td style="padding:24px 36px 28px 36px;border-top:1px solid rgba(255,255,255,.05);">
+              <p style="margin:0 0 8px 0;font-size:12px;color:#8A9198;line-height:1.55;">
+                You're receiving this email at <span style="color:#C8CCCE;">{{user_email}}</span> because you signed up for MotionMax. If you'd rather not get lifecycle emails, <a href="{{unsubscribe_url}}" style="color:#14C8CC;text-decoration:underline;">unsubscribe here</a>.
+              </p>
+              <p style="margin:0 0 6px 0;font-size:11px;color:#8A9198;line-height:1.55;">
+                MotionMax &middot; 2261 Market Street #4503 &middot; San Francisco, CA 94114, USA
+              </p>
+              <p style="margin:0;font-size:11px;color:#5A6268;">
+                &copy; MotionMax &middot; <a href="https://motionmax.io" style="color:#14C8CC;text-decoration:none;">motionmax.io</a> &middot; ToS {{tos_version}}
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

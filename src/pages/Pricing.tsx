@@ -33,6 +33,12 @@ import {
   type PlanId,
 } from "@/config/pricing";
 import { TopUpPacksModal } from "@/components/credits/TopUpPacksModal";
+// B-NEW-7 (Lens B) — paid_plan_selected funnel event. Fires BEFORE the
+// EU cooling-off block so we measure intent ("user wants to pay")
+// independently of compliance gating ("user clicked away because the
+// waiver checkbox surprised them").
+import { trackEvent } from "@/hooks/useAnalytics";
+import { getStoredUtms } from "@/lib/utm";
 
 /** Pricing — B-NEW-21 mirror of Agent Opus structure with motionmax's
  *  Creator + Studio tier names. Yearly/Monthly toggle drives both the
@@ -72,6 +78,28 @@ export default function Pricing() {
       navigate(`/auth?next=/pricing&plan=${planId}`);
       return;
     }
+    // B-NEW-7 (Lens B) — emit paid_plan_selected BEFORE the EU
+    // cooling-off block so the event count reflects intent rather than
+    // compliance pass-through.
+    try {
+      const utms = getStoredUtms();
+      const utmEvt = utms
+        ? {
+            ...(utms.source   ? { utm_source: utms.source } : {}),
+            ...(utms.medium   ? { utm_medium: utms.medium } : {}),
+            ...(utms.campaign ? { utm_campaign: utms.campaign } : {}),
+            ...(utms.term     ? { utm_term: utms.term } : {}),
+            ...(utms.content  ? { utm_content: utms.content } : {}),
+            ...(utms.gclid    ? { gclid: utms.gclid } : {}),
+            ...(utms.fbclid   ? { fbclid: utms.fbclid } : {}),
+          }
+        : {};
+      trackEvent("paid_plan_selected", {
+        plan_id: planId,
+        cycle,
+        ...utmEvt,
+      });
+    } catch { /* analytics non-critical */ }
     if (isEU && !euWaived) {
       toast.error("Please confirm the EU/UK cooling-off waiver to continue.");
       return;

@@ -1,0 +1,19 @@
+<p>Thanks for upgrading to the <strong style="color:#E4C875;">{{plan}}</strong> plan. This email confirms your purchase and serves as your tax receipt.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:18px 0;border-collapse:collapse;">
+  <thead>
+    <tr style="background:rgba(20,200,204,.08);">
+      <th align="left" style="padding:10px 12px;font-size:12px;color:#14C8CC;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid rgba(255,255,255,.08);">Item</th>
+      <th align="right" style="padding:10px 12px;font-size:12px;color:#14C8CC;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid rgba(255,255,255,.08);">Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{line_items_html}}
+    <tr style="background:rgba(228,200,117,.05);">
+      <td style="padding:12px;font-size:14px;color:#E4C875;font-weight:600;border-top:1px solid rgba(228,200,117,.2);">Total paid</td>
+      <td align="right" style="padding:12px;font-size:14px;color:#E4C875;font-weight:600;border-top:1px solid rgba(228,200,117,.2);">{{total}}</td>
+    </tr>
+  </tbody>
+</table>
+<p style="font-size:13px;color:#8A9198;">Billing period: <span style="color:#C8CCCE;">{{period}}</span></p>
+<p style="font-size:13px;color:#8A9198;margin-top:4px;">A full PDF invoice is available from the button below or anytime in your <a href="https://motionmax.io/settings/billing" style="color:#14C8CC;text-decoration:underline;">billing history</a>.</p>
+<p style="margin-top:18px;">Questions about this charge? Reply to this email or write to <a href="mailto:support@motionmax.io" style="color:#14C8CC;text-decoration:underline;">support@motionmax.io</a> &mdash; we're around weekdays.</p>

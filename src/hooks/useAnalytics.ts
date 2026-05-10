@@ -78,6 +78,101 @@ export function trackEvent(name: string, params?: EventParams) {
   sendEvent(name, params);
 }
 
+// ── GA identify / forget ────────────────────────────────────────────────────
+// B-NEW-7 (Lens B). Without a `user_id` tied to GA's session, the funnel
+// "ad click → anonymous pageview → signup → conversion" cannot be
+// stitched: GA only sees an anonymous client_id flip. The fix is to
+// call `gtag('config', GA_ID, { user_id: <hash> })` once we know who
+// the user is, and clear it on logout.
+//
+// Privacy: we hash the Supabase user UUID with SHA-256 (browser-native
+// SubtleCrypto, no library dependency). GA receives a stable but
+// irreversible identifier — sufficient to link sessions across devices
+// for one user without leaking the raw UUID into Google's logs.
+
+const GA_ID_META_NAME = "motionmax-ga-id";
+
+function readGaIdFromMeta(): string | null {
+  if (typeof document === "undefined") return null;
+  const meta = document.querySelector(`meta[name="${GA_ID_META_NAME}"]`);
+  if (!meta) return null;
+  const value = meta.getAttribute("content");
+  if (!value) return null;
+  if (!/^G-[A-Z0-9]{6,}$/i.test(value)) return null;
+  return value;
+}
+
+function readGaId(): string | null {
+  // The marketing site exposes the GA ID via a meta tag; the React app
+  // build also has it in the Vite env. Prefer the meta tag when present
+  // so a Vercel-side rotation flows through without a rebuild.
+  const fromMeta = readGaIdFromMeta();
+  if (fromMeta) return fromMeta;
+  const fromEnv = (import.meta.env.VITE_GA_MEASUREMENT_ID as string | undefined) ?? "";
+  if (!fromEnv) return null;
+  if (!/^G-[A-Z0-9]{6,}$/i.test(fromEnv)) return null;
+  return fromEnv;
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  // SubtleCrypto needs a secure context (https or localhost). All
+  // production traffic on motionmax.io is HTTPS — the only environment
+  // without crypto.subtle is plain-http previews, where we degrade to
+  // returning the raw value rather than throwing (analytics must never
+  // break the auth flow).
+  const subtle =
+    typeof window !== "undefined" && window.crypto && window.crypto.subtle
+      ? window.crypto.subtle
+      : null;
+  if (!subtle) return input;
+  const data = new TextEncoder().encode(input);
+  const buf = await subtle.digest("SHA-256", data);
+  const bytes = new Uint8Array(buf);
+  let hex = "";
+  for (let i = 0; i < bytes.length; i++) {
+    hex += bytes[i].toString(16).padStart(2, "0");
+  }
+  return hex;
+}
+
+/**
+ * Stamp a stable hashed user_id onto the current GA configuration.
+ * Called from useAuth on signin and signup. No-ops without analytics
+ * consent (so we never push a user_id into a session GA shouldn't be
+ * tracking) and no-ops if gtag never loaded.
+ */
+export async function identifyUser(userId: string): Promise<void> {
+  try {
+    if (!userId) return;
+    if (!hasAnalyticsConsent()) return;
+    if (typeof window === "undefined") return;
+    if (typeof window.gtag !== "function") return;
+    const gaId = readGaId();
+    if (!gaId) return;
+    const hashed = await sha256Hex(userId);
+    window.gtag("config", gaId, { user_id: hashed });
+  } catch {
+    // analytics is non-critical — never throw out of an auth callback
+  }
+}
+
+/**
+ * Clear the GA user_id on logout. Passing user_id: undefined is the
+ * GA-prescribed way to drop the binding so subsequent events on the
+ * same client_id are not still attributed to the previous user.
+ */
+export function clearIdentity(): void {
+  try {
+    if (typeof window === "undefined") return;
+    if (typeof window.gtag !== "function") return;
+    const gaId = readGaId();
+    if (!gaId) return;
+    window.gtag("config", gaId, { user_id: undefined });
+  } catch {
+    /* swallow */
+  }
+}
+
 /** Hook: track CTA button clicks */
 export function useTrackClick(eventName: string, params?: EventParams) {
   return useCallback(() => {

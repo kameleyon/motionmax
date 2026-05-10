@@ -1,9 +1,14 @@
 import { useState, useEffect, useCallback, createContext, useContext, ReactNode, createElement } from "react";
 import { User, Session, AuthError } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { trackEvent, getStoredUtm } from "@/hooks/useAnalytics";
+import { trackEvent, getStoredUtm, identifyUser, clearIdentity } from "@/hooks/useAnalytics";
 import { CURRENT_POLICY_VERSION } from "@/lib/policyVersion";
 import { LEGAL_VERSIONS } from "@/config/legal-versions";
+// B-NEW-7 (Lens B) — first-touch UTM blob captured on motionmax.io and
+// rehydrated on app.motionmax.io via the .motionmax.io cookie. Written
+// to profiles.acquisition at signup, then cleared so a second signup
+// from the same browser doesn't reuse the same attribution.
+import { getStoredUtms, clearStoredUtms } from "@/lib/utm";
 
 // ---------------------------------------------------------------------------
 // Auth context shape — mirrors the original useAuth() return value exactly so
@@ -93,6 +98,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
         if (_event === "SIGNED_OUT") {
           setLegalVersionMismatch(false);
+          // B-NEW-7 (Lens B): drop the GA user_id binding so post-logout
+          // events on the same client_id aren't still attributed to the
+          // previous user.
+          try { clearIdentity(); } catch { /* analytics non-critical */ }
         }
 
         // Persist accepted_policy_version to profiles on first sign-in after sign-up.
@@ -145,6 +154,47 @@ export function AuthProvider({ children }: AuthProviderProps) {
           // run the version-mismatch check. Backfilled '2026.02-v0' rows
           // will mismatch and trigger the re-acceptance modal.
           void checkLegalVersionMismatch(session.user.id, setLegalVersionMismatch);
+
+          // B-NEW-7 (Lens B) — stamp the GA user_id so anonymous-pageview
+          // → authenticated-session can be stitched into one user journey
+          // in GA. Hashed with SHA-256 before transmission so Google
+          // never sees the raw Supabase UUID. Best-effort.
+          void identifyUser(session.user.id);
+
+          // B-NEW-7 (Lens B) — first-touch attribution write. The
+          // marketing site dropped a .motionmax.io cookie; on the first
+          // SIGNED_IN after signup we mirror it into profiles.acquisition
+          // and CLEAR it so a second signup from the same browser
+          // doesn't inherit the same ad-click. Idempotent: existing
+          // rows with non-null acquisition are not overwritten — the
+          // first signup wins.
+          const utms = getStoredUtms();
+          if (utms) {
+            const acquisitionPayload = {
+              utm_source: utms.source,
+              utm_medium: utms.medium,
+              utm_campaign: utms.campaign,
+              utm_term: utms.term,
+              utm_content: utms.content,
+              gclid: utms.gclid,
+              fbclid: utms.fbclid,
+              captured_at: utms.captured_at,
+              landing_url: utms.landing_url,
+            };
+            supabase
+              .from("profiles")
+              .update({ acquisition: acquisitionPayload } as unknown as Record<string, unknown>)
+              .eq("user_id", session.user.id)
+              .is("acquisition", null)
+              .then(({ error }) => {
+                if (!error) {
+                  // Only clear after the write resolved without error;
+                  // a transient failure shouldn't lose the attribution
+                  // before retry on the next session restore.
+                  try { clearStoredUtms(); } catch { /* ignore */ }
+                }
+              });
+          }
 
           // Fire-and-forget welcome email on first sign-in. The edge fn
           // is idempotent (atomic claim on profiles.welcome_email_sent_at)
@@ -214,6 +264,26 @@ export function AuthProvider({ children }: AuthProviderProps) {
     });
     if (!error) {
       try { trackEvent("signup", { method: "email", ...utmParams }); } catch { /* analytics non-critical */ }
+      // B-NEW-7 (Lens B) — explicit funnel event so dashboards can
+      // distinguish "form submitted + API ok" from generic "signup".
+      // Cross-subdomain UTMs (richer than the sessionStorage shape used
+      // by user_metadata above) ride along so attribution survives even
+      // if the user clears sessionStorage between landing and signup.
+      try {
+        const utms = getStoredUtms();
+        const utmEvt = utms
+          ? {
+              ...(utms.source   ? { utm_source: utms.source } : {}),
+              ...(utms.medium   ? { utm_medium: utms.medium } : {}),
+              ...(utms.campaign ? { utm_campaign: utms.campaign } : {}),
+              ...(utms.term     ? { utm_term: utms.term } : {}),
+              ...(utms.content  ? { utm_content: utms.content } : {}),
+              ...(utms.gclid    ? { gclid: utms.gclid } : {}),
+              ...(utms.fbclid   ? { fbclid: utms.fbclid } : {}),
+            }
+          : {};
+        trackEvent("signup_completed", { method: "email", ...utmEvt });
+      } catch { /* analytics non-critical */ }
     }
     return { data, error };
   }, []);

@@ -78,6 +78,31 @@ export async function handler(req: Request): Promise<Response> {
     await sendSignupWelcomeEmail(user.email, displayName ?? undefined);
     logStep("Welcome email sent", { userId: user.id, to: user.email });
 
+    // B-NEW-8: schedule the day-1/3/7/14 lifecycle drip rows. Each row
+    // is idempotent on (user_id, drip_type) so repeated calls (impossible
+    // in practice given the welcome-email atomic-claim above, but cheap
+    // to defend against) never duplicate. Win-back drips are scheduled
+    // separately by the dormant-user-detector cron, not at signup.
+    const now = Date.now();
+    const dripRows = [
+      { drip_type: "day_1",  scheduled_at: new Date(now + 1  * 86_400_000).toISOString() },
+      { drip_type: "day_3",  scheduled_at: new Date(now + 3  * 86_400_000).toISOString() },
+      { drip_type: "day_7",  scheduled_at: new Date(now + 7  * 86_400_000).toISOString() },
+      { drip_type: "day_14", scheduled_at: new Date(now + 14 * 86_400_000).toISOString() },
+    ].map((r) => ({ ...r, user_id: user.id, status: "pending" as const }));
+
+    const { error: dripErr } = await supabaseAdmin
+      .from("email_drip_schedule")
+      .upsert(dripRows, { onConflict: "user_id,drip_type", ignoreDuplicates: true });
+    if (dripErr) {
+      // Non-fatal: the welcome email already went out. Log and move on
+      // so the request returns 200; the dormant detector will still
+      // pick the user up at day-30 if onboarding drips fail to schedule.
+      logStep("WARN: drip schedule insert failed", { userId: user.id, error: dripErr.message });
+    } else {
+      logStep("Drip rows scheduled", { userId: user.id, count: dripRows.length });
+    }
+
     return new Response(JSON.stringify({ ok: true, sent: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,

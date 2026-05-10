@@ -3,7 +3,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { creditPackProducts, subscriptionProducts, monthlyCredits, newTopupSkuToCredits, packAddonSkuToCredits } from "../_shared/stripeProducts.ts";
-import { sendWelcomeEmail, sendPaymentFailedEmail, sendCancellationEmail } from "../_shared/resend.ts";
+import { sendWelcomeEmail, sendPaymentFailedEmail, sendCancellationEmail, sendBrandedReceiptEmail } from "../_shared/resend.ts";
 import { writeSystemLog } from "../_shared/log.ts";
 
 /**
@@ -539,6 +539,82 @@ export async function handler(req: Request, deps: WebhookDeps = {}): Promise<Res
             }
           }
         }
+
+        // ── B-NEW-8: Branded purchase receipt ──────────────────────────
+        // Fires for both subscription invoices AND one-time invoiced
+        // purchases (top-up packs that go through the Stripe Invoice
+        // surface). One-time non-invoiced top-ups still flow through
+        // checkout.session.completed and are receipted by Stripe's
+        // built-in card-payment receipt — that's a separate surface.
+        //
+        // Skip $0 invoices (free-tier conversions, trial credits) so we
+        // don't spam users with receipts for nothing.
+        try {
+          if (invoice.amount_paid > 0 && invoice.customer_email) {
+            // Resolve user (preferred) by joining customer_id → subscriptions
+            // → user_id. Fall back to the invoice's customer email for
+            // edge cases (legacy customers without a subscription row).
+            const { data: receiptSubData } = await supabaseAdmin
+              .from("subscriptions")
+              .select("user_id, plan_name")
+              .eq("stripe_customer_id", customerId)
+              .maybeSingle();
+
+            const recipientEmail = invoice.customer_email;
+            const planLabel = receiptSubData?.plan_name
+              ?? (invoice.subscription ? "subscription" : "credit pack");
+
+            // Build line-items HTML — one <tr> per Stripe line.
+            const lineItemsHtml = invoice.lines.data.map((line) => {
+              const desc = (line.description ?? "Charge").replace(/[<>]/g, "");
+              const qty = line.quantity ?? 1;
+              const amt = ((line.amount ?? 0) / 100).toFixed(2);
+              const cur = (line.currency ?? invoice.currency ?? "usd").toUpperCase();
+              const qtyStr = qty > 1 ? ` &times;${qty}` : "";
+              return `<tr><td style="padding:10px 12px;font-size:13.5px;color:#C8CCCE;border-bottom:1px solid rgba(255,255,255,.04);">${desc}${qtyStr}</td><td align="right" style="padding:10px 12px;font-size:13.5px;color:#C8CCCE;border-bottom:1px solid rgba(255,255,255,.04);">${cur} ${amt}</td></tr>`;
+            }).join("");
+
+            const totalStr = `${(invoice.currency ?? "usd").toUpperCase()} ${(invoice.amount_paid / 100).toFixed(2)}`;
+            const periodStr = invoice.period_start && invoice.period_end
+              ? `${new Date(invoice.period_start * 1000).toUTCString().slice(5, 16)} – ${new Date(invoice.period_end * 1000).toUTCString().slice(5, 16)}`
+              : new Date((invoice.created ?? Date.now() / 1000) * 1000).toUTCString().slice(5, 16);
+            const invoiceUrl = invoice.hosted_invoice_url ?? invoice.invoice_pdf ?? "https://motionmax.io/settings/billing";
+
+            // Build unsubscribe URL via the existing token RPC. Receipts
+            // are transactional so unsubscribe isn't strictly required,
+            // but the layout includes the slot for consistency and CAN-
+            // SPAM safety.
+            let unsubscribeUrl = "https://motionmax.io/unsubscribe";
+            if (receiptSubData?.user_id) {
+              const { data: tok } = await supabaseAdmin.rpc("ensure_unsubscribe_token", {
+                p_user_id: receiptSubData.user_id,
+              });
+              if (tok) unsubscribeUrl = `https://motionmax.io/unsubscribe?t=${encodeURIComponent(tok as string)}`;
+            }
+
+            await sendBrandedReceiptEmail({
+              to: recipientEmail,
+              plan: planLabel,
+              lineItemsHtml,
+              total: totalStr,
+              period: periodStr,
+              invoiceUrl,
+              unsubscribeUrl,
+            });
+            logStep("Branded receipt sent", { invoiceId: invoice.id, to: recipientEmail });
+          } else if (invoice.amount_paid === 0) {
+            logStep("Skipping branded receipt — $0 invoice", { invoiceId: invoice.id });
+          }
+        } catch (receiptErr) {
+          // Non-fatal — Stripe's default receipt still goes out, and
+          // failing the webhook would force a retry that re-runs the
+          // credit grant above. Log and move on.
+          logStep("WARN: branded receipt send failed (non-fatal)", {
+            invoiceId: invoice.id,
+            error: receiptErr instanceof Error ? receiptErr.message : String(receiptErr),
+          });
+        }
+
         break;
       }
 

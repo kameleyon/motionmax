@@ -118,6 +118,52 @@ export async function sendCancellationEmail(to: string, displayName?: string): P
   await sendEmail({ to, subject: "Your MotionMax subscription has been cancelled", html });
 }
 
+// ── Branded purchase receipt (B-NEW-8) ────────────────────────────────
+// Replaces the unbranded Stripe default. Caller passes pre-rendered
+// line-items HTML so this fn stays presentation-only — webhook handler
+// owns the Stripe → HTML mapping.
+//
+// CAN-SPAM note: receipts are transactional, so unsubscribe is NOT
+// strictly required, but we include it anyway because the layout
+// shipped via the lifecycle template helper builds it in. The user
+// invoking this helper supplies the unsubscribe URL via the template
+// var pipeline (see _shared/email-templates/_helper.ts).
+export interface BrandedReceiptArgs {
+  to: string;
+  displayName?: string;
+  plan: string;
+  /** Pre-rendered <tr> rows for the line-items table. */
+  lineItemsHtml: string;
+  /** Human-readable total, e.g. "$29.00 USD". */
+  total: string;
+  /** Human-readable billing period, e.g. "May 10 – Jun 10, 2026". */
+  period: string;
+  /** Stripe invoice hosted-PDF URL (or hosted_invoice_url). */
+  invoiceUrl: string;
+  /** Recipient unsubscribe link (built from profiles.unsubscribe_token). */
+  unsubscribeUrl: string;
+}
+export async function sendBrandedReceiptEmail(args: BrandedReceiptArgs): Promise<void> {
+  // Lazy import to avoid loading the template runtime in functions that
+  // don't need it (cold-start cost matters for short-lived edge fns).
+  const { renderTemplate } = await import("./email-templates/_helper.ts");
+  const rendered = await renderTemplate("receipt", {
+    user_email: args.to,
+    unsubscribe_url: args.unsubscribeUrl,
+    greeting: args.displayName?.trim() ? `Hi ${args.displayName.trim()},` : "Hi there,",
+    plan: args.plan,
+    line_items_html: args.lineItemsHtml,
+    total: args.total,
+    period: args.period,
+    invoice_url: args.invoiceUrl,
+  });
+  await sendEmail({
+    to: args.to,
+    subject: rendered.subject,
+    html: rendered.html,
+  });
+}
+
 // ── Generic support email — used by admin Communicate panel ──────────
 export async function sendSupportEmail(
   to: string,

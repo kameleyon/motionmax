@@ -14,6 +14,11 @@ import { ThemedLogo } from "@/components/ThemedLogo";
 import { supabase } from "@/integrations/supabase/client";
 import { getAuthErrorMessage } from "@/lib/errorMessages";
 import { PasswordStrengthMeter } from "@/components/ui/password-strength";
+// B-NEW-7 (Lens B) — funnel event before the API call so dashboards can
+// see drop-off between "user pressed Create Account" and the eventual
+// signup_completed. Always paired with signup_completed in useAuth.ts.
+import { trackEvent } from "@/hooks/useAnalytics";
+import { getStoredUtms } from "@/lib/utm";
 
 type AuthMode = "login" | "signup" | "reset" | "update";
 
@@ -191,6 +196,25 @@ export default function Auth() {
           toast.error("Terms required", { description: "You must accept the Terms of Service and Privacy Policy to create an account." });
           return;
         }
+        // B-NEW-7 (Lens B) — funnel event fired BEFORE the signUp API
+        // call so we can measure form-submit → server-ack drop-off.
+        // Includes UTMs so a campaign with high signup_started but low
+        // signup_completed shows up as a friction signal in GA.
+        try {
+          const utms = getStoredUtms();
+          const utmEvt = utms
+            ? {
+                ...(utms.source   ? { utm_source: utms.source } : {}),
+                ...(utms.medium   ? { utm_medium: utms.medium } : {}),
+                ...(utms.campaign ? { utm_campaign: utms.campaign } : {}),
+                ...(utms.term     ? { utm_term: utms.term } : {}),
+                ...(utms.content  ? { utm_content: utms.content } : {}),
+                ...(utms.gclid    ? { gclid: utms.gclid } : {}),
+                ...(utms.fbclid   ? { fbclid: utms.fbclid } : {}),
+              }
+            : {};
+          trackEvent("signup_started", { method: "email", ...utmEvt });
+        } catch { /* analytics non-critical */ }
         const { data: signUpData, error } = await signUp(email, password);
         if (error) {
           const msg = getAuthErrorMessage(error.message);

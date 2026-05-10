@@ -117,5 +117,21 @@ const structuredData = breadcrumbs
       analytics loader, which is gated on per-category consent.
     */}
     <CookieBanner />
+    {/*
+      B-NEW-7 (Lens B) — UTM capture must run on every marketing page so
+      first-touch attribution survives the marketing→app handoff. Loaded
+      AFTER <CookieBanner /> on the page so the banner's import of
+      cookieConsent.js has already been evaluated; the capture itself is
+      idempotent and re-runs on every consent-changed event.
+
+      Mounted via a same-origin <script src="...">-style import (Astro
+      emits this as a hashed /_astro/*.js) rather than is:inline because
+      the marketing CSP is `script-src 'self'` with no nonce — any inline
+      block would be rejected. Same constraint as cookieBanner.js.
+    */}
+    <script>
+      import { initUtmCapture } from "../scripts/utmCapture.js";
+      initUtmCapture();
+    </script>
   </body>
 </html>

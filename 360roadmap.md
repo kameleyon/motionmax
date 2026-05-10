@@ -110,11 +110,11 @@ Each Critical references the verdict's finding ID + originating reviewer(s). Ope
 
 ## §2 — Visitor → Customer Conversion (5 Critical)
 
-- [ ] **[CRITICAL][REVENUE]** C-2-1: Pricing → Auth funnel silently drops `next` and `plan` query params; users who pick a paid plan never reach Stripe checkout — most expensive customer in the funnel gets dumped on `/app` — _Reviewers: **Hook B1**_ — Owner: Vega + Forge
-- [ ] **[CRITICAL][LEGAL]** C-2-2: "Creator plan: 47 people upgraded this week" hard-coded fake scarcity ribbon; manufactured-urgency dark pattern, FTC enforcement target — _Reviewers: **Hook B3 + Comply (FTC)**_ — Owner: Vega
-- [ ] **[CRITICAL][LEGAL]** C-2-3: Manually-reset fake price-increase countdown (`PRICE_INCREASE_DATE = "2026-05-19"` with comment "Update this when you want to reset"); FTC v. WunderlandPress precedent — _Reviewers: **Hook B4**_ — Owner: Vega
-- [ ] **[CRITICAL][CONVERSION]** C-2-4: Free plan disappears from in-app `LandingPricing` (only Creator/Studio rendered) while marketing site shows three tiers — "Free to start" hero promise contradicts the pricing block four screens below — _Reviewers: **Hook C2**_ — Owner: Vega
-- [ ] **[CRITICAL][LEGAL]** C-2-5: "Testimonials" section contains zero real testimonials — three "quotes" attributed to role categories with no name, photo, company, or source — _Reviewers: **Compass 2.1 + Herald + Hook C4**_ — Owner: Vega + Pixel
+- [x] **[CRITICAL][REVENUE]** C-2-1 (✅ `3971086` — next/plan preserved via URL + sessionStorage backup; postConfirmPath honored; ?autocheckout= re-entry auto-fires checkout): Pricing → Auth funnel silently drops `next` and `plan` query params; users who pick a paid plan never reach Stripe checkout — most expensive customer in the funnel gets dumped on `/app` — _Reviewers: **Hook B1**_ — Owner: Vega + Forge
+- [x] **[CRITICAL][LEGAL]** C-2-2 (✅ verified absent — already cleaned up; zero matches in current source): "Creator plan: 47 people upgraded this week" hard-coded fake scarcity ribbon; manufactured-urgency dark pattern, FTC enforcement target — _Reviewers: **Hook B3 + Comply (FTC)**_ — Owner: Vega
+- [x] **[CRITICAL][LEGAL]** C-2-3 (✅ verified absent — PRICE_INCREASE_DATE not in current source; legitimate Wave 5 LIMITED_TIME_PROMO_END preserved): Manually-reset fake price-increase countdown (`PRICE_INCREASE_DATE = "2026-05-19"` with comment "Update this when you want to reset"); FTC v. WunderlandPress precedent — _Reviewers: **Hook B4**_ — Owner: Vega
+- [x] **[CRITICAL][CONVERSION]** C-2-4 (✅ `3971086` — Free card restored, 3-tier grid in LandingPricing): Free plan disappears from in-app `LandingPricing` (only Creator/Studio rendered) while marketing site shows three tiers — "Free to start" hero promise contradicts the pricing block four screens below — _Reviewers: **Hook C2**_ — Owner: Vega
+- [x] **[CRITICAL][LEGAL]** C-2-5 (✅ `3971086` — Testimonials.tsx deleted; mount removed from Landing.tsx with explanatory comment for future re-add): "Testimonials" section contains zero real testimonials — three "quotes" attributed to role categories with no name, photo, company, or source — _Reviewers: **Compass 2.1 + Herald + Hook C4**_ — Owner: Vega + Pixel
 
 ## §3 — Process & Flow Consistency (6 Critical)
 
@@ -127,9 +127,9 @@ Each Critical references the verdict's finding ID + originating reviewer(s). Ope
 
 ## §4 — Code Health & Redundancy (3 Critical)
 
-- [ ] **[CRITICAL][ARCHITECTURE]** C-4-1: 11 legacy admin components (~6,498 LOC) exist unimported — confuses readers, drifts — _Reviewers: **Arch C-A1**_ — Owner: Arch + Vega
-- [ ] **[CRITICAL][ARCHITECTURE]** C-4-2: `supabase/functions/generate-video/index.ts` is a 5,530-line god-file — _Reviewers: **Arch C-A3**_ — Owner: Forge
-- [ ] **[CRITICAL][ARCHITECTURE]** C-4-3: `worker/src/index.ts` is 1,603 lines — merge-conflict surface for parallel workflow — _Reviewers: **Arch C-A4**_ — Owner: Forge
+- [x] **[CRITICAL][ARCHITECTURE]** C-4-1 (✅ `3971086` — 11 files deleted, 6,498 LOC removed exactly matching audit count): 11 legacy admin components (~6,498 LOC) exist unimported — confuses readers, drifts — _Reviewers: **Arch C-A1**_ — Owner: Arch + Vega
+- [~] **[CRITICAL][ARCHITECTURE]** C-4-2 (✅ `3971086` round 1 — 5,530→4,372 LOC; 5 lib modules extracted: types/validation/llm/logging/audioCodec; TTS+image providers + phase handlers DEFERRED to round 2 with documented rationale): `supabase/functions/generate-video/index.ts` is a 5,530-line god-file — _Reviewers: **Arch C-A3**_ — Owner: Forge
+- [x] **[CRITICAL][ARCHITECTURE]** C-4-3 (✅ `3971086` — 1,545→703 LOC, -54%; 9 lib modules extracted: concurrencyBudget, masterKillSwitch, staleClaimReaper, startupDiagnostic, heartbeat, lifecycle, providerKeysBanner, queueDepthAlert, dispatch): `worker/src/index.ts` is 1,603 lines — merge-conflict surface for parallel workflow — _Reviewers: **Arch C-A4**_ — Owner: Forge
 
 ## §5 — Performance / Mobile Readiness (9 Critical)
 

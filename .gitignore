@@ -83,3 +83,13 @@ ADMIN_REBUILD_CHECKLIST.md
 AUTOPOST_ENV.md
 AUTOPOST_PLAN.md
 AUTOPOST_ROADMAP.md
+
+# Voice locale QA pipeline (scripts/qa-voice-locales.mjs)
+# - Audio outputs are big and regeneratable → ignore
+# - Test paragraph .txt files ARE tracked (repo content, see exception below)
+# - The runbook + paragraph README are tracked via the existing allowlist for docs/
+qa-output/
+!scripts/qa-test-paragraphs/
+!scripts/qa-test-paragraphs/*.txt
+!scripts/qa-test-paragraphs/README.md
+!docs/voice-locale-qa-runbook.md

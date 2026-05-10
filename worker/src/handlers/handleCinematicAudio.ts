@@ -183,9 +183,21 @@ async function _runCinematicAudio(
 
   let result: { url: string | null; durationSeconds?: number; provider?: string; error?: string } = { url: null };
 
-  if (isHC) {
-    // ── Haitian Creole: use legacy Gemini TTS path ──
-    console.log(`[CinematicAudio] Scene ${sceneIndex}: Haitian Creole → legacy Gemini TTS`);
+  // Compute voice early so the gm:* short-circuit can run before the
+  // legacy HC branch — Gemini Flash 2.5 speaks Haitian Creole natively,
+  // so an HC project with a gm:* pick must honor the chosen voice instead
+  // of collapsing onto the Pierre/Marie → Aoede/Enceladus default pair.
+  const earlyVoiceName: string = generation.projects?.voice_name || "Nova";
+  const isCustomVoiceProject =
+    generation.projects?.voice_type === "custom" && !!generation.projects?.voice_id;
+
+  if (isHC && !earlyVoiceName.startsWith("gm:") && !isCustomVoiceProject) {
+    // ── Haitian Creole legacy fallback (Pierre / Marie only) ──
+    // New HC projects pick a gm:* voice (see getDefaultSpeaker("ht") =
+    // "gm:Sulafat") and take the Gemini Flash path below. This branch
+    // only catches legacy projects whose voice_name is still "Pierre"
+    // or "Marie".
+    console.log(`[CinematicAudio] Scene ${sceneIndex}: Haitian Creole legacy ${earlyVoiceName} → audioRouter`);
     const googleApiKeys = [
       process.env.GOOGLE_TTS_API_KEY_3,
       process.env.GOOGLE_TTS_API_KEY_2,

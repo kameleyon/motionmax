@@ -47,6 +47,16 @@ function AuthPageFooter() {
   );
 }
 
+// Hard-navigate to the Astro landing page. Production serves
+// `dist/index.html` (built by Astro via scripts/merge-dist.mjs); the
+// React SPA shell lives at `/app-shell.html`. A client-side
+// `navigate("/")` would stay inside the SPA and render the legacy
+// React `<Landing />` — using `window.location.assign` forces a full
+// page load so Vercel returns the Astro page.
+function goToAstroLanding(): void {
+  window.location.assign("/");
+}
+
 // ── Referral capture helpers ──────────────────────────────────────
 // Persist the ?ref= code in sessionStorage so it survives a page-mode switch
 // (e.g. user lands on signup link, gets redirected to login first).
@@ -243,7 +253,7 @@ export default function Auth() {
   if (showEmailSent) {
     return (
       <div className="flex min-h-screen flex-col bg-background">
-        <AuthPageHeader onLogoClick={() => navigate("/")} />
+        <AuthPageHeader onLogoClick={goToAstroLanding} />
         <main className="flex flex-1 items-center justify-center px-6 pt-16">
           <motion.div
             initial={{ opacity: 0, y: 20 }}

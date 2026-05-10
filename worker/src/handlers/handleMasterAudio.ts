@@ -224,29 +224,12 @@ async function _runMasterAudio(
       { number: 1, voiceover: masterText, duration: Math.ceil(masterText.split(/\s+/).length / 2.5) },
       config,
     );
-  } else if (isHC) {
-    const googleApiKeys = [
-      process.env.GOOGLE_TTS_API_KEY_3,
-      process.env.GOOGLE_TTS_API_KEY_2,
-      process.env.GOOGLE_TTS_API_KEY,
-    ].filter(Boolean) as string[];
-    const config: AudioConfig = {
-      projectId,
-      googleApiKeys,
-      elevenLabsApiKey: process.env.ELEVENLABS_API_KEY,
-      lemonfoxApiKey: process.env.LEMONFOX_API_KEY,
-      fishAudioApiKey: process.env.FISH_AUDIO_API_KEY,
-      replicateApiKey: process.env.REPLICATE_API_KEY || "",
-      voiceGender: voiceName === "Pierre" ? "male" : "female",
-      forceHaitianCreole: true,
-      language: "ht",
-    };
-    result = await generateSceneAudio(
-      { number: 1, voiceover: masterText, duration: Math.ceil(masterText.split(/\s+/).length / 2.5) },
-      config,
-    );
   } else if (voiceName.startsWith("gm:")) {
-    // Gemini Flash — the most common path for doc2video + cinematic
+    // Gemini Flash — the most common path for doc2video + cinematic.
+    // MUST come before the HC branch: Gemini Flash 2.5 speaks Haitian
+    // Creole natively, so when the user picks a gm:* voice for an HC
+    // project we honor that choice instead of collapsing every voice
+    // onto the legacy Pierre/Marie → Aoede/Enceladus pair.
     const googleApiKeys = [
       process.env.GOOGLE_TTS_API_KEY_3,
       process.env.GOOGLE_TTS_API_KEY_2,
@@ -278,6 +261,31 @@ async function _runMasterAudio(
       voiceId: voiceName,
       language: resolvedLanguage,
     });
+  } else if (isHC) {
+    // Legacy Haitian Creole fallback for Pierre / Marie speaker names
+    // saved on older projects. New HC projects pick a gm:* voice (see
+    // getDefaultSpeaker("ht") = "gm:Sulafat") and take the Gemini Flash
+    // chunked path above instead.
+    const googleApiKeys = [
+      process.env.GOOGLE_TTS_API_KEY_3,
+      process.env.GOOGLE_TTS_API_KEY_2,
+      process.env.GOOGLE_TTS_API_KEY,
+    ].filter(Boolean) as string[];
+    const config: AudioConfig = {
+      projectId,
+      googleApiKeys,
+      elevenLabsApiKey: process.env.ELEVENLABS_API_KEY,
+      lemonfoxApiKey: process.env.LEMONFOX_API_KEY,
+      fishAudioApiKey: process.env.FISH_AUDIO_API_KEY,
+      replicateApiKey: process.env.REPLICATE_API_KEY || "",
+      voiceGender: voiceName === "Pierre" ? "male" : "female",
+      forceHaitianCreole: true,
+      language: "ht",
+    };
+    result = await generateSceneAudio(
+      { number: 1, voiceover: masterText, duration: Math.ceil(masterText.split(/\s+/).length / 2.5) },
+      config,
+    );
   } else {
     // Legacy named speakers (Adam, River, Jacques, Camille, Carlos, Isabella)
     // go through the standard audio router.

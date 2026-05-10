@@ -208,12 +208,12 @@ Each Critical references the verdict's finding ID + originating reviewer(s). Ope
 
 ## §11 — Analytics, Marketing, Growth (6 Critical, beyond Blockers)
 
-- [ ] **[CRITICAL][ANALYTICS]** C-11-1: Admin dashboard funnel renders fake drop-off — first three rows hardcoded to `funnel.signups` with `pctOfTop: 100` — _Reviewers: **Lens C1**_ — Owner: Forge + Vega
-- [ ] **[CRITICAL][ANALYTICS]** C-11-2: No tracking on `generation_started` / `generation_completed` — activation event has zero GA4 visibility — _Reviewers: **Lens C2**_ — Owner: Vega + Forge
-- [ ] **[CRITICAL][ANALYTICS]** C-11-3: Voice Lab + Autopost Lab have zero tracking — _Reviewers: **Lens C3**_ — Owner: Vega
-- [ ] **[CRITICAL][ANALYTICS]** C-11-4: Server-side conversion uses `userId` as GA4 `client_id` — every purchase looks like "(direct) / (none)" with no UTMs; ROAS broken — _Reviewers: **Lens C4**_ — Owner: Forge
-- [ ] **[CRITICAL][ANALYTICS]** C-11-5: Pre-consent events vanish silently — user clicking CTA in first 1.5s before banner mounts loses the event — _Reviewers: **Lens C5**_ — Owner: Vega
-- [ ] **[CRITICAL][LEGAL]** C-11-6: Auto-renewal disclosure in ToS only; no self-service cancel UI; FTC "Click to Cancel" rule effective 2026 — _Reviewers: **Herald (lifecycle gap) + Comply L-C-09**_ — Owner: Forge + Comply
+- [x] **[CRITICAL][ANALYTICS]** C-11-1 (✅ `0bdb54c` — get_signup_funnel SQL fn + funnel_events table + TabAnalytics rewrite; "—" for no-data stages): Admin dashboard funnel renders fake drop-off — first three rows hardcoded to `funnel.signups` with `pctOfTop: 100` — _Reviewers: **Lens C1**_ — Owner: Forge + Vega
+- [x] **[CRITICAL][ANALYTICS]** C-11-2 (✅ `0bdb54c` — generation_started + completed + failed wired in useGenerationPipeline + unifiedPipeline; mirrored server-side via record_funnel_event): No tracking on `generation_started` / `generation_completed` — activation event has zero GA4 visibility — _Reviewers: **Lens C2**_ — Owner: Vega + Forge
+- [x] **[CRITICAL][ANALYTICS]** C-11-3 (✅ `0bdb54c` — Voice Lab + Autopost events via src/lib/events.ts constants; social_account_connected on integrations): Voice Lab + Autopost Lab have zero tracking — _Reviewers: **Lens C3**_ — Owner: Vega
+- [x] **[CRITICAL][ANALYTICS]** C-11-4 (✅ `0bdb54c` — profiles.ga_client_id captured from _ga cookie at SIGNED_IN; stripe-webhook uses ga_client_id for client_id + userId for user_id; UTMs forwarded): Server-side conversion uses `userId` as GA4 `client_id` — every purchase looks like "(direct) / (none)" with no UTMs; ROAS broken — _Reviewers: **Lens C4**_ — Owner: Forge
+- [x] **[CRITICAL][ANALYTICS]** C-11-5 (✅ `0bdb54c` — pendingAnalyticsEvents buffer cap-50, drains on grant, clears on decline): Pre-consent events vanish silently — user clicking CTA in first 1.5s before banner mounts loses the event — _Reviewers: **Lens C5**_ — Owner: Vega
+- [x] **[CRITICAL][LEGAL]** C-11-6 (✅ `0bdb54c` — CancelRetentionModal: 2-click cancel path from Settings; pause-1/2/3-months + 50%-off retention on same screen; email-footer link): Auto-renewal disclosure in ToS only; no self-service cancel UI; FTC "Click to Cancel" rule effective 2026 — _Reviewers: **Herald (lifecycle gap) + Comply L-C-09**_ — Owner: Forge + Comply
 
 ## §12 — SEO & Discoverability (5 Critical)
 
@@ -225,14 +225,14 @@ Each Critical references the verdict's finding ID + originating reviewer(s). Ope
 
 ## §13 — Legal & Regulatory Compliance (8 Critical, beyond Blockers)
 
-- [ ] **[CRITICAL][LEGAL]** C-13-1: No DMCA Designated Agent registered with U.S. Copyright Office; every user upload uninsured under §512(c)(2) safe harbor — _Reviewers: **Comply L-C-01**_ — Owner: Comply
-- [ ] **[CRITICAL][LEGAL]** C-13-2: AUP §2 categorically bans "deepfakes" — but the product itself manufactures deepfakes (image-to-video + voice cloning); self-contradicting AUP is unenforceable on its face — _Reviewers: **Comply L-C-02**_ — Owner: Comply
-- [ ] **[CRITICAL][LEGAL]** C-13-3: Voice biometric data not classified as such in Privacy Policy; BIPA $1,000-$5,000-per-violation statutory damages risk — _Reviewers: **Comply L-C-03**_ — Owner: Comply
-- [ ] **[CRITICAL][LEGAL]** C-13-4: Privacy Policy promises "delete personal data within 90 days" of account closure; code processes a 7-day grace + nightly cron — documented breach — _Reviewers: **Comply L-C-04**_ — Owner: Comply + Forge
-- [ ] **[CRITICAL][LEGAL]** C-13-5: Subprocessor / DPA list gated to "enterprise customers" — GDPR Art. 28(2) requires availability to all customers — _Reviewers: **Comply L-C-06**_ — Owner: Comply
-- [ ] **[CRITICAL][LEGAL]** C-13-6: Self-service `export-my-data` Edge Function fully implemented but never invoked from any UI — Art. 12(2) facilitation gap — _Reviewers: **Comply L-C-07 + Keeper KEEPER-01**_ — Owner: Vega
-- [ ] **[CRITICAL][LEGAL]** C-13-7: ToS §5 lacks warranty disclaimer for output non-infringement, no IP indemnification, no copyright-uncertainty disclaimer; post-Andersen v. Stability AI / Getty exposure — _Reviewers: **Comply L-C-08**_ — Owner: Comply
-- [ ] **[CRITICAL][LEGAL]** C-13-8: Privacy Policy / ToS / AUP only in English while marketing claims 11 languages; GDPR Art. 12(1) "intelligible" violation — _Reviewers: **Tongue TONGUE-11**_ — Owner: Tongue + Comply
+- [~] **[CRITICAL][LEGAL]** C-13-1 (⏳ HUMAN ACTION — task #54: Jo files with U.S. Copyright Office, $6, 15 min): No DMCA Designated Agent registered with U.S. Copyright Office; every user upload uninsured under §512(c)(2) safe harbor — _Reviewers: **Comply L-C-01**_ — Owner: Comply
+- [x] **[CRITICAL][LEGAL]** C-13-2 (✅ `0bdb54c` — AUP §2 rewritten to consent-based; new §2.1 Voice Cloning Consent; LEGAL_VERSIONS.aup bumped to v2): AUP §2 categorically bans "deepfakes" — but the product itself manufactures deepfakes (image-to-video + voice cloning); self-contradicting AUP is unenforceable on its face — _Reviewers: **Comply L-C-02**_ — Owner: Comply
+- [x] **[CRITICAL][LEGAL]** C-13-3 (✅ `0bdb54c` — Privacy §7.1 BIPA/CUBI/CPRA classification; user_voices.voice_biometric_consent_at column; Voice Lab BIPA consent checkbox required): Voice biometric data not classified as such in Privacy Policy; BIPA $1,000-$5,000-per-violation statutory damages risk — _Reviewers: **Comply L-C-03**_ — Owner: Comply
+- [x] **[CRITICAL][LEGAL]** C-13-4 (✅ `0bdb54c` — Privacy §7 rewritten: 7-day grace + permanent deletion; 7-year financial-records exception; LEGAL_VERSIONS.privacy bumped to v3): Privacy Policy promises "delete personal data within 90 days" of account closure; code processes a 7-day grace + nightly cron — documented breach — _Reviewers: **Comply L-C-04**_ — Owner: Comply + Forge
+- [x] **[CRITICAL][LEGAL]** C-13-5 (✅ `0bdb54c` — Privacy §5 publicly enumerates 17 subprocessors with country + purpose + DPA links; /privacy#5 unauth-accessible): Subprocessor / DPA list gated to "enterprise customers" — GDPR Art. 28(2) requires availability to all customers — _Reviewers: **Comply L-C-06**_ — Owner: Comply
+- [x] **[CRITICAL][LEGAL]** C-13-6 (✅ already shipped in Wave 2 B-NEW-6 `78fd5e2` — DataExportSection in Settings/Security): Self-service `export-my-data` Edge Function fully implemented but never invoked from any UI — Art. 12(2) facilitation gap — _Reviewers: **Comply L-C-07 + Keeper KEEPER-01**_ — Owner: Vega
+- [x] **[CRITICAL][LEGAL]** C-13-7 (✅ `0bdb54c` — ToS §5.A No Warranty for AI Output + §5.B IP Indemnification + §5.C Copyright Uncertainty (cites Andersen v Stability AI + Getty); LEGAL_VERSIONS.tos bumped to v3): ToS §5 lacks warranty disclaimer for output non-infringement, no IP indemnification, no copyright-uncertainty disclaimer; post-Andersen v. Stability AI / Getty exposure — _Reviewers: **Comply L-C-08**_ — Owner: Comply
+- [x] **[CRITICAL][LEGAL]** C-13-8 (✅ `0bdb54c` — English-only notice + support@motionmax.io contact path on all 3 docs; Wave 3 B-NEW-11 already reduced "11 languages" marketing claim defusing the core Art. 12(1) violation): Privacy Policy / ToS / AUP only in English while marketing claims 11 languages; GDPR Art. 12(1) "intelligible" violation — _Reviewers: **Tongue TONGUE-11**_ — Owner: Tongue + Comply
 
 ---
 

@@ -5,20 +5,22 @@
 **Source verdict:** `.audits/2026-05-10-360/verdict.md` (Studio Zero full-360 audit — 6 core reviewers + 28 specialists, $66.82 cost)
 **Supersedes:** `archive/360roadmap_fix.md` (v1 baseline) and the prior 5-blocker v1 roll-up
 **Status:** v1 Phase 0 (B-1 through B-5) shipped in commit `9601306` — awaiting originating-reviewer re-verification. v2 Phase 0+ open.
-**Coverage note:** Blockers (21) and Critical (~75) below carry **per-agent attribution** — every finding traces to one or more of the 34 reviewer/specialist reports. Major/Minor/Polish are summarized at cluster level here; individual `file:line` detail lives in `.audits/2026-05-10-360/{reviewer}.md` (6 core) + `specialists/{agent}.md` (28 specialists).
+**Coverage note:** Curated body section has **129 checkboxes** (27 Blockers + 102 Criticals — convergence-elevated clusters with per-agent attribution). Appendix has the full **751 raw findings** extracted from all 34 reviewer/specialist files. Grand total: **880 checkboxes** (curated section is a re-grouped view of the appendix's Blocker+Critical subset, not additive). Individual `file:line` detail lives in `.audits/2026-05-10-360/{reviewer}.md` (6 core) + `specialists/{agent}.md` (28 specialists).
 
 ---
 
 ## Summary Statistics (v2 audit)
 
-| Severity | v1 audit | v2 360 audit | Combined open |
+| Severity | v1 audit | v2 raw findings (appendix) | v2 curated body |
 |---|---:|---:|---:|
-| Blocker | 5 (all fixed in `9601306`, awaiting re-verify) | **21** (5 v1-carryover + 16 new) | **17 net new** |
-| Critical | 24 | **~75+** (102 listed by ID; the verdict caps the table at "highest-leverage and convergence-elevated") | **~75+** |
-| Major | 37 | **~150+** (clustered, not individually listed in verdict — per-reviewer files have detail) | **~150+** |
-| Minor | 24 | **~80+** | **~80+** |
-| Polish | 13 | **~40+** | **~40+** |
-| **Total** | **103** | **~365+** | **~325+ net new** |
+| Blocker | 5 (all fixed in `9601306`, awaiting re-verify) | **62** | **27** (5 v1-carryover + 22 v2 elevated) |
+| Critical | 24 | **177** | **102** |
+| Major | 37 | **318** | _raw findings only — see appendix_ |
+| Minor | 24 | **149** | _raw findings only — see appendix_ |
+| Polish | 13 | **45** | _raw findings only — see appendix_ |
+| **Total** | **103** | **751** | **129** |
+
+> **Total checkboxes in this file: 880** — the 129 curated entries are the convergence-elevated subset of the 751 raw findings (same defects, two views: clusters/owners up front, raw per-reviewer detail below). Major/Minor/Polish are not curated up front — work them off the appendix once Blockers + Criticals close.
 
 > **Verdict: `FAIL`.** Per `protocols/code-standards.md`, no production deploy until verdict promotes to `PASS WITH FIXES` (every Critical AND Blocker verified-fixed by originating reviewer) or `PASS`.
 
@@ -344,13 +346,14 @@ Each Critical / Blocker finding closes only when the **originating reviewer** (n
 - **v1 baseline (archived):** `motionmax/archive/360roadmap_fix.md`
 
 
+
 ---
 
 # Appendix — Per-Finding Detail (auto-extracted from 34 reviewer/specialist files)
 
 **Generator:** `scripts/extract-audit-findings.mjs` + `scripts/generate-roadmap.mjs` (Studio Zero)
 **Source:** `shared_context/audits/motionmax-360/2026-05-10/{,/specialists/}*.md`
-**Findings extracted:** 751 across 29 of 34 agents (5 agents — halo, prism, terra, herald, pixel — use formats not yet in the parser; their findings live in the per-reviewer files and should be folded in via the next iteration of the extractor).
+**Findings extracted:** 751 across **all 34 agents** (6 core reviewers + 28 specialists). Parser handles 11 reviewer-output formats; if a future audit adds new formats, extend `scripts/extract-audit-findings.mjs`.
 
 Each line below is one finding. Pattern: `[SEVERITY][AGENT] ID — summary — Evidence: ... — Fix: ... — Effort: ...`
 

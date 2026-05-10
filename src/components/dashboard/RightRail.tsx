@@ -5,6 +5,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { PLAN_LIMITS, normalizePlanName } from '@/lib/planLimits';
 import { toast } from 'sonner';
 import { Loader2, Square, AudioLines } from 'lucide-react';
+// B-NEW-21 — top-up modal lets users buy credits without leaving the
+// dashboard. Opens from the credit-counter chip's "Top up →" link.
+import { TopUpPacksModal } from '@/components/credits/TopUpPacksModal';
 
 /** Strip the sm:/sm2:/gm: provider prefix so UI shows "Quinn" not
  *  "sm:quinn". Capitalises the first letter of the result for
@@ -96,6 +99,8 @@ export default function RightRail() {
   const [previewLoading, setPreviewLoading] = useState<string | null>(null);
   const [previewPlaying, setPreviewPlaying] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // B-NEW-21 — Buy More Credits modal trigger.
+  const [topUpModalOpen, setTopUpModalOpen] = useState(false);
 
   const stopPlayback = useCallback(() => {
     if (audioRef.current) {
@@ -397,12 +402,13 @@ export default function RightRail() {
           <span className="font-mono text-[10px] tracking-widest uppercase px-2 py-1 rounded bg-[#14C8CC]/10 text-[#14C8CC]">
             {planLabel}
           </span>
-          <a
-            href="/pricing"
-            className="font-mono text-[10.5px] tracking-wider uppercase text-[#14C8CC] hover:text-[#ECEAE4] transition-colors no-underline"
+          <button
+            type="button"
+            onClick={() => setTopUpModalOpen(true)}
+            className="font-mono text-[10.5px] tracking-wider uppercase text-[#14C8CC] hover:text-[#ECEAE4] transition-colors no-underline bg-transparent border-0 cursor-pointer"
           >
             Top up →
-          </a>
+          </button>
         </div>
       </div>
 
@@ -535,6 +541,9 @@ export default function RightRail() {
           </div>
         </div>
       </div>
+
+      {/* B-NEW-21 — top-up packs modal, opened by the credits chip "Top up →" button. */}
+      <TopUpPacksModal open={topUpModalOpen} onOpenChange={setTopUpModalOpen} />
     </aside>
   );
 }

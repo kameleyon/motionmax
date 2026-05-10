@@ -103,17 +103,105 @@ export async function handler(req: Request): Promise<Response> {
       });
     }
 
-    const { priceId, mode, eu_cooling_off_waived: euCoolingOffWaived } = await req.json();
-    if (!priceId) throw new UserFacingError("Price ID is required");
+    // ── Request body parsing ──────────────────────────────────────
+    //
+    // B-NEW-21 (2026-05-10): support two request shapes in addition to
+    // the legacy `{ priceId, mode }`:
+    //
+    //   Subscription (Creator / Studio):
+    //     {
+    //       tier:    'creator' | 'studio',
+    //       cycle:   'monthly' | 'yearly',
+    //       multipack: 1..6,                    // quantity multiplier
+    //       eu_cooling_off_waived?: boolean,
+    //     }
+    //
+    //   Top-up (one-time credit pack, available to Free too):
+    //     {
+    //       kind: 'topup',
+    //       sku:  'quick' | 'plus' | 'power' | 'studio' | 'pro',
+    //       eu_cooling_off_waived?: boolean,
+    //     }
+    //
+    // The legacy `priceId` shape is still accepted so existing
+    // /pricing flows + credit-pack buttons keep working until they're
+    // fully migrated.
+    const body = await req.json();
+    const {
+      priceId: rawPriceId,
+      mode: rawMode,
+      tier,
+      cycle,
+      multipack,
+      kind,
+      sku,
+      eu_cooling_off_waived: euCoolingOffWaived,
+    } = body;
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
       apiVersion: "2024-12-18.acacia",
     });
 
+    // Resolve Stripe IDs from env vars based on the request shape.
+    // STRIPE_MODE=test|live drives the suffix on each var name so we
+    // can keep test+live IDs side-by-side and flip per environment.
+    const STRIPE_MODE = (Deno.env.get("STRIPE_MODE") ?? "test").toLowerCase();
+    const SUFFIX = STRIPE_MODE === "live" ? "LIVE" : "TEST";
+
+    let priceId: string | undefined = rawPriceId;
+    let mode: "subscription" | "payment" = rawMode === "payment" ? "payment" : "subscription";
+    let quantity = 1;
+    let promoCouponId: string | undefined;
+
+    if (kind === "topup" && typeof sku === "string") {
+      const skuKey = sku.toUpperCase();
+      priceId = Deno.env.get(`STRIPE_PRICE_TOPUP_${skuKey}_${SUFFIX}`);
+      mode = "payment";
+      if (!priceId) {
+        throw new UserFacingError(`Top-up pack '${sku}' is not configured. Please run the Stripe sync script.`);
+      }
+    } else if (typeof tier === "string" && typeof cycle === "string") {
+      const tierKey = tier.toUpperCase();
+      const cycleKey = cycle.toUpperCase();
+      if (tierKey !== "CREATOR" && tierKey !== "STUDIO") {
+        throw new UserFacingError("Unknown subscription tier");
+      }
+      if (cycleKey !== "MONTHLY" && cycleKey !== "YEARLY") {
+        throw new UserFacingError("Unknown billing cycle");
+      }
+      priceId = Deno.env.get(`STRIPE_PRICE_${tierKey}_${cycleKey}_${SUFFIX}`);
+      if (!priceId) {
+        throw new UserFacingError(`Subscription price for ${tier}/${cycle} is not configured. Please run the Stripe sync script.`);
+      }
+      mode = "subscription";
+
+      // Multi-pack ladder — implemented as Stripe SubscriptionItem
+      // quantity. Defaults to 1× (the base allotment).
+      const m = Number(multipack ?? 1);
+      if (!Number.isFinite(m) || m < 1 || m > 6) {
+        throw new UserFacingError("Multipack must be between 1 and 6.");
+      }
+      quantity = Math.floor(m);
+
+      // Promo coupon (3-month repeating, ~30-34% off) — only attaches
+      // to MONTHLY subscriptions. Yearly is already discounted up-front
+      // and shouldn't compound. The coupon's `duration_in_months: 3`
+      // semantics mean Stripe automatically reverts to the standard
+      // monthly rate from the 4th billing cycle.
+      if (cycleKey === "MONTHLY") {
+        promoCouponId = Deno.env.get(`STRIPE_COUPON_${tierKey}_PROMO_${SUFFIX}`);
+        // Coupon is optional — if not configured, skip (the price is
+        // simply the standard monthly rate from the start).
+      }
+    }
+
+    if (!priceId) throw new UserFacingError("Price ID is required");
+
     // Dynamic validation: fetch the price from Stripe and verify it is active
     // and belongs to one of our known products (product IDs are stable),
     // OR has `metadata.motionmax_sku` set (the new 2026-05-06 SKU catalog
-    // created by scripts/stripe-create-billing-products.ts).
+    // created by scripts/stripe-create-billing-products.ts AND the
+    // 2026-05-10 catalog from scripts/sync-stripe-products.mjs).
     const price = await stripe.prices.retrieve(priceId, { expand: ["product"] });
     if (!price || !price.active) {
       throw new UserFacingError("Price is no longer active. Please refresh and try again.");
@@ -129,7 +217,15 @@ export async function handler(req: Request): Promise<Response> {
       throw new UserFacingError("Invalid product for this price");
     }
 
-    logStep("Price validated", { priceId, productId, active: price.active, sku: productMeta.motionmax_sku });
+    logStep("Price validated", {
+      priceId,
+      productId,
+      active: price.active,
+      sku: productMeta.motionmax_sku,
+      quantity,
+      promoCouponId: promoCouponId ?? null,
+      stripeMode: STRIPE_MODE,
+    });
 
     // B-V1-5 — record the EU/EEA/UK 14-day cooling-off waiver, if the user
     // ticked the binding checkbox on the frontend. We stamp the profile row
@@ -166,18 +262,38 @@ export async function handler(req: Request): Promise<Response> {
 
     const origin = req.headers.get("origin") || "https://motionmax.io";
 
-    const session = await stripe.checkout.sessions.create({
+    // B-NEW-21 — Stripe Checkout Session.
+    //
+    // `discounts` accepts an array of coupon refs (NOT both `discounts`
+    // and `allow_promotion_codes` — they're mutually exclusive). The
+    // promo coupon is `duration: 'repeating', duration_in_months: 3`
+    // so Stripe auto-reverts to standard pricing from cycle 4 — we
+    // don't have to track expiry dates ourselves.
+    //
+    // `quantity` is the multi-pack ladder multiplier (1× through 6×).
+    // For top-ups, quantity stays 1 — buying 2 Quick packs in one go
+    // is not supported in this iteration.
+    const sessionParams: Record<string, unknown> = {
       customer: customerId,
       customer_email: customerId ? undefined : user.email,
       client_reference_id: user.id,
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: [{ price: priceId, quantity }],
       mode: mode || "subscription",
       success_url: `${origin}/billing?success=true`,
       cancel_url: `${origin}/billing?canceled=true`,
       metadata: {
         user_id: user.id,
+        ...(tier ? { tier: String(tier) } : {}),
+        ...(cycle ? { cycle: String(cycle) } : {}),
+        ...(typeof multipack === "number" ? { multipack: String(multipack) } : {}),
+        ...(kind ? { kind: String(kind) } : {}),
+        ...(sku ? { sku: String(sku) } : {}),
       },
-    });
+    };
+    if (promoCouponId && mode === "subscription") {
+      sessionParams.discounts = [{ coupon: promoCouponId }];
+    }
+    const session = await stripe.checkout.sessions.create(sessionParams);
 
     logStep("Checkout session created", { sessionId: session.id });
 

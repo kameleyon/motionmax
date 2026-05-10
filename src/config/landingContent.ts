@@ -1,4 +1,7 @@
 import { Film, Mic, Wand2, Subtitles, Globe, Pencil, Shield, Users, type LucideIcon } from "lucide-react";
+// B-NEW-21 — pull tier names + entitlement counts from the single
+// pricing source so FAQ copy never drifts from the Pricing page.
+import { PLANS, formatUsd } from "@/config/pricing";
 
 /* ──────────────────────────────────────────────
  * Feature cards shown on the landing page.
@@ -102,7 +105,7 @@ export const LANDING_FAQ: FaqItem[] = [
   {
     question: "Is there a free plan?",
     answer:
-      "Yes! The free plan includes monthly credits so you can create short videos and explore all core features — no credit card required.",
+      `Yes! The Free plan gives you ${PLANS.free.credits_monthly} credits per month plus ${PLANS.free.daily_credits} daily refresh credits — full editor access, no credit card required.`,
   },
   {
     question: "What video formats and resolutions are supported?",
@@ -120,7 +123,11 @@ export const LANDING_FAQ: FaqItem[] = [
     // B-3 fix (2026-05-09): aligned credits-expiry policy across Pricing / FAQ / Terms.
     // Subscription credits expire on the 28th of each month; top-up credit packs never expire.
     answer:
-      "Each generation (video, audio, or infographic) consumes credits based on complexity and length. Subscription credits expire on the 28th of each month — they don't roll over. Top-up credit packs you buy on top of a plan never expire.",
+      // B-NEW-21 — credit math reflects new tier ladder. Creator: ${PLANS.creator.credits_monthly}/mo
+      // ($${PLANS.creator.price_monthly_after} after promo). Studio: ${PLANS.studio.credits_monthly}/mo
+      // ($${PLANS.studio.price_monthly_after} after promo). Subscription credits expire on the 28th;
+      // daily refresh + top-ups never expire (ToS §6).
+      `Each generation (video, audio, or infographic) consumes credits based on complexity and length. The Creator plan includes ${PLANS.creator.credits_monthly} credits/month (${formatUsd(PLANS.creator.price_monthly_after)}/mo after the intro period); Studio includes ${PLANS.studio.credits_monthly} credits/month (${formatUsd(PLANS.studio.price_monthly_after)}/mo). Both add ${PLANS.creator.daily_credits} daily refresh credits on top. Subscription credits expire on the 28th of each month; daily refresh credits and top-up credit packs never expire.`,
   },
   {
     question: "Can I cancel my subscription?",

@@ -42,21 +42,24 @@ const FAQS: Faq[] = [
   },
   {
     cat: "started",
-    q: "What's the difference between Studio, Pro and Free plans?",
+    // B-NEW-21 (2026-05-10): copy aligned with new tier ladder. Free = 60 cr/mo + 100 daily.
+    // Creator = 500 cr/mo (or 6,000/yr) at $29/mo after promo (or $14.50/mo billed annually).
+    // Studio = 2,000 cr/mo (or 24,000/yr) at $129/mo after promo (or $64.50/mo billed annually).
+    q: "What's the difference between Free, Creator and Studio?",
     a: (
       <>
-        Free includes 1,000 credits/month and watermarked output. Pro ($29/mo) unlocks 50,000 credits, HD exports and voice cloning. Studio ($99/mo) adds 4K, priority queue, 5 team seats, brand kits and removed branding. See <a href="/billing">Billing</a> for the full comparison.
+        Free gives you 60 credits/month plus 100 daily refresh credits — full editor access, no card. Creator ($14.50/mo billed annually, or $29/mo after the intro period) unlocks 500 credits/month, 1 voice-clone slot, 1 automation slot, and watermark removal. Studio ($64.50/mo billed annually, or $129/mo after the intro period) raises that to 2,000 credits/month, 5 voice clones, 5 automation slots, priority queue, and watermark removal. See <a href="/pricing">Pricing</a> for the full comparison.
       </>
     ),
   },
   {
     cat: "billing",
     q: "How do credits work?",
-    // B-2 + B-3 fix (2026-05-09): "Pro" is not a real plan (Free / Creator / Studio).
-    // Credits expire on the 28th of each month, not the 1st. Aligned with FAQ + Pricing + Terms.
+    // B-NEW-21 (2026-05-10): credit math reflects new tier ladder. Subscription credits expire
+    // on the 28th; daily refresh credits and top-up packs never expire (ToS §6).
     a: (
       <>
-        Each second of finished 1080p video costs roughly 8 credits; 4K costs 24. Voice generation is 1 credit per word. Subscription credits expire on the 28th of each month and don't roll over; Studio members keep up to 10,000 in reserve. Top-up credit packs you buy on top of a plan never expire.
+        Each generation consumes credits based on complexity and length. The Creator plan includes 500 credits/month (Studio includes 2,000) plus 200 daily refresh credits on top. Subscription credits expire on the 28th of each month and don't roll over. Daily refresh credits and top-up credit packs you buy on top of any plan never expire. Use the multi-pack ladder (1×–6×) on either paid plan if you want a larger monthly bucket without changing tier.
       </>
     ),
   },
@@ -74,7 +77,27 @@ const FAQS: Faq[] = [
     q: "Do you offer discounts for students or non-profits?",
     a: (
       <>
-        Yes — 50% off Pro for verified students (.edu email) and 30% off any annual plan for registered non-profits and educators. Apply via the contact form below with proof of status.
+        Yes — 50% off Creator for verified students (.edu email) and 30% off any annual plan for registered non-profits and educators. Apply via the contact form below with proof of status.
+      </>
+    ),
+  },
+  {
+    cat: "billing",
+    // B-NEW-21 (2026-05-10): new FAQ entry covering the limited-time promo so support deflects.
+    q: "What's the limited-time offer I see on the pricing page?",
+    a: (
+      <>
+        New monthly subscriptions get up to 34% off for the first 3 months — Creator drops from $29/mo to $19/mo, Studio drops from $129/mo to $90/mo. After the third billing cycle, pricing returns to standard rates. Yearly plans bypass the promo entirely because they're already discounted up-front (Creator $174/yr, Studio $774/yr). The promo runs through July 15.
+      </>
+    ),
+  },
+  {
+    cat: "billing",
+    // B-NEW-21 (2026-05-10): new FAQ for top-up packs so users know they're available on Free too.
+    q: "Can I buy credits without subscribing?",
+    a: (
+      <>
+        Yes. Top-up credit packs are available to every tier — Free included. Pick from Quick (250 cr / $14.99), Plus (500 cr / $24.99), Power (1,000 cr / $44.99), Studio Pack (2,500 cr / $99.99), or Pro Pack (5,000 cr / $179.99). Top-up credits never expire. Open the "Buy more credits" modal from your dashboard's credit chip or from <a href="/pricing">Pricing</a>.
       </>
     ),
   },
@@ -83,7 +106,7 @@ const FAQS: Faq[] = [
     q: "How do I clone my voice?",
     a: (
       <>
-        Open <code>Voice Lab</code>, click <code>+ Clone voice</code> and either upload 60+ seconds of clean audio (WAV/MP3) or record live in your browser. Training takes 2–4 minutes. Pro and Studio only. You must own the voice or have written consent — see our <a href="/acceptable-use">acceptable-use policy</a>.
+        Open <code>Voice Lab</code>, click <code>+ Clone voice</code> and either upload 60+ seconds of clean audio (WAV/MP3) or record live in your browser. Training takes 2–4 minutes. Creator and Studio only (Free has no voice-clone slots). You must own the voice or have written consent — see our <a href="/acceptable-use">acceptable-use policy</a>.
       </>
     ),
   },
@@ -119,7 +142,7 @@ const FAQS: Faq[] = [
     q: "How long do my renders stay in the cloud?",
     a: (
       <>
-        Free: 14 days. Pro: 90 days. Studio: indefinitely (subject to fair-use limits of 500 GB). After expiry, project source files remain — only the rendered MP4 is purged. Re-rendering is free if you have credits.
+        Free: 14 days. Creator: 90 days. Studio: indefinitely (subject to fair-use limits of 500 GB). After expiry, project source files remain — only the rendered MP4 is purged. Re-rendering is free if you have credits.
       </>
     ),
   },

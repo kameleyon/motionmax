@@ -19,7 +19,12 @@
  * module directly so the version badge stays in lock-step.
  */
 export const LEGAL_VERSIONS = {
-  tos: '2026.05.10-v1',
+  // B-NEW-21 (2026-05-10): bumped tos to v2 — "Credits and Billing" §6
+  // restated with the new Creator/Studio tier prices, credit allotments
+  // and top-up pack ladder. Existing users get the TermsUpdateModal on
+  // next sign-in (B-NEW-13 hook compares profiles.tos_version_accepted
+  // against this constant). Privacy + AUP unchanged this round.
+  tos: '2026.05.10-v2',
   privacy: '2026.05.10-v1',
   aup: '2026.05.10-v1',
 } as const;

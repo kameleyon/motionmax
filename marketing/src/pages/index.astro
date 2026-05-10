@@ -1,5 +1,25 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
+// B-NEW-21 — pull the locked pricing spec from the shared module so
+// landing copy never drifts from the React app.
+import {
+  PLANS,
+  TOP_UP_PACKS,
+  isPromoActive,
+  PROMO_BANNER_COPY,
+  formatUsd,
+  monthlyPromoPercentOff,
+  yearlySavingsPercent,
+} from "@/config/pricing";
+
+const promoActive = isPromoActive();
+const creator = PLANS.creator;
+const studio = PLANS.studio;
+const free = PLANS.free;
+
+const creatorPromoPct = monthlyPromoPercentOff("creator");
+const studioPromoPct = monthlyPromoPercentOff("studio");
+const yearlySavePct = yearlySavingsPercent("creator");
 
 const features = [
   {
@@ -45,7 +65,7 @@ const faqs = [
   },
   {
     q: "Is there a free plan?",
-    a: "Yes! The free plan includes monthly credits so you can create short videos and explore all core features — no credit card required.",
+    a: `Yes! The Free plan gives you ${free.credits_monthly} credits per month plus ${free.daily_credits} daily refresh credits — full editor access, no credit card required.`,
   },
   {
     q: "What video formats and resolutions are supported?",
@@ -57,8 +77,9 @@ const faqs = [
   },
   {
     q: "How do credits work?",
-    // B-3 fix (2026-05-09): aligned with app-side FAQ / Pricing / Terms — subscription credits expire on the 28th of each month.
-    a: "Each generation consumes credits based on complexity and length. Subscription credits expire on the 28th of each month and don't roll over. Top-up credit packs you buy on top of a plan never expire.",
+    // B-NEW-21 — credit math reflects the new tier ladder (Creator 500/mo, Studio 2,000/mo).
+    // Subscription credits expire on the 28th; daily refresh + top-ups never expire (ToS §6).
+    a: `Each generation consumes credits based on complexity and length. The Creator plan includes ${creator.credits_monthly} credits/month (${formatUsd(creator.price_monthly_after)}/mo after the intro period); Studio includes ${studio.credits_monthly} credits/month (${formatUsd(studio.price_monthly_after)}/mo). Both add ${creator.daily_credits} daily refresh credits on top. Subscription credits expire on the 28th of each month; daily refresh credits and top-up credit packs never expire.`,
   },
   {
     q: "Can I cancel my subscription?",
@@ -257,29 +278,44 @@ const faqJsonLd = {
     </section>
 
     <!-- ── Pricing ───────────────────────────────────────────── -->
+    <!--
+      B-NEW-21 (2026-05-10): Mirrors the React app's /pricing page.
+      Yearly cycle is rendered as the default headline; monthly +
+      first-3-months promo appears under each card. The interactive
+      cycle toggle + multi-pack ladder lives in the dashboard
+      Pricing.tsx page (post-auth) — this surface is read-only marketing
+      copy that resolves at build time from @/config/pricing.
+    -->
     <section id="pricing" class="py-20 bg-background/95">
       <div class="mx-auto max-w-5xl px-4 sm:px-6">
-        <div class="text-center mb-14">
+        {promoActive && (
+          <div class="mx-auto max-w-[680px] mb-8 rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-500/10 to-primary/10 px-4 py-3 flex items-center gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-amber-400 shrink-0"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>
+            <p class="text-sm text-foreground leading-snug">{PROMO_BANNER_COPY}</p>
+          </div>
+        )}
+
+        <div class="text-center mb-10">
           <h2 class="text-3xl sm:text-4xl font-bold text-foreground">Simple, Transparent Pricing</h2>
-          <p class="mt-4 text-muted-foreground max-w-xl mx-auto">Start free. Upgrade when you're ready. No hidden fees.</p>
+          <p class="mt-4 text-muted-foreground max-w-xl mx-auto">Start free. Upgrade when you're ready. Yearly saves up to {yearlySavingsPercent("studio")}%.</p>
         </div>
 
         <div class="grid sm:grid-cols-3 gap-6">
           <!-- Free -->
           <div class="rounded-2xl border border-border/50 bg-card/50 p-6 flex flex-col">
             <div>
-              <h3 class="font-semibold text-foreground text-lg">Free</h3>
+              <h3 class="font-semibold text-foreground text-lg">{free.name}</h3>
               <div class="mt-3 flex items-end gap-1">
                 <span class="text-4xl font-bold text-foreground">$0</span>
                 <span class="text-muted-foreground pb-1">/month</span>
               </div>
-              <p class="mt-2 text-sm text-muted-foreground">Perfect for trying out the platform</p>
+              <p class="mt-2 text-sm text-muted-foreground">{free.blurb}</p>
             </div>
             <ul class="mt-6 space-y-2 text-sm text-muted-foreground flex-1">
-              <li class="flex items-center gap-2"><span class="text-primary">✓</span> 150 one-time credits</li>
-              <li class="flex items-center gap-2"><span class="text-primary">✓</span> 720p video export</li>
-              <li class="flex items-center gap-2"><span class="text-primary">✓</span> Landscape format</li>
-              <li class="flex items-center gap-2"><span class="text-primary">✓</span> 3 Smart Flow videos</li>
+              <li class="flex items-center gap-2"><span class="text-primary">✓</span> {free.credits_monthly} credits / month</li>
+              <li class="flex items-center gap-2"><span class="text-primary">✓</span> +{free.daily_credits} daily refresh credits</li>
+              <li class="flex items-center gap-2"><span class="text-primary">✓</span> Full editor access</li>
+              <li class="flex items-center gap-2 opacity-40"><span>✗</span> Watermark removal</li>
               <li class="flex items-center gap-2 opacity-40"><span>✗</span> Voice cloning</li>
             </ul>
             <a href="/auth" class="mt-6 block rounded-xl border border-border/50 px-4 py-3 text-center text-sm font-medium text-foreground hover:bg-muted/50 transition-colors min-h-[44px] flex items-center justify-center">
@@ -293,52 +329,84 @@ const faqJsonLd = {
               <span class="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">Most Popular</span>
             </div>
             <div>
-              <h3 class="font-semibold text-foreground text-lg">Creator</h3>
-              <div class="mt-3 flex items-end gap-1">
-                <span class="text-4xl font-bold text-foreground">$29</span>
+              <h3 class="font-semibold text-foreground text-lg">{creator.name}</h3>
+              <div class="mt-3 flex items-end gap-1.5 flex-wrap">
+                <span class="text-4xl font-bold text-foreground">{formatUsd(creator.price_yearly_monthly)}</span>
                 <span class="text-muted-foreground pb-1">/month</span>
               </div>
-              <p class="mt-2 text-sm text-muted-foreground">For content creators and small teams</p>
+              <p class="mt-1 text-xs text-muted-foreground">{formatUsd(creator.price_yearly_total)} billed annually · save {yearlySavePct}%</p>
+              {promoActive && (
+                <p class="mt-2 text-xs text-amber-400">
+                  Or {formatUsd(creator.price_monthly_first3)}/mo for the first 3 months on monthly billing — then {formatUsd(creator.price_monthly_after)}/mo ({creatorPromoPct}% off).
+                </p>
+              )}
+              <p class="mt-2 text-sm text-muted-foreground">{creator.blurb}</p>
             </div>
             <ul class="mt-6 space-y-2 text-sm text-muted-foreground flex-1">
-              <li class="flex items-center gap-2"><span class="text-primary">✓</span> 500 credits/month</li>
-              <li class="flex items-center gap-2"><span class="text-primary">✓</span> 1080p video export</li>
-              <li class="flex items-center gap-2"><span class="text-primary">✓</span> Portrait & landscape</li>
-              <li class="flex items-center gap-2"><span class="text-primary">✓</span> 1 voice clone</li>
-              <li class="flex items-center gap-2"><span class="text-primary">✓</span> 20 Smart Flow videos</li>
+              <li class="flex items-center gap-2"><span class="text-primary">✓</span> {creator.credits_yearly.toLocaleString()} credits / year ({creator.credits_monthly} / mo)</li>
+              <li class="flex items-center gap-2"><span class="text-primary">✓</span> +{creator.daily_credits} daily refresh credits</li>
+              <li class="flex items-center gap-2"><span class="text-primary">✓</span> {creator.voice_clones} voice clone slot</li>
+              <li class="flex items-center gap-2"><span class="text-primary">✓</span> {creator.automation_slots} automation slot</li>
+              <li class="flex items-center gap-2"><span class="text-primary">✓</span> Watermark removal</li>
+              <li class="flex items-center gap-2"><span class="text-primary">✓</span> Multi-pack ladder up to 6×</li>
             </ul>
             <a href="/auth" class="mt-6 block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity min-h-[44px] flex items-center justify-center">
-              Start with Creator
+              Start with {creator.name}
             </a>
           </div>
 
           <!-- Studio -->
           <div class="rounded-2xl border border-gold/40 bg-gold/5 p-6 flex flex-col">
             <div>
-              <h3 class="font-semibold text-foreground text-lg">Studio</h3>
-              <div class="mt-3 flex items-end gap-1">
-                <span class="text-4xl font-bold text-foreground">$79</span>
+              <h3 class="font-semibold text-foreground text-lg">{studio.name}</h3>
+              <div class="mt-3 flex items-end gap-1.5 flex-wrap">
+                <span class="text-4xl font-bold text-foreground">{formatUsd(studio.price_yearly_monthly)}</span>
                 <span class="text-muted-foreground pb-1">/month</span>
               </div>
-              <p class="mt-2 text-sm text-muted-foreground">For professionals and agencies</p>
+              <p class="mt-1 text-xs text-muted-foreground">{formatUsd(studio.price_yearly_total)} billed annually</p>
+              {promoActive && (
+                <p class="mt-2 text-xs text-amber-400">
+                  Or {formatUsd(studio.price_monthly_first3)}/mo for the first 3 months on monthly billing — then {formatUsd(studio.price_monthly_after)}/mo ({studioPromoPct}% off).
+                </p>
+              )}
+              <p class="mt-2 text-sm text-muted-foreground">{studio.blurb}</p>
             </div>
             <ul class="mt-6 space-y-2 text-sm text-muted-foreground flex-1">
-              <li class="flex items-center gap-2"><span class="text-gold">✓</span> 2,500 credits/month</li>
-              <li class="flex items-center gap-2"><span class="text-gold">✓</span> 4K video export</li>
-              <li class="flex items-center gap-2"><span class="text-gold">✓</span> 5 voice clones</li>
-              <li class="flex items-center gap-2"><span class="text-gold">✓</span> Brand kit</li>
-              <li class="flex items-center gap-2"><span class="text-gold">✓</span> Priority rendering</li>
-              <li class="flex items-center gap-2"><span class="text-gold">✓</span> Character consistency</li>
-              <li class="flex items-center gap-2"><span class="text-gold">✓</span> Unlimited Smart Flow</li>
+              <li class="flex items-center gap-2"><span class="text-gold">✓</span> {studio.credits_yearly.toLocaleString()} credits / year ({studio.credits_monthly.toLocaleString()} / mo)</li>
+              <li class="flex items-center gap-2"><span class="text-gold">✓</span> +{studio.daily_credits} daily refresh credits</li>
+              <li class="flex items-center gap-2"><span class="text-gold">✓</span> {studio.voice_clones} voice clone slots</li>
+              <li class="flex items-center gap-2"><span class="text-gold">✓</span> {studio.automation_slots} automation slots</li>
+              <li class="flex items-center gap-2"><span class="text-gold">✓</span> Watermark removal</li>
+              <li class="flex items-center gap-2"><span class="text-gold">✓</span> Priority queue</li>
+              <li class="flex items-center gap-2"><span class="text-gold">✓</span> Multi-pack ladder up to 6×</li>
             </ul>
             <a href="/auth" class="mt-6 block rounded-xl border border-gold/50 px-4 py-3 text-center text-sm font-semibold text-foreground hover:bg-gold/10 transition-colors min-h-[44px] flex items-center justify-center">
-              Start with Studio
+              Start with {studio.name}
             </a>
           </div>
         </div>
 
+        <!-- Top-up packs -->
+        <div class="mt-14">
+          <div class="text-center mb-6">
+            <h3 class="text-xl font-semibold text-foreground">One-time credit packs</h3>
+            <p class="mt-2 text-sm text-muted-foreground">Stack a pack on top of any plan — Free included. Top-up credits never expire.</p>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            {TOP_UP_PACKS.map((p) => (
+              <div class="rounded-xl border border-border/50 bg-card/50 p-4 text-center">
+                <div class="text-[10px] uppercase tracking-widest text-muted-foreground">{p.label}</div>
+                <div class="mt-1 text-xl font-bold text-foreground">{p.credits.toLocaleString()}</div>
+                <div class="text-[10px] text-muted-foreground">credits</div>
+                <div class="mt-2 text-sm font-semibold text-foreground">{formatUsd(p.price_usd)}</div>
+                <div class="text-[10px] text-muted-foreground">${p.per_credit.toFixed(3)} / credit</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <p class="mt-8 text-center text-sm text-muted-foreground">
-          All plans include a 7-day money-back guarantee. Annual billing saves 20%.
+          All plans include a 7-day money-back guarantee. Yearly billing saves up to {yearlySavingsPercent("studio")}%.
           <a href="/pricing" class="text-primary hover:underline ml-1">See full pricing details →</a>
         </p>
       </div>

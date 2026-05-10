@@ -1,129 +1,99 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Check, X, Loader2 } from "lucide-react";
+import { Check, X, Loader2, Coins, Sparkles } from "lucide-react";
 import AppShell from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useAuth } from "@/hooks/useAuth";
-import { PLAN_PRICES } from "@/config/products";
-import { STRIPE_PLANS } from "@/config/stripeProducts";
-import { CREDIT_PACKAGES } from "@/config/pricingPlans";
-import { Coins } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   isLikelyEUUser,
   EU_COOLING_OFF_CONSENT_COPY,
 } from "@/lib/euCoolingOff";
+import {
+  PLANS,
+  TOP_UP_PACKS,
+  isPromoActive,
+  PROMO_BANNER_COPY,
+  multipackLadder,
+  formatUsd,
+  monthlyPromoPercentOff,
+  yearlySavingsPercent,
+  MULTIPACK_MAX,
+  type PlanId,
+} from "@/config/pricing";
+import { TopUpPacksModal } from "@/components/credits/TopUpPacksModal";
 
-/** Pricing — mirrors the landing-page 3-up plan grid (Free / Creator
- *  / Studio) inside the dashboard chrome. Same visual language as
- *  Voice Lab / Projects: dark card, teal accents on the popular plan,
- *  serif headline, mono uppercase labels. CTAs hit real Stripe
- *  checkout via useSubscription.createCheckout. */
+/** Pricing — B-NEW-21 mirror of Agent Opus structure with motionmax's
+ *  Creator + Studio tier names. Yearly/Monthly toggle drives both the
+ *  headline price + the multi-pack credit-allotment dropdown. The
+ *  EU cooling-off waiver from B-V1-5 still gates checkout. */
 
-interface Plan {
-  id: "free" | "creator" | "studio";
-  name: string;
-  price: string;
-  blurb: string;
-  features: { text: string; included: boolean }[];
-  cta: string;
-  popular?: boolean;
-  accent: "neutral" | "teal" | "gold";
-  /** Null for Free — clicking it routes to /auth or no-ops if already
-   *  signed in. */
-  priceId: string | null;
-}
-
-const PLANS: Plan[] = [
-  {
-    id: "free",
-    name: "Free",
-    price: "$0",
-    blurb: "Perfect for trying out the platform.",
-    features: [
-      { text: "150 one-time credits", included: true },
-      { text: "720p video export", included: true },
-      { text: "Landscape format", included: true },
-      { text: "3 Smart Flow videos", included: true },
-      { text: "Voice cloning", included: false },
-    ],
-    cta: "Get started free",
-    accent: "neutral",
-    priceId: null,
-  },
-  {
-    id: "creator",
-    name: "Creator",
-    price: PLAN_PRICES.creator.monthly,
-    blurb: "For content creators and small teams.",
-    features: [
-      { text: "500 credits/month", included: true },
-      { text: "1080p video export", included: true },
-      { text: "Portrait & landscape", included: true },
-      { text: "1 voice clone", included: true },
-      { text: "20 Smart Flow videos", included: true },
-    ],
-    cta: "Start with Creator",
-    popular: true,
-    accent: "teal",
-    priceId: STRIPE_PLANS.creator.monthly.priceId,
-  },
-  {
-    id: "studio",
-    name: "Studio",
-    price: PLAN_PRICES.studio.monthly,
-    blurb: "For professionals and agencies.",
-    features: [
-      { text: "2,500 credits/month", included: true },
-      { text: "4K video export", included: true },
-      { text: "5 voice clones", included: true },
-      { text: "Brand kit", included: true },
-      { text: "Priority rendering", included: true },
-      { text: "Character consistency", included: true },
-      { text: "Unlimited Smart Flow", included: true },
-    ],
-    cta: "Start with Studio",
-    accent: "gold",
-    priceId: STRIPE_PLANS.studio.monthly.priceId,
-  },
-];
+type CycleKey = "monthly" | "yearly";
+type PaidPlanId = Exclude<PlanId, "free">;
 
 export default function Pricing() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { createCheckout } = useSubscription();
   const [pendingPlan, setPendingPlan] = useState<string | null>(null);
+  const [cycle, setCycle] = useState<CycleKey>("yearly");
+  const [topUpModalOpen, setTopUpModalOpen] = useState(false);
 
-  // B-V1-5 / Comply L-B-05 — EU/EEA/UK 14-day cooling-off waiver.
-  // Detection runs post-mount so SSR/hydration matches; default unchecked
-  // per Directive 2011/83/EU Art. 16(m) (active opt-in required).
+  // Per-plan multi-pack multiplier (1×–6×). Default is 1× (the base
+  // allotment); users bump it to grant more credits without changing tier.
+  const [multipackByPlan, setMultipackByPlan] = useState<Record<PaidPlanId, number>>({
+    creator: 1,
+    studio: 1,
+  });
+
+  const promoActive = isPromoActive();
+
+  // B-V1-5 / Comply L-B-05 — EU/EEA/UK cooling-off binding. Detection
+  // runs post-mount so SSR/hydration matches.
   const [isEU, setIsEU] = useState(false);
   const [euWaived, setEuWaived] = useState(false);
   useEffect(() => {
     setIsEU(isLikelyEUUser());
   }, []);
 
-  const handleCta = async (plan: Plan) => {
-    if (!plan.priceId) {
-      if (!user) navigate("/auth");
-      else toast.info("You're already on the platform — start creating!");
-      return;
-    }
+  const handleSubscribe = async (planId: PaidPlanId) => {
     if (!user) {
-      navigate(`/auth?next=/pricing&plan=${plan.id}`);
+      navigate(`/auth?next=/pricing&plan=${planId}`);
       return;
     }
     if (isEU && !euWaived) {
       toast.error("Please confirm the EU/UK cooling-off waiver to continue.");
       return;
     }
-    setPendingPlan(plan.id);
+
+    const plan = PLANS[planId];
+    const priceId =
+      cycle === "monthly" ? plan.getMonthlyPriceId() : plan.getYearlyPriceId();
+
+    if (!priceId) {
+      // The sync script hasn't been run yet — surface a clear message
+      // rather than letting Stripe error opaquely.
+      toast.error("Plan not configured", {
+        description:
+          "Run scripts/sync-stripe-products.mjs and add the printed STRIPE_PRICE_* env vars.",
+      });
+      return;
+    }
+
+    setPendingPlan(`${planId}-${cycle}`);
     try {
-      const url = await createCheckout(plan.priceId, "subscription", {
+      const url = await createCheckout(priceId, "subscription", {
         euCoolingOffWaived: isEU ? euWaived : false,
       });
       if (url) window.location.href = url;
@@ -140,6 +110,22 @@ export default function Pricing() {
       <Helmet><title>Pricing · MotionMax</title></Helmet>
 
       <div className="px-3 sm:px-4 md:px-6 lg:px-8 py-8 sm:py-12 max-w-[1100px] mx-auto">
+        {/* Promo banner — only renders inside the limited-time window. */}
+        {promoActive && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35 }}
+            className="mx-auto max-w-[820px] mb-6 sm:mb-8 rounded-xl border border-[#E4C875]/40 bg-gradient-to-r from-[#E4C875]/10 to-[#14C8CC]/10 px-4 py-3 flex items-center gap-3"
+            data-testid="promo-banner"
+          >
+            <Sparkles className="w-4 h-4 text-[#E4C875] shrink-0" />
+            <p className="text-[12.5px] sm:text-[13px] text-[#ECEAE4] leading-snug">
+              {PROMO_BANNER_COPY}
+            </p>
+          </motion.div>
+        )}
+
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -152,29 +138,51 @@ export default function Pricing() {
           <p className="text-[14px] sm:text-[15px] text-[#8A9198] mt-3">
             Start free. Upgrade when you're ready. No hidden fees.
           </p>
+
+          {/* Billing-cycle toggle. Yearly is default-selected because it
+              is the offer Jo wants visitors to anchor on. */}
+          <div className="inline-flex items-center gap-1 mt-7 rounded-full bg-[#10151A] border border-white/10 p-1">
+            <CycleButton active={cycle === "monthly"} onClick={() => setCycle("monthly")}>
+              Monthly
+            </CycleButton>
+            <CycleButton active={cycle === "yearly"} onClick={() => setCycle("yearly")}>
+              Yearly
+              <span className="ml-1.5 text-[10px] font-semibold text-[#0A0D0F] bg-[#E4C875] px-1.5 py-0.5 rounded-full">
+                Save {yearlySavingsPercent("creator")}%
+              </span>
+            </CycleButton>
+          </div>
         </motion.div>
 
+        {/* Plan grid — Free + Creator + Studio. */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 mt-10 sm:mt-12">
-          {PLANS.map((plan, i) => (
-            <PlanCard
-              key={plan.id}
-              plan={plan}
-              pending={pendingPlan === plan.id}
-              // Block paid plans for EU users until the cooling-off waiver
-              // is ticked. Free tier (priceId === null) is unaffected.
-              blocked={!!plan.priceId && isEU && !euWaived}
-              onCta={() => handleCta(plan)}
-              delay={i * 0.05}
-            />
-          ))}
+          <FreeCard onCta={() => (user ? toast.info("You're already on the platform — start creating!") : navigate("/auth"))} />
+          <PaidPlanCard
+            planId="creator"
+            cycle={cycle}
+            promoActive={promoActive}
+            multipack={multipackByPlan.creator}
+            onMultipackChange={(m) => setMultipackByPlan((s) => ({ ...s, creator: m }))}
+            pending={pendingPlan === `creator-${cycle}`}
+            blocked={isEU && !euWaived}
+            onCta={() => handleSubscribe("creator")}
+            accent="teal"
+            popular
+          />
+          <PaidPlanCard
+            planId="studio"
+            cycle={cycle}
+            promoActive={promoActive}
+            multipack={multipackByPlan.studio}
+            onMultipackChange={(m) => setMultipackByPlan((s) => ({ ...s, studio: m }))}
+            pending={pendingPlan === `studio-${cycle}`}
+            blocked={isEU && !euWaived}
+            onCta={() => handleSubscribe("studio")}
+            accent="gold"
+          />
         </div>
 
-        {/* EU/EEA/UK cooling-off waiver — Directive 2011/83/EU Art. 16(m).
-            Rendered only when the timezone heuristic flags an EU user; the
-            checkbox is unchecked by default and gates every Continue button
-            on this page (subscription + credit packs). The legal binding is
-            persisted server-side in profiles.eu_cooling_off_waived_at by
-            create-checkout before the Stripe session is created. */}
+        {/* EU cooling-off waiver — same component contract as before. */}
         {isEU && (
           <div
             className="mt-8 mx-auto max-w-[640px] rounded-xl border border-[#E4C875]/30 bg-[#10151A] p-4 sm:p-5"
@@ -204,12 +212,10 @@ export default function Pricing() {
         )}
 
         <p className="text-center text-[12px] text-[#5A6268] mt-8">
-          All plans include a 7-day money-back guarantee. Annual billing saves 20%.
+          All plans include a 7-day money-back guarantee. Annual billing saves up to {yearlySavingsPercent("studio")}%.
         </p>
 
-        {/* Credit top-up packs — for users who want to add credits
-            without changing subscription tier. Same Stripe checkout
-            flow, different priceId. */}
+        {/* Top-up packs — one-time, available to ALL tiers (incl. Free). */}
         <div className="mt-16 sm:mt-20">
           <div className="text-center">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#E4C875]/10 border border-[#E4C875]/30 font-mono text-[10px] tracking-[0.16em] uppercase text-[#E4C875]">
@@ -220,152 +226,201 @@ export default function Pricing() {
               One-time credit packs
             </h2>
             <p className="text-[13px] sm:text-[14px] text-[#8A9198] mt-2">
-              Need more credits this cycle? Stack a pack on top of your plan. Credits never expire.
+              Need more credits this cycle? Stack a pack on top of any plan — Free included. Top-up credits never expire.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mt-8">
-            {CREDIT_PACKAGES.map((pack, i) => (
-              <CreditPackCard
-                key={pack.credits}
-                credits={pack.credits}
-                price={pack.price}
-                perCredit={pack.perCredit}
-                priceId={pack.priceId}
-                pending={pendingPlan === `pack-${pack.credits}`}
-                blocked={isEU && !euWaived}
-                onCta={async () => {
-                  if (!user) {
-                    navigate(`/auth?next=/pricing`);
-                    return;
-                  }
-                  if (isEU && !euWaived) {
-                    toast.error("Please confirm the EU/UK cooling-off waiver to continue.");
-                    return;
-                  }
-                  setPendingPlan(`pack-${pack.credits}`);
-                  try {
-                    const url = await createCheckout(pack.priceId, "payment", {
-                      euCoolingOffWaived: isEU ? euWaived : false,
-                    });
-                    if (url) window.location.href = url;
-                  } catch (err) {
-                    const msg = err instanceof Error ? err.message : String(err);
-                    toast.error("Couldn't start checkout", { description: msg });
-                  } finally {
-                    setPendingPlan(null);
-                  }
-                }}
-                highlight={i === 1}
-                delay={i * 0.05}
-              />
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mt-8">
+            {TOP_UP_PACKS.map((p, i) => (
+              <motion.div
+                key={p.sku}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: i * 0.04 }}
+                className={cn(
+                  "rounded-xl bg-[#10151A] border p-4 flex flex-col",
+                  i === TOP_UP_PACKS.length - 1
+                    ? "border-[#E4C875]/40"
+                    : "border-white/8",
+                )}
+              >
+                <div className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#5A6268]">
+                  {p.label}
+                </div>
+                <div className="mt-1 flex items-baseline gap-1">
+                  <span className="font-serif text-[22px] text-[#ECEAE4] leading-none">
+                    {p.credits.toLocaleString()}
+                  </span>
+                </div>
+                <div className="font-mono text-[10px] text-[#5A6268] mt-1.5 tracking-wide">
+                  ${p.per_credit.toFixed(3)} / credit
+                </div>
+                <div className="font-serif text-[18px] text-[#ECEAE4] mt-3">
+                  {formatUsd(p.price_usd)}
+                </div>
+              </motion.div>
             ))}
+          </div>
+          <div className="text-center mt-6">
+            <Button
+              type="button"
+              onClick={() => setTopUpModalOpen(true)}
+              className="h-10 px-6 rounded-full bg-[#E4C875] text-[#0A0D0F] hover:brightness-110 font-semibold text-[12.5px]"
+            >
+              Buy a credit pack
+            </Button>
           </div>
         </div>
       </div>
+
+      <TopUpPacksModal open={topUpModalOpen} onOpenChange={setTopUpModalOpen} />
     </AppShell>
   );
 }
 
-function CreditPackCard({
-  credits, price, perCredit, pending, onCta, highlight, delay, blocked = false,
+// ─────────────────────────────────────────────────────────────────────
+// Sub-components
+// ─────────────────────────────────────────────────────────────────────
+
+function CycleButton({
+  active,
+  onClick,
+  children,
 }: {
-  credits: number;
-  price: string;
-  perCredit: string;
-  priceId: string;
-  pending: boolean;
-  onCta: () => void;
-  highlight: boolean;
-  delay: number;
-  /** EU cooling-off waiver unchecked — visually disable + label the CTA. */
-  blocked?: boolean;
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
 }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay }}
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        "rounded-xl bg-[#10151A] border p-5 flex flex-col",
-        highlight ? "border-[#E4C875]/40" : "border-white/8",
+        "px-4 py-1.5 rounded-full text-[12.5px] font-semibold transition-colors inline-flex items-center",
+        active
+          ? "bg-[#14C8CC] text-[#0A0D0F]"
+          : "text-[#8A9198] hover:text-[#ECEAE4]",
       )}
     >
-      <div className="flex items-baseline gap-1">
-        <span className="font-serif text-[28px] font-medium text-[#ECEAE4] leading-none">
-          {credits.toLocaleString()}
-        </span>
-        <span className="text-[12px] text-[#8A9198]">credits</span>
+      {children}
+    </button>
+  );
+}
+
+function FreeCard({ onCta }: { onCta: () => void }) {
+  const p = PLANS.free;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+      className="relative rounded-2xl bg-[#10151A] border border-white/8 p-6 sm:p-7 flex flex-col"
+    >
+      <h3 className="font-serif text-[20px] font-medium text-[#ECEAE4]">{p.name}</h3>
+      <div className="mt-2 flex items-baseline gap-1">
+        <span className="font-serif text-[36px] font-medium text-[#ECEAE4] leading-none">$0</span>
+        <span className="text-[13px] text-[#8A9198]">/month</span>
       </div>
-      <div className="font-mono text-[10px] tracking-[0.12em] uppercase text-[#5A6268] mt-2">
-        {perCredit} / credit
-      </div>
-      <div className="font-serif text-[20px] font-medium text-[#ECEAE4] mt-4">{price}</div>
+      <p className="text-[13px] text-[#8A9198] mt-2.5">{p.blurb}</p>
+
+      <ul className="mt-5 space-y-2 flex-1">
+        <Feature on>{p.credits_monthly} credits / month</Feature>
+        <Feature on>{p.daily_credits} daily refresh credits</Feature>
+        <Feature on>Full editor access</Feature>
+        <Feature off>Watermark removal</Feature>
+        <Feature off>Voice cloning</Feature>
+        <Feature off>Automation slots</Feature>
+      </ul>
+
       <Button
         type="button"
         onClick={onCta}
-        disabled={pending || blocked}
-        aria-disabled={pending || blocked}
-        title={blocked ? "Confirm the EU/UK cooling-off waiver above to continue." : undefined}
-        className={cn(
-          "w-full mt-4 h-9 rounded-full font-semibold text-[12px] disabled:opacity-50",
-          highlight
-            ? "bg-[#E4C875] text-[#0A0D0F] hover:brightness-110"
-            : "bg-transparent border border-white/15 text-[#ECEAE4] hover:bg-white/5",
-        )}
+        className="w-full mt-6 h-10 rounded-full font-semibold text-[12.5px] bg-transparent border border-white/15 text-[#ECEAE4] hover:bg-white/5"
       >
-        {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : null}
-        {pending
-          ? "Opening checkout…"
-          : blocked
-            ? "Confirm EU/UK waiver"
-            : "Buy pack"}
+        Get started free
       </Button>
     </motion.div>
   );
 }
 
-function PlanCard({
-  plan, pending, onCta, delay, blocked = false,
+function PaidPlanCard({
+  planId,
+  cycle,
+  promoActive,
+  multipack,
+  onMultipackChange,
+  pending,
+  blocked,
+  onCta,
+  accent,
+  popular = false,
 }: {
-  plan: Plan;
+  planId: PaidPlanId;
+  cycle: CycleKey;
+  promoActive: boolean;
+  multipack: number;
+  onMultipackChange: (n: number) => void;
   pending: boolean;
+  blocked: boolean;
   onCta: () => void;
-  delay: number;
-  /** EU cooling-off waiver unchecked — visually disable + label the CTA. */
-  blocked?: boolean;
+  accent: "teal" | "gold";
+  popular?: boolean;
 }) {
-  // Per-accent border + glow tokens. Teal = popular Creator card,
-  // gold = Studio, neutral = Free. Same hue family as the rest of
-  // the app so the page reads native to the editor chrome.
+  const plan = PLANS[planId];
+
+  // Compute the credit ladder for the chosen cycle.
+  const ladder = useMemo(
+    () =>
+      multipackLadder(
+        cycle === "monthly" ? plan.credits_monthly : plan.credits_yearly,
+      ),
+    [cycle, plan.credits_monthly, plan.credits_yearly],
+  );
+
+  const promoPct = monthlyPromoPercentOff(planId);
+  const showStrikethrough = cycle === "monthly" && promoActive && promoPct > 0;
+
+  // Headline price string for this cycle.
+  const priceMain =
+    cycle === "monthly"
+      ? formatUsd(promoActive ? plan.price_monthly_first3 : plan.price_monthly_after)
+      : formatUsd(plan.price_yearly_monthly);
+  const priceStrike =
+    cycle === "monthly" && promoActive ? formatUsd(plan.price_monthly_after) : null;
+  const billedAs =
+    cycle === "yearly"
+      ? `${formatUsd(plan.price_yearly_total)} billed annually`
+      : promoActive
+        ? "for the first 3 months"
+        : "billed monthly";
+
   const accentBorder =
-    plan.accent === "teal"
+    accent === "teal"
       ? "border-[#14C8CC]/40 shadow-[0_18px_50px_-22px_rgba(20,200,204,0.45)]"
-      : plan.accent === "gold"
-        ? "border-[#E4C875]/30"
-        : "border-white/8";
+      : "border-[#E4C875]/30";
 
   const ctaClass =
-    plan.accent === "teal"
+    accent === "teal"
       ? "bg-gradient-to-r from-[#14C8CC] to-[#0FA6AE] text-[#0A0D0F] hover:brightness-110"
-      : plan.accent === "gold"
-        ? "bg-transparent border border-[#E4C875]/40 text-[#E4C875] hover:bg-[#E4C875]/10"
-        : "bg-transparent border border-white/15 text-[#ECEAE4] hover:bg-white/5";
+      : "bg-transparent border border-[#E4C875]/40 text-[#E4C875] hover:bg-[#E4C875]/10";
 
-  const checkColor =
-    plan.accent === "gold" ? "text-[#E4C875]" : "text-[#14C8CC]";
+  const checkColor = accent === "gold" ? "text-[#E4C875]" : "text-[#14C8CC]";
+
+  // The selected ladder allotment (what the user's about to be granted).
+  const selectedCredits = ladder[multipack - 1];
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay }}
+      transition={{ duration: 0.35, delay: 0.05 }}
       className={cn(
         "relative rounded-2xl bg-[#10151A] border p-6 sm:p-7 flex flex-col",
         accentBorder,
       )}
     >
-      {plan.popular && (
+      {popular && (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-[#14C8CC] text-[#0A0D0F] font-mono text-[10px] tracking-[0.12em] uppercase font-semibold">
           Most popular
         </div>
@@ -373,24 +428,79 @@ function PlanCard({
 
       <h3 className="font-serif text-[20px] font-medium text-[#ECEAE4]">{plan.name}</h3>
 
-      <div className="mt-2 flex items-baseline gap-1">
-        <span className="font-serif text-[36px] font-medium text-[#ECEAE4] leading-none">{plan.price}</span>
+      <div className="mt-2 flex items-baseline gap-1.5 flex-wrap">
+        {priceStrike && (
+          <span className="text-[18px] font-serif text-[#5A6268] line-through">
+            {priceStrike}
+          </span>
+        )}
+        <span className="font-serif text-[36px] font-medium text-[#ECEAE4] leading-none">
+          {priceMain}
+        </span>
         <span className="text-[13px] text-[#8A9198]">/month</span>
       </div>
 
-      <p className="text-[13px] text-[#8A9198] mt-2.5">{plan.blurb}</p>
+      <p className="text-[11.5px] font-mono uppercase tracking-[0.12em] text-[#8A9198] mt-1.5">
+        {billedAs}
+      </p>
+
+      {showStrikethrough && (
+        <p
+          className="text-[11px] text-[#E4C875] mt-1"
+          data-testid={`promo-caption-${planId}`}
+        >
+          Save {promoPct}% for the first 3 months — then {formatUsd(plan.price_monthly_after)}/mo.
+        </p>
+      )}
+
+      <p className="text-[13px] text-[#8A9198] mt-3">{plan.blurb}</p>
+
+      {/* Multi-pack ladder selector */}
+      <div className="mt-4">
+        <label className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] block mb-1.5">
+          Credit allotment
+        </label>
+        <Select
+          value={String(multipack)}
+          onValueChange={(v) => onMultipackChange(Number(v))}
+        >
+          <SelectTrigger className="bg-[#0A0D0F] border-white/10 text-[#ECEAE4] h-9 text-[12.5px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-[#10151A] border-white/10">
+            {ladder.map((credits, idx) => {
+              const mult = idx + 1;
+              return (
+                <SelectItem key={mult} value={String(mult)}>
+                  {mult}× — {credits.toLocaleString()} credits
+                  {cycle === "monthly" ? "/mo" : "/yr"}
+                  {mult === 1 ? " (base)" : ""}
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+        {multipack > 1 && (
+          <p className="text-[10.5px] text-[#5A6268] mt-1.5 leading-snug">
+            Selected: {selectedCredits.toLocaleString()} credits {cycle === "monthly" ? "per month" : "per year"} ({multipack}× of base).
+          </p>
+        )}
+      </div>
 
       <ul className="mt-5 space-y-2 flex-1">
-        {plan.features.map((f, i) => (
-          <li key={i} className="flex items-start gap-2 text-[13px]">
-            {f.included ? (
-              <Check className={cn("w-4 h-4 shrink-0 mt-[1px]", checkColor)} />
-            ) : (
-              <X className="w-4 h-4 shrink-0 mt-[1px] text-[#5A6268]" />
-            )}
-            <span className={f.included ? "text-[#ECEAE4]" : "text-[#5A6268]"}>{f.text}</span>
-          </li>
-        ))}
+        <Feature on color={checkColor}>
+          {(cycle === "monthly" ? plan.credits_monthly : plan.credits_yearly).toLocaleString()} credits / {cycle === "monthly" ? "month" : "year"}
+        </Feature>
+        <Feature on color={checkColor}>+{plan.daily_credits} daily refresh credits</Feature>
+        <Feature on color={checkColor}>
+          {plan.voice_clones} voice clone slot{plan.voice_clones === 1 ? "" : "s"}
+        </Feature>
+        <Feature on color={checkColor}>
+          {plan.automation_slots} automation slot{plan.automation_slots === 1 ? "" : "s"}
+        </Feature>
+        <Feature on={plan.watermark_removal} color={checkColor}>Watermark removal</Feature>
+        <Feature on={plan.priority_queue} color={checkColor}>Priority queue</Feature>
+        <Feature on color={checkColor}>Multi-pack ladder up to {MULTIPACK_MAX}×</Feature>
       </ul>
 
       <Button
@@ -399,15 +509,39 @@ function PlanCard({
         disabled={pending || blocked}
         aria-disabled={pending || blocked}
         title={blocked ? "Confirm the EU/UK cooling-off waiver above to continue." : undefined}
-        className={cn("w-full mt-6 h-10 rounded-full font-semibold text-[12.5px] disabled:opacity-50", ctaClass)}
+        className={cn(
+          "w-full mt-6 h-10 rounded-full font-semibold text-[12.5px] disabled:opacity-50",
+          ctaClass,
+        )}
       >
         {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : null}
         {pending
           ? "Opening checkout…"
           : blocked
             ? "Confirm EU/UK waiver above"
-            : plan.cta}
+            : `Start with ${plan.name}`}
       </Button>
     </motion.div>
+  );
+}
+
+function Feature({
+  children,
+  on = true,
+  color = "text-[#14C8CC]",
+}: {
+  children: React.ReactNode;
+  on?: boolean;
+  color?: string;
+}) {
+  return (
+    <li className="flex items-start gap-2 text-[13px]">
+      {on ? (
+        <Check className={cn("w-4 h-4 shrink-0 mt-[1px]", color)} />
+      ) : (
+        <X className="w-4 h-4 shrink-0 mt-[1px] text-[#5A6268]" />
+      )}
+      <span className={on ? "text-[#ECEAE4]" : "text-[#5A6268]"}>{children}</span>
+    </li>
   );
 }

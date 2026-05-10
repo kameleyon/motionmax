@@ -160,6 +160,51 @@ You are writing prompts for a generative video AI that CANNOT do lip-sync.
 - Characters must always have anatomically correct proportions — no extra limbs, no stretched necks, no distorted faces
 - All characters must be FULLY CLOTHED in context-appropriate attire at all times
 
+=== MODERATION-FRIENDLY VISUALS (avoid upstream false positives) ===
+The downstream video provider (Seedance / Kling) runs its own content
+filter that flags surprisingly benign things. Steer prompts AWAY from
+these patterns even when the topic is innocent — a held-frame fallback
+runs when a scene is rejected, but losing motion on every flagged scene
+degrades the final video.
+
+⛔ AVOID these construction patterns:
+1. **Multiple national flags / national crests in one scene paired with
+   competition or rivalry language** — e.g. "Portugal, DR Congo,
+   Uzbekistan and Colombia crests side by side in the group of death" →
+   FLAGGED. Replace with a SINGLE focal national symbol per scene, or a
+   stadium / pitch / tactical-board establishing shot, or a stylised
+   competition graphic without the literal flag composition.
+2. **Real named individuals in conflict-adjacent or politicised
+   contexts** — e.g. "Putin meets Trump at the war negotiations" →
+   FLAGGED. Use generic role language ("a head of state addresses the
+   press"), or a metaphor (chess pieces on a map), or a static
+   establishing shot of the location only.
+3. **Military uniforms + active weaponry** — historical contexts get
+   flagged the same as modern. Use silhouettes, the uniform alone with
+   weapons holstered/sheathed, or focus on the environment (a war room,
+   a barracks) instead of the soldier in action.
+4. **Specific religious figures** depicted with reverence or worship
+   language — even artistic/historical depictions trigger filters. Use
+   architectural shots of churches/temples/mosques, or symbolic
+   stand-ins (a candle, an altar) instead.
+5. **Children in any conflict / hardship / risk framing** — extremely
+   high false-positive rate. Replace with adult subjects or remove the
+   human element from that scene entirely.
+
+✅ SAFE alternatives that still tell the story:
+- Establishing shots of stadiums, cities, monuments, landscapes (no
+  human risk vocabulary).
+- Single-subject hero shots with one symbolic element (one flag, one
+  trophy, one player silhouette — never a multi-flag panel).
+- Tactical / stylised graphics (charts, maps, stylised game pieces).
+- Atmospheric environments with no people (tunnels, rain on tarmac,
+  empty stadiums at dawn).
+
+This section addresses real upstream filter behaviour observed in
+production on 2026-05-09 / 2026-05-10. The rules ARE conservative —
+they err on the side of motion video over forced-static — but a clean
+motion video on every scene is the goal.
+
 === TEMPORAL CONSISTENCY & PHYSICS (ZERO TOLERANCE) ===
 The video AI tends to morph appearance and break physics across frames.
 Keep these rules in MIND while writing each scene, but DO NOT copy

@@ -79,18 +79,22 @@ const STYLES: Array<{ id: string; label: string; preview: string }> = [
 ];
 
 // Full language catalogue — mirrors src/components/workspace/LanguageSelector.tsx
-const LANGUAGES: Array<{ code: string; label: string; flag: string }> = [
-  { code: 'en', label: 'English',         flag: '\u{1F1FA}\u{1F1F8}' },
-  { code: 'fr', label: 'Français',        flag: '\u{1F1EB}\u{1F1F7}' },
-  { code: 'es', label: 'Español',         flag: '\u{1F1EA}\u{1F1F8}' },
-  { code: 'ht', label: 'Kreyòl Ayisyen',  flag: '\u{1F1ED}\u{1F1F9}' },
-  { code: 'de', label: 'Deutsch',         flag: '\u{1F1E9}\u{1F1EA}' },
-  { code: 'it', label: 'Italiano',        flag: '\u{1F1EE}\u{1F1F9}' },
-  { code: 'nl', label: 'Nederlands',      flag: '\u{1F1F3}\u{1F1F1}' },
-  { code: 'ru', label: 'Русский',         flag: '\u{1F1F7}\u{1F1FA}' },
-  { code: 'zh', label: '中文',            flag: '\u{1F1E8}\u{1F1F3}' },
-  { code: 'ja', label: '日本語',          flag: '\u{1F1EF}\u{1F1F5}' },
-  { code: 'ko', label: '한국어',          flag: '\u{1F1F0}\u{1F1F7}' },
+// C-1-2: each row carries a BCP-47 `lang` code + an `englishName` so the
+// <option> can self-tag with `lang` (switches screen-reader TTS voice)
+// and carry an aria-label that announces the language in English for
+// users whose AT stays on a single voice.
+const LANGUAGES: Array<{ code: string; label: string; flag: string; englishName: string }> = [
+  { code: 'en', label: 'English',         flag: '\u{1F1FA}\u{1F1F8}', englishName: 'English' },
+  { code: 'fr', label: 'Français',        flag: '\u{1F1EB}\u{1F1F7}', englishName: 'French' },
+  { code: 'es', label: 'Español',         flag: '\u{1F1EA}\u{1F1F8}', englishName: 'Spanish' },
+  { code: 'ht', label: 'Kreyòl Ayisyen',  flag: '\u{1F1ED}\u{1F1F9}', englishName: 'Haitian Creole' },
+  { code: 'de', label: 'Deutsch',         flag: '\u{1F1E9}\u{1F1EA}', englishName: 'German' },
+  { code: 'it', label: 'Italiano',        flag: '\u{1F1EE}\u{1F1F9}', englishName: 'Italian' },
+  { code: 'nl', label: 'Nederlands',      flag: '\u{1F1F3}\u{1F1F1}', englishName: 'Dutch' },
+  { code: 'ru', label: 'Русский',         flag: '\u{1F1F7}\u{1F1FA}', englishName: 'Russian' },
+  { code: 'zh', label: '中文',            flag: '\u{1F1E8}\u{1F1F3}', englishName: 'Chinese' },
+  { code: 'ja', label: '日本語',          flag: '\u{1F1EF}\u{1F1F5}', englishName: 'Japanese' },
+  { code: 'ko', label: '한국어',          flag: '\u{1F1F0}\u{1F1F7}', englishName: 'Korean' },
 ];
 
 // MUSIC_GENRES removed alongside the Music + SFX intake UI block while
@@ -1077,7 +1081,20 @@ export default function IntakeForm({
             onChange={(e) => setLanguage(e.target.value)}
             className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-base sm:text-[13px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50"
           >
-            {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.flag} {l.label}</option>)}
+            {/* Per-option `lang` + `aria-label` (C-1-2 / Halo F-A11Y-006):
+                tells the screen-reader's TTS engine to switch voice
+                synthesizer for native-script labels and provides an
+                English-language fallback announcement. */}
+            {LANGUAGES.map((l) => (
+              <option
+                key={l.code}
+                value={l.code}
+                lang={l.code}
+                aria-label={`${l.label} (${l.englishName})`}
+              >
+                {l.flag} {l.label}
+              </option>
+            ))}
           </select>
         </div>
         <div>
@@ -1559,7 +1576,7 @@ export default function IntakeForm({
             </Button>
             <Button
               onClick={() => navigate('/pricing')}
-              className="bg-gradient-to-r from-[#11C4D0] to-[#E4C875] text-[#0A0D0F] hover:opacity-90"
+              className="bg-gradient-to-r from-[#14C8CC] to-[#E4C875] text-[#0A0D0F] hover:opacity-90"
             >
               View plans
             </Button>

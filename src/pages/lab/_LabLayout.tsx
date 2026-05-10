@@ -73,9 +73,9 @@ export function LabLayout({
           >
             <Link
               to="/lab"
-              className="inline-flex items-center gap-1.5 text-[#ECEAE4] hover:text-[#11C4D0] transition-colors"
+              className="inline-flex items-center gap-1.5 text-[#ECEAE4] hover:text-[#14C8CC] transition-colors"
             >
-              <FlaskConical className="h-3.5 w-3.5 text-[#11C4D0]" />
+              <FlaskConical className="h-3.5 w-3.5 text-[#14C8CC]" />
               <span className="font-medium">Lab</span>
             </Link>
             {breadcrumbs.map((crumb, i) => {

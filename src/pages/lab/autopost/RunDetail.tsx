@@ -300,7 +300,7 @@ export default function RunDetail() {
                   <div className="space-y-1.5">
                     <Link
                       to={`/lab/autopost/schedules/${runQuery.data.schedule_id}`}
-                      className="font-serif text-xl text-[#ECEAE4] hover:text-[#11C4D0] transition-colors break-words"
+                      className="font-serif text-xl text-[#ECEAE4] hover:text-[#14C8CC] transition-colors break-words"
                     >
                       {runQuery.data.schedule?.name ?? "(deleted schedule)"}
                     </Link>
@@ -332,7 +332,7 @@ export default function RunDetail() {
                       <Button
                         size="sm"
                         asChild
-                        className="bg-[#11C4D0] text-[#0A0D0F] hover:bg-[#11C4D0]/90"
+                        className="bg-[#14C8CC] text-[#0A0D0F] hover:bg-[#14C8CC]/90"
                       >
                         <a href={renderedVideoUrl} target="_blank" rel="noreferrer noopener">
                           <Play className="h-3.5 w-3.5 mr-1.5" />
@@ -417,7 +417,7 @@ export default function RunDetail() {
                               color:
                                 log.category === "system_error" ? "#E4C875"
                                 : log.category === "system_warning" ? "#E4C875"
-                                : "#11C4D0",
+                                : "#14C8CC",
                             }}
                           >
                             {new Date(log.created_at).toLocaleTimeString()}
@@ -512,7 +512,7 @@ function PublishJobPanel({
     <div className="rounded-lg border border-white/8 bg-black/20 p-4 space-y-3">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <Icon className="h-4 w-4 text-[#11C4D0] shrink-0" />
+          <Icon className="h-4 w-4 text-[#14C8CC] shrink-0" />
           <p className="text-[13px] font-medium text-[#ECEAE4] truncate">
             {platformLabel(job.platform)}
           </p>
@@ -544,7 +544,7 @@ function PublishJobPanel({
           href={job.platform_post_url}
           target="_blank"
           rel="noreferrer noopener"
-          className="inline-flex items-center gap-1.5 text-[12px] text-[#11C4D0] hover:underline"
+          className="inline-flex items-center gap-1.5 text-[12px] text-[#14C8CC] hover:underline"
         >
           View live post
           <ExternalLink className="h-3 w-3" />

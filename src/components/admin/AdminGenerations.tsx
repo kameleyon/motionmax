@@ -57,7 +57,7 @@ type TimePeriod = "7d" | "30d" | "90d" | "all";
 const STATUS_COLORS = {
   pending: "hsl(var(--muted-foreground))", // Muted
   processing: "hsl(var(--secondary))", // Light aqua
-  complete: "hsl(var(--primary))", // Primary aqua #11C4D0
+  complete: "hsl(var(--primary))", // Primary aqua #14C8CC
   error: "hsl(var(--destructive))", // Red for errors
   deleted: "hsl(var(--muted-foreground))", // Neutral gray
 };

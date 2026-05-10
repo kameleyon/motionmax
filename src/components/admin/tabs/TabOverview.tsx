@@ -98,9 +98,9 @@ function glyphFor(e: string | null): IconKey {
 
 const PROVIDER_COLOR: Record<string, string> = {
   "Replicate · Video": "#14C8CC",
-  "ElevenLabs": "#a78bfa",
+  "ElevenLabs": "#E4C875",
   "Replicate · Image": "#E4C875",
-  "OpenAI": "#5CD68D",
+  "OpenAI": "#14C8CC",
   "Other": "#5A6268",
 };
 const PROVIDER_ORDER: readonly string[] = [

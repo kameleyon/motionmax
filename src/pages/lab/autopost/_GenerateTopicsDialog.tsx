@@ -362,7 +362,7 @@ export function GenerateTopicsDialog({
       <DialogContent className="autopost-modal-content w-[calc(100vw-2rem)] sm:w-auto max-w-xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="text-[#ECEAE4] flex items-center gap-2 min-w-0">
-            <Wand2 className="h-4 w-4 text-[#11C4D0] shrink-0" />
+            <Wand2 className="h-4 w-4 text-[#14C8CC] shrink-0" />
             <span className="truncate">Generate more topics</span>
           </DialogTitle>
           <DialogDescription className="text-[#8A9198]">
@@ -386,7 +386,7 @@ export function GenerateTopicsDialog({
           variant="outline"
           onClick={generate}
           disabled={generating}
-          className="w-full border-[#11C4D0]/30 bg-[#11C4D0]/5 text-[#11C4D0] hover:bg-[#11C4D0]/10 hover:text-[#11C4D0]"
+          className="w-full border-[#14C8CC]/30 bg-[#14C8CC]/5 text-[#14C8CC] hover:bg-[#14C8CC]/10 hover:text-[#14C8CC]"
         >
           {generating ? (
             <>
@@ -407,7 +407,7 @@ export function GenerateTopicsDialog({
               <button
                 type="button"
                 onClick={toggleAll}
-                className="text-[#11C4D0] hover:text-[#11C4D0]/80 underline-offset-2 hover:underline"
+                className="text-[#14C8CC] hover:text-[#14C8CC]/80 underline-offset-2 hover:underline"
               >
                 {allSelected ? "Clear selection" : "Select all"}
               </button>
@@ -420,7 +420,7 @@ export function GenerateTopicsDialog({
               style={{
                 maxHeight: '260px',
                 scrollbarWidth: 'thin',
-                scrollbarColor: '#11C4D0 #1B2228',
+                scrollbarColor: '#14C8CC #1B2228',
               }}
             >
               <ul className="divide-y divide-white/8">
@@ -431,14 +431,14 @@ export function GenerateTopicsDialog({
                       key={topic}
                       className={cn(
                         "flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-white/[0.03]",
-                        isSelected && "bg-[#11C4D0]/[0.04]",
+                        isSelected && "bg-[#14C8CC]/[0.04]",
                       )}
                       onClick={() => toggleOne(topic)}
                     >
                       <Checkbox
                         checked={isSelected}
                         onCheckedChange={() => toggleOne(topic)}
-                        className="border-white/20 data-[state=checked]:bg-[#11C4D0] data-[state=checked]:border-[#11C4D0] shrink-0"
+                        className="border-white/20 data-[state=checked]:bg-[#14C8CC] data-[state=checked]:border-[#14C8CC] shrink-0"
                       />
                       <span className="text-[13px] text-[#ECEAE4] flex-1 min-w-0 break-words">{topic}</span>
                     </li>
@@ -454,7 +454,7 @@ export function GenerateTopicsDialog({
             <p className="text-[11px] uppercase tracking-wider text-[#5A6268] flex items-center gap-2">
               <span>Current queue ({queue.length})</span>
               {reorderMutation.isPending ? (
-                <span className="inline-flex items-center gap-1 normal-case tracking-normal text-[#11C4D0]">
+                <span className="inline-flex items-center gap-1 normal-case tracking-normal text-[#14C8CC]">
                   <Loader2 className="h-2.5 w-2.5 animate-spin" />
                   Saving order…
                 </span>
@@ -465,7 +465,7 @@ export function GenerateTopicsDialog({
               style={{
                 maxHeight: '180px',
                 scrollbarWidth: 'thin',
-                scrollbarColor: '#11C4D0 #1B2228',
+                scrollbarColor: '#14C8CC #1B2228',
               }}
             >
               <ul className="divide-y divide-white/8">
@@ -505,7 +505,7 @@ export function GenerateTopicsDialog({
                       className={cn(
                         "group flex items-center gap-2 px-3 py-2 hover:bg-white/[0.03] transition-opacity",
                         isDragging && "opacity-40",
-                        isDropTarget && "bg-[#11C4D0]/[0.06] outline outline-1 outline-[#11C4D0]/40",
+                        isDropTarget && "bg-[#14C8CC]/[0.06] outline outline-1 outline-[#14C8CC]/40",
                       )}
                     >
                       <span
@@ -564,7 +564,7 @@ export function GenerateTopicsDialog({
           <Button
             onClick={() => addMutation.mutate()}
             disabled={selected.size === 0 || addMutation.isPending}
-            className="bg-[#11C4D0] text-[#0A0D0F] hover:bg-[#11C4D0]/90 w-full md:w-auto"
+            className="bg-[#14C8CC] text-[#0A0D0F] hover:bg-[#14C8CC]/90 w-full md:w-auto"
           >
             {addMutation.isPending ? (
               <Loader2 className="h-4 w-4 mr-1.5 animate-spin shrink-0" />

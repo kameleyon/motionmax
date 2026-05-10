@@ -134,7 +134,7 @@ export function SourcesField({ attachments, onChange }: SourcesFieldProps) {
                 key={a.id}
                 className="flex items-center gap-1.5 rounded-full border border-white/10 bg-[#0A0D0F] px-2.5 py-1 text-xs text-[#ECEAE4]"
               >
-                <Icon className="h-3 w-3 shrink-0 text-[#11C4D0]" />
+                <Icon className="h-3 w-3 shrink-0 text-[#14C8CC]" />
                 <span className="max-w-[180px] truncate">{a.name}</span>
                 <button
                   type="button"
@@ -156,7 +156,7 @@ export function SourcesField({ attachments, onChange }: SourcesFieldProps) {
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="flex items-center gap-1.5 rounded-md border border-white/10 bg-[#0A0D0F] px-3 py-1.5 text-xs text-[#11C4D0] hover:border-[#11C4D0]/40 hover:bg-[#11C4D0]/[0.06] transition-colors"
+            className="flex items-center gap-1.5 rounded-md border border-white/10 bg-[#0A0D0F] px-3 py-1.5 text-xs text-[#14C8CC] hover:border-[#14C8CC]/40 hover:bg-[#14C8CC]/[0.06] transition-colors"
           >
             <Plus className="h-3.5 w-3.5" />
             Add source
@@ -193,7 +193,7 @@ export function SourcesField({ attachments, onChange }: SourcesFieldProps) {
               <p className="text-[10px] text-[#5A6268]">Separate multiple with commas</p>
               <Button
                 size="sm"
-                className="w-full h-7 text-xs bg-[#11C4D0] text-[#0A0D0F] hover:bg-[#11C4D0]/90"
+                className="w-full h-7 text-xs bg-[#14C8CC] text-[#0A0D0F] hover:bg-[#14C8CC]/90"
                 onClick={submitLinks}
                 disabled={!linkInput.trim()}
               >
@@ -207,7 +207,7 @@ export function SourcesField({ attachments, onChange }: SourcesFieldProps) {
                 onClick={() => handleFileSelect("image/*", "image")}
                 className="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-sm hover:bg-white/5 transition-colors"
               >
-                <ImageIcon className="h-4 w-4 text-[#11C4D0]" />
+                <ImageIcon className="h-4 w-4 text-[#14C8CC]" />
                 <span>Photos & Images</span>
               </button>
               <button
@@ -224,7 +224,7 @@ export function SourcesField({ attachments, onChange }: SourcesFieldProps) {
                 onClick={() => setLinkMode("link")}
                 className="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-sm hover:bg-white/5 transition-colors"
               >
-                <Link2 className="h-4 w-4 text-[#11C4D0]" />
+                <Link2 className="h-4 w-4 text-[#14C8CC]" />
                 <span>Web Links</span>
               </button>
               <button
@@ -249,7 +249,7 @@ export function SourcesField({ attachments, onChange }: SourcesFieldProps) {
                 onClick={() => setLinkMode("gdrive")}
                 className="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-sm hover:bg-white/5 transition-colors"
               >
-                <FolderOpen className="h-4 w-4 text-[#11C4D0]" />
+                <FolderOpen className="h-4 w-4 text-[#14C8CC]" />
                 <span>Google Drive</span>
               </button>
             </div>

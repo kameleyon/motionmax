@@ -48,18 +48,22 @@ const GRADE_OPTIONS: Grade[] = [
 // Mirrors src/components/workspace/LanguageSelector.tsx so the editor's
 // language picker matches the intake. Voices are language-scoped so when
 // the user changes language here we surface a fresh voice list below.
-const LANGUAGE_OPTIONS: { id: string; label: string; flag: string }[] = [
-  { id: 'en', label: 'English', flag: '\u{1F1FA}\u{1F1F8}' },
-  { id: 'fr', label: 'Fran\u00e7ais', flag: '\u{1F1EB}\u{1F1F7}' },
-  { id: 'es', label: 'Espa\u00f1ol', flag: '\u{1F1EA}\u{1F1F8}' },
-  { id: 'ht', label: 'Krey\u00f2l Ayisyen', flag: '\u{1F1ED}\u{1F1F9}' },
-  { id: 'de', label: 'Deutsch', flag: '\u{1F1E9}\u{1F1EA}' },
-  { id: 'it', label: 'Italiano', flag: '\u{1F1EE}\u{1F1F9}' },
-  { id: 'nl', label: 'Nederlands', flag: '\u{1F1F3}\u{1F1F1}' },
-  { id: 'ru', label: '\u0420\u0443\u0441\u0441\u043A\u0438\u0439', flag: '\u{1F1F7}\u{1F1FA}' },
-  { id: 'zh', label: '\u4E2D\u6587', flag: '\u{1F1E8}\u{1F1F3}' },
-  { id: 'ja', label: '\u65E5\u672C\u8A9E', flag: '\u{1F1EF}\u{1F1F5}' },
-  { id: 'ko', label: '\uD55C\uAD6D\uC5B4', flag: '\u{1F1F0}\u{1F1F7}' },
+// C-1-2 (Halo F-A11Y-006): each option carries a BCP-47 `lang` code +
+// English fallback name so screen readers (a) switch TTS voice for
+// native-script labels, or (b) announce the language in English when
+// AT is configured to stay on one voice.
+const LANGUAGE_OPTIONS: { id: string; label: string; flag: string; englishName: string }[] = [
+  { id: 'en', label: 'English', flag: '\u{1F1FA}\u{1F1F8}', englishName: 'English' },
+  { id: 'fr', label: 'Fran\u00e7ais', flag: '\u{1F1EB}\u{1F1F7}', englishName: 'French' },
+  { id: 'es', label: 'Espa\u00f1ol', flag: '\u{1F1EA}\u{1F1F8}', englishName: 'Spanish' },
+  { id: 'ht', label: 'Krey\u00f2l Ayisyen', flag: '\u{1F1ED}\u{1F1F9}', englishName: 'Haitian Creole' },
+  { id: 'de', label: 'Deutsch', flag: '\u{1F1E9}\u{1F1EA}', englishName: 'German' },
+  { id: 'it', label: 'Italiano', flag: '\u{1F1EE}\u{1F1F9}', englishName: 'Italian' },
+  { id: 'nl', label: 'Nederlands', flag: '\u{1F1F3}\u{1F1F1}', englishName: 'Dutch' },
+  { id: 'ru', label: '\u0420\u0443\u0441\u0441\u043A\u0438\u0439', flag: '\u{1F1F7}\u{1F1FA}', englishName: 'Russian' },
+  { id: 'zh', label: '\u4E2D\u6587', flag: '\u{1F1E8}\u{1F1F3}', englishName: 'Chinese' },
+  { id: 'ja', label: '\u65E5\u672C\u8A9E', flag: '\u{1F1EF}\u{1F1F5}', englishName: 'Japanese' },
+  { id: 'ko', label: '\uD55C\uAD6D\uC5B4', flag: '\u{1F1F0}\u{1F1F7}', englishName: 'Korean' },
 ];
 
 function prettyVoiceName(raw: string | null | undefined): string {
@@ -785,8 +789,19 @@ function Inspector({
               disabled={busy !== 'idle' || projectLocked}
               className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-base sm:text-[12.5px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
+              {/* C-1-2: per-option `lang` switches the AT TTS voice
+                  for native-script labels; aria-label provides the
+                  English-language equivalent for users whose AT stays
+                  on a single voice. */}
               {LANGUAGE_OPTIONS.map((l) => (
-                <option key={l.id} value={l.id}>{l.flag} {l.label}</option>
+                <option
+                  key={l.id}
+                  value={l.id}
+                  lang={l.id}
+                  aria-label={`${l.label} (${l.englishName})`}
+                >
+                  {l.flag} {l.label}
+                </option>
               ))}
             </select>
             <div className="font-mono text-[10px] text-[#5A6268] tracking-wider mt-1.5 uppercase">

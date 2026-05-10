@@ -5,11 +5,11 @@
  * renders identically inside the React app even when the host page
  * doesn't define --cyan / --panel / --line.
  *
- * Palette mapping:
- *   --cyan      → #14C8CC
+ * Palette mapping (brand-aligned: aqua + gold only — see Canon Critical-3):
+ *   --cyan      → #14C8CC  (brand aqua)
  *   --cyan-2    → #0FA6AE
- *   --gold      → #F5B049
- *   --good      → #5CD68D
+ *   --gold      → #E4C875  (brand gold; was template orange, swapped per brand spec)
+ *   --good      → #14C8CC  (was off-brand green; pulse animation now uses brand aqua)
  *   --bg        → #0A0E10
  *   --panel     → #10151A
  *   --panel-2   → #151B20
@@ -92,7 +92,7 @@
   overflow: hidden;
   background:
     radial-gradient(60% 70% at 30% 30%, rgba(20, 200, 204, .22), transparent 65%),
-    radial-gradient(50% 60% at 80% 85%, rgba(245, 176, 73, .18), transparent 60%),
+    radial-gradient(50% 60% at 80% 85%, rgba(228, 200, 117, .18), transparent 60%),
     linear-gradient(160deg, #0d1416, #0a0e10);
   border-right: 1px solid rgba(255, 255, 255, .06);
   display: grid;
@@ -159,8 +159,8 @@
 }
 .mm-ann-num i {
   font-style: normal;
-  color: #F5B049;
-  -webkit-text-fill-color: #F5B049;
+  color: #E4C875;
+  -webkit-text-fill-color: #E4C875;
 }
 .mm-ann-pulse {
   display: block;
@@ -168,14 +168,14 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #5CD68D;
-  box-shadow: 0 0 0 0 rgba(92, 214, 141, .7);
+  background: #14C8CC;
+  box-shadow: 0 0 0 0 rgba(20, 200, 204, .7);
   animation: mmAnnPulse 2s infinite;
 }
 @keyframes mmAnnPulse {
-  0%   { box-shadow: 0 0 0 0    rgba(92, 214, 141, .7); }
-  70%  { box-shadow: 0 0 0 14px rgba(92, 214, 141, 0); }
-  100% { box-shadow: 0 0 0 0    rgba(92, 214, 141, 0); }
+  0%   { box-shadow: 0 0 0 0    rgba(20, 200, 204, .7); }
+  70%  { box-shadow: 0 0 0 14px rgba(20, 200, 204, 0); }
+  100% { box-shadow: 0 0 0 0    rgba(20, 200, 204, 0); }
 }
 
 /* right body */
@@ -265,9 +265,9 @@
   place-items: center;
 }
 .mm-ann-ico-gold {
-  background: rgba(245, 176, 73, .1);
-  color: #F5B049;
-  border-color: rgba(245, 176, 73, .3);
+  background: rgba(228, 200, 117, .1);
+  color: #E4C875;
+  border-color: rgba(228, 200, 117, .3);
 }
 .mm-ann-list h4 {
   font-family: 'Inter', system-ui, sans-serif;
@@ -296,9 +296,9 @@
   letter-spacing: .12em;
   padding: 2px 6px;
   border-radius: 3px;
-  background: rgba(245, 176, 73, .16);
-  color: #F5B049;
-  border: 1px solid rgba(245, 176, 73, .3);
+  background: rgba(228, 200, 117, .16);
+  color: #E4C875;
+  border: 1px solid rgba(228, 200, 117, .3);
 }
 
 .mm-ann-cta {

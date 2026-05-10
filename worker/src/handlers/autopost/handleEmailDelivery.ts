@@ -219,7 +219,7 @@ export async function handleAutopostEmailDelivery(
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-bottom:16px;">
         <tr>
           <td style="font-family:Georgia,'Times New Roman',serif;font-size:22px;font-weight:600;color:#ECEAE4;letter-spacing:0.2px;">
-            <span style="color:#11C4D0;">Motion</span><span style="color:#E4C875;">Max</span>
+            <span style="color:#14C8CC;">Motion</span><span style="color:#E4C875;">Max</span>
           </td>
           <td align="right" style="font-size:11px;text-transform:uppercase;letter-spacing:0.18em;color:#5A6268;">
             Autopost
@@ -235,7 +235,7 @@ export async function handleAutopostEmailDelivery(
         </a>` : ""}
 
         <div style="padding:28px 28px 32px;">
-          <p style="margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:0.16em;color:#11C4D0;">Your video is ready</p>
+          <p style="margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:0.16em;color:#14C8CC;">Your video is ready</p>
           <h1 style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:22px;font-weight:600;line-height:1.25;color:#ECEAE4;">
             ${safeTopic || safeName}
           </h1>
@@ -246,7 +246,7 @@ export async function handleAutopostEmailDelivery(
           <!-- primary CTA -->
           <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 14px;">
             <tr>
-              <td align="center" bgcolor="#11C4D0" style="border-radius:10px;">
+              <td align="center" bgcolor="#14C8CC" style="border-radius:10px;">
                 <a href="${safeRunUrl}" style="display:inline-block;padding:13px 26px;font-size:14px;font-weight:600;color:#0A0D0F;text-decoration:none;letter-spacing:0.2px;">
                   Watch on MotionMax  &rarr;
                 </a>

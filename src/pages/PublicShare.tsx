@@ -599,7 +599,19 @@ export default function PublicShare() {
                 playsInline
                 preload="auto"
                 poster={scenes[0]?.imageUrl || undefined}
-              />
+              >
+                {/* C-1-11 (Halo F-A11Y-015): captions are currently
+                    burned into the video frames by the render worker
+                    (visible pixels, not a sidecar text track). A
+                    <track kind="captions"> here would need a VTT URL
+                    we don't yet generate.
+                    TODO (Critical follow-up — worker change): emit a
+                    .vtt alongside the .mp4 during render and expose
+                    its URL on `projects` (e.g., `captions_vtt_url`),
+                    then wire it here as `src={...}` with srcLang/label.
+                    Until then, the <details> transcript below this
+                    player surfaces the same text for Deaf/HoH viewers. */}
+              </video>
             ) : currentScene?.videoUrl ? (
               <video
                 ref={videoRef}
@@ -608,7 +620,12 @@ export default function PublicShare() {
                 playsInline
                 preload="auto"
                 poster={currentImageUrl || undefined}
-              />
+              >
+                {/* C-1-11: per-scene captions blocked on worker-side
+                    VTT emission (see TODO above). Per-scene transcript
+                    is rendered in-frame via the existing narration
+                    overlay at the bottom of this section. */}
+              </video>
             ) : currentImageUrl ? (
               <img
                 src={currentImageUrl}
@@ -678,6 +695,35 @@ export default function PublicShare() {
                 </Button>
               </div>
             </div>
+          )}
+
+          {/* C-1-11 (Halo F-A11Y-015) — text-equivalent transcript.
+              Captions are currently burned into the video frames
+              (visible only) by the render worker; until the worker
+              also emits a sidecar VTT, this <details> block exposes
+              the scene-by-scene narration as readable text so Deaf /
+              hard-of-hearing visitors and users with audio muted have
+              an equal experience. WCAG 1.2.2 (Captions, prerecorded). */}
+          {scenes.some((s) => (s.narration || s.voiceover || '').trim().length > 0) && (
+            <details className="mt-6 rounded-lg border border-border/40 bg-card/40 p-4 text-sm">
+              <summary className="cursor-pointer select-none font-medium text-foreground">
+                Read the transcript
+              </summary>
+              <ol className="mt-3 space-y-3 text-muted-foreground">
+                {scenes.map((s, i) => {
+                  const line = (s.narration || s.voiceover || '').trim();
+                  if (!line) return null;
+                  return (
+                    <li key={i}>
+                      <span className="font-mono text-[11px] uppercase tracking-wider text-foreground/60 mr-2">
+                        Scene {i + 1}
+                      </span>
+                      <span>{line}</span>
+                    </li>
+                  );
+                })}
+              </ol>
+            </details>
           )}
 
           {/* Footer notice */}

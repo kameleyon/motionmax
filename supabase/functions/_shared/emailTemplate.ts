@@ -52,7 +52,7 @@ export function buildEmail(input: EmailLayoutInput): string {
       <tr>
         <td align="center" style="padding:8px 0 4px 0;">
           <a href="${escapeAttr(cta.href)}"
-             style="display:inline-block;padding:13px 26px;border-radius:10px;background:linear-gradient(135deg,#F5B049 0%,#E4C875 100%);color:#0a0e10;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;font-size:14px;letter-spacing:.2px;text-decoration:none;border:1px solid rgba(245,176,73,.45);">
+             style="display:inline-block;padding:13px 26px;border-radius:10px;background:linear-gradient(135deg,#E4C875 0%,#C9A75A 100%);color:#0a0e10;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;font-size:14px;letter-spacing:.2px;text-decoration:none;border:1px solid rgba(228,200,117,.45);">
             ${escapeAttr(cta.label)}
           </a>
         </td>
@@ -77,7 +77,7 @@ export function buildEmail(input: EmailLayoutInput): string {
     ${escapeAttr(preheader)}
   </span>
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
-         style="background:#0a0e10;background-image:radial-gradient(60% 70% at 30% 20%, rgba(20,200,204,.18), transparent 65%), radial-gradient(50% 60% at 80% 85%, rgba(245,176,73,.14), transparent 60%), linear-gradient(160deg,#0d1416,#0a0e10);">
+         style="background:#0a0e10;background-image:radial-gradient(60% 70% at 30% 20%, rgba(20,200,204,.18), transparent 65%), radial-gradient(50% 60% at 80% 85%, rgba(228,200,117,.14), transparent 60%), linear-gradient(160deg,#0d1416,#0a0e10);">
     <tr>
       <td align="center" style="padding:32px 16px;">
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600"

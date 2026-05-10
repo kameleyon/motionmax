@@ -209,7 +209,7 @@ const PLATFORMS: PlatformDef[] = [
 function StatusPill({ status }: { status: string }) {
   const tone =
     status === "connected"
-      ? "bg-[#11C4D0]/15 text-[#11C4D0] border-[#11C4D0]/30"
+      ? "bg-[#14C8CC]/15 text-[#14C8CC] border-[#14C8CC]/30"
       : status === "expired"
         ? "bg-[#E4C875]/15 text-[#E4C875] border-[#E4C875]/30"
         : status === "error"
@@ -267,14 +267,14 @@ function AccountRow({
           checked={!!selected}
           onCheckedChange={() => onToggle?.(account.id)}
           aria-label={`Select ${account.display_name}`}
-          className="border-white/20 data-[state=checked]:bg-[#11C4D0] data-[state=checked]:text-black data-[state=checked]:border-[#11C4D0]"
+          className="border-white/20 data-[state=checked]:bg-[#14C8CC] data-[state=checked]:text-black data-[state=checked]:border-[#14C8CC]"
         />
       )}
       <Avatar className={compact ? "h-8 w-8 shrink-0" : "h-9 w-9 shrink-0"}>
         {account.avatar_url && (
           <AvatarImage src={account.avatar_url} alt={account.display_name} />
         )}
-        <AvatarFallback className="bg-[#11C4D0]/15 text-[11px] font-medium text-[#11C4D0]">
+        <AvatarFallback className="bg-[#14C8CC]/15 text-[11px] font-medium text-[#14C8CC]">
           {avatarInitials(account.display_name) || "?"}
         </AvatarFallback>
       </Avatar>
@@ -458,8 +458,8 @@ export function ConnectedAccountsList({
             <CardHeader className={compact ? "space-y-2 pb-3" : "space-y-3"}>
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#11C4D0]/10 shrink-0">
-                    <Icon className="h-5 w-5 text-[#11C4D0]" />
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#14C8CC]/10 shrink-0">
+                    <Icon className="h-5 w-5 text-[#14C8CC]" />
                   </div>
                   <CardTitle className="text-[#ECEAE4] text-base truncate">
                     {p.name}
@@ -468,7 +468,7 @@ export function ConnectedAccountsList({
                 {platformAccounts.length > 0 && (
                   <Badge
                     variant="outline"
-                    className="border-[#11C4D0]/30 bg-[#11C4D0]/10 text-[#11C4D0] shrink-0"
+                    className="border-[#14C8CC]/30 bg-[#14C8CC]/10 text-[#14C8CC] shrink-0"
                   >
                     {platformAccounts.length}
                   </Badge>
@@ -497,7 +497,7 @@ export function ConnectedAccountsList({
 
               {p.id === "instagram" && p.guidance && !compact && (
                 <div className="flex items-start gap-2 rounded-md border border-white/8 bg-black/20 px-3 py-2 text-[12px] text-[#8A9198]">
-                  <ShieldCheck className="h-3.5 w-3.5 shrink-0 mt-0.5 text-[#11C4D0]" />
+                  <ShieldCheck className="h-3.5 w-3.5 shrink-0 mt-0.5 text-[#14C8CC]" />
                   <span>{p.guidance}</span>
                 </div>
               )}
@@ -537,7 +537,7 @@ export function ConnectedAccountsList({
                   onClick={() => handleConnect(p.id)}
                   disabled={pendingConnect === p.id}
                   variant="outline"
-                  className="w-full border-[#11C4D0]/40 bg-transparent text-[#ECEAE4] hover:bg-[#11C4D0]/10 hover:text-[#11C4D0]"
+                  className="w-full border-[#14C8CC]/40 bg-transparent text-[#ECEAE4] hover:bg-[#14C8CC]/10 hover:text-[#14C8CC]"
                 >
                   {pendingConnect === p.id ? (
                     <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />

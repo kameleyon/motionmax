@@ -213,28 +213,35 @@ export const LANGUAGES: Array<{ code: string; label: string; flag: string }> = [
   { code: "ko", label: "Korean",          flag: "🇰🇷" },
 ];
 
-/** Avatar background colour per accent — same hue family as the
- *  accent flag to keep the card visually anchored. Tailwind-style
- *  arbitrary value strings so callers can pass them straight to
- *  inline `style={{ background }}`. */
+/** Avatar background gradient per accent.
+ *
+ *  Flag chip gradients use brand aqua/gold variants only; visual
+ *  differentiation is by tonal shift, not by national flag colour, to
+ *  avoid the WCAG/brand violation noted in Canon Critical-1 + Tongue 08.
+ *  Brand rule: only aqua (#14C8CC) and gold (#E4C875) may appear in
+ *  product UI — language identity is carried by the language name and
+ *  the flag glyph emoji rendered alongside, not by the chip colour. */
 export function avatarBackground(accent: string): string {
   switch (accent) {
-    case "US":    return "linear-gradient(135deg, #3B82F6, #1E40AF)";
-    case "UK":    return "linear-gradient(135deg, #EF4444, #991B1B)";
-    case "AU":    return "linear-gradient(135deg, #10B981, #047857)";
-    case "FR":    return "linear-gradient(135deg, #6366F1, #312E81)";
-    case "ES":    return "linear-gradient(135deg, #F59E0B, #B45309)";
-    case "LATAM": return "linear-gradient(135deg, #F97316, #C2410C)";
-    case "DE":    return "linear-gradient(135deg, #525252, #171717)";
-    case "IT":    return "linear-gradient(135deg, #14B8A6, #0F766E)";
-    case "NL":    return "linear-gradient(135deg, #F97316, #1E3A8A)";
-    case "RU":    return "linear-gradient(135deg, #DC2626, #7F1D1D)";
-    case "CN":    return "linear-gradient(135deg, #DC2626, #FBBF24)";
-    case "JP":    return "linear-gradient(135deg, #F472B6, #BE185D)";
-    case "KR":    return "linear-gradient(135deg, #6366F1, #C026D3)";
-    case "HT":    return "linear-gradient(135deg, #1D4ED8, #DC2626)";
-    case "Multi": return "linear-gradient(135deg, #14C8CC, #6366F1)";
-    case "EU":    return "linear-gradient(135deg, #1E40AF, #FBBF24)";
+    /* Aqua family — anchor on primary aqua, differentiate by depth. */
+    case "US":    return "linear-gradient(135deg, #14C8CC, #0D99A8)"; // primary → deep aqua
+    case "UK":    return "linear-gradient(135deg, #3DD4E0, #14C8CC)"; // light aqua → primary
+    case "AU":    return "linear-gradient(135deg, #0FA6AE, #0D99A8)"; // mid-deep aqua
+    case "IT":    return "linear-gradient(135deg, #7ad6e6, #0FA6AE)"; // pale → mid aqua
+    case "Multi": return "linear-gradient(135deg, #14C8CC, #E4C875)"; // brand split
+    /* Aqua → gold transitions for European / global accents. */
+    case "FR":    return "linear-gradient(135deg, #14C8CC, #C9A75A)";
+    case "DE":    return "linear-gradient(135deg, #0D99A8, #5A6268)"; // deep aqua → neutral ink-dim
+    case "EU":    return "linear-gradient(135deg, #0FA6AE, #E4C875)";
+    case "NL":    return "linear-gradient(135deg, #3DD4E0, #C9A75A)";
+    /* Gold family — anchor on brand gold, differentiate by depth. */
+    case "ES":    return "linear-gradient(135deg, #E4C875, #C9A75A)";
+    case "LATAM": return "linear-gradient(135deg, #E4C875, #B4934A)"; // gold → deeper gold
+    case "RU":    return "linear-gradient(135deg, #C9A75A, #5A6268)";
+    case "CN":    return "linear-gradient(135deg, #E4C875, #14C8CC)"; // gold → aqua
+    case "JP":    return "linear-gradient(135deg, #E4C875, #7ad6e6)"; // gold → pale aqua
+    case "KR":    return "linear-gradient(135deg, #C9A75A, #0D99A8)";
+    case "HT":    return "linear-gradient(135deg, #14C8CC, #C9A75A)";
     default:      return "linear-gradient(135deg, #14C8CC, #0FA6AE)";
   }
 }

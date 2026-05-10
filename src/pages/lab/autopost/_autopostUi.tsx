@@ -34,7 +34,7 @@ export const AUTOPOST_BRAND = {
   fg: "#ECEAE4",
   fgMuted: "#8A9198",
   fgFaint: "#5A6268",
-  aqua: "#11C4D0",
+  aqua: "#14C8CC",
   gold: "#E4C875",
 } as const;
 
@@ -116,10 +116,10 @@ interface PillTone {
 
 const RUN_STATUS_TONE: Record<RunStatus, PillTone> = {
   queued:     { text: "#8A9198", bg: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.1)" },
-  generating: { text: "#11C4D0", bg: "rgba(17,196,208,0.1)",   border: "rgba(17,196,208,0.3)" },
-  rendered:   { text: "#11C4D0", bg: "rgba(17,196,208,0.1)",   border: "rgba(17,196,208,0.3)" },
+  generating: { text: "#14C8CC", bg: "rgba(17,196,208,0.1)",   border: "rgba(17,196,208,0.3)" },
+  rendered:   { text: "#14C8CC", bg: "rgba(17,196,208,0.1)",   border: "rgba(17,196,208,0.3)" },
   publishing: { text: "#E4C875", bg: "rgba(228,200,117,0.1)",  border: "rgba(228,200,117,0.3)" },
-  completed:  { text: "#11C4D0", bg: "rgba(17,196,208,0.1)",  border: "rgba(17,196,208,0.3)" },
+  completed:  { text: "#14C8CC", bg: "rgba(17,196,208,0.1)",  border: "rgba(17,196,208,0.3)" },
   failed:     { text: "#E4C875", bg: "rgba(228,200,117,0.1)",  border: "rgba(228,200,117,0.3)" },
   cancelled:  { text: "#8A9198", bg: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.1)" },
 };
@@ -128,7 +128,7 @@ const PUBLISH_STATUS_TONE: Record<PublishStatus, PillTone> = {
   pending:    { text: "#8A9198", bg: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.12)" },
   uploading:  { text: "#E4C875", bg: "rgba(228,200,117,0.1)",  border: "rgba(228,200,117,0.3)" },
   processing: { text: "#E4C875", bg: "rgba(228,200,117,0.1)",  border: "rgba(228,200,117,0.3)" },
-  published:  { text: "#11C4D0", bg: "rgba(17,196,208,0.1)",  border: "rgba(17,196,208,0.3)" },
+  published:  { text: "#14C8CC", bg: "rgba(17,196,208,0.1)",  border: "rgba(17,196,208,0.3)" },
   failed:     { text: "#E4C875", bg: "rgba(228,200,117,0.1)",  border: "rgba(228,200,117,0.3)" },
   rejected:   { text: "#E4C875", bg: "rgba(228,200,117,0.1)",  border: "rgba(228,200,117,0.3)" },
 };
@@ -196,14 +196,14 @@ export function RunProgressBar({
             className="h-full rounded-full transition-[width] duration-700 ease-out"
             style={{
               width: `${pct}%`,
-              background: "linear-gradient(90deg, #11C4D0, #5BE3EE)",
+              background: "linear-gradient(90deg, #14C8CC, #5BE3EE)",
             }}
           />
         ) : (
           <div
             className="h-full w-1/3 animate-shimmer rounded-full"
             style={{
-              background: "linear-gradient(90deg, transparent, #11C4D0, transparent)",
+              background: "linear-gradient(90deg, transparent, #14C8CC, transparent)",
             }}
           />
         )}

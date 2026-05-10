@@ -34,11 +34,16 @@
   --line-2: rgba(255, 255, 255, 0.10);
   --line-strong: rgba(255, 255, 255, 0.18);
 
-  /* Status / accents — gold-only, no red */
+  /* Status / accents — brand palette only (aqua + gold). The semantic
+     names are kept (`--good`, `--purple`) so the 13+ admin component
+     consumers don't need to change which token they reference; only the
+     value is remapped to brand colours. See Canon Critical-4 + Canvas
+     F-030: admin-shell must use brand aqua/gold, no off-brand green
+     (#5CD68D) or violet (#a78bfa). */
   --warn: #E4C875;
   --gold-deep: #C9A75A;
-  --good: #5CD68D;
-  --purple: #a78bfa;
+  --good: #14C8CC;   /* semantic = "positive/active" → brand aqua */
+  --purple: #E4C875; /* semantic = "highlight/special" → brand gold */
   --danger: #E4C875; /* admin-scoped: destructive renders as gold */
 
   /* Geometry */
@@ -57,8 +62,9 @@
   50%      { opacity: 0.5; }
 }
 
+/* Pulse glow uses brand aqua (rgb 20,200,204) — was off-brand green. */
 @keyframes adm-tab-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(92, 214, 141, 0.55); }
-  70%  { box-shadow: 0 0 0 5px rgba(92, 214, 141, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(92, 214, 141, 0); }
+  0%   { box-shadow: 0 0 0 0 rgba(20, 200, 204, 0.55); }
+  70%  { box-shadow: 0 0 0 5px rgba(20, 200, 204, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(20, 200, 204, 0); }
 }

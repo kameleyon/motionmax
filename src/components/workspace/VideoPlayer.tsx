@@ -296,7 +296,18 @@ export function VideoPlayer({
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}
           onEnded={() => setIsPlaying(false)}
-        />
+        >
+          {/* C-1-11 (Halo F-A11Y-015) — captions are burned into the
+              video frames by the render worker (visible pixels). A
+              <track kind="captions"> needs a sidecar .vtt that the
+              worker doesn't currently emit.
+              TODO follow-up (worker change): emit a .vtt during
+              render, expose its URL on the project row, and wire it
+              here as `src={projectCaptionsUrl}` with srcLang / label /
+              default. The legacy workspace surfaces the same script in
+              the result panel above, so Deaf / HoH users keep a text
+              equivalent in the interim. */}
+        </video>
       )}
 
       {/* ── Floating controls ── */}

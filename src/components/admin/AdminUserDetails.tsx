@@ -409,7 +409,7 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
             <button
               type="button"
               onClick={() => setGrantOpen(true)}
-              className="rounded-md p-1 text-[#11C4D0] hover:bg-[#11C4D0]/10 transition-colors"
+              className="rounded-md p-1 text-[#14C8CC] hover:bg-[#14C8CC]/10 transition-colors"
               aria-label="Grant credits to user"
               title="Grant credits"
             >
@@ -791,7 +791,7 @@ export function AdminUserDetails({ userId, onFlagCreated }: AdminUserDetailsProp
             <Button
               onClick={handleGrantCredits}
               disabled={granting || !grantAmount.trim()}
-              className="bg-[#11C4D0] text-[#0A0D0F] hover:bg-[#11C4D0]/90"
+              className="bg-[#14C8CC] text-[#0A0D0F] hover:bg-[#14C8CC]/90"
             >
               {granting ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Plus className="h-4 w-4 mr-1.5" />}
               {granting ? "Granting…" : "Grant credits"}

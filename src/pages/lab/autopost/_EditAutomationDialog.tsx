@@ -322,7 +322,7 @@ export function EditAutomationDialog({
   // recomputing them inline. Triggers / inputs share `fieldShell`,
   // section heading captions share `sectionLabel`, etc.
   const fieldShell =
-    "bg-[#0A0D0F] border-white/[0.08] text-[#ECEAE4] h-10 hover:border-white/15 focus-visible:border-[#11C4D0]/50 focus-visible:ring-0 transition-colors";
+    "bg-[#0A0D0F] border-white/[0.08] text-[#ECEAE4] h-10 hover:border-white/15 focus-visible:border-[#14C8CC]/50 focus-visible:ring-0 transition-colors";
   const popoverShell =
     "z-[10000] bg-[#10151A] border-white/10 text-[#ECEAE4] max-h-72";
   const sectionLabel =
@@ -368,7 +368,7 @@ export function EditAutomationDialog({
                 value={draft.prompt_template}
                 onChange={e => setDraft(d => ({ ...d, prompt_template: e.target.value }))}
                 rows={4}
-                className="bg-[#0A0D0F] border-white/[0.08] text-[#ECEAE4] resize-none hover:border-white/15 focus-visible:border-[#11C4D0]/50 focus-visible:ring-0 transition-colors leading-[1.5]"
+                className="bg-[#0A0D0F] border-white/[0.08] text-[#ECEAE4] resize-none hover:border-white/15 focus-visible:border-[#14C8CC]/50 focus-visible:ring-0 transition-colors leading-[1.5]"
                 placeholder="e.g. A 30-second motivational reel about resilience for entrepreneurs"
               />
             </div>
@@ -413,7 +413,7 @@ export function EditAutomationDialog({
                       disabled
                         ? 'border-white/[0.08] bg-[#0A0D0F]/60 opacity-50 cursor-not-allowed'
                         : selected
-                          ? 'border-[#11C4D0]/40 bg-[#11C4D0]/[0.05] shadow-[0_0_0_1px_rgba(17,196,208,0.18)] cursor-pointer'
+                          ? 'border-[#14C8CC]/40 bg-[#14C8CC]/[0.05] shadow-[0_0_0_1px_rgba(17,196,208,0.18)] cursor-pointer'
                           : 'border-white/[0.08] bg-[#0A0D0F] hover:border-white/15 hover:bg-[#0E1418] cursor-pointer'
                     }`}
                   >
@@ -430,16 +430,16 @@ export function EditAutomationDialog({
                     <span
                       aria-hidden
                       className={`w-3.5 h-3.5 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors ${
-                        selected && !disabled ? 'border-[#11C4D0]' : 'border-white/25 group-hover:border-white/40'
+                        selected && !disabled ? 'border-[#14C8CC]' : 'border-white/25 group-hover:border-white/40'
                       }`}
                     >
-                      {selected && !disabled && <span className="w-1.5 h-1.5 rounded-full bg-[#11C4D0]" />}
+                      {selected && !disabled && <span className="w-1.5 h-1.5 rounded-full bg-[#14C8CC]" />}
                     </span>
                     <span
                       aria-hidden
                       className={`w-7 h-7 rounded-md grid place-items-center shrink-0 transition-colors ${
                         selected && !disabled
-                          ? 'bg-[#11C4D0]/15 text-[#11C4D0]'
+                          ? 'bg-[#14C8CC]/15 text-[#14C8CC]'
                           : 'bg-white/[0.04] text-[#8A9198] group-hover:text-[#ECEAE4]'
                       }`}
                     >
@@ -462,11 +462,11 @@ export function EditAutomationDialog({
             {draft.delivery_method === 'email' && (
               <div className="space-y-1.5 pt-1">
                 <Label className={fieldLabel}>Email recipients</Label>
-                <div className="flex flex-wrap items-center gap-1.5 px-2.5 py-2 rounded-lg bg-[#0A0D0F] border border-white/[0.08] focus-within:border-[#11C4D0]/40 transition-colors">
+                <div className="flex flex-wrap items-center gap-1.5 px-2.5 py-2 rounded-lg bg-[#0A0D0F] border border-white/[0.08] focus-within:border-[#14C8CC]/40 transition-colors">
                   {draft.email_recipients.map((addr) => (
                     <span
                       key={addr}
-                      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#11C4D0]/[0.08] border border-[#11C4D0]/25 text-[#11C4D0] text-[12px]"
+                      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#14C8CC]/[0.08] border border-[#14C8CC]/25 text-[#14C8CC] text-[12px]"
                     >
                       <Mail className="w-3 h-3" />
                       <span className="truncate max-w-[180px]">{addr}</span>
@@ -618,7 +618,7 @@ export function EditAutomationDialog({
           <Button
             onClick={() => saveMutation.mutate()}
             disabled={saveMutation.isPending}
-            className="bg-[#11C4D0] text-[#0A0D0F] hover:bg-[#11C4D0]/90 font-medium"
+            className="bg-[#14C8CC] text-[#0A0D0F] hover:bg-[#14C8CC]/90 font-medium"
           >
             {saveMutation.isPending ? (
               <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />

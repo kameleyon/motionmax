@@ -252,7 +252,7 @@ export function TabGenerations(): JSX.Element {
           delta={k && k.gens_yesterday ? `${(((k.gens_today - k.gens_yesterday) / k.gens_yesterday) * 100).toFixed(0)}% vs yest` : undefined}
           deltaDir={k && (k.gens_today ?? 0) >= (k.gens_yesterday ?? 0) ? "up" : "down"}
           spark={k?.spark_today} icon={<I.spark />} />
-        <Kpi label="Success rate" sparkColor="#5CD68D"
+        <Kpi label="Success rate" sparkColor="#14C8CC"
           value={k && k.success_rate_24h != null ? k.success_rate_24h.toFixed(1) : dash} unit="%"
           delta={k && k.success_rate_24h != null && k.success_rate_prev != null
             ? `${(k.success_rate_24h - k.success_rate_prev).toFixed(1)} pts wk/wk`

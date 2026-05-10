@@ -46,9 +46,9 @@ type RpcFn = <T>(fn: string, args?: Record<string, unknown>) => Promise<{ data: 
 const rpc = supabase.rpc.bind(supabase) as unknown as RpcFn;
 
 const PHASE_COLOR: Record<string, string> = {
-  script: "#7ad6e6", voiceover: "#a78bfa", audio: "#a78bfa", tts: "#a78bfa",
+  script: "#7ad6e6", voiceover: "#E4C875", audio: "#E4C875", tts: "#E4C875",
   image: "#E4C875", video: "#14C8CC", render: "#14C8CC",
-  compose: "#5CD68D", mux: "#5CD68D", export: "#5CD68D",
+  compose: "#14C8CC", mux: "#14C8CC", export: "#14C8CC",
 };
 function colorForPhase(phase: string): string {
   const k = phase.toLowerCase();

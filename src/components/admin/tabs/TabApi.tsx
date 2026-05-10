@@ -327,7 +327,7 @@ export function TabApi(): JSX.Element {
               const perDay = r.calls / Math.max(modelTop.days, 1);
               const k = kindFor(r.label);
               const color = k === "Video" ? "#14C8CC"
-                : k === "Voice" ? "#a78bfa"
+                : k === "Voice" ? "#E4C875"
                 : k === "Image" ? "#E4C875"
                 : "#7ad6e6";
               return (

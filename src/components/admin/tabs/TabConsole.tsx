@@ -35,9 +35,9 @@ const LEVEL_KEYS: ReadonlyArray<{ key: LevelFilter; label: string }> = [
   { key: "debug", label: "Debug" }, { key: "warn", label: "Warn" }, { key: "error", label: "Error" },
 ];
 const LEVEL_COLORS: Record<LogLevel, { lvl: string; msg: string }> = {
-  ok:    { lvl: "#5CD68D", msg: "var(--ink-dim)" },
+  ok:    { lvl: "#14C8CC", msg: "var(--ink-dim)" },
   info:  { lvl: "#7ad6e6", msg: "var(--ink-dim)" },
-  debug: { lvl: "#a78bfa", msg: "var(--ink-dim)" },
+  debug: { lvl: "#E4C875", msg: "var(--ink-dim)" },
   warn:  { lvl: "#E4C875", msg: "var(--ink)" },
   error: { lvl: "#E4C875", msg: "#F5DCAA" },
 };

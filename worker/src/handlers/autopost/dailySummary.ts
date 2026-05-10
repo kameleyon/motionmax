@@ -287,7 +287,7 @@ async function emitUserSummary(userId: string, day: string): Promise<void> {
       const p = escapeHtmlSummary(r.platform);
       return `<tr>
         <td style="padding:6px 12px;color:#ECEAE4;">${p}</td>
-        <td style="padding:6px 12px;color:#11C4D0;text-align:right;">${r.succeeded}</td>
+        <td style="padding:6px 12px;color:#14C8CC;text-align:right;">${r.succeeded}</td>
         <td style="padding:6px 12px;color:#E4C875;text-align:right;">${r.failed}</td>
         <td style="padding:6px 12px;color:#8A9198;text-align:right;">${r.total_attempts}</td>
       </tr>`;
@@ -301,7 +301,7 @@ async function emitUserSummary(userId: string, day: string): Promise<void> {
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-bottom:16px;">
         <tr>
           <td style="font-family:Georgia,'Times New Roman',serif;font-size:22px;font-weight:600;color:#ECEAE4;letter-spacing:0.2px;">
-            <span style="color:#11C4D0;">Motion</span><span style="color:#E4C875;">Max</span>
+            <span style="color:#14C8CC;">Motion</span><span style="color:#E4C875;">Max</span>
           </td>
           <td align="right" style="font-size:11px;text-transform:uppercase;letter-spacing:0.18em;color:#5A6268;">
             Daily Summary
@@ -309,7 +309,7 @@ async function emitUserSummary(userId: string, day: string): Promise<void> {
         </tr>
       </table>
       <div style="background:#10151A;border:1px solid rgba(255,255,255,0.08);border-radius:14px;overflow:hidden;padding:28px;">
-        <p style="margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:0.16em;color:#11C4D0;">Autopost summary</p>
+        <p style="margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:0.16em;color:#14C8CC;">Autopost summary</p>
         <h1 style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:22px;font-weight:600;line-height:1.25;color:#ECEAE4;">${escapeHtmlSummary(day)}</h1>
         <p style="margin:0 0 22px;font-size:13px;color:#8A9198;">${totalSucceeded} succeeded \u00b7 ${totalFailed} failed \u00b7 ${totalAttempts} attempts</p>
         ${rows.length > 0 ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">

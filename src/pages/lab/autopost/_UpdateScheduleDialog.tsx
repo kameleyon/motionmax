@@ -125,7 +125,7 @@ export function UpdateScheduleDialog({
       <DialogContent className="autopost-modal-content max-w-md">
         <DialogHeader>
           <DialogTitle className="text-[#ECEAE4] flex items-center gap-2">
-            <Clock className="h-4 w-4 text-[#11C4D0]" />
+            <Clock className="h-4 w-4 text-[#14C8CC]" />
             Update schedule
           </DialogTitle>
           <DialogDescription className="text-[#8A9198]">
@@ -134,7 +134,7 @@ export function UpdateScheduleDialog({
         </DialogHeader>
 
         {schedule.active && (
-          <div className="rounded-md border border-[#11C4D0]/25 bg-[#11C4D0]/[0.06] px-3 py-2 text-[12px] text-[#11C4D0] flex items-center gap-2">
+          <div className="rounded-md border border-[#14C8CC]/25 bg-[#14C8CC]/[0.06] px-3 py-2 text-[12px] text-[#14C8CC] flex items-center gap-2">
             <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
             <span>
               Schedule active · Running {intervalMeta?.label.toLowerCase() ?? "on cadence"} · Next run {formatRelativeTime(schedule.next_fire_at)}
@@ -184,7 +184,7 @@ export function UpdateScheduleDialog({
           <Button
             onClick={() => updateMutation.mutate()}
             disabled={updateMutation.isPending}
-            className="bg-gradient-to-r from-[#11C4D0] to-[#E4C875] text-[#0A0D0F] hover:opacity-90"
+            className="bg-gradient-to-r from-[#14C8CC] to-[#E4C875] text-[#0A0D0F] hover:opacity-90"
           >
             {updateMutation.isPending ? (
               <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />

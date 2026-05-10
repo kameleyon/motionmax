@@ -42,9 +42,12 @@ type CohortRow = {
 };
 
 const PLAN_COLORS: Record<string, string> = {
-  Studio: "#14C8CC", Pro: "#a78bfa", Free: "#5A6268",
+  Studio: "#14C8CC", Pro: "#E4C875", Free: "#5A6268",
 };
-const FEATURE_SWATCHES = ["#14C8CC", "#7ad6e6", "#5CD68D", "#E4C875", "#a78bfa", "#5A6268"];
+/* Feature chart swatches — brand aqua + gold variants only (no green/violet).
+   Differentiation comes from tonal shifts within the brand palette per
+   Canon Critical-4. */
+const FEATURE_SWATCHES = ["#14C8CC", "#7ad6e6", "#0FA6AE", "#E4C875", "#C9A75A", "#5A6268"];
 const MUTED_INFO_STYLE: React.CSSProperties = {
   padding: "18px 4px", fontSize: 12, color: "var(--ink-mute)",
   fontFamily: "var(--mono)", letterSpacing: ".04em",
@@ -176,8 +179,8 @@ export function TabAnalytics(): JSX.Element {
       { label: "Visited landing", n: funnel.signups, pctOfTop: 100, annot: "(signup-base)", color: "#7ad6e6" },
       { label: "Started sign-up", n: funnel.signups, pctOfTop: 100, annot: "100% of base", color: "#14C8CC" },
       { label: "Completed sign-up", n: funnel.signups, pctOfTop: 100, annot: pctFmt(pct(funnel.signups, top)) + " complete", color: "#14C8CC" },
-      { label: "First generation", n: funnel.first_gen, pctOfTop: pct(funnel.first_gen, top), annot: pctFmt(pct(funnel.first_gen, top)) + " activate", color: "#5CD68D" },
-      { label: "Returned next day", n: funnel.returned, pctOfTop: pct(funnel.returned, top), annot: pctFmt(pct(funnel.returned, top)) + " retention", color: "#a78bfa" },
+      { label: "First generation", n: funnel.first_gen, pctOfTop: pct(funnel.first_gen, top), annot: pctFmt(pct(funnel.first_gen, top)) + " activate", color: "#14C8CC" },
+      { label: "Returned next day", n: funnel.returned, pctOfTop: pct(funnel.returned, top), annot: pctFmt(pct(funnel.returned, top)) + " retention", color: "#E4C875" },
       { label: "Upgraded to paid", n: funnel.paid, pctOfTop: pct(funnel.paid, top), annot: pctFmt(pct(funnel.paid, top)) + " conversion", color: "#E4C875" },
     ];
   }, [funnel]);
@@ -187,7 +190,7 @@ export function TabAnalytics(): JSX.Element {
       <div className="kpi-grid">
         <Kpi label="DAU · today" value={kpis ? fmtNum(kpis.dau_today) : "—"} delta={dauDelta} deltaDir="up" icon={<I.users />} sparkColor="var(--cyan)" />
         <Kpi label="WAU · 7d" value={kpis ? fmtNum(kpis.wau) : "—"} deltaDir="up" sparkColor="var(--cyan)" />
-        <Kpi label="MAU · 30d" value={kpis ? fmtNum(kpis.mau) : "—"} delta={mauPctOfTotal} deltaDir="up" sparkColor="#5CD68D" />
+        <Kpi label="MAU · 30d" value={kpis ? fmtNum(kpis.mau) : "—"} delta={mauPctOfTotal} deltaDir="up" sparkColor="#14C8CC" />
         <Kpi
           label="Stickiness · DAU/MAU"
           value={kpis ? kpis.stickiness_pct.toFixed(1) : "—"}

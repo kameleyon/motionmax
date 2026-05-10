@@ -24,7 +24,7 @@
     /* Aqua & Gold Color Palette */
     --brand-dark: 200 9% 6%; /* #0F1112 - Carbon Black */
     --brand-aqua-dark: 186 85% 35%; /* #0D99A8 - Deep Aqua */
-    --brand-aqua: 184 85% 44%; /* #11C4D0 - Primary Aqua */
+    --brand-aqua: 184 85% 44%; /* #14C8CC - Primary Aqua */
     --brand-aqua-light: 184 75% 55%; /* #3DD4E0 - Light Aqua */
     --brand-gold-dark: 45 67% 50%; /* Deep Gold */
     --brand-gold: 45 67% 68%; /* #e4c875 - Primary Gold */
@@ -40,7 +40,7 @@
     --popover: 0 0% 100%;
     --popover-foreground: 200 9% 12%;
 
-    /* Primary - Aqua #11C4D0 */
+    /* Primary - Aqua #14C8CC */
     --primary: 184 85% 44%;
     --primary-foreground: 0 0% 100%;
 
@@ -63,10 +63,13 @@
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
-    /* Destructive - Gold (was red) — all destructive affordances render
-       in brand gold so error/warning chrome stays on-palette. */
-    --destructive: 45 67% 55%;
-    --destructive-foreground: 200 9% 10%;
+    /* Destructive uses a darker red despite the brand gold/aqua palette —
+       this is a system-level accessibility override per WCAG 1.4.3 AA
+       (gold-on-white was ~1.6:1, well below the 4.5:1 minimum). Brand
+       decoration uses ONLY aqua + gold; only error/destructive surfaces
+       and validation copy may use this red. #B91C1C → 5.94:1 on white. */
+    --destructive: 0 73% 41%;
+    --destructive-foreground: 0 0% 100%;
 
     /* Success - Aqua (brand-aligned) */
     --success: 186 85% 35%;
@@ -115,7 +118,7 @@
     --popover: 200 8% 20%;
     --popover-foreground: 0 0% 96%;
 
-    /* Primary - Aqua #11C4D0 (same in dark mode) */
+    /* Primary - Aqua #14C8CC (same in dark mode) */
     --primary: 184 85% 44%;
     --primary-foreground: 0 0% 100%;
 
@@ -142,10 +145,12 @@
     --warning: 38 92% 55%;
     --warning-foreground: 200 9% 10%;
 
-    /* Destructive - Gold (was red) — dark-mode variant of the same
-       gold mapping used in light mode. */
-    --destructive: 45 67% 68%;
-    --destructive-foreground: 200 9% 10%;
+    /* Destructive — dark-mode variant of the system-level red override.
+       Slightly lighter so it stays readable on the near-black surface
+       (#EF4444 → ~5.5:1 on the dark background). See light-mode comment
+       for rationale. */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
 
     /* Success - Aqua (brand-aligned) */
     --success: 184 75% 55%;

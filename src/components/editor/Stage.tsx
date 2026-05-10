@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Maximize2, Minimize2 } from 'lucide-react';
 import type { EditorState, EditorScene } from '@/hooks/useEditorState';
 import { useActiveJobs } from './useActiveJobs';
@@ -542,6 +542,21 @@ function Stage({
           (isFullscreen ? '#000' : '#050709'),
       }}
     >
+      {/* C-1-10 (Halo F-A11Y-022): single screen-reader live region for
+          the multi-minute generation pipeline. Announces only stable
+          phase transitions (started → script → images → audio → done
+          / error) so AT users know what's happening without the
+          rotating decorative copy in <ProcessingOverlay /> spamming
+          every 4s. Visible UI is unchanged. */}
+      <GenerationLiveAnnouncer
+        phase={state.phase}
+        progress={
+          (pipelineProgress && pipelineProgress > 0) ? pipelineProgress : state.progress
+        }
+        projectExists={!!state.project}
+        errorMessage={state.generation?.error_message ?? null}
+      />
+
       {/* Subtle grid (hidden in fullscreen for cinema feel). */}
       {!isFullscreen && (
         <div
@@ -663,7 +678,19 @@ function Stage({
               playsInline
               preload="auto"
               poster={sceneToShow?.imageUrl || undefined}
-            />
+            >
+              {/* C-1-11 (Halo F-A11Y-015) — captions are burned into
+                  the video frames by the render worker (visible
+                  pixels). A <track kind="captions" src=...> requires
+                  a sidecar VTT we don't yet generate.
+                  TODO follow-up (worker change): emit a .vtt during
+                  render, expose its URL on the project / scene row,
+                  and wire it as `src` below with srcLang / label /
+                  default. The Inspector's Voice tab already surfaces
+                  the per-scene narration as text inside the app, so
+                  Deaf / HoH editors retain a text equivalent in the
+                  meantime. */}
+            </video>
             <audio
               ref={audioRef}
               preload="auto"
@@ -823,7 +850,13 @@ function Stage({
  *  status underneath. Phase-aware: pulls from one of four message
  *  banks based on progress, so copy naturally follows script →
  *  imagery → voice → final stretch without us wiring each phase
- *  explicitly. */
+ *  explicitly.
+ *
+ *  C-1-10: this overlay is purely VISUAL. The live-region announcer
+ *  for screen-reader users sits in <GenerationLiveAnnouncer />
+ *  alongside it — that one publishes only stable phase transitions
+ *  (started → script → images → audio → done / error) rather than
+ *  the decorative rotating copy below, which would spam AT every 4s. */
 function ProcessingOverlay({
   progress,
   projectType,
@@ -844,10 +877,11 @@ function ProcessingOverlay({
   const isPortrait = aspect === '9:16';
   return (
     <div
-      role="status"
-      aria-live="polite"
-      aria-atomic="true"
-      aria-label="Generation in progress"
+      // C-1-10: NO aria-live here — visible rotating decorative copy
+      // would otherwise be re-announced every 4s, talking over the
+      // user's screen reader. The dedicated <GenerationLiveAnnouncer />
+      // owns announcements with a stable, idle-friendly cadence.
+      aria-hidden="true"
       className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-[8%] bg-black/35 backdrop-blur-[2px]"
     >
       <LoadingRing size={isPortrait ? 52 : 72} />
@@ -900,6 +934,97 @@ function ProcessingOverlay({
             ? 'Script ~20s · image ~30s · audio ~30s'
             : 'Script ~30s · images ~2min · audio ~2min'}
       </div>
+    </div>
+  );
+}
+
+// C-1-10 (Halo F-A11Y-022): user-meaningful pipeline phases. Stays
+// coarse on purpose — per-scene "fetching image 3 of 12" chatter would
+// drown the AT user. We bucket on progress percentile so the announcer
+// fires roughly once per high-level phase (typically every 30–90s on
+// the explainer path, 60–120s on cinematic).
+type LivePhase =
+  | 'idle'
+  | 'starting'
+  | 'storyboarding'
+  | 'images'
+  | 'narration'
+  | 'assembly'
+  | 'complete'
+  | 'error';
+
+function livePhaseFor(
+  editorPhase: 'rendering' | 'ready' | 'editing' | 'error' | 'idle',
+  progress: number,
+  projectExists: boolean,
+): LivePhase {
+  if (editorPhase === 'error') return 'error';
+  if (editorPhase === 'ready' || editorPhase === 'editing') return 'complete';
+  if (editorPhase === 'idle' && !projectExists) return 'idle';
+  // 'rendering' OR ('idle' + project exists but no generation row yet)
+  if (progress < 5) return 'starting';
+  if (progress < 30) return 'storyboarding';
+  if (progress < 60) return 'images';
+  if (progress < 85) return 'narration';
+  return 'assembly';
+}
+
+function liveMessageFor(phase: LivePhase, errorMessage: string | null): string {
+  switch (phase) {
+    case 'idle':
+      return '';
+    case 'starting':
+      return 'Generation started. This usually takes 3 to 5 minutes — you can leave this tab open.';
+    case 'storyboarding':
+      return 'Phase 1 of 4: writing the script and storyboard.';
+    case 'images':
+      return 'Phase 2 of 4: generating images for each scene.';
+    case 'narration':
+      return 'Phase 3 of 4: rendering narration audio.';
+    case 'assembly':
+      return 'Phase 4 of 4: assembling the final video.';
+    case 'complete':
+      return 'Generation complete. The video is ready to preview.';
+    case 'error':
+      return errorMessage
+        ? `Generation failed: ${errorMessage}`
+        : 'Generation failed. Open the inspector to retry the affected scenes.';
+  }
+}
+
+/** Single-source aria-live region for the entire generation pipeline.
+ *  Renders an empty string when idle so AT stays quiet pre-kickoff.
+ *  Only re-renders the message when the coarse phase changes — the
+ *  3-second editor poll otherwise re-fires <Stage /> every tick and
+ *  we don't want NVDA / JAWS replaying the same line every 3s. */
+function GenerationLiveAnnouncer({
+  phase,
+  progress,
+  projectExists,
+  errorMessage,
+}: {
+  phase: 'rendering' | 'ready' | 'editing' | 'error' | 'idle';
+  progress: number;
+  projectExists: boolean;
+  errorMessage: string | null;
+}) {
+  const livePhase = useMemo(
+    () => livePhaseFor(phase, progress, projectExists),
+    [phase, progress, projectExists],
+  );
+  const message = useMemo(
+    () => liveMessageFor(livePhase, errorMessage),
+    [livePhase, errorMessage],
+  );
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      // Tailwind's `sr-only` utility — visually hidden, available to AT.
+      className="sr-only"
+    >
+      {message}
     </div>
   );
 }

@@ -323,7 +323,7 @@ export function TabNewsletter(): JSX.Element {
           delta={k ? `+${fmtNum(k.subscribers_delta_7d)} · 7d` : undefined}
           deltaDir={k && k.subscribers_delta_7d > 0 ? "up" : "neutral"} />
         <Kpi label="Last open rate" value={k ? String(k.last_send_open_pct) : dash}
-          unit="%" delta="last sent campaign" deltaDir="neutral" sparkColor="#5CD68D" />
+          unit="%" delta="last sent campaign" deltaDir="neutral" sparkColor="#14C8CC" />
         <Kpi label="Last click rate" value={k ? String(k.last_send_click_pct) : dash}
           unit="%" delta="industry avg ~2.6%" deltaDir="neutral" />
         <Kpi label="Unsubs · last send" value={k ? fmtNum(k.last_send_unsubs) : dash}

@@ -33,7 +33,12 @@
     --gold-foreground: 200 9% 10%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
-    --destructive: 0 72% 51%;
+    /* Destructive uses a darker red despite the brand gold/aqua palette —
+       this is a system-level accessibility override per WCAG 1.4.3 AA.
+       Brand decoration uses ONLY aqua + gold; only error/destructive
+       surfaces and validation copy may use this red. #B91C1C → 5.94:1 on
+       white. Kept in sync with src/index.css (in-app token). */
+    --destructive: 0 73% 41%;
     --destructive-foreground: 0 0% 100%;
     --success: 186 85% 35%;
     --success-foreground: 0 0% 100%;
@@ -74,7 +79,10 @@
     --gold-foreground: 200 9% 10%;
     --warning: 38 92% 55%;
     --warning-foreground: 200 9% 10%;
-    --destructive: 0 72% 55%;
+    /* Destructive — dark-mode variant of the system-level red override.
+       Slightly lighter for legibility on near-black. Kept in sync with
+       src/index.css. */
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
     --success: 184 75% 55%;
     --success-foreground: 0 0% 100%;

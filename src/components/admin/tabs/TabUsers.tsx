@@ -244,7 +244,7 @@ export function TabUsers(): JSX.Element {
           value={k ? short(k.total_users) : dash}
           delta={k && k.signups_7d != null ? `+${fmtNum(k.signups_7d)} this week` : undefined}
           deltaDir="up" />
-        <Kpi label="Paying" sparkColor="#5CD68D"
+        <Kpi label="Paying" sparkColor="#14C8CC"
           value={k ? fmtNum(k.paying_users) : dash}
           delta={k && k.total_users > 0
             ? `${((k.paying_users / k.total_users) * 100).toFixed(1)}% conversion`

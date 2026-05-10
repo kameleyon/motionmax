@@ -135,7 +135,7 @@ function surfaceOf(row: ErrorGroupRow): "web" | "worker" | "edge" {
 const SURFACE_META: Record<"web" | "worker" | "edge", { label: string; color: string }> = {
   web: { label: "Web app", color: "#14C8CC" },
   worker: { label: "Worker · render", color: "#E4C875" },
-  edge: { label: "Edge functions", color: "#a78bfa" },
+  edge: { label: "Edge functions", color: "#E4C875" },
 };
 
 /* ── Sub: error row ─────────────────────────────────────────────────── */
@@ -314,7 +314,7 @@ export function TabErrors(): JSX.Element {
           delta="last 60 min" deltaDir="neutral"
         />
         <Kpi
-          label="Open signatures" sparkColor="#5CD68D"
+          label="Open signatures" sparkColor="#14C8CC"
           value={k ? fmtNum(k.open_signatures) : dash}
           delta="unresolved · 7d" deltaDir="up"
         />

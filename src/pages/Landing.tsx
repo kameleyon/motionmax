@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Menu, Play } from "lucide-react";
 import { LANDING_FEATURES } from "@/config/landingContent";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useNavigate } from "react-router-dom";
 import { trackEvent, useScrollDepthTracker } from "@/hooks/useAnalytics";
 import { useForceDarkMode } from "@/hooks/useForceDarkMode";
@@ -23,7 +22,6 @@ import BeforeAfterComparison from "@/components/landing/BeforeAfterComparison";
 export default function Landing() {
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [demoModalOpen, setDemoModalOpen] = useState(false);
   const menuToggleRef = useRef<HTMLButtonElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
@@ -271,16 +269,28 @@ export default function Landing() {
                   try {
                     trackEvent("watch_demo_click", { location: "hero" });
                   } catch {
-                    /* analytics is best-effort; never block the modal */
+                    /* analytics is best-effort; never block the scroll */
                   }
-                  setDemoModalOpen(true);
+                  // C-1-3 (Optic 2.1 + Hook C3 + Proof F-08): smooth-scroll
+                  // to the real Guidde walkthrough already embedded below
+                  // at <section id="demo-walkthrough">. Replaces the prior
+                  // "Demo video coming soon" placeholder modal which broke
+                  // trust on the secondary CTA — a real walkthrough was
+                  // already on the same page.
+                  const target = document.getElementById("demo-walkthrough");
+                  if (target) {
+                    target.scrollIntoView({ behavior: "smooth", block: "start" });
+                    // Move focus to the section heading so keyboard /
+                    // screen-reader users land where they expect.
+                    target.focus({ preventScroll: true });
+                  }
                 }}
-                aria-haspopup="dialog"
+                aria-controls="demo-walkthrough"
                 style={{ touchAction: "manipulation" }}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 min-w-[160px] h-12 rounded-md border border-white/30 px-6 text-[15px] font-semibold text-white hover:bg-white/10 active:bg-white/15 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A0D0F]"
               >
                 <Play className="h-4 w-4" aria-hidden="true" />
-                Watch Demo
+                Watch the walkthrough
               </button>
             </div>
 
@@ -298,8 +308,17 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Product Demo Section */}
-      <section id="demo" className="py-12 sm:py-20 bg-white/[0.02]">
+      {/* Product Demo Section
+          C-1-3: `id="demo-walkthrough"` is the scroll target for the
+          hero "Watch the walkthrough" CTA. `tabIndex={-1}` makes the
+          section a programmatic focus target without entering the
+          natural tab order, so keyboard / SR users land here on click. */}
+      <section
+        id="demo-walkthrough"
+        tabIndex={-1}
+        aria-labelledby="demo-walkthrough-heading"
+        className="py-12 sm:py-20 bg-white/[0.02] focus:outline-none scroll-mt-24"
+      >
         <div className="mx-auto max-w-4xl px-6 sm:px-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -310,7 +329,7 @@ export default function Landing() {
             <span className="inline-block mb-3 text-xs font-medium uppercase tracking-widest text-primary">
               See It in Action
             </span>
-            <h2 className="type-h1 tracking-tight text-foreground">
+            <h2 id="demo-walkthrough-heading" className="type-h1 tracking-tight text-foreground">
               From text to cinematic video in minutes
             </h2>
           </motion.div>
@@ -322,9 +341,13 @@ export default function Landing() {
             transition={{ delay: 0.1 }}
             className="relative rounded-xl overflow-hidden border border-border/50 bg-black aspect-video"
           >
+            {/* C-1-11 (Halo F-A11Y-015): Guidde auto-generates captions
+                from the recorded narration; `cc=1` opts in by default
+                so Deaf/HoH viewers don't have to discover the toggle
+                inside the player chrome. */}
             <iframe
-              src="https://embed.app.guidde.com/playbooks/wvJwFaqbh66kuXS3hZ23ir?mode=videoOnly"
-              title="Product walkthrough: creating an AI video from text in MotionMax"
+              src="https://embed.app.guidde.com/playbooks/wvJwFaqbh66kuXS3hZ23ir?mode=videoOnly&cc=1"
+              title="Product walkthrough: creating an AI video from text in MotionMax (captions available)"
               frameBorder="0"
               referrerPolicy="unsafe-url"
               allowFullScreen
@@ -499,42 +522,10 @@ export default function Landing() {
       {/* Footer */}
       <LandingFooter />
 
-      {/* Watch Demo modal — replaces the old scroll-to-#demo (which had
-          no target anchor). Shows a short explainer of what MotionMax
-          does; swap the <iframe> src for a real demo video once ready. */}
-      <Dialog open={demoModalOpen} onOpenChange={setDemoModalOpen}>
-        <DialogContent className="max-w-[min(92vw,880px)] w-full p-0 overflow-hidden bg-[#0A0D0F] border-white/10">
-          <DialogHeader className="px-6 pt-5 pb-3 border-b border-white/10">
-            <DialogTitle className="font-serif text-[20px] text-white">
-              <span className="text-[#14C8CC]">Motion</span><span className="text-[#E4C875]">Max</span>
-              <span className="text-white/60 font-sans text-[15px] ml-2">— 90-second demo</span>
-            </DialogTitle>
-          </DialogHeader>
-          <div className="aspect-video w-full bg-black grid place-items-center">
-            {/* Placeholder until a real demo MP4 is recorded.
-                Swap the <div> block below for an <iframe> or <video>
-                pointing at the final asset. */}
-            <div className="text-center px-6 py-10">
-              <div className="h-14 w-14 mx-auto rounded-full border border-white/20 grid place-items-center mb-4">
-                <Play className="h-6 w-6 text-white/70" />
-              </div>
-              <p className="font-serif text-[18px] text-white mb-1">Demo video coming soon</p>
-              <p className="font-mono text-[11px] tracking-wider uppercase text-white/50">
-                Sign up free — make your first video in under 90 seconds
-              </p>
-              <Button
-                className="mt-5 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
-                onClick={() => {
-                  setDemoModalOpen(false);
-                  handleCta("Demo Modal CTA");
-                }}
-              >
-                Try for Free
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* C-1-3 (2026-05-10): the prior "Demo video coming soon"
+          placeholder modal was removed. The hero "Watch the walkthrough"
+          CTA now smooth-scrolls to <section id="demo-walkthrough"> where
+          the real Guidde walkthrough has been embedded all along. */}
     </div>
   );
 }

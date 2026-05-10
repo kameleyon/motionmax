@@ -36,11 +36,11 @@ export default function LabHome() {
         {EXPERIMENTS.map(exp => {
           const Icon = exp.icon;
           const inner = (
-            <Card className="h-full bg-[#10151A] border-white/8 hover:border-[#11C4D0]/40 transition-colors">
+            <Card className="h-full bg-[#10151A] border-white/8 hover:border-[#14C8CC]/40 transition-colors">
               <CardHeader className="space-y-3">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#11C4D0]/10">
-                    <Icon className="h-5 w-5 text-[#11C4D0]" />
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#14C8CC]/10">
+                    <Icon className="h-5 w-5 text-[#14C8CC]" />
                   </div>
                   <Badge
                     variant="outline"
@@ -66,7 +66,7 @@ export default function LabHome() {
                     /lab/{exp.id}
                   </span>
                   {exp.to && (
-                    <span className="inline-flex items-center gap-1 text-[#11C4D0]">
+                    <span className="inline-flex items-center gap-1 text-[#14C8CC]">
                       Open
                       <ChevronRight className="h-3.5 w-3.5" />
                     </span>
@@ -77,7 +77,7 @@ export default function LabHome() {
           );
 
           return exp.to ? (
-            <Link key={exp.id} to={exp.to} className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-[#11C4D0] rounded-lg">
+            <Link key={exp.id} to={exp.to} className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC] rounded-lg">
               {inner}
             </Link>
           ) : (

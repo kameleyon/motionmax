@@ -40,6 +40,28 @@ resource "cloudflare_dns_record" "app" {
   comment = "app.motionmax.io → Vercel (authenticated app shell)"
 }
 
+# Audit C-9-4 (2026-05-10) — public status page hosted by BetterStack.
+# Provisioning order:
+#   1. Run scripts/setup-betterstack-monitors.mjs (or terraform apply
+#      against iac/betterstack/) — that creates the status page and
+#      prints the BetterStack subdomain to use as the CNAME target.
+#   2. Set var.betterstack_status_target to that subdomain (something
+#      like motionmax.betteruptime.com) in terraform.tfvars and apply.
+#   3. BetterStack auto-issues + renews the TLS cert for the custom
+#      domain once it can resolve the CNAME.
+# proxied = false because BetterStack requires the request to reach
+# their edge directly so they can serve the status page TLS cert —
+# putting Cloudflare's proxy in front breaks SSL and SNI routing.
+resource "cloudflare_dns_record" "status" {
+  zone_id = var.cloudflare_zone_id
+  name    = "status.${var.apex_domain}"
+  type    = "CNAME"
+  content = var.betterstack_status_target
+  ttl     = 300
+  proxied = false
+  comment = "status.motionmax.io → BetterStack status page (audit C-9-4)"
+}
+
 # TODO (B-NEW-17 / Part D): once the staging Vercel project exists,
 # add a `staging.motionmax.io` CNAME pointing at its preview alias.
 # Likely shape:

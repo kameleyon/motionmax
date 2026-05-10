@@ -15,6 +15,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
+import { invokeWithTrace, shortTraceRef } from "@/lib/tracing";
 import { AdminEmpty } from "@/components/admin/_shared/AdminEmpty";
 import { AdminLoading } from "@/components/admin/_shared/AdminLoading";
 import { ConfirmDestructive } from "@/components/admin/_shared/confirmDestructive";
@@ -245,7 +246,10 @@ export function TabNewsletter(): JSX.Element {
   const [pendingSend, setPendingSend] = useState<CampaignRow | null>(null);
 
   async function dispatchCampaign(id: string): Promise<void> {
-    const { data, error } = await supabase.functions.invoke<{
+    // Audit C-9-6: trace-propagated invoke. Admin-facing but still important —
+    // a misfired newsletter dispatch is exactly the kind of thing where you
+    // want a Sentry-searchable trace ID rather than guessing.
+    const { data, error, traceId } = await invokeWithTrace<{
       ok: boolean;
       sent?: number;
       failed?: number;
@@ -256,10 +260,11 @@ export function TabNewsletter(): JSX.Element {
     }>("admin-send-newsletter", { body: { newsletter_id: id } });
     if (error) {
       // supabase-js wraps non-2xx into FunctionsHttpError, message has the upstream JSON.
-      throw new Error(error.message || "Failed to dispatch newsletter");
+      const msg = error instanceof Error ? error.message : "Failed to dispatch newsletter";
+      throw new Error(`${msg} (Ref: ${shortTraceRef(traceId)})`);
     }
     if (data?.error) {
-      throw new Error(data.error);
+      throw new Error(`${data.error} (Ref: ${shortTraceRef(traceId)})`);
     }
     if (data?.warning) {
       toast.warning(data.warning);

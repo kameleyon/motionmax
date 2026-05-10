@@ -19,6 +19,7 @@
  */
 import { generateGrokVideo, type GrokVideoInput, type GrokVideoResult } from "./grokVideo.js";
 import { writeApiLog } from "../lib/logger.js";
+import { videoCostUsd } from "../lib/providerRates.js";
 import * as Sentry from "@sentry/node";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -38,8 +39,10 @@ export interface SceneVideoRequest {
   duration?: number;
   /** Project ID (for logging) */
   projectId?: string;
-  /** User ID (for logging) */
-  userId?: string;
+  /** User ID (for api_call_logs attribution). (C-8-5 / C-9-7) */
+  userId?: string | null;
+  /** Generation ID (for api_call_logs attribution). */
+  generationId?: string | null;
 }
 
 export interface SceneVideoResult {
@@ -91,6 +94,7 @@ export async function generateSceneVideo(
     duration = 5,
     projectId,
     userId,
+    generationId,
   } = request;
 
   const startTime = Date.now();
@@ -128,14 +132,18 @@ export async function generateSceneVideo(
         `[SceneVideoGen] Scene ${sceneIndex}: ✅ ${result.provider} succeeded in ${(elapsed / 1000).toFixed(1)}s`
       );
 
-      // Log the API call
+      // Log the API call. Kling V2.6 Pro I2V (which the grok-video route
+      // proxies to today) bills $0.20 per 5s clip. duration is the
+      // generated clip length in seconds — feed it through the rate
+      // helper so longer clips get the right multiplied cost.
       writeApiLog({
-        userId,
+        userId: userId ?? null,
+        generationId: generationId ?? null,
         provider: "hypereal",
         model: "grok-video-i2v",
         status: "success",
         totalDurationMs: elapsed,
-        cost: 0.05,
+        cost: videoCostUsd("hypereal_video_kling", duration),
       }).catch((err: unknown) => {
         const msg = (err as Error).message ?? String(err);
         console.warn('[SceneVideoGen] background log failed (success path):', msg);
@@ -169,7 +177,8 @@ export async function generateSceneVideo(
     );
 
     writeApiLog({
-      userId,
+      userId: userId ?? null,
+      generationId: generationId ?? null,
       provider: "hypereal",
       model: "grok-video-i2v",
       status: "error",

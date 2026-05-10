@@ -40,7 +40,17 @@ export default defineConfig({
     video: "retain-on-failure",
   },
   projects: [
+    // Desktop default — fastest feedback loop for local dev.
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    // C-10-1: mobile + tablet matrix. MotionMax has 8 explicit mobile
+    // breakpoints in the codebase and a mobile-heavy audience, so the
+    // E2E pipeline MUST exercise touch/viewport-specific code paths.
+    // Pixel 5 covers Chromium-Android, iPhone 13 covers WebKit-iOS,
+    // iPad gives us a tablet (md → lg) breakpoint sweep.
+    // Run a single project: `npx playwright test --project=mobile-chrome`.
+    { name: "mobile-chrome", use: { ...devices["Pixel 5"] } },
+    { name: "mobile-safari", use: { ...devices["iPhone 13"] } },
+    { name: "tablet", use: { ...devices["iPad (gen 7)"] } },
   ],
   webServer: {
     // `npm run dev` boots vite on :8080 (see vite.config.ts).

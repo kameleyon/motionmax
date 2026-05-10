@@ -471,6 +471,22 @@ async function _runExport(
   const restartCount = typeof payload._restartCount === "number" ? payload._restartCount : 0;
   const exportConfig = await buildExportConfig(payload);
   exportConfig.userId = userId;
+  // Resolve the latest generation_id for this project so any AI video
+  // generation calls inside the export pipeline get full attribution.
+  // (C-8-5 / C-9-7) Best-effort — a lookup miss leaves generationId
+  // unset and AI video calls fall back to userId-only attribution.
+  try {
+    const { data: latestGen } = await supabase
+      .from("generations")
+      .select("id")
+      .eq("project_id", project_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (latestGen?.id) exportConfig.generationId = latestGen.id as string;
+  } catch (lookupErr) {
+    wlog.warn("[ExportVideo] generationId lookup for attribution failed", { err: (lookupErr as Error).message });
+  }
 
   // EU AI Act Art. 50 disclosure (Option B, 2026-05-10):
   //   - free tier → burn visible drawtext watermark on the export
@@ -644,9 +660,16 @@ async function _runExport(
           return data.signedUrl;
         };
 
-        // Fire ASR for all scenes in parallel — runs while scenes encode
+        // Fire ASR for all scenes in parallel — runs while scenes encode.
+        // generationId was resolved at the top of _runExport into
+        // exportConfig so ASR + AI-video calls share the same lookup.
+        // (C-8-5 / C-9-7)
         const scenesWithAudio = scenes.map((s: any) => ({ audioUrl: s.audioUrl, voiceover: s.voiceover }));
-        asrPromise = transcribeAllScenes(scenesWithAudio, hyperealApiKey, "en", signUrl).catch(err => {
+        const asrAttribution = {
+          userId: userId ?? null,
+          generationId: exportConfig.generationId ?? null,
+        };
+        asrPromise = transcribeAllScenes(scenesWithAudio, hyperealApiKey, "en", signUrl, asrAttribution).catch(err => {
           log.warn("ASR failed, will use estimation", { error: (err as Error).message });
           return scenes.map(() => null);
         });

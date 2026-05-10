@@ -271,7 +271,162 @@ describe("refundCreditsOnFailure (real implementation) — idempotency contract"
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
-  // ── 6. Refund description includes job ID (prevents cross-job collisions) ───
+  // ── 6a. Orphan-detected: autopost_render whose run already finished ──
+  //
+  // Probe C-10-4 PART D step 14 — extend orphan-detected paths.
+  //
+  // Scenario: a stale-claim reaper revives an autopost_render job (or
+  // a duplicate row sneaks past idempotency) AFTER a sibling render has
+  // already delivered the video. The autopost_runs row is in 'rendered'
+  // / 'publishing' / 'completed' status. Refunding here double-credits
+  // the user (they kept the rendered video AND get their credits back).
+  // The refund handler must look at autopost_runs.status and SKIP.
+  it("skips refund for autopost_render orphan when autopost_run is already 'rendered'", async () => {
+    // 1st .from('autopost_runs') call returns the run row with status='rendered'.
+    // refundCreditsOnFailure short-circuits before the credit_transactions
+    // idempotency check, so we wire from() to return that row.
+    const autopostRunChain = makeMockChain({
+      data: { status: "rendered", video_job_id: "vid-job-sibling-1" },
+      error: null,
+    });
+    vi.mocked(supabase.from).mockReturnValue(autopostRunChain as never);
+    vi.mocked(supabase.rpc).mockResolvedValue({ data: true, error: null } as never);
+
+    const job = makeJob({
+      // task_type "autopost_render" isn't in the typed union yet (the
+      // production source reads it as string), so cast through unknown.
+      task_type: "autopost_render" as unknown as Job["task_type"],
+      payload: {
+        projectType: "doc2video",
+        length: "brief",
+        creditsDeducted: 280,
+        autopost_run_id: "run-sibling-1",
+      },
+    });
+    await refundCreditsOnFailure(job);
+
+    // No RPC call — the sibling already consumed the credits successfully.
+    expect(supabase.rpc).not.toHaveBeenCalled();
+    // We DID consult autopost_runs (to discover the orphan signal).
+    expect(supabase.from).toHaveBeenCalledWith("autopost_runs");
+  });
+
+  it("skips refund for autopost_render orphan when autopost_run is 'publishing'", async () => {
+    const chain = makeMockChain({
+      data: { status: "publishing", video_job_id: "vid-job-pub-1" },
+      error: null,
+    });
+    vi.mocked(supabase.from).mockReturnValue(chain as never);
+    vi.mocked(supabase.rpc).mockResolvedValue({ data: true, error: null } as never);
+
+    const job = makeJob({
+      // task_type "autopost_render" isn't in the typed union yet (the
+      // production source reads it as string), so cast through unknown.
+      task_type: "autopost_render" as unknown as Job["task_type"],
+      payload: {
+        projectType: "doc2video",
+        length: "brief",
+        creditsDeducted: 280,
+        autopost_run_id: "run-pub-1",
+      },
+    });
+    await refundCreditsOnFailure(job);
+
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it("skips refund for autopost_render orphan when autopost_run is 'completed'", async () => {
+    const chain = makeMockChain({
+      data: { status: "completed", video_job_id: "vid-job-done-1" },
+      error: null,
+    });
+    vi.mocked(supabase.from).mockReturnValue(chain as never);
+    vi.mocked(supabase.rpc).mockResolvedValue({ data: true, error: null } as never);
+
+    const job = makeJob({
+      // task_type "autopost_render" isn't in the typed union yet (the
+      // production source reads it as string), so cast through unknown.
+      task_type: "autopost_render" as unknown as Job["task_type"],
+      payload: {
+        projectType: "doc2video",
+        length: "brief",
+        creditsDeducted: 280,
+        autopost_run_id: "run-done-1",
+      },
+    });
+    await refundCreditsOnFailure(job);
+
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  // ── 6b. autopost_render with creditsDeducted=0 → pre-deduction row, skip ──
+  //
+  // The orchestrator inserts a row BEFORE the credit deduction commits;
+  // if that early row gets reaped as a stranded claim, refunding it
+  // would credit the user for a deduction that never happened.
+  it("skips refund for autopost_render rows whose payload has no creditsDeducted (pre-deduction)", async () => {
+    vi.mocked(supabase.from).mockReturnValue(
+      makeMockChain({ data: null, error: null }) as never,
+    );
+    vi.mocked(supabase.rpc).mockResolvedValue({ data: true, error: null } as never);
+
+    const job = makeJob({
+      // task_type "autopost_render" isn't in the typed union yet (the
+      // production source reads it as string), so cast through unknown.
+      task_type: "autopost_render" as unknown as Job["task_type"],
+      payload: { projectType: "doc2video", length: "brief" /* no creditsDeducted */ },
+    });
+    await refundCreditsOnFailure(job);
+
+    expect(supabase.from).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  // ── 6c. autopost_render orphan with run status='pending' → refund proceeds ──
+  //
+  // The orphan-detection ONLY skips when a sibling has finished. If the
+  // run is still pending / generating, the failure here genuinely means
+  // the credits were lost; refund should proceed (subject to the
+  // idempotency check on credit_transactions).
+  it("DOES refund autopost_render orphan when autopost_run is still 'pending' (no sibling finish)", async () => {
+    // Two from() calls happen in this path:
+    //   1st: autopost_runs lookup (status='pending', no video_job_id)
+    //   2nd: credit_transactions idempotency check (no existing refund)
+    // Then supabase.rpc("refund_credits_securely") is called.
+    const chainSequence = [
+      makeMockChain({ data: { status: "pending", video_job_id: null }, error: null }),
+      makeMockChain({ data: null, error: null }), // no existing refund tx
+    ];
+    let callIdx = 0;
+    vi.mocked(supabase.from).mockImplementation(() => {
+      const c = chainSequence[callIdx] ?? chainSequence[chainSequence.length - 1];
+      callIdx += 1;
+      return c as never;
+    });
+    vi.mocked(supabase.rpc).mockResolvedValue({ data: true, error: null } as never);
+
+    const job = makeJob({
+      // task_type "autopost_render" isn't in the typed union yet (the
+      // production source reads it as string), so cast through unknown.
+      task_type: "autopost_render" as unknown as Job["task_type"],
+      payload: {
+        projectType: "doc2video",
+        length: "brief",
+        creditsDeducted: 280,
+        autopost_run_id: "run-pending-1",
+      },
+    });
+    await refundCreditsOnFailure(job);
+
+    // The refund DID fire — exact amount from payload.creditsDeducted.
+    expect(supabase.rpc).toHaveBeenCalledOnce();
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      "refund_credits_securely",
+      expect.objectContaining({ p_amount: 280, p_user_id: "user-abc" }),
+    );
+  });
+
+  // ── 7. Refund description includes job ID (prevents cross-job collisions) ───
   it("uses a description that uniquely identifies the job to prevent cross-job duplicates", async () => {
     const chain = makeMockChain({ data: null, error: null });
     vi.mocked(supabase.from).mockReturnValue(chain as never);

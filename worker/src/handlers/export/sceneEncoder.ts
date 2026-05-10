@@ -62,6 +62,8 @@ export interface ExportConfig {
   projectId?: string;
   /** User ID for logging */
   userId?: string;
+  /** Generation ID for api_call_logs attribution. (C-8-5 / C-9-7) */
+  generationId?: string;
 }
 
 /** Default export config for landscape format */
@@ -255,6 +257,7 @@ async function tryAiVideo(
         duration: 5,
         projectId: config.projectId,
         userId: config.userId,
+        generationId: config.generationId,
       },
       config.aiVideoTimeoutMs
     );

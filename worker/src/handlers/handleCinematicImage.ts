@@ -127,6 +127,7 @@ async function _runCinematicImage(
   const imageUrl = await generateImage(
     prompt, hyperealApiKey, replicateApiKey, format, projectId,
     characterImages.length > 0 ? characterImages : undefined,
+    { userId: userId ?? null, generationId },
   );
 
   if (!imageUrl) {

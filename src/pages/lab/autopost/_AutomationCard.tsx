@@ -43,7 +43,7 @@ import { humanizeCron, formatRelativeTime, nextFireFromCron } from "./_utils";
 import { EditAutomationDialog } from "./_EditAutomationDialog";
 import { GenerateTopicsDialog } from "./_GenerateTopicsDialog";
 import { UpdateScheduleDialog } from "./_UpdateScheduleDialog";
-import { AUTOPOST_CREDITS_PER_RUN } from "@/lib/planLimits";
+import { getAutopostCreditsRequired } from "@/lib/planLimits";
 import type { AutomationSchedule } from "./_automationTypes";
 
 interface AutomationCardProps {
@@ -347,7 +347,20 @@ export function AutomationCard({ schedule, lastRunAt }: AutomationCardProps) {
             )}
             <span>{cadence}</span>
             <span className="dot" />
-            <span>{AUTOPOST_CREDITS_PER_RUN} cr/run</span>
+            <span>
+              {(() => {
+                // C-8-6: per-card credit estimate uses the schedule's
+                // own saved mode + length from config_snapshot. Was a
+                // hard-coded flat 45 which the SQL deduction has not
+                // matched since migration 20260502110000.
+                const cfg = (schedule.config_snapshot ?? {}) as Record<string, unknown>;
+                const mode = (typeof cfg.mode === "string" ? cfg.mode : "smartflow") as
+                  "doc2video" | "smartflow" | "cinematic";
+                const length = (typeof cfg.length === "string" ? cfg.length : "short") as
+                  "short" | "brief" | "presentation";
+                return getAutopostCreditsRequired(mode, length);
+              })()} cr/run
+            </span>
           </div>
           <div className="platforms">
             {platforms.map(p => (

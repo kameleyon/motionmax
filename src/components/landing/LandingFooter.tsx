@@ -11,7 +11,11 @@ const footerLinks = {
   company: [
     { label: "About", href: "#about" },
     { label: "Contact", href: "mailto:support@motionmax.io" },
-  ],
+    // Audit C-9-4: public status page. Must be reachable when auth /
+    // app is down — that's the whole point — so it lives on a separate
+    // subdomain hosted by BetterStack (see runbooks/uptime-and-status-page.md).
+    { label: "Status", href: "https://status.motionmax.io", external: true },
+  ] as Array<{ label: string; href: string; external?: boolean }>,
   legal: [
     { label: "Terms of Service", href: "/terms" },
     { label: "Privacy Policy", href: "/privacy" },
@@ -64,7 +68,13 @@ export default function LandingFooter() {
             <ul className="space-y-2.5">
               {footerLinks.company.map(link => (
                 <li key={link.label}>
-                  <a href={link.href} className="text-sm text-muted-foreground hover:text-foreground hover:underline transition-colors">
+                  <a
+                    href={link.href}
+                    className="text-sm text-muted-foreground hover:text-foreground hover:underline transition-colors"
+                    {...(link.external
+                      ? { target: "_blank", rel: "noopener noreferrer" }
+                      : {})}
+                  >
                     {link.label}
                   </a>
                 </li>

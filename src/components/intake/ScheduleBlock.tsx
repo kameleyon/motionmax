@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { AUTOPOST_CREDITS_PER_RUN, isAutopostEligible } from '@/lib/planLimits';
+import { getAutopostCreditsRequired, isAutopostEligible } from '@/lib/planLimits';
 import { useSubscription } from '@/hooks/useSubscription';
 import {
   Clock, Wand2, Loader2, RefreshCw, Plug, Youtube, Instagram, Music2,
@@ -59,14 +59,18 @@ const TOPIC_POLL_MS = 1500;
 // 5 min — enough to cover one retry attempt without leaving the
 // intake form spinning forever.
 const TOPIC_POLL_TIMEOUT_MS = 300_000;
-/** Per-run cost estimate used for the "X credits/month" helper. The
- *  intake form's full cost calculator is downstream of which mode
- *  the user picked; we use a conservative single number here so the
- *  helper is honest without being precise. Wave B2 can replace this
- *  with a live read from the parent's `totalCost`. */
-// Re-exported as a const for backwards-compat with the existing
-// monthly-cost calculation below. Mirrors the flat-45 SQL deduction.
-const PER_RUN_CREDIT_ESTIMATE = AUTOPOST_CREDITS_PER_RUN;
+/** Per-run cost estimate used for the "X credits/month" helper.
+ *
+ *  C-8-6: previously hard-coded to the AUTOPOST_CREDITS_PER_RUN
+ *  constant (45). That lowballed every cost display because the SQL
+ *  deduction is actually variable per mode+length (75-1800). We can't
+ *  read the parent's `mode` / `length` from inside ScheduleBlock
+ *  without a wider refactor, so we default to the SmartFlow/short
+ *  combo (the cheapest) and add a "+ varies with mode/length" caveat
+ *  in the user-facing copy. Real cost is shown at the create-CTA
+ *  level in IntakeForm.tsx where mode + length are in scope.
+ */
+const PER_RUN_CREDIT_ESTIMATE = getAutopostCreditsRequired('smartflow', 'short');
 
 const PLATFORMS: Array<{ id: 'youtube' | 'instagram' | 'tiktok'; label: string; Icon: typeof Youtube }> = [
   { id: 'youtube',   label: 'YouTube',   Icon: Youtube },
@@ -463,7 +467,7 @@ export default function ScheduleBlock({
             <Clock className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[#E4C875]" />
             <div className="flex-1 min-w-0">
               <span className="text-[#E4C875] font-medium">Heads up — Autopost is a Creator/Studio feature.</span>{' '}
-              <span className="text-[#8A9198]">You can configure your schedule below; you'll be prompted to upgrade when you click Generate. {AUTOPOST_CREDITS_PER_RUN} credits per run on Creator+.</span>{' '}
+              <span className="text-[#8A9198]">You can configure your schedule below; you'll be prompted to upgrade when you click Generate. Credits per run vary with mode + duration (≈{PER_RUN_CREDIT_ESTIMATE}–1800 cr/run).</span>{' '}
               <a href="/pricing" className="text-[#14C8CC] hover:underline whitespace-nowrap">See plans →</a>
             </div>
           </div>

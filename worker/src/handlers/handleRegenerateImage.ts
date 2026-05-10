@@ -175,6 +175,7 @@ async function _runRegenerateImage(
       aspectRatio,
       undefined,
       projectId,
+      { userId: userId ?? null, generationId },
     );
   } else {
     // Full Regeneration — include style + character bible in prompt
@@ -194,7 +195,10 @@ async function _runRegenerateImage(
     ];
 
     const fullPrompt = promptParts.filter(Boolean).join("\n\n");
-    imageUrl = await generateImage(fullPrompt, hyperealApiKey, replicateApiKey, format, projectId);
+    imageUrl = await generateImage(
+      fullPrompt, hyperealApiKey, replicateApiKey, format, projectId, undefined,
+      { userId: userId ?? null, generationId },
+    );
   }
 
   // Save current state as a version in scene_versions table

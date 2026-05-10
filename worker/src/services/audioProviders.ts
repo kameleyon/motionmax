@@ -16,6 +16,17 @@ import {
   base64ToUint8Array,
 } from "./audioWavUtils.js";
 import { validateMediaBytes, MediaValidationError } from "../handlers/export/mediaValidator.js";
+import { writeApiLog } from "../lib/logger.js";
+import { ttsCharsCostUsd, ttsSecondsCostUsd } from "../lib/providerRates.js";
+
+/**
+ * Shared attribution payload threaded from the handler so each
+ * api_call_logs row has real userId + generationId. (C-8-5 / C-9-7)
+ */
+export interface AudioProviderAttribution {
+  userId: string | null;
+  generationId: string | null;
+}
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -158,7 +169,9 @@ export async function generateGeminiTTS(
    *  female narration; the same voice works across all 11 supported
    *  languages because Gemini Flash TTS is multilingual natively. */
   voiceName: string = "Enceladus",
+  attribution: AudioProviderAttribution = { userId: null, generationId: null },
 ): Promise<{ url: string | null; durationSeconds?: number; provider?: string; error?: string; pcmBytes?: Uint8Array }> {
+  const startTime = Date.now();
   for (let round = 0; round < KEY_ROTATION_ROUNDS; round++) {
     if (round > 0) await sleep(3000 * round);
     for (const apiKey of googleApiKeys) {
@@ -216,6 +229,15 @@ export async function generateGeminiTTS(
           const url = await uploadAudio(wav, "audio/wav", projectId, sceneNumber);
           const durationSeconds = Math.max(1, pcm.length / (24000 * 2));
           console.log(`[TTS-Gemini] Scene ${sceneNumber} ✅ ${model.label} voice=${voiceName}`);
+          // Gemini Flash TTS bills $0.001/min of synthesized audio.
+          writeApiLog({
+            userId: attribution.userId,
+            generationId: attribution.generationId,
+            provider: "google_tts", model: model.name,
+            status: "success", totalDurationMs: Date.now() - startTime,
+            cost: ttsSecondsCostUsd("gemini_flash_tts", durationSeconds),
+            error: undefined,
+          }).catch((err) => { console.warn('[TTS-Gemini] background log failed:', (err as Error).message); });
           return { url, durationSeconds, provider: `Gemini ${model.label} (${voiceName})` };
         } catch (err: any) {
           if (err?.quotaExhausted) break;
@@ -223,6 +245,13 @@ export async function generateGeminiTTS(
       }
     }
   }
+  writeApiLog({
+    userId: attribution.userId,
+    generationId: attribution.generationId,
+    provider: "google_tts", model: "gemini-tts-rotation",
+    status: "error", totalDurationMs: Date.now() - startTime,
+    cost: 0, error: "All Gemini keys exhausted",
+  }).catch((err) => { console.warn('[TTS-Gemini] background log failed:', (err as Error).message); });
   return { url: null, error: "All Gemini keys exhausted" };
 }
 
@@ -230,10 +259,12 @@ export async function generateGeminiTTS(
 
 export async function generateElevenLabsTTS(
   text: string, sceneNumber: number, voiceId: string, apiKey: string, projectId: string,
+  attribution: AudioProviderAttribution = { userId: null, generationId: null },
 ): Promise<{ url: string | null; durationSeconds?: number; provider?: string; error?: string }> {
   const sanitized = sanitizeVoiceover(text);
   if (!sanitized || sanitized.length < 2) return { url: null, error: "No text" };
 
+  const startTime = Date.now();
   const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
     method: "POST",
     headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
@@ -241,10 +272,28 @@ export async function generateElevenLabsTTS(
       voice_settings: { stability: 0.25, similarity_boost: 0.8, style: 0.75, use_speaker_boost: true } }),
   });
 
-  if (!res.ok) return { url: null, error: `ElevenLabs TTS ${res.status}` };
+  if (!res.ok) {
+    writeApiLog({
+      userId: attribution.userId,
+      generationId: attribution.generationId,
+      provider: "elevenlabs", model: "eleven_multilingual_v2",
+      status: "error", totalDurationMs: Date.now() - startTime,
+      cost: 0, error: `ElevenLabs TTS ${res.status}`,
+    }).catch((err) => { console.warn('[ElevenLabs] background log failed:', (err as Error).message); });
+    return { url: null, error: `ElevenLabs TTS ${res.status}` };
+  }
 
   const bytes = new Uint8Array(await res.arrayBuffer());
   const url = await uploadAudio(bytes, "audio/mpeg", projectId, sceneNumber);
+  // ElevenLabs bills $0.18/1k characters on the multilingual_v2 model.
+  writeApiLog({
+    userId: attribution.userId,
+    generationId: attribution.generationId,
+    provider: "elevenlabs", model: "eleven_multilingual_v2",
+    status: "success", totalDurationMs: Date.now() - startTime,
+    cost: ttsCharsCostUsd("elevenlabs_tts", sanitized.length),
+    error: undefined,
+  }).catch((err) => { console.warn('[ElevenLabs] background log failed:', (err as Error).message); });
   return { url, durationSeconds: Math.max(1, bytes.length / 16000), provider: "ElevenLabs TTS" };
 }
 
@@ -310,12 +359,14 @@ function releaseLemonSlot(): void {
 
 export async function generateLemonfoxTTS(
   text: string, sceneNumber: number, voiceGender: string, apiKey: string, projectId: string,
+  attribution: AudioProviderAttribution = { userId: null, generationId: null },
 ): Promise<{ url: string | null; durationSeconds?: number; provider?: string; error?: string }> {
   const sanitized = sanitizeVoiceover(text);
   if (!sanitized) return { url: null, error: "No text" };
   const voice = voiceGender === "male" ? "adam" : "river";
 
   await acquireLemonSlot();
+  const startTime = Date.now();
   try {
     const MAX_ATTEMPTS = 5;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -338,13 +389,47 @@ export async function generateLemonfoxTTS(
           await sleep(2000 * attempt);
           continue;
         }
+        // Final non-retriable failure — record attribution + duration
+        // but $0 cost (LemonFox doesn't bill failed requests).
+        writeApiLog({
+          userId: attribution.userId,
+          generationId: attribution.generationId,
+          provider: "lemonfox", model: `lemonfox-${voice}`,
+          status: "error", totalDurationMs: Date.now() - startTime,
+          cost: 0, error: `Lemonfox ${res.status}`,
+        }).catch((err) => { console.warn('[Lemonfox] background log failed:', (err as Error).message); });
         return { url: null, error: `Lemonfox ${res.status}` };
       }
       const bytes = new Uint8Array(await res.arrayBuffer());
-      if (bytes.length < 100) return { url: null, error: "Empty audio" };
+      if (bytes.length < 100) {
+        writeApiLog({
+          userId: attribution.userId,
+          generationId: attribution.generationId,
+          provider: "lemonfox", model: `lemonfox-${voice}`,
+          status: "error", totalDurationMs: Date.now() - startTime,
+          cost: 0, error: "Empty audio",
+        }).catch((err) => { console.warn('[Lemonfox] background log failed:', (err as Error).message); });
+        return { url: null, error: "Empty audio" };
+      }
       const url = await uploadAudio(bytes, "audio/mpeg", projectId, sceneNumber);
+      // LemonFox bills $0.08/1k characters of input text.
+      writeApiLog({
+        userId: attribution.userId,
+        generationId: attribution.generationId,
+        provider: "lemonfox", model: `lemonfox-${voice}`,
+        status: "success", totalDurationMs: Date.now() - startTime,
+        cost: ttsCharsCostUsd("lemonfox_tts", sanitized.length),
+        error: undefined,
+      }).catch((err) => { console.warn('[Lemonfox] background log failed:', (err as Error).message); });
       return { url, durationSeconds: Math.max(1, bytes.length / 16000), provider: `Lemonfox (${voice})` };
     }
+    writeApiLog({
+      userId: attribution.userId,
+      generationId: attribution.generationId,
+      provider: "lemonfox", model: `lemonfox-${voice}`,
+      status: "error", totalDurationMs: Date.now() - startTime,
+      cost: 0, error: "Lemonfox failed after 5 attempts",
+    }).catch((err) => { console.warn('[Lemonfox] background log failed:', (err as Error).message); });
     return { url: null, error: "Lemonfox failed after 5 attempts" };
   } finally {
     releaseLemonSlot();
@@ -394,11 +479,13 @@ function parseFishRetryAfter(headerVal: string | null): number {
 
 export async function generateFishAudioTTS(
   text: string, sceneNumber: number, apiKey: string, projectId: string, voiceId?: string,
+  attribution: AudioProviderAttribution = { userId: null, generationId: null },
 ): Promise<{ url: string | null; durationSeconds?: number; provider?: string; error?: string }> {
   const referenceId = voiceId || FISH_AUDIO_FEMALE_VOICE;
 
   // Gate concurrency so we don't burst all scenes at once.
   await acquireFishSlot();
+  const startTime = Date.now();
   try {
     const MAX_ATTEMPTS = 5;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -442,13 +529,45 @@ export async function generateFishAudioTTS(
           await sleep(2000 * attempt);
           continue;
         }
+        writeApiLog({
+          userId: attribution.userId,
+          generationId: attribution.generationId,
+          provider: "fish_audio", model: "s2-pro",
+          status: "error", totalDurationMs: Date.now() - startTime,
+          cost: 0, error: `Fish Audio ${res.status}`,
+        }).catch((err) => { console.warn('[FishAudio] background log failed:', (err as Error).message); });
         return { url: null, error: `Fish Audio ${res.status}: ${errBody.substring(0, 100)}` };
       }
       const bytes = new Uint8Array(await res.arrayBuffer());
-      if (bytes.length < 100) return { url: null, error: "Empty audio" };
+      if (bytes.length < 100) {
+        writeApiLog({
+          userId: attribution.userId,
+          generationId: attribution.generationId,
+          provider: "fish_audio", model: "s2-pro",
+          status: "error", totalDurationMs: Date.now() - startTime,
+          cost: 0, error: "Empty audio",
+        }).catch((err) => { console.warn('[FishAudio] background log failed:', (err as Error).message); });
+        return { url: null, error: "Empty audio" };
+      }
       const url = await uploadAudio(bytes, "audio/mpeg", projectId, sceneNumber);
+      // Fish Audio bills $0.10 per 1k characters on the s2-pro tier.
+      writeApiLog({
+        userId: attribution.userId,
+        generationId: attribution.generationId,
+        provider: "fish_audio", model: "s2-pro",
+        status: "success", totalDurationMs: Date.now() - startTime,
+        cost: ttsCharsCostUsd("fish_audio_tts", text.length),
+        error: undefined,
+      }).catch((err) => { console.warn('[FishAudio] background log failed:', (err as Error).message); });
       return { url, durationSeconds: Math.max(1, bytes.length / 16000), provider: "Fish Audio TTS" };
     }
+    writeApiLog({
+      userId: attribution.userId,
+      generationId: attribution.generationId,
+      provider: "fish_audio", model: "s2-pro",
+      status: "error", totalDurationMs: Date.now() - startTime,
+      cost: 0, error: "Fish Audio failed after 5 attempts",
+    }).catch((err) => { console.warn('[FishAudio] background log failed:', (err as Error).message); });
     return { url: null, error: "Fish Audio failed after 5 attempts" };
   } finally {
     releaseFishSlot();

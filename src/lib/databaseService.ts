@@ -11,6 +11,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { invokeWithTrace } from "@/lib/tracing";
 import type { Database } from "@/integrations/supabase/types";
 
 // ---------------------------------------------------------------------------
@@ -103,11 +104,18 @@ function createDatabaseService() {
       fnName: string,
       body?: Record<string, unknown>,
     ): Promise<DbResult<T>> {
-      const { data, error } = await supabase.functions.invoke(fnName, {
+      // Audit C-9-6: invokeWithTrace generates X-Trace-Id + _trace_id so
+      // every edge-function call from the React app is correlatable end-to-
+      // end. Callers wanting to expose the trace ID in error toasts should
+      // call invokeWithTrace directly.
+      const { data, error } = await invokeWithTrace<T>(fnName, {
         body: body ?? {},
       });
-      if (error) return { data: null, error: error.message };
-      return { data: data as T, error: null };
+      if (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        return { data: null, error: msg };
+      }
+      return { data: (data ?? null) as T, error: null };
     },
 
     /** Direct access — escape hatch for features not yet abstracted. */

@@ -11,6 +11,7 @@
 
 import { supabase } from "../lib/supabase.js";
 import { writeApiLog } from "../lib/logger.js";
+import { ttsSecondsCostUsd } from "../lib/providerRates.js";
 
 const REPLICATE_API_URL = "https://api.replicate.com/v1/models/qwen/qwen3-tts/predictions";
 
@@ -70,6 +71,10 @@ export interface Qwen3TTSOptions {
   speaker?: string;        // Display name (e.g. "Nova") — mapped internally
   language?: string;       // Our language code (e.g. "en", "fr")
   styleInstruction?: string; // AI-generated tone/emotion instruction
+  /** Caller's user id for api_call_logs attribution. (C-8-5 / C-9-7) */
+  userId?: string | null;
+  /** Caller's generation id for api_call_logs attribution. */
+  generationId?: string | null;
 }
 
 /**
@@ -183,7 +188,15 @@ export async function generateQwen3TTS(
       const durationSeconds = Math.max(1, bytes.length / (44100 * 2)); // rough estimate for 16-bit mono WAV
 
       console.log(`[Qwen3TTS] Scene ${sceneNumber}: success (${bytes.length} bytes, ~${durationSeconds.toFixed(1)}s)`);
-      writeApiLog({ userId: undefined, generationId: undefined, provider: "qwen3", model: "qwen3-tts", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[Qwen3TTS] background log failed:', (err as Error).message); });
+      // Replicate bills Qwen3 per second of synthesized audio.
+      writeApiLog({
+        userId: opts.userId ?? null,
+        generationId: opts.generationId ?? null,
+        provider: "qwen3", model: "qwen3-tts",
+        status: "success", totalDurationMs: Date.now() - startTime,
+        cost: ttsSecondsCostUsd("qwen3_tts", durationSeconds),
+        error: undefined,
+      }).catch((err) => { console.warn('[Qwen3TTS] background log failed:', (err as Error).message); });
       return { url, durationSeconds, provider: `Qwen3 TTS (${speaker})` };
 
     } catch (err) {
@@ -192,6 +205,12 @@ export async function generateQwen3TTS(
     }
   }
 
-  writeApiLog({ userId: undefined, generationId: undefined, provider: "qwen3", model: "qwen3-tts", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: "Qwen3 TTS failed after 3 attempts" }).catch((err) => { console.warn('[Qwen3TTS] background log failed:', (err as Error).message); });
+  writeApiLog({
+    userId: opts.userId ?? null,
+    generationId: opts.generationId ?? null,
+    provider: "qwen3", model: "qwen3-tts",
+    status: "error", totalDurationMs: Date.now() - startTime,
+    cost: 0, error: "Qwen3 TTS failed after 3 attempts",
+  }).catch((err) => { console.warn('[Qwen3TTS] background log failed:', (err as Error).message); });
   return { url: null, error: "Qwen3 TTS failed after 3 attempts" };
 }

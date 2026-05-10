@@ -20,3 +20,14 @@ variable "apex_domain" {
   type        = string
   default     = "motionmax.io"
 }
+
+# Audit C-9-4: target subdomain BetterStack issues for the public
+# status page. Format: <subdomain>.betteruptime.com (the `subdomain`
+# field of iac/betterstack/main.tf:betteruptime_status_page.public).
+# Empty default keeps `terraform plan` clean before the BetterStack
+# resource exists; the status CNAME stays uncreated until set.
+variable "betterstack_status_target" {
+  description = "BetterStack-issued CNAME target for the status.motionmax.io custom domain (e.g. motionmax.betteruptime.com). Set after running scripts/setup-betterstack-monitors.mjs."
+  type        = string
+  default     = "motionmax.betteruptime.com"
+}

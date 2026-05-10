@@ -13,6 +13,7 @@ import { db } from "@/lib/databaseService";
 import { toast as sonnerToast } from "sonner";
 import { createScopedLogger } from "@/lib/logger";
 import { breadcrumbGenerationStart } from "@/lib/sentryBreadcrumbs";
+import { startGenerationTrace, shortTraceRef } from "@/lib/tracing";
 import { callPhase } from "./generation/callPhase";
 import { resumeCinematicPipeline } from "./generation/cinematicPipeline";
 import { runUnifiedPipeline } from "./generation/unifiedPipeline";
@@ -47,7 +48,7 @@ export function useGenerationPipeline() {
   sceneCountRef.current = state.sceneCount;
 
   /** Create a pipeline context whose setState is scoped to the current epoch. */
-  const createContext = useCallback((): PipelineContext => {
+  const createContext = useCallback((traceId?: string): PipelineContext => {
     const epoch = epochRef.current;
     return {
       setState: (updater) => {
@@ -57,7 +58,17 @@ export function useGenerationPipeline() {
         }
         setState(updater);
       },
-      callPhase,
+      // Audit C-9-6: wrap callPhase so every phase body carries the
+      // generation-lifecycle trace ID. The worker pulls
+      // `payload.traceId` into Sentry as a tag already; this is the
+      // missing client-side half.
+      callPhase: (body, timeoutMs, endpoint) =>
+        callPhase(
+          traceId ? { ...body, traceId, _trace_id: traceId } : body,
+          timeoutMs,
+          endpoint,
+        ),
+      traceId,
       toast: (opts) => {
         if (opts.variant === "destructive") {
           sonnerToast.error(opts.title || "Error", { description: opts.description });
@@ -100,17 +111,31 @@ export function useGenerationPipeline() {
       projectId: params.projectId,
     });
 
+    // Audit C-9-6: start a Sentry-correlated trace for the whole generation
+    // lifecycle. The ID flows down through PipelineContext.callPhase into
+    // every phase body (and thence into worker job.payload.traceId), and
+    // surfaces in user-facing error toasts as a 8-char ref.
+    const { traceId, end: endTrace } = startGenerationTrace(
+      `generation.${params.projectType ?? "doc2video"}.${params.length}`,
+    );
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("You must be logged in to generate videos");
 
-      const ctx = createContext();
+      const ctx = createContext(traceId);
       await runUnifiedPipeline(params, ctx, expectedSceneCount);
     } catch (error) {
       log.error("Generation error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Generation failed";
+      const rawMsg = error instanceof Error ? error.message : "Generation failed";
+      // Don't double-print the ref if a downstream layer already attached one.
+      const errorMessage = rawMsg.includes("(Ref:")
+        ? rawMsg
+        : `${rawMsg} (Ref: ${shortTraceRef(traceId)})`;
       setState((prev) => ({ ...prev, step: "error", isGenerating: false, error: errorMessage, statusMessage: errorMessage }));
       sonnerToast.error("Generation Failed", { description: errorMessage });
+    } finally {
+      endTrace();
     }
   }, [createContext]);
 

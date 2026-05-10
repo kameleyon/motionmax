@@ -34,7 +34,7 @@ import {
   type ScheduleInterval,
 } from "@/components/intake/_scheduleConstants";
 import { nextFireFromCron, formatRelativeTime } from "./_utils";
-import { AUTOPOST_CREDITS_PER_RUN } from "@/lib/planLimits";
+import { getAutopostCreditsRequired } from "@/lib/planLimits";
 import type { AutomationSchedule } from "./_automationTypes";
 
 interface UpdateScheduleDialogProps {
@@ -69,13 +69,20 @@ export function UpdateScheduleDialog({
     [interval],
   );
 
-  // Per-run cost is a flat AUTOPOST_CREDITS_PER_RUN — mirrors the SQL
-  // `autopost_credits_required` function which now returns 45
-  // unconditionally. Schedule mode/length no longer factor into cost.
+  // C-8-6: per-run cost is derived from the schedule's saved mode +
+  // length (matching the SQL autopost_credits_required formula), NOT a
+  // flat 45. The UI now shows the user the same number they'll actually
+  // be charged.
   const monthlyCredits = useMemo(() => {
     const runs = RUNS_PER_MONTH[interval] ?? 0;
-    return runs * AUTOPOST_CREDITS_PER_RUN;
-  }, [interval]);
+    const cfg = (schedule.config_snapshot ?? {}) as Record<string, unknown>;
+    const mode = (typeof cfg.mode === "string" ? cfg.mode : "smartflow") as
+      | "doc2video" | "smartflow" | "cinematic";
+    const length = (typeof cfg.length === "string" ? cfg.length : "short") as
+      | "short" | "brief" | "presentation";
+    const perRun = getAutopostCreditsRequired(mode, length);
+    return runs * perRun;
+  }, [interval, schedule.config_snapshot]);
 
   const updateMutation = useMutation({
     mutationFn: async () => {

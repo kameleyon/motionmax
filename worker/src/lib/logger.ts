@@ -56,9 +56,25 @@ interface LogPayload {
 }
 
 // API call logging -- matches api_call_logs table schema exactly
+//
+// STRICT REQUIRED FIELDS (C-8-5 / C-9-7):
+//   userId         — `string | null`, NOT optional. `null` is only ever
+//                    legitimate for system-level calls with no user
+//                    context (e.g. the post-deploy provider key banner).
+//                    Forcing the field to be present at the type level
+//                    surfaces every missing-attribution callsite at
+//                    compile time instead of silently writing NULL.
+//   generationId   — `string | null`, NOT optional. Same rationale.
+//   cost           — `number`, NOT optional. USD spend for this call.
+//                    Callers MUST compute via providerRates.ts so the
+//                    $/active-user, $/generated-video and abuse-
+//                    forensics dashboards have real numbers to work
+//                    with. `0` is reserved for genuinely free calls
+//                    (e.g. health pings) — using `0` as "I don't know"
+//                    breaks finops, hence the strict type.
 interface ApiCallPayload {
-  userId?: string;
-  generationId?: string;
+  userId: string | null;
+  generationId: string | null;
   provider: "openrouter" | "hypereal" | "elevenlabs" | "replicate" | "google_tts" | "google" | "fish_audio" | "lemonfox" | "qwen3" | "smallest";
   model: string;
   status: "success" | "error";
@@ -151,11 +167,29 @@ export async function writeApiLog(payload: ApiCallPayload) {
     }
   }
 
+  // Emit a structured stderr line when a call lacks user attribution.
+  // This is a soft alert — the row still lands in api_call_logs (with
+  // user_id NULL) so we never lose the cost row, but the warning makes
+  // it visible in log aggregators that a callsite is still using the
+  // legacy untracked path. Once every callsite is migrated, this
+  // warning should never fire in production.
+  if (payload.userId === null || payload.generationId === null) {
+    console.warn(JSON.stringify({
+      ts: new Date().toISOString(),
+      level: "warn",
+      event: "api_log_missing_attribution",
+      provider: payload.provider,
+      model: payload.model,
+      hasUserId: payload.userId !== null,
+      hasGenerationId: payload.generationId !== null,
+    }));
+  }
+
   try {
     await supabase.from("api_call_logs").insert({
       id: uuidv4(),
-      user_id: payload.userId || null,
-      generation_id: payload.generationId || null,
+      user_id: payload.userId,
+      generation_id: payload.generationId,
       provider: payload.provider,
       model: payload.model,
       status: payload.status,

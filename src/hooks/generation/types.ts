@@ -132,6 +132,12 @@ export interface PipelineContext {
   setState: SetGenerationState;
   callPhase: (body: Record<string, unknown>, timeoutMs?: number, endpoint?: string) => Promise<Record<string, unknown>>;
   toast: (opts: { title?: string; description?: string; variant?: "default" | "destructive" }) => void;  // Legacy signature — adapter wraps Sonner
+  /** Audit C-9-6: trace ID for the whole generation lifecycle. The pipeline
+   *  injects this via the callPhase adapter so each phase body carries it
+   *  through to the worker job payload (worker/src/index.ts already reads
+   *  `job.payload?.traceId` as a Sentry tag). Surfaced in error toasts as
+   *  `shortTraceRef(traceId)`. */
+  traceId?: string;
 }
 
 // ---- Constants ----

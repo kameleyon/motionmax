@@ -60,7 +60,13 @@ function scrubString(value: string, parentKey?: string): string {
     out = out.replace(FOUR_DIGIT_RE, "****");
     logRedaction("card_last4");
   }
-  if (parentKey && /url|path|referer|location/i.test(parentKey)) {
+  // Audit C-9-6: do NOT redact trace_id even when it sits inside a URL or
+  // similar location-shaped value. The whole point of the trace ID is to be
+  // surfaced to support tickets, so it must survive the scrubber.
+  const isTraceIdKey = parentKey
+    ? /^(x[-_])?trace[-_]?id$/i.test(parentKey)
+    : false;
+  if (parentKey && !isTraceIdKey && /url|path|referer|location/i.test(parentKey)) {
     out = out.replace(UUID_RE, "<REDACTED:uuid>");
   }
 

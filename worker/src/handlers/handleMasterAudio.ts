@@ -219,6 +219,8 @@ async function _runMasterAudio(
       customVoiceId: customVoiceFromProject,
       customVoiceProvider: provider,
       language: resolvedLanguage,
+      userId: userId ?? null,
+      generationId,
     };
     result = await generateSceneAudio(
       { number: 1, voiceover: masterText, duration: Math.ceil(masterText.split(/\s+/).length / 2.5) },
@@ -252,6 +254,8 @@ async function _runMasterAudio(
         style: inferStyleInstruction(masterText),
         pacing: "natural human conversational tone pace, varied — push forward in hook/action beats, soften into reflective moments",
       },
+      userId: userId ?? null,
+      generationId,
     });
   } else if (voiceName.startsWith("sm:") || voiceName.startsWith("sm2:")) {
     result = await generateSmallestTTS({
@@ -260,6 +264,8 @@ async function _runMasterAudio(
       projectId,
       voiceId: voiceName,
       language: resolvedLanguage,
+      userId: userId ?? null,
+      generationId,
     });
   } else if (isHC) {
     // Legacy Haitian Creole fallback for Pierre / Marie speaker names
@@ -281,6 +287,8 @@ async function _runMasterAudio(
       voiceGender: voiceName === "Pierre" ? "male" : "female",
       forceHaitianCreole: true,
       language: "ht",
+      userId: userId ?? null,
+      generationId,
     };
     result = await generateSceneAudio(
       { number: 1, voiceover: masterText, duration: Math.ceil(masterText.split(/\s+/).length / 2.5) },
@@ -304,6 +312,8 @@ async function _runMasterAudio(
       replicateApiKey: process.env.REPLICATE_API_KEY || "",
       voiceGender: legacyMapping?.gender || "female",
       language: legacyMapping?.language || resolvedLanguage,
+      userId: userId ?? null,
+      generationId,
     };
     result = await generateSceneAudio(
       { number: 1, voiceover: masterText, duration: Math.ceil(masterText.split(/\s+/).length / 2.5) },

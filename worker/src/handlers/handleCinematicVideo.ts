@@ -209,6 +209,7 @@ async function _runCinematicVideo(
     imageUrl = await generateImage(
       prompt, hyperealApiKey, replicateApiKey, format, projectId,
       characterImages.length > 0 ? characterImages : undefined,
+      { userId: userId ?? null, generationId },
     );
     await updateSceneField(generationId, sceneIndex, "imageUrl", imageUrl);
   }
@@ -243,6 +244,7 @@ async function _runCinematicVideo(
           endImageUrl = await generateImage(
             nextPrompt, hyperealApiKey, replicateApiKey, format, projectId,
             characterImages.length > 0 ? characterImages : undefined,
+            { userId: userId ?? null, generationId },
           );
           await updateSceneField(generationId, sceneIndex + 1, "imageUrl", endImageUrl);
         } catch {

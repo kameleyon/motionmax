@@ -28,6 +28,7 @@
 
 import { supabase } from "../lib/supabase.js";
 import { writeApiLog } from "../lib/logger.js";
+import { imageCostUsd } from "../lib/providerRates.js";
 import { isEnabled } from "../lib/featureFlags.js";
 import { v4 as uuidv4 } from "uuid";
 
@@ -625,6 +626,12 @@ export async function generateImage(
   format: string,
   projectId: string,
   referenceImages?: string[],
+  /** Attribution for api_call_logs — pass real userId + generationId
+   *  from the handler so finops dashboards can attribute spend. Optional
+   *  to preserve back-compat with old callers; pass `null` only when
+   *  there is genuinely no user context (e.g. system warmup pings).
+   *  (C-8-5 / C-9-7) */
+  attribution: { userId: string | null; generationId: string | null } = { userId: null, generationId: null },
 ): Promise<string> {
   const key = _cacheKey(prompt, format);
 
@@ -642,7 +649,7 @@ export async function generateImage(
     return existing;
   }
 
-  const work = _generateImageUncached(prompt, hyperealApiKey, replicateApiKey, format, projectId, referenceImages);
+  const work = _generateImageUncached(prompt, hyperealApiKey, replicateApiKey, format, projectId, referenceImages, attribution);
   _inFlight.set(key, work);
 
   try {
@@ -661,6 +668,7 @@ async function _generateImageUncached(
   format: string,
   projectId: string,
   referenceImages?: string[],
+  attribution: { userId: string | null; generationId: string | null } = { userId: null, generationId: null },
 ): Promise<string> {
   const startTime = Date.now();
 
@@ -686,7 +694,15 @@ async function _generateImageUncached(
     const bytes = await tryHyperealGptImage2(prompt, hyperealApiKey, format, referenceImages).finally(releaseHypereal);
     if (bytes) {
       const url = await uploadToStorage(bytes, projectId);
-      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: HYPEREAL_GPT_IMAGE2_MODEL, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
+      // gpt-image-2 via Hypereal = $0.08/image (premium tier).
+      writeApiLog({
+        userId: attribution.userId,
+        generationId: attribution.generationId,
+        provider: "hypereal", model: HYPEREAL_GPT_IMAGE2_MODEL,
+        status: "success", totalDurationMs: Date.now() - startTime,
+        cost: imageCostUsd("hypereal_gpt_image2"),
+        error: undefined,
+      }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
       return url;
     }
     console.warn("[ImageGen] gpt-image-2 exhausted — falling back to OpenRouter gpt-5.4-image-2");
@@ -703,7 +719,18 @@ async function _generateImageUncached(
     const bytes = await tryOpenRouterGptImage2(prompt, format);
     if (bytes) {
       const url = await uploadToStorage(bytes, projectId);
-      writeApiLog({ userId: undefined, generationId: undefined, provider: "openrouter", model: OPENROUTER_MODEL, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
+      // OpenRouter gpt-5.4-image-2 pricing is roughly OpenAI direct
+      // (~$0.22/img). Tracked under the openrouter provider so the
+      // per-provider $/img dashboard surfaces the higher cost vs the
+      // Hypereal primary, justifying its strictly-fallback placement.
+      writeApiLog({
+        userId: attribution.userId,
+        generationId: attribution.generationId,
+        provider: "openrouter", model: OPENROUTER_MODEL,
+        status: "success", totalDurationMs: Date.now() - startTime,
+        cost: 0.22,
+        error: undefined,
+      }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
       return url;
     }
     console.warn("[ImageGen] OpenRouter exhausted — falling back to Gemini 3.1 Flash");
@@ -720,7 +747,15 @@ async function _generateImageUncached(
     const bytes = await tryHypereal(prompt, hyperealApiKey, format).finally(releaseHypereal);
     if (bytes) {
       const url = await uploadToStorage(bytes, projectId);
-      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: HYPEREAL_MODEL, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
+      // Hypereal Gemini 3.1 Flash image gen = $0.04/image (base tier).
+      writeApiLog({
+        userId: attribution.userId,
+        generationId: attribution.generationId,
+        provider: "hypereal", model: HYPEREAL_MODEL,
+        status: "success", totalDurationMs: Date.now() - startTime,
+        cost: imageCostUsd("hypereal_image"),
+        error: undefined,
+      }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
       return url;
     }
     console.warn("[ImageGen] Gemini 3.1 Flash exhausted — chain fully exhausted");
@@ -736,7 +771,15 @@ async function _generateImageUncached(
   void replicateApiKey;
 
   const err = new Error("Image generation failed: gpt-image-2, OpenRouter gpt-5.4-image-2, and Gemini 3.1 Flash all exhausted");
-  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: HYPEREAL_GPT_IMAGE2_MODEL, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
+  // Chain-exhaustion error — no provider charged us, but record the
+  // failed attempt so per-user error dashboards see the dropped call.
+  writeApiLog({
+    userId: attribution.userId,
+    generationId: attribution.generationId,
+    provider: "hypereal", model: HYPEREAL_GPT_IMAGE2_MODEL,
+    status: "error", totalDurationMs: Date.now() - startTime,
+    cost: 0, error: err.message,
+  }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
   throw err;
 }
 

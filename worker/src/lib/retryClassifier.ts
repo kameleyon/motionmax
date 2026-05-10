@@ -27,6 +27,17 @@ const TRANSIENT_PATTERNS: RegExp[] = [
   /rate.?limit/i,
   /too many requests/i,
   /quota exceeded/i,
+  // C-8-2: explicit tag emitted by services/openrouter.ts after the
+  // local Retry-After-respecting retry loop exhausts. The /429/ pattern
+  // above would catch it too, but the explicit tag keeps the intent
+  // legible and survives any future refactor that drops the status code
+  // from the error message.
+  /OpenRouter rate-limited/i,
+  // C-8-1: HyperealSlotExhausted is the fleet-wide concurrency-bucket
+  // empty signal — withTransientRetry should wait + retry rather than
+  // terminal-failing on temporary fleet saturation.
+  /HyperealSlotExhausted/i,
+  /Hypereal concurrency bucket exhausted/i,
 
   // Upstream gateway / availability
   /\b502\b/,

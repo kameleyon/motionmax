@@ -10,7 +10,12 @@ import { scrubSentryEvent } from './lib/sentry-scrubber.js';
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
   environment: process.env.NODE_ENV || 'production',
-  tracesSampleRate: 0.1,
+  // billing endpoints use full trace sampling per audit C-9-2 — every failed
+  // checkout MUST be reproducible. The worker runs Stripe-driven jobs
+  // (subscription billing, credit top-ups, refunds) and finalize/export
+  // pipelines whose failures gate user-visible billing outcomes, so we keep
+  // 100 % traces here. App-wide sampling stays at 10 % via src/lib/sentry.ts.
+  tracesSampleRate: 1.0,
   // PII scrubbing — strips emails, Stripe IDs, JWTs, OAuth tokens, last4 in card contexts,
   // and drops known-noise events. See worker/src/lib/sentry-scrubber.ts.
   beforeSend: scrubSentryEvent,
@@ -40,6 +45,7 @@ import {
 } from "./lib/concurrencyBudget.js";
 import { isMasterKillEngaged } from "./lib/masterKillSwitch.js";
 import { runStaleClaimReaper } from "./lib/staleClaimReaper.js";
+import { runHyperealSlotReaper, setHyperealSlotWorkerId } from "./lib/hyperealSlots.js";
 import { runStartupDiagnostic } from "./lib/startupDiagnostic.js";
 import { startHeartbeatWriter } from "./lib/heartbeat.js";
 import { logProviderKeysBanner } from "./lib/providerKeysBanner.js";
@@ -165,6 +171,11 @@ async function pollConcurrencyOverride(): Promise<void> {
 // Allows the startup diagnostic to scope resets to THIS worker's own rows
 // rather than blindly touching rows owned by sibling replicas.
 const WORKER_ID: string = `${os.hostname()}-${process.pid}-${randomUUID()}`;
+
+// Propagate to the fleet-wide Hypereal slot limiter (C-8-1). Doing this at
+// module load (rather than in main()) ensures any handler firing on the
+// first claim cycle already has a worker_id to stamp on its slot row.
+setHyperealSlotWorkerId(WORKER_ID);
 
 /* ---- Queue depth monitoring ---- */
 let queueDepthAlertThreshold = MAX_CONCURRENT_JOBS * 2; // alert when queue > 2x capacity
@@ -493,6 +504,11 @@ async function pollQueue() {
     // and fail-closed behavior for autopost orchestrators.
     if (pollCount % 12 === 0) {
       await runStaleClaimReaper();
+      // Hypereal fleet-wide slot reaper (C-8-1). Releases any slot
+      // held >5 min — the holder is presumed dead. Cheap UPDATE on a
+      // 12-row table, fine to ride the same cadence as the stale-claim
+      // reaper.
+      await runHyperealSlotReaper();
     }
 
     const claimedJobs: any[] = [];

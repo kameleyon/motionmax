@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createScopedLogger } from "@/lib/logger";
+import { invokeWithTrace, shortTraceRef } from "@/lib/tracing";
 
 const log = createScopedLogger("VoiceCloning");
 
@@ -73,24 +74,35 @@ export function useVoiceCloning() {
 
       const storagePath = await uploadAudio(file, `${name.replace(/\s+/g, "_")}.mp3`);
 
-      const { data: queued, error: queueError } = await supabase.functions.invoke("clone-voice-fish", {
+      // Audit C-9-6: trace-propagated invoke. Voice cloning is a long-lived
+      // async job; failures surface to the user via this catch and the
+      // trace ID is the only link to the worker's Fish API call.
+      const { data: queued, error: queueError, traceId } = await invokeWithTrace<{
+        success?: boolean;
+        jobId?: string;
+        error?: string;
+      }>("clone-voice-fish", {
         body: { storagePath, voiceName: name, description, consentGiven, removeNoise: removeNoise ?? true },
       });
 
       if (queueError) {
-        const errorBody = queueError.context?.body;
+        const qe = queueError as { context?: { body?: string }; message?: string };
+        const errorBody = qe.context?.body;
+        const ref = ` (Ref: ${shortTraceRef(traceId)})`;
         if (errorBody) {
           try {
             const parsed = JSON.parse(errorBody);
-            throw new Error(parsed.error || "Failed to queue voice clone");
+            throw new Error((parsed.error || "Failed to queue voice clone") + ref);
           } catch {
-            throw new Error(queueError.message || "Failed to queue voice clone");
+            throw new Error((qe.message || "Failed to queue voice clone") + ref);
           }
         }
-        throw new Error(queueError.message || "Failed to queue voice clone");
+        throw new Error((qe.message || "Failed to queue voice clone") + ref);
       }
       if (!queued?.success || !queued?.jobId) {
-        throw new Error(queued?.error || "Voice clone queue returned no job id");
+        throw new Error(
+          `${queued?.error || "Voice clone queue returned no job id"} (Ref: ${shortTraceRef(traceId)})`,
+        );
       }
 
       // Poll the job. Cloning typically takes 8–15s for a 30s sample
@@ -138,24 +150,32 @@ export function useVoiceCloning() {
   // deleting cleanly while new Fish clones go through the right API.
   const deleteVoiceMutation = useMutation({
     mutationFn: async (voiceId: string) => {
-      const { data, error } = await supabase.functions.invoke("delete-voice-fish", {
-        body: { voiceId },
-      });
+      // Audit C-9-6: trace-propagated invoke.
+      const { data, error, traceId } = await invokeWithTrace<{
+        success?: boolean;
+        error?: string;
+      }>("delete-voice-fish", { body: { voiceId } });
 
       if (error) {
-        const errorBody = error.context?.body;
+        const e = error as { context?: { body?: string }; message?: string };
+        const errorBody = e.context?.body;
+        const ref = ` (Ref: ${shortTraceRef(traceId)})`;
         if (errorBody) {
           try {
             const parsed = JSON.parse(errorBody);
-            throw new Error(parsed.error || "Failed to delete voice");
+            throw new Error((parsed.error || "Failed to delete voice") + ref);
           } catch {
-            throw new Error(error.message || "Failed to delete voice");
+            throw new Error((e.message || "Failed to delete voice") + ref);
           }
         }
-        throw new Error(error.message || "Failed to delete voice");
+        throw new Error((e.message || "Failed to delete voice") + ref);
       }
-      
-      if (!data.success) throw new Error(data.error || "Failed to delete voice");
+
+      if (!data?.success) {
+        throw new Error(
+          `${data?.error || "Failed to delete voice"} (Ref: ${shortTraceRef(traceId)})`,
+        );
+      }
       return data;
     },
     onSuccess: () => {

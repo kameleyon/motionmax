@@ -14,6 +14,7 @@ import {
 } from "@/lib/planLimits";
 import { createScopedLogger } from "@/lib/logger";
 import { isLikelyEUUser, EUCoolingOffConsentRequired } from "@/lib/euCoolingOff";
+import { invokeWithTrace, shortTraceRef } from "@/lib/tracing";
 
 const log = createScopedLogger("Subscription");
 
@@ -227,15 +228,28 @@ export function useSubscription() {
       throw new EUCoolingOffConsentRequired();
     }
 
-    const { data, error } = await supabase.functions.invoke("create-checkout", {
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
+    // Audit C-9-6: invokeWithTrace generates an X-Trace-Id + _trace_id so
+    // Stripe Checkout failures can be reproduced end-to-end (browser →
+    // create-checkout edge fn → Stripe). Combined with C-9-2's
+    // tracesSampleRate=1.0 on create-checkout, every failed checkout has
+    // a full distributed trace in Sentry tagged by trace_id.
+    const { data, error, traceId } = await invokeWithTrace<{ url?: string }>(
+      "create-checkout",
+      {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: { priceId, mode, eu_cooling_off_waived: euCoolingOffWaived },
       },
-      body: { priceId, mode, eu_cooling_off_waived: euCoolingOffWaived },
-    });
+    );
 
-    if (error) throw error;
-    if (!data?.url) throw new Error("Failed to create checkout session");
+    if (error) {
+      const msg = error instanceof Error ? error.message : "Checkout failed";
+      throw new Error(`${msg} (Ref: ${shortTraceRef(traceId)})`);
+    }
+    if (!data?.url) {
+      throw new Error(
+        `Failed to create checkout session (Ref: ${shortTraceRef(traceId)})`,
+      );
+    }
 
     try { trackEvent("begin_checkout", { price_id: priceId, mode, ...getStoredUtm() }); } catch { /* analytics non-critical */ }
     window.open(data.url, "_blank");
@@ -247,19 +261,30 @@ export function useSubscription() {
       throw new Error("Please sign in to continue");
     }
 
-    const { data, error } = await supabase.functions.invoke("customer-portal", {
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-      },
+    // Audit C-9-6: trace-propagated invoke so customer-portal failures are
+    // attributable when a user reports "billing portal won't load."
+    const { data, error, traceId } = await invokeWithTrace<{
+      url?: string;
+      error?: string;
+      message?: string;
+    }>("customer-portal", {
+      headers: { Authorization: `Bearer ${session.access_token}` },
     });
 
-    if (error) throw error;
-    
+    if (error) {
+      const msg = error instanceof Error ? error.message : "Billing portal failed";
+      throw new Error(`${msg} (Ref: ${shortTraceRef(traceId)})`);
+    }
+
     if (data?.error === "MANUAL_SUBSCRIPTION") {
       throw new Error(data.message || "Your subscription is managed directly. Please contact support for billing inquiries.");
     }
-    
-    if (!data?.url) throw new Error("Failed to open billing portal");
+
+    if (!data?.url) {
+      throw new Error(
+        `Failed to open billing portal (Ref: ${shortTraceRef(traceId)})`,
+      );
+    }
 
     window.open(data.url, "_blank");
     return data.url;

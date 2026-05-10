@@ -8,6 +8,19 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { invokeWithTrace, shortTraceRef } from "@/lib/tracing";
+
+/**
+ * Convert an invokeWithTrace error into a user-facing Error that surfaces
+ * the trace reference. Used across every billing-related edge fn call so
+ * support tickets always include an actionable Sentry-searchable ID.
+ *
+ * Audit C-9-6.
+ */
+function traceError(error: unknown, traceId: string, fallback: string): Error {
+  const msg = error instanceof Error ? error.message : fallback;
+  return new Error(`${msg} (Ref: ${shortTraceRef(traceId)})`);
+}
 
 type RpcFn = <T>(
   fn: string,
@@ -123,10 +136,14 @@ export interface InvoiceRow {
 }
 
 export async function fetchInvoices(accessToken: string): Promise<InvoiceRow[]> {
-  const { data, error } = await supabase.functions.invoke("list-invoices", {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (error) throw error;
+  // Audit C-9-6: trace-propagated invoke. list-invoices fans into Stripe;
+  // when a user reports "I don't see my invoices" the trace ID points support
+  // to the exact Stripe API call that returned the empty set.
+  const { data, error, traceId } = await invokeWithTrace<{ invoices?: InvoiceRow[] }>(
+    "list-invoices",
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  if (error) throw traceError(error, traceId, "Failed to fetch invoices");
   return (data?.invoices ?? []) as InvoiceRow[];
 }
 
@@ -192,46 +209,61 @@ export async function applyPromoCode(code: string): Promise<{ ok: boolean; messa
 }
 
 export async function callPauseSubscription(accessToken: string, months: number) {
-  const { data, error } = await supabase.functions.invoke("pause-subscription", {
+  // Audit C-9-6: trace-propagated invoke.
+  const { data, error, traceId } = await invokeWithTrace("pause-subscription", {
     headers: { Authorization: `Bearer ${accessToken}` },
     body: { months },
   });
-  if (error) throw error;
+  if (error) throw traceError(error, traceId, "Failed to pause subscription");
   return data;
 }
 
 export async function callResumeSubscription(accessToken: string) {
-  const { data, error } = await supabase.functions.invoke("pause-subscription", {
+  // Audit C-9-6: trace-propagated invoke.
+  const { data, error, traceId } = await invokeWithTrace("pause-subscription", {
     headers: { Authorization: `Bearer ${accessToken}` },
     body: { resume: true },
   });
-  if (error) throw error;
+  if (error) throw traceError(error, traceId, "Failed to resume subscription");
   return data;
 }
 
 export async function callUpdatePackQuantity(accessToken: string, quantity: number) {
-  const { data, error } = await supabase.functions.invoke("update-pack-quantity", {
+  // Audit C-9-6: trace-propagated invoke.
+  const { data, error, traceId } = await invokeWithTrace("update-pack-quantity", {
     headers: { Authorization: `Bearer ${accessToken}` },
     body: { quantity },
   });
-  if (error) throw error;
+  if (error) throw traceError(error, traceId, "Failed to update pack quantity");
   return data;
 }
 
 export async function callCancelWithReason(accessToken: string, reason: string | null, keepWithOffer: boolean) {
-  const { data, error } = await supabase.functions.invoke("cancel-with-reason", {
+  // Audit C-9-6: trace-propagated invoke.
+  const { data, error, traceId } = await invokeWithTrace("cancel-with-reason", {
     headers: { Authorization: `Bearer ${accessToken}` },
     body: { reason, keep_with_offer: keepWithOffer },
   });
-  if (error) throw error;
+  if (error) throw traceError(error, traceId, "Failed to cancel subscription");
   return data;
 }
 
 export async function callCustomerPortal(accessToken: string) {
-  const { data, error } = await supabase.functions.invoke("customer-portal", {
+  // Audit C-9-6: trace-propagated invoke. Customer-portal opens Stripe's
+  // hosted billing UI; failures here are usually Stripe auth issues that
+  // need the trace ID to debug.
+  const { data, error, traceId } = await invokeWithTrace<{
+    url?: string;
+    message?: string;
+    error?: string;
+  }>("customer-portal", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (error) throw error;
-  if (!data?.url) throw new Error(data?.message ?? data?.error ?? "Could not open portal");
-  return data.url as string;
+  if (error) throw traceError(error, traceId, "Failed to open portal");
+  if (!data?.url) {
+    throw new Error(
+      `${data?.message ?? data?.error ?? "Could not open portal"} (Ref: ${shortTraceRef(traceId)})`,
+    );
+  }
+  return data.url;
 }

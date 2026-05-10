@@ -225,7 +225,15 @@ async function _runGenerateVideo(
   // ALL project types get research — ensures accurate visuals and facts.
   {
     await updateJobProgress(jobId, 7);
-    const researchBrief = await researchTopic(payload.content || "");
+    // Pass attribution so the Gemini call lands in api_call_logs with
+    // real userId. generationId is null here because the generations row
+    // hasn't been inserted yet (that happens after the script LLM
+    // returns scenes). User-level attribution is the most important
+    // finops signal anyway. (C-8-5 / C-9-7)
+    const researchBrief = await researchTopic(payload.content || "", {
+      userId: userId ?? null,
+      generationId: null,
+    });
     if (researchBrief) {
       promptResult.system += `
 

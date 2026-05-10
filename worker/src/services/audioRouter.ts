@@ -50,6 +50,10 @@ export interface AudioConfig {
   forceHaitianCreole?: boolean;
   /** "en" | "fr" | "es" | "ht" | "de" | "it" | "nl" | "ru" | "zh" | "ja" | "ko" */
   language?: string;
+  /** Caller's user id for api_call_logs attribution. (C-8-5 / C-9-7) */
+  userId?: string | null;
+  /** Caller's generation id for api_call_logs attribution. */
+  generationId?: string | null;
 }
 
 export interface AudioResult {
@@ -86,8 +90,11 @@ export async function generateSceneAudio(
     voiceGender = "female",
     customVoiceId,
     language,
+    userId = null,
+    generationId = null,
   } = config;
 
+  const attribution = { userId, generationId };
   const isEnglish = (language ?? "en") === "en";
   const isMale = voiceGender === "male";
 
@@ -102,7 +109,7 @@ export async function generateSceneAudio(
     }
     console.log(`[TTS] Scene ${scene.number}: Clone (${customVoiceId.slice(0, 8)}…) → Fish s2-pro`);
     const result = await generateFishAudioTTS(
-      voiceoverText, scene.number, fishAudioApiKey, projectId, customVoiceId,
+      voiceoverText, scene.number, fishAudioApiKey, projectId, customVoiceId, attribution,
     );
     if (result.url) {
       console.log(`✅ Scene ${scene.number}: Fish s2-pro (clone)`);
@@ -117,7 +124,9 @@ export async function generateSceneAudio(
       return { url: null, error: "English male (Adam) requires LEMONFOX_API_KEY" };
     }
     console.log(`[TTS] Scene ${scene.number}: English Male → LemonFox (Adam) [strict]`);
-    const result = await generateLemonfoxTTS(voiceoverText, scene.number, "male", lemonfoxApiKey, projectId);
+    const result = await generateLemonfoxTTS(
+      voiceoverText, scene.number, "male", lemonfoxApiKey, projectId, attribution,
+    );
     if (result.url) {
       console.log(`✅ Scene ${scene.number}: LemonFox Adam`);
       return result;
@@ -134,7 +143,9 @@ export async function generateSceneAudio(
   }
   const voiceName = isMale ? GEMINI_MALE_VOICE : GEMINI_FEMALE_VOICE;
   console.log(`[TTS] Scene ${scene.number}: lang=${language ?? "auto"} gender=${voiceGender} → Gemini (${voiceName})`);
-  const result = await generateGeminiTTS(voiceoverText, scene.number, googleApiKeys, projectId, voiceName);
+  const result = await generateGeminiTTS(
+    voiceoverText, scene.number, googleApiKeys, projectId, voiceName, attribution,
+  );
   if (result.url) {
     console.log(`✅ Scene ${scene.number}: Gemini ${voiceName} (${language ?? "auto"})`);
     return { ...result, provider: result.provider ?? `Gemini ${voiceName}` };

@@ -6,12 +6,12 @@ Playwright tests for the user-facing flows: auth, generation, admin.
 
 ```bash
 # Install Playwright browsers (one-time)
-npx playwright install chromium
+npx playwright install chromium webkit
 
 # Boot a local Supabase stack (one-time per machine; requires Docker)
 supabase start --no-studio
 
-# Run all E2E tests (auto-starts vite on :8080)
+# Run all E2E tests across the full device matrix (auto-starts vite on :8080)
 npm run test:e2e
 
 # Open the Playwright UI runner (interactive)
@@ -21,6 +21,69 @@ npm run test:e2e:ui
 The Playwright config at the repo root (`playwright.config.ts`) starts
 `npm run dev` automatically — you do **not** need a separate `vite` process
 running.
+
+## Device matrix (C-10-1)
+
+Every spec runs against four projects by default. The motionmax UI has
+eight explicit mobile breakpoints + 60 %+ mobile traffic in production,
+so the E2E pipeline exercises both desktop and mobile/tablet viewports.
+
+| Project          | Device emulation     | Engine            | Notes                            |
+| ---------------- | -------------------- | ----------------- | -------------------------------- |
+| `chromium`       | Desktop Chrome       | Chromium          | Fastest; default for local dev   |
+| `mobile-chrome`  | Pixel 5              | Chromium (mobile) | Touch + Chrome-Android quirks    |
+| `mobile-safari`  | iPhone 13            | WebKit            | iOS Safari rendering & gestures  |
+| `tablet`         | iPad (gen 7)         | WebKit            | md → lg breakpoint coverage      |
+
+### Running a single device
+
+```bash
+# Only the mobile-chrome project
+npx playwright test --project=mobile-chrome
+
+# Only desktop (the fastest pre-commit smoke)
+npx playwright test --project=chromium
+
+# Only the mobile pair (chrome + safari)
+npx playwright test --project=mobile-chrome --project=mobile-safari
+
+# Re-run a single failing spec on every project
+npx playwright test e2e/auth.spec.ts
+```
+
+### Known mobile-flaky candidates (TODO)
+
+The existing specs were written desktop-first. The following selectors
+and patterns are likely to need mobile-aware tweaks; surface a real
+failure first, then fix per spec rather than pre-emptively branching:
+
+- `e2e/auth.spec.ts` —
+  - `getByRole("link", { name: /sign up/i })` may be inside a hamburger
+    on mobile (`md:` shows the inline nav, `<md` collapses to a menu
+    trigger). If the test fails on `mobile-chrome` / `mobile-safari`,
+    open the burger first.
+- `e2e/generate.spec.ts` —
+  - "New project" CTA position differs on mobile (FAB vs sidebar).
+    The regex `/new project|create project|\+/i` covers both, but the
+    selector resolution may pick the wrong one on viewport switch.
+  - "Generate" button enabled state assertion (`toBeEnabled`) is OK,
+    but mobile keyboards push the button below the fold — add an
+    explicit `scrollIntoViewIfNeeded()` if a timeout shows up.
+- `e2e/admin.spec.ts` —
+  - The admin tab strip uses horizontal-scroll on `<sm` and a sidebar
+    on `>=md`. Selectors like `#admin-tabpanel-${tab}` work either way
+    but the tab CLICK affordance is different.
+  - 19.1.9 / 19.1.11 / 19.1.13 — pause/resume buttons, "send to self"
+    chips and dialog overlays sometimes get covered by the mobile
+    keyboard. If flake appears, dismiss the on-screen keyboard with
+    `page.keyboard.press("Escape")` before clicking.
+  - **Hover-state assertions are not mobile-safe** — there are none
+    in the current specs (good), but be aware as new tests land:
+    use tap/focus instead of hover when targeting mobile.
+
+When a spec is genuinely incompatible with mobile, prefer
+`test.skip(({ isMobile }) => isMobile, "desktop-only flow")` over
+splitting the spec — keeps the matrix readable.
 
 ## Test-Supabase isolation
 

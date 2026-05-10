@@ -112,6 +112,9 @@ async function _runVoicePreview(
       language,
       customVoiceId: externalId,
       customVoiceProvider: provider,
+      // Previews have no generation context — attribute to user only.
+      userId: userId ?? null,
+      generationId: null,
     };
     result = await generateSceneAudio(
       { number: 0, voiceover: previewText, duration: 5 },
@@ -143,6 +146,8 @@ async function _runVoicePreview(
         process.env.GOOGLE_TTS_API_KEY,
       ].filter(Boolean) as string[],
       // No directives → clean native-language preview.
+      userId: userId ?? null,
+      generationId: null,
     });
   } else
   // ── Smallest.ai preview (ADDITIVE — testing) ──
@@ -155,6 +160,8 @@ async function _runVoicePreview(
       projectId: "voice-preview",
       voiceId: speaker,
       language,
+      userId: userId ?? null,
+      generationId: null,
     });
   } else if (legacyMapping) {
     // Fish Audio / LemonFox / Gemini
@@ -172,6 +179,8 @@ async function _runVoicePreview(
       voiceGender: legacyMapping.gender,
       language: legacyMapping.language,
       forceHaitianCreole: legacyMapping.language === "ht",
+      userId: userId ?? null,
+      generationId: null,
     };
 
     result = await generateSceneAudio(
@@ -197,6 +206,8 @@ async function _runVoicePreview(
       replicateApiKey: process.env.REPLICATE_API_KEY || "",
       voiceGender: genderGuess,
       language,
+      userId: userId ?? null,
+      generationId: null,
     };
 
     result = await generateSceneAudio(

@@ -88,6 +88,79 @@ const supabaseKey = resolveKey();
 console.log(`[Worker] Supabase URL: ${supabaseUrl}`);
 console.log(`[Worker] Supabase key: service_role (env)`);
 
+// ── pgbouncer / pooler URL assertion (C-8-3 / Crash CRASH-004) ─────
+//
+// At launch load with 8 worker replicas, each opening direct Postgres
+// connections to db.<ref>.supabase.co:5432, the hosted Supabase
+// connection ceiling (~60 on the standard plan) is exhausted within a
+// minute — UPDATEs queue, claim_pending_job RPCs time out, and the
+// queue stalls. The transaction pooler at port 6543 multiplexes our
+// many short-lived queries onto a small pool of upstream connections,
+// which is what we actually want here.
+//
+// However the supabase-js HTTP client uses the REST URL
+// (https://<ref>.supabase.co — the PostgREST gateway), NOT a raw
+// libpq connection string. PostgREST itself is connection-pooled
+// upstream by Supabase. So the connection-exhaustion risk applies to
+// any direct libpq code path (PG_URL / DATABASE_URL / direct
+// connection string) that the worker uses ALONGSIDE supabase-js — eg
+// `pg`-based migrations, custom RPC clients, or future Postgres-LISTEN
+// channels. We assert on those env vars here so an operator deploying
+// with the direct (non-pooler) connection string in production sees a
+// loud refusal at boot instead of a silent quota burn.
+//
+// What we DO NOT block:
+//   * SUPABASE_URL — that's the REST URL, not a libpq DSN. Always
+//     of the form https://<ref>.supabase.co/...
+//   * Local dev (NODE_ENV !== 'production' AND no Railway/Render env
+//     markers) — directly-connected dev is fine, you only have one
+//     worker.
+function assertPoolerUrl(envName: string, raw: string): void {
+  // We only care about libpq-style URLs (postgres:// or postgresql://).
+  // Anything else falls through.
+  if (!/^postgres(ql)?:\/\//i.test(raw)) return;
+  // The pooler host is `pooler.supabase.com` (regional, e.g.
+  // aws-0-us-east-1.pooler.supabase.com:6543) — accept any subdomain.
+  // Direct host pattern is `db.<ref>.supabase.co:5432`.
+  const isPooler = /pooler\.supabase\.com/i.test(raw);
+  if (isPooler) return; // good
+  // Detect direct connection. Sanitize for logging — strip the
+  // password and any obvious secrets.
+  const sanitized = raw.replace(/:\/\/[^:]+:[^@]+@/, "://***:***@");
+  const isProd = process.env.NODE_ENV === "production"
+    || !!process.env.RAILWAY_ENVIRONMENT
+    || !!process.env.RENDER
+    || !!process.env.RENDER_SERVICE_ID;
+  if (isProd) {
+    console.error(
+      `[Worker] 🔴 ${envName} appears to be a DIRECT Supabase connection (port 5432) ` +
+      `instead of the transaction pooler (pooler.supabase.com:6543). ` +
+      `At launch load with multiple worker replicas this WILL exhaust the connection ` +
+      `quota and stall the queue (C-8-3 / CRASH-004). ` +
+      `Switch to the transaction-pool URL from Supabase Dashboard → Project Settings → ` +
+      `Database → Connection Pooling → Transaction. ` +
+      `Sanitized value: ${sanitized}`,
+    );
+    // Refuse to start. The fail-loud behaviour matches the project-ref
+    // / service-role checks above — wrong DB plumbing is a launch
+    // blocker, not a warning.
+    process.exit(1);
+  } else {
+    console.warn(
+      `[Worker] ⚠ ${envName} appears to be a direct Supabase connection (not pooler). ` +
+      `Tolerated outside production; in production this is a fail-closed startup ` +
+      `error (C-8-3 / CRASH-004). Sanitized: ${sanitized}`,
+    );
+  }
+}
+
+// Run the assertion against every libpq-style env var the worker might
+// pick up. Adding a new one? Drop it into this list.
+for (const envName of ["DATABASE_URL", "POSTGRES_URL", "PG_URL", "SUPABASE_DB_URL"]) {
+  const raw = process.env[envName];
+  if (raw) assertPoolerUrl(envName, raw);
+}
+
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
     autoRefreshToken: false,

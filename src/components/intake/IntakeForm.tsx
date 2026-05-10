@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
-import { isAutopostEligible, AUTOPOST_CREDITS_PER_RUN } from '@/lib/planLimits';
+import { isAutopostEligible, getAutopostCreditsRequired } from '@/lib/planLimits';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -1348,41 +1348,55 @@ export default function IntakeForm({
           the toggle on click. Closing the dialog leaves the form state
           intact so the user can either upgrade and re-submit, or flip
           the schedule off and create a one-shot project instead. */}
-      <Dialog open={autopostUpgradeOpen} onOpenChange={setAutopostUpgradeOpen}>
-        <DialogContent className="bg-[#10151A] border-white/10 text-[#ECEAE4] max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-[#ECEAE4]">Autopost is a Creator+ feature</DialogTitle>
-            <DialogDescription className="text-[#8A9198]">
-              Your schedule is configured and ready to run, but recurring
-              automation is reserved for paid plans. Upgrade to start
-              firing this schedule automatically — {AUTOPOST_CREDITS_PER_RUN} credits per run.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="rounded-md border border-[#14C8CC]/25 bg-[#14C8CC]/[0.06] px-3 py-2.5 text-[12.5px] text-[#ECEAE4] leading-[1.55]">
-            <div className="font-medium text-[#14C8CC] mb-1">What you'll unlock</div>
-            <ul className="list-disc pl-4 text-[#8A9198] space-y-0.5">
-              <li>Run topics on your cadence (hourly to weekly)</li>
-              <li>Email or social-publish each finished video</li>
-              <li>Per-run cost is a flat {AUTOPOST_CREDITS_PER_RUN} credits — no surprises</li>
-            </ul>
-          </div>
-          <DialogFooter className="gap-2 flex-col-reverse sm:flex-row">
-            <Button
-              variant="outline"
-              onClick={() => setAutopostUpgradeOpen(false)}
-              className="border-white/10 bg-transparent text-[#8A9198] hover:bg-white/5 hover:text-[#ECEAE4]"
-            >
-              Maybe later
-            </Button>
-            <Button
-              onClick={() => navigate('/pricing')}
-              className="bg-gradient-to-r from-[#14C8CC] to-[#E4C875] text-[#0A0D0F] hover:opacity-90"
-            >
-              View plans
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {(() => {
+        // C-8-6: compute the REAL per-run credit cost from the user's
+        // current mode + duration pick. Mirrors public.autopost_credits_required(mode,length)
+        // exactly — same formula, same numbers. Replacing the old flat-45
+        // copy so the upsell dialog shows the actual charge instead of
+        // a misleading lowball.
+        const _autopostLength: 'short' | 'brief' | 'presentation' =
+          features.duration && duration === '>3min' ? 'presentation' : 'short';
+        const _autopostMode = mode as 'doc2video' | 'smartflow' | 'cinematic';
+        const _autopostCredits = getAutopostCreditsRequired(_autopostMode, _autopostLength);
+        return (
+          <Dialog open={autopostUpgradeOpen} onOpenChange={setAutopostUpgradeOpen}>
+            <DialogContent className="bg-[#10151A] border-white/10 text-[#ECEAE4] max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-[#ECEAE4]">Autopost is a Creator+ feature</DialogTitle>
+                <DialogDescription className="text-[#8A9198]">
+                  Your schedule is configured and ready to run, but recurring
+                  automation is reserved for paid plans. Upgrade to start
+                  firing this schedule automatically — about {_autopostCredits} credits per run
+                  at your current {MODE_LABEL[mode]} settings.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="rounded-md border border-[#14C8CC]/25 bg-[#14C8CC]/[0.06] px-3 py-2.5 text-[12.5px] text-[#ECEAE4] leading-[1.55]">
+                <div className="font-medium text-[#14C8CC] mb-1">What you'll unlock</div>
+                <ul className="list-disc pl-4 text-[#8A9198] space-y-0.5">
+                  <li>Run topics on your cadence (hourly to weekly)</li>
+                  <li>Email or social-publish each finished video</li>
+                  <li>~{_autopostCredits} credits per run at these settings (varies by mode and length — Cinematic + Presentation runs cost more)</li>
+                </ul>
+              </div>
+              <DialogFooter className="gap-2 flex-col-reverse sm:flex-row">
+                <Button
+                  variant="outline"
+                  onClick={() => setAutopostUpgradeOpen(false)}
+                  className="border-white/10 bg-transparent text-[#8A9198] hover:bg-white/5 hover:text-[#ECEAE4]"
+                >
+                  Maybe later
+                </Button>
+                <Button
+                  onClick={() => navigate('/pricing')}
+                  className="bg-gradient-to-r from-[#14C8CC] to-[#E4C875] text-[#0A0D0F] hover:opacity-90"
+                >
+                  View plans
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
     </form>
   );
 }

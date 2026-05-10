@@ -22,6 +22,11 @@ import { scrubSentryEvent } from "../_shared/sentry-scrubber.ts";
 Sentry.init({
   dsn: Deno.env.get("SENTRY_DSN") || "",
   environment: Deno.env.get("DENO_DEPLOYMENT_ID") ? "production" : "development",
+  // billing endpoints use full trace sampling per audit C-9-2 — every failed
+  // checkout MUST be reproducible. This function is the entry point for
+  // Stripe Checkout Sessions; if it fails the user sees "checkout failed"
+  // with no Stripe session to debug, so we need the full distributed trace.
+  tracesSampleRate: 1.0,
   beforeSend: scrubSentryEvent,
 });
 
@@ -87,6 +92,13 @@ export async function handler(req: Request, deps: CreateCheckoutDeps = {}): Prom
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
   );
+
+  // Audit C-9-6: read the trace ID from the request header so every Sentry
+  // event from this invocation is tagged. The body-mirrored `_trace_id`
+  // (set by invokeWithTrace) is the fallback when the header gets eaten by
+  // an intermediate transport. Generated locally if neither is present so
+  // we always have *some* correlation ID for the support ticket.
+  const traceIdFromHeader = req.headers.get("X-Trace-Id") || req.headers.get("x-trace-id");
 
   try {
     logStep("Function started");
@@ -158,7 +170,17 @@ export async function handler(req: Request, deps: CreateCheckoutDeps = {}): Prom
       kind,
       sku,
       eu_cooling_off_waived: euCoolingOffWaived,
+      _trace_id: bodyTraceId,
     } = body;
+
+    // Audit C-9-6: resolve the effective trace ID (header > body > generated)
+    // and attach as a Sentry tag + log breadcrumb so every event during this
+    // invocation is searchable by trace_id in Sentry. The worker side does
+    // the same via job.payload.traceId, so the same ID ties together both
+    // halves of a stripe-driven flow.
+    const traceId: string = traceIdFromHeader || (typeof bodyTraceId === "string" ? bodyTraceId : "") || crypto.randomUUID();
+    Sentry.setTag("trace_id", traceId);
+    logStep("Trace ID resolved", { trace_id: traceId });
 
     const stripe = deps.stripe ?? new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
       apiVersion: "2024-12-18.acacia",

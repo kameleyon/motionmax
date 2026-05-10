@@ -10,23 +10,41 @@ import { audit, auditError } from "../lib/audit.js";
 import { generateLyriaMusic, lyriaIsConfigured, type LyriaMusicGenre } from "../services/lyriaMusic.js";
 import { retryDbRead } from "../lib/retryClassifier.js";
 
-// ── Pricing (matches edge function PRICING constants) ──────────────
+// ── Pricing ──────────────────────────────────────────────────────
+//
+// C-8-8 fix: audio pricing is now indexed by ACTUAL provider per scene,
+// not by a single "Qwen3PerSecond" sentinel. The voice_name on the
+// project decides which TTS provider runs and therefore which rate
+// applies — gm:* → Gemini Flash, sm:* → Smallest, custom → Fish Audio,
+// English-male standard → LemonFox, etc. The old code billed Qwen3's
+// $0.001/s for every scene regardless of the actual provider, so
+// generation_costs disagreed with provider invoices on every single
+// row (LemonFox is $0.08/1k chars; ElevenLabs is $0.18/1k chars;
+// Fish Audio is $0.10/1k chars — none of these are seconds-billed).
+//
+// The constants below are kept in sync with worker/src/lib/providerRates.ts.
+// Two surfaces because handleFinalize aggregates while providerRates
+// computes per call — but the per-1k or per-second numbers must match.
 
 const PRICING = {
   // Script generation (per token)
   openrouterPerToken: 0.000003,   // Claude Sonnet via OpenRouter
   hyperealLlmPerToken: 0.0000008, // Gemini via Hypereal ($0.80/M input)
-  // Audio (per second)
-  qwen3PerSecond: 0.001,          // Qwen3 TTS via Replicate
-  elevenlabsPerSecond: 0.003,     // ElevenLabs TTS
-  googleTtsPerSecond: 0.004,      // Google Cloud TTS
-  fishAudioPerSecond: 0.001,      // Fish Audio
-  lemonfoxPerSecond: 0.001,       // LemonFox
+  // Audio: per-provider rates (per 1k characters for char-billed
+  // providers; per second for seconds-billed providers).
+  geminiFlashTtsPerSecond: 0.001 / 60, // $0.001/min synthesized audio
+  qwen3PerSecond: 0.001,          // Qwen3 TTS via Replicate (legacy / disabled)
+  googleCloudTtsPerSecond: 0.004, // Google Cloud TTS for Haitian Creole
+  fishAudioPer1kChars: 0.10,      // Fish Audio s2-pro
+  lemonfoxPer1kChars: 0.08,       // LemonFox (Adam / River)
+  elevenlabsPer1kChars: 0.18,     // ElevenLabs multilingual_v2
+  smallestPer1kChars: 0.20,       // Smallest.ai lightning-v3.1
   // Images (per image)
-  hyperealImage: 0.04,            // Hypereal image gen
-  replicateImage: 0.05,           // Replicate image gen
-  // Video (per 10s clip)
-  hyperealVideo: 0.70,            // Kling V2.6 Pro I2V via Hypereal (10s, no sound)
+  hyperealImage: 0.04,            // Hypereal image gen (base / gemini flash)
+  hyperealGptImage2: 0.08,        // Hypereal gpt-image-2 premium
+  replicateImage: 0.05,           // Replicate image gen (legacy)
+  // Video (per 5s clip — Kling V2.6 Pro I2V via Hypereal)
+  hyperealVideoPer5s: 0.20,
   // ASR (per minute)
   hyperealAsr: 0.01,              // Hypereal audio-asr
 };
@@ -193,50 +211,153 @@ async function _runFinalize(
     return rest;
   });
 
-  // Record generation costs -- attribute to correct providers
+  // Record generation costs -- attribute to correct providers.
+  //
+  // C-8-7 / C-8-8: audio cost is now classified by the ACTUAL TTS
+  // provider used per scene, not by a single Qwen3 rate. The voice_name
+  // prefix decides:
+  //   gm:*                  → Gemini Flash TTS (per second)
+  //   sm: / sm2:*           → Smallest.ai      (per 1k chars)
+  //   project.voice_type==='custom' → Fish Audio (per 1k chars)
+  //   English-male standard → LemonFox        (per 1k chars)
+  //   ht (Haitian Creole)   → Gemini Flash via the Creole branch
+  //   else                  → Gemini Flash via the std router
+  //
+  // The new generation_costs columns added in migration
+  // 20260510250100 receive the per-provider slice; the legacy
+  // hypereal_cost / replicate_cost / google_tts_cost columns are
+  // still written for dashboard back-compat (they alias the appropriate
+  // new column).
   const projectType = (generation.projects as any)?.project_type || "doc2video";
   const isCinematic = projectType === "cinematic";
   const sceneCount = scenes.length;
+  const voiceName: string = (generation.projects as any)?.voice_name || "";
+  const voiceType: string = (generation.projects as any)?.voice_type || "standard";
+  const voiceGenderRaw: string = (generation.projects as any)?.voice_gender || "";
+  const language: string = (generation.projects as any)?.voice_inclination || "en";
 
   // Script: Hypereal (Gemini) primary, OpenRouter (Claude) fallback
   // We default to Hypereal since that's the primary now
   const scriptCost = costTracking.scriptTokens * PRICING.hyperealLlmPerToken;
 
-  // Audio: pricing differs by provider. Haitian Creole uses Google TTS; all others use Qwen3.
-  const audioSeconds = costTracking.audioSeconds || (sceneCount * 8); // ~8s per scene avg
-  const language = (generation.projects as any)?.voice_inclination || "en";
-  const audioRatePerSec = language === "ht" ? PRICING.googleTtsPerSecond : PRICING.qwen3PerSecond;
-  const audioCost = audioSeconds * audioRatePerSec;
+  // Total spoken-text length across all scenes (used by char-billed providers).
+  // For Smallest / Fish / LemonFox / ElevenLabs we bill by input chars; for
+  // Gemini Flash and Google Cloud TTS we bill by output seconds.
+  const totalChars: number = scenes.reduce(
+    (sum: number, s: any) => sum + (typeof s?.voiceover === "string" ? s.voiceover.length : 0),
+    0,
+  ) || (sceneCount * 350); // fallback: ~350 chars/scene if voiceover field missing
+  const audioSeconds: number = costTracking.audioSeconds || (sceneCount * 8); // ~8s/scene avg
+
+  // Detect the per-project audio provider. The router (audioRouter.ts +
+  // handleCinematicAudio.ts) takes the same first-match decisions; we
+  // mirror them here. NOTE: scenes can each have a different audio
+  // provider in theory, but every shipped flow today picks one provider
+  // for the whole project — so we classify once.
+  type AudioProviderKey = "gemini_flash" | "smallest" | "fish" | "lemonfox" | "elevenlabs" | "google_cloud" | "qwen3";
+  // Declared with explicit type and `: AudioProviderKey` annotation so TS
+  // keeps the union wide enough for the downstream switch — without the
+  // annotation it narrows to just the literals assigned in the if-else
+  // chain and the legacy-only `google_cloud` / `qwen3` arms become
+  // unreachable per the type system (TS2678).
+  const audioProviderKey: AudioProviderKey = ((): AudioProviderKey => {
+    if (voiceType === "custom") return "fish";
+    if (voiceName.startsWith("sm:") || voiceName.startsWith("sm2:")) return "smallest";
+    if (voiceName.startsWith("gm:")) return "gemini_flash";
+    if (voiceName.startsWith("el:")) return "elevenlabs";
+    if (voiceName.startsWith("lf:") || (language === "en" && voiceGenderRaw === "male")) return "lemonfox";
+    if (language === "ht") return "gemini_flash";
+    return "gemini_flash";
+  })();
+
+  // Per-provider audio cost
+  let fishAudioCost = 0;
+  let lemonfoxCost = 0;
+  let elevenlabsCost = 0;
+  let smallestCost = 0;
+  let geminiFlashTtsCost = 0;
+  let googleCloudTtsCost = 0;
+  let replicateAudioCost = 0;
+  switch (audioProviderKey) {
+    case "fish":
+      fishAudioCost = (totalChars / 1000) * PRICING.fishAudioPer1kChars;
+      break;
+    case "lemonfox":
+      lemonfoxCost = (totalChars / 1000) * PRICING.lemonfoxPer1kChars;
+      break;
+    case "elevenlabs":
+      elevenlabsCost = (totalChars / 1000) * PRICING.elevenlabsPer1kChars;
+      break;
+    case "smallest":
+      smallestCost = (totalChars / 1000) * PRICING.smallestPer1kChars;
+      break;
+    case "google_cloud":
+      googleCloudTtsCost = audioSeconds * PRICING.googleCloudTtsPerSecond;
+      break;
+    case "qwen3":
+      replicateAudioCost = audioSeconds * PRICING.qwen3PerSecond;
+      break;
+    case "gemini_flash":
+    default:
+      geminiFlashTtsCost = audioSeconds * PRICING.geminiFlashTtsPerSecond;
+      break;
+  }
 
   // Images: Hypereal for cinematic, mix for others
   const imageCount = costTracking.imagesGenerated || sceneCount;
-  const imageCost = imageCount * PRICING.hyperealImage;
+  // We default to gpt-image-2 (premium) as the primary chain since
+  // imageGenerator.ts tries it first. Fallbacks are gemini-flash-image
+  // and OpenRouter; treating each scene as gpt-image-2 priced is the
+  // closest single-rate approximation absent per-call detail in the
+  // costTracking blob.
+  const imageCost = imageCount * PRICING.hyperealGptImage2;
 
-  // Video: Kling I2V for cinematic only
-  const videoCost = isCinematic ? sceneCount * PRICING.hyperealVideo : 0;
+  // Video: Kling I2V via Hypereal — billed in 5s blocks.
+  const videoCost = isCinematic ? sceneCount * PRICING.hyperealVideoPer5s : 0;
 
-  // Research: ~1 Hypereal Gemini call for cinematic/storytelling
+  // Research: ~1 Gemini call for cinematic/storytelling (priced as
+  // Hypereal LLM tokens).
   const researchCost = (isCinematic || projectType === "storytelling") ? 0.005 : 0;
 
   // ASR: ~1 credit per scene for caption transcription (cinematic only)
   const asrCost = isCinematic ? (sceneCount * (8 / 60) * PRICING.hyperealAsr) : 0;
 
-  // Attribution: most costs go to Hypereal now (images, video, LLM, ASR)
-  const hyperealTotal = scriptCost + imageCost + videoCost + researchCost + asrCost;
-  const replicateTotal = language !== "ht" ? audioCost : 0; // Qwen3 TTS on Replicate (non-HC)
+  // Aggregate by column. Legacy three-column rollup is preserved:
+  //   - hypereal_cost  ← image, video, research, ASR, script
+  //   - replicate_cost ← Qwen3 audio (only when actually used)
+  //   - google_tts_cost ← Gemini-Flash + Google Cloud TTS combined
+  // New per-provider columns (added in migration 20260510250100) carry
+  // the granular breakdown for dashboards.
+  const hyperealTotal = scriptCost + imageCost + videoCost + researchCost;
+  const replicateTotal = replicateAudioCost;
   const openrouterTotal = 0; // Only used as fallback now
-  const googleTtsTotal = language === "ht" ? audioCost : 0; // Google TTS for Haitian Creole
+  const googleTtsLegacyTotal = geminiFlashTtsCost + googleCloudTtsCost;
 
   try {
     await supabase.from("generation_costs").insert({
       generation_id: generationId,
       user_id: userId || null,
+      // Legacy columns (kept for dashboard back-compat)
       openrouter_cost: openrouterTotal,
       replicate_cost: replicateTotal,
       hypereal_cost: hyperealTotal,
-      google_tts_cost: googleTtsTotal,
+      google_tts_cost: googleTtsLegacyTotal,
+      // New per-provider columns (C-8-7)
+      fish_audio_cost: fishAudioCost,
+      elevenlabs_cost: elevenlabsCost,
+      lemonfox_cost: lemonfoxCost,
+      smallest_cost: smallestCost,
+      gemini_flash_tts_cost: geminiFlashTtsCost,
+      hypereal_asr_cost: asrCost,
+      hypereal_video_cost: videoCost,
+      // openai_cost stays 0 here — we route through OpenRouter + Hypereal,
+      // not direct OpenAI. Reserved for future direct-OpenAI flows.
     });
-    console.log(`[Finalize] Costs recorded: hypereal=$${hyperealTotal.toFixed(4)} replicate=$${replicateTotal.toFixed(4)} (${sceneCount} scenes, ${projectType})`);
+    console.log(
+      `[Finalize] Costs recorded: provider=${audioProviderKey} chars=${totalChars} secs=${audioSeconds} ` +
+      `hypereal=$${hyperealTotal.toFixed(4)} audio=$${(fishAudioCost + lemonfoxCost + elevenlabsCost + smallestCost + geminiFlashTtsCost + googleCloudTtsCost + replicateAudioCost).toFixed(4)} ` +
+      `(${sceneCount} scenes, ${projectType})`
+    );
   } catch (err) {
     console.warn("[Finalize] Cost recording failed (non-fatal):", err);
   }

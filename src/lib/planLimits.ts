@@ -124,13 +124,48 @@ export function getMultiplier(projectType: string): number {
 }
 
 /**
- * Flat per-run cost for autopost. Mirrors the
- * `public.autopost_credits_required(mode, length)` SQL function which
- * returns 45 unconditionally. Both frontend cost displays and the
- * SQL deduction read from the same constant so the UI estimate
- * always matches what the user is actually charged.
+ * C-8-6: autopost credit cost mirrors the actual SQL function
+ * `public.autopost_credits_required(mode, length)` defined in migration
+ * 20260502110000_autopost_credit_deduction_and_empty_topic_guard.sql:
+ *
+ *   secs = short:150 | brief:280 | presentation:360
+ *   mult = doc2video:1 | smartflow:0.5 | cinematic:5
+ *   credits = CEIL(secs × mult)
+ *
+ * That returns a spread of 75 (smartflow/short) → 1800 (cinematic/presentation).
+ * Previously the frontend hard-coded `AUTOPOST_CREDITS_PER_RUN = 45` AND
+ * the IntakeForm copy said "no surprises", which was fraudulent UX —
+ * users were quoted 45 and charged anywhere from 75 to 1800. This
+ * helper produces the SAME number the SQL deduction will use.
+ *
+ * The const below is preserved (as `getAutopostCreditsPerRun()` for
+ * a single common mode/length) so legacy imports don't break before
+ * every call site migrates to the function. Any UI surface that
+ * shows a per-run cost MUST use `getAutopostCreditsRequired(mode, length)`
+ * and either show the real number or the actual range, never a fake
+ * single number.
  */
-export const AUTOPOST_CREDITS_PER_RUN = 45;
+export function getAutopostCreditsRequired(
+  mode: "doc2video" | "smartflow" | "cinematic",
+  length: "short" | "brief" | "presentation",
+): number {
+  // Mirrors getCreditsRequired() above — autopost runs are full
+  // generations, so cost is identical to a manual generation.
+  return getCreditsRequired(mode, length);
+}
+
+/**
+ * @deprecated Use `getAutopostCreditsRequired(mode, length)` instead.
+ *
+ * Kept only because three UI files still import this name. Returns the
+ * SmartFlow / short combo (the historically-cheapest pick) so call sites
+ * still display A NUMBER while the migration to the function-based
+ * approach lands. Any *real* per-run cost display must use the
+ * function — relying on this constant gives the user the SmartFlow/short
+ * estimate even if they pick cinematic/presentation, which is exactly
+ * the bug C-8-6 calls out.
+ */
+export const AUTOPOST_CREDITS_PER_RUN = getAutopostCreditsRequired("smartflow", "short");
 
 /** Plans that are allowed to use the autopost feature. Free is gated. */
 export const AUTOPOST_ELIGIBLE_PLANS: ReadonlyArray<PlanTier> = [

@@ -55,6 +55,9 @@ const { title, description, canonical, breadcrumbs, documentVersion } = Astro.pr
           <a href="/privacy" class="hover:text-foreground transition-colors">Privacy Policy</a>
           <a href="/terms" class="hover:text-foreground transition-colors">Terms of Service</a>
           <a href="/acceptable-use" class="hover:text-foreground transition-colors">Acceptable Use</a>
+          {/* Audit C-9-4 — public status page (BetterStack-hosted) reachable
+              when auth/app is down. */}
+          <a href="https://status.motionmax.io" target="_blank" rel="noopener noreferrer" class="hover:text-foreground transition-colors">Status</a>
           {/* B-NEW-10 / TONGUE-10 — see index.astro footer for rationale. */}
           <a
             href="#"

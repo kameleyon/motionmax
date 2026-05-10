@@ -201,6 +201,8 @@ async function _runRegenerateAudio(
       customVoiceProvider,
       language: lang,
       forceHaitianCreole: isHC,
+      userId: userId ?? null,
+      generationId,
     };
     audioResult = await generateSceneAudio(
       { number: scene.number || sceneIndex + 1, voiceover: newVoiceover, duration: scene.duration || 10 },
@@ -227,6 +229,8 @@ async function _runRegenerateAudio(
         style: styleInstruction,
         pacing: "natural human conversational tone pace, varied — push forward in hook/action beats, soften into reflective moments",
       },
+      userId: userId ?? null,
+      generationId,
     });
   } else if ((voiceName.startsWith("sm:") || voiceName.startsWith("sm2:")) && !isHC) {
     // ── Smallest.ai (ADDITIVE — testing) ──
@@ -239,6 +243,8 @@ async function _runRegenerateAudio(
       projectId,
       voiceId: voiceName,
       language: resolvedLanguage,
+      userId: userId ?? null,
+      generationId,
     });
   } else
 
@@ -264,6 +270,8 @@ async function _runRegenerateAudio(
       voiceGender: gender,
       language: lang,
       forceHaitianCreole: isHC,
+      userId: userId ?? null,
+      generationId,
     };
 
     if (voiceId) {

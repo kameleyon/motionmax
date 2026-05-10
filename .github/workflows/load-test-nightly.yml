@@ -1,0 +1,156 @@
+name: Load Test (Nightly)
+
+# Probe C-10-5: scheduled load tests against the SHADOW Supabase project.
+# Never runs on PRs — too slow and too expensive in real Stripe rate-limit
+# budget. Manual dispatch is allowed for pre-release smoke runs.
+
+on:
+  schedule:
+    # 09:00 UTC — outside US/EU peak, before EU business hours start.
+    # Matches the deploy-staging.yml cadence so the load tests see a
+    # representative codebase (last 24h of merges).
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "Which scenario to run (all | auth | checkout | generation)"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - auth
+          - checkout
+          - generation
+      target_rps_override:
+        description: "Override TARGET_RPS (leave blank for script default)"
+        required: false
+        type: string
+      duration_s_override:
+        description: "Override DURATION_S (leave blank for script default)"
+        required: false
+        type: string
+
+concurrency:
+  # One load test at a time — overlapping runs would skew baselines and
+  # double-bill the shadow project.
+  group: load-test-nightly
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  load-test:
+    name: k6 — ${{ matrix.scenario }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [auth, checkout, generation]
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Skip if scenario filter doesn't include this run
+        id: scenario-gate
+        env:
+          REQUESTED: ${{ github.event.inputs.scenario || 'all' }}
+          THIS: ${{ matrix.scenario }}
+        run: |
+          if [ "$REQUESTED" = "all" ] || [ "$REQUESTED" = "$THIS" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install k6
+        if: steps.scenario-gate.outputs.should_run == 'true'
+        # Use the upstream apt repo so we get a recent k6 (the Ubuntu repo
+        # lags by months). Pinned via the gpg fingerprint Grafana publishes.
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring \
+            --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+            --keyserver hkp://keyserver.ubuntu.com:80 \
+            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
+            | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+          k6 version
+
+      # Fail-safe: refuse to run if any caller forgot to point us at the
+      # shadow Supabase. The k6 scripts also enforce this at runtime,
+      # but a workflow-level check shaves a wasted minute.
+      - name: Verify SUPABASE_URL is non-prod
+        if: steps.scenario-gate.outputs.should_run == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SHADOW_SUPABASE_URL }}
+        run: |
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "::error::SHADOW_SUPABASE_URL secret is empty — cannot run load test."
+            exit 1
+          fi
+          if ! echo "$SUPABASE_URL" | grep -Eiq 'test|staging|localhost|islqnpbdkfbaexwtuppt'; then
+            echo "::error::SHADOW_SUPABASE_URL ($SUPABASE_URL) does not look like a non-prod host — refusing to load-test."
+            exit 1
+          fi
+
+      - name: Run auth.k6.js
+        if: steps.scenario-gate.outputs.should_run == 'true' && matrix.scenario == 'auth'
+        env:
+          SUPABASE_URL: ${{ secrets.SHADOW_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SHADOW_SUPABASE_ANON_KEY }}
+          TARGET_RPS: ${{ github.event.inputs.target_rps_override }}
+          DURATION_S: ${{ github.event.inputs.duration_s_override }}
+        run: k6 run --summary-export=auth-results.json scripts/load-test/auth.k6.js
+
+      - name: Run checkout.k6.js
+        if: steps.scenario-gate.outputs.should_run == 'true' && matrix.scenario == 'checkout'
+        env:
+          SUPABASE_URL: ${{ secrets.SHADOW_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SHADOW_SUPABASE_ANON_KEY }}
+          STRIPE_TEST_USER_TOKEN: ${{ secrets.LOAD_TEST_USER_TOKENS }}
+          TARGET_RPS: ${{ github.event.inputs.target_rps_override }}
+          DURATION_S: ${{ github.event.inputs.duration_s_override }}
+        run: k6 run --summary-export=checkout-results.json scripts/load-test/checkout.k6.js
+
+      - name: Run generation-submit.k6.js
+        if: steps.scenario-gate.outputs.should_run == 'true' && matrix.scenario == 'generation'
+        env:
+          SUPABASE_URL: ${{ secrets.SHADOW_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SHADOW_SUPABASE_ANON_KEY }}
+          TEST_USER_EMAIL: ${{ secrets.LOAD_TEST_USER_EMAIL }}
+          TEST_USER_PASSWORD: ${{ secrets.LOAD_TEST_USER_PASSWORD }}
+          TARGET_RPS: ${{ github.event.inputs.target_rps_override }}
+          DURATION_S: ${{ github.event.inputs.duration_s_override }}
+        run: k6 run --summary-export=generation-submit-results.json scripts/load-test/generation-submit.k6.js
+
+      # Even on failure, keep the JSON so we can diff against the prior
+      # week's baseline. Failure here MUST NOT block deploys (it's a
+      # detection signal, not a release gate) but it should ping us.
+      - name: Upload k6 JSON summary
+        if: always() && steps.scenario-gate.outputs.should_run == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: k6-${{ matrix.scenario }}-${{ github.run_id }}
+          path: |
+            auth-results.json
+            checkout-results.json
+            generation-submit-results.json
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Annotate run summary
+        if: always() && steps.scenario-gate.outputs.should_run == 'true'
+        run: |
+          {
+            echo "## k6 — ${{ matrix.scenario }}"
+            echo ""
+            echo "See attached artifact \`k6-${{ matrix.scenario }}-${{ github.run_id }}\` for the JSON summary."
+            echo ""
+            echo "Compare to the baseline in [scripts/load-test/README.md](../tree/${{ github.sha }}/scripts/load-test/README.md#baseline-numbers-regression-goalposts) — a regression is real if both the previous AND current run breach the same threshold."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeWithTrace, shortTraceRef } from "@/lib/tracing";
 
 /** Support email — ground truth lives in HelpPopover.tsx and this
  *  must stay in sync with that one source. Used as the fallback
@@ -333,7 +334,11 @@ export default function Help() {
     if (!name.trim() || !email.trim() || !subject.trim() || !description.trim()) return;
     setIsSubmitting(true);
     try {
-      const { data, error } = await supabase.functions.invoke<{ ok?: boolean; id?: string; error?: string }>(
+      // Audit C-9-6: trace-propagated invoke. Support tickets are exactly
+      // where trace IDs matter most — when this submission fails, the user
+      // gets the Ref string back as part of the mailto: fallback so the
+      // engineer who picks up the email can search Sentry directly.
+      const { data, error, traceId } = await invokeWithTrace<{ ok?: boolean; id?: string; error?: string }>(
         "submit-support-ticket",
         {
           body: {
@@ -346,8 +351,9 @@ export default function Help() {
         },
       );
       if (error || !data?.ok || !data.id) {
-        const message = (data?.error as string | undefined) ?? error?.message ?? "Couldn't reach the ticket service.";
-        throw new Error(message);
+        const errMsg = error instanceof Error ? error.message : undefined;
+        const message = (data?.error as string | undefined) ?? errMsg ?? "Couldn't reach the ticket service.";
+        throw new Error(`${message} (Ref: ${shortTraceRef(traceId)})`);
       }
       setSentTicketId(data.id);
       const short = data.id.slice(0, 6);

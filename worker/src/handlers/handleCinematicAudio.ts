@@ -216,6 +216,8 @@ async function _runCinematicAudio(
         : generation.projects?.voice_name || "female",
       forceHaitianCreole: true,
       language: "ht",
+      userId: userId ?? null,
+      generationId,
     };
 
     if (generation.projects?.voice_type === "custom" && generation.projects?.voice_id) {
@@ -256,6 +258,8 @@ async function _runCinematicAudio(
         customVoiceId: generation.projects.voice_id,
         customVoiceProvider,
         language: resolvedLanguage,
+        userId: userId ?? null,
+        generationId,
       };
       result = await generateSceneAudio(
         { number: sceneIndex + 1, voiceover, duration: scene.duration || 10 },
@@ -288,6 +292,8 @@ async function _runCinematicAudio(
           pacing: "natural human conversational tone pace, varied — push forward in hook/action beats, soften into reflective moments",
           accent: undefined, // auto-inferred from narration language
         },
+        userId: userId ?? null,
+        generationId,
       });
 
       if (!result.url) {
@@ -349,6 +355,8 @@ async function _runCinematicAudio(
           pacing: "natural human conversational tone pace, varied — push forward in hook/action beats, soften into reflective moments",
           accent: undefined,
         },
+        userId: userId ?? null,
+        generationId,
       });
 
       if (!result.url) {
@@ -416,6 +424,8 @@ async function _runCinematicAudio(
         replicateApiKey: process.env.REPLICATE_API_KEY || "",
         voiceGender: legacyMapping.gender,
         language: legacyMapping.language,
+        userId: userId ?? null,
+        generationId,
       };
 
       result = await generateSceneAudio(
@@ -460,6 +470,8 @@ async function _runCinematicAudio(
           replicateApiKey: process.env.REPLICATE_API_KEY || "",
           voiceGender: remap.gender,
           language: remap.language,
+          userId: userId ?? null,
+          generationId,
         };
 
         result = await generateSceneAudio(
@@ -506,6 +518,11 @@ async function _runCinematicAudio(
               customVoiceId: externalId,
               customVoiceProvider: provider,
               language: resolvedLanguage,
+              // userId here is the SHADOW from generation.projects?.user_id — the
+              // legacy-clone path re-derives it; either way it's the owner of
+              // the audio, which is what api_call_logs wants.
+              userId: userId ?? null,
+              generationId,
             };
             result = await generateSceneAudio(
               { number: sceneIndex + 1, voiceover, duration: scene.duration || 10 },

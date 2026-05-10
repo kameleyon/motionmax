@@ -1,4 +1,5 @@
 import { writeApiLog } from "../lib/logger.js";
+import { acquireHyperealSlot, releaseHyperealSlot } from "../lib/hyperealSlots.js";
 
 const HYPEREAL_IMAGE_URL = "https://api.hypereal.cloud/v1/images/generate";
 const HYPEREAL_VIDEO_URL = "https://api.hypereal.cloud/v1/videos/generate";
@@ -80,12 +81,45 @@ async function parseHyperealJson(response: Response, label: string): Promise<any
 let lastRequestTime = 0;
 const completedJobs = new Map<string, string>(); // jobId → videoUrl cache
 
-/** Enforce minimum 2s gap between Hypereal API calls (process-wide). */
+/**
+ * Enforce minimum 2s gap between Hypereal API calls (process-wide) AND
+ * — for POST submissions only — acquire a fleet-wide concurrency slot
+ * from the `hypereal_concurrency_slots` table (C-8-1 / CRASH-002).
+ *
+ * Submissions take a slot because they're what Hypereal's per-key rate
+ * limiter actually budgets; status polls (GET /v1/jobs/{id}) do NOT
+ * take a slot — they're cheap and queueing them behind in-flight
+ * submissions would starve the bucket.
+ *
+ * The 2-second intra-process gap still applies to both POST and GET to
+ * smooth out spikes inside a single worker.
+ */
 async function hyperealFetch(url: string, options: RequestInit): Promise<Response> {
-  const gap = Date.now() - lastRequestTime;
-  if (gap < 2_000) await new Promise(r => setTimeout(r, 2_000 - gap));
-  lastRequestTime = Date.now();
-  return fetch(url, options);
+  const isSubmission = (options.method || "GET").toUpperCase() === "POST";
+
+  // Acquire fleet-wide slot FIRST (POST only). Time spent waiting here
+  // doesn't count against the caller's withTransientRetry budget —
+  // queueing is the whole point.
+  let slotId = -1;
+  if (isSubmission) {
+    slotId = await acquireHyperealSlot();
+  }
+
+  try {
+    const gap = Date.now() - lastRequestTime;
+    if (gap < 2_000) await new Promise(r => setTimeout(r, 2_000 - gap));
+    lastRequestTime = Date.now();
+    return await fetch(url, options);
+  } finally {
+    // Release as soon as the POST headers + body are sent — we do NOT
+    // hold the slot across the polling lifetime of an async job. The
+    // bucket caps SUBMISSIONS in flight, not the work the upstream is
+    // doing on our behalf afterwards.
+    if (isSubmission) {
+      // Fire-and-forget: release errors are logged inside the helper.
+      void releaseHyperealSlot(slotId);
+    }
+  }
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -867,7 +901,7 @@ export async function pollHyperealJob(
       if (consecutive429 >= max429Streak) {
         console.warn(`[Hypereal] ${model} ${jobId} — ${max429Streak} consecutive 429s, bailing`);
         const rlErr = new Error(`Hypereal rate-limited: ${max429Streak} consecutive 429 responses`);
-        writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: rlErr.message }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
+        writeApiLog({ userId: null, generationId: null, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: rlErr.message }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
         throw rlErr;
       }
       continue;
@@ -904,10 +938,10 @@ export async function pollHyperealJob(
       if (!videoUrl) {
         console.log(`[Hypereal] Full response: ${JSON.stringify(data)}`);
         const err = new Error(`${model} job ${data.status} but no URL found in response`);
-        writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: err.message }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
+        writeApiLog({ userId: null, generationId: null, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: err.message }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
         throw err;
       }
-      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model, status: "success", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: undefined }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
+      writeApiLog({ userId: null, generationId: null, provider: "hypereal", model, status: "success", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: undefined }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
       completedJobs.set(jobId, videoUrl);
       return videoUrl;
     }
@@ -940,7 +974,7 @@ export async function pollHyperealJob(
       }
 
       const err = new Error(`${model} job failed: ${errText || JSON.stringify(data)}`);
-      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: err.message }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
+      writeApiLog({ userId: null, generationId: null, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: err.message }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
       throw err;
     }
 
@@ -950,7 +984,7 @@ export async function pollHyperealJob(
   }
 
   const timeoutErr = new Error(`${model} timed out after ${maxAttempts} polls (~${Math.round(maxAttempts * 30_000 / 60_000)} min).`);
-  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: timeoutErr.message }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
+  writeApiLog({ userId: null, generationId: null, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: timeoutErr.message }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
   throw timeoutErr;
 }
 

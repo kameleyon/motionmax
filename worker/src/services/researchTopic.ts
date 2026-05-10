@@ -15,6 +15,7 @@
  */
 
 import { writeApiLog } from "../lib/logger.js";
+import { llmCostUsd } from "../lib/providerRates.js";
 import { callGemini } from "./geminiNative.js";
 
 // Built at request time with current date injected — see buildResearchPrompt()
@@ -68,8 +69,16 @@ Return your research as a structured brief in plain text (NOT JSON). Use section
 /**
  * Research a topic before script generation.
  * Returns a research brief string to inject into the script prompt.
+ *
+ * `attribution` is required so the resulting api_call_logs row carries
+ * real userId / generationId for finops. Pass `{ userId: null,
+ * generationId: null }` only for system warmups or smoke tests — never
+ * in the production script-generation path. (C-8-5 / C-9-7)
  */
-export async function researchTopic(content: string): Promise<string> {
+export async function researchTopic(
+  content: string,
+  attribution: { userId: string | null; generationId: string | null } = { userId: null, generationId: null },
+): Promise<string> {
   if (!process.env.GOOGLE_TTS_API_KEY && !process.env.GOOGLE_TTS_API_KEY_2 && !process.env.GOOGLE_TTS_API_KEY_3) {
     console.warn("[Research] No GOOGLE_TTS_API_KEY (or _2/_3) set — skipping web-grounded research");
     return "";
@@ -106,11 +115,31 @@ export async function researchTopic(content: string): Promise<string> {
     });
     const elapsed = Date.now() - startTime;
     console.log(`[Research] Complete (${brief.length} chars, ${(elapsed / 1000).toFixed(1)}s)`);
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "google", model: "gemini-3.1-pro-preview", status: "success", totalDurationMs: elapsed, cost: 0, error: undefined }).catch((err) => { console.warn('[Research] background log failed:', (err as Error).message); });
+    // Approximate cost = (input chars / 4) tokens in + (output chars / 4)
+    // tokens out, priced via providerRates. callGemini doesn't surface
+    // the model's exact usage counters back to us yet — TODO: thread
+    // them through so we use the real billed token count. For now this
+    // gets us within ~10% which is what every other LLM caller does.
+    const approxInputTokens = Math.ceil((userText.length + buildResearchPrompt().length) / 4);
+    const approxOutputTokens = Math.ceil(brief.length / 4);
+    writeApiLog({
+      userId: attribution.userId,
+      generationId: attribution.generationId,
+      provider: "google", model: "gemini-3.1-pro-preview",
+      status: "success", totalDurationMs: elapsed,
+      cost: llmCostUsd("google_gemini_pro_preview", approxInputTokens, approxOutputTokens),
+      error: undefined,
+    }).catch((err) => { console.warn('[Research] background log failed:', (err as Error).message); });
     return brief;
   } catch (err) {
     console.warn(`[Research] Failed: ${(err as Error).message} — continuing without research`);
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "google", model: "gemini-3.1-pro-preview", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: (err as Error).message }).catch((err) => { console.warn('[Research] background log failed:', (err as Error).message); });
+    writeApiLog({
+      userId: attribution.userId,
+      generationId: attribution.generationId,
+      provider: "google", model: "gemini-3.1-pro-preview",
+      status: "error", totalDurationMs: Date.now() - startTime,
+      cost: 0, error: (err as Error).message,
+    }).catch((err) => { console.warn('[Research] background log failed:', (err as Error).message); });
     return "";
   }
 }

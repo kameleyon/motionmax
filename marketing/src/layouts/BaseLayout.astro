@@ -41,6 +41,14 @@ const {
 // gtag.
 const gaMeasurementId = import.meta.env.PUBLIC_GA_MEASUREMENT_ID ?? "";
 
+// Audit C-9-5 — Sentry DSN for the marketing surface. Same meta-tag
+// pattern as the GA ID so the value can rotate on Vercel without a
+// rebuild. Both PUBLIC_SENTRY_DSN (Astro-side) and the React-side
+// VITE_SENTRY_DSN can be set to the same value — the `surface=marketing`
+// tag emitted by sentry.js keeps the two streams distinguishable.
+const sentryDsn = import.meta.env.PUBLIC_SENTRY_DSN ?? "";
+const sentryRelease = import.meta.env.PUBLIC_SENTRY_RELEASE ?? "";
+
 const structuredData = breadcrumbs
   ? JSON.stringify({
       "@context": "https://schema.org",
@@ -77,6 +85,13 @@ const structuredData = breadcrumbs
       value. No script is loaded otherwise.
     */}
     {gaMeasurementId && <meta name="motionmax-ga-id" content={gaMeasurementId} />}
+
+    {/* Audit C-9-5 — Sentry DSN + release exposed via meta so the
+        sentry.js loader can read them at runtime without re-bundling.
+        sentry.js is consent-gated and short-circuits if the DSN is
+        absent or still the placeholder. */}
+    {sentryDsn && <meta name="motionmax-sentry-dsn" content={sentryDsn} />}
+    {sentryRelease && <meta name="motionmax-sentry-release" content={sentryRelease} />}
 
     <meta property="og:type" content="website" />
     <meta property="og:url" content={canonical} />
@@ -132,6 +147,17 @@ const structuredData = breadcrumbs
     <script>
       import { initUtmCapture } from "../scripts/utmCapture.js";
       initUtmCapture();
+    </script>
+    {/*
+      Audit C-9-5 — marketing Sentry. Mounted AFTER <CookieBanner /> so the
+      consent registry is already evaluated; sentry.js short-circuits when
+      the user has not granted analytics consent, and re-arms itself via
+      onConsentChange when they do. Bundled as a same-origin module for
+      the same CSP reason as utmCapture above.
+    */}
+    <script>
+      import { initMarketingSentry } from "../scripts/sentry.js";
+      initMarketingSentry();
     </script>
   </body>
 </html>

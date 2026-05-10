@@ -526,6 +526,10 @@ const faqJsonLd = {
           <h4 class="text-sm font-semibold text-foreground mb-3">Support</h4>
           <ul class="space-y-2 text-sm text-muted-foreground">
             <li><a href="mailto:support@motionmax.io" class="hover:text-foreground transition-colors">support@motionmax.io</a></li>
+            {/* Audit C-9-4 — public status page. Hosted on a separate
+                domain (BetterStack) so it stays up even when our auth
+                or app shell are down. */}
+            <li><a href="https://status.motionmax.io" class="hover:text-foreground transition-colors" target="_blank" rel="noopener noreferrer">Status</a></li>
             <li><a href="https://twitter.com/motionmaxio" class="hover:text-foreground transition-colors" target="_blank" rel="noopener">Twitter / X</a></li>
           </ul>
         </div>

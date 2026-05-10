@@ -28,6 +28,11 @@ import { scrubSentryEvent } from "../_shared/sentry-scrubber.ts";
 Sentry.init({
   dsn: Deno.env.get("SENTRY_DSN") || "",
   environment: Deno.env.get("DENO_DEPLOYMENT_ID") ? "production" : "development",
+  // billing endpoints use full trace sampling per audit C-9-2 — every failed
+  // checkout MUST be reproducible. Stripe webhooks fan out into subscription
+  // lifecycle, credit grants, receipts, refunds; losing 90 % of traces here
+  // makes "why didn't my upgrade succeed?" tickets unsolvable.
+  tracesSampleRate: 1.0,
   beforeSend: scrubSentryEvent,
 });
 
@@ -122,6 +127,11 @@ export async function handler(req: Request, deps: WebhookDeps = {}): Promise<Res
     { auth: { persistSession: false } }
   );
 
+  // C-9-8: track the audit row's event_id at function scope so the
+  // catch handler can flip status to "failed" without needing access to
+  // the inner-scoped `event` variable.
+  let reservedAuditEventId: string | null = null;
+
   try {
     // Guard against oversized webhook payloads before buffering the body.
     // Stripe webhooks are typically < 10 KB; cap at 512 KB.
@@ -185,26 +195,95 @@ export async function handler(req: Request, deps: WebhookDeps = {}): Promise<Res
 
     logStep("Event verified and parsed", { type: event.type });
 
-    // === IDEMPOTENCY: Check-first, insert-after ===
-    // We SELECT before running handlers and INSERT after they succeed.
-    // This prevents the insert-before-run bug where a handler 500 causes
-    // Stripe to retry, the retry hits the existing row (23505), and the
-    // event is silently dropped — losing financial data with no error.
-    const { data: existingEvent } = await supabaseAdmin
+    // Audit C-9-6: tag every Sentry event with the Stripe event ID as the
+    // trace_id. Combined with tracesSampleRate=1.0 (C-9-2) this means every
+    // webhook is fully searchable in Sentry by its `evt_…` ID — the same ID
+    // visible in the Stripe Dashboard and the `webhook_events` table.
+    Sentry.setTag("trace_id", event.id);
+    Sentry.setTag("stripe_event_type", event.type);
+
+    // === C-9-8: AUDIT-FIRST WEBHOOK PROCESSING ===
+    // SOC 2 CC7.2 and PCI-DSS 10.2 require that every privileged action
+    // produces an audit row, and that the audit row IS the record of
+    // record — billing mutations must not commit without one. Pre-fix,
+    // we inserted webhook_events AFTER handlers ran (best-effort). A
+    // crash between handler-commit and the audit insert would leave a
+    // credit grant or subscription update on the books with no audit
+    // row, which is a control failure.
+    //
+    // New ordering:
+    //   1. UPSERT a "processing" row with event_id, type, body hash
+    //      BEFORE running any handler.
+    //   2. Run handlers.
+    //   3. On success: UPDATE the row to "completed".
+    //   4. On error:   UPDATE the row to "failed" with the error message.
+    //   5. If the audit INSERT itself fails (DB outage etc.), refuse to
+    //      process the webhook — return 500 so Stripe retries. Never
+    //      run handlers without an audit row reserved.
+    //
+    // Idempotency: ON CONFLICT (event_id) on the insert means a retried
+    // delivery hits the existing row. If that row is in "completed" or
+    // "failed" state, return 200 (we already processed it).
+
+    // Hash the raw request body for the audit row. Using SHA-256 hex
+    // since the original body bytes shouldn't sit in plaintext audit
+    // logs (PII concerns + size). Verified earlier via signature so
+    // there's no integrity loss — the hash is just for forensic
+    // correlation if we ever need to compare to Stripe's stored body.
+    const _encoder = new TextEncoder();
+    const _bodyHashBuf = await crypto.subtle.digest("SHA-256", _encoder.encode(body));
+    const bodyHash = Array.from(new Uint8Array(_bodyHashBuf))
+      .map(b => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    // Reserve audit row. The `status` and `body_hash` columns are
+    // best-effort: if a deployment hasn't migrated them yet, those
+    // keys are silently dropped by Supabase — the core event_id /
+    // event_type columns are the long-standing idempotency anchors.
+    const { data: existingAudit, error: auditInsertErr } = await supabaseAdmin
       .from("webhook_events")
-      .select("event_id")
-      .eq("event_id", event.id)
+      .upsert(
+        {
+          event_id: event.id,
+          event_type: event.type,
+          status: "processing",
+          body_hash: bodyHash,
+          received_at: new Date().toISOString(),
+        },
+        { onConflict: "event_id", ignoreDuplicates: false },
+      )
+      .select("event_id, status")
       .maybeSingle();
 
-    if (existingEvent) {
-      logStep("Duplicate event, skipping", { eventId: event.id });
-      return new Response(JSON.stringify({ received: true, duplicate: true }), {
+    if (auditInsertErr) {
+      // Audit row reservation failed — DB outage, RLS misconfig, etc.
+      // SOC 2 / PCI requires we refuse to run any business logic without
+      // an audit row, so return 500 and let Stripe retry.
+      logStep("CRITICAL: audit reservation failed — refusing to process", {
+        eventId: event.id,
+        error: auditInsertErr.message,
+      });
+      Sentry.captureException(new Error(`Stripe webhook audit reservation failed: ${auditInsertErr.message}`));
+      await Sentry.flush(2000);
+      return new Response(JSON.stringify({ error: "Audit log unavailable; please retry" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500,
+      });
+    }
+
+    // Duplicate check: if the row already existed in terminal state,
+    // honor the idempotency contract and short-circuit.
+    const previousStatus = (existingAudit as { status?: string } | null)?.status;
+    if (previousStatus === "completed" || previousStatus === "failed") {
+      logStep("Duplicate event (audit row already terminal), skipping", { eventId: event.id, previousStatus });
+      return new Response(JSON.stringify({ received: true, duplicate: true, previousStatus }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
       });
     }
 
-    logStep("Event not yet processed, proceeding", { eventId: event.id });
+    reservedAuditEventId = event.id;
+    logStep("Audit row reserved, proceeding", { eventId: event.id });
 
     switch (event.type) {
       case "checkout.session.completed": {
@@ -717,18 +796,26 @@ export async function handler(req: Request, deps: WebhookDeps = {}): Promise<Res
       }
     }
 
-    // === IDEMPOTENCY: Insert row only after handlers succeed ===
-    // A 23505 here means two concurrent identical events both passed the
-    // SELECT check and both ran handlers — that's acceptable since all
-    // handlers are idempotent. We still return 200 so Stripe won't retry.
-    const { error: idempotencyError } = await supabaseAdmin
+    // === C-9-8: mark audit row "completed" ===
+    // Handlers ran without throwing, so flip the pre-reserved audit
+    // row from "processing" to "completed". This row + the body hash
+    // are the SOC 2 / PCI record-of-record for this event. If this
+    // UPDATE fails we still return 200 (handlers committed; resending
+    // would re-run them via idempotency anyway), but we log + Sentry
+    // so the row mismatch is investigated.
+    const { error: auditCompleteError } = await supabaseAdmin
       .from("webhook_events")
-      .insert({ event_id: event.id, event_type: event.type });
+      .update({
+        status: "completed",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("event_id", event.id);
 
-    if (idempotencyError && idempotencyError.code !== "23505") {
-      logStep("WARNING: Idempotency insert failed (non-duplicate)", { message: idempotencyError.message });
+    if (auditCompleteError) {
+      logStep("WARNING: Audit completion update failed", { message: auditCompleteError.message });
+      Sentry.captureMessage(`Stripe webhook audit completion failed for ${event.id}: ${auditCompleteError.message}`, { level: "error" });
     } else {
-      logStep("Event recorded for idempotency", { eventId: event.id });
+      logStep("Event audit row completed", { eventId: event.id });
     }
 
     // Mirror every successfully-processed Stripe event into system_logs
@@ -763,6 +850,26 @@ export async function handler(req: Request, deps: WebhookDeps = {}): Promise<Res
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR", { message: errorMessage });
     Sentry.captureException(error);
+
+    // C-9-8: if we already reserved an audit row, flip it to "failed"
+    // so the audit trail records the attempt + error. Best-effort —
+    // a DB outage here would also have prevented the original reservation,
+    // so we don't have a row to flip in that case.
+    if (reservedAuditEventId) {
+      try {
+        await supabaseAdmin
+          .from("webhook_events")
+          .update({
+            status: "failed",
+            error_message: errorMessage.substring(0, 500),
+            completed_at: new Date().toISOString(),
+          })
+          .eq("event_id", reservedAuditEventId);
+      } catch (auditErr) {
+        logStep("Audit failure-flip best-effort errored", { message: (auditErr as Error).message });
+      }
+    }
+
     await Sentry.flush(2000);
     return new Response(JSON.stringify({ error: "Webhook processing failed" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

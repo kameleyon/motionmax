@@ -11,6 +11,16 @@
  */
 
 import { writeApiLog } from "../lib/logger.js";
+import { asrMinutesCostUsd } from "../lib/providerRates.js";
+
+/**
+ * Attribution payload threaded from the handler so each api_call_logs
+ * row is attached to a real user + generation. (C-8-5 / C-9-7)
+ */
+export interface AsrAttribution {
+  userId: string | null;
+  generationId: string | null;
+}
 
 // /api/v1/ returns 404; /v1/ is the working base (matches image/video services)
 const HYPEREAL_ASR_URL = "https://api.hypereal.cloud/v1/audio/generate";
@@ -48,12 +58,19 @@ async function ensureAccessibleUrl(
 /**
  * Transcribe audio and get word-level timestamps.
  * Returns null on failure (caller falls back to estimation).
+ *
+ * `attribution` is optional but should always be supplied from
+ * production handlers so the api_call_logs row carries real userId +
+ * generationId. ASR is the most expensive per-second call in the
+ * pipeline by some metrics ($0.01/min × N scenes); unattributed rows
+ * make $/audit-call dashboards uncomputable. (C-8-5 / C-9-7)
  */
 export async function transcribeAudio(
   audioUrl: string,
   apiKey: string,
   language = "en",
   signUrl?: (bucket: string, path: string) => Promise<string | null>,
+  attribution: AsrAttribution = { userId: null, generationId: null },
 ): Promise<ASRResult | null> {
   if (!apiKey || !audioUrl) return null;
 
@@ -120,17 +137,45 @@ export async function transcribeAudio(
 
     if (res.ok) {
       const result = await handleASRResponse(res, apiKey);
-      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "audio-asr", status: result ? "success" : "error", totalDurationMs: Date.now() - startTime, cost: 0, error: result ? undefined : "ASR returned no usable result" }).catch((err) => { console.warn('[AudioASR] background log failed:', (err as Error).message); });
+      // ASR cost = $0.01/min × audio duration in minutes. The result
+      // carries word-level timestamps; pull the last word.end (seconds)
+      // as our authoritative duration, falling back to the largest
+      // start+1 if end timestamps are missing.
+      const lastEnd = result?.words?.length
+        ? Math.max(...result.words.map((w) => w.end ?? w.start ?? 0))
+        : 0;
+      const audioMinutes = lastEnd / 60;
+      writeApiLog({
+        userId: attribution.userId,
+        generationId: attribution.generationId,
+        provider: "hypereal", model: "audio-asr",
+        status: result ? "success" : "error",
+        totalDurationMs: Date.now() - startTime,
+        cost: result ? asrMinutesCostUsd(audioMinutes) : 0,
+        error: result ? undefined : "ASR returned no usable result",
+      }).catch((err) => { console.warn('[AudioASR] background log failed:', (err as Error).message); });
       return result;
     }
 
     const errText = await res.text();
     console.warn(`[ASR] Failed (${res.status}): ${errText.substring(0, 300)}`);
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "audio-asr", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: `ASR failed ${res.status}` }).catch((err) => { console.warn('[AudioASR] background log failed:', (err as Error).message); });
+    writeApiLog({
+      userId: attribution.userId,
+      generationId: attribution.generationId,
+      provider: "hypereal", model: "audio-asr",
+      status: "error", totalDurationMs: Date.now() - startTime,
+      cost: 0, error: `ASR failed ${res.status}`,
+    }).catch((err) => { console.warn('[AudioASR] background log failed:', (err as Error).message); });
     return null;
   } catch (err) {
     console.warn(`[ASR] Error: ${(err as Error).message}`);
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "audio-asr", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: (err as Error).message }).catch((err) => { console.warn('[AudioASR] background log failed:', (err as Error).message); });
+    writeApiLog({
+      userId: attribution.userId,
+      generationId: attribution.generationId,
+      provider: "hypereal", model: "audio-asr",
+      status: "error", totalDurationMs: Date.now() - startTime,
+      cost: 0, error: (err as Error).message,
+    }).catch((err) => { console.warn('[AudioASR] background log failed:', (err as Error).message); });
     return null;
   }
 }
@@ -256,6 +301,7 @@ export async function transcribeAllScenes(
   apiKey: string,
   language = "en",
   signUrl?: (bucket: string, path: string) => Promise<string | null>,
+  attribution: AsrAttribution = { userId: null, generationId: null },
 ): Promise<(ASRResult | null)[]> {
   if (!apiKey) return scenes.map(() => null);
 
@@ -267,7 +313,7 @@ export async function transcribeAllScenes(
     const batch = scenes.slice(i, i + ASR_BATCH_SIZE);
     const batchResults = await Promise.all(
       batch.map(scene =>
-        scene.audioUrl ? transcribeAudio(scene.audioUrl, apiKey, language, signUrl) : Promise.resolve(null)
+        scene.audioUrl ? transcribeAudio(scene.audioUrl, apiKey, language, signUrl, attribution) : Promise.resolve(null)
       )
     );
 

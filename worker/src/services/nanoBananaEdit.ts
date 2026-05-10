@@ -13,6 +13,7 @@
  */
 
 import { writeApiLog } from "../lib/logger.js";
+import { imageCostUsd } from "../lib/providerRates.js";
 import { supabase } from "../lib/supabase.js";
 import { v4 as uuidv4 } from "uuid";
 
@@ -62,6 +63,9 @@ export async function editImageWithNanoBanana(
   aspectRatio: string = "16:9",
   resolution: NanoBananaProResolution = DEFAULT_RESOLUTION,
   projectId?: string,
+  /** Attribution for api_call_logs. Optional for legacy callers; pass
+   *  real userId + generationId from production handlers. (C-8-5 / C-9-7) */
+  attribution: { userId: string | null; generationId: string | null } = { userId: null, generationId: null },
 ): Promise<string> {
   if (!imageUrl || typeof imageUrl !== "string" || imageUrl.trim().length === 0) {
     throw new Error("editImageWithNanoBanana: imageUrl is required and must be a non-empty string");
@@ -93,7 +97,14 @@ export async function editImageWithNanoBanana(
   if (!response.ok) {
     const errorText = await response.text();
     const err = new Error(`Nano Banana Pro Edit API Error: ${response.status} - ${errorText}`);
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: NANO_BANANA_PRO_MODEL, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[NanoBananaProEdit] background log failed:', (err as Error).message); });
+    // Edit failed before Hypereal accepted the job — no charge incurred.
+    writeApiLog({
+      userId: attribution.userId,
+      generationId: attribution.generationId,
+      provider: "hypereal", model: NANO_BANANA_PRO_MODEL,
+      status: "error", totalDurationMs: Date.now() - startTime,
+      cost: 0, error: err.message,
+    }).catch((err) => { console.warn('[NanoBananaProEdit] background log failed:', (err as Error).message); });
     throw err;
   }
 
@@ -108,17 +119,39 @@ export async function editImageWithNanoBanana(
     if (jobId) {
       const polledUrl = await pollNanoBananaJob(jobId, apiKey);
       const finalUrl = projectId ? await rehostToSupabase(polledUrl, projectId) : polledUrl;
-      writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: NANO_BANANA_PRO_MODEL, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[NanoBananaProEdit] background log failed:', (err as Error).message); });
+      // Async-poll success — Hypereal charged us once the job completed.
+      writeApiLog({
+        userId: attribution.userId,
+        generationId: attribution.generationId,
+        provider: "hypereal", model: NANO_BANANA_PRO_MODEL,
+        status: "success", totalDurationMs: Date.now() - startTime,
+        cost: imageCostUsd("hypereal_nano_banana_pro"),
+        error: undefined,
+      }).catch((err) => { console.warn('[NanoBananaProEdit] background log failed:', (err as Error).message); });
       return finalUrl;
     }
     const err = new Error(`No image URL returned from Nano Banana Pro Edit: ${JSON.stringify(data).substring(0, 200)}`);
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: NANO_BANANA_PRO_MODEL, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[NanoBananaProEdit] background log failed:', (err as Error).message); });
+    writeApiLog({
+      userId: attribution.userId,
+      generationId: attribution.generationId,
+      provider: "hypereal", model: NANO_BANANA_PRO_MODEL,
+      status: "error", totalDurationMs: Date.now() - startTime,
+      cost: 0, error: err.message,
+    }).catch((err) => { console.warn('[NanoBananaProEdit] background log failed:', (err as Error).message); });
     throw err;
   }
 
   console.log(`[NanoBananaProEdit] Edit complete (r2): ${editedUrl}`);
   const finalUrl = projectId ? await rehostToSupabase(editedUrl, projectId) : editedUrl;
-  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: NANO_BANANA_PRO_MODEL, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[NanoBananaProEdit] background log failed:', (err as Error).message); });
+  // Sync success — image edit fully complete.
+  writeApiLog({
+    userId: attribution.userId,
+    generationId: attribution.generationId,
+    provider: "hypereal", model: NANO_BANANA_PRO_MODEL,
+    status: "success", totalDurationMs: Date.now() - startTime,
+    cost: imageCostUsd("hypereal_nano_banana_pro"),
+    error: undefined,
+  }).catch((err) => { console.warn('[NanoBananaProEdit] background log failed:', (err as Error).message); });
   return finalUrl;
 }
 

@@ -25,6 +25,7 @@
 
 import { supabase } from "../lib/supabase.js";
 import { writeApiLog } from "../lib/logger.js";
+import { ttsSecondsCostUsd } from "../lib/providerRates.js";
 import { pcmToWav, base64ToUint8Array } from "./audioWavUtils.js";
 import { v4 as uuidv4 } from "uuid";
 
@@ -193,6 +194,12 @@ export interface GeminiFlashTTSOptions {
   /** Rotated API keys. Typically
    *  [GOOGLE_TTS_API_KEY_3, GOOGLE_TTS_API_KEY_2, GOOGLE_TTS_API_KEY]. */
   apiKeys: string[];
+  /** Caller's user id — propagated to api_call_logs for finops
+   *  attribution. `null` is reserved for system pings; production
+   *  callers should always pass a real id. (C-8-5 / C-9-7) */
+  userId?: string | null;
+  /** Caller's generation id — same rationale as userId. */
+  generationId?: string | null;
 }
 
 /**
@@ -555,11 +562,16 @@ export async function generateGeminiFlashTTS(
         const durationSeconds = Math.max(1, pcm.length / (GEMINI_PCM_SAMPLE_RATE * 2));
 
         console.log(`[GeminiFlashTTS] Scene ${opts.sceneNumber} ✅ voice=${voiceName} (${pcm.length} PCM bytes, ~${durationSeconds.toFixed(1)}s)`);
+        // Real cost = $0.001/min × actual synthesized audio seconds.
+        // We bill by output duration, not text length — matches Google's
+        // billing model and lets dashboards reconcile to the invoice.
         writeApiLog({
-          userId: undefined, generationId: undefined,
+          userId: opts.userId ?? null,
+          generationId: opts.generationId ?? null,
           provider: "google_tts", model: MODEL,
           status: "success", totalDurationMs: Date.now() - startTime,
-          cost: 0, error: undefined,
+          cost: ttsSecondsCostUsd("gemini_flash_tts", durationSeconds),
+          error: undefined,
         }).catch((err) => { console.warn('[GeminiFlashTTS] background log failed:', (err as Error).message); });
 
         return {
@@ -574,8 +586,12 @@ export async function generateGeminiFlashTTS(
       }
     }
 
+    // Failed call — no audio synthesized, so cost is $0 (Gemini Flash
+    // doesn't bill failed responses). Attribution still required so the
+    // failure shows up in per-user error dashboards.
     writeApiLog({
-      userId: undefined, generationId: undefined,
+      userId: opts.userId ?? null,
+      generationId: opts.generationId ?? null,
       provider: "google_tts", model: MODEL,
       status: "error", totalDurationMs: Date.now() - startTime,
       cost: 0, error: lastError,

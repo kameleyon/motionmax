@@ -114,6 +114,62 @@ let server: http.Server | null = null;
 let vitalsProvider: VitalsProvider | null = null;
 const startedAt = Date.now();
 
+// ── Cached DB-alive state (C-8-4 / Crash CRASH-005) ──────────────────
+//
+// Render's health probe hits /health every ~7s. With 8 worker
+// replicas that's 128 hits/min against the hot `video_generation_jobs`
+// table — which competes with the actual queue claim path for the same
+// statement_timeout pool and inflates the audit trail.
+//
+// Fix: the anonymous /health endpoint returns a cached "DB alive"
+// boolean updated by a single background probe once every 60s. The
+// probe is the lightest possible read — `select 1` via PostgREST's
+// metadata endpoint — and even if it fails we still return 200 from
+// /health (Render's probe is checking "is this Node process alive and
+// listening", NOT "is the database also up"). The token-gated
+// /health/full continues to do a live DB query for ops dashboards.
+const DB_PROBE_INTERVAL_MS = 60_000;
+const DB_PROBE_STALE_MS    = 5 * 60_000;
+let lastDbCheckAt: number = 0;       // ms-since-epoch; 0 = never probed
+let lastDbHealthy: boolean = true;   // optimistic until probe says otherwise
+let dbProbeTimer: ReturnType<typeof setInterval> | null = null;
+
+async function runDbProbeOnce(): Promise<void> {
+  try {
+    // Single-row select — index lookup against `id`, statement_timeout
+    // doesn't fire on this and the cost is negligible.
+    const { error } = await supabase
+      .from("video_generation_jobs")
+      .select("id")
+      .limit(1);
+    lastDbCheckAt = Date.now();
+    lastDbHealthy = !error;
+  } catch {
+    // Treat exceptions as unhealthy but DO NOT throw — the probe must
+    // never crash the worker. Next interval will re-probe.
+    lastDbCheckAt = Date.now();
+    lastDbHealthy = false;
+  }
+}
+
+function startDbProbeLoop(): void {
+  if (dbProbeTimer) return;
+  // Kick off an initial probe so we don't return optimistic "true"
+  // for 60s on cold start.
+  void runDbProbeOnce();
+  dbProbeTimer = setInterval(() => { void runDbProbeOnce(); }, DB_PROBE_INTERVAL_MS);
+  // Don't keep the event loop alive solely for this timer — when the
+  // worker drains and exits, the probe should stop too.
+  if (typeof dbProbeTimer.unref === "function") dbProbeTimer.unref();
+}
+
+function stopDbProbeLoop(): void {
+  if (dbProbeTimer) {
+    clearInterval(dbProbeTimer);
+    dbProbeTimer = null;
+  }
+}
+
 function buildHealthResponse(vitals: WorkerVitals) {
   const mem = process.memoryUsage();
   return {
@@ -255,19 +311,21 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       // Railway / load-balancer health probes to decide "alive vs dead".
       // The detailed diagnostic (PID, Node version, memory, job counts)
       // moved to `/health/full` behind the Bearer token below.
-      try {
-        const { error: dbError } = await supabase
-          .from('video_generation_jobs')
-          .select('id')
-          .limit(1);
-        if (dbError) {
-          // Do not echo the underlying DB error message — that itself is
-          // an info-disclosure surface (driver version, host names, etc.).
-          res.writeHead(503);
-          res.end(JSON.stringify({ status: "unhealthy" }));
-          break;
-        }
-      } catch {
+      //
+      // C-8-4 / Crash CRASH-005: NO live DB query on this code path —
+      // Render's probe fires every 7s; against 8 replicas that was 128
+      // hits/min hammering `video_generation_jobs`. We now consult the
+      // cached probe result (refreshed every 60s by startDbProbeLoop)
+      // and only mark the process unhealthy if BOTH the cache says the
+      // DB is down AND the cache value is recent enough to trust.
+      // If the cache is stale (never probed, or probe loop wedged) we
+      // err on the side of returning 200 — Render's probe is checking
+      // "is this Node process alive and listening", NOT "is Postgres
+      // also up"; the dedicated /health/full + /ready endpoints carry
+      // the higher-fidelity signal.
+      const cacheAge = lastDbCheckAt ? Date.now() - lastDbCheckAt : Infinity;
+      const cacheUsable = cacheAge <= DB_PROBE_STALE_MS;
+      if (cacheUsable && !lastDbHealthy) {
         res.writeHead(503);
         res.end(JSON.stringify({ status: "unhealthy" }));
         break;
@@ -401,6 +459,10 @@ export function startHealthServer(
     );
   }
 
+  // C-8-4: kick off the cached DB probe loop. /health reads its result
+  // instead of running a live query on every Render probe.
+  startDbProbeLoop();
+
   server = http.createServer(handleRequest);
 
   server.listen(port, "0.0.0.0", () => {
@@ -425,6 +487,7 @@ export function startHealthServer(
  * Stops accepting new connections and waits for existing ones to finish.
  */
 export async function stopHealthServer(): Promise<void> {
+  stopDbProbeLoop();
   if (!server) return;
   return new Promise((resolve) => {
     server!.close(() => {

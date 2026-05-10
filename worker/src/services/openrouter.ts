@@ -8,6 +8,37 @@
 
 import { writeApiLog } from "../lib/logger.js";
 
+/**
+ * Parse an HTTP Retry-After header value. RFC 9110 §10.2.3 says it's
+ * EITHER a non-negative integer count of seconds OR an HTTP-date.
+ * Returns the wait duration in ms, clamped to [0, capMs]. Returns
+ * `null` if the header is missing/garbled — caller falls back to its
+ * own backoff schedule.
+ *
+ * Capped because some upstreams return Retry-After: 3600 on a transient
+ * 429 — holding a worker job for an hour blows the per-job timeout and
+ * tanks the queue. 60s is the audit-recommended cap (C-8-2).
+ */
+export function parseRetryAfter(raw: string | null | undefined, capMs = 60_000): number | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  // Form 1: integer seconds.
+  if (/^\d+$/.test(trimmed)) {
+    const secs = parseInt(trimmed, 10);
+    if (!Number.isFinite(secs) || secs < 0) return null;
+    return Math.min(capMs, secs * 1000);
+  }
+  // Form 2: HTTP-date. Date.parse accepts RFC 1123 / RFC 850 / asctime
+  // forms — close enough for our purposes; if upstream sends something
+  // weirder we just fall back to local backoff.
+  const t = Date.parse(trimmed);
+  if (!Number.isFinite(t)) return null;
+  const deltaMs = t - Date.now();
+  if (deltaMs <= 0) return 0;
+  return Math.min(capMs, deltaMs);
+}
+
 // ── OpenRouter concurrency limiter ─────────────────────────────────
 // Caps simultaneous outbound OpenRouter calls process-wide. Without
 // this, 3 generate_video jobs claimed in parallel each fire their own
@@ -132,8 +163,22 @@ async function _callOpenRouterLLMInner(
     console.log(`[OpenRouter] Extended timeout: ${Math.round(totalTimeoutMs / 1000)}s (maxTokens=${options.maxTokens})`);
   }
 
+  // C-8-2 / Crash CRASH-003: honour 429 Retry-After. OpenRouter's
+  // limiter is per-key + bursty; the 2026-05-09 incident was caused by
+  // this code ignoring Retry-After and slamming the API on its local
+  // backoff schedule, prolonging the rate-limited state. Now: on 429,
+  // we read Retry-After (seconds or HTTP-date), sleep that long (capped
+  // at 60s so a worker doesn't hang on a misbehaving header), and retry
+  // up to MAX_429_RETRIES times within this single call. Past that, we
+  // surface the 429 to the caller's withTransientRetry — the regex
+  // classifier already maps "OpenRouter API error 429" → transient
+  // (TRANSIENT_PATTERNS in retryClassifier.ts).
+  const MAX_429_RETRIES = 3;
+  const RETRY_AFTER_CAP_MS = 60_000;
   let res: Response | undefined;
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  let consecutive429 = 0;
+  fetchLoop:
+  for (let attempt = 1; attempt <= 2 + MAX_429_RETRIES; attempt++) {
     try {
       res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
@@ -146,13 +191,32 @@ async function _callOpenRouterLLMInner(
         body: JSON.stringify(requestBody),
         signal: controller.signal,
       });
-      break; // success
+      // 429 → respect Retry-After then retry within this call.
+      if (res.status === 429 && consecutive429 < MAX_429_RETRIES) {
+        consecutive429++;
+        const headerVal = res.headers.get("retry-after");
+        const parsed = parseRetryAfter(headerVal, RETRY_AFTER_CAP_MS);
+        // If header absent/garbled: fall back to exponential 2s → 4s → 8s
+        // (the same shape the dispatcher's withTransientRetry uses).
+        const waitMs = parsed !== null
+          ? parsed
+          : Math.min(RETRY_AFTER_CAP_MS, 2_000 * Math.pow(2, consecutive429 - 1));
+        console.warn(
+          `[OpenRouter] 429 rate-limited (streak=${consecutive429}/${MAX_429_RETRIES}) — ` +
+          `Retry-After=${headerVal ?? "<none>"}, sleeping ${Math.round(waitMs / 1000)}s before retry`,
+        );
+        // Drain body so the connection can be reused.
+        await res.text().catch(() => {});
+        await new Promise((r) => setTimeout(r, waitMs));
+        continue fetchLoop;
+      }
+      break; // success or non-429 error to be handled below
     } catch (err: any) {
       if (err.name === "AbortError") {
         clearTimeout(timeoutId);
         throw new Error(`OpenRouter request timed out after ${Math.round(totalTimeoutMs / 1000)}s (model: ${model}, maxTokens: ${options.maxTokens})`);
       }
-      if (attempt < 2) {
+      if (attempt < 2 + MAX_429_RETRIES) {
         console.warn(`[OpenRouter] Fetch failed (attempt ${attempt}), retrying in 3s...`);
         await new Promise(r => setTimeout(r, 3000));
         continue;
@@ -166,8 +230,14 @@ async function _callOpenRouterLLMInner(
 
   if (!res.ok) {
     const body = await res.text();
-    const err = new Error(`OpenRouter API error ${res.status}: ${body}`);
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "openrouter", model, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
+    // Surface 429 with explicit prefix so withTransientRetry / the
+    // isTransientError classifier picks it up unambiguously even
+    // through wrapped error chains. The classifier already matches
+    // /\b429\b/ but a stable string prefix simplifies the operator
+    // forensics in Sentry breadcrumbs.
+    const tag = res.status === 429 ? "OpenRouter rate-limited (429) after retries" : `OpenRouter API error ${res.status}`;
+    const err = new Error(`${tag}: ${body}`);
+    writeApiLog({ userId: null, generationId: null, provider: "openrouter", model, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
     throw err;
   }
 
@@ -175,12 +245,12 @@ async function _callOpenRouterLLMInner(
   const text = data.choices?.[0]?.message?.content;
   if (!text) {
     const err = new Error("OpenRouter returned empty content");
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "openrouter", model, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
+    writeApiLog({ userId: null, generationId: null, provider: "openrouter", model, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
     throw err;
   }
 
   console.log(`[OpenRouter] Response received (${text.length} chars)`);
-  writeApiLog({ userId: undefined, generationId: undefined, provider: "openrouter", model, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
+  writeApiLog({ userId: null, generationId: null, provider: "openrouter", model, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
   return text;
 }
 
@@ -256,7 +326,7 @@ export async function callHyperealLLM(
   if (!res.ok) {
     const body = await res.text();
     const err = new Error(`Hypereal API error ${res.status}: ${body.substring(0, 300)}`);
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-fast", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
+    writeApiLog({ userId: null, generationId: null, provider: "hypereal", model: "gemini-3.1-fast", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
     throw err;
   }
 
@@ -264,7 +334,7 @@ export async function callHyperealLLM(
   let text = data.choices?.[0]?.message?.content;
   if (!text) {
     const err = new Error("Hypereal returned empty content");
-    writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-fast", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
+    writeApiLog({ userId: null, generationId: null, provider: "hypereal", model: "gemini-3.1-fast", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
     throw err;
   }
 
@@ -283,7 +353,7 @@ export async function callHyperealLLM(
   }
 
   console.log(`[Hypereal] Response received (${text.length} chars, credits: ${data.creditsUsed ?? "?"})`);
-  writeApiLog({ userId: undefined, generationId: undefined, provider: "hypereal", model: "gemini-3.1-fast", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
+  writeApiLog({ userId: null, generationId: null, provider: "hypereal", model: "gemini-3.1-fast", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
   return text;
 }
 

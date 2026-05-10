@@ -25,6 +25,7 @@ import CookiePreferencesSection from "@/components/settings/CookiePreferencesSec
 import AITrainingOptInSection from "@/components/settings/AITrainingOptInSection";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeWithTrace, shortTraceRef } from "@/lib/tracing";
 import { PasswordStrengthMeter, getPasswordStrength } from "@/components/ui/password-strength";
 import AppShell from "@/components/dashboard/AppShell";
 import { Input } from "@/components/ui/input";
@@ -300,16 +301,21 @@ export default function Settings() {
         return;
       }
 
-      // Reauth succeeded — fire the edge function. Pass the access
-      // token explicitly because functions.invoke does this anyway, but
-      // documenting it in the call signature catches future regressions.
-      const { data, error: invokeError } = await supabase.functions.invoke<{
+      // Reauth succeeded — fire the edge function. Audit C-9-6 wraps this
+      // in invokeWithTrace so support can correlate "I tried to delete my
+      // account and it didn't work" tickets to the exact backend call.
+      const { data, error: invokeError, traceId } = await invokeWithTrace<{
         success?: boolean;
         scheduled_at?: string;
         error?: string;
       }>("delete-account", { method: "POST" });
-      if (invokeError) throw new Error(invokeError.message);
-      if (data?.error) throw new Error(data.error);
+      if (invokeError) {
+        const msg = invokeError instanceof Error ? invokeError.message : "Failed to schedule deletion";
+        throw new Error(`${msg} (Ref: ${shortTraceRef(traceId)})`);
+      }
+      if (data?.error) {
+        throw new Error(`${data.error} (Ref: ${shortTraceRef(traceId)})`);
+      }
 
       const scheduledAt =
         data?.scheduled_at ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();

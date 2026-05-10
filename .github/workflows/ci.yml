@@ -51,6 +51,26 @@ jobs:
       - name: Run tests
         run: npm run test
 
+      # C-10-2: enforce the coverage threshold (50%/40%) defined in
+      # vitest.config.ts. Without this step, the threshold lives in
+      # the config but is never tripped on PRs, so it's effectively
+      # dormant.
+      - name: Coverage check
+        run: npm run test:coverage
+
+      - name: Upload coverage to Codecov (optional)
+        if: always()
+        # Pinned per Wave 1 third-party-action policy. v4 = commit
+        # 0da7aa657d958d32c117fc47e1ccaa00e3b35c61 (released 2024-04-25).
+        uses: codecov/codecov-action@0da7aa657d958d32c117fc47e1ccaa00e3b35c61
+        with:
+          files: ./coverage/coverage-final.json
+          # CODECOV_TOKEN is optional for public repos; if absent the
+          # upload silently no-ops, so CI doesn't fail when running
+          # forked PRs that can't access org secrets.
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
       - name: Build production bundle
         run: npm run build
         env:
@@ -207,8 +227,10 @@ jobs:
             echo "VITE_SUPABASE_ANON_KEY=$ANON_KEY"
           } >> "$GITHUB_ENV"
 
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install Playwright browsers (chromium + webkit for mobile matrix)
+        # C-10-1: mobile-chrome (Pixel 5) runs on Chromium; mobile-safari (iPhone 13)
+        # and tablet (iPad gen 7) run on WebKit. Install both.
+        run: npx playwright install --with-deps chromium webkit
 
       - name: Run Playwright E2E tests
         run: npm run test:e2e

@@ -18,6 +18,7 @@
 
 import { supabase } from "../lib/supabase.js";
 import { writeApiLog } from "../lib/logger.js";
+import { ttsCharsCostUsd } from "../lib/providerRates.js";
 import { v4 as uuidv4 } from "uuid";
 
 /** Smallest has multiple model generations. Lightning v3.1 is the current
@@ -142,6 +143,11 @@ export interface SmallestTTSOptions {
   language?: string;
   /** Playback speed 0.5–2.0 (default 1.0). */
   speed?: number;
+  /** Caller's user id — propagated to api_call_logs for finops
+   *  attribution. (C-8-5 / C-9-7) */
+  userId?: string | null;
+  /** Caller's generation id — same rationale as userId. */
+  generationId?: string | null;
 }
 
 /**
@@ -246,11 +252,16 @@ export async function generateSmallestTTS(
         const durationSeconds = Math.max(1, bytes.length / 16000);
 
         console.log(`[SmallestTTS] Scene ${opts.sceneNumber} ✅ ${model}/${voiceId} (${bytes.length} bytes, ~${durationSeconds.toFixed(1)}s)`);
+        // Real cost = $0.20/1k chars × input char count. Smallest bills
+        // by input text length, not synthesized audio duration — that's
+        // why we use text.length here instead of durationSeconds.
         writeApiLog({
-          userId: undefined, generationId: undefined,
+          userId: opts.userId ?? null,
+          generationId: opts.generationId ?? null,
           provider: "smallest", model,
           status: "success", totalDurationMs: Date.now() - startTime,
-          cost: 0, error: undefined,
+          cost: ttsCharsCostUsd("smallest_ai_tts", text.length),
+          error: undefined,
         }).catch((err) => { console.warn('[SmallestTTS] background log failed:', (err as Error).message); });
 
         return { url, durationSeconds, provider: `Smallest ${model} (${voiceId})` };
@@ -260,8 +271,13 @@ export async function generateSmallestTTS(
       }
     }
 
+    // Final-failure path — Smallest doesn't bill failed requests, so
+    // cost is $0 but attribution must still land in api_call_logs for
+    // the abuse-forensics dashboard ("which users keep hitting their
+    // own retry cap").
     writeApiLog({
-      userId: undefined, generationId: undefined,
+      userId: opts.userId ?? null,
+      generationId: opts.generationId ?? null,
       provider: "smallest", model,
       status: "error", totalDurationMs: Date.now() - startTime,
       cost: 0, error: `Smallest TTS failed after ${MAX_ATTEMPTS} attempts`,

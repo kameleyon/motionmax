@@ -230,21 +230,30 @@ function writeCheckpoint(tempDir: string, jobId: string, sceneResults: (string |
 
 /**
  * EU AI Act Article 50 (effective 2026-08-02) requires AI-generated content to
- * carry a clear, machine-readable disclosure of its synthetic origin \u2014
- * REGARDLESS of subscription tier. Previously this gate returned `false` for
- * paid plans (creator/starter/professional/studio/enterprise) so paid users
- * exported with no visible mark; that is non-compliant.
+ * carry a clear disclosure of its synthetic origin. Disclosure can be satisfied
+ * by a combination of mechanisms \u2014 it does NOT have to be a burned-in pixel
+ * overlay on every frame.
  *
- * The function now ALWAYS returns a watermark tier so a visible drawtext
- * overlay is burned into every export. To preserve the paid-tier UX value,
- * the tier is downgraded to "paid" (smaller, lower-opacity, corner-only)
- * for paid plans \u2014 visible per Art. 50, but not the prominent center-bottom
- * banner free-tier users get.
+ * Policy decision (2026-05-10, Option B): we burn a visible drawtext watermark
+ * for FREE users only. Paid users get NO visible burn-in. Both tiers still
+ * receive the XMP machine-readable provenance metadata via `embedXmpProvenance`,
+ * and the public-share page (`PublicShare.tsx`) renders an "AI-generated
+ * content" disclosure badge for every shared export regardless of tier.
+ *
+ * The legal posture under that combination: machine-readable XMP provenance +
+ * human-visible PublicShare badge satisfies the Art. 50 disclosure obligation
+ * under the more aggressive reading we've adopted. C2PA Content Credentials
+ * would strengthen it further once a signing cert is provisioned.
+ *
+ * `fetchWatermarkTier` still returns `"free" | "paid"` (never null) so the
+ * caller can decide whether to skip the burn-in step; the type is preserved
+ * for backwards compatibility with `applyWatermarkOverlay` /
+ * `watermarkFilterSpec` which keep the same signature.
  */
 type WatermarkTier = "free" | "paid";
 
 async function fetchWatermarkTier(userId: string | undefined): Promise<WatermarkTier> {
-  if (!userId) return "free"; // No user = treat as free (most prominent mark)
+  if (!userId) return "free"; // No user = treat as free (visible burn-in)
   const { data } = await supabase
     .from("subscriptions")
     .select("plan_name")
@@ -463,11 +472,17 @@ async function _runExport(
   const exportConfig = await buildExportConfig(payload);
   exportConfig.userId = userId;
 
-  // EU AI Act Art. 50 (effective 2026-08-02): watermark is now ALWAYS applied
-  // to every AI-generated export. Tier only controls obtrusiveness.
+  // EU AI Act Art. 50 disclosure (Option B, 2026-05-10):
+  //   - free tier → burn visible drawtext watermark on the export
+  //   - paid tier → SKIP visible burn-in (the PublicShare disclosure badge +
+  //                  XMP machine-readable provenance carry the obligation)
+  // XMP metadata via `embedXmpProvenance` runs for BOTH tiers regardless.
   const watermarkTier = await fetchWatermarkTier(userId);
   const watermarkText = "AI-generated · motionmax";
-  log.info("AI Act Art. 50 watermark will be applied", { tier: watermarkTier });
+  log.info("AI Act Art. 50 disclosure: visible burn-in policy resolved", {
+    tier: watermarkTier,
+    burnInVisible: watermarkTier === "free",
+  });
 
   // If this job has been restarted after a crash, disable crossfade and Ken Burns
   // to prevent the same crash loop. Use the safest possible export path.
@@ -603,11 +618,14 @@ async function _runExport(
     // skip captions or crash ffmpeg.
     const captionStyle = normalizeCaptionStyle(payload.caption_style);
     const brandMark: string | undefined = payload.brandMark || payload.brand_mark || undefined;
-    // AI Act Art. 50 watermark always wins over user-supplied brand mark —
-    // we cannot let a user-supplied brand replace the disclosure mark.
+    // AI Act Art. 50 disclosure mark text. When a visible burn-in is applied
+    // (free tier only under Option B) it always uses this text — we cannot
+    // let a user-supplied brand replace the disclosure mark.
     const effectiveBrandMark: string = watermarkText;
-    // Tier only controls how obtrusive the burn-in is; both tiers get the mark.
+    // Option B: visible burn-in is FREE-tier only. Paid tier uses the
+    // XMP metadata + PublicShare badge to carry the disclosure.
     const watermarkTierForOverlay: WatermarkTier = watermarkTier;
+    const applyVisibleWatermark: boolean = watermarkTier === "free";
     // Held for diagnostics / forward-compat — user brand marks may eventually
     // co-exist with the disclosure if we add a second drawtext layer.
     void brandMark;
@@ -795,12 +813,18 @@ async function _runExport(
           message: "Crossfade failed — fell back to concat demuxer",
         });
       }
-      // EU AI Act Art. 50: watermark is mandatory regardless of which
-      // path produced finalOutputPath. Apply it to the output of BOTH the
-      // crossfade path AND the demuxer fallback path — otherwise an
-      // unlucky crossfade failure ships an unwatermarked export.
-      log.info("Applying AI Act watermark to stitched output", { tier: watermarkTierForOverlay, usedCrossfade });
-      await applyWatermarkOverlay(finalOutputPath, effectiveBrandMark, tempDir, watermarkTierForOverlay);
+      // Option B: free tier gets the visible burn-in regardless of which
+      // path produced finalOutputPath. We MUST apply it to BOTH the
+      // crossfade path AND the demuxer fallback path — that fix from
+      // B-NEW-12 (free-tier crossfade-fallback path was missing the
+      // mark) is preserved here. Paid tier skips this step entirely
+      // and relies on XMP + PublicShare badge for disclosure.
+      if (applyVisibleWatermark) {
+        log.info("Applying free-tier watermark to stitched output", { tier: watermarkTierForOverlay, usedCrossfade });
+        await applyWatermarkOverlay(finalOutputPath, effectiveBrandMark, tempDir, watermarkTierForOverlay);
+      } else {
+        log.info("Paid tier — skipping visible burn-in (XMP + PublicShare disclosure cover Art. 50)", { usedCrossfade });
+      }
     } else {
       // No crossfade — probe clips, then concat (with or without captions in ONE pass)
 
@@ -847,18 +871,36 @@ async function _runExport(
             message: `Concat + caption burn (single pass): ${clipPaths.length} clips, style=${captionStyle}`,
           });
 
+          // Option B: pass the tier through. concatWithCaptions skips the
+          // drawtext filter when tier === "paid" — captions still burn in.
           await concatWithCaptions(clipPaths, assPath, fontsDir, finalOutputPath, undefined, effectiveBrandMark, watermarkTierForOverlay);
           removeFiles(assPath);
-          log.info("Concat + captions + AI watermark done in single pass", { captionStyle, tier: watermarkTierForOverlay });
+          log.info("Concat + captions done in single pass", { captionStyle, tier: watermarkTierForOverlay, watermarkBurnedIn: applyVisibleWatermark });
         } else {
-          // ASS generation returned null — concat with the AI watermark only
-          await concatWithBrandMark(clipPaths, effectiveBrandMark, finalOutputPath, undefined, watermarkTierForOverlay);
-          log.info("Concat + AI watermark (no captions)", { tier: watermarkTierForOverlay });
+          // ASS generation returned null. Free → concatWithBrandMark burns
+          // the drawtext; paid → fall through concatFiles (no re-encode for
+          // the sake of a watermark we're not applying) so XMP is the only
+          // disclosure surface, which is the Option B paid contract.
+          if (applyVisibleWatermark) {
+            await concatWithBrandMark(clipPaths, effectiveBrandMark, finalOutputPath, undefined, watermarkTierForOverlay);
+            log.info("Concat + free-tier watermark (no captions)", { tier: watermarkTierForOverlay });
+          } else {
+            await concatFiles(clipPaths, finalOutputPath, false);
+            log.info("Concat (paid tier — no visible burn-in)", { tier: watermarkTierForOverlay });
+          }
         }
       } else {
-        // No captions — concat + AI Act watermark (Art. 50 mandates it always)
-        await concatWithBrandMark(clipPaths, effectiveBrandMark, finalOutputPath, undefined, watermarkTierForOverlay);
-        log.info("Concat + AI watermark (no captions)", { tier: watermarkTierForOverlay });
+        // No captions branch (B-NEW-12 latent bug: this path was previously
+        // a stream-copy demuxer concat that bypassed the watermark entirely
+        // for free users). Free → concatWithBrandMark burns the drawtext.
+        // Paid → plain concatFiles; XMP + PublicShare cover disclosure.
+        if (applyVisibleWatermark) {
+          await concatWithBrandMark(clipPaths, effectiveBrandMark, finalOutputPath, undefined, watermarkTierForOverlay);
+          log.info("Concat + free-tier watermark (no captions)", { tier: watermarkTierForOverlay });
+        } else {
+          await concatFiles(clipPaths, finalOutputPath, false);
+          log.info("Concat (paid tier — no visible burn-in)", { tier: watermarkTierForOverlay });
+        }
       }
     }
 

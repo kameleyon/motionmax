@@ -10,10 +10,14 @@ import fs from "fs";
 import { runFfmpeg, X264_MEM_FLAGS } from "./ffmpegCmd.js";
 
 /**
- * Watermark obtrusiveness tier. EU AI Act Art. 50 requires the watermark
- * always be present; the tier only controls font size, opacity, and position.
- *   - "free": prominent center-bottom mark, 60% opacity
- *   - "paid": small bottom-right mark, 35% opacity
+ * Watermark tier (Option B, 2026-05-10):
+ *   - "free": burn prominent center-bottom mark, 60% opacity
+ *   - "paid": NO visible burn-in. XMP metadata + PublicShare badge carry
+ *             the EU AI Act Art. 50 disclosure obligation.
+ *
+ * The drawtext filter from `watermarkFilterSpec()` is gated by the tier
+ * inside `concatWithCaptions` and `concatWithBrandMark` — when tier is
+ * "paid" the filter is omitted from the filter chain entirely.
  */
 export type WatermarkTier = "free" | "paid";
 
@@ -117,13 +121,15 @@ export async function concatWithCaptions(
   const fontsDirEsc = fontsDir.replace(/\\/g, "/").replace(/'/g, "'\\''");
   const assPathEsc = assPath.replace(/\\/g, "/").replace(/'/g, "'\\''");
 
-  // Build video filter chain: captions + AI Act watermark (always-on per Art. 50)
+  // Build video filter chain. Captions always burn in; the AI Act
+  // watermark drawtext is gated by tier (Option B: free only).
   let vf = `ass='${assPathEsc}':fontsdir='${fontsDirEsc}'`;
-  if (brandMark) {
-    vf += `,${watermarkFilterSpec(brandMark, watermarkTier)}`;
+  const burnWatermark = !!brandMark && watermarkTier === "free";
+  if (burnWatermark) {
+    vf += `,${watermarkFilterSpec(brandMark!, watermarkTier)}`;
   }
 
-  console.log(`[ConcatScenes] Joining ${files.length} clips + captions${brandMark ? ` + AI mark "${brandMark}" (${watermarkTier})` : ""} (single pass)`);
+  console.log(`[ConcatScenes] Joining ${files.length} clips + captions${burnWatermark ? ` + AI mark "${brandMark}" (${watermarkTier})` : ` (tier=${watermarkTier}, no visible burn-in)`} (single pass)`);
 
   try {
     await runFfmpeg([
@@ -150,7 +156,12 @@ export async function concatWithCaptions(
 
 /**
  * Concat files with brand mark only (no captions).
- * Re-encodes to burn the drawtext overlay.
+ * Re-encodes to burn the drawtext overlay when watermarkTier === "free".
+ *
+ * Option B: when watermarkTier === "paid", the drawtext filter is skipped
+ * (re-encode still happens to keep the output codec-consistent with the
+ * other branches; callers preferring no re-encode at all should call
+ * `concatFiles` directly instead).
  */
 export async function concatWithBrandMark(
   files: string[],
@@ -167,28 +178,29 @@ export async function concatWithBrandMark(
     .join("\n");
   await fs.promises.writeFile(listPath, listContent, "utf-8");
 
-  const vf = watermarkFilterSpec(brandMark, watermarkTier);
+  const burnWatermark = watermarkTier === "free";
+  const args = [
+    "-f", "concat",
+    "-safe", "0",
+    "-i", listPath,
+    ...(burnWatermark ? ["-vf", watermarkFilterSpec(brandMark, watermarkTier)] : []),
+    "-c:v", "libx264",
+    "-preset", "fast",
+    "-crf", "20",
+    "-pix_fmt", "yuv420p",
+    "-c:a", "aac",
+    "-b:a", "128k",
+    "-ar", "44100",
+    "-ac", "2",
+    "-movflags", "+faststart",
+    ...X264_MEM_FLAGS,
+    outputPath,
+  ];
 
-  console.log(`[ConcatScenes] Joining ${files.length} clips + AI mark "${brandMark}" (${watermarkTier})`);
+  console.log(`[ConcatScenes] Joining ${files.length} clips${burnWatermark ? ` + AI mark "${brandMark}" (${watermarkTier})` : ` (tier=${watermarkTier}, no visible burn-in)`}`);
 
   try {
-    await runFfmpeg([
-      "-f", "concat",
-      "-safe", "0",
-      "-i", listPath,
-      "-vf", vf,
-      "-c:v", "libx264",
-      "-preset", "fast",
-      "-crf", "20",
-      "-pix_fmt", "yuv420p",
-      "-c:a", "aac",
-      "-b:a", "128k",
-      "-ar", "44100",
-      "-ac", "2",
-      "-movflags", "+faststart",
-      ...X264_MEM_FLAGS,
-      outputPath,
-    ], timeoutMs);
+    await runFfmpeg(args, timeoutMs);
   } finally {
     try { fs.unlinkSync(listPath); } catch { /* ignore */ }
   }

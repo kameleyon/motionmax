@@ -4,7 +4,9 @@
  * Covers:
  *  1. ffmpeg failure → handler throws (job marked failed by index.ts processJob)
  *  2. Storage upload failure → error propagates (credits refunded upstream)
- *  3. Free-tier user (no paid subscription) → watermark is applied
+ *  3. Watermark policy (Option B, 2026-05-10):
+ *     - free-tier user → visible watermark IS burned in
+ *     - paid-tier user → NO visible watermark; XMP metadata still embedded
  *  4. Export concurrency cap → jobs wait when MAX_EXPORT_JOBS slots are full
  *
  * Design notes:
@@ -276,10 +278,15 @@ describe("handleExportVideo", () => {
       expect(result).toMatchObject({ success: true });
     });
 
-    it("should ALWAYS apply watermark for paid users at the 'paid' tier (EU AI Act Art. 50)", async () => {
-      // EU AI Act Art. 50 (effective 2026-08-02) requires AI-disclosure on
-      // every export regardless of subscription tier. Paid users still get
-      // a watermark — just smaller / lower opacity / corner-only ("paid" tier).
+    it("should NOT burn a visible watermark for paid users (Option B, 2026-05-10)", async () => {
+      // Option B: visible burn-in is FREE tier only. Paid users rely on XMP
+      // machine-readable provenance + the PublicShare disclosure badge to
+      // satisfy EU AI Act Art. 50. The no-captions / paid path therefore
+      // routes through concatFiles, NOT concatWithBrandMark.
+      //
+      // We also assert XMP metadata IS still embedded (via runFfmpeg) for
+      // paid exports — the disclosure obligation under Option B's reading
+      // depends on it being present on every tier.
       const { supabase } = await import("../lib/supabase.js");
 
       for (const plan of ["creator", "starter", "professional", "studio", "enterprise"]) {
@@ -306,19 +313,29 @@ describe("handleExportVideo", () => {
         const { uploadToSupabase } = await import("./export/storageHelpers.js");
         vi.mocked(uploadToSupabase).mockResolvedValue(`https://cdn.example.com/${plan}.mp4`);
 
+        const ffmpegMod = await import("./export/ffmpegCmd.js");
+        vi.mocked(ffmpegMod.runFfmpeg).mockResolvedValue(undefined as any);
+
         const { handleExportVideo } = await import("./exportVideo.js");
         const result = await handleExportVideo(`job-paid-${plan}`, makePayload(), `user-${plan}`);
 
         // Export completes successfully.
         expect(result).toMatchObject({ success: true });
-        // concatWithBrandMark MUST be called even for paid users — Art. 50.
-        const { concatWithBrandMark } = await import("./export/concatScenes.js");
-        expect(concatWithBrandMark).toHaveBeenCalled();
-        // Last positional arg should be the "paid" tier marker.
-        const lastCall = vi.mocked(concatWithBrandMark).mock.calls.at(-1);
-        expect(lastCall?.[4]).toBe("paid");
-        // The visible mark text must be the AI-disclosure string.
-        expect(lastCall?.[1]).toContain("AI-generated");
+
+        // concatWithBrandMark MUST NOT be called for paid users (Option B).
+        const { concatWithBrandMark, concatFiles } = await import("./export/concatScenes.js");
+        expect(concatWithBrandMark).not.toHaveBeenCalled();
+        // Paid path falls through to concatFiles (no visible burn-in).
+        expect(concatFiles).toHaveBeenCalled();
+
+        // XMP metadata IS still embedded on paid exports — embedXmpProvenance
+        // calls runFfmpeg with -metadata flags. Confirm at least one runFfmpeg
+        // invocation included the AI-disclosure metadata key.
+        const xmpInvocation = vi.mocked(ffmpegMod.runFfmpeg).mock.calls.find((call) => {
+          const args = call[0] as string[];
+          return args.some((a) => typeof a === "string" && a.startsWith("is_ai_generated="));
+        });
+        expect(xmpInvocation, `XMP provenance should run for plan=${plan}`).toBeDefined();
       }
     });
 

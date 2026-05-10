@@ -308,6 +308,10 @@ export default function TabOverview({ onGoTab }: { onGoTab: (t: string) => void 
         onClose={() => setCancelOpen(false)}
         videosRendered={o?.videos_rendered ?? 0}
         unusedCredits={credits}
+        // C-11-6: surface the end-of-period date so the confirmation
+        // screen can say exactly when access ends (FTC click-to-cancel
+        // expects a clear, dated cancellation acknowledgement).
+        periodEnd={o?.period_end ?? null}
         onChanged={() => { qc.invalidateQueries({ queryKey: ["billing"] }); }}
       />
 

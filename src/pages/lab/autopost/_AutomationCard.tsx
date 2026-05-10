@@ -39,6 +39,8 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { trackEvent } from "@/hooks/useAnalytics";
+import { EVENTS } from "@/lib/events";
 import { humanizeCron, formatRelativeTime, nextFireFromCron } from "./_utils";
 import { EditAutomationDialog } from "./_EditAutomationDialog";
 import { GenerateTopicsDialog } from "./_GenerateTopicsDialog";
@@ -154,6 +156,15 @@ export function AutomationCard({ schedule, lastRunAt }: AutomationCardProps) {
     },
     onSuccess: () => {
       toast.success("Run queued — check Run History in a moment");
+      // §11 Lens C3 — explicit user-initiated run separate from
+      // pg_cron-driven fires (those are server-side and not analytics-
+      // relevant for adoption).
+      try {
+        trackEvent(EVENTS.automation_run_now, {
+          schedule_id: schedule.id,
+          delivery_method: schedule.delivery_method ?? "social",
+        });
+      } catch { /* non-critical */ }
       void queryClient.invalidateQueries({ queryKey: ["autopost", "schedules-list"] });
       void queryClient.invalidateQueries({ queryKey: ["autopost", "last-runs"] });
       void queryClient.invalidateQueries({ queryKey: ["autopost", "schedule-spark", schedule.id] });
@@ -191,6 +202,15 @@ export function AutomationCard({ schedule, lastRunAt }: AutomationCardProps) {
     },
     onSuccess: (next) => {
       toast.success(next ? "Automation resumed" : "Automation paused");
+      // §11 Lens C3 — pause / resume is the strongest signal a user
+      // values (or doesn't) a created automation. Separate events to
+      // keep the GA4 funnel readable.
+      try {
+        trackEvent(
+          next ? EVENTS.automation_resumed : EVENTS.automation_paused,
+          { schedule_id: schedule.id },
+        );
+      } catch { /* non-critical */ }
       void queryClient.invalidateQueries({ queryKey: ["autopost", "schedules-list"] });
     },
     onError: (err: unknown) => {

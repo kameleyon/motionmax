@@ -1,6 +1,6 @@
 import { Helmet } from "react-helmet-async";
 import { useState, useEffect, useMemo } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Loader2,
   AlertTriangle,
@@ -9,6 +9,14 @@ import {
   Activity as ActivityIcon,
   Shield,
 } from "lucide-react";
+// C-11-6 / Comply L-C-09: FTC click-to-cancel (16 CFR Part 425, effective
+// 2026-05-14) requires the cancellation path to be at-least-as-easy as
+// signup. The Settings → Profile tab now surfaces a prominent
+// "Cancel subscription" affordance when an active paid sub exists, so a
+// user can go Settings → Cancel button → confirmation in TWO clicks
+// (no scrolling to find Billing, no navigation indirection).
+import { fetchBillingOverview } from "@/components/billing/_shared/billingApi";
+import { CancelRetentionModal } from "@/components/billing/CancelRetentionModal";
 import { CURRENT_POLICY_VERSION } from "@/lib/policyVersion";
 import { loadAdminFonts } from "@/lib/loadCaptionFonts";
 
@@ -89,6 +97,17 @@ export default function Settings() {
   const [isCancellingDeletion, setIsCancellingDeletion] = useState(false);
   const [acceptedPolicyVersion, setAcceptedPolicyVersion] = useState<string | null>(null);
   const [acceptedPolicyAt, setAcceptedPolicyAt] = useState<string | null>(null);
+  // C-11-6: cancel modal lives directly in Settings so the path from
+  // landing on /settings to confirming a cancel is 2 clicks (button
+  // → confirm). The modal handles its own busy state, error toasts,
+  // and post-cancel confirmation copy.
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const billingOverviewQ = useQuery({
+    queryKey: ["billing", "overview"],
+    queryFn: fetchBillingOverview,
+    enabled: !!user,
+    staleTime: 60_000,
+  });
 
   const passwordStrength = useMemo(() => getPasswordStrength(newPassword), [newPassword]);
 
@@ -529,6 +548,76 @@ export default function Settings() {
                 </div>
               </div>
 
+              {/* C-11-6 (Comply L-C-09): Subscription card. Sits ABOVE the
+                  Danger Zone so a user looking for "how do I cancel" finds
+                  it without scrolling past account-deletion. The
+                  "Cancel subscription" button opens the same modal as the
+                  Billing → Overview tab — one click here, one click in the
+                  modal, done (FTC 16 CFR Part 425 click-to-cancel gate).
+                  Only paid plans see the cancel affordance; Free plan
+                  users see a quiet "no active subscription" line. */}
+              <div className="card" style={{ marginTop: 18 }}>
+                <h3>Subscription</h3>
+                {(() => {
+                  const o = billingOverviewQ.data;
+                  const isPaid = !!o && o.plan && o.plan !== "free";
+                  const planLabel = o?.plan
+                    ? o.plan.charAt(0).toUpperCase() + o.plan.slice(1)
+                    : "Free";
+                  if (!isPaid) {
+                    return (
+                      <div className="set-row" style={{ borderTop: 0, paddingTop: 0 }}>
+                        <div className="info">
+                          <div className="t">No active subscription</div>
+                          <div className="d">
+                            You're on the {planLabel} plan. Upgrade any time from the Billing page.
+                          </div>
+                        </div>
+                        <a
+                          href="/billing?tab=plans"
+                          className="btn-ghost"
+                          style={{ padding: "8px 14px", fontSize: 12, textDecoration: "none" }}
+                        >
+                          View plans
+                        </a>
+                      </div>
+                    );
+                  }
+                  return (
+                    <>
+                      <div className="set-row" style={{ borderTop: 0, paddingTop: 0 }}>
+                        <div className="info">
+                          <div className="t">{planLabel} plan {o?.paused_until ? "· paused" : "· active"}</div>
+                          <div className="d">
+                            {o?.period_end
+                              ? `Next renewal: ${new Date(o.period_end).toLocaleDateString(undefined, { dateStyle: "long" })}`
+                              : "Manage your subscription, pause it, or cancel any time."}
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <a
+                            href="/billing"
+                            className="btn-ghost"
+                            style={{ padding: "8px 14px", fontSize: 12, textDecoration: "none" }}
+                          >
+                            Manage billing
+                          </a>
+                          <button
+                            type="button"
+                            className="btn-ghost danger"
+                            onClick={() => setCancelOpen(true)}
+                            style={{ padding: "8px 14px", fontSize: 12 }}
+                            aria-label="Cancel subscription"
+                          >
+                            Cancel subscription
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+
               {/* Danger zone — preserves existing delete-account + cancel-deletion wiring */}
               <div className="card danger-card" style={{ marginTop: 18 }}>
                 <h3>
@@ -963,6 +1052,19 @@ export default function Settings() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* C-11-6: cancel modal mounted at the page level so it portals
+          above the AppShell and is reachable from the Subscription card. */}
+      <CancelRetentionModal
+        open={cancelOpen}
+        onClose={() => setCancelOpen(false)}
+        videosRendered={billingOverviewQ.data?.videos_rendered ?? 0}
+        unusedCredits={billingOverviewQ.data?.credits_balance ?? 0}
+        periodEnd={billingOverviewQ.data?.period_end ?? null}
+        onChanged={() => {
+          queryClient.invalidateQueries({ queryKey: ["billing"] });
+        }}
+      />
     </AppShell>
   );
 }

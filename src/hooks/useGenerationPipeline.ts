@@ -14,6 +14,8 @@ import { toast as sonnerToast } from "sonner";
 import { createScopedLogger } from "@/lib/logger";
 import { breadcrumbGenerationStart } from "@/lib/sentryBreadcrumbs";
 import { startGenerationTrace, shortTraceRef } from "@/lib/tracing";
+import { trackEvent } from "@/hooks/useAnalytics";
+import { EVENTS } from "@/lib/events";
 import { callPhase } from "./generation/callPhase";
 import { resumeCinematicPipeline } from "./generation/cinematicPipeline";
 import { runUnifiedPipeline } from "./generation/unifiedPipeline";
@@ -88,6 +90,32 @@ export function useGenerationPipeline() {
       creditCost: expectedSceneCount,
     });
 
+    // §11 Lens C2 — fire client-side activation event + mirror server-side
+    // to funnel_events so the admin funnel can count it without depending on
+    // GA4. project_id is best-effort (may be undefined for brand-new submits
+    // — IntakeForm now seeds it via create_project_idempotent).
+    const genStartedAt = Date.now();
+    try {
+      trackEvent(EVENTS.generation_started, {
+        project_id: params.projectId ?? "(pending)",
+        task_type: params.projectType ?? "doc2video",
+        length: params.length,
+      });
+    } catch { /* analytics non-critical */ }
+    // Fire-and-forget RPC mirror. Worker also writes first_generation_started
+    // when it starts processing the script job, so a network error here is
+    // tolerable — we may miss the click-to-start lag but not the cohort.
+    void (supabase.rpc as unknown as (
+      fn: string, args: Record<string, unknown>,
+    ) => Promise<unknown>)("record_funnel_event", {
+      p_stage: "first_generation_started",
+      p_props: {
+        project_id: params.projectId ?? null,
+        task_type: params.projectType ?? "doc2video",
+        length: params.length,
+      },
+    }).then(() => {}, () => {});
+
     // Bump epoch to abort any stale pipeline
     epochRef.current++;
 
@@ -134,6 +162,18 @@ export function useGenerationPipeline() {
         : `${rawMsg} (Ref: ${shortTraceRef(traceId)})`;
       setState((prev) => ({ ...prev, step: "error", isGenerating: false, error: errorMessage, statusMessage: errorMessage }));
       sonnerToast.error("Generation Failed", { description: errorMessage });
+
+      // §11 Lens C2 — terminal-failure event. error_class is the message
+      // prefix only (no tail / no PII) so the GA4 dimension stays low-card.
+      try {
+        const errorClass = rawMsg.split(/[:.(]/)[0]?.trim().slice(0, 64) || "unknown";
+        trackEvent(EVENTS.generation_failed, {
+          project_id: params.projectId ?? "(none)",
+          task_type: params.projectType ?? "doc2video",
+          error_class: errorClass,
+          duration_ms: Date.now() - genStartedAt,
+        });
+      } catch { /* analytics non-critical */ }
     } finally {
       endTrace();
     }

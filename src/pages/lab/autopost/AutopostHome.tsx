@@ -36,6 +36,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import AppShell from "@/components/dashboard/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
+import { trackEvent } from "@/hooks/useAnalytics";
+import { EVENTS } from "@/lib/events";
 import { AutopostNav } from "./_AutopostNav";
 import { loadAdminFonts } from "@/lib/loadCaptionFonts";
 
@@ -173,6 +175,13 @@ async function fetchRadarRuns(): Promise<RadarRow[]> {
 export default function AutopostHome() {
   const queryClient = useQueryClient();
   const { isAdmin } = useAdminAuth();
+
+  // §11 Lens C3 — feature-adoption funnel anchor for Autopost Lab. Fires
+  // once on first mount; subsequent navigation between RunHistory /
+  // RunDetail isn't tracked separately (low GA4 cardinality wins).
+  useEffect(() => {
+    try { trackEvent(EVENTS.autopost_lab_opened); } catch { /* non-critical */ }
+  }, []);
 
   const automationsQuery = useQuery({
     queryKey: ["autopost", "schedules-list"],

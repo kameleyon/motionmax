@@ -15,6 +15,8 @@ import { useVoiceCloning } from "@/hooks/useVoiceCloning";
 import { useSubscription } from "@/hooks/useSubscription";
 import { PLAN_LIMITS } from "@/lib/planLimits";
 import { createScopedLogger } from "@/lib/logger";
+import { trackEvent } from "@/hooks/useAnalytics";
+import { EVENTS } from "@/lib/events";
 import AppShell from "@/components/dashboard/AppShell";
 import VoiceCard from "@/components/voice-lab/VoiceCard";
 import {
@@ -55,6 +57,14 @@ export default function VoiceLab() {
   const [language, setLanguage] = useState("en");
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
+
+  // §11 Lens C3 — fire once on first paint so the feature-adoption funnel
+  // can count distinct users that opened the Voice Lab in a given period.
+  // Tab navigation inside the lab isn't tracked separately to keep GA4
+  // cardinality low; we care about lab-opened, not which sub-tab won.
+  useEffect(() => {
+    try { trackEvent(EVENTS.voice_lab_opened); } catch { /* non-critical */ }
+  }, []);
 
   // Liked + bookmarked persisted per-user. We hydrate lazily on mount
   // so SSR / first-paint never reads from localStorage.
@@ -136,6 +146,18 @@ export default function VoiceLab() {
 
     const sampleText = getSampleText(voice.name, language);
     setPlayingVoiceId(voice.id);
+
+    // §11 Lens C3 — fire BEFORE the worker fetch so the click is captured
+    // even if the queue or TTS provider fails downstream. is_clone is a
+    // low-card boolean (the worker would otherwise need its own dimension
+    // for clone-vs-builtin attribution).
+    try {
+      trackEvent(EVENTS.voice_preview_played, {
+        voice_id: voice.id,
+        is_clone: voice.id.startsWith("clone:"),
+        language,
+      });
+    } catch { /* non-critical */ }
 
     try {
       const { data: job, error } = await supabase
@@ -721,6 +743,15 @@ function ClonedTab() {
   const [removeNoise, setRemoveNoise] = useState(true);
   const [voiceName, setVoiceName] = useState("");
   const [consentAccepted, setConsentAccepted] = useState(false);
+  // C-13-3 (Comply L-C-03): voice recordings are biometric identifiers
+  // under BIPA / CUBI / CPRA. The first checkbox (consentAccepted)
+  // covers the "I own / I have permission" representation; this second
+  // checkbox is the explicit biometric-data consent required at the
+  // moment of capture. Both must be checked before the cloning job
+  // queues. The timestamp of this consent is persisted server-side
+  // into user_voices.voice_biometric_consent_at by the clone-voice-fish
+  // edge function (migration: 20260510260000_voice_biometric_consent).
+  const [biometricConsentAccepted, setBiometricConsentAccepted] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
 
   useEffect(() => () => {
@@ -795,26 +826,56 @@ function ClonedTab() {
       const dur = await getAudioDuration(audioBlob);
       if (dur < 10) { toast.error("Audio too short", { description: "10 seconds minimum." }); return; }
     } catch { /* skip */ }
-    await cloneVoice({
-      file: audioBlob,
-      name: voiceName.trim(),
-      description: `Created via ${recordedBlob ? "recording" : "file upload"}`,
-      removeNoise,
-      consentGiven: consentAccepted,
-    });
+
+    // §11 Lens C3 — record the user committed to the clone (after duration
+    // gate, before the network call). `source` tells us whether record vs
+    // upload pulls more weight in adoption.
+    const source: "recording" | "upload" = recordedBlob ? "recording" : "upload";
+    try { trackEvent(EVENTS.voice_clone_started, { source, remove_noise: removeNoise }); } catch { /* non-critical */ }
+
+    try {
+      await cloneVoice({
+        file: audioBlob,
+        name: voiceName.trim(),
+        description: `Created via ${recordedBlob ? "recording" : "file upload"}`,
+        removeNoise,
+        consentGiven: consentAccepted,
+        // C-13-3: persist BIPA / CUBI / CPRA biometric-data consent.
+        biometricConsentGiven: biometricConsentAccepted,
+      });
+      try { trackEvent(EVENTS.voice_clone_saved, { source }); } catch { /* non-critical */ }
+    } catch (err) {
+      // useVoiceCloning surfaces a toast itself; here we just emit the
+      // funnel event so adoption metrics see the failure cohort.
+      const errorClass = err instanceof Error ? err.message.split(/[:.(]/)[0]?.trim().slice(0, 64) : "unknown";
+      try { trackEvent(EVENTS.voice_clone_failed, { source, error_class: errorClass ?? "unknown" }); } catch { /* non-critical */ }
+      // Don't re-throw — the hook already showed the toast and the UX
+      // contract preserved by NOT clearing the form (user can retry).
+      return;
+    }
     setVoiceName("");
     setRecordedBlob(null);
     setUploadedFile(null);
     setRecordingDuration(0);
     setConsentAccepted(false);
+    setBiometricConsentAccepted(false);
   };
 
   const fmt = (s: number) =>
     `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
   const hasAudio = !!recordedBlob || !!uploadedFile;
-  const step = !hasAudio ? 0 : !voiceName.trim() || !consentAccepted ? 1 : 2;
-  const canClone = hasAudio && voiceName.trim().length > 0 && consentAccepted && !isCloning;
+  // C-13-3: both ownership and biometric consent are required for step 2.
+  const step =
+    !hasAudio ? 0 :
+    !voiceName.trim() || !consentAccepted || !biometricConsentAccepted ? 1 :
+    2;
+  const canClone =
+    hasAudio &&
+    voiceName.trim().length > 0 &&
+    consentAccepted &&
+    biometricConsentAccepted &&
+    !isCloning;
 
   return (
     <div>
@@ -948,6 +1009,34 @@ function ClonedTab() {
           />
           <span className="text-[12px] text-[#8A9198] leading-relaxed">
             I confirm this voice belongs to me or I have explicit consent from the owner to clone it for use in my projects.
+          </span>
+        </label>
+        {/* C-13-3 (Comply L-C-03): BIPA / CUBI / CPRA require an explicit,
+            time-stamped consent at the moment of biometric capture. This
+            checkbox is intentionally distinct from the ownership-or-
+            permission representation above so we can prove both: that
+            the user attested they had rights to the source voice, AND
+            that they specifically authorised storage and processing of
+            their (or the owner's) voice as biometric data. Both are
+            required to proceed (canClone gate). */}
+        <label className="flex items-start gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={biometricConsentAccepted}
+            onChange={(e) => setBiometricConsentAccepted(e.target.checked)}
+            className="mt-0.5 accent-[#14C8CC]"
+          />
+          <span className="text-[12px] text-[#8A9198] leading-relaxed">
+            I consent to the collection, storage, and processing of this voice recording as
+            biometric data under the Illinois Biometric Information Privacy Act (BIPA),
+            the Texas Capture or Use of Biometric Identifier Act (CUBI), the California
+            Consumer Privacy Act (CPRA), and similar laws. I understand I can withdraw this
+            consent at any time by deleting the voice from the Voice Lab, after which the
+            biometric data is permanently removed within 24 hours (see{" "}
+            <a href="/privacy" target="_blank" rel="noreferrer" className="text-[#14C8CC] underline">
+              Privacy Policy §7.1
+            </a>
+            ).
           </span>
         </label>
         <button

@@ -35,30 +35,70 @@ export default function AcceptableUse() {
           </p>
         </div>
 
+        {/* C-13-8 / Tongue TONGUE-11: English-only disclosure. Wave 3
+            B-NEW-11 already reduced the marketing "11 languages" claim to
+            "Multilingual voiceover" — so the GDPR Art. 12(1)
+            "intelligible-to-claimed-audience" concern is largely defused.
+            This notice is the documentary acknowledgement that the legal
+            text itself is still English-only and gives users a clear
+            contact path before being bound. */}
+        <section className="rounded-md border border-border/40 bg-muted/20 p-4 text-sm text-muted-foreground leading-relaxed">
+          This document is provided in English. We are working to translate it into additional
+          languages. If you do not understand any provision, please contact us at{" "}
+          <a href="mailto:support@motionmax.io" className="text-primary hover:underline">
+            support@motionmax.io
+          </a>{" "}
+          for clarification before using the Service.
+        </section>
+
         <section className="space-y-3">
           <h2 className="text-xl font-semibold text-foreground">1. Overview</h2>
           <p className="text-muted-foreground leading-relaxed">
-            MotionMax provides AI-powered video generation tools. By using our platform, you agree to use it responsibly
+            MotionMax provides AI-powered video, image, and voice generation tools. By using our platform, you agree to use it responsibly
             and in accordance with this Acceptable Use Policy ("AUP"). Violations may result in account suspension or termination.
           </p>
         </section>
 
+        {/* C-13-2 (Comply L-C-02): the previous §2 banned "deepfakes"
+            categorically, which contradicted the core product (image-to-
+            video + voice cloning IS synthetic-media generation) and made
+            the AUP unenforceable. Rewritten with consent-based language
+            that draws a clear line between legitimate synthetic media and
+            non-consensual impersonation / deception. */}
         <section className="space-y-3">
-          <h2 className="text-xl font-semibold text-foreground">2. Prohibited Content</h2>
-          <p className="text-muted-foreground leading-relaxed">You may not use MotionMax to create or distribute content that:</p>
+          <h2 className="text-xl font-semibold text-foreground">2. Prohibited Uses</h2>
+          <p className="text-muted-foreground leading-relaxed">You may NOT use the Service to:</p>
           <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
-            <li>Is illegal, harmful, threatening, abusive, harassing, or defamatory</li>
-            <li>Infringes any intellectual property rights of any third party</li>
-            <li>Contains explicit, pornographic, or sexually explicit material</li>
-            <li>Promotes violence, terrorism, or self-harm</li>
-            <li>Spreads disinformation, deepfakes, or misleading content designed to deceive</li>
-            <li>Violates the privacy of any individual without consent</li>
-            <li>Targets or harasses specific individuals or groups</li>
+            <li>Generate synthetic media (image, voice, or video) depicting any identifiable person without their explicit prior consent.</li>
+            <li>Create content intended to deceive viewers into believing it depicts real events that did not occur.</li>
+            <li>Impersonate any identified person in commercial, political, or otherwise public-facing communications without their consent.</li>
+            <li>Produce content that is illegal, harmful, threatening, abusive, harassing, or defamatory.</li>
+            <li>Infringe the intellectual property rights of any third party.</li>
+            <li>Generate explicit, pornographic, or sexually explicit material — including non-consensual intimate imagery of any kind.</li>
+            <li>Promote violence, terrorism, or self-harm; produce content depicting minors in unsafe contexts.</li>
+            <li>Spread disinformation or manipulated media designed to mislead a public audience without clear AI-generated disclosure.</li>
+            <li>Violate the privacy of any individual, or target / harass specific individuals or groups.</li>
           </ul>
         </section>
 
+        {/* C-13-2 §2.x — explicit voice-cloning consent clause. Pairs
+            with src/pages/VoiceLab.tsx's BIPA consent UI and the
+            voice_biometric_consent_at column added in
+            supabase/migrations/20260510260000_voice_biometric_consent.sql. */}
         <section className="space-y-3">
-          <h2 className="text-xl font-semibold text-foreground">3. Voice Cloning</h2>
+          <h2 className="text-xl font-semibold text-foreground">2.1 Voice Cloning Consent</h2>
+          <p className="text-muted-foreground leading-relaxed">
+            You represent that you have explicit consent from any voice owner before cloning their voice on the Service.
+            Voice cloning of public figures, deceased persons, or any individual without their consent is strictly
+            prohibited and is grounds for immediate termination. Where applicable jurisdictions classify voice
+            recordings as biometric identifiers (Illinois BIPA, Texas CUBI, California CPRA, and similar laws),
+            you further acknowledge that consent must be in writing and that the voice owner retains the right to
+            withdraw consent and request deletion of their biometric data at any time.
+          </p>
+        </section>
+
+        <section className="space-y-3">
+          <h2 className="text-xl font-semibold text-foreground">3. Voice Cloning — Practical Use</h2>
           <p className="text-muted-foreground leading-relaxed">
             The voice cloning feature requires your explicit consent and must only be used with voices you have the legal right
             to clone. Cloning another person's voice without their explicit written consent is strictly prohibited and may

@@ -11,6 +11,8 @@
  */
 import { createScopedLogger } from "@/lib/logger";
 import { supabase } from "@/integrations/supabase/client";
+import { trackEvent } from "@/hooks/useAnalytics";
+import { EVENTS } from "@/lib/events";
 import {
   type GenerationParams,
   type PipelineContext,
@@ -26,6 +28,10 @@ export async function runUnifiedPipeline(
   _expectedSceneCount: number
 ): Promise<void> {
   const isCinematic = params.projectType === "cinematic";
+  // §11 Lens C2 — wall-clock for the duration_ms dimension on
+  // generation_completed. Spans the full unified-pipeline run including
+  // queue wait + worker time, which is what the user actually experiences.
+  const pipelineStartMs = Date.now();
 
   log.debug("Starting unified pipeline", { projectType: params.projectType, format: params.format, length: params.length });
 
@@ -281,4 +287,31 @@ export async function runUnifiedPipeline(
     title: "Video Generated!",
     description: `"${finalResult.title}" is ready with ${finalScenes?.length || 0} scenes.`,
   });
+
+  // §11 Lens C2 — success activation event. Fired only after the
+  // finalize job comes back successful so a worker-side failure that
+  // surfaces as a different state transition doesn't double-count.
+  try {
+    trackEvent(EVENTS.generation_completed, {
+      project_id: projectId ?? "(unknown)",
+      task_type: params.projectType ?? "doc2video",
+      duration_ms: Date.now() - pipelineStartMs,
+      scene_count: finalScenes?.length ?? 0,
+      success: true,
+    });
+  } catch { /* analytics non-critical */ }
+  // Mirror to funnel_events so the admin funnel's
+  // first_generation_completed stage has a server-side anchor too. Worker
+  // ALSO writes this from finalize_generation; the client mirror is a
+  // belt-and-braces guard for early-cohort users.
+  void (supabase.rpc as unknown as (
+    fn: string, args: Record<string, unknown>,
+  ) => Promise<unknown>)("record_funnel_event", {
+    p_stage: "first_generation_completed",
+    p_props: {
+      project_id: projectId,
+      task_type: params.projectType ?? "doc2video",
+      duration_ms: Date.now() - pipelineStartMs,
+    },
+  }).then(() => {}, () => {});
 }

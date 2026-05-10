@@ -61,6 +61,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { trackEvent } from "@/hooks/useAnalytics";
+import { EVENTS } from "@/lib/events";
 
 /* ────────────────────────────────────────────────────────────── */
 /* Types + helpers                                                */
@@ -425,6 +427,17 @@ export function ConnectedAccountsList({
         toast.error("Session expired — please sign in again");
         return;
       }
+      // §11 Lens C3 — fire on intent-to-connect (the click that
+      // navigates to the OAuth provider). True OAuth-completed tracking
+      // requires server-side firing from the /api/autopost/connect/
+      // callback; the intent event is the strongest client-side signal
+      // we can capture here and is what adoption funnels need.
+      try {
+        trackEvent(EVENTS.social_account_connected, {
+          platform,
+          surface: intakeMode ? "intake" : "settings",
+        });
+      } catch { /* non-critical */ }
       // Top-level navigation: JWT must ride as a query param because
       // browsers can't set Authorization on a GET navigation.
       window.location.href = `/api/autopost/connect/${platform}/start?token=${encodeURIComponent(

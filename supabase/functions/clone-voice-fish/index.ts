@@ -28,6 +28,13 @@ interface CloneRequestBody {
   description?: string;
   transcript?: string;
   consentGiven: boolean;
+  // C-13-3 (Comply L-C-03): explicit BIPA / CUBI / CPRA biometric-data
+  // consent captured at the moment of upload in Voice Lab. Distinct
+  // from `consentGiven`, which covers the ownership-or-permission
+  // representation. The worker that creates the user_voices row reads
+  // this flag from the job payload and stamps
+  // user_voices.voice_biometric_consent_at = now() when true.
+  biometricConsentGiven?: boolean;
   removeNoise?: boolean;
 }
 
@@ -68,13 +75,24 @@ export async function handler(req: Request): Promise<Response> {
     }
 
     const body = (await req.json()) as CloneRequestBody;
-    const { storagePath, voiceName, description, transcript, consentGiven, removeNoise } = body;
+    const {
+      storagePath, voiceName, description, transcript,
+      consentGiven, biometricConsentGiven, removeNoise,
+    } = body;
 
     if (!consentGiven) {
       return new Response(JSON.stringify({ error: "Consent is required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+    // C-13-3: biometric consent is non-negotiable under BIPA / CUBI /
+    // CPRA. Refuse the request rather than create an unprovable record.
+    if (!biometricConsentGiven) {
+      return new Response(
+        JSON.stringify({ error: "Biometric data consent (BIPA / CUBI / CPRA) is required to clone a voice." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
     if (!storagePath || !voiceName?.trim()) {
       return new Response(JSON.stringify({ error: "storagePath and voiceName are required" }), {
@@ -133,6 +151,11 @@ export async function handler(req: Request): Promise<Response> {
           description: description ?? null,
           transcript: transcript ?? null,
           consentGiven,
+          // C-13-3: forwarded to the worker so it can stamp
+          // user_voices.voice_biometric_consent_at = now() at the moment
+          // the user_voices row is created.
+          biometricConsentGiven: !!biometricConsentGiven,
+          biometricConsentAt: new Date().toISOString(),
           removeNoise: removeNoise ?? true,
         },
         status: "pending",

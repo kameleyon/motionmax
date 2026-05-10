@@ -28,9 +28,21 @@ type KpisRow = {
 };
 type TimeseriesRow = { day: string; value: number };
 type PlanMixRow = { plan_name: string; count: number };
-type FunnelRow = {
-  signups: number; first_project: number; first_gen: number;
-  returned: number; paid: number;
+/**
+ * §11 Lens C1 — real funnel row shape returned by get_signup_funnel.
+ * Replaces the old `FunnelRow` (signups / first_project / first_gen /
+ * returned / paid) that the hardcoded 100% rows were built on top of.
+ */
+type FunnelStageRow = {
+  stage:
+    | "landing_visit"
+    | "signup_started"
+    | "signup_completed"
+    | "first_generation_started"
+    | "first_generation_completed"
+    | "first_paid_conversion";
+  count: number;
+  pct_of_top: number;
 };
 type ProjectTypeRow = {
   project_type: string; count: number; last_7d: number; last_30d: number;
@@ -107,12 +119,22 @@ export function TabAnalytics(): JSX.Element {
     ...ADMIN_DEFAULT_QUERY_OPTIONS,
   });
 
+  // §11 Lens C1 — real funnel. Calls the new get_signup_funnel(p_window_days)
+  // function which uses funnel_events + auth.users + video_generation_jobs
+  // + subscriptions instead of fudging the first three rows at 100%. Stages
+  // with no event data return count=0 and are rendered as "—" below.
   const funnelQuery = useQuery({
     queryKey: adminKey("analytics", "funnel", period),
-    queryFn: async (): Promise<FunnelRow> => {
-      const { data, error } = await supabase.rpc("admin_analytics_funnel", { p_since: since });
-      if (error) throw error;
-      return data as unknown as FunnelRow;
+    queryFn: async (): Promise<FunnelStageRow[]> => {
+      const rpc = supabase.rpc.bind(supabase) as unknown as (
+        fn: string,
+        args?: Record<string, unknown>,
+      ) => Promise<{ data: FunnelStageRow[] | null; error: { message: string } | null }>;
+      const { data, error } = await rpc("get_signup_funnel", {
+        p_window_days: PERIOD_DAYS[period],
+      });
+      if (error) throw new Error(error.message);
+      return data ?? [];
     },
     ...ADMIN_DEFAULT_QUERY_OPTIONS,
   });
@@ -146,7 +168,7 @@ export function TabAnalytics(): JSX.Element {
   const dauValues = (dauQuery.data ?? []).map((r) => r.value);
   const planMix = planMixQuery.data ?? [];
   const planTotal = planMix.reduce((s, r) => s + r.count, 0);
-  const funnel = funnelQuery.data;
+  const funnelStages = funnelQuery.data ?? [];
   const features = (featuresQuery.data ?? []).slice(0, 6);
   const featureTotal = features.reduce((s, r) => s + r.count, 0);
 
@@ -172,18 +194,42 @@ export function TabAnalytics(): JSX.Element {
     toast.success(`Exported ${count} day${count === 1 ? "" : "s"} of DAU data`);
   }, [dauQuery.data, period]);
 
+  // §11 Lens C1 — real funnel rendering. Old version hardcoded the first
+  // three rows to `funnel.signups` with pctOfTop=100 (i.e. 100% retention
+  // through onboarding, which is impossible). Now each stage shows its
+  // real count + percentage relative to the top stage with non-zero data;
+  // stages with count=0 render the dash "—" so the UI is honest about
+  // gaps rather than fabricating engagement.
+  const FUNNEL_STAGE_DISPLAY: Record<
+    FunnelStageRow["stage"],
+    { label: string; annotSuffix: string; color: string }
+  > = {
+    landing_visit:              { label: "Visited landing",         annotSuffix: " of top",       color: "#7ad6e6" },
+    signup_started:             { label: "Started sign-up",         annotSuffix: " started",      color: "#14C8CC" },
+    signup_completed:           { label: "Completed sign-up",       annotSuffix: " completed",    color: "#14C8CC" },
+    first_generation_started:   { label: "First generation started", annotSuffix: " began gen",    color: "#14C8CC" },
+    first_generation_completed: { label: "First generation done",   annotSuffix: " activated",    color: "#E4C875" },
+    first_paid_conversion:      { label: "Upgraded to paid",        annotSuffix: " conversion",   color: "#E4C875" },
+  };
   const funnelRows = useMemo(() => {
-    if (!funnel) return [];
-    const top = funnel.signups || 1;
-    return [
-      { label: "Visited landing", n: funnel.signups, pctOfTop: 100, annot: "(signup-base)", color: "#7ad6e6" },
-      { label: "Started sign-up", n: funnel.signups, pctOfTop: 100, annot: "100% of base", color: "#14C8CC" },
-      { label: "Completed sign-up", n: funnel.signups, pctOfTop: 100, annot: pctFmt(pct(funnel.signups, top)) + " complete", color: "#14C8CC" },
-      { label: "First generation", n: funnel.first_gen, pctOfTop: pct(funnel.first_gen, top), annot: pctFmt(pct(funnel.first_gen, top)) + " activate", color: "#14C8CC" },
-      { label: "Returned next day", n: funnel.returned, pctOfTop: pct(funnel.returned, top), annot: pctFmt(pct(funnel.returned, top)) + " retention", color: "#E4C875" },
-      { label: "Upgraded to paid", n: funnel.paid, pctOfTop: pct(funnel.paid, top), annot: pctFmt(pct(funnel.paid, top)) + " conversion", color: "#E4C875" },
-    ];
-  }, [funnel]);
+    return funnelStages.map((row) => {
+      const display = FUNNEL_STAGE_DISPLAY[row.stage] ?? {
+        label: row.stage, annotSuffix: "", color: "#5A6268",
+      };
+      const hasData = row.count > 0;
+      // Render "—" when the stage has no data. Important for stages like
+      // landing_visit before the marketing site is wired to record events
+      // — the old behavior fabricated 100% which masked the gap.
+      return {
+        label: display.label,
+        n: row.count,
+        pctOfTop: hasData ? Number(row.pct_of_top) : 0,
+        annot: hasData ? `${pctFmt(Number(row.pct_of_top))}${display.annotSuffix}` : "no data yet",
+        color: display.color,
+        hasData,
+      };
+    });
+  }, [funnelStages]);
 
   return (
     <div>
@@ -254,13 +300,20 @@ export function TabAnalytics(): JSX.Element {
             <div key={r.label} style={{ display: "grid", gridTemplateColumns: "180px 1fr 100px 140px", gap: 12, alignItems: "center" }}>
               <div style={{ fontSize: 13, color: "var(--ink-dim)" }}>{r.label}</div>
               <div className="bar-track" style={{ height: 18 }}>
-                <div className="bar-fill" style={{ width: Math.max(r.pctOfTop, 1) + "%", background: r.color }} />
+                {/* §11 Lens C1: only paint a fill when the stage has real
+                    data. Empty stages render an empty track instead of a
+                    forced 1%-wide sliver, so the visual gap is honest. */}
+                {r.hasData && (
+                  <div className="bar-fill" style={{ width: Math.max(r.pctOfTop, 1) + "%", background: r.color }} />
+                )}
               </div>
-              <div className="mono strong" style={{ fontSize: 12, color: "var(--ink)", textAlign: "right" }}>{fmtNum(r.n)}</div>
+              <div className="mono strong" style={{ fontSize: 12, color: r.hasData ? "var(--ink)" : "var(--ink-mute)", textAlign: "right" }}>
+                {r.hasData ? fmtNum(r.n) : "—"}
+              </div>
               <div className="mono muted" style={{ fontSize: 11, letterSpacing: ".04em" }}>{r.annot}</div>
             </div>
           ))}
-          {!funnel && (
+          {funnelRows.length === 0 && (
             <div style={{ color: "var(--ink-mute)", fontSize: 12, padding: "12px 0" }}>
               {funnelQuery.isLoading ? "Loading funnel…" : "No funnel data for this period"}
             </div>

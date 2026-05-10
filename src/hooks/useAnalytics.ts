@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { hasAnalyticsConsent } from "@/components/CookieConsent";
+import { hasAnswered, onConsentChange } from "@/lib/cookieConsent";
 
 // ── UTM persistence ──────────────────────────────────────────────────────────
 // Capture UTM params on landing and persist in sessionStorage so they survive
@@ -7,6 +8,78 @@ import { hasAnalyticsConsent } from "@/components/CookieConsent";
 
 const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"] as const;
 const UTM_STORAGE_KEY = "mm_utm";
+
+// ── Pre-consent event buffer (§11 Lens C5) ──────────────────────────────────
+// Cookie banner mounts ~1.5 s after JS hydration. Without a buffer, every
+// event a user fires in that window (e.g. clicking "Get Started" on the
+// landing page) hits sendEvent() while hasAnalyticsConsent() is still false
+// and is silently dropped. The user clicked the CTA but GA never sees it —
+// the activation funnel loses a real, important data point.
+//
+// Fix: buffer events in memory during the "haven't-decided-yet" window. On
+// consent grant, drain the buffer in order (events arrive in GA4 just
+// slightly later than the user's click). On explicit decline, discard the
+// buffer (Art. 7(3) — declining is meaningful; replaying after decline
+// would violate consent).
+//
+// Hard cap at 50 events to prevent unbounded growth if a user lingers on
+// the landing page for an hour with the banner dismissed in some other tab
+// or via a fast script. The user is unlikely to fire >50 distinct funnel
+// events before answering the banner; the cap is a tail-risk guard.
+const PENDING_EVENT_CAP = 50;
+interface PendingEvent {
+  name: string;
+  params?: EventParams;
+}
+let pendingAnalyticsEvents: PendingEvent[] = [];
+
+/** Push the GA4 / dataLayer fire of a single event. Bypasses the consent
+ *  gate — callers must have already checked it. */
+function dispatchEvent(name: string, params?: EventParams): void {
+  try {
+    if (typeof window !== "undefined" && typeof window.gtag === "function") {
+      window.gtag("event", name, params);
+      return;
+    }
+    if (typeof window !== "undefined" && Array.isArray(window.dataLayer)) {
+      window.dataLayer.push({ event: name, ...params });
+      return;
+    }
+    if (import.meta.env.DEV) {
+      console.debug("[analytics]", name, params);
+    }
+  } catch {
+    /* analytics should never break the app */
+  }
+}
+
+/** Drain the buffered pre-consent events in FIFO order, then clear. */
+function drainPendingEvents(): void {
+  const drained = pendingAnalyticsEvents;
+  pendingAnalyticsEvents = [];
+  if (drained.length === 0) return;
+  if (import.meta.env.DEV) {
+    console.debug(`[analytics] draining ${drained.length} pre-consent event(s)`);
+  }
+  for (const evt of drained) {
+    dispatchEvent(evt.name, evt.params);
+  }
+}
+
+// Wire the buffer drain on consent grant. Runs once on module load (the
+// listener attaches to the same CustomEvent that CookieConsent.tsx
+// dispatches, so reactivity works regardless of mount order). On grant we
+// drain; on explicit decline we clear without dispatching.
+if (typeof window !== "undefined") {
+  onConsentChange((record) => {
+    if (record && record.categories.analytics === true) {
+      drainPendingEvents();
+    } else {
+      // Explicit decline or revoke — drop the buffer. The user said no.
+      pendingAnalyticsEvents = [];
+    }
+  });
+}
 
 export function captureUtmParams(): void {
   const params = new URLSearchParams(window.location.search);
@@ -44,30 +117,39 @@ type EventParams = Record<string, string | number | boolean>;
 
 /** Safely push an event to gtag or dataLayer.
  *  Gated on the user's analytics-category cookie consent — no events
- *  leave the browser unless the user opted in (B-NEW-9 / GDPR Art. 7). */
+ *  leave the browser unless the user opted in (B-NEW-9 / GDPR Art. 7).
+ *
+ *  §11 Lens C5: during the "banner not yet answered" window we BUFFER
+ *  events instead of dropping them. On consent grant the buffer drains
+ *  to GA4 in FIFO order; on explicit decline it's cleared. This means
+ *  the activation CTA a user clicked during the 1.5 s before the
+ *  banner mounted is no longer silently lost. */
 function sendEvent(name: string, params?: EventParams) {
   try {
     if (!hasAnalyticsConsent()) {
-      // Dev visibility into what we're suppressing for compliance.
-      if (import.meta.env.DEV) {
+      // Two cases when consent is not (yet) granted:
+      //
+      // (a) User hasn't answered the banner yet — buffer the event,
+      //     drain on grant, drop on decline (handled by the
+      //     onConsentChange listener at module scope).
+      // (b) User explicitly declined or revoked — do nothing. Buffering
+      //     here would be wrong: a future re-grant must NOT replay
+      //     events the user fired in a window where they had said no.
+      if (!hasAnswered()) {
+        if (pendingAnalyticsEvents.length < PENDING_EVENT_CAP) {
+          pendingAnalyticsEvents.push({ name, params });
+          if (import.meta.env.DEV) {
+            console.debug("[analytics:buffered — pre-consent]", name, params);
+          }
+        } else if (import.meta.env.DEV) {
+          console.debug("[analytics:dropped — buffer at cap]", name, params);
+        }
+      } else if (import.meta.env.DEV) {
         console.debug("[analytics:skipped — no consent]", name, params);
       }
       return;
     }
-    // Google Analytics 4 via gtag.js
-    if (typeof window !== "undefined" && typeof window.gtag === "function") {
-      window.gtag("event", name, params);
-      return;
-    }
-    // Google Tag Manager dataLayer
-    if (typeof window !== "undefined" && Array.isArray(window.dataLayer)) {
-      window.dataLayer.push({ event: name, ...params });
-      return;
-    }
-    // Dev fallback
-    if (import.meta.env.DEV) {
-      console.debug("[analytics]", name, params);
-    }
+    dispatchEvent(name, params);
   } catch {
     // Silently swallow — analytics should never break the app
   }

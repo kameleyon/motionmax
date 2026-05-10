@@ -161,6 +161,35 @@ export function AuthProvider({ children }: AuthProviderProps) {
           // never sees the raw Supabase UUID. Best-effort.
           void identifyUser(session.user.id);
 
+          // §11 Lens C4 — capture the GA4 `_ga` cookie value so the
+          // Stripe webhook's server-side purchase event uses the SAME
+          // client_id GA minted on the original ad-click pageview.
+          // Without this, every purchase shows in GA4 as "(direct) /
+          // (none)" with no UTMs because the server-side hit's client_id
+          // (userId) doesn't match any anonymous session. Idempotent:
+          // only writes when the column is currently NULL so a second
+          // signin from the same browser can't overwrite the first.
+          //
+          // Cookie format is `GA1.<scope>.<client_id>` — the trailing
+          // two dot-separated segments form the actual client_id GA
+          // expects in Measurement Protocol. Safely no-ops when the
+          // cookie isn't set yet (consent not granted, GA didn't load).
+          try {
+            const gaClientId = readGaClientIdFromCookie();
+            if (gaClientId) {
+              supabase
+                .from("profiles")
+                .update({ ga_client_id: gaClientId } as unknown as Record<string, unknown>)
+                .eq("user_id", session.user.id)
+                .is("ga_client_id", null)
+                .then(({ error }) => {
+                  if (error) {
+                    console.warn("[Auth] Failed to persist ga_client_id:", error.message);
+                  }
+                });
+            }
+          } catch { /* analytics non-critical */ }
+
           // B-NEW-7 (Lens B) — first-touch attribution write. The
           // marketing site dropped a .motionmax.io cookie; on the first
           // SIGNED_IN after signup we mirror it into profiles.acquisition
@@ -472,6 +501,37 @@ async function checkLegalVersionMismatch(
   } catch {
     // Best-effort. Do not gate the user on telemetry failures.
   }
+}
+
+// ---------------------------------------------------------------------------
+// §11 Lens C4 — GA4 client_id cookie reader.
+//
+// The `_ga` cookie GA4 sets on first pageview has the format
+// `GA1.<scope>.<client_id>` where scope is the cookie's subdomain depth
+// (e.g. `GA1.1.123456789.1700000000` on apex, `GA1.2.…` on subdomain).
+// The actual client_id GA expects in Measurement Protocol is the last
+// two dot-separated segments: `<random>.<timestamp>`.
+//
+// Returns null when:
+//   • document.cookie is unavailable (SSR).
+//   • The cookie doesn't exist (consent not granted, GA didn't load,
+//     ad blocker stripped it, etc.) — webhook falls back to userId.
+//   • The cookie value is malformed.
+// ---------------------------------------------------------------------------
+function readGaClientIdFromCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const cookies = document.cookie ? document.cookie.split("; ") : [];
+  for (const c of cookies) {
+    if (!c.startsWith("_ga=")) continue;
+    const raw = decodeURIComponent(c.slice(4));
+    // GA1.<scope>.<client>.<timestamp> — keep the last two segments
+    // joined with a dot. Defensive against future GA cookie scheme
+    // changes: if there's no dot at all, treat as malformed.
+    const parts = raw.split(".");
+    if (parts.length < 4 || parts[0] !== "GA1") return null;
+    return `${parts[parts.length - 2]}.${parts[parts.length - 1]}`;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------

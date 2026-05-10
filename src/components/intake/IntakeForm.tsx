@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import { trackEvent } from '@/hooks/useAnalytics';
+import { EVENTS } from '@/lib/events';
 import { isAutopostEligible, getAutopostCreditsRequired } from '@/lib/planLimits';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -776,6 +778,18 @@ export default function IntakeForm({
         if (scheduleInsert.error || !scheduleInsert.data) {
           throw scheduleInsert.error ?? new Error('Schedule insert returned no row');
         }
+
+        // §11 Lens C3 — adoption signal for autopost. delivery_method
+        // disambiguates "I scheduled to publish socially" from "I scheduled
+        // for email digest" — those are different jobs-to-be-done.
+        try {
+          trackEvent(EVENTS.automation_created, {
+            delivery_method: scheduleState.deliveryMethod,
+            interval: scheduleState.interval ?? 'unspecified',
+            topic_count: scheduleState.topics.length,
+            platform_count: scheduleState.platformAccountIds.length,
+          });
+        } catch { /* analytics non-critical */ }
 
         toast.success('Automation created — first run scheduled.');
         navigate('/lab/autopost');

@@ -49,6 +49,21 @@ export default function Terms() {
 
         <div className="prose prose-sm max-w-none space-y-8 text-muted-foreground">
 
+          {/* C-13-8 / Tongue TONGUE-11: English-only disclosure. Wave 3
+              B-NEW-11 reduced the marketing "11 languages" claim to
+              "Multilingual voiceover", largely defusing the GDPR
+              Art. 12(1) intelligibility concern; this notice records
+              the residual position and gives the user a clear contact
+              path before being bound. */}
+          <section className="rounded-md border border-border/40 bg-muted/20 p-4 not-prose">
+            <p className="text-sm leading-relaxed m-0">
+              This document is provided in English. We are working to translate it into additional languages.
+              If you do not understand any provision, please contact us at{" "}
+              <a href="mailto:support@motionmax.io" className="text-primary hover:underline">support@motionmax.io</a>
+              {" "}for clarification before using the Service.
+            </p>
+          </section>
+
           <section className="space-y-3">
             <h2 className="text-lg font-semibold text-foreground">1. Acceptance of Terms</h2>
             <p>By accessing or using MotionMax ("the Service"), you agree to be bound by these Terms of Service. If you do not agree to these terms, you may not use the Service. These terms apply to all visitors, users, and others who access the Service.</p>
@@ -84,6 +99,31 @@ export default function Terms() {
             <h2 className="text-lg font-semibold text-foreground">5. Intellectual Property</h2>
             <p>You retain ownership of the content you provide as input to the Service (your scripts, documents, and text). By submitting content to the Service, you grant MotionMax a limited, non-exclusive license to process that content solely for the purpose of providing the Service to you.</p>
             <p>The AI-generated outputs produced by the Service are owned by you, subject to the limitations of the underlying AI model licenses and any applicable terms of the third-party AI providers used to generate that content. These providers include Kling (image-to-video), Hypereal (image generation), ElevenLabs (voice synthesis and voice cloning), and Google Gemini (image generation and research), among others. You are responsible for reviewing and complying with the usage rights and restrictions published by each provider. MotionMax retains all rights to the Service itself, including its software, design, and underlying technology.</p>
+          </section>
+
+          {/* C-13-7 (Comply L-C-08): §5 previously lacked any warranty
+              disclaimer for output non-infringement, an IP indemnification
+              clause, and a copyright-uncertainty disclosure. After
+              Andersen v. Stability AI (N.D. Cal.) and Getty v. Stability
+              AI (UK High Court), generative AI providers face real
+              exposure on (a) output that incorporates copyrighted
+              training material and (b) the open question of whether
+              AI-generated outputs are themselves copyrightable. §5.A
+              strips warranty, §5.B shifts IP risk to the user-creator,
+              §5.C honestly discloses the unsettled state of the law. */}
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold text-foreground">5.A No Warranty for AI Output</h2>
+            <p>AI-generated outputs produced by the Service are provided <strong className="text-foreground">"as is" and without warranty of any kind</strong>. We make NO warranty, express or implied, that any output: (i) does not infringe third-party intellectual property rights, including copyright, trademark, publicity, or moral rights; (ii) is original or free of similarities to existing works; (iii) is non-defamatory or otherwise lawful in your jurisdiction; or (iv) is fit, suitable, or safe for any particular purpose. You are solely responsible for reviewing each output before publication or distribution and for obtaining any clearances, licences, or releases your intended use requires.</p>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold text-foreground">5.B IP Indemnification</h2>
+            <p>You agree to <strong className="text-foreground">defend, indemnify, and hold harmless MotionMax</strong>, its officers, directors, employees, contractors, and licensors against any third-party claim, demand, action, damage, loss, liability, judgment, settlement, fine, fee, or expense (including reasonable attorneys' fees) arising from or related to your use, publication, broadcast, distribution, monetisation, or other exploitation of AI-generated content created with the Service — including without limitation claims of intellectual-property infringement, right-of-publicity violation, defamation, false advertising, unfair competition, or breach of any release or licence you were responsible for obtaining. This indemnification survives termination of these Terms.</p>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold text-foreground">5.C Copyright Uncertainty Disclosure</h2>
+            <p>The copyright status of AI-generated content is <strong className="text-foreground">unsettled in many jurisdictions</strong>. Recent and ongoing matters — including <em>Andersen v. Stability AI</em> (N.D. Cal., 2023–) and <em>Getty Images v. Stability AI</em> (UK High Court / Delaware, 2023–) — have not yet resolved whether AI-generated outputs are copyrightable, who owns any resulting rights, or whether and to what extent training on copyrighted material affects the legality of downstream outputs. The U.S. Copyright Office's current position (as of the date of this document) is that purely AI-generated content is generally <em>not</em> registrable, and analogous positions exist in other registrars. <strong className="text-foreground">We make no representation about the copyrightability, ownership, registrability, or enforceability of outputs in any jurisdiction.</strong> If you rely on the legal status of an output for any commercial purpose, you should seek your own legal counsel.</p>
           </section>
 
           <section className="space-y-3">

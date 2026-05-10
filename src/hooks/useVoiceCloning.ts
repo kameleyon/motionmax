@@ -69,7 +69,28 @@ export function useVoiceCloning() {
   // transcoding (WebM → MP3) and the actual Fish API call so we don't
   // need ffmpeg in the browser or the edge runtime.
   const cloneVoiceMutation = useMutation({
-    mutationFn: async ({ file, name, description, removeNoise, consentGiven }: { file: Blob; name: string; description?: string; removeNoise?: boolean; consentGiven: boolean }) => {
+    mutationFn: async ({
+      file,
+      name,
+      description,
+      removeNoise,
+      consentGiven,
+      // C-13-3 (Comply L-C-03): biometric-data consent under BIPA / CUBI
+      // / CPRA. Captured separately from `consentGiven` (which covers the
+      // ownership-or-permission representation) so we can prove both at
+      // audit time. The clone-voice-fish edge function stamps
+      // user_voices.voice_biometric_consent_at = now() when this is TRUE.
+      // Optional in the type so legacy callers continue to compile, but
+      // VoiceLab.tsx now passes it on every invocation.
+      biometricConsentGiven,
+    }: {
+      file: Blob;
+      name: string;
+      description?: string;
+      removeNoise?: boolean;
+      consentGiven: boolean;
+      biometricConsentGiven?: boolean;
+    }) => {
       setIsCloning(true);
 
       const storagePath = await uploadAudio(file, `${name.replace(/\s+/g, "_")}.mp3`);
@@ -82,7 +103,16 @@ export function useVoiceCloning() {
         jobId?: string;
         error?: string;
       }>("clone-voice-fish", {
-        body: { storagePath, voiceName: name, description, consentGiven, removeNoise: removeNoise ?? true },
+        body: {
+          storagePath,
+          voiceName: name,
+          description,
+          consentGiven,
+          // C-13-3: forwarded to the edge function for the timestamp
+          // write into user_voices.voice_biometric_consent_at.
+          biometricConsentGiven: biometricConsentGiven ?? false,
+          removeNoise: removeNoise ?? true,
+        },
       });
 
       if (queueError) {

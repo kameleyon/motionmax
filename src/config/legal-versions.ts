@@ -32,9 +32,28 @@ export const LEGAL_VERSIONS = {
   // Bumping the version forces existing users through TermsUpdateModal
   // so they re-read the policy now that the affordance is real, which
   // closes the FTC §5 strict-liability gap. AUP unchanged this round.
-  tos: '2026.05.10-v2',
-  privacy: '2026.05.10-v2',
-  aup: '2026.05.10-v1',
+  //
+  // Wave 4 / Comply L-C-02..08 (2026-05-10):
+  //   • tos    → v3 — added §5.A "No warranty for AI output", §5.B "IP
+  //     indemnification" and §5.C "Copyright uncertainty disclosure"
+  //     covering Andersen v. Stability AI + Getty v. Stability AI
+  //     exposure (C-13-7). Also prepended an English-only disclosure
+  //     notice at the top (C-13-8 / Tongue TONGUE-11).
+  //   • privacy → v3 — added §X "Voice Biometric Data" classifying
+  //     voice-clone audio under BIPA / CUBI / CPRA with explicit
+  //     consent + 30-day post-account retention (C-13-3); rewrote §7
+  //     to match the actual 7-day grace + immediate-delete behaviour
+  //     shipped in Wave 2 B-NEW-6 (C-13-4); promoted the §5
+  //     subprocessor list from enterprise-only to publicly enumerated
+  //     to satisfy GDPR Art. 28(2) (C-13-5); also prepended the
+  //     English-only disclosure notice (C-13-8).
+  //   • aup    → v2 — replaced the categorical "no deepfakes" ban with
+  //     consent-based synthetic-media language (C-13-2) and added a
+  //     §2.x Voice Cloning consent clause; prepended the English-only
+  //     notice (C-13-8).
+  tos: '2026.05.10-v3',
+  privacy: '2026.05.10-v3',
+  aup: '2026.05.10-v2',
 } as const;
 
 export type LegalDoc = keyof typeof LEGAL_VERSIONS;

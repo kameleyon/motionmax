@@ -60,28 +60,76 @@ async function trackConversion(params: {
   currency: string;
   transactionId: string;
   itemName: string;
+  // deno-lint-ignore no-explicit-any
+  supabaseAdmin: any;
 }): Promise<void> {
   const measurementId = Deno.env.get("GA_MEASUREMENT_ID");
   const apiSecret = Deno.env.get("GA_API_SECRET");
   if (!measurementId || !apiSecret) return;
 
+  // §11 Lens C4 — resolve the GA4 client_id from profiles. Captured at
+  // signup from the `_ga` cookie. Falls back to userId only when the
+  // user signed up before the column existed or cookies were disabled
+  // (legacy attribution is "(direct) / (none)" — same as the broken
+  // path was producing before, but now constrained to the pre-fix
+  // cohort only).
+  let clientId = params.userId;
+  let utmSource: string | null = null;
+  let utmMedium: string | null = null;
+  let utmCampaign: string | null = null;
   try {
+    const { data: profile } = await params.supabaseAdmin
+      .from("profiles")
+      .select("ga_client_id, acquisition")
+      .eq("user_id", params.userId)
+      .maybeSingle();
+    if (profile?.ga_client_id) {
+      clientId = profile.ga_client_id;
+    }
+    // Forward stored UTMs as event params so the conversion is enriched
+    // even if GA's own session stitching falls through (e.g. GA4 expired
+    // the session before the user converted).
+    const acq = profile?.acquisition as Record<string, unknown> | null;
+    if (acq) {
+      const pick = (k: string): string | null => {
+        const v = acq[k];
+        return typeof v === "string" && v.length > 0 ? v : null;
+      };
+      utmSource   = pick("utm_source");
+      utmMedium   = pick("utm_medium");
+      utmCampaign = pick("utm_campaign");
+    }
+  } catch (e) {
+    logStep("GA4 client_id lookup failed (using userId fallback)", { error: String(e) });
+  }
+
+  try {
+    const eventParams: Record<string, unknown> = {
+      currency: params.currency,
+      value: params.value,
+      transaction_id: params.transactionId,
+      items: [{ item_name: params.itemName, price: params.value }],
+    };
+    if (utmSource)   eventParams.campaign_source = utmSource;
+    if (utmMedium)   eventParams.campaign_medium = utmMedium;
+    if (utmCampaign) eventParams.campaign         = utmCampaign;
+
     await fetch(
       `https://www.google-analytics.com/mp/collect?measurement_id=${measurementId}&api_secret=${apiSecret}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          client_id: params.userId,
+          client_id: clientId,
+          // user_id stays the Supabase UUID so GA4's User-ID dimension
+          // can stitch this hit to authenticated client-side events
+          // (which were stamped with the same hashed UUID by
+          // identifyUser() in useAnalytics.ts). client_id is the new
+          // bit — it's the anonymous session id, not the user id.
           user_id: params.userId,
           events: [{
             name: params.eventName,
-            params: {
-              currency: params.currency,
-              value: params.value,
-              transaction_id: params.transactionId,
-              items: [{ item_name: params.itemName, price: params.value }],
-            },
+            params: eventParams,
           }],
         }),
       }
@@ -359,6 +407,7 @@ export async function handler(req: Request, deps: WebhookDeps = {}): Promise<Res
                 currency: (session.currency ?? "usd").toUpperCase(),
                 transactionId: paymentIntentId ?? session.id,
                 itemName: `${credits} credits`,
+                supabaseAdmin,
               });
             } else {
               const priceId = item.price?.id ?? null;
@@ -417,6 +466,7 @@ export async function handler(req: Request, deps: WebhookDeps = {}): Promise<Res
             currency: "USD",
             transactionId: (event.data.object as Stripe.Checkout.Session).id,
             itemName: `${planName} plan`,
+            supabaseAdmin,
           });
         }
         break;

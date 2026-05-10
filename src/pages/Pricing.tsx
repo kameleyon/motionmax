@@ -496,6 +496,25 @@ export default function Pricing() {
             </Button>
           </div>
         </div>
+
+        {/* C-11-6 (Comply L-C-09): FTC click-to-cancel requires that the
+            cancellation path be as discoverable as the sign-up path.
+            This footer link sits on the same page as the "Start with…"
+            CTAs so a returning subscriber who wants to cancel can do so
+            from the same surface they originally subscribed from. */}
+        <div className="text-center mt-10 mb-2 text-[12px] text-[#5A6268]">
+          Already subscribed?{" "}
+          <a
+            href="/settings?tab=profile"
+            className="text-[#14C8CC] hover:underline"
+          >
+            Cancel subscription
+          </a>
+          {" · "}
+          <a href="/privacy" className="hover:text-[#ECEAE4]">Privacy</a>
+          {" · "}
+          <a href="/terms" className="hover:text-[#ECEAE4]">Terms</a>
+        </div>
       </div>
 
       <TopUpPacksModal open={topUpModalOpen} onOpenChange={setTopUpModalOpen} />

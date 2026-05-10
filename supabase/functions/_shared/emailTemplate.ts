@@ -113,7 +113,20 @@ export function buildEmail(input: EmailLayoutInput): string {
               <p style="margin:0 0 6px 0;font-size:12px;color:#8A9198;line-height:1.55;">
                 ${escapeAttr(footerNote)}
               </p>
-              <p style="margin:0;font-size:11px;color:#5A6268;">
+              <!-- C-11-6 / Comply L-C-09: FTC 16 CFR Part 425 (Click-to-
+                   Cancel, effective 2026-05-14) expects the cancellation
+                   path to be discoverable from sign-up / welcome touch
+                   points. Surfacing it in the email footer means a user
+                   who never returns to the dashboard can still find a
+                   one-click route to /settings → Cancel button.  -->
+              <p style="margin:6px 0 0 0;font-size:11px;color:#5A6268;">
+                <a href="${SITE_URL}/settings?tab=profile" style="color:#14C8CC;text-decoration:none;">Cancel subscription</a>
+                &nbsp;·&nbsp;
+                <a href="${SITE_URL}/privacy" style="color:#5A6268;text-decoration:none;">Privacy</a>
+                &nbsp;·&nbsp;
+                <a href="${SITE_URL}/terms" style="color:#5A6268;text-decoration:none;">Terms</a>
+              </p>
+              <p style="margin:6px 0 0 0;font-size:11px;color:#5A6268;">
                 © MotionMax · <a href="${SITE_URL}" style="color:#14C8CC;text-decoration:none;">motionmax.io</a>
               </p>
             </td>

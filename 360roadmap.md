@@ -4,7 +4,7 @@
 **Date:** 2026-05-10
 **Source verdict:** `.audits/2026-05-10-360/verdict.md` (Studio Zero full-360 audit — 6 core reviewers + 28 specialists, $66.82 cost)
 **Supersedes:** `archive/360roadmap_fix.md` (v1 baseline) and the prior 5-blocker v1 roll-up
-**Status (2026-05-10):** v1 (5/5) shipped `9601306` — awaiting re-verify. v2 Wave 1 (B-NEW-3/4/5ab/13/18 + B-V1-5) shipped `c6ec5a4`. v2 Wave 2 (B-NEW-1/2/6) shipped `78fd5e2`. B-NEW-16 verified resolved (leaked project DNS-deleted, no live target). **10 of 22 v2 Blockers closed**; 12 remaining (Waves 3-5) + 4 human-action items (DMCA filing, Art. 27 rep, JWT-rotation ✅ confirmed via DNS, Creator pricing — direction = mirror Agent Opus).
+**Status (2026-05-10):** v1 (5/5) shipped `9601306`. v2 Wave 1 shipped `c6ec5a4` (B-NEW-3/4/5ab/13/18 + B-V1-5). v2 Wave 2 shipped `78fd5e2` (B-NEW-1/2/6). B-NEW-16 verified resolved (project DNS-deleted). B-NEW-21 shipped `1cef0a4` (Agent Opus pricing mirror, scaffold mode — Jo runs `sync-stripe-products.mjs` to provision Stripe). **11 of 22 v2 Blockers closed**; 11 remaining (Waves 3-5) + 2 human-action items (DMCA filing, Art. 27 rep).
 **Coverage note:** Curated body section has **129 checkboxes** (27 Blockers + 102 Criticals — convergence-elevated clusters with per-agent attribution). Appendix has the full **751 raw findings** extracted from all 34 reviewer/specialist files. Grand total: **880 checkboxes** (curated section is a re-grouped view of the appendix's Blocker+Critical subset, not additive). Individual `file:line` detail lives in `.audits/2026-05-10-360/{reviewer}.md` (6 core) + `specialists/{agent}.md` (28 specialists).
 
 ---
@@ -61,7 +61,7 @@ Grouped by 14-category mapping from `360assessment.md`. Per-agent attribution pr
 
 - [ ] **[BLOCKER][INFRA]** B-NEW-17: (a) `iac/cloudflare`, `iac/supabase`, `iac/vercel` are empty placeholders — zero actual IaC; (b) hard-coded production Supabase ref blocks any staging environment; (c) two conflicting worker deploy manifests (`render.yaml` + `railway.json` + `railpack.json`); (d) CI deploys straight to prod with no staging gate, no canary, no manual approval — _Reviewers: **Terra F1/F2/F3/F4**_ — Owner: **Pipeline + Forge** — Re-audit: Terra
 - [x] **[BLOCKER][INFRA]** B-NEW-18 (✅ `c6ec5a4`): `claim_pending_job` runs O(N) correlated subqueries per pending row — quadratic queue cost; combined with stale-claim reaper (30 min) shorter than `cinematic_video` runtime (45 min) → duplicate Hypereal renders + double-spend documented as 2026-05-08 incident pattern — _Reviewers: **Crash CRASH-001 + Forge F-CH-02 + Stream C-2**_ — Owner: **Forge** — Re-audit: Crash + Forge
-- [ ] **[BLOCKER][FINOPS]** B-NEW-21: Creator plan economics mathematically cannot deliver headline product — 500 cr/mo cap < 750 cr cinematic short. Top-up math = $7.50 user revenue against $11.30 provider cost = **negative ~$3.80 contribution per cinematic short** — _Reviewers: **Meter B1**_ — Owner: **Sprint + Forge + Meter** — Re-audit: Meter
+- [x] **[BLOCKER][FINOPS]** B-NEW-21 (✅ scaffold-mode shipped — Agent Opus pricing mirror; Jo runs sync-stripe-products.mjs to provision Stripe products): Creator plan economics mathematically cannot deliver headline product — 500 cr/mo cap < 750 cr cinematic short. Top-up math = $7.50 user revenue against $11.30 provider cost = **negative ~$3.80 contribution per cinematic short** — _Reviewers: **Meter B1**_ — Owner: **Sprint + Forge + Meter** — Re-audit: Meter
 
 ## §9 Observability & Incident Readiness (1 Blocker)
 

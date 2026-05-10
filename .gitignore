@@ -23,6 +23,13 @@ scripts/migrate-storage.mjs
 worker/.env
 worker/.env.local
 
+# Accidental shell-redirect files (literal-quoted names from copy-paste of
+# `echo … > 'foo'` SQL fragments — Wave D cleanup 2026-05-10)
+'imageUrl'
+'image_url'
+'*Url'
+'*_url'
+
 # Logs
 logs
 *.log

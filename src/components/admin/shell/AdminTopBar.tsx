@@ -26,7 +26,7 @@ export interface AdminTopBarProps {
  *   - `.crumbs`    `Operations / <activeTabLabel>`
  *   - cyan "production" pill
  *   - spacer
- *   - "All systems normal" ok pill (TODO: wire to incidents counter)
+ *   - "All systems normal" ok pill (TODO(admin-incident-pill): wire to incidents counter)
  *   - Refresh icon-button — invalidates all `['admin', ...]` queries
  *   - Live pill toggle — controls console live-tail / `?live=1`
  *   - Gear icon-button — placeholder for user dropdown

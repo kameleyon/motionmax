@@ -55,7 +55,8 @@ export function AdminHero({ onTabChange, onSetLive }: AdminHeroProps) {
   )} burned this month · last deploy ${formatRelative(counters.lastDeployAt)}`;
 
   const handleSnapshot = () => {
-    toast.info("TODO: hook to overview export", {
+    // TODO(admin-phase3-polish): wire to overview CSV export.
+    toast.info("Coming soon — overview export", {
       description:
         "CSV export of overview KPIs/timeseries lands with Phase 3 polish.",
     });

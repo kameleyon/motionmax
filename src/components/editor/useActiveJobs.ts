@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -6,8 +6,15 @@ import { useAuth } from '@/hooks/useAuth';
 /** In-flight job tracking for a single project. Drives the scene
  *  thumbnail spinners + Inspector button loaders + "Update all" bulk
  *  loaders so users can SEE that something's actually happening after
- *  they click regen. Polls every 3 s on top of a realtime channel —
- *  realtime misses events sometimes, so the interval is a safety net. */
+ *  they click regen.
+ *
+ *  Wave D §C-5 polling refactor:
+ *    realtime healthy  → 30 s keep-alive poll (safety net only)
+ *    realtime degraded → 5 s active poll  (fast recovery if WS drops)
+ *  The realtime channel is the primary signal; this hook adapts the
+ *  poll cadence based on `channel.subscribe` status so the DB QPS is
+ *  near-zero in steady state but recovers quickly when the WebSocket
+ *  is unhealthy on weak connections. */
 
 export type ActiveTask =
   | 'regenerate_image'
@@ -59,17 +66,23 @@ export function useActiveJobs(projectId: string | null | undefined) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
+  // Wave D §C-5: track realtime channel health so we can dial down
+  // the poll to a keep-alive cadence when WS is healthy and crank it
+  // up when the channel drops. 'SUBSCRIBED' = realtime alive →
+  // safety-net only; anything else (CLOSED / CHANNEL_ERROR / TIMED_OUT)
+  // means we can't trust realtime, so poll faster to bridge the gap.
+  const [realtimeHealthy, setRealtimeHealthy] = useState(false);
+
   const query = useQuery<ActiveJob[]>({
     queryKey: ['active-jobs', projectId, user?.id],
     enabled: !!user && !!projectId,
-    // §5 PERF — bumped from 3 s → 15 s. The supabase realtime
-    // subscription on `video_generation_jobs` is the primary signal
-    // (the page invalidates this query on INSERT/UPDATE). The poll is
-    // strictly belt-and-suspenders for the rare case the channel
-    // misses an event during a server-side reconnect; 15 s is fast
-    // enough to recover within one human-noticeable window while
-    // cutting the per-tab DB QPS by 5×.
-    refetchInterval: 15_000,
+    // §5 PERF (Wave D §C-5 follow-up) — adaptive poll based on the
+    // realtime channel's reported status. With realtime alive the
+    // page invalidates this query on INSERT/UPDATE, so 30 s is just
+    // a safety net for missed reconnects. When realtime is degraded
+    // (offline / CHANNEL_ERROR / TIMED_OUT) we fall back to 5 s so
+    // the UI doesn't go stale during a flaky connection.
+    refetchInterval: realtimeHealthy ? 30_000 : 5_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('video_generation_jobs')
@@ -129,8 +142,18 @@ export function useActiveJobs(projectId: string | null | undefined) {
         },
         () => queryClient.invalidateQueries({ queryKey: ['active-jobs', projectId, user.id] }),
       )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+      .subscribe((status) => {
+        // Wave D §C-5: realtime-first polling. SUBSCRIBED means the WS
+        // is alive and we'll receive INSERT/UPDATE events; flip to the
+        // long keep-alive poll. Any other status (CHANNEL_ERROR,
+        // TIMED_OUT, CLOSED) means we can't trust realtime so the
+        // hook falls back to a fast 5 s poll until the next attempt.
+        setRealtimeHealthy(status === 'SUBSCRIBED');
+      });
+    return () => {
+      setRealtimeHealthy(false);
+      supabase.removeChannel(channel);
+    };
   }, [projectId, user?.id, queryClient]);
 
   const jobs = query.data ?? [];

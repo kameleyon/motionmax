@@ -115,7 +115,15 @@ export async function handleGenerateTopics(
     ? `\n\nEXISTING TOPICS (do NOT repeat these or any close variant — but DO match their format exactly):\n${existing.map((t) => `- ${t}`).join("\n")}\n\nFORMAT CONSISTENCY — CRITICAL:\nStudy the existing topics above. Match their EXACT structural format in every new topic:\n- Same prefix pattern (if they all start with a card name, place name, date, etc., yours must too — using a NEW value of the same kind)\n- Same casing rules (Title Case vs Sentence case)\n- Same punctuation style (colons, em-dashes, etc.)\n- Same approximate length and rhythm\n- Same tone\nThe new topics should feel like they belong in the same series. Only the subject changes — never the format.`
     : "";
 
-  const todayHuman = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
+  // Wave E-Legal Part J — Tongue i18n hygiene.
+  // Inject ISO 8601 (YYYY-MM-DD) into the AI prompt rather than the
+  // en-US long-form string ("November 5, 2026"). The locale-formatted
+  // string biased the LLM towards US conventions (e.g. month-day-year
+  // ordering, English month names) in any downstream language. ISO is
+  // unambiguous and locale-neutral; the LLM is fully capable of
+  // rendering it in the requested output language if it ever needs to
+  // surface the date to the user.
+  const todayHuman = new Date().toISOString().slice(0, 10);
 
   // Expand any [PDF_URL]/[FETCH_URL]/[YOUTUBE_URL]/[GITHUB_URL] tags
   // into actual fetched/parsed content BEFORE we embed sources in the

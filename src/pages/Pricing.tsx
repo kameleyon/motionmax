@@ -407,10 +407,32 @@ export default function Pricing() {
           />
         </div>
 
+        {/* Wave E-Legal Part I — VAT disclosure for EU/UK users.
+            Directive 98/6/EC requires consumer prices to be shown
+            inclusive of VAT in B2C transactions. We display USD list
+            prices and let Stripe Tax compute the precise local VAT at
+            checkout based on the billing country — so the most honest
+            disclosure is to flag the position here and confirm that
+            the final price is shown before payment. */}
+        {isEU && (
+          <div
+            className="mt-8 mx-auto max-w-[640px] rounded-xl border border-[#14C8CC]/30 bg-[#10151A] p-4 sm:p-5"
+            data-testid="eu-vat-disclosure"
+          >
+            <p className="text-[12.5px] leading-[1.55] text-[#ECEAE4]">
+              <strong className="text-[#14C8CC]">EU / UK VAT:</strong>{" "}
+              the prices shown above are exclusive of VAT. The applicable EU / UK
+              VAT for your billing country is added at checkout (handled by
+              Stripe Tax). The total payable amount, including VAT, will be
+              displayed before you confirm payment.
+            </p>
+          </div>
+        )}
+
         {/* EU cooling-off waiver — same component contract as before. */}
         {isEU && (
           <div
-            className="mt-8 mx-auto max-w-[640px] rounded-xl border border-[#E4C875]/30 bg-[#10151A] p-4 sm:p-5"
+            className="mt-4 mx-auto max-w-[640px] rounded-xl border border-[#E4C875]/30 bg-[#10151A] p-4 sm:p-5"
             data-testid="eu-cooling-off-block"
           >
             <label className="flex items-start gap-3 cursor-pointer">

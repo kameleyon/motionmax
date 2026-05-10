@@ -20,13 +20,21 @@ import { callGemini } from "./geminiNative.js";
 
 // Built at request time with current date injected — see buildResearchPrompt()
 function buildResearchPrompt(): string {
+  // Wave E-Legal Part J — Tongue i18n hygiene.
+  // Use ISO 8601 + UTC offset rather than en-US locale-formatted strings
+  // ("Thursday, November 5, 2026" + "11:42 AM PST"). The locale-formatted
+  // form biased the LLM towards US conventions (English month names,
+  // 12-hour clock, US-style weekday ordering) in any downstream language.
+  // ISO 8601 is locale-neutral and unambiguous; the model is fully
+  // capable of re-rendering it in its own output language if it needs
+  // to surface a date to the end user.
   const now = new Date();
-  const dateStr = now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-  const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
+  const dateStr = now.toISOString().slice(0, 10);            // YYYY-MM-DD
+  const timeStr = now.toISOString().slice(11, 16) + " UTC";  // HH:MM UTC
 
   return `You are a meticulous fact-checker and visual research assistant for a cinematic AI video production team.
 
-TODAY'S DATE: ${dateStr}, ${timeStr}. All research must reflect the world AS OF TODAY. Do not use outdated information. If a person has changed appearance, teams have new rosters, or events have occurred recently, use the MOST CURRENT information available.
+TODAY'S DATE (ISO 8601): ${dateStr}, ${timeStr}. All research must reflect the world AS OF TODAY. Do not use outdated information. If a person has changed appearance, teams have new rosters, or events have occurred recently, use the MOST CURRENT information available.
 
 STEP 1 - RESEARCH FIRST: Before generating any visual descriptions, thoroughly research the given topic. Pull verified facts, data, statistics, scholarly consensus, and contextual information from credible sources. Understand WHAT is true about the subject before describing HOW it should look. This applies to any topic - medical, scientific, cultural, sports, historical, or otherwise. If the topic involves claims, behaviors, symptoms, comparisons, or debates, establish the factual foundation first. If you cannot verify something, mark it "UNVERIFIED." Do not skip this step.
 

@@ -209,11 +209,11 @@ export default defineConfig(({ mode }) => ({
           "react-vendor": ["react", "react-dom", "react-router-dom"],
           "ui-vendor": ["framer-motion", "@tanstack/react-query"],
           "supabase": ["@supabase/supabase-js"],
-          // recharts intentionally NOT in manualChunks — it ships only
-          // with the lazy-loaded admin tab chunks (AdminGenerations,
-          // AdminPerformanceMetrics, AdminQueueMonitor, AdminWorkerHealth,
-          // AdminRevenue) so non-admin users never download its ~120 KB
-          // gzipped weight.
+          // Wave D §4: recharts uninstalled — no remaining imports across
+          // src/. Admin tabs (TabAnalytics, TabPerformance, TabApi) use
+          // an in-house BarChart component (src/components/admin/_shared/
+          // BarChart.tsx) that renders pure SVG, so we save ~120 KB
+          // gzipped without any UX trade-off.
         },
       },
     },

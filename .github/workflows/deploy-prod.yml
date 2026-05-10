@@ -76,7 +76,9 @@ jobs:
       # ── Supabase: migrations + edge functions ────────────────────
       - uses: supabase/setup-cli@b60b5899c73b63a2d2d651b1e90db8d4c9392f51  # v1
         with:
-          version: latest
+          # Pinned to a known-good release (Wave E-CI). See
+          # ci.yml's "Install Supabase CLI" comment for rationale.
+          version: 2.98.2
 
       - name: Run database migrations (prod)
         run: |
@@ -146,7 +148,9 @@ jobs:
       - name: Smoke — motionmax.io 200
         run: |
           for i in {1..30}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://motionmax.io || echo "000")
+            # --max-time 10: defensive cap so a single hung curl can't
+            # consume the whole 5-second sleep budget for this retry.
+            STATUS=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" https://motionmax.io || echo "000")
             if [ "$STATUS" = "200" ] || [ "$STATUS" = "304" ]; then
               echo "motionmax.io is up (HTTP $STATUS)"
               exit 0
@@ -160,18 +164,20 @@ jobs:
         if: success()
         run: |
           if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
-            curl -X POST -H 'Content-Type: application/json' \
+            # --max-time 30: Slack incoming-webhook should reply within
+            # 1-2s; cap prevents a Slack outage from hanging the job.
+            curl --max-time 30 -X POST -H 'Content-Type: application/json' \
               --data "{\"text\":\":white_check_mark: Production deploy succeeded — ${GITHUB_SHA::7}\"}" \
-              "${{ secrets.SLACK_WEBHOOK_URL }}"
+              "${{ secrets.SLACK_WEBHOOK_URL }}" || true
           fi
 
       - name: Notify failure
         if: failure()
         run: |
           if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
-            curl -X POST -H 'Content-Type: application/json' \
+            curl --max-time 30 -X POST -H 'Content-Type: application/json' \
               --data "{\"text\":\":rotating_light: Production deploy FAILED — ${GITHUB_SHA::7} — see ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" \
-              "${{ secrets.SLACK_WEBHOOK_URL }}"
+              "${{ secrets.SLACK_WEBHOOK_URL }}" || true
           else
             echo "::warning::SLACK_WEBHOOK_URL not configured — skipping Slack alert"
           fi

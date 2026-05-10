@@ -148,18 +148,32 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
           7-day money-back guarantee on first subscription payment. No questions asked.
         </p>
 
-        {/* EU cooling-off advisory (binding checkbox lives at /pricing) */}
+        {/* EU cooling-off advisory + VAT-inclusive price disclosure
+            (Wave E-Legal Part I). EU consumer protection (Directive
+            98/6/EC + 2011/83/EU) requires VAT-inclusive total prices to
+            be displayed to consumers in B2C transactions. Stripe Tax
+            calculates the exact local VAT at checkout based on the
+            billing country and customer status — we can't compute it
+            client-side without that input, so we disclose the position
+            here and defer the exact figure to checkout. */}
         {isEU && (
           <div
-            className="mt-6 mx-auto max-w-[640px] rounded-xl border border-[#E4C875]/30 bg-[#E4C875]/5 p-4 text-xs text-muted-foreground"
+            className="mt-6 mx-auto max-w-[640px] rounded-xl border border-[#E4C875]/30 bg-[#E4C875]/5 p-4 text-xs text-muted-foreground space-y-2"
             data-testid="eu-cooling-off-advisory"
           >
-            <p className="font-medium text-foreground mb-1">
+            <p className="font-medium text-foreground">
               EU / UK customers — important notice
             </p>
             <p className="leading-relaxed">
-              {EU_COOLING_OFF_CONSENT_COPY} You will be asked to confirm this
-              at checkout.
+              <strong className="text-foreground">VAT:</strong> the headline prices
+              above are exclusive of VAT. EU / UK VAT is added at checkout based
+              on your billing country (Stripe Tax handles the calculation). The
+              final price you pay will be shown before you confirm payment.
+            </p>
+            <p className="leading-relaxed">
+              <strong className="text-foreground">Cooling-off:</strong>{" "}
+              {EU_COOLING_OFF_CONSENT_COPY} You will be asked to confirm this at
+              checkout.
             </p>
           </div>
         )}

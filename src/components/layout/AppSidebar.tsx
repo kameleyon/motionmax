@@ -79,6 +79,16 @@ import { toast } from "sonner";
 
 // No external props needed — navigation is handled internally
 
+/**
+ * @deprecated Legacy app-shell sidebar from the original /app layout.
+ * Wave D §C-4 sidebar audit (2026-05-10): grepped repo, zero imports
+ * found. All routes now use src/components/dashboard/Sidebar.tsx (full
+ * text) or src/components/editor/MiniSidebar.tsx (64px icon-only).
+ * Kept here only as reference for the historical decisions baked into
+ * the dashboard sidebar (collapse persistence, plan-name normalisation,
+ * project-type icon mapping). Safe to delete in a follow-up wave once
+ * we're confident no lazy/runtime import resurrects it.
+ */
 import { PLAN_LIMITS, normalizePlanName } from "@/lib/planLimits";
 import { isLikelyEUUser } from "@/lib/euCoolingOff";
 import { getProjectTypeMeta } from "@/lib/projectUtils";

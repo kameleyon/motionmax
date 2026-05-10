@@ -97,6 +97,29 @@ export default function AcceptableUse() {
           </p>
         </section>
 
+        {/* Wave E-Legal Part D: AUP minimum-age clause. The 18+ rule
+            already lives in ToS §3; restating it here gives the AUP its
+            own self-contained age gate so an enforcement decision based
+            solely on AUP violation has direct textual support. The
+            under-13 carve-out tracks COPPA + GDPR Art. 8 thresholds and
+            matches the Privacy Policy §10 disclosure. */}
+        <section className="space-y-3">
+          <h2 className="text-xl font-semibold text-foreground">2.2 Minimum Age</h2>
+          <p className="text-muted-foreground leading-relaxed">
+            You must be at least 18 years of age to create an account or use the Service. We do not
+            knowingly allow access by anyone under 18, and in particular do not knowingly collect
+            personal information from children under 13 (United States COPPA threshold) or under the
+            higher local age-of-digital-consent threshold where it applies (e.g. 16 in Germany under
+            GDPR Art. 8). If we learn that a user is under the applicable minimum age, we will close
+            the account and delete personal information. Parents or guardians who believe a minor has
+            registered may contact{" "}
+            <a href="mailto:privacy@motionmax.io" className="text-primary hover:underline">
+              privacy@motionmax.io
+            </a>{" "}
+            for immediate removal.
+          </p>
+        </section>
+
         <section className="space-y-3">
           <h2 className="text-xl font-semibold text-foreground">3. Voice Cloning — Practical Use</h2>
           <p className="text-muted-foreground leading-relaxed">

@@ -19,6 +19,7 @@ import {
   normalizeScenes,
 } from "./types";
 import { submitJob, waitForJob } from "./callPhase";
+import { isSmartFlow } from "@/lib/projectUtils";
 
 const log = createScopedLogger("Pipeline:Unified");
 
@@ -107,7 +108,7 @@ export async function runUnifiedPipeline(
   // scene's audioUrl with the master URL so editor + export code
   // keeps working unchanged. Cuts Gemini quota burn from N× to 1×
   // and gives one continuous narration take instead of N cold takes.
-  const isSmartflow = params.projectType === "smartflow";
+  const isSmartflow = isSmartFlow(params.projectType);
   if (isSmartflow) {
     // Legacy per-scene path for smartflow (single-scene anyway)
     for (let i = 0; i < sceneCount; i++) {

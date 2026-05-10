@@ -135,10 +135,18 @@ export default function Privacy() {
             <p>We notify all customers — not only enterprise customers — at least 10 business days before adding or replacing a subprocessor that processes personal data, via the in-app changelog and an email to the address on file. To request copies of executed data-processing agreements or to ask about any subprocessor, contact <a href="mailto:privacy@motionmax.io" className="text-primary hover:underline">privacy@motionmax.io</a>.</p>
           </section>
 
+          {/* Wave E-Legal Part F: previous draft claimed the "EU–US Data
+              Privacy Framework" as a transfer mechanism. DPF is a formal
+              U.S. Department of Commerce self-certification program — you
+              cannot rely on it unless your organisation is listed on the
+              DataPrivacyFramework.gov participants registry. motionmax is
+              not on that registry, so the claim is removed. Standard
+              Contractual Clauses + DPA available on request is the lawful
+              transfer basis we actually have in place. */}
           <section className="space-y-3">
             <h2 className="text-lg font-semibold text-foreground">6. International Data Transfers</h2>
             <p>MotionMax is operated from the United States. If you access the Service from the EEA, UK, or Switzerland, your personal data will be transferred to and processed in the United States, which may not provide the same level of data protection as your home jurisdiction.</p>
-            <p>Where required, we rely on the EU–US Data Privacy Framework, Standard Contractual Clauses (SCCs) approved by the European Commission, or other lawful transfer mechanisms. Our key subprocessors (Supabase, Vercel, Stripe, ElevenLabs) maintain SCCs or equivalent safeguards. You may request copies of applicable safeguards by contacting us at privacy@motionmax.io.</p>
+            <p>International transfers from the EU / EEA, UK, and Switzerland are covered by Standard Contractual Clauses (SCCs) approved by the European Commission, together with additional safeguards (technical and organisational measures, transfer impact assessments where applicable) documented in our Data Processing Addendum (DPA). Our key subprocessors (Supabase, Vercel, Stripe, ElevenLabs) maintain executed SCCs or equivalent safeguards. To request a copy of our DPA or details of the SCCs in place with a specific subprocessor, contact <a href="mailto:privacy@motionmax.io" className="text-primary hover:underline">privacy@motionmax.io</a>.</p>
           </section>
 
           {/* C-13-4 (Comply L-C-04): the previous paragraph promised
@@ -158,7 +166,7 @@ export default function Privacy() {
               <li><strong className="text-foreground">Activity &amp; security logs:</strong> automatically deleted after <strong className="text-foreground">90 days</strong>.</li>
               <li><strong className="text-foreground">Video generation job records</strong> (completed and failed jobs): automatically deleted after <strong className="text-foreground">30 days</strong>.</li>
               <li><strong className="text-foreground">Generation archives:</strong> automatically deleted after <strong className="text-foreground">1 year</strong>.</li>
-              <li><strong className="text-foreground">Payment webhook records</strong> (idempotency keys): automatically deleted after <strong className="text-foreground">7 days</strong>.</li>
+              <li><strong className="text-foreground">Payment webhook records</strong> (raw Stripe event payloads + idempotency keys): automatically deleted after <strong className="text-foreground">90 days</strong>. The permanent invoice ledger (Stripe invoice IDs, amount, customer) is retained separately for the period required by applicable tax and accounting law.</li>
               <li><strong className="text-foreground">Financial records</strong> (Stripe invoices, tax records): retained for the period required by applicable tax and accounting law (typically 7 years), even after account deletion.</li>
             </ul>
           </section>
@@ -191,10 +199,28 @@ export default function Privacy() {
               <li><strong className="text-foreground">Objection:</strong> Object to certain processing activities</li>
             </ul>
             <p>To exercise any of these rights, contact us at{" "}
-              <a href="mailto:support@motionmax.io" className="text-primary hover:underline">support@motionmax.io</a>.
-              We will respond to verified requests within 30 days.
+              <a href="mailto:support@motionmax.io" className="text-primary hover:underline">support@motionmax.io</a>{" "}
+              or{" "}
+              <a href="mailto:privacy@motionmax.io" className="text-primary hover:underline">privacy@motionmax.io</a>.
+              We respond to verified requests <strong className="text-foreground">within 30 days</strong> of receipt (GDPR Art. 12(3) and analogous timelines under CCPA / CPRA, LGPD, and other privacy regimes). For complex or high-volume requests, we may extend the response period by up to an additional <strong className="text-foreground">60 days</strong>; if we do, we will notify you within the initial 30-day window with the reason for the extension and an expected completion date.
             </p>
             <p>If you are in the EEA and believe your data has been processed unlawfully, you have the right to lodge a complaint with your national supervisory authority. For example, in Ireland: Data Protection Commission (dataprotection.ie); in Germany: your state's Datenschutzbehörde; in the UK: the Information Commissioner's Office (ico.org.uk).</p>
+          </section>
+
+          {/* Wave E-Legal Part B: GDPR Art. 22 requires explicit
+              disclosure of any automated decision-making — including
+              profiling — that produces legal effects or significantly
+              affects the user. motionmax's generation pipeline produces
+              content but does not produce decisions about users; all
+              material account decisions (suspension, billing dispute
+              outcomes, plan tier overrides) involve human review.
+              Disclosing the negative is the safest posture under Art. 22
+              and meaningful for users who do not know what "AI" actually
+              does in this product. */}
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold text-foreground">8.1 Automated Decision-Making (GDPR Art. 22)</h2>
+            <p>MotionMax does <strong className="text-foreground">not</strong> use solely-automated decision-making to materially affect your rights, contracts, or legal status. The AI generation pipeline produces content (video, image, audio) based on your inputs, but does not make decisions about you — for example, we do not auto-approve or auto-deny accounts, auto-set pricing tiers, or auto-suspend users based solely on algorithmic output. All material account decisions (suspensions, ToS / AUP enforcement, billing exceptions) involve human review.</p>
+            <p>Per GDPR Article 22, you have the right not to be subject to a decision based solely on automated processing that produces legal or similarly significant effects. If you believe an automated decision has affected you, you may obtain human review by contacting <a href="mailto:privacy@motionmax.io" className="text-primary hover:underline">privacy@motionmax.io</a>; we will review the decision, allow you to provide additional context, and confirm or correct the outcome.</p>
           </section>
 
           <section className="space-y-3">
@@ -202,9 +228,16 @@ export default function Privacy() {
             <p>We implement industry-standard security measures including encryption at rest and in transit (TLS/HTTPS), access controls, and regular security reviews. However, no method of transmission over the internet is 100% secure. We cannot guarantee absolute security of your data.</p>
           </section>
 
+          {/* Wave E-Legal Part D: explicit COPPA carve-out for the U.S.
+              under-13 threshold. ToS §3 already requires 18+ for the
+              Service overall; this notice satisfies the FTC's separate
+              expectation that any consumer site disclose its policy on
+              collecting personal information from children under 13. */}
           <section className="space-y-3">
             <h2 className="text-lg font-semibold text-foreground">10. Children's Privacy</h2>
-            <p>The Service is not directed to individuals under the age of 18. We do not knowingly collect personal information from children. If we become aware that a child has provided us with personal information, we will delete it promptly.</p>
+            <p>The Service is not directed to children. We require all users to be at least 18 years of age (see Terms of Service §3 and AUP §3).</p>
+            <p><strong className="text-foreground">United States — Children under 13 (COPPA).</strong> MotionMax is not directed to children under 13. We do not knowingly collect personal information from children under 13. If you are under 13, do not use the Service. If we learn that we have collected personal information from a child under 13, we will delete it promptly. Parents or guardians who believe their child has provided information without consent should contact <a href="mailto:privacy@motionmax.io" className="text-primary hover:underline">privacy@motionmax.io</a> and we will take immediate steps to delete the data and close the account.</p>
+            <p>In jurisdictions where the age of digital consent is higher than 13 (e.g. 14 in Spain, 15 in France, 16 in Germany under GDPR Art. 8), the same prohibition applies at the higher local threshold.</p>
           </section>
 
           <section className="space-y-3">
@@ -212,19 +245,44 @@ export default function Privacy() {
             <p>We may update this Privacy Policy periodically. We will notify you of significant changes via email or a prominent notice within the Service. The "Last updated" date at the top of this page indicates when this policy was last revised.</p>
           </section>
 
+          {/* Wave E-Legal Part G: full California section refactor —
+              CCPA / CPRA Notice at Collection (Cal. Civ. Code §1798.100),
+              Limit Use of Sensitive Personal Information (§1798.121),
+              right to opt out of sale or sharing with a link to the
+              standalone /do-not-sell landing page. DSAR window unified
+              to 30 days (was 45) to align with the general response
+              timeline in §8 — CCPA's statutory floor is 45 days but
+              there is no prohibition on responding faster, and a single
+              clock simplifies operations and is more user-friendly. */}
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold text-foreground">12. California Privacy Rights (CCPA)</h2>
-            <p>If you are a California resident, the California Consumer Privacy Act (CCPA) grants you specific rights regarding your personal information, in addition to the general rights described in Section 6 above:</p>
+            <h2 className="text-lg font-semibold text-foreground">12. California Residents (CCPA / CPRA)</h2>
+            <p>If you are a California resident, the California Consumer Privacy Act ("CCPA") as amended by the California Privacy Rights Act ("CPRA") grants you the rights described below. The disclosures in this section also constitute our "Notice at Collection" required under Cal. Civ. Code §1798.100.</p>
+
+            <h3 className="text-base font-semibold text-foreground pt-2">Notice at Collection</h3>
+            <p>We collect the following categories of personal information, as defined in Cal. Civ. Code §1798.140(c):</p>
             <ul className="list-disc pl-6 space-y-1">
-              <li><strong className="text-foreground">Right to Know:</strong> You may request that we disclose the categories and specific pieces of personal information we have collected about you, the categories of sources from which it was collected, the business purpose for collecting it, and the categories of third parties with whom we share it.</li>
-              <li><strong className="text-foreground">Right to Delete:</strong> You may request deletion of personal information we have collected about you, subject to certain exceptions.</li>
-              <li><strong className="text-foreground">Right to Opt Out of Sale or Sharing:</strong> MotionMax does not sell or share your personal information with third parties for cross-context behavioral advertising. Because we do not engage in such activities, no opt-out action is required. If our practices change, we will update this policy and provide a mechanism to opt out.</li>
-              <li><strong className="text-foreground">Right to Non-Discrimination:</strong> We will not discriminate against you for exercising any of your CCPA rights.</li>
+              <li><strong className="text-foreground">Identifiers:</strong> email address, IP address, account ID. Purpose: account creation, authentication, security, communications. Retention: duration of account + 7-day grace period; financial records 7 years.</li>
+              <li><strong className="text-foreground">Customer records:</strong> billing email, Stripe customer ID, subscription status. Purpose: billing and tax. Retention: 7 years for tax compliance.</li>
+              <li><strong className="text-foreground">Commercial information:</strong> purchase history, credit consumption. Purpose: account management, service delivery. Retention: duration of account.</li>
+              <li><strong className="text-foreground">Internet activity:</strong> usage of the Service, generation history. Purpose: service delivery, abuse prevention, aggregate analytics. Retention: 30 days for video job records, 1 year for archives, 90 days for security logs.</li>
+              <li><strong className="text-foreground">Sensory data (Sensitive PI):</strong> voice recordings uploaded for cloning (biometric identifiers — see §7.1). Purpose: voice synthesis output you request. Retention: account life + 30 days after deletion. We <strong className="text-foreground">limit use of this Sensitive PI</strong> to the purposes disclosed in §7.1 (CCPA §1798.121 right to limit).</li>
+              <li><strong className="text-foreground">Inferences:</strong> none drawn beyond service operation; we do not build behavioural profiles for advertising.</li>
             </ul>
-            <p>To exercise your California privacy rights, please contact us at{" "}
-              <a href="mailto:privacy@motionmax.io" className="text-primary hover:underline">privacy@motionmax.io</a>.
-              We will respond to verified requests within 45 days as required by the CCPA.
-            </p>
+            <p>We do not collect categories under §1798.140(c) that are not listed above (no precise geolocation beyond IP-level, no biometric data other than voice samples, no professional or education information, no genetic data).</p>
+
+            <h3 className="text-base font-semibold text-foreground pt-2">Your Rights</h3>
+            <ul className="list-disc pl-6 space-y-1">
+              <li><strong className="text-foreground">Right to Know:</strong> request the categories and specific pieces of personal information we have collected about you, the categories of sources, the business purpose, and the categories of third parties with whom we share it.</li>
+              <li><strong className="text-foreground">Right to Delete:</strong> request deletion of personal information we have collected about you, subject to statutory exceptions (e.g. financial records we are required to retain).</li>
+              <li><strong className="text-foreground">Right to Correct:</strong> request correction of inaccurate personal information.</li>
+              <li><strong className="text-foreground">Right to Limit Use of Sensitive Personal Information (§1798.121):</strong> direct us to limit use of your Sensitive PI (in our case, voice biometric data) to the disclosed purposes. We already restrict this category by default — see §7.1.</li>
+              <li><strong className="text-foreground">Right to Opt Out of Sale or Sharing:</strong> <strong className="text-foreground">MotionMax does not sell or share personal information for cross-context behavioural advertising, monetary consideration, or any other form of "sale" as defined under CCPA §1798.140(ad) or "sharing" under §1798.140(ah).</strong> We disclose this explicitly via our <a href="/do-not-sell" className="text-primary hover:underline">Do Not Sell or Share My Personal Information</a> page, which also describes how to submit a CCPA request and how we honour the Global Privacy Control (GPC) signal.</li>
+              <li><strong className="text-foreground">Right to Non-Discrimination:</strong> we will not discriminate against you for exercising any CCPA / CPRA right.</li>
+            </ul>
+
+            <h3 className="text-base font-semibold text-foreground pt-2">How to Exercise</h3>
+            <p>To exercise your California privacy rights, contact <a href="mailto:privacy@motionmax.io" className="text-primary hover:underline">privacy@motionmax.io</a>. We respond to verified requests <strong className="text-foreground">within 30 days</strong>; for complex requests we may extend by up to 60 additional days with notice, consistent with our general DSAR timeline in §8 (CCPA's statutory ceiling is 45 days, extendable; we hold ourselves to the faster GDPR Art. 12(3) cadence as a unified policy).</p>
+            <p>An authorised agent may submit a request on your behalf; we will require written authorisation and may verify your identity before disclosing personal information.</p>
           </section>
 
           <section className="space-y-3">
@@ -239,9 +297,11 @@ export default function Privacy() {
       <footer className="border-t border-border/30 py-8 mt-12">
         <div className="mx-auto max-w-3xl px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
           <span>© 2026 MotionMax. All rights reserved.</span>
-          <div className="flex gap-4">
+          <div className="flex flex-wrap gap-4">
             <a href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</a>
             <a href="/terms" className="hover:text-foreground transition-colors">Terms of Service</a>
+            <a href="/cookies" className="hover:text-foreground transition-colors">Cookie Policy</a>
+            <a href="/do-not-sell" className="hover:text-foreground transition-colors">Do Not Sell My Info</a>
           </div>
         </div>
       </footer>

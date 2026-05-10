@@ -4,10 +4,10 @@
 // legal version (the app uses src/config/legal-versions.ts; this
 // file is read only by Resend dispatchers and the receipt template).
 //
-// Last sync: 2026-05-10 (B-NEW-21 — tos bumped to v2 alongside the
-// Wave 4 lifecycle email rollout).
+// Last sync: 2026-05-10 (Wave E-Legal — tos v4, privacy v4, aup v3).
+// See src/config/legal-versions.ts header for the full changelog.
 export const LEGAL_VERSIONS = {
-  tos: "2026.05.10-v2",
-  privacy: "2026.05.10-v2",
-  aup: "2026.05.10-v1",
+  tos: "2026.05.10-v4",
+  privacy: "2026.05.10-v4",
+  aup: "2026.05.10-v3",
 } as const;

@@ -473,6 +473,46 @@ const faqJsonLd = {
           All plans include a 7-day money-back guarantee. Yearly billing saves up to {yearlySavingsPercent("studio")}%.
           <a href="/pricing" class="text-primary hover:underline ml-1">See full pricing details →</a>
         </p>
+
+        {/* Wave E-Legal Part I — EU/UK VAT disclosure. Directive
+            98/6/EC requires consumer prices to be displayed inclusive
+            of VAT. Stripe Tax calculates the exact VAT at checkout based
+            on billing country, so the right disclosure is to flag the
+            position here and confirm the final price is shown before
+            payment. The notice is hidden by default and revealed by a
+            small inline script for visitors whose IANA timezone is in
+            the EU/EEA/UK list. */}
+        <div id="eu-vat-disclosure" hidden class="mx-auto mt-4 max-w-[640px] rounded-xl border border-[#14C8CC]/30 bg-[#14C8CC]/5 p-4 text-xs text-muted-foreground">
+          <p class="leading-relaxed">
+            <strong class="text-foreground">EU / UK customers:</strong>
+            the prices shown above are exclusive of VAT. The applicable EU / UK
+            VAT for your billing country is added at checkout (handled by
+            Stripe Tax). The total payable amount, including VAT, will be
+            displayed before you confirm payment.
+          </p>
+        </div>
+        <script type="module">
+          // Reveal the EU VAT notice when the visitor's browser timezone
+          // sits in the EU/EEA/UK range. Conservative match — false
+          // positives just show a true statement; false negatives just
+          // omit the disclosure for someone outside the EU.
+          const EU_TZ_PREFIXES = [
+            "Europe/Amsterdam","Europe/Andorra","Europe/Athens","Europe/Berlin","Europe/Bratislava",
+            "Europe/Brussels","Europe/Bucharest","Europe/Budapest","Europe/Copenhagen","Europe/Dublin",
+            "Europe/Gibraltar","Europe/Guernsey","Europe/Helsinki","Europe/Isle_of_Man","Europe/Jersey",
+            "Europe/Lisbon","Europe/Ljubljana","Europe/London","Europe/Luxembourg","Europe/Madrid",
+            "Europe/Malta","Europe/Monaco","Europe/Oslo","Europe/Paris","Europe/Prague","Europe/Reykjavik",
+            "Europe/Riga","Europe/Rome","Europe/Sofia","Europe/Stockholm","Europe/Tallinn","Europe/Vaduz",
+            "Europe/Vienna","Europe/Vilnius","Europe/Warsaw","Europe/Zagreb","Europe/Zurich",
+            "Atlantic/Azores","Atlantic/Canary","Atlantic/Madeira","Asia/Nicosia"
+          ];
+          try {
+            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            if (tz && EU_TZ_PREFIXES.includes(tz)) {
+              document.getElementById("eu-vat-disclosure")?.removeAttribute("hidden");
+            }
+          } catch (_) { /* no-op */ }
+        </script>
       </div>
     </section>
 
@@ -566,6 +606,10 @@ const faqJsonLd = {
             <li><a href="/terms" class="hover:text-foreground transition-colors">Terms of Service</a></li>
             <li><a href="/privacy" class="hover:text-foreground transition-colors">Privacy Policy</a></li>
             <li><a href="/acceptable-use" class="hover:text-foreground transition-colors">Acceptable Use</a></li>
+            {/* Wave E-Legal Part A — standalone cookie disclosure page. */}
+            <li><a href="/cookies" class="hover:text-foreground transition-colors">Cookie Policy</a></li>
+            {/* Wave E-Legal Part G — CCPA "Do Not Sell or Share". */}
+            <li><a href="/do-not-sell" class="hover:text-foreground transition-colors">Do Not Sell My Info</a></li>
             {/* B-NEW-10 / TONGUE-10 — withdrawing consent must be as easy as
                 granting it (GDPR Art. 7(3)). The data-cookie-action attribute
                 is picked up by the delegated click handler in

@@ -17,7 +17,19 @@ import motionmaxLogo from '@/assets/motionmax-logo.webp';
 /** Icon-only 64px sidebar used by the unified Editor. Matches the
  *  design bundle's .side.mini — logo, 5 nav items (Studio / Projects
  *  active / Voices / Characters / Brand kits), profile avatar footer
- *  with the same dropdown as the dashboard sidebar. */
+ *  with the same dropdown as the dashboard sidebar.
+ *
+ *  ── Why not dedup with components/dashboard/Sidebar.tsx ──────────
+ *  Wave D §C-4 sidebar audit: the dashboard Sidebar is a 658-line
+ *  full-text component (project list + cmd-k search + delete dialog
+ *  + footer dropdown). MiniSidebar is a 178-line icon-only chrome
+ *  used in the Editor where horizontal real-estate is precious. They
+ *  share only the profile-dropdown items (~50 LOC) but with subtly
+ *  different routes (Sidebar shows Billing+Help, MiniSidebar shows
+ *  Usage&Billing). Extracting a shared shell would force one of two
+ *  routes on the other, and the dropdown items themselves are mostly
+ *  Tailwind/JSX — abstracting them costs more readability than the
+ *  ~50 lines saves. Decision: KEEP THE SPLIT. */
 
 const NAV_ITEMS: Array<{
   to: string;

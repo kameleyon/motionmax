@@ -40,6 +40,8 @@ const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
 const Terms = lazy(() => import("./pages/Terms"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const AcceptableUse = lazy(() => import("./pages/AcceptableUse"));
+const CookiePolicy = lazy(() => import("./pages/CookiePolicy"));
+const DoNotSellMyInfo = lazy(() => import("./pages/DoNotSellMyInfo"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // Admin page in its own chunk — never loaded for non-admin users
@@ -265,6 +267,10 @@ const App = () => (
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/acceptable-use" element={<AcceptableUse />} />
+            {/* Wave E-Legal Part A — standalone cookie disclosure page. */}
+            <Route path="/cookies" element={<CookiePolicy />} />
+            {/* Wave E-Legal Part G — CCPA "Do Not Sell or Share" landing. */}
+            <Route path="/do-not-sell" element={<DoNotSellMyInfo />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
           </Suspense>

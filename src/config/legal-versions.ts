@@ -51,9 +51,33 @@ export const LEGAL_VERSIONS = {
   //     consent-based synthetic-media language (C-13-2) and added a
   //     §2.x Voice Cloning consent clause; prepended the English-only
   //     notice (C-13-8).
-  tos: '2026.05.10-v3',
-  privacy: '2026.05.10-v3',
-  aup: '2026.05.10-v2',
+  //
+  // Wave E-Legal (2026-05-10):
+  //   • tos     → v4 — added COPPA carve-out + GDPR Art. 8 deferral to §3
+  //     so the ToS itself carries the under-13 prohibition (was only in
+  //     the Privacy Policy).
+  //   • privacy → v4 — six material amendments:
+  //       (1) §6 removed the unverified DPF claim and substituted
+  //           SCCs + DPA-on-request as the actual transfer basis.
+  //       (2) §7 webhook retention extended from 7 → 90 days to align
+  //           with the new purge_old_webhook_events() window
+  //           (migration 20260510270000); permanent invoice ledger
+  //           clarified.
+  //       (3) §8 DSAR timeline unified to 30 days (was 45 in the CA
+  //           section) with explicit "+60 days for complex requests"
+  //           extension language.
+  //       (4) §8.1 new — GDPR Art. 22 automated decision-making
+  //           disclosure with human-review path.
+  //       (5) §10 expanded — COPPA carve-out + GDPR Art. 8 deferral.
+  //       (6) §12 restructured — full CCPA / CPRA Notice at Collection,
+  //           Limit Use of Sensitive PI (§1798.121), and link to the
+  //           new /do-not-sell standalone page.
+  //   • aup    → v3 — added §2.2 self-contained minimum-age clause
+  //     (18+, COPPA under-13 carve-out) so AUP enforcement no longer
+  //     has to cross-reference ToS §3.
+  tos: '2026.05.10-v4',
+  privacy: '2026.05.10-v4',
+  aup: '2026.05.10-v3',
 } as const;
 
 export type LegalDoc = keyof typeof LEGAL_VERSIONS;

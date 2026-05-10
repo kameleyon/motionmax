@@ -78,6 +78,9 @@ export default function Terms() {
             <h2 className="text-lg font-semibold text-foreground">3. Account Registration</h2>
             <p>To use the Service, you must create an account by providing a valid email address and password. You are responsible for maintaining the confidentiality of your account credentials and for all activities that occur under your account. You must notify us immediately of any unauthorized use of your account.</p>
             <p>You must be at least 18 years of age to create an account and use the Service.</p>
+            {/* Wave E-Legal Part D: COPPA carve-out + GDPR Art. 8
+                deferral. Aligns ToS with Privacy §10 and AUP §2.2. */}
+            <p><strong className="text-foreground">Children under 13.</strong> The Service is not directed to children under 13. We do not knowingly collect personal information from children under 13. If we learn that we have collected information from a child under 13 we will delete it promptly; parents or guardians who believe their child has registered should contact <a href="mailto:privacy@motionmax.io" className="text-primary hover:underline">privacy@motionmax.io</a>. In jurisdictions where the age of digital consent is higher than 13, the same prohibition applies at the higher local threshold.</p>
           </section>
 
           <section className="space-y-3">
@@ -200,9 +203,11 @@ export default function Terms() {
       <footer className="border-t border-border/30 py-8 mt-12">
         <div className="mx-auto max-w-3xl px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
           <span>© 2026 MotionMax. All rights reserved.</span>
-          <div className="flex gap-4">
+          <div className="flex flex-wrap gap-4">
             <a href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</a>
             <a href="/terms" className="hover:text-foreground transition-colors">Terms of Service</a>
+            <a href="/cookies" className="hover:text-foreground transition-colors">Cookie Policy</a>
+            <a href="/do-not-sell" className="hover:text-foreground transition-colors">Do Not Sell My Info</a>
           </div>
         </div>
       </footer>

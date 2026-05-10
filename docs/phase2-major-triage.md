@@ -632,4 +632,40 @@ Estimated effort: ~6-8h. ~25 items. Two sub-waves possible (legal/docs vs CI/IaC
 - **F-A11Y-015 caption tracks** — pending worker VTT generation pipeline (already flagged C-1-11 partial).
 - **TONGUE-04 RTL plumbing + TONGUE-13 email i18n + TONGUE-14 multi-currency** — all L items; not viable until i18n runtime lands.
 - **§8 Crash 6, 11, 12, 13** — worker-side; bundle with Forge wave.
+
+---
+
+# Wave execution log
+
+## Wave A — Brand sweep finish + design tokens (2026-05-10) — DONE
+Shipped: `--warning` aqua-friendly token, marketing emoji → Lucide, theme-color/apple-status-bar/PWA splash unified, og:image variants, password-strength/CaptionStyleSelector/VoiceLab color sweep, spacing.brand-* + shadow.brand-* + transitionDuration tokens, admin destructive contrast.
+
+## Wave B — Auth + onboarding UX polish (2026-05-10) — DONE
+Shipped: Auth.tsx lockout banner + live countdown, resend confirmation cooldown + 5-min stale prompt, `autoCapitalize="none"` on email, account-deletion re-auth + email, Help "Live chat"/Coming-soon cleanup, errorMessages account-enumeration unification, skip-link to app-shell, F-14/F-15 literal copy fixes, Sentry breadcrumb on referral swallowed-error.
+
+## Wave C — Analytics + lifecycle email + SEO trio (2026-05-10) — DONE
+Shipped: signOut UTM/Sentry reset, ga_client_id captured from `_ga` at SIGNED_IN, Sentry breadcrumbs on catch, same-tab checkout for mobile, referral_code in signup_completed/begin_checkout, docs/tracking-plan.md, 5 lifecycle email rewrites (welcome no-paid-upsell, payment-failed, cancellation, greeting fallback, win-back), scripts/generate-sitemap.mjs, robots.txt cleanup, hreflang canonical apex, aggregateRating + contactPoint + VideoObject JSON-LD.
+
+## Wave D — Code health refactor + perf (2026-05-10) — DONE
+Shipped: projectUtils rollout (3 callsites swapped to isSmartFlow), Lucide tree-shake audit (keep barrel — `sideEffects: false` + Vite handles it), recharts uninstalled (-34 packages), Sidebar dedup audit (keep dashboard ↔ editor split, AppSidebar marked @deprecated dead-code), repo root cleanup (`'imageUrl'` + `'image_url'` shell-redirect cruft deleted + .gitignore guards), 8 TODO markers re-tagged with milestones, Web Vitals confirmed already wired at src/lib/webVitals.ts → trackEvent (consent-gated), PWA precache 4.1 MB (already tight from C-5-4), lighthouserc.cjs widened from 1 → 6 routes with per-route gates, useActiveJobs.ts realtime-aware adaptive polling (30s healthy / 5s degraded), **UserDrawer 393.5 KB → 14 KB** via lazy CommunicatePanel split (tiptap now lazy-loaded — 96% chunk reduction), Tailwind CSS 208 KB kept (JIT already tight).
+
+## Wave E-Legal — cookie/COPPA/DPF/CCPA/GPC/VAT + practical i18n (2026-05-10) — DONE
+Shipped: new /cookies page (React + Astro) with per-cookie disclosure tables and "reopen banner" CTA, banner copy tightened (real examples), Art. 22 automated-decision disclosure (Privacy §8.1), DSAR unified to 30 days (extension +60d) across all jurisdictions, COPPA clauses in Privacy §10 + ToS §3 + AUP §2.2, webhook_events retention 7 → 90 days via `20260510270000_webhook_events_retention_extend.sql` (permanent invoice ledger via stripe_processed_invoices), DPF claim removed (now SCCs + DPA only), California Notice at Collection + Limit-Use-of-SPI + Right to Limit (§12 rewrite), new /do-not-sell pages (React + Astro), GPC detection in CookieConsent.tsx + marketing cookieBanner.js (forces analytics=marketing=false), EU/UK VAT-inclusive disclosure in Pricing/LandingPricing/marketing index.astro with IANA-timezone EU detection, worker en-US dates → ISO 8601 in AI prompts (handleGenerateTopics + researchTopic), email layout English-only acknowledgment footer, legal versions bumped (tos→v4, privacy→v4, aup→v3) triggering re-acceptance on next sign-in.
+
+## Wave E-CI — SAST/CodeQL/SBOM/staging-env/HSTS-preload/Dependabot (2026-05-10) — DONE
+Shipped: .husky/pre-commit inline secret-scan (Stripe sk_live_/sk_test_/rk_, JWTs, AWS AKIA, GH PATs, Slack tokens, OpenAI sk-, PEM keys) + .env block + lint-staged; new .github/workflows/codeql.yml (push/PR + weekly Mon cron, javascript-typescript matrix, SHA-pinned, security-extended queries); new sbom.yml (CycloneDX over root + marketing/ + worker/, JSON 1.6 spec, 90-day artifact retention); new gitleaks.yml + .gitleaks.toml (push/PR + daily cron, baseline allowlists for rotated b9148c1 leak); new release-checklist.yml (Supabase migrations + Sentry sourcemap + Vercel env-var-presence + Stripe tag + Slack release notes — defensive `::warning::` on missing secrets); docs/security-deployment.md (HSTS preload submission procedure); ci.yml marketing-build job added (npm audit covers marketing); Supabase CLI pinned to 2.98.2 across ci.yml + deploy-staging.yml + deploy-prod.yml; staging→production gating verified (workflow_run trigger + environment: production); Render curls confirmed absent + Railway auto-deploy is GitHub-native + Slack curls now `--max-time 30` with `|| true`; .github/dependabot.yml across 4 ecosystems (root npm, marketing npm, worker npm, github-actions) — weekly Monday 08:00 UTC, grouped dev-deps + prod-deps-patch, React major bumps ignored.
+
+---
+
+## Final Phase 2 Major status (2026-05-10)
+
+- Triaged: 240 bullets across §1–§14
+- Closed via incidental Critical work: ~64 items
+- Wave A+B+C+D+E-Legal+E-CI shipped: ~88 items
+- Remaining (deferred — call-out from this doc above):
+  - i18n RUNTIME (multi-week — RTL plumbing, email i18n, multi-currency)
+  - 3 §10 ghost edge cases needing test-first
+  - 4 RLS-PUBLIC-leak followups (Task #83)
+  - 2 HUMAN tasks (DMCA Designated Agent + EU Art. 27 representative)
+- Bundle deltas: UserDrawer -96% (393.5 → 14 KB), 34 recharts/d3 packages removed, PWA precache 4.1 MB.
 - **§9 Watch M1 SLO definitions, M5 cost spike alerting** — require product input on thresholds.

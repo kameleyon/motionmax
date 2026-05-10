@@ -54,6 +54,14 @@ import { LEGAL_VERSIONS, LEGAL_LAST_UPDATED_LABEL } from "@/config/legal-version
       <p class="leading-relaxed">You represent that you have explicit consent from any voice owner before cloning their voice on the Service. Voice cloning of public figures, deceased persons, or any individual without their consent is strictly prohibited and is grounds for immediate termination. Where applicable jurisdictions classify voice recordings as biometric identifiers (Illinois BIPA, Texas CUBI, California CPRA, and similar laws), you further acknowledge that consent must be in writing and that the voice owner retains the right to withdraw consent and request deletion of their biometric data at any time.</p>
     </section>
 
+    {/* Wave E-Legal Part D: AUP minimum-age clause. Mirrors the React
+        AUP §2.2 — the 18+ rule already lives in ToS §3 but restating it
+        here gives the AUP its own self-contained age gate. */}
+    <section class="space-y-3">
+      <h2 class="text-xl font-semibold text-foreground">2.2 Minimum Age</h2>
+      <p class="leading-relaxed">You must be at least 18 years of age to create an account or use the Service. We do not knowingly allow access by anyone under 18, and in particular do not knowingly collect personal information from children under 13 (United States COPPA threshold) or under the higher local age-of-digital-consent threshold where it applies (e.g. 16 in Germany under GDPR Art. 8). If we learn that a user is under the applicable minimum age, we will close the account and delete personal information. Parents or guardians who believe a minor has registered may contact <a href="mailto:privacy@motionmax.io" class="text-primary hover:underline">privacy@motionmax.io</a> for immediate removal.</p>
+    </section>
+
     <section class="space-y-3">
       <h2 class="text-xl font-semibold text-foreground">3. Voice Cloning — Practical Use</h2>
       <p class="leading-relaxed">The voice cloning feature requires your explicit consent and must only be used with voices you have the legal right to clone. Cloning another person's voice without their explicit written consent is strictly prohibited and may constitute a violation of applicable laws, including those related to fraud, identity theft, and defamation.</p>

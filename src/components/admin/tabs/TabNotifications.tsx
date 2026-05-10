@@ -228,7 +228,7 @@ export function TabNotifications(): JSX.Element {
         <>
           <Pill variant="default">Coming soon</Pill>
           <button type="button" className="btn-ghost"
-            onClick={() => toast.info("Routing rule editor — TODO Phase 18")}>
+            onClick={() => toast.info("Routing rule editor — TODO(admin-phase18)")}>
             <I.plus /> New rule
           </button>
         </>
@@ -256,7 +256,7 @@ export function TabNotifications(): JSX.Element {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
                   <span style={{ fontSize: 12.5, color: "var(--ink)", fontWeight: 500 }}>{r.n}</span>
                   <button type="button" className="btn-mini"
-                    onClick={() => toast.info("Rule editor — TODO Phase 18")}>Edit</button>
+                    onClick={() => toast.info("Rule editor — TODO(admin-phase18)")}>Edit</button>
                 </div>
                 <div className="mono muted" style={{ fontSize: 10.5, letterSpacing: ".04em" }}>
                   WHEN <span style={{ color: "var(--cyan)" }}>{r.c}</span> → {r.a}
@@ -309,7 +309,7 @@ function NotificationRow({ n, onAck }: { n: NotifRow; onAck: () => void }): JSX.
             {!ack && <button type="button" className="btn-mini" onClick={onAck}><I.check /> Acknowledge</button>}
             <button type="button" className="btn-mini"
               onClick={() => { if (n.cta_url) window.open(n.cta_url, "_blank", "noopener,noreferrer"); else toast.info("No CTA URL"); }}>View</button>
-            <button type="button" className="btn-mini" onClick={() => toast.info("Snooze — TODO Phase 18")}>Snooze 1h</button>
+            <button type="button" className="btn-mini" onClick={() => toast.info("Snooze — TODO(admin-phase18)")}>Snooze 1h</button>
           </div>
         </div>
       </div>
@@ -325,7 +325,7 @@ function ChannelRow({ k, d, on }: { k: string; d: string; on: boolean }): JSX.El
         <div style={{ fontSize: 13, color: "var(--ink)", fontWeight: 500 }}>{k}</div>
         <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>{d}</div>
       </div>
-      <Toggle checked={checked} onChange={(v) => { setChecked(v); toast.info("Channel toggle — persistence TODO Phase 18"); }} ariaLabel={k} />
+      <Toggle checked={checked} onChange={(v) => { setChecked(v); toast.info("Channel toggle — persistence TODO(admin-phase18)"); }} ariaLabel={k} />
     </div>
   );
 }

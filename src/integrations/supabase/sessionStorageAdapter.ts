@@ -26,7 +26,7 @@
  * no unauthorized origins), the residual XSS-→-account-takeover risk is
  * acceptable as a stopgap until we add an SSR layer.
  *
- * TODO (C-6-6 follow-up): once an SSR layer exists (Astro adapter for the
+ * TODO(C-6-6-ssr-migration): once an SSR layer exists (Astro adapter for the
  * marketing site is NOT enough — we need SSR on the /app routes), migrate
  * to `@supabase/ssr` with `createServerClient` + `createBrowserClient` and
  * httpOnly Secure SameSite=Lax cookies set server-side. At that point the

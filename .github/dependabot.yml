@@ -1,0 +1,124 @@
+# Dependabot configuration for motionmax
+# ─────────────────────────────────────────────────────────────────────
+# Why Dependabot over Renovate:
+#   - GitHub-native: no separate billing, runs against the existing
+#     branch-protection / required-check setup.
+#   - Simpler config: this single file vs renovate.json + bot-token +
+#     scheduling preferences.
+#   - First-party security advisories are wired directly into PRs
+#     (security updates skip the schedule and arrive immediately).
+#   - We don't need Renovate's monorepo grouping / regex-managers /
+#     auto-merge — npm workspaces here are loose, each ecosystem is
+#     listed explicitly below.
+#
+# If we later need cross-ecosystem coordinated PRs (e.g. Stripe
+# webhook + dashboard + worker sharing a Stripe SDK upgrade), revisit.
+# ─────────────────────────────────────────────────────────────────────
+
+version: 2
+
+updates:
+  # ── Root: Vite/React app ───────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "npm"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    groups:
+      # Keep dev-deps in one PR — usually safe, reduces churn.
+      dev-deps:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+      # Group prod patches; minors get their own PR for review.
+      prod-deps-patch:
+        dependency-type: "production"
+        update-types:
+          - "patch"
+    ignore:
+      # React major bumps require coordinated work across the app and
+      # third-party libs (Radix, TanStack, tiptap). Take those manually.
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+
+  # ── marketing/ : Astro site (separate lockfile) ────────────────────
+  - package-ecosystem: "npm"
+    directory: "/marketing"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "marketing"
+    commit-message:
+      prefix: "deps(marketing)"
+      include: "scope"
+    groups:
+      marketing-dev-deps:
+        dependency-type: "development"
+        update-types: ["minor", "patch"]
+      marketing-prod-deps:
+        dependency-type: "production"
+        update-types: ["patch"]
+
+  # ── worker/ : Node worker (separate lockfile) ─────────────────────
+  - package-ecosystem: "npm"
+    directory: "/worker"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "worker"
+    commit-message:
+      prefix: "deps(worker)"
+      include: "scope"
+    groups:
+      worker-dev-deps:
+        dependency-type: "development"
+        update-types: ["minor", "patch"]
+      worker-prod-deps:
+        dependency-type: "production"
+        update-types: ["patch"]
+
+  # ── GitHub Actions: keep SHA-pinned versions current ───────────────
+  # B-NEW-5(a) SHA-pinned all third-party actions. Dependabot for
+  # github-actions ecosystem opens PRs that bump the comment-trailing
+  # version AND the SHA, so we don't have to manually re-resolve SHAs
+  # every quarter.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      actions-minor-patch:
+        update-types: ["minor", "patch"]

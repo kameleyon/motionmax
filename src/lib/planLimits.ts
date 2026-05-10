@@ -6,6 +6,8 @@
  * Re-edits (image/video/audio regen) are FREE -- no extra credit cost.
  */
 
+import { isSmartFlow } from "./projectUtils";
+
 export type PlanTier = "free" | "creator" | "studio";
 
 export interface PlanLimits {
@@ -270,7 +272,7 @@ export function validateGenerationAccess(
     };
   }
 
-  if (projectType === "smartflow" && limits.smartFlowLimit === 0) {
+  if (isSmartFlow(projectType) && limits.smartFlowLimit === 0) {
     return {
       canGenerate: false,
       error: "Smart Flow is not available on the Free plan.",

@@ -1,0 +1,80 @@
+# motionmax gitleaks configuration
+# ─────────────────────────────────────────────────────────────────────
+# Extends the default gitleaks ruleset and adds:
+#   - allowlists for historical leaks that have already been rotated
+#   - allowlists for obvious test/fixture values
+#
+# Layout follows the v8 schema:
+#   https://github.com/gitleaks/gitleaks#configuration
+# ─────────────────────────────────────────────────────────────────────
+
+# Inherit the bundled default rules (Stripe, AWS, GitHub, Slack, JWT,
+# private keys, etc.). Anything not overridden below uses defaults.
+[extend]
+useDefault = true
+
+# ─── Global allowlist ────────────────────────────────────────────────
+# Files / paths we never want to scan.
+[allowlist]
+description = "global allowlist — fixtures, lockfiles, generated content"
+paths = [
+  # Lockfiles are noisy and reviewed via dependabot, not gitleaks.
+  '''(^|/)package-lock\.json$''',
+  '''(^|/)yarn\.lock$''',
+  '''(^|/)pnpm-lock\.yaml$''',
+  '''(^|/)deno\.lock$''',
+  # Build output / coverage / playwright trace files.
+  '''^dist/''',
+  '''^marketing-dist/''',
+  '''^coverage/''',
+  '''^playwright-report/''',
+  '''^test-results/''',
+  '''\.min\.(js|css)$''',
+  # Documented example envs only — actual .env files are blocked at the
+  # husky pre-commit layer, gitleaks doesn't need to flag .env.example.
+  '''\.env\.example$''',
+  # This file itself contains the patterns we're trying to detect.
+  '''^\.gitleaks\.toml$''',
+  '''^\.husky/pre-commit$''',
+  # Brand-asset binaries (PNG/JPG) — gitleaks already skips binaries,
+  # but be explicit to silence warnings on case-sensitive remotes.
+  '''\.(png|jpg|jpeg|gif|webp|ico|pdf|mp4|mov|woff2?|ttf|otf)$''',
+]
+
+# Stable allowlist regexes — values we know are public / placeholders.
+regexes = [
+  # Standard JWT *header* used as illustrative example in docs.
+  # alg=none / alg=HS256 header bytes are public knowledge.
+  '''eyJhbGciOiJub25lIn0''',
+  # `sk_test_xxxxxxxxxxxx` style fully-x'd placeholders.
+  '''sk_(test|live)_x{8,}''',
+  '''sk-x{8,}''',
+]
+
+# Historical commits with rotated/known leaks.
+# Wave 1 / B-NEW-16 rotated the .env that landed in commit b9148c1.
+# The rotation is documented; reflagging it on every CI run wastes
+# reviewer attention. If a NEW secret lands here, the SHA changes and
+# the leak gets flagged again.
+commits = [
+  "b9148c1",
+]
+
+# ─── Repo-specific rules layered on top of defaults ──────────────────
+# (kept minimal — most coverage comes from useDefault = true).
+[[rules]]
+id = "supabase-service-role-jwt"
+description = "Supabase service-role JWT (role:service_role in payload)"
+# Pre-filter: must look like a JWT.
+regex = '''eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'''
+# Refine: payload must decode to something containing "service_role".
+# Gitleaks doesn't decode base64, so we settle for a high-entropy JWT
+# match and rely on default rules for actual key-shaped strings. The
+# narrow id is here so reviewers can mute false-positives selectively.
+keywords = ["service_role", "supabase"]
+[rules.allowlist]
+description = "Allow Supabase anon publishable keys (role:anon, public by design)"
+regexes = [
+  '''anon''',
+  '''VITE_SUPABASE_PUBLISHABLE_KEY''',
+]

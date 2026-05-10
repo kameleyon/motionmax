@@ -683,7 +683,7 @@ function Stage({
                   the video frames by the render worker (visible
                   pixels). A <track kind="captions" src=...> requires
                   a sidecar VTT we don't yet generate.
-                  TODO follow-up (worker change): emit a .vtt during
+                  TODO(worker-vtt-emit): emit a .vtt during
                   render, expose its URL on the project / scene row,
                   and wire it as `src` below with srcLang / label /
                   default. The Inspector's Voice tab already surfaces

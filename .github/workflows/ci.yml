@@ -124,6 +124,30 @@ jobs:
       - name: Build worker
         run: cd worker && npm run build
 
+  # ──────────────────────────────────────────────────────────────────
+  # Wave E-CI / B-NEW-4 follow-up: the marketing site (Astro) has its
+  # own package-lock.json and was not previously covered by `npm
+  # audit`. Audit + build it here so a vuln introduced in marketing
+  # deps fails the CI gate, not just the staging deploy build.
+  # ──────────────────────────────────────────────────────────────────
+  marketing-build:
+    name: Marketing Build + Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: marketing/package-lock.json
+      - name: Install marketing dependencies
+        run: cd marketing && npm ci
+      - name: Security audit (marketing)
+        run: cd marketing && npm audit --audit-level=high
+      - name: Build marketing site
+        run: cd marketing && npm run build
+
   edge-functions-check:
     name: Edge Functions Validate
     runs-on: ubuntu-latest
@@ -196,9 +220,14 @@ jobs:
         run: npm ci
 
       - name: Install Supabase CLI
+        # Pinned to a known-good release (Wave E-CI). `latest` previously
+        # tracked the moving tag, which means a Supabase CLI breaking
+        # change can red-light CI without any motionmax commit landing.
+        # Bumps come through dependabot's github-actions ecosystem feed
+        # or a manual edit reviewed in PR.
         uses: supabase/setup-cli@b60b5899c73b63a2d2d651b1e90db8d4c9392f51  # v1
         with:
-          version: latest
+          version: 2.98.2
 
       # Boot a local Supabase stack — fully isolated, torn down at job end.
       # `--ignore-health-check` skips the slow remote-version check.

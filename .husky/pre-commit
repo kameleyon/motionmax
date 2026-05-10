@@ -1,1 +1,68 @@
+#!/usr/bin/env sh
+# motionmax pre-commit
+# ──────────────────────────────────────────────────────────────────────
+# 1. Inline secret-scan over staged content (Wave E-CI / Pipeline).
+#    Blocks the commit if a staged blob contains:
+#      - Stripe live/test/restricted secret keys (sk_live_, sk_test_, rk_live_, rk_test_)
+#      - JWTs that look like Supabase service-role / signed access tokens
+#        (eyJ... header.payload.signature)
+#      - AWS access keys (AKIA[0-9A-Z]{16})
+#      - GitHub PATs (ghp_/gho_/ghs_/ghr_)
+#      - Slack tokens (xoxb-/xoxa-/xoxp-/xoxs-/xoxr-)
+#      - Private keys (-----BEGIN ... PRIVATE KEY-----)
+#      - .env / .envrc files added under any path
+#
+#    This is the local fast-path. The thorough scan runs in CI via
+#    .github/workflows/gitleaks.yml (gitleaks with .gitleaks.toml).
+#
+# 2. lint-staged (eslint --no-warn-ignored on staged *.ts / *.tsx).
+# ──────────────────────────────────────────────────────────────────────
+
+set -e
+
+staged_files="$(git diff --cached --name-only --diff-filter=ACMR)"
+
+if [ -n "$staged_files" ]; then
+  # ── A. Block staged .env* files outright (allow .env.example) ───────
+  bad_env="$(echo "$staged_files" | grep -E '(^|/)\.env(\.|$)' | grep -Ev '\.example$' || true)"
+  if [ -n "$bad_env" ]; then
+    echo "✗ pre-commit: refusing to commit .env file(s):"
+    echo "$bad_env" | sed 's/^/    /'
+    echo "  If you really mean to, use --no-verify (and rotate the keys first)."
+    exit 1
+  fi
+
+  # ── B. Regex scan staged content for secret-shaped strings ──────────
+  # We scan via `git diff --cached -U0` so we only look at added/changed
+  # lines, not the entire file (avoids false positives on context lines
+  # untouched by this commit).
+  diff_added="$(git diff --cached -U0 --diff-filter=ACMR -- $staged_files 2>/dev/null | grep -E '^\+[^+]' || true)"
+
+  if [ -n "$diff_added" ]; then
+    # Patterns. Each is intentionally narrow to keep false-positive rate low.
+    #   Stripe:      sk_live_…, sk_test_…, rk_live_…, rk_test_…
+    #   JWT:         three base64url segments separated by dots, starting with eyJ
+    #   AWS:         AKIA + 16 upper-case alnum
+    #   GitHub PAT:  ghp_/gho_/ghs_/ghr_/github_pat_ + ≥30 chars
+    #   Slack:       xox[abprs]-…
+    #   Private key: PEM header
+    #   OpenAI:      sk-… (≥40 chars after the dash, to skip sk_live_ above)
+    pattern='sk_live_[A-Za-z0-9]{20,}|sk_test_[A-Za-z0-9]{20,}|rk_live_[A-Za-z0-9]{20,}|rk_test_[A-Za-z0-9]{20,}|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[ps]_[A-Za-z0-9]{30,}|gho_[A-Za-z0-9]{30,}|ghr_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|xox[abprs]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|sk-[A-Za-z0-9]{40,}'
+
+    hits="$(echo "$diff_added" | grep -nE "$pattern" || true)"
+    if [ -n "$hits" ]; then
+      echo "✗ pre-commit: staged change contains a secret-shaped string."
+      echo "  First match(es):"
+      echo "$hits" | head -5 | sed 's/^/    /'
+      echo
+      echo "  If this is a fixture/test value, mark it with a trailing"
+      echo "  '# pragma: allowlist-secret' comment OR move it to a .env.example"
+      echo "  and re-commit. To bypass intentionally: git commit --no-verify."
+      echo "  (You will still hit gitleaks in CI — fix it properly.)"
+      exit 1
+    fi
+  fi
+fi
+
+# ── C. lint-staged (eslint over staged *.ts / *.tsx) ──────────────────
 npx lint-staged

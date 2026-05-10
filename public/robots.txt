@@ -25,6 +25,8 @@ Allow: /help
 Allow: /terms
 Allow: /privacy
 Allow: /acceptable-use
+Allow: /cookies
+Allow: /do-not-sell
 Allow: /share/
 Disallow: /app
 Disallow: /app/
@@ -53,6 +55,8 @@ Allow: /help
 Allow: /terms
 Allow: /privacy
 Allow: /acceptable-use
+Allow: /cookies
+Allow: /do-not-sell
 Allow: /share/
 Disallow: /app
 Disallow: /app/
@@ -87,6 +91,8 @@ Allow: /help
 Allow: /terms
 Allow: /privacy
 Allow: /acceptable-use
+Allow: /cookies
+Allow: /do-not-sell
 Allow: /share/
 Disallow: /app
 Disallow: /app/

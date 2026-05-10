@@ -57,7 +57,9 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       - uses: supabase/setup-cli@b60b5899c73b63a2d2d651b1e90db8d4c9392f51  # v1
         with:
-          version: latest
+          # Pinned to a known-good release (Wave E-CI). See
+          # ci.yml's "Install Supabase CLI" comment for rationale.
+          version: 2.98.2
 
       - name: Push migrations to staging Supabase
         run: |
@@ -132,7 +134,9 @@ jobs:
       - name: Wait for staging to respond
         run: |
           for i in {1..30}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://staging.motionmax.io || echo "000")
+            # --max-time 10: defensive cap so a single hung curl can't
+            # consume the whole 5-second sleep budget for this retry.
+            STATUS=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" https://staging.motionmax.io || echo "000")
             if [ "$STATUS" = "200" ] || [ "$STATUS" = "304" ]; then
               echo "staging.motionmax.io is up (HTTP $STATUS)"
               exit 0
@@ -145,10 +149,10 @@ jobs:
 
       - name: HEAD /api/health (Supabase edge fn proxy)
         run: |
-          curl -fsS -I https://staging.motionmax.io/ \
+          curl --max-time 30 -fsS -I https://staging.motionmax.io/ \
             -H "Cache-Control: no-cache" \
             | head -1
-          curl -fsS https://${{ secrets.SUPABASE_PROJECT_ID_STAGING }}.supabase.co/functions/v1/health \
+          curl --max-time 30 -fsS https://${{ secrets.SUPABASE_PROJECT_ID_STAGING }}.supabase.co/functions/v1/health \
             -H "Authorization: Bearer ${{ secrets.STAGING_VITE_SUPABASE_PUBLISHABLE_KEY }}" \
             -H "apikey: ${{ secrets.STAGING_VITE_SUPABASE_PUBLISHABLE_KEY }}"
 
@@ -156,9 +160,11 @@ jobs:
         if: failure()
         run: |
           if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
-            curl -X POST -H 'Content-Type: application/json' \
+            # --max-time 30: Slack webhook normally responds in ~1s; cap
+            # prevents a Slack outage from hanging the failure handler.
+            curl --max-time 30 -X POST -H 'Content-Type: application/json' \
               --data "{\"text\":\":x: Staging smoke tests failed for ${GITHUB_SHA::7} — see ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" \
-              "${{ secrets.SLACK_WEBHOOK_URL }}"
+              "${{ secrets.SLACK_WEBHOOK_URL }}" || true
           else
             echo "::warning::SLACK_WEBHOOK_URL not configured — skipping Slack notification"
           fi

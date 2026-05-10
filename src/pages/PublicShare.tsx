@@ -605,7 +605,7 @@ export default function PublicShare() {
                     (visible pixels, not a sidecar text track). A
                     <track kind="captions"> here would need a VTT URL
                     we don't yet generate.
-                    TODO (Critical follow-up — worker change): emit a
+                    TODO(worker-vtt-emit, A11Y-015 critical): emit a
                     .vtt alongside the .mp4 during render and expose
                     its URL on `projects` (e.g., `captions_vtt_url`),
                     then wire it here as `src={...}` with srcLang/label.

@@ -120,6 +120,34 @@ function attachToggle(id) {
   });
 }
 
+/**
+ * Wave E-Legal Part H — Global Privacy Control (GPC) handling.
+ *
+ * If the browser exposes navigator.globalPrivacyControl === true, we
+ * treat it as a binding opt-out of analytics + marketing categories
+ * even if the user has previously granted consent. CCPA/CPRA AG
+ * guidance post-Sephora settlement makes this the safer posture, and
+ * the user has explicitly enabled GPC at the browser level so we honour
+ * that signal in preference to a stale banner choice.
+ *
+ * Functional cookies stay on (theme + language) because GPC is an
+ * advertising / cross-context-sharing opt-out, not a "disable site"
+ * signal.
+ */
+function gpcEnabled() {
+  return typeof navigator !== "undefined" && navigator.globalPrivacyControl === true;
+}
+
+function applyGpcIfPresent() {
+  if (!gpcEnabled()) return false;
+  const existing = (typeof window !== "undefined"
+    ? (function () { try { return JSON.parse(window.localStorage.getItem("motionmax_cookie_consent_v2") || "null"); } catch (_) { return null; } })()
+    : null);
+  const functional = !!(existing && existing.categories && existing.categories.functional);
+  setConsent({ functional, analytics: false, marketing: false });
+  return true;
+}
+
 function init() {
   // Kick the analytics loader FIRST so users who already consented (e.g.
   // arrived from app.motionmax.io with a shared cookie) see GA fire on
@@ -175,7 +203,11 @@ function init() {
   });
 
   // First-paint visibility decision.
-  if (hasAnswered()) {
+  // GPC takes precedence: if the browser signals opt-out we stamp a
+  // record honouring it and never show the banner.
+  if (applyGpcIfPresent()) {
+    setBannerVisible(false);
+  } else if (hasAnswered()) {
     setBannerVisible(false);
   } else {
     syncSwitchesFromRecord();

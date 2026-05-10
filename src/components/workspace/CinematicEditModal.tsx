@@ -182,7 +182,7 @@ export function CinematicEditModal({
                       >
                         {/* C-1-11 (Halo F-A11Y-015): captions are burned
                             into the video frames by the render worker.
-                            TODO follow-up (worker change): emit a .vtt
+                            TODO(worker-vtt-emit): emit a .vtt
                             sidecar during render so we can mount a
                             <track kind="captions"> here. The Cinematic
                             edit dialog already shows scene narration as

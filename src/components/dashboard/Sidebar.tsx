@@ -42,6 +42,17 @@ type SidebarProject = {
   updated_at: string;
 };
 
+/** Full-text dashboard sidebar (260px wide) used by the dashboard
+ *  shell, Admin, IntakeFrame, and EditorFrame. Hosts the project
+ *  list, cmd-k search palette, delete-confirm dialog, and the
+ *  account-dropdown footer.
+ *
+ *  ── Sibling: src/components/editor/MiniSidebar.tsx ───────────────
+ *  Wave D §C-4 sidebar audit confirmed the editor's 64px MiniSidebar
+ *  is intentionally separate. Shared surface is just the profile
+ *  dropdown (~50 LOC) and the routes diverge (Billing+Help here vs
+ *  Usage&Billing in MiniSidebar). Dedup costs more than it saves.
+ *  KEEP THE SPLIT. */
 export default function Sidebar() {
   const queryClient = useQueryClient();
   const { user, signOut } = useAuth();

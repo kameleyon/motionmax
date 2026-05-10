@@ -17,6 +17,7 @@ import { useSceneRegen } from './useSceneRegen';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserClones } from '@/hooks/useUserClones';
+import { isSmartFlow as isSmartFlowProject } from '@/lib/projectUtils';
 
 type InspectorTab = 'scene' | 'voice' | 'captions' | 'motion';
 
@@ -340,7 +341,7 @@ function Inspector({
   // Smart Flow has no per-scene motion controls — those are baked
   // into the SmartFlow render pipeline. Hide the tab entirely so it
   // doesn't surface a confusing empty panel.
-  const isSmartFlow = projectType === 'smartflow';
+  const isSmartFlow = isSmartFlowProject(projectType);
   const visibleTabs: InspectorTab[] = isSmartFlow
     ? ['scene', 'voice', 'captions']
     : ['scene', 'voice', 'captions', 'motion'];

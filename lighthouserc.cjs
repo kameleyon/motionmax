@@ -1,59 +1,91 @@
 /**
- * Phase 19.3 — Lighthouse CI configuration for /admin perf gating.
+ * Lighthouse CI configuration.
+ *
+ * History:
+ *   Phase 19.3 — initial /admin perf gating.
+ *   Wave D §C-3 (2026-05-10) — widened coverage to the public,
+ *     conversion-critical funnel (landing, pricing, signup, share,
+ *     help). Admin stays the strict perf gate (auth'd, throttled
+ *     desktop); the public routes have looser perf budgets per the
+ *     mobile-3G reality of a marketing landing.
  *
  * Run with:
  *   npx lhci autorun --config=./lighthouserc.cjs
  *
  * Pre-reqs:
- *   • dev server running on http://localhost:5173
- *   • admin login session cookie present (Lighthouse runs unauth'd by
- *     default — for /admin which is gated by AdminRoute, you need
- *     either a Puppeteer pre-auth script or run against a deployed
- *     preview where the admin session cookie is already set).
- *
- * Gates (per Phase 19.3 spec):
- *   • Performance ≥ 90
- *   • Accessibility ≥ 95
- *   • Time-to-Interactive ≤ 1500 ms (proxied via "interactive" metric)
- *
- * Best-practices + SEO scores are NOT gated — admin is noindex by
- * design (`<meta name="robots" content="noindex,nofollow">` in
- * Admin.tsx) and SEO assertions there would be noise.
+ *   • dev server running on http://localhost:5173 OR set BASE_URL=
+ *     to a deployed preview (Vercel preview URL is recommended for
+ *     auth'd admin runs since the session cookie is already set).
+ *   • For /admin you'll need a pre-auth Puppeteer script or a
+ *     preview URL with the admin cookie already attached. Public
+ *     routes (landing / pricing / share / help / signup) run
+ *     unauthenticated against the dev server with no extra setup.
  */
+const BASE_URL = process.env.BASE_URL || "http://localhost:5173";
+
+// Sample shareable token for /share/:token — set SHARE_TOKEN in CI
+// to a live preview share, or fall back to a sentinel that returns
+// the "share not found" state (which still benchmarks the chrome).
+const SHARE_TOKEN = process.env.LH_SHARE_TOKEN || "sample-token";
+
 module.exports = {
   ci: {
     collect: {
-      // Run against the dev server. If you're running against a
-      // deployed preview, swap to https://<your-preview>.vercel.app
-      // (or whatever your hosting target is) and set the BASE_URL env var.
+      // Wave D §C-3: cover the funnel. Order matters for cache —
+      // / lands first to warm any shared chunks, then the rest.
       url: [
-        (process.env.BASE_URL || "http://localhost:5173") + "/admin?tab=overview",
+        `${BASE_URL}/`,
+        `${BASE_URL}/pricing`,
+        `${BASE_URL}/auth?mode=signup`,
+        `${BASE_URL}/help`,
+        `${BASE_URL}/share/${SHARE_TOKEN}`,
+        `${BASE_URL}/admin?tab=overview`,
       ],
       numberOfRuns: 3,
       settings: {
-        // Throttle to 4G to match the spec's "1.5 s p95 on a 4 G
-        // connection" assertion. Lighthouse's "mobile" preset is too
-        // aggressive (slow 4G); we use "desktop" base + custom
-        // throttling so the numbers are interpretable for an admin
-        // panel, which won't be loaded on a 2009 Android phone.
-        preset: "desktop",
+        // Desktop preset with 4G throttling. Public routes are run
+        // with the same settings so deltas across routes are
+        // comparable; for true mobile budgeting set LH_PRESET=mobile.
+        preset: process.env.LH_PRESET || "desktop",
         throttling: {
           rttMs: 40,
           throughputKbps: 10240,
           cpuSlowdownMultiplier: 1,
         },
-        // Skip pwa audits — admin is not a PWA.
+        // Skip pwa audits — admin is not a PWA and the share viewer
+        // is route-specific. Public marketing pages DO benefit from
+        // the install audit but the perf gates above cover SW.
         skipAudits: ["service-worker", "installable-manifest"],
       },
     },
     assert: {
-      assertions: {
-        "categories:performance":   ["error", { minScore: 0.90 }],
-        "categories:accessibility": ["error", { minScore: 0.95 }],
-        "interactive":              ["error", { maxNumericValue: 1500 }],
-        // Best practices and SEO are advisory, not gates.
-        "categories:best-practices": ["warn", { minScore: 0.90 }],
-      },
+      // Per-route assertions. /admin stays the strict desktop gate;
+      // public routes target the mobile-friendly ≥85 perf / ≥95 a11y
+      // bar called out in Wave D §C-3.
+      assertMatrix: [
+        {
+          matchingUrlPattern: "/admin",
+          assertions: {
+            "categories:performance":    ["error", { minScore: 0.90 }],
+            "categories:accessibility":  ["error", { minScore: 0.95 }],
+            "interactive":               ["error", { maxNumericValue: 1500 }],
+            "categories:best-practices": ["warn",  { minScore: 0.90 }],
+          },
+        },
+        {
+          // Public funnel — landing / pricing / help / share / signup.
+          // Slightly looser perf budget reflects the marketing-page
+          // reality (hero fonts, OG video, signup form). Still gates
+          // on the regression that an unbundled dependency would cause.
+          matchingUrlPattern: "/(pricing|help|auth|share|^/$)",
+          assertions: {
+            "categories:performance":    ["error", { minScore: 0.85 }],
+            "categories:accessibility":  ["error", { minScore: 0.95 }],
+            "categories:best-practices": ["warn",  { minScore: 0.90 }],
+            "categories:seo":            ["warn",  { minScore: 0.90 }],
+          },
+        },
+      ],
     },
     upload: {
       // Default: write reports to .lighthouseci/. CI providers can

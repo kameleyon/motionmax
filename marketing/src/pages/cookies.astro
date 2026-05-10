@@ -1,0 +1,242 @@
+---
+import LegalLayout from "../layouts/LegalLayout.astro";
+// B-NEW-13: shared single source of truth for cookie policy version.
+// We reuse the CONSENT_POLICY_VERSION from the React app so the marketing
+// page and the in-app banner advertise the same version string.
+import { CONSENT_POLICY_VERSION } from "@/lib/cookieConsent";
+
+/**
+ * Cookie Policy — standalone disclosure surface (Wave E-Legal Part A).
+ *
+ * Mirrors src/pages/CookiePolicy.tsx so a logged-out visitor on the
+ * marketing site sees the same content and the same "Manage cookie
+ * preferences" affordance as a logged-in user. The reopen control here
+ * uses the same `data-cookie-action="reopen"` hook the footer uses —
+ * scripts/cookieBanner.js wires it up.
+ */
+---
+
+<LegalLayout
+  title="Cookie Policy — MotionMax"
+  description="MotionMax cookie policy. The cookies and storage we use, what they do, how long they last, and how to manage them."
+  canonical="https://motionmax.io/cookies"
+  documentVersion={CONSENT_POLICY_VERSION}
+>
+  <h1 class="text-3xl font-bold tracking-tight text-foreground mb-2">Cookie Policy</h1>
+  <p class="text-sm text-muted-foreground mb-10">
+    Consent policy version <span class="font-mono">{CONSENT_POLICY_VERSION}</span>
+  </p>
+
+  <div class="space-y-8 text-muted-foreground">
+
+    <section class="space-y-3">
+      <h2 class="text-lg font-semibold text-foreground">1. What this page covers</h2>
+      <p>
+        This page lists every cookie and locally-stored item motionmax sets on your browser, what
+        each one does, how long it lasts, and whether it is set by us (first-party) or by a vendor
+        we use to provide the Service (third-party). We disclose localStorage and sessionStorage
+        entries on the same basis as cookies because UK ICO and EU CNIL guidance treats them
+        identically for consent purposes under the ePrivacy Directive.
+      </p>
+      <p>
+        You can change your category-level choices at any time using the button at the bottom of
+        this page, the "Cookie preferences" link in our footer, or the Cookie preferences section
+        in your account Settings. Necessary cookies cannot be disabled because the site cannot
+        function without them.
+      </p>
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="text-lg font-semibold text-foreground">2. Categories</h2>
+      <ul class="list-disc pl-6 space-y-1.5">
+        <li>
+          <strong class="text-foreground">Necessary</strong> — auth session, security tokens,
+          billing state. Required for the site to function; always on.
+        </li>
+        <li>
+          <strong class="text-foreground">Functional</strong> — language preference, theme
+          (dark/light), sidebar state, draft auto-save.
+        </li>
+        <li>
+          <strong class="text-foreground">Analytics</strong> — Google Analytics 4 page-view
+          metrics and Sentry session replay on errors. Loaded only after you grant analytics
+          consent.
+        </li>
+        <li>
+          <strong class="text-foreground">Marketing</strong> — pixel tracking and retargeting.
+          Not currently used; reserved so your prior choice carries forward if we introduce them.
+        </li>
+      </ul>
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="text-lg font-semibold text-foreground">3. Cookies we set</h2>
+      <div class="overflow-x-auto rounded-md border border-border/40">
+        <table class="w-full text-xs">
+          <thead class="bg-muted/30">
+            <tr class="text-left">
+              <th class="px-3 py-2 font-semibold text-foreground">Name</th>
+              <th class="px-3 py-2 font-semibold text-foreground">Party</th>
+              <th class="px-3 py-2 font-semibold text-foreground">Category</th>
+              <th class="px-3 py-2 font-semibold text-foreground">Purpose</th>
+              <th class="px-3 py-2 font-semibold text-foreground">Retention</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="border-t border-border/30 align-top">
+              <td class="px-3 py-2 font-mono text-[11px] text-foreground whitespace-nowrap">sb-&lt;project&gt;-auth-token</td>
+              <td class="px-3 py-2">First</td>
+              <td class="px-3 py-2">Necessary</td>
+              <td class="px-3 py-2 leading-snug">Supabase auth session token. Keeps you signed in across page loads.</td>
+              <td class="px-3 py-2 whitespace-nowrap">Session + refresh window</td>
+            </tr>
+            <tr class="border-t border-border/30 align-top">
+              <td class="px-3 py-2 font-mono text-[11px] text-foreground whitespace-nowrap">motionmax_csrf</td>
+              <td class="px-3 py-2">First</td>
+              <td class="px-3 py-2">Necessary</td>
+              <td class="px-3 py-2 leading-snug">Cross-site request forgery defense token for state-changing endpoints.</td>
+              <td class="px-3 py-2 whitespace-nowrap">Session</td>
+            </tr>
+            <tr class="border-t border-border/30 align-top">
+              <td class="px-3 py-2 font-mono text-[11px] text-foreground whitespace-nowrap">__stripe_mid / __stripe_sid</td>
+              <td class="px-3 py-2">Third &mdash; <a href="https://stripe.com/privacy" class="text-primary hover:underline" target="_blank" rel="noreferrer">Stripe</a></td>
+              <td class="px-3 py-2">Necessary</td>
+              <td class="px-3 py-2 leading-snug">Stripe fraud-prevention and checkout session continuity.</td>
+              <td class="px-3 py-2 whitespace-nowrap">__stripe_mid: 1 year; __stripe_sid: 30 minutes</td>
+            </tr>
+            <tr class="border-t border-border/30 align-top">
+              <td class="px-3 py-2 font-mono text-[11px] text-foreground whitespace-nowrap">motionmax_theme</td>
+              <td class="px-3 py-2">First</td>
+              <td class="px-3 py-2">Functional</td>
+              <td class="px-3 py-2 leading-snug">Remembers your light/dark/system theme choice across visits.</td>
+              <td class="px-3 py-2 whitespace-nowrap">1 year</td>
+            </tr>
+            <tr class="border-t border-border/30 align-top">
+              <td class="px-3 py-2 font-mono text-[11px] text-foreground whitespace-nowrap">motionmax_sidebar_state</td>
+              <td class="px-3 py-2">First</td>
+              <td class="px-3 py-2">Functional</td>
+              <td class="px-3 py-2 leading-snug">Remembers whether the dashboard sidebar is expanded or collapsed.</td>
+              <td class="px-3 py-2 whitespace-nowrap">1 year</td>
+            </tr>
+            <tr class="border-t border-border/30 align-top">
+              <td class="px-3 py-2 font-mono text-[11px] text-foreground whitespace-nowrap">_ga / _ga_&lt;container&gt;</td>
+              <td class="px-3 py-2">Third &mdash; <a href="https://policies.google.com/privacy" class="text-primary hover:underline" target="_blank" rel="noreferrer">Google Analytics 4</a></td>
+              <td class="px-3 py-2">Analytics</td>
+              <td class="px-3 py-2 leading-snug">Distinguishes anonymous users and aggregates page-view, session, and feature-usage statistics. Loaded only after you grant analytics consent.</td>
+              <td class="px-3 py-2 whitespace-nowrap">2 years</td>
+            </tr>
+            <tr class="border-t border-border/30 align-top">
+              <td class="px-3 py-2 font-mono text-[11px] text-foreground whitespace-nowrap">sentryReplaySession</td>
+              <td class="px-3 py-2">Third &mdash; <a href="https://sentry.io/privacy/" class="text-primary hover:underline" target="_blank" rel="noreferrer">Sentry</a></td>
+              <td class="px-3 py-2">Analytics</td>
+              <td class="px-3 py-2 leading-snug">Session replay for error reproduction. Captures DOM mutations and user input masks, no passwords or generated content. Loaded only after analytics consent.</td>
+              <td class="px-3 py-2 whitespace-nowrap">30 days on Sentry servers</td>
+            </tr>
+            <tr class="border-t border-border/30 align-top">
+              <td class="px-3 py-2 font-mono text-[11px] text-foreground whitespace-nowrap">(none currently set)</td>
+              <td class="px-3 py-2">&mdash;</td>
+              <td class="px-3 py-2">Marketing</td>
+              <td class="px-3 py-2 leading-snug">motionmax does not currently use marketing or retargeting cookies. The Marketing category is reserved so that if we ever introduce them, your prior choice already applies.</td>
+              <td class="px-3 py-2 whitespace-nowrap">n/a</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="text-lg font-semibold text-foreground">4. Browser storage we use</h2>
+      <p>
+        The following entries are stored in your browser's localStorage. They are not transmitted
+        to any server unless explicitly noted, and they obey the same category-consent rules as
+        cookies.
+      </p>
+      <div class="overflow-x-auto rounded-md border border-border/40">
+        <table class="w-full text-xs">
+          <thead class="bg-muted/30">
+            <tr class="text-left">
+              <th class="px-3 py-2 font-semibold text-foreground">Key</th>
+              <th class="px-3 py-2 font-semibold text-foreground">Category</th>
+              <th class="px-3 py-2 font-semibold text-foreground">Purpose</th>
+              <th class="px-3 py-2 font-semibold text-foreground">Retention</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="border-t border-border/30 align-top">
+              <td class="px-3 py-2 font-mono text-[11px] text-foreground whitespace-nowrap">motionmax_cookie_consent_v2</td>
+              <td class="px-3 py-2">Necessary</td>
+              <td class="px-3 py-2 leading-snug">Stores your granular cookie-consent choices and the policy version they were given against.</td>
+              <td class="px-3 py-2 whitespace-nowrap">Until revoke or version bump</td>
+            </tr>
+            <tr class="border-t border-border/30 align-top">
+              <td class="px-3 py-2 font-mono text-[11px] text-foreground whitespace-nowrap">motionmax_utm</td>
+              <td class="px-3 py-2">Functional</td>
+              <td class="px-3 py-2 leading-snug">First-touch UTM campaign attribution captured at landing — written to your profile at signup, then cleared.</td>
+              <td class="px-3 py-2 whitespace-nowrap">Cleared at signup, max 30 days</td>
+            </tr>
+            <tr class="border-t border-border/30 align-top">
+              <td class="px-3 py-2 font-mono text-[11px] text-foreground whitespace-nowrap">motionmax_workspace_draft</td>
+              <td class="px-3 py-2">Functional</td>
+              <td class="px-3 py-2 leading-snug">Auto-saves your in-progress generation draft so you don't lose it on refresh.</td>
+              <td class="px-3 py-2 whitespace-nowrap">30 days or until cleared</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="text-lg font-semibold text-foreground">5. Third-party vendors</h2>
+      <p>The third-party services whose cookies appear above are:</p>
+      <ul class="list-disc pl-6 space-y-1">
+        <li><strong class="text-foreground">Stripe</strong> &mdash; payment processing. <a href="https://stripe.com/privacy" target="_blank" rel="noreferrer" class="text-primary hover:underline">Privacy</a></li>
+        <li><strong class="text-foreground">Google Analytics 4</strong> &mdash; aggregated usage analytics, consent-gated. <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer" class="text-primary hover:underline">Privacy</a></li>
+        <li><strong class="text-foreground">Sentry</strong> &mdash; error reporting and consent-gated session replay. <a href="https://sentry.io/privacy/" target="_blank" rel="noreferrer" class="text-primary hover:underline">Privacy</a></li>
+      </ul>
+      <p>The full subprocessor list &mdash; including those that do not set browser cookies &mdash; is in our <a href="/privacy#5" class="text-primary hover:underline">Privacy Policy &sect;5</a>.</p>
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="text-lg font-semibold text-foreground">6. Global Privacy Control (GPC)</h2>
+      <p>
+        If your browser sends the Global Privacy Control signal (the <span class="font-mono">Sec-GPC: 1</span>
+        header or <span class="font-mono">navigator.globalPrivacyControl</span> property), we treat it
+        as a binding opt-out of the Analytics and Marketing categories &mdash; even if you have not yet
+        interacted with the consent banner. The Necessary and Functional categories remain on so
+        the site continues to function. GPC takes precedence: if you grant analytics consent in
+        the banner but your browser also sends GPC, the GPC opt-out wins until you disable it at
+        the browser level.
+      </p>
+      <p>
+        California residents: this honours the California "right to opt out of sale/share" under
+        the CCPA / CPRA as required by AG advisory (Sephora settlement, 2022).
+      </p>
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="text-lg font-semibold text-foreground">7. Manage your preferences</h2>
+      <p>
+        Use the button below to wipe your stored consent record and re-open the granular consent
+        banner. You can also browser-side delete cookies via your browser's privacy settings, and
+        clear localStorage from the developer tools.
+      </p>
+      <div class="pt-2">
+        <button
+          type="button"
+          data-cookie-action="reopen"
+          class="inline-flex items-center justify-center rounded-lg bg-[#14C8CC] px-5 py-2.5 text-sm font-semibold text-[#0A0D0F] hover:bg-[#0FA6AE] transition-colors"
+        >
+          Manage cookie preferences
+        </button>
+      </div>
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="text-lg font-semibold text-foreground">8. Contact</h2>
+      <p>
+        Questions about this policy? Email <a href="mailto:privacy@motionmax.io" class="text-primary hover:underline">privacy@motionmax.io</a>.
+      </p>
+    </section>
+
+  </div>
+</LegalLayout>

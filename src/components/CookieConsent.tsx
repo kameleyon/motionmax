@@ -100,13 +100,63 @@ export function CookieConsent() {
   // surface (footer "Cookie preferences" link, Settings "Forget" button)
   // wipes consent at runtime.
   useEffect(() => {
+    // Wave E-Legal Part H — Global Privacy Control (GPC).
+    //
+    // navigator.globalPrivacyControl (and the matching Sec-GPC: 1 header
+    // sent by the browser) is a binding opt-out signal under California
+    // AG guidance post-Sephora settlement, and is treated as a valid
+    // opt-out under CCPA/CPRA §1798.135(b). If GPC is present we treat
+    // it as a hard opt-out of the Analytics and Marketing categories,
+    // EVEN IF the user has previously granted analytics consent in the
+    // banner — GPC at the browser level is a more recent, more specific
+    // signal and the AG advisory says it wins.
+    //
+    // Functional cookies stay on (so theme + language preference still
+    // persist) because they are not analytics/marketing and the user
+    // has not opted out of basic site functionality by enabling GPC.
+    // Necessary cookies are always on.
+    //
+    // We also stamp the consent record so we have an audit trail and
+    // the banner doesn't keep re-showing on every page load.
+    function gpcEnabled(): boolean {
+      if (typeof navigator === "undefined") return false;
+      const n = navigator as Navigator & { globalPrivacyControl?: boolean };
+      return n.globalPrivacyControl === true;
+    }
+
     function syncFromStorage() {
+      const gpc = gpcEnabled();
       if (hasAnswered()) {
+        // If the stored record grants analytics/marketing but GPC is now
+        // on, re-stamp with those categories revoked. Functional stays
+        // whatever the user chose. This re-runs whenever the banner
+        // mounts (every page load), so toggling GPC at the browser
+        // level takes effect on the next navigation without user action.
+        if (gpc && (hasCategoryConsent("analytics") || hasCategoryConsent("marketing"))) {
+          const current = getConsent();
+          setConsent({
+            functional: !!current?.categories.functional,
+            analytics: false,
+            marketing: false,
+          });
+          // Don't load GA, don't grant Sentry replay.
+          setVisible(false);
+          return;
+        }
         // Re-grant in-process integrations on every reload from storage.
         if (hasCategoryConsent("analytics")) {
           loadGoogleAnalytics();
           grantAnalyticsConsent();
         }
+        setVisible(false);
+        return;
+      }
+      // No record yet. If GPC is on, stamp a record that honours it
+      // without requiring the user to interact with the banner. The
+      // banner stays hidden — the user has already expressed their
+      // preference at the browser level.
+      if (gpc) {
+        setConsent({ functional: true, analytics: false, marketing: false });
         setVisible(false);
         return;
       }
@@ -184,9 +234,14 @@ export function CookieConsent() {
               Cookie preferences
             </p>
             <p id="cookie-banner-desc" className="text-xs text-muted-foreground leading-relaxed">
-              We use cookies for essential site features, and (with your permission) for
-              analytics. You can change your choices any time from Settings or the
-              "Cookie preferences" link in the footer.{" "}
+              We use cookies to keep you signed in, remember your preferences, and
+              (with your consent) measure how the site is used. You can change your
+              choices any time from Settings or the "Cookie preferences" link in the
+              footer.{" "}
+              <a href="/cookies" className="text-[#14C8CC] hover:underline">
+                Cookie policy
+              </a>
+              {" · "}
               <a href="/privacy" className="text-[#14C8CC] hover:underline">
                 Privacy policy
               </a>
@@ -198,28 +253,28 @@ export function CookieConsent() {
                 <CategoryRow
                   id="cc-necessary"
                   title="Necessary"
-                  description="Auth, security, billing. Required for the site to work."
+                  description="Auth session, CSRF/security tokens, billing state. Required."
                   checked
                   disabled
                 />
                 <CategoryRow
                   id="cc-functional"
                   title="Functional"
-                  description="Language preference, theme persistence."
+                  description="Language preference, theme (dark/light), sidebar state."
                   checked={functional}
                   onChange={setFunctional}
                 />
                 <CategoryRow
                   id="cc-analytics"
                   title="Analytics"
-                  description="Anonymised usage stats and Sentry session replay on errors."
+                  description="Google Analytics 4 and Sentry session replay on errors."
                   checked={analytics}
                   onChange={setAnalytics}
                 />
                 <CategoryRow
                   id="cc-marketing"
                   title="Marketing"
-                  description="Pixel tracking and retargeting. Reserved — currently unused."
+                  description="Pixel tracking and retargeting. Not currently used."
                   checked={marketing}
                   onChange={setMarketing}
                 />

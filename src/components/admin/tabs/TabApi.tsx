@@ -202,8 +202,9 @@ export function TabApi(): JSX.Element {
   }, [visibleRows, period]);
 
   const onActionClick = useCallback(() => {
+    // TODO(admin-api-call-drawer): wire to AdminApiCalls drawer once it ships.
     toast.info("Detail drawer coming soon", {
-      description: "TODO: wire to AdminApiCalls drawer.",
+      description: "Per-call action drawer ships with admin Phase 3.",
     });
   }, []);
 

@@ -49,12 +49,15 @@
       <div class="cookie-banner__body">
         <p id="cookie-banner-title" class="cookie-banner__title">Cookie preferences</p>
         <p id="cookie-banner-desc" class="cookie-banner__desc">
-          We use cookies for essential site features, and (with your permission) for
-          analytics. You can change your choices any time from the
+          We use cookies to keep you signed in, remember your preferences, and
+          (with your consent) measure how the site is used. You can change your
+          choices any time from the
           <button type="button" id="cookie-banner-customize" class="cookie-banner__link-btn">
             Customize
           </button>
           option below or the &quot;Cookie preferences&quot; link in the footer.
+          <a href="/cookies" class="cookie-banner__link">Cookie policy</a>
+          ·
           <a href="/privacy" class="cookie-banner__link">Privacy policy</a>.
         </p>
 
@@ -66,7 +69,7 @@
                 <span class="cookie-banner__pill">Always on</span>
               </span>
               <span class="cookie-banner__cat-desc">
-                Auth, security, billing. Required for the site to work.
+                Auth session, CSRF/security tokens, billing state. Required.
               </span>
             </label>
             <button
@@ -86,7 +89,7 @@
             <label for="cc-functional">
               <span class="cookie-banner__cat-title">Functional</span>
               <span class="cookie-banner__cat-desc">
-                Language preference, theme persistence.
+                Language preference, theme (dark/light), sidebar state.
               </span>
             </label>
             <button
@@ -105,7 +108,7 @@
             <label for="cc-analytics">
               <span class="cookie-banner__cat-title">Analytics</span>
               <span class="cookie-banner__cat-desc">
-                Anonymised usage stats and Sentry session replay on errors.
+                Google Analytics 4 and Sentry session replay on errors.
               </span>
             </label>
             <button
@@ -124,7 +127,7 @@
             <label for="cc-marketing">
               <span class="cookie-banner__cat-title">Marketing</span>
               <span class="cookie-banner__cat-desc">
-                Pixel tracking and retargeting. Reserved &mdash; currently unused.
+                Pixel tracking and retargeting. Not currently used.
               </span>
             </label>
             <button

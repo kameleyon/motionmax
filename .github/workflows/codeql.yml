@@ -1,0 +1,70 @@
+name: CodeQL
+
+# ──────────────────────────────────────────────────────────────────────
+# Static analysis via GitHub's CodeQL.
+#
+# Triggers:
+#   - Push / PR against main (so we catch regressions at PR time)
+#   - Weekly cron Mon 06:00 UTC — picks up new queries / new CVEs from
+#     the security-events analysis even if no code changed.
+#
+# Findings land in repo → Security → Code scanning alerts.
+#
+# Permissions: only what CodeQL requires to upload SARIF results.
+# All third-party actions are SHA-pinned per Wave 1 / B-NEW-5(a).
+# ──────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1' # weekly, Mondays 06:00 UTC
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # CodeQL v3 merged JS + TS into a single language pack.
+        language: [javascript-typescript]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      # Initialize the CodeQL tooling. The same repo SHA is used for
+      # init / autobuild / analyze (codeql-action publishes all three
+      # actions from one repo, one tag).
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@7fd177fa680c9881b53cdab4d346d32574c9f7f4 # v3
+        with:
+          languages: ${{ matrix.language }}
+          # `security-extended` adds higher-coverage queries (still no
+          # `security-and-quality` to avoid stylistic noise).
+          queries: security-extended
+
+      # No build needed for JS/TS — CodeQL analyses source directly.
+      # Leaving Autobuild commented out as a reminder it exists if we
+      # later add a compiled language (Go, Java) to the matrix.
+      # - name: Autobuild
+      #   uses: github/codeql-action/autobuild@7fd177fa680c9881b53cdab4d346d32574c9f7f4 # v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@7fd177fa680c9881b53cdab4d346d32574c9f7f4 # v3
+        with:
+          category: '/language:${{ matrix.language }}'

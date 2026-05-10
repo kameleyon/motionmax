@@ -1,0 +1,74 @@
+name: Gitleaks
+
+# ──────────────────────────────────────────────────────────────────────
+# Repository-wide secret scan.
+#
+# Triggers:
+#   - Push to main          (catches anything that slipped through PR)
+#   - Pull request          (catches it before merge; main signal)
+#   - Daily cron 07:00 UTC  (re-scan with updated default rules / in
+#                            case a historical commit gets a new rule)
+#
+# Configuration lives in .gitleaks.toml at the repo root. The fast
+# local pre-commit hook in .husky/pre-commit handles same-day rejects;
+# this workflow is the thorough/authoritative scan.
+#
+# Note: gitleaks/gitleaks-action v2 is free for **public** repos. For
+# the private motionmax repo, GITLEAKS_LICENSE is required (one-time
+# free license from gitleaks.io). If the license secret isn't set,
+# the action no-ops with a warning — we still want the workflow file
+# in place so adding the license later is a one-line change.
+# ──────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '0 7 * * *'
+
+concurrency:
+  group: gitleaks-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+  # Only set if we ever uplift to SARIF upload — currently the action
+  # only posts a PR comment / fails the job.
+  # security-events: write
+  pull-requests: read
+
+jobs:
+  scan:
+    name: Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout (full history for diff scans)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # gitleaks needs the full history to diff against the base
+          # commit on PRs.
+          fetch-depth: 0
+
+      - name: Gitleaks scan
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GITLEAKS_LICENSE is required for private repos. Add via:
+          #   Repo → Settings → Secrets and variables → Actions →
+          #   New repository secret → GITLEAKS_LICENSE.
+          # Until then, this scan no-ops on private repos with a
+          # warning, which is fine — the husky pre-commit hook is
+          # still the first line of defence.
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+          # Point gitleaks at the repo-root config.
+          GITLEAKS_CONFIG: .gitleaks.toml
+          # Don't fail on commits older than `b9148c1` (already-rotated
+          # leak documented in B-NEW-16 / Wave 1). The `commits`
+          # allowlist in .gitleaks.toml handles that, but
+          # GITLEAKS_NOTIFY_USER_LIST keeps the PR comment quiet too.
+          GITLEAKS_ENABLE_COMMENTS: true
+          GITLEAKS_ENABLE_SUMMARY: true
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: true

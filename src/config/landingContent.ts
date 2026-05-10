@@ -111,13 +111,16 @@ export const LANDING_FAQ: FaqItem[] = [
   },
   {
     question: "Can I use my own voice?",
+    // B-2 fix (2026-05-09): "Professional" was not a real plan. Real plans are Free / Creator / Studio.
     answer:
-      "Absolutely. Creator and Professional plans include voice cloning — upload a short sample and generate narrations in your own voice.",
+      "Absolutely. Creator and Studio plans include voice cloning — upload a short sample and generate narrations in your own voice.",
   },
   {
     question: "How do credits work?",
+    // B-3 fix (2026-05-09): aligned credits-expiry policy across Pricing / FAQ / Terms.
+    // Subscription credits expire on the 28th of each month; top-up credit packs never expire.
     answer:
-      "Each generation (video, audio, or infographic) consumes credits based on complexity and length. Credits reset monthly and unused credits do not roll over. You can also purchase credit packs at any time.",
+      "Each generation (video, audio, or infographic) consumes credits based on complexity and length. Subscription credits expire on the 28th of each month — they don't roll over. Top-up credit packs you buy on top of a plan never expire.",
   },
   {
     question: "Can I cancel my subscription?",

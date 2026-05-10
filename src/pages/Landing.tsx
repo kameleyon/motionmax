@@ -284,23 +284,16 @@ export default function Landing() {
               </button>
             </div>
 
-            {/* Trust / urgency row */}
+            {/* Trust row — honest claims only. B-1 fix (2026-05-09): removed fake "2,400+" count. */}
             <p className="mt-4 text-sm text-white/60">
-              Free to start&nbsp;·&nbsp;No credit card required&nbsp;·&nbsp;Used by 2,400+ marketers
+              Free to start&nbsp;·&nbsp;No credit card required&nbsp;·&nbsp;Cancel anytime
             </p>
 
-            {/* Social proof avatars */}
-            <div className="mt-8 flex items-center justify-center gap-3">
-              <div className="flex -space-x-2">
-                {[1,2,3,4,5].map(i => (
-                  <div key={i} className="h-7 w-7 rounded-full border-2 border-background bg-gradient-to-br from-primary/60 to-primary/30" />
-                ))}
-              </div>
-              {/* TODO: replace 2,400+ with a real figure from your analytics/DB */}
-              <p className="text-sm text-white/70">
-                Join <span className="font-semibold text-white/90">2,400+</span> creators already making videos
-              </p>
-            </div>
+            {/* B-1 fix (2026-05-09): removed fabricated social-proof block ("2,400+ creators
+                already making videos") and decorative avatars. Replace with real metrics
+                (e.g., "X videos generated last week" from analytics, or named customer logos)
+                only when those metrics are real. Per FTC §255.1, fabricated counts carry
+                endorsement-rule exposure. */}
           </motion.div>
         </div>
       </section>
@@ -397,10 +390,12 @@ export default function Landing() {
             className="text-center mb-12"
           >
             <span className="inline-block mb-3 text-xs font-medium uppercase tracking-widest text-primary">
-              4 Ways to Create
+              3 Ways to Create
             </span>
+            {/* B-4 fix (2026-05-09): updated count from 4 to 3 after removing the
+                phantom "Visual Stories" card that referenced a non-existent mode. */}
             <h2 className="type-h1 tracking-tight text-white">
-              One platform. Four creative modes.
+              One platform. Three creative modes.
             </h2>
             <p className="mt-4 text-base max-w-xl mx-auto text-white/70">
               Pick the format that fits your content. Each mode is purpose-built.
@@ -427,13 +422,12 @@ export default function Landing() {
                 borderColor: "hover:border-[#e4c875]/40",
                 mode: "doc2video",
               },
-              {
-                title: "Visual Stories",
-                description: "AI writes the script from your story idea, generates scene images, and narrates with matched emotion. Full creative control over tone and style.",
-                example: "\"A bedtime story about a brave robot\" → animated visual story",
-                color: "from-[#0D99A8]/20 to-[#0D99A8]/5",
-                borderColor: "hover:border-[#0D99A8]/40",
-              },
+              // B-4 fix (2026-05-09): Removed phantom "Visual Stories" mode card. The
+              // mode is not implemented in the codebase (no `mode: 'visual-stories'`
+              // route, no Hero.tsx mode entry; modeFromParam coerces unknown values
+              // to 'cinematic' silently). Re-add this card only when the feature
+              // ships AND a `mode` field is provided that maps to a real route.
+              // Also removed off-brand color #0D99A8 per Critical C-4.
               {
                 title: "Smart Flow",
                 tag: "Infographics",

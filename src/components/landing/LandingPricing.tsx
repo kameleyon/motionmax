@@ -12,9 +12,11 @@ import { EXPERIMENTS } from "@/lib/experiments";
 // Update this when you want to reset the countdown. Keep ~30 days out.
 const PRICE_INCREASE_DATE = new Date("2026-05-19T23:59:59Z");
 
-// ─── Social proof counts ──────────────────────────────────────────────────────
-// TODO: replace with a real figure fetched from your analytics/DB once available
-const SOCIAL_PROOF_COUNT = "2,400+";
+// ─── Social proof ─────────────────────────────────────────────────────────────
+// B-1 fix (2026-05-09): removed fake `SOCIAL_PROOF_COUNT = "2,400+"`. Per
+// FTC §255.1, fabricated counts in marketing carry endorsement-rule exposure.
+// Reinstate with a real metric sourced from analytics OR a verified customer
+// list before re-enabling per-plan social-proof strings.
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
@@ -73,7 +75,7 @@ const pricingPlans = [
     ],
     buttonText: "Start Creating",
     popular: true,
-    socialProof: `Join ${SOCIAL_PROOF_COUNT} creators`,
+    socialProof: "", // B-1 fix (2026-05-09): cleared fake count; render is null-safe below
   },
   {
     name: "Studio",
@@ -98,7 +100,7 @@ const pricingPlans = [
     ],
     buttonText: "Go Studio",
     popular: false,
-    socialProof: `Trusted by ${SOCIAL_PROOF_COUNT} creators`,
+    socialProof: "", // B-1 fix (2026-05-09): cleared fake count
   },
 ];
 
@@ -235,10 +237,13 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
                 {plan.buttonText}
               </Button>
 
-              {/* Social proof micro-copy under CTA */}
-              <p className="text-center text-xs text-muted-foreground mb-1">
-                {plan.socialProof}
-              </p>
+              {/* Social-proof micro-copy under CTA — B-1 fix (2026-05-09): renders only
+                  when a real, verifiable claim is set (currently empty per FTC §255 fix). */}
+              {plan.socialProof && (
+                <p className="text-center text-xs text-muted-foreground mb-1">
+                  {plan.socialProof}
+                </p>
+              )}
               {/* Per-card refund guarantee — visible where the purchase decision is made */}
               <p className="text-center text-xs text-muted-foreground/60 mb-6">
                 🛡️ 7-day money-back guarantee

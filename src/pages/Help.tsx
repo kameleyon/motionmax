@@ -52,9 +52,11 @@ const FAQS: Faq[] = [
   {
     cat: "billing",
     q: "How do credits work?",
+    // B-2 + B-3 fix (2026-05-09): "Pro" is not a real plan (Free / Creator / Studio).
+    // Credits expire on the 28th of each month, not the 1st. Aligned with FAQ + Pricing + Terms.
     a: (
       <>
-        Each second of finished 1080p video costs roughly 8 credits; 4K costs 24. Voice generation is 1 credit per word. Credits reset on the 1st of each month. Unused credits don't roll over on Pro; Studio members keep up to 10,000 in reserve.
+        Each second of finished 1080p video costs roughly 8 credits; 4K costs 24. Voice generation is 1 credit per word. Subscription credits expire on the 28th of each month and don't roll over; Studio members keep up to 10,000 in reserve. Top-up credit packs you buy on top of a plan never expire.
       </>
     ),
   },

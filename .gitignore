@@ -73,3 +73,9 @@ scripts/clear-stuck-job.mjs
 .claude/worktrees/elated-williamson
 .claude/worktrees/busy-lederberg
 .claude/worktrees/busy-lederberg
+
+# Studio Zero audit reports — one source of truth lives in studio-zero/shared_context/audits/
+.audits/
+
+# B-5 fix (2026-05-10): backup of pre-fix byte-identical PNG bundle
+public/_archive-pre-b5-fix/

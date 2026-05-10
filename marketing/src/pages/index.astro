@@ -57,7 +57,8 @@ const faqs = [
   },
   {
     q: "How do credits work?",
-    a: "Each generation consumes credits based on complexity and length. Credits reset monthly. You can also purchase credit packs at any time.",
+    // B-3 fix (2026-05-09): aligned with app-side FAQ / Pricing / Terms — subscription credits expire on the 28th of each month.
+    a: "Each generation consumes credits based on complexity and length. Subscription credits expire on the 28th of each month and don't roll over. Top-up credit packs you buy on top of a plan never expire.",
   },
   {
     q: "Can I cancel my subscription?",
@@ -69,7 +70,7 @@ const jsonLd = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   name: "MotionMax",
-  description: "AI video generator that creates cinematic videos, explainers, visual stories, and infographics from text.",
+  description: "AI video generator that creates cinematic videos, explainers, and Smart Flow infographics from text.",
   url: "https://motionmax.io",
   applicationCategory: "MultimediaApplication",
   operatingSystem: "Web",
@@ -99,7 +100,7 @@ const faqJsonLd = {
 
 <BaseLayout
   title="MotionMax — AI Video Generator | Turn Text into Cinematic Videos"
-  description="Create stunning AI-generated cinematic videos, explainers, and visual stories from any text. AI scriptwriting, voiceover, image-to-video with 25+ caption styles. Multi-language. Start free."
+  description="Create stunning AI-generated cinematic videos, explainers, and infographics from any text. AI scriptwriting, voiceover, image-to-video with 25+ caption styles. Multi-language. Start free."
   canonical="https://motionmax.io"
   darkMode={true}
 >
@@ -199,20 +200,13 @@ const faqJsonLd = {
         </div>
 
         <p class="mt-5 text-xs text-white/50 px-4 leading-relaxed">
-          Free to start &nbsp;&middot;&nbsp; No credit card required &nbsp;&middot;&nbsp; Used by 2,400+ marketers
+          Free to start &nbsp;&middot;&nbsp; No credit card required &nbsp;&middot;&nbsp; Cancel anytime
         </p>
 
-        <!-- Social proof avatars -->
-        <div class="mt-8 flex flex-col sm:flex-row items-center justify-center gap-2 px-4">
-          <div class="flex -space-x-2">
-            {[1,2,3,4,5].map(i => (
-              <div class="h-7 w-7 rounded-full border-2 border-background bg-gradient-to-br from-primary/60 to-primary/20" />
-            ))}
-          </div>
-          <p class="text-xs text-white/60 text-center">
-            Join <span class="font-semibold text-white/80">2,400+</span> creators already making videos
-          </p>
-        </div>
+        <!-- B-1 fix (2026-05-09): removed fabricated "2,400+ creators" social-proof
+             block + decorative avatars. Per FTC §255.1, fabricated counts in marketing
+             carry endorsement-rule exposure. Reinstate with real metrics or named
+             customer logos when those are verifiable. -->
       </div>
     </section>
 

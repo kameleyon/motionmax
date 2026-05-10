@@ -55,7 +55,8 @@ import LegalLayout from "../layouts/LegalLayout.astro";
 
     <section class="space-y-3">
       <h2 class="text-lg font-semibold text-foreground">6. Credits and Billing</h2>
-      <p>The Service operates on a credit-based system. Credits are consumed when generating content. Monthly subscription credits expire at the end of each billing period. Purchased credit packs do not expire but are non-refundable once consumed.</p>
+      {/* B-3 fix (2026-05-09): aligned with app-side Terms — subscription credits expire on the 28th of each month. */}
+      <p>The Service operates on a credit-based system. Credits are consumed when generating content. Monthly subscription credits expire on the 28th of each month and do not roll over. Purchased credit packs (top-ups) do not expire but are non-refundable once consumed.</p>
       <p>Current plan limits — including credits per month, maximum resolution, voice clone slots, and Smart Flow generation caps — are published on the <a href="/pricing" class="text-primary hover:underline">Pricing page</a> and incorporated into these Terms by reference. Specifically: the Free tier includes 150 one-time credits with 720p output, no voice cloning, and a 3-video Smart Flow cap; the Creator plan includes 500 credits/month at 1080p with 1 voice clone; and the Studio plan includes 2,500 credits/month at 4K with 5 voice clones. MotionMax reserves the right to adjust plan limits with 30 days' prior notice.</p>
       <p>Subscription fees are billed in advance on a monthly or annual basis. You may cancel your subscription at any time; cancellation takes effect at the end of the current billing period. No partial refunds are issued for unused subscription periods.</p>
     </section>

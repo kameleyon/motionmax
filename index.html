@@ -18,21 +18,26 @@
     <link rel="alternate" hreflang="x-default" href="https://www.motionmax.io/" />
     <link rel="alternate" hreflang="en" href="https://www.motionmax.io/" />
 
+    <!-- B-5 fix (2026-05-10): asset bundle now distinct files at correct dimensions
+         (favicon 64×64 was 2000×2000 / 752KB, apple-touch 180×180, OG 1200×630
+         letterboxed onto carbon black). All 4 PNGs were md5-identical before this
+         fix, breaking every social-share preview and PWA icon. Mj-36 fix (2026-05-10):
+         theme-color, mask-icon color, manifest theme_color now all converge on brand
+         carbon black `#0F1112` (matches background) — removed the third teal `#2D9A8C`. -->
     <link rel="icon" href="/favicon.png" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon.png" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
     <link rel="shortcut icon" href="/favicon.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <link rel="mask-icon" href="/favicon.png" color="#2D9A8C" />
+    <link rel="mask-icon" href="/favicon.png" color="#14C8CC" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="msapplication-TileColor" content="#0F1112" />
-    <meta name="msapplication-TileImage" content="/favicon.png" />
+    <meta name="msapplication-TileImage" content="/pwa-192x192.png" />
     <meta name="theme-color" content="#0F1112" />
 
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://motionmax.io" />
     <meta property="og:title" content="MotionMax &#x2013; AI Video Generator | Cinematic Videos from Text" />
-    <meta property="og:description" content="Create AI-generated cinematic videos, explainers, and visual stories from any text. AI scriptwriting, voiceover, image-to-video, 25+ caption styles. Start free." />
+    <meta property="og:description" content="Create AI-generated cinematic videos, explainers, and Smart Flow infographics from any text. AI scriptwriting, voiceover, image-to-video, 25+ caption styles. Start free." />
     <meta property="og:image" content="https://motionmax.io/og-image.png?v=20260129" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -43,7 +48,7 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:url" content="https://motionmax.io" />
     <meta name="twitter:title" content="MotionMax &#x2013; AI Video Generator | Cinematic Videos from Text" />
-    <meta name="twitter:description" content="Create AI cinematic videos, explainers, and visual stories from text. AI scriptwriting, voiceover, image-to-video, 25+ caption styles. Start free." />
+    <meta name="twitter:description" content="Create AI cinematic videos, explainers, and Smart Flow infographics from text. AI scriptwriting, voiceover, image-to-video, 25+ caption styles. Start free." />
     <meta property="twitter:image" content="https://motionmax.io/og-image.png?v=20260129" />
     <meta name="twitter:image:alt" content="MotionMax &#x2013; AI Video Generator" />
     <meta name="twitter:site" content="@motionmaxio" />

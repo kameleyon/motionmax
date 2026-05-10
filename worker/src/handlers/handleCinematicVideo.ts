@@ -559,9 +559,15 @@ async function _runCinematicVideo(
     // Treat moderation rejection as a permanent per-scene failure —
     // never retry and never bubble. Anything else (transient API,
     // timeout, etc.) we re-throw so the dispatcher's retry policy
-    // gets a shot at it. Seedance moderation surfaces with similar
-    // wording to Kling — same regex covers both.
-    const isModerationReject = /risk control|content[_ ]?violation|blocked.*content|moderation/i.test(errMsg);
+    // gets a shot at it. Seedance + Kling surface moderation with
+    // multiple wordings; the regex must cover ALL of them or the
+    // held-frame fallback won't run. The "potentially sensitive" /
+    // "flagged.*sensitive" patterns were added 2026-05-10 after a
+    // Colombia/Group-K autopost run failed cleanly with that exact
+    // wording but the outer catch (this regex) didn't recognise it
+    // — it must match the same patterns the inner catch uses
+    // (commit 2e377bb).
+    const isModerationReject = /risk control|content[_ ]?violation|blocked.*content|moderation|potentially sensitive|flagged.*sensitive/i.test(errMsg);
     if (!isModerationReject) {
       throw err;
     }

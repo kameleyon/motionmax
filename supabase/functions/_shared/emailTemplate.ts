@@ -52,7 +52,7 @@ export function buildEmail(input: EmailLayoutInput): string {
       <tr>
         <td align="center" style="padding:8px 0 4px 0;">
           <a href="${escapeAttr(cta.href)}"
-             style="display:inline-block;padding:13px 26px;border-radius:10px;background:linear-gradient(135deg,#E4C875 0%,#C9A75A 100%);color:#0a0e10;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;font-size:14px;letter-spacing:.2px;text-decoration:none;border:1px solid rgba(228,200,117,.45);">
+             style="display:inline-block;padding:13px 26px;border-radius:10px;background:linear-gradient(135deg,#E4C875 0%,#C9A75A 100%);color:#0a0e10;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:14px;letter-spacing:.2px;text-decoration:none;border:1px solid rgba(228,200,117,.45);">
             ${escapeAttr(cta.label)}
           </a>
         </td>
@@ -72,7 +72,7 @@ export function buildEmail(input: EmailLayoutInput): string {
   <meta name="supported-color-schemes" content="dark light" />
   <title>${escapeAttr(headline)}</title>
 </head>
-<body style="margin:0;padding:0;background:#0a0e10;color:#ECEAE4;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;">
+<body style="margin:0;padding:0;background:#0a0e10;color:#ECEAE4;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;">
   <span style="display:none!important;visibility:hidden;mso-hide:all;font-size:1px;color:#0a0e10;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
     ${escapeAttr(preheader)}
   </span>

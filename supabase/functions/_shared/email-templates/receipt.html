@@ -17,3 +17,9 @@
 <p style="font-size:13px;color:#8A9198;">Billing period: <span style="color:#C8CCCE;">{{period}}</span></p>
 <p style="font-size:13px;color:#8A9198;margin-top:4px;">A full PDF invoice is available from the button below or anytime in your <a href="https://motionmax.io/settings/billing" style="color:#14C8CC;text-decoration:underline;">billing history</a>.</p>
 <p style="margin-top:18px;">Questions about this charge? Reply to this email or write to <a href="mailto:support@motionmax.io" style="color:#14C8CC;text-decoration:underline;">support@motionmax.io</a> &mdash; we're around weekdays.</p>
+<!-- Wave C Herald — transaction trace id surfaced in the footer so a
+     support agent can pull the exact webhook trace in Sentry without
+     asking the user to dig through their account. Rendered only when
+     the caller passed args.traceId; missing values resolve to "" and
+     the wrapper collapses to a blank line, which Gmail strips. -->
+<p style="margin-top:12px;font-size:11px;color:#5A6268;font-family:'SFMono-Regular',Menlo,Consolas,'Courier New',monospace;">Reference: <span style="color:#8A9198;">{{trace_id}}</span></p>

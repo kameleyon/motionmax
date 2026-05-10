@@ -100,18 +100,29 @@ const structuredData = breadcrumbs
     <meta property="og:image" content={ogImage} />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    {/* Wave A PART E — alt + type added so screen readers and crawlers
+        that need explicit dimensions/format render the social preview
+        accessibly. Mirror of index.html (SPA shell) social meta. */}
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:alt" content="MotionMax — AI Video Generator" />
     <meta property="og:site_name" content="MotionMax" />
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta property="twitter:image" content={ogImage} />
+    <meta name="twitter:image:alt" content="MotionMax — AI Video Generator" />
     <meta name="twitter:site" content="@motionmaxio" />
+    <meta name="twitter:creator" content="@motionmaxio" />
 
     <link rel="icon" href="/favicon.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#0F1112" />
+    {/* Wave A PART D — converged with index.html on brand carbon #040a0e
+        (dark-mode --background) so the browser chrome blends into the app
+        shell. Previously #0F1112. */}
+    <meta name="theme-color" content="#040a0e" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

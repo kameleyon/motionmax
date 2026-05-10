@@ -11,11 +11,16 @@ export function getPasswordStrength(password: string): { score: number; label: s
   if (/\d/.test(password)) score += 25;
   if (/[^a-zA-Z0-9]/.test(password)) score += 25;
 
-  // Brand palette has no orange — Fair sits between destructive (Weak)
-  // and yellow (Good) using a brand-safe muted-foreground tone.
-  if (score <= 25) return { score, label: "Weak", color: "bg-destructive" };
-  if (score <= 50) return { score, label: "Fair", color: "bg-muted-foreground" };
-  if (score <= 75) return { score, label: "Good", color: "bg-yellow-500" };
+  // Wave A PART F (2026-05-10): brand palette has no red/orange/green for
+  // decorative meter states (per Canon: aqua + gold only; --destructive is
+  // reserved for actual errors, not "weak password" guidance). The ramp is
+  // now: Weak = charcoal (muted-foreground), Fair = brand gold-dark
+  // (--warning), Good = brand gold (--gold), Strong = brand aqua
+  // (--primary). The colour itself communicates progress along brand —
+  // intensity rises rather than swapping hues.
+  if (score <= 25) return { score, label: "Weak", color: "bg-muted-foreground" };
+  if (score <= 50) return { score, label: "Fair", color: "bg-warning" };
+  if (score <= 75) return { score, label: "Good", color: "bg-gold" };
   return { score, label: "Strong", color: "bg-primary" };
 }
 
@@ -34,9 +39,9 @@ export function PasswordStrengthMeter({ password, showRequirements = true }: Pas
       <div className="flex items-center justify-between text-xs">
         <span className="text-muted-foreground">Password strength</span>
         <span className={`font-medium ${
-          strength.score <= 25 ? "text-destructive" :
-          strength.score <= 50 ? "text-muted-foreground" :
-          strength.score <= 75 ? "text-yellow-600" :
+          strength.score <= 25 ? "text-muted-foreground" :
+          strength.score <= 50 ? "text-warning" :
+          strength.score <= 75 ? "text-gold" :
           "text-primary"
         }`}>
           {strength.label}

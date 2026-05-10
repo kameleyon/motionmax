@@ -6,6 +6,17 @@
 # default so the signal is consistent at both the robots and the HTML
 # layer. Stale /workspace and /voice-lab paths kept as legacy disallows
 # (no longer routes, but external bookmarks still point at them).
+#
+# Wave C Signal S-M4 / L-M-11 refresh (2026-05-10):
+#   • Removed `Crawl-delay: 10` — a 10-second floor chokes crawl budget
+#     on a young domain. Google ignores it anyway; only Bing and Yandex
+#     read it. With <100 indexable URLs we want every visit to count.
+#   • Unified AI-crawler policy: GPTBot, ChatGPT-User, CCBot,
+#     anthropic-ai, Claude-Web, Google-Extended, PerplexityBot all hard-
+#     blocked. Position: we do not opt into AI training on our content.
+#     Public marketing pages can be summarised by the live-search bots
+#     that obey robots — but training datasets do not get crawl rights.
+#     See docs/ai-training-policy.md for the full statement.
 
 User-agent: Googlebot
 Allow: /
@@ -96,73 +107,44 @@ Disallow: /lab/
 Disallow: /voice-lab
 Disallow: /workspace
 Disallow: /api/
-Crawl-delay: 10
 
-# AI training crawlers — disallow user-generated content and
-# authenticated surfaces. Public marketing pages stay allowed (they're
-# already public; we lose nothing by letting AI surfaces summarise the
-# product page). CCBot remains a hard block per existing policy.
+# ── AI training crawlers ─────────────────────────────────────────────
+# Position: we do not opt into AI training on our content. The previous
+# policy was internally inconsistent (CCBot hard-blocked, GPTBot/
+# Claude-Web only blocked from /app), so an AI bot following robots.txt
+# could decide our public copy was fair game while a "stricter" bot
+# inferred we'd opt out entirely. Now uniform: every named AI training
+# crawler is fully disallowed. Bots that respect robots will skip; bots
+# that don't aren't constrained by anything here anyway.
+
 User-agent: GPTBot
-Disallow: /app
-Disallow: /app/
-Disallow: /auth
-Disallow: /dashboard
-Disallow: /dashboard-new
-Disallow: /projects
-Disallow: /settings
-Disallow: /billing
-Disallow: /admin
-Disallow: /lab
-Disallow: /editor
-Disallow: /usage
-Disallow: /api/
+Disallow: /
 
 User-agent: ChatGPT-User
-Disallow: /app
-Disallow: /app/
-Disallow: /auth
-Disallow: /dashboard
-Disallow: /dashboard-new
-Disallow: /projects
-Disallow: /settings
-Disallow: /billing
-Disallow: /admin
-Disallow: /lab
-Disallow: /editor
-Disallow: /usage
-Disallow: /api/
+Disallow: /
 
 User-agent: CCBot
 Disallow: /
 
 User-agent: anthropic-ai
-Disallow: /app
-Disallow: /app/
-Disallow: /auth
-Disallow: /dashboard
-Disallow: /dashboard-new
-Disallow: /projects
-Disallow: /settings
-Disallow: /billing
-Disallow: /admin
-Disallow: /lab
-Disallow: /editor
-Disallow: /usage
-Disallow: /api/
+Disallow: /
 
 User-agent: Claude-Web
-Disallow: /app
-Disallow: /app/
-Disallow: /auth
-Disallow: /dashboard
-Disallow: /dashboard-new
-Disallow: /projects
-Disallow: /settings
-Disallow: /billing
-Disallow: /admin
-Disallow: /lab
-Disallow: /editor
-Disallow: /usage
-Disallow: /api/
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: PerplexityBot
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: Amazonbot
+Disallow: /
 
 Sitemap: https://motionmax.io/sitemap.xml

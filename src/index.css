@@ -59,9 +59,15 @@
     --gold: 45 67% 68%;
     --gold-foreground: 200 9% 10%;
 
-    /* Warning - Unified amber */
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
+    /* Warning - Brand gold-dark (#C9A75A) instead of the previous amber
+       #F5A623. Brand canon has no amber; we intentionally use the darker
+       gold variant here (not the primary --gold #E4C875) so "warning /
+       caution" surfaces are visually distinguishable from decorative gold
+       accents and from --primary. AA: gold-dark on white is ~2.4:1 — only
+       use as a fill or border tint, never as standalone text on light bg.
+       Pair with the dark --warning-foreground for legible button labels. */
+    --warning: 38 47% 57%;
+    --warning-foreground: 200 9% 10%;
 
     /* Destructive uses a darker red despite the brand gold/aqua palette —
        this is a system-level accessibility override per WCAG 1.4.3 AA
@@ -143,8 +149,9 @@
     --gold: 45 67% 72%;
     --gold-foreground: 200 9% 10%;
 
-    /* Warning - Unified amber */
-    --warning: 38 92% 55%;
+    /* Warning - Brand gold-dark, slightly lighter for dark surface contrast.
+       See light-mode comment for rationale. */
+    --warning: 38 50% 62%;
     --warning-foreground: 200 9% 10%;
 
     /* Destructive — dark-mode variant of the system-level red override.

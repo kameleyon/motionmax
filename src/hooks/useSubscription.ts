@@ -251,8 +251,60 @@ export function useSubscription() {
       );
     }
 
-    try { trackEvent("begin_checkout", { price_id: priceId, mode, ...getStoredUtm() }); } catch { /* analytics non-critical */ }
-    window.open(data.url, "_blank");
+    // Wave C Lens M-referral: surface the active referral code so the
+    // funnel report can break out signups-by-referrer all the way to
+    // paid conversion. Auth.tsx sets this on landing-with-?ref=...
+    // (REF_SESSION_KEY = "mm_referral_code"). Missing = direct.
+    let referralCode: string | undefined;
+    try {
+      const stored = sessionStorage.getItem("mm_referral_code");
+      if (stored && stored.length > 0 && stored.length < 64) referralCode = stored;
+    } catch { /* sessionStorage may be unavailable in incognito */ }
+
+    try {
+      trackEvent("begin_checkout", {
+        price_id: priceId,
+        mode,
+        ...getStoredUtm(),
+        ...(referralCode ? { referral_code: referralCode } : {}),
+      });
+      // Audit asked for both paid_plan_selected (intent) and
+      // checkout_completed (server-confirmed). Intent fires here because
+      // we have the user's plan choice and we've just successfully
+      // minted the Checkout URL. Completion fires on the success-page
+      // bounce — but include referral_code on both so we can compute
+      // per-channel conversion lift without joining tables.
+      if (mode === "subscription") {
+        trackEvent("paid_plan_selected", {
+          price_id: priceId,
+          ...(referralCode ? { referral_code: referralCode } : {}),
+        });
+      }
+    } catch { /* analytics non-critical */ }
+
+    // Wave C Lens M2 — mobile same-tab redirect.
+    //
+    // Stripe Checkout opened in a new tab on mobile is a UX trap: iOS
+    // Safari and Chrome on Android shove the user into a tab they can't
+    // see, the original tab becomes a dangling "click to come back"
+    // surface, and on PWAs the new tab opens in the system browser —
+    // breaking the back-button flow entirely. Stripe's own guidance is
+    // to use top-level navigation on mobile.
+    //
+    // Detection: matchMedia is the cleanest signal we have (no UA
+    // parsing). 768 px matches Tailwind's `md` breakpoint which our
+    // pricing surface already uses as the desktop boundary. On the
+    // server / non-DOM environment we fall through to window.open.
+    const isMobile =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(max-width: 768px)").matches;
+
+    if (isMobile) {
+      window.location.href = data.url;
+    } else {
+      window.open(data.url, "_blank");
+    }
     return data.url;
   }, [session?.access_token]);
 

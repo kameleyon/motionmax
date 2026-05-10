@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, createContext, useContext, ReactNode, createElement } from "react";
 import { User, Session, AuthError } from "@supabase/supabase-js";
+import * as Sentry from "@sentry/react";
 import { supabase } from "@/integrations/supabase/client";
 import { trackEvent, getStoredUtm, identifyUser, clearIdentity } from "@/hooks/useAnalytics";
 import { CURRENT_POLICY_VERSION } from "@/lib/policyVersion";
@@ -410,6 +411,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const authKeys = ['upgradeModalDismissed', 'subscriptionSuspendedDismissed'];
     authKeys.forEach(key => sessionStorage.removeItem(key));
     const { error } = await supabase.auth.signOut();
+    // Wave C Lens M1 — identity-leak fix on shared devices.
+    //
+    // Before this block, after logout the next user signing in on the
+    // same browser would inherit:
+    //   • The previous user's UTM attribution (.motionmax.io cookie +
+    //     sessionStorage `mm_utm` blob), so their signup row carried
+    //     the wrong source / campaign in profiles.acquisition.
+    //   • The previous user's Sentry user_id tag, so any client-side
+    //     error fired in the brief "signed-out, banner not shown yet"
+    //     window was attributed to the previous user in Sentry.
+    //   • The previous user's GA `user_id` on the same client_id,
+    //     stitching two distinct people into one funnel.
+    //
+    // We clear all three. All are best-effort — analytics never blocks
+    // the auth path, so each call is individually try/caught.
+    try { clearStoredUtms(); } catch { /* utm clear non-critical */ }
+    try { Sentry.setUser(null); } catch { /* sentry non-critical */ }
+    try { clearIdentity(); } catch { /* analytics non-critical */ }
     return { error };
   }, []);
 

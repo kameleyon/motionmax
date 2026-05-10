@@ -2,7 +2,8 @@ import { useEffect, useState, useRef } from "react";
 import { Helmet } from "react-helmet-async";
 import { motion } from "framer-motion";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Mail, Lock, ArrowRight, Eye, EyeOff, Loader2, CheckCircle2, ShieldCheck, Lock as LockIcon } from "lucide-react";
+import { Mail, Lock, ArrowRight, Eye, EyeOff, Loader2, CheckCircle2, ShieldCheck, Lock as LockIcon, AlertTriangle } from "lucide-react";
+import * as Sentry from "@sentry/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -84,8 +85,20 @@ async function applyStoredReferralCode(userId: string): Promise<void> {
       p_code: code,
       p_referred_user_id: userId,
     });
-  } catch {
-    // Non-critical — never let referral errors surface to the user
+  } catch (err) {
+    // Non-critical — never let referral errors surface to the user.
+    // We DO want observability on recurring failures, though: a broken
+    // RPC silently zeroes referral conversions and the growth team won't
+    // notice until quarterly review. Drop a warning breadcrumb so the
+    // next captured exception in this session carries the context.
+    const message = err instanceof Error ? err.message : String(err);
+    Sentry.addBreadcrumb({
+      category: "referral",
+      level: "warning",
+      message: "Failed to apply referral code",
+      data: { error: message },
+    });
+    Sentry.captureException(err, { level: "warning" });
   }
 }
 
@@ -117,6 +130,23 @@ export default function Auth() {
   const [ageVerified, setAgeVerified] = useState(false);
   const failedAttemptsRef = useRef(0);
   const [lockedUntil, setLockedUntil] = useState<number>(0);
+  // Live ms-remaining counter for the lockout banner. Driven by the
+  // setInterval below so the banner updates every second without forcing
+  // a parent re-render. When `lockedUntil` is in the past, the effect
+  // clears the value and the banner disappears.
+  const [lockoutMsRemaining, setLockoutMsRemaining] = useState<number>(0);
+  // PART B (11.1 + Trace) — cooldown for the "Resend confirmation email"
+  // button on the post-signup screen. Supabase enforces a server-side
+  // rate-limit; this client-side cooldown keeps users from hammering the
+  // button and getting a 429.
+  const [resendCooldownUntil, setResendCooldownUntil] = useState<number>(0);
+  const [resendCooldownMsRemaining, setResendCooldownMsRemaining] = useState<number>(0);
+  const [isResending, setIsResending] = useState(false);
+  // PART B step 9 — if the user has been on the "Check your email"
+  // screen for > 5 min without clicking the confirmation link, show a
+  // softer "didn't get it?" prompt with a Resend hint.
+  const [emailSentAt, setEmailSentAt] = useState<number | null>(null);
+  const [showStalePrompt, setShowStalePrompt] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const navigate = useNavigate();
   // C-2-1 fix (Hook B1) — accept `next` as an alias for `returnUrl`
@@ -143,7 +173,11 @@ export default function Auth() {
   // their email into login can still onboard.
   const handleMagicLink = async () => {
     if (!email) {
-      setErrors({ email: "Enter your email to receive a magic link." });
+      // F-14 fix — original copy ("Enter your email to receive a magic
+      // link.") implied the user could enter it inside this error,
+      // which they can't (the message renders below the empty input).
+      // Tell them where to act instead.
+      setErrors({ email: "Enter your email address above first, then tap this button again." });
       return;
     }
     setMagicLinkLoading(true);
@@ -158,12 +192,52 @@ export default function Auth() {
       if (error) {
         const msg = getAuthErrorMessage(error.message);
         setErrors({ email: msg });
-        toast.error("Magic link failed", { description: msg });
+        // F-15 fix — "Magic link failed" reads like the link itself
+        // is broken (i.e. user clicked it). At this point we haven't
+        // even sent one yet. Rephrase so the user knows the SEND
+        // attempt is what failed.
+        toast.error("Couldn't send your sign-in link", { description: msg });
         return;
       }
+      setEmailSentAt(Date.now());
       setShowEmailSent(true);
     } finally {
       setMagicLinkLoading(false);
+    }
+  };
+
+  // PART B (11.1) — resend the signup confirmation email. Uses Supabase
+  // Auth's resend endpoint (`type: 'signup'`). The 60 s cooldown is
+  // enforced client-side here AND server-side by Supabase Auth's
+  // rate-limiter; this client gate just prevents the user from getting
+  // a 429 toast they didn't deserve.
+  const handleResendConfirmation = async () => {
+    if (!email) return;
+    if (Date.now() < resendCooldownUntil) return;
+    setIsResending(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}${returnUrl}`,
+        },
+      });
+      if (error) {
+        const msg = getAuthErrorMessage(error.message);
+        toast.error("Couldn't resend the confirmation email", { description: msg });
+        return;
+      }
+      // 60 s cooldown — long enough that Supabase's per-email rate limit
+      // is never the user's bottleneck.
+      setResendCooldownUntil(Date.now() + 60_000);
+      // Refresh the "stale" deadline so we don't immediately re-show the
+      // "didn't get it?" prompt the moment the user just clicked resend.
+      setEmailSentAt(Date.now());
+      setShowStalePrompt(false);
+      toast.success("Confirmation email resent", { description: `Sent to ${email}.` });
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -194,6 +268,67 @@ export default function Auth() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // PART A (3.2 + Ghost G-M2) — drive the lockout banner countdown.
+  // Recompute ms-remaining every 1 s while `lockedUntil` is in the
+  // future. When the deadline passes we clear both values so the banner
+  // unmounts cleanly. The 250 ms initial tick gives the banner an
+  // immediate first paint instead of a 1 s "0:00" flash.
+  useEffect(() => {
+    if (lockedUntil <= 0) {
+      setLockoutMsRemaining(0);
+      return;
+    }
+    const tick = () => {
+      const remaining = Math.max(0, lockedUntil - Date.now());
+      setLockoutMsRemaining(remaining);
+      if (remaining === 0) {
+        setLockedUntil(0);
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [lockedUntil]);
+
+  // PART B (11.1 + Trace) — resend-button cooldown countdown. Same
+  // setInterval pattern as the lockout. We re-enable the button at 0
+  // and reset the deadline so a second click starts a fresh 60 s window.
+  useEffect(() => {
+    if (resendCooldownUntil <= 0) {
+      setResendCooldownMsRemaining(0);
+      return;
+    }
+    const tick = () => {
+      const remaining = Math.max(0, resendCooldownUntil - Date.now());
+      setResendCooldownMsRemaining(remaining);
+      if (remaining === 0) {
+        setResendCooldownUntil(0);
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [resendCooldownUntil]);
+
+  // PART B step 9 — once a user has been parked on the email-sent
+  // screen for 5 minutes without confirming, surface a "didn't get it?
+  // check spam, or resend" prompt. Without this, users with delayed
+  // mail providers just stare at the screen and bounce.
+  useEffect(() => {
+    if (!showEmailSent || !emailSentAt) {
+      setShowStalePrompt(false);
+      return;
+    }
+    const STALE_AFTER_MS = 5 * 60 * 1000;
+    const elapsed = Date.now() - emailSentAt;
+    if (elapsed >= STALE_AFTER_MS) {
+      setShowStalePrompt(true);
+      return;
+    }
+    const id = window.setTimeout(() => setShowStalePrompt(true), STALE_AFTER_MS - elapsed);
+    return () => window.clearTimeout(id);
+  }, [showEmailSent, emailSentAt]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -211,6 +346,26 @@ export default function Auth() {
       if (mode === "login") {
         const { error } = await signIn(email, password);
         if (error) {
+          // PART A step 5 — server-side throttle (C-6-3) reaches us with
+          // a message starting "Too many failed sign-in attempts." (see
+          // useAuth.ts:374). When we see that prefix we light up the
+          // persistent banner directly instead of waiting for the
+          // client-side 5-attempt counter to catch up. The server is
+          // authoritative — even if the user reloads, the lockout sticks
+          // until the DB row clears.
+          if (/^Too many failed sign-in attempts/i.test(error.message)) {
+            // The throttle row's window is 30 min (see migration
+            // `create_auth_throttle.sql`). We don't get the deadline
+            // back as an ISO string from useAuth.signIn, so fall back to
+            // a 30-min wall-clock from now — the banner updates live and
+            // the next signIn attempt will reset the timestamp if the
+            // server returns a different remaining window.
+            const serverLockMs = 30 * 60 * 1000;
+            setLockedUntil(Date.now() + serverLockMs);
+            failedAttemptsRef.current = 0;
+            toast.error("Account temporarily locked", { description: error.message });
+            return;
+          }
           failedAttemptsRef.current += 1;
           if (failedAttemptsRef.current >= LOCKOUT_THRESHOLD) {
             setLockedUntil(Date.now() + LOCKOUT_DURATION_MS);
@@ -273,6 +428,7 @@ export default function Auth() {
           applyStoredReferralCode(newUserId);
         }
         // Show persistent confirmation screen instead of just a dismissible toast
+        setEmailSentAt(Date.now());
         setShowEmailSent(true);
         return;
       }
@@ -342,10 +498,50 @@ export default function Auth() {
               <p className="text-xs text-muted-foreground mb-6">
                 Click the link in the email to activate your account. If you don't see it, check your spam or junk folder.
               </p>
+
+              {/* PART B step 9 — after 5 min of staring at this screen,
+                  promote the resend path with a softer prompt. Uses gold
+                  (#E4C875) per brand to stay on-palette (no red/green). */}
+              {showStalePrompt && (
+                <p
+                  role="status"
+                  aria-live="polite"
+                  className="mb-4 rounded-xl border border-[#E4C875]/40 bg-[#E4C875]/10 px-3 py-2 text-xs text-[#E4C875]"
+                >
+                  Didn't get the email? Check your spam folder, or tap Resend below.
+                </p>
+              )}
+
+              {/* PART B steps 6–8 — Resend button with 60 s cooldown.
+                  Disabled while the cooldown is active OR while the
+                  network request is in flight. Label switches to a
+                  live "Resend (45s)" countdown so the user knows
+                  exactly when they can try again. */}
+              <Button
+                variant="outline"
+                className="w-full rounded-lg mb-3"
+                onClick={handleResendConfirmation}
+                disabled={isResending || resendCooldownMsRemaining > 0 || !email}
+              >
+                {isResending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : resendCooldownMsRemaining > 0 ? (
+                  `Resend (${Math.ceil(resendCooldownMsRemaining / 1000)}s)`
+                ) : (
+                  "Resend confirmation email"
+                )}
+              </Button>
+
               <Button
                 variant="outline"
                 className="w-full rounded-lg"
-                onClick={() => { setShowEmailSent(false); setMode("login"); setPassword(""); }}
+                onClick={() => {
+                  setShowEmailSent(false);
+                  setMode("login");
+                  setPassword("");
+                  setEmailSentAt(null);
+                  setShowStalePrompt(false);
+                }}
               >
                 Back to Sign In
               </Button>
@@ -439,6 +635,30 @@ export default function Auth() {
               </>
             )}
 
+            {/* PART A (3.2 + Ghost G-M2) — persistent lockout banner with
+                live countdown. Renders only while `lockedUntil` is in the
+                future. Gold (#E4C875) per brand — we never use red. The
+                aria-live keeps the SR users informed without yanking focus
+                every second; we update the visible counter inline but
+                only the surrounding banner is the live region. */}
+            {lockoutMsRemaining > 0 && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="mb-5 flex items-start gap-3 rounded-xl border border-[#E4C875]/40 bg-[#E4C875]/10 px-3 py-2"
+              >
+                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-[#E4C875]" aria-hidden="true" />
+                <div className="text-xs text-[#E4C875]">
+                  <strong className="font-semibold">Too many failed attempts.</strong>{" "}
+                  Try again in{" "}
+                  <span className="font-mono tabular-nums">
+                    {Math.ceil(lockoutMsRemaining / 1000)}
+                  </span>{" "}
+                  second{Math.ceil(lockoutMsRemaining / 1000) === 1 ? "" : "s"}.
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-5">
               {mode !== "update" && (
                 <div className="space-y-2">
@@ -450,6 +670,10 @@ export default function Auth() {
                       type="email"
                       autoFocus
                       autoComplete="email"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      inputMode="email"
                       placeholder="you@example.com"
                       value={email}
                       onChange={(e) => { setEmail(e.target.value); if (errors.email) setErrors(prev => ({ ...prev, email: undefined })); }}

@@ -64,6 +64,8 @@ export default function SeoHead() {
       <meta property="og:image" content={OG_IMAGE} />
       <meta property="og:image:width" content="1200" />
       <meta property="og:image:height" content="630" />
+      {/* Wave A PART E — explicit MIME so crawlers skip the HEAD probe. */}
+      <meta property="og:image:type" content="image/png" />
       <meta
         property="og:image:alt"
         content="MotionMax — Turn text into engaging visual content"

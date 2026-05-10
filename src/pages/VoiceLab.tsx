@@ -682,7 +682,7 @@ function MyVoicesTab({
                 onClick={() => {
                   if (confirm(`Delete "${v.voice_name}"? This cannot be undone.`)) deleteVoice(v.id);
                 }}
-                className="w-8 h-8 grid place-items-center rounded-md text-[#5A6268] hover:text-red-400 hover:bg-white/5 transition-colors"
+                className="w-8 h-8 grid place-items-center rounded-md text-[#5A6268] hover:text-destructive hover:bg-white/5 transition-colors"
                 title="Delete voice"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -1088,7 +1088,7 @@ function ClonedTab() {
                 <button
                   type="button"
                   onClick={() => { if (confirm(`Delete "${v.voice_name}"?`)) deleteVoice(v.id); }}
-                  className="w-8 h-8 grid place-items-center rounded-md text-[#5A6268] hover:text-red-400 hover:bg-white/5"
+                  className="w-8 h-8 grid place-items-center rounded-md text-[#5A6268] hover:text-destructive hover:bg-white/5"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>

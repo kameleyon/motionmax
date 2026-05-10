@@ -31,8 +31,11 @@
     --accent-foreground: 200 9% 10%;
     --gold: 45 67% 68%;
     --gold-foreground: 200 9% 10%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
+    /* Warning — brand gold-dark (#C9A75A), aligned with src/index.css.
+       Brand canon has no amber; gold-dark distinguishes caution surfaces
+       from the primary brand gold #E4C875. */
+    --warning: 38 47% 57%;
+    --warning-foreground: 200 9% 10%;
     /* Destructive uses a darker red despite the brand gold/aqua palette —
        this is a system-level accessibility override per WCAG 1.4.3 AA.
        Brand decoration uses ONLY aqua + gold; only error/destructive
@@ -77,7 +80,8 @@
     --accent-foreground: 184 60% 85%;
     --gold: 45 67% 72%;
     --gold-foreground: 200 9% 10%;
-    --warning: 38 92% 55%;
+    /* Warning — brand gold-dark, dark-mode variant. Kept in sync with src/index.css. */
+    --warning: 38 50% 62%;
     --warning-foreground: 200 9% 10%;
     /* Destructive — dark-mode variant of the system-level red override.
        Slightly lighter for legibility on near-black. Kept in sync with

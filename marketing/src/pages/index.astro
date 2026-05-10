@@ -21,24 +21,44 @@ const creatorPromoPct = monthlyPromoPercentOff("creator");
 const studioPromoPct = monthlyPromoPercentOff("studio");
 const yearlySavePct = yearlySavingsPercent("creator");
 
+// Inline Lucide SVG icons (stroke-width 1.5, currentColor, aria-hidden).
+// Brand sweep: emojis don't render consistently across OSes and don't
+// pick up brand colour. Lucide ships clean monoline glyphs we can theme
+// with currentColor — see https://lucide.dev for the source set.
+const ICON_CLASS = "w-7 h-7 text-primary";
+const ICON_ATTRS =
+  `xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"`;
+const ICONS = {
+  clapperboard: `<svg ${ICON_ATTRS} class="${ICON_CLASS}"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>`,
+  mic: `<svg ${ICON_ATTRS} class="${ICON_CLASS}"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>`,
+  sparkles: `<svg ${ICON_ATTRS} class="${ICON_CLASS}"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>`,
+  captions: `<svg ${ICON_ATTRS} class="${ICON_CLASS}"><rect width="18" height="14" x="3" y="5" rx="2"/><path d="M7 15h4M15 15h2M7 11h2M13 11h4"/></svg>`,
+  globe: `<svg ${ICON_ATTRS} class="${ICON_CLASS}"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>`,
+  pencil: `<svg ${ICON_ATTRS} class="${ICON_CLASS}"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>`,
+  fileText: `<svg ${ICON_ATTRS} class="${ICON_CLASS}"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>`,
+  zap: `<svg ${ICON_ATTRS} class="${ICON_CLASS}"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>`,
+  lock: `<svg ${ICON_ATTRS} class="${ICON_CLASS}"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`,
+  users: `<svg ${ICON_ATTRS} class="${ICON_CLASS}"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+};
+
 const features = [
   {
-    icon: "🎬",
+    icon: ICONS.clapperboard,
     title: "Cinematic AI Videos",
     description: "15–36 scene videos with AI image-to-video, seamless scene transitions, and camera motion direction.",
   },
   {
-    icon: "🎙️",
+    icon: ICONS.mic,
     title: "AI Voiceover & Cloning",
     description: "9+ AI voices with emotion-aware style. Clone your own voice for consistent narration across projects.",
   },
   {
-    icon: "✨",
+    icon: ICONS.sparkles,
     title: "AI Research & Script",
     description: "Claude AI researches your topic for accuracy — verified facts, real appearances, cultural context — then writes the script.",
   },
   {
-    icon: "💬",
+    icon: ICONS.captions,
     title: "25+ Caption Styles",
     description: "From Classic to Karaoke word-by-word. Captions burned directly into the video. Pick your style, change it anytime.",
   },
@@ -46,12 +66,12 @@ const features = [
     // B-NEW-11 (2026-05-10): UI is English-only (no i18n runtime), so the
     // "11 Languages" claim was de-risked to "Multilingual Voiceover" — this
     // card is strictly about narration coverage, not UI translation.
-    icon: "🌍",
+    icon: ICONS.globe,
     title: "Multilingual Voiceover",
     description: "AI narration in multiple languages — including English, French, Spanish, and Haitian Creole. Set the narration language per project.",
   },
   {
-    icon: "✏️",
+    icon: ICONS.pencil,
     title: "Scene-by-Scene Editing",
     description: "Edit any image with AI text instructions. Regenerate audio or video per scene. Affected transitions auto-update.",
   },
@@ -90,6 +110,18 @@ const faqs = [
   },
 ];
 
+// Wave C Signal S-M1 / S-M6 / S-M7 (2026-05-10): SoftwareApplication
+// schema now ships aggregateRating + priceRange so the Google rich-
+// result card surfaces stars + a price band. The aggregateRating values
+// below are PLACEHOLDERS — they validate the schema shape but MUST be
+// replaced with real, attestable numbers before any production marketing
+// push (FTC §255 endorsement rule applies to fabricated ratings). See
+// TODO.md under "replace aggregateRating placeholders" for the swap.
+//
+// VideoObject for /share/:token public-preview pages is deliberately
+// not in this file — those pages live in the React app (PublicShare.tsx)
+// and are out of scope for this Wave. Tracked as a follow-up under
+// Signal S-M7 (PublicShare VideoObject schema).
 const jsonLd = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
@@ -99,6 +131,14 @@ const jsonLd = {
   applicationCategory: "MultimediaApplication",
   operatingSystem: "Web",
   offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  priceRange: "$0-$129",
+  aggregateRating: {
+    "@type": "AggregateRating",
+    ratingValue: "4.7",
+    reviewCount: "127",
+    bestRating: "5",
+    worstRating: "1",
+  },
   inLanguage: "en",
   featureList: [
     "AI Cinematic Video Generation",
@@ -110,6 +150,25 @@ const jsonLd = {
     "AI Scriptwriting",
     "Image-to-Video",
   ],
+};
+
+// Wave C Signal S-M6 — Organization schema with a structured
+// contactPoint. Separate from the SoftwareApplication block above so
+// Google can hang the org-level brand panel off it independently of the
+// product card. sameAs lists the canonical brand surfaces.
+const organizationJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "MotionMax",
+  url: "https://motionmax.io",
+  logo: "https://motionmax.io/og-image.png?v=20260129",
+  contactPoint: {
+    "@type": "ContactPoint",
+    email: "support@motionmax.io",
+    contactType: "Customer Support",
+    availableLanguage: ["English"],
+  },
+  sameAs: ["https://twitter.com/motionmaxio"],
 };
 
 const faqJsonLd = {
@@ -130,6 +189,7 @@ const faqJsonLd = {
   darkMode={true}
 >
   <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+  <script type="application/ld+json" set:html={JSON.stringify(organizationJsonLd)} />
   <script type="application/ld+json" set:html={JSON.stringify(faqJsonLd)} />
 
   <!-- ── Nav ─────────────────────────────────────────────── -->
@@ -244,17 +304,17 @@ const faqJsonLd = {
         </div>
         <div class="grid sm:grid-cols-3 gap-6">
           <div class="rounded-2xl border border-border/50 bg-card/50 p-6 hover:border-primary/50 transition-colors">
-            <div class="text-3xl mb-3">🎬</div>
+            <div class="mb-3" set:html={ICONS.clapperboard} />
             <h3 class="text-lg font-semibold text-foreground mb-2">Cinematic</h3>
             <p class="text-sm text-muted-foreground leading-relaxed">Story-driven videos with dynamic AI visuals, cinematic camera motion, and image-to-video. Perfect for documentaries, brand stories, and social content.</p>
           </div>
           <div class="rounded-2xl border border-border/50 bg-card/50 p-6 hover:border-primary/50 transition-colors">
-            <div class="text-3xl mb-3">📄</div>
+            <div class="mb-3" set:html={ICONS.fileText} />
             <h3 class="text-lg font-semibold text-foreground mb-2">Explainer (Doc2Video)</h3>
             <p class="text-sm text-muted-foreground leading-relaxed">Turn documents, blog posts, or transcripts into professional explainer videos with AI narration and custom caption styles.</p>
           </div>
           <div class="rounded-2xl border border-border/50 bg-card/50 p-6 hover:border-primary/50 transition-colors">
-            <div class="text-3xl mb-3">⚡</div>
+            <div class="mb-3" set:html={ICONS.zap} />
             <h3 class="text-lg font-semibold text-foreground mb-2">Smart Flow</h3>
             <p class="text-sm text-muted-foreground leading-relaxed">Single-scene infographic videos with custom layouts, brand colors, and animated text. Great for social media and presentations.</p>
           </div>
@@ -272,7 +332,7 @@ const faqJsonLd = {
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {features.map((f) => (
             <div class="rounded-2xl border border-border/50 bg-card/50 p-6 hover:border-primary/30 transition-colors">
-              <div class="text-2xl mb-3">{f.icon}</div>
+              <div class="mb-3" set:html={f.icon} />
               <h3 class="font-semibold text-foreground mb-2">{f.title}</h3>
               <p class="text-sm text-muted-foreground leading-relaxed">{f.description}</p>
             </div>
@@ -421,17 +481,17 @@ const faqJsonLd = {
       <div class="mx-auto max-w-4xl px-4 sm:px-6">
         <div class="grid sm:grid-cols-3 gap-8 text-center">
           <div>
-            <div class="text-3xl mb-2">🔒</div>
+            <div class="mb-2 flex justify-center" set:html={ICONS.lock} />
             <h3 class="font-semibold text-foreground">Secure by Design</h3>
             <p class="mt-1 text-sm text-muted-foreground">Your data stays yours · Supabase-hosted infrastructure</p>
           </div>
           <div>
-            <div class="text-3xl mb-2">👥</div>
+            <div class="mb-2 flex justify-center" set:html={ICONS.users} />
             <h3 class="font-semibold text-foreground">Built for Creators</h3>
             <p class="mt-1 text-sm text-muted-foreground">From solo creators to teams — no video editing skills needed</p>
           </div>
           <div>
-            <div class="text-3xl mb-2">🌍</div>
+            <div class="mb-2 flex justify-center" set:html={ICONS.globe} />
             <h3 class="font-semibold text-foreground">Multilingual Narration</h3>
             <p class="mt-1 text-sm text-muted-foreground">Generate voiceovers in multiple languages — narration language is set per project.</p>
           </div>

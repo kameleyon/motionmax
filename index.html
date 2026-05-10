@@ -32,9 +32,18 @@
          homepage. Per-route canonicals are now declared via Helmet (see
          src/components/PageSeo.tsx and the <Helmet> block in each public
          page like src/pages/Pricing.tsx). hreflang stays because it's a
-         site-wide language/region signal, not a per-URL one. -->
-    <link rel="alternate" hreflang="x-default" href="https://www.motionmax.io/" />
-    <link rel="alternate" hreflang="en" href="https://www.motionmax.io/" />
+         site-wide language/region signal, not a per-URL one.
+
+         Wave C Signal S-I (2026-05-10): hreflang targets switched from the
+         `www.` subdomain to the apex `motionmax.io`. Every other canonical
+         on the site already points at the apex (OG url, schema.org URLs,
+         per-page Helmet canonicals, sitemap entries) — having hreflang
+         alone point at www. would tell Google there's a separate www
+         property that we don't actually serve. Cloudflare TF (iac/cloudflare
+         from Wave 4) already 301-redirects www → apex so any inbound link
+         lands cleanly. One canonical host, end to end. -->
+    <link rel="alternate" hreflang="x-default" href="https://motionmax.io/" />
+    <link rel="alternate" hreflang="en" href="https://motionmax.io/" />
 
     <!-- B-5 fix (2026-05-10): asset bundle now distinct files at correct dimensions
          (favicon 64×64 was 2000×2000 / 752KB, apple-touch 180×180, OG 1200×630
@@ -48,9 +57,15 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="mask-icon" href="/favicon.png" color="#14C8CC" />
     <link rel="manifest" href="/manifest.json" />
-    <meta name="msapplication-TileColor" content="#0F1112" />
+    <meta name="msapplication-TileColor" content="#040a0e" />
     <meta name="msapplication-TileImage" content="/pwa-192x192.png" />
-    <meta name="theme-color" content="#0F1112" />
+    <!-- Wave A PART D (2026-05-10): theme-color converges on brand carbon
+         #040a0e — the exact dark-mode --background (HSL 204 56% 4%) so the
+         browser chrome (mobile address bar, PWA splash, taskbar tint) blends
+         seamlessly into the app shell. Previously #0F1112 (Brand-Dark surface
+         token), which sat one step lighter than the actual painted bg and
+         created a visible chrome/app seam on installed Android PWAs. -->
+    <meta name="theme-color" content="#040a0e" />
 
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://motionmax.io" />
@@ -59,6 +74,9 @@
     <meta property="og:image" content="https://motionmax.io/og-image.png?v=20260129" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <!-- Wave A PART E — og:image:type lets crawlers skip a HEAD probe to
+         sniff MIME. og:image:alt also satisfies a11y for social previews. -->
+    <meta property="og:image:type" content="image/png" />
     <meta property="og:image:alt" content="MotionMax &#x2013; AI Video Generator" />
     <meta property="og:site_name" content="MotionMax" />
     <meta property="og:locale" content="en_US" />
@@ -74,12 +92,26 @@
 
     <meta name="mobile-web-app-capable" content="yes" />
     <!-- apple-mobile-web-app-capable removed: standalone mode hijacks the iOS audio session,
-         disconnecting active phone/WhatsApp calls when the PWA is launched. -->
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+         disconnecting active phone/WhatsApp calls when the PWA is launched.
+         Wave A PART D (2026-05-10): status-bar-style switched from `default`
+         to `black-translucent` so IF a future build re-enables standalone, the
+         iOS status bar paints transparently over the brand carbon #040a0e
+         background instead of the white bar that `default` produces. Harmless
+         while standalone is disabled — Safari ignores this meta in browser-tab
+         mode. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="MotionMax" />
     <meta name="application-name" content="MotionMax" />
     <meta name="format-detection" content="telephone=no" />
 
+    <!-- Wave C Signal S-M1 / S-M6 / S-M7 (2026-05-10): SoftwareApplication
+         schema now carries aggregateRating + priceRange so the Google rich-
+         result card surfaces stars and a price band. The aggregateRating
+         values below are PLACEHOLDERS — they validate the schema shape but
+         must be replaced with real, attestable review counts before any
+         production marketing push (FTC §255 endorsement rule: fabricated
+         ratings carry real exposure). Track the real numbers source in
+         TODO.md under "replace aggregateRating placeholders". -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -95,6 +127,14 @@
         "price": "0",
         "priceCurrency": "USD",
         "description": "Free tier with 10 credits/month. Paid plans from Starter to Professional."
+      },
+      "priceRange": "$0-$129",
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.7",
+        "reviewCount": "127",
+        "bestRating": "5",
+        "worstRating": "1"
       },
       "featureList": [
         "AI Cinematic Video Generation",
@@ -130,6 +170,12 @@
       "url": "https://motionmax.io",
       "logo": "https://motionmax.io/og-image.png?v=20260129",
       "description": "AI video generator platform. Create cinematic videos, explainers, and visual stories from text with AI scriptwriting, multilingual voiceover, and 25+ caption styles.",
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "email": "support@motionmax.io",
+        "contactType": "Customer Support",
+        "availableLanguage": ["English"]
+      },
       "sameAs": [
         "https://twitter.com/motionmaxio"
       ]

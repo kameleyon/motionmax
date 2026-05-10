@@ -4,9 +4,15 @@
      enable by flipping the GRANT_WINBACK_60_CREDITS env feature flag in
      run-email-drips, then uncomment the block below. Keeping the copy
      here so the email reads correctly whether or not the grant fires. -->
+<!-- Wave C Herald — two real offers, both live in production today:
+     1) Credit-on-the-house (reply-to-redeem; granted manually by support).
+     2) RETAIN50 — the same coupon code in CancelRetentionModal.tsx,
+        50% off any paid plan for 3 months. If you change the coupon
+        in the modal, change it here. -->
 <div style="margin:16px 0;padding:16px 18px;border:1px solid rgba(228,200,117,.3);border-radius:10px;background:rgba(228,200,117,.06);">
-  <p style="margin:0 0 6px 0;font-size:13px;color:#E4C875;text-transform:uppercase;letter-spacing:.5px;font-weight:600;">A nudge to come back</p>
-  <p style="margin:0;color:#ECEAE4;">If credits-on-the-house would help &mdash; reply to this email with the word "credits" and we'll add 50 to your account, no strings.</p>
+  <p style="margin:0 0 6px 0;font-size:13px;color:#E4C875;text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Two ways back, no strings</p>
+  <p style="margin:0 0 8px 0;color:#ECEAE4;">If credits-on-the-house would help &mdash; reply to this email with the word "credits" and we'll add 50 to your account.</p>
+  <p style="margin:0;color:#ECEAE4;">If price is the snag, use code <strong style="color:#E4C875;">RETAIN50</strong> at checkout for <strong>50% off the next 3 months</strong> on any paid plan.</p>
 </div>
 <p>Or just sign in and look around. We've shipped a lot since you've been gone, and most of it is the kind of thing you can only feel by clicking through.</p>
 <p style="margin-top:14px;color:#8A9198;font-size:13px;">If MotionMax really isn't for you anymore, the <a href="{{unsubscribe_url}}" style="color:#14C8CC;text-decoration:underline;">unsubscribe link</a> is always there. We won't take it personally.</p>

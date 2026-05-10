@@ -69,53 +69,78 @@ export async function sendWelcomeEmail(to: string, planName: string, displayName
 }
 
 // ── Generic signup welcome (free + paid) ──────────────────────────────
+// Wave C Herald rewrite. Now routes through the lifecycle template
+// helper so the day-0 email matches the rest of the drip series in
+// brand, layout, and copy voice — and so a designer change to
+// welcome.html flows through to BOTH the drip cron AND the
+// notify-signup-welcome path with one edit.
+//
+// The old inline copy mentioned "Creator plan benefits" / "Schedule
+// auto-posts (Creator plan)" to free users on day 0 — Wave 5 noted
+// that as confusing (people thought they'd been billed). New copy is
+// single-CTA, single-goal: ship one video, the rest of the tour
+// arrives on day 1. See welcome.html for the rendered body.
 export async function sendSignupWelcomeEmail(to: string, displayName?: string): Promise<void> {
-  const html = buildEmail({
-    preheader: "Your MotionMax account is ready — start creating.",
+  const { renderTemplate } = await import("./email-templates/_helper.ts");
+  const rendered = await renderTemplate("welcome", {
+    user_email: to,
+    // Welcome is technically transactional, but the layout always
+    // renders an unsubscribe link for consistency. /unsubscribe is the
+    // generic landing page when we don't have a per-recipient token.
+    unsubscribe_url: "https://motionmax.io/unsubscribe",
     greeting: greetingFor(displayName),
-    headline: "Welcome to MotionMax",
-    bodyHtml: `
-      <p>Thanks for joining. Your account is ready — head to the dashboard to create your first video.</p>
-      <p style="margin-top:18px;">A few things to try first:</p>
-      <ul style="padding-left:20px;margin:8px 0 0 0;color:#C8CCCE;">
-        <li style="margin-bottom:6px;">Pick a style and length, drop in a topic, hit generate.</li>
-        <li style="margin-bottom:6px;">Bring your own brand colors and voice for a consistent look.</li>
-        <li style="margin-bottom:6px;">Schedule auto-posts so a steady stream of content goes out without daily effort <span style="color:#E4C875;">(Creator plan)</span>.</li>
-      </ul>
-    `,
-    cta: { label: "Open dashboard", href: "https://motionmax.io/app" },
+    first_name: displayName,
   });
-  await sendEmail({ to, subject: "Welcome to MotionMax", html });
+  await sendEmail({ to, subject: rendered.subject, html: rendered.html });
 }
 
 // ── Payment failed ────────────────────────────────────────────────────
-export async function sendPaymentFailedEmail(to: string, displayName?: string): Promise<void> {
-  const html = buildEmail({
-    preheader: "Action required: update your payment method.",
+// Wave C Herald rewrite. Routes through the lifecycle template helper
+// so the copy (subject + body + CTA) lives in the same place as the
+// drip series — designers can iterate without touching TypeScript.
+// `unsubscribeUrl` falls back to the generic /unsubscribe page when the
+// caller didn't pass a per-user token (transactional emails don't
+// strictly need an unsubscribe under CAN-SPAM, but the shared layout
+// renders the link unconditionally for consistency).
+export async function sendPaymentFailedEmail(
+  to: string,
+  displayName?: string,
+  unsubscribeUrl: string = "https://motionmax.io/unsubscribe",
+): Promise<void> {
+  const { renderTemplate } = await import("./email-templates/_helper.ts");
+  const rendered = await renderTemplate("payment_failed", {
+    user_email: to,
+    unsubscribe_url: unsubscribeUrl,
     greeting: greetingFor(displayName),
-    headline: "Payment failed",
-    bodyHtml: `
-      <p>We couldn't process your most recent payment. Update your payment method to keep your subscription active —
-      your account stays accessible during a short grace period.</p>
-    `,
-    cta: { label: "Update payment", href: "https://motionmax.io/settings/billing" },
+    first_name: displayName,
   });
-  await sendEmail({ to, subject: "Action required: payment failed", html });
+  await sendEmail({ to, subject: rendered.subject, html: rendered.html });
 }
 
 // ── Cancellation ──────────────────────────────────────────────────────
-export async function sendCancellationEmail(to: string, displayName?: string): Promise<void> {
-  const html = buildEmail({
-    preheader: "Your subscription has been cancelled.",
+// Wave C Herald rewrite. Same template-helper route as payment_failed.
+// `periodEnd` shows the user when their paid access actually ends so
+// they can plan a possible resubscribe inside the 30-day project-retention
+// window (see cancellation_confirmed.html body copy). Falls back to a
+// generic "the end of your billing period" when the caller didn't pass
+// the date.
+export async function sendCancellationEmail(
+  to: string,
+  displayName?: string,
+  periodEnd?: string,
+  unsubscribeUrl: string = "https://motionmax.io/unsubscribe",
+): Promise<void> {
+  const { renderTemplate } = await import("./email-templates/_helper.ts");
+  const rendered = await renderTemplate("cancellation_confirmed", {
+    user_email: to,
+    unsubscribe_url: unsubscribeUrl,
     greeting: greetingFor(displayName),
-    headline: "Subscription cancelled",
-    bodyHtml: `
-      <p>Your subscription has been cancelled. You'll keep access until the end of your current billing period.</p>
-      <p>Want to come back? You can resubscribe any time.</p>
-    `,
-    cta: { label: "View pricing", href: "https://motionmax.io/pricing" },
+    first_name: displayName,
+    period_end: periodEnd && periodEnd.trim().length > 0
+      ? periodEnd
+      : "the end of your billing period",
   });
-  await sendEmail({ to, subject: "Your MotionMax subscription has been cancelled", html });
+  await sendEmail({ to, subject: rendered.subject, html: rendered.html });
 }
 
 // ── Branded purchase receipt (B-NEW-8) ────────────────────────────────
@@ -142,6 +167,11 @@ export interface BrandedReceiptArgs {
   invoiceUrl: string;
   /** Recipient unsubscribe link (built from profiles.unsubscribe_token). */
   unsubscribeUrl: string;
+  /** Wave C Herald — optional trace_id (Stripe event id) rendered in
+   *  the receipt footer so a user reporting a billing issue can quote
+   *  it back to support, who can then pull the exact webhook trace in
+   *  Sentry. Omit when the caller doesn't have one. */
+  traceId?: string;
 }
 export async function sendBrandedReceiptEmail(args: BrandedReceiptArgs): Promise<void> {
   // Lazy import to avoid loading the template runtime in functions that
@@ -156,6 +186,7 @@ export async function sendBrandedReceiptEmail(args: BrandedReceiptArgs): Promise
     total: args.total,
     period: args.period,
     invoice_url: args.invoiceUrl,
+    trace_id: args.traceId,
   });
   await sendEmail({
     to: args.to,

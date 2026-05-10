@@ -37,12 +37,48 @@ export interface TemplateMeta {
 export const TEMPLATE_META: Record<string, TemplateMeta> = {
   // ── Day-0 (welcome) — kept here for completeness; the existing
   //    notify-signup-welcome edge fn renders this inline today.
+  //
+  // Wave C Herald rewrite — first-touch is about ONE action (ship a
+  // video), not a feature tour. Paid-plan language was scrubbed: free
+  // users were getting "Creator plan benefits" copy on day 0, which
+  // tested as confusing (people thought they'd been charged). Subject
+  // personalises with {{first_name}} via the standard template var
+  // pipeline — the substituter renders an empty string when the var is
+  // missing, so the welcome handler in notify-signup-welcome must pass
+  // first_name explicitly or fall back to "there" at call time.
   welcome: {
-    subject: "Welcome to MotionMax",
-    preheader: "Your account is ready — start creating.",
-    headline: "Welcome to MotionMax",
-    cta_label: "Open dashboard",
-    cta_href: "https://motionmax.io/app",
+    subject: "{{first_name}}, your first video is 3 minutes away",
+    preheader: "One topic, one style, one render. We'll walk you through the rest after.",
+    headline: "Let's ship your first video",
+    cta_label: "Start my first video",
+    cta_href: "https://motionmax.io/create",
+  },
+  // ── Payment-failed (Stripe invoice.payment_failed) ──────────────────
+  // Wave C Herald rewrite. Original copy ("Payment failed") tested as
+  // panic-inducing: half of recipients assumed they were locked out
+  // immediately. New copy leads with what happened ("didn't go
+  // through"), what they need to do ("update card"), and reassures on
+  // the grace period so they don't churn out of fear.
+  payment_failed: {
+    subject: "Action needed: card declined on your motionmax subscription",
+    preheader: "Update your card to keep your subscription active — we'll retry automatically.",
+    headline: "Your last payment didn't go through",
+    cta_label: "Update payment method",
+    cta_href: "https://motionmax.io/settings/billing",
+  },
+  // ── Cancellation-confirmed ──────────────────────────────────────────
+  // Wave C Herald rewrite. Added two retention hooks per the Wave-C
+  // brief: a 30-sec exit survey link (placeholder URL — wire to a real
+  // form when one exists) and a "you can come back" line referencing
+  // the 30-day project-retention window. We DO NOT mention the
+  // CancelRetentionModal's 50%-off coupon in this email — the coupon
+  // is meant to fire BEFORE cancel-click, not after.
+  cancellation_confirmed: {
+    subject: "Your motionmax subscription is cancelled",
+    preheader: "You'll keep access until the end of your billing period. Your projects stay for 30 days.",
+    headline: "Sorry to see you go",
+    cta_label: "Take the 30-second survey",
+    cta_href: "https://motionmax.io/feedback?source=cancel_email",
   },
   // ── Day-1 — first-project nudge.
   day_1: {
@@ -165,6 +201,10 @@ export interface RenderVars {
   unsubscribe_url: string;
   /** Optional personalised greeting line; defaults to "Hi there,". */
   greeting?: string;
+  /** Optional first-name; used by the welcome subject. Falls back to
+   *  the literal "there" when omitted or empty so the subject stays
+   *  grammatical. */
+  first_name?: string;
   /** Receipt-specific: link to the Stripe-hosted invoice PDF. */
   invoice_url?: string;
   /** Receipt-specific: plan/pack name purchased. */
@@ -200,27 +240,41 @@ export async function renderTemplate(
 
   const greeting = vars.greeting ?? "Hi there,";
 
+  // Wave C Herald — the welcome subject personalises with {{first_name}}.
+  // We default to "there" so the line reads "there, your first video is
+  // 3 minutes away" instead of the literal ", your first video is …" when
+  // the caller didn't pass a name. Same default flows into all other
+  // templates that may opt into first_name in future without code change.
+  const varsWithDefaults: Record<string, string | undefined> = {
+    ...(vars as Record<string, string | undefined>),
+    greeting,
+    first_name: (vars.first_name && vars.first_name.trim().length > 0)
+      ? vars.first_name.trim()
+      : "there",
+  };
+
+  // Subject is META-defined but may itself contain {{var}} (welcome:
+  // first_name). Substitute against the same vars-with-defaults so both
+  // the rendered HTML and the returned `subject` are consistent.
+  const filledSubject = substitute(meta.subject, varsWithDefaults);
+
   // Two-pass substitution: body first (so its filled-in vars can flow
   // through into the layout's {{body_html}} slot), then layout.
-  const filledBody = substitute(body, {
-    ...(vars as Record<string, string | undefined>),
-    greeting,
-  });
+  const filledBody = substitute(body, varsWithDefaults);
 
   const filledLayout = substitute(layout, {
-    ...(vars as Record<string, string | undefined>),
-    greeting,
-    subject: meta.subject,
+    ...varsWithDefaults,
+    subject: filledSubject,
     preheader: meta.preheader,
     headline: meta.headline,
     cta_label: meta.cta_label,
-    cta_href: substitute(meta.cta_href, vars as Record<string, string | undefined>),
+    cta_href: substitute(meta.cta_href, varsWithDefaults),
     body_html: filledBody,
     tos_version: LEGAL_VERSIONS.tos,
   });
 
   return {
-    subject: meta.subject,
+    subject: filledSubject,
     html: filledLayout,
     text: htmlToText(filledLayout),
   };

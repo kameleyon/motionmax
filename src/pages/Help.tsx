@@ -158,7 +158,7 @@ const FAQS: Faq[] = [
     q: "How do I invite teammates?",
     a: (
       <>
-        Go to <a href="/settings">Settings → Workspace → Team members</a> (coming soon — single-seat accounts only today). Studio will include 5 seats; additional seats are $19 each per month.
+        Team workspaces aren't available yet — every plan today is a single-seat account. When Studio gains team support it will include 5 seats with additional seats at $19/month each. Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> if you'd like an early-access invite.
       </>
     ),
   },
@@ -176,7 +176,7 @@ const FAQS: Faq[] = [
     q: "Where can I find API documentation?",
     a: (
       <>
-        Public API docs and SDKs are coming soon. Today MotionMax runs server-side only via Supabase Auth + RLS — programmatic access keys, webhooks and rate-limit dashboards will land alongside the public REST endpoints.
+        MotionMax doesn't have a public API yet — everything today runs through the web app and the Supabase-backed dashboard. We're prioritising programmatic access keys, webhooks and a REST SDK on the next quarterly roadmap. Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> with your use-case to get on the early-access list.
       </>
     ),
   },
@@ -185,7 +185,7 @@ const FAQS: Faq[] = [
     q: "Are there rate limits?",
     a: (
       <>
-        Once the public API ships, Studio plans will have 100 requests/minute and 10,000/day; we'll return <code>429</code> with a <code>Retry-After</code> header when you exceed it. Need higher limits? Contact us about an Enterprise plan.
+        There are no public-API rate limits because there's no public API yet. When it ships, Studio plans will have 100 requests/minute and 10,000/day with a <code>429</code> + <code>Retry-After</code> header response on exceedance. Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> about Enterprise limits.
       </>
     ),
   },
@@ -533,19 +533,11 @@ export default function Help() {
               <div>
                 <div className="card" style={{ marginBottom: 14 }}>
                   <h3>Other ways to reach us</h3>
-                  {/* Live chat — not implemented; mark "Coming soon". */}
-                  <div className="touch-row disabled" aria-disabled="true">
-                    <div className="ico">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}>
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                      </svg>
-                    </div>
-                    <div className="meta">
-                      <div className="t">Live chat</div>
-                      <div className="d">Coming soon · email us in the meantime</div>
-                    </div>
-                    <span className="soon-tag">Soon</span>
-                  </div>
+                  {/* Audit cleanup — removed the "Live chat · Coming soon"
+                      placeholder row. Vaporware in the support UI erodes
+                      trust ("if even Help has placeholders, what else is
+                      half-built?"). The mailto: row below is the real,
+                      monitored channel — promoted to primary. */}
                   <a
                     className="touch-row"
                     href={`mailto:${SUPPORT_EMAIL}?subject=MotionMax%20support`}
@@ -559,7 +551,7 @@ export default function Help() {
                     </div>
                     <div className="meta">
                       <div className="t">{SUPPORT_EMAIL}</div>
-                      <div className="d">For account &amp; billing</div>
+                      <div className="d">Account, billing &amp; everything else — one business day reply</div>
                     </div>
                     <svg className="arr" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                       <path d="M9 18l6-6-6-6" />

@@ -10,7 +10,43 @@ const log = createScopedLogger("ErrorMessages");
 /**
  * Map raw Supabase Auth error messages to user-friendly strings.
  * Use for login, signup, password reset, and other auth flows.
+ *
+ * ───────────────────────────────────────────────────────────────────
+ * SECURITY NOTE — Account-enumeration unification (S-014 / F-16).
+ *
+ * THREAT: an attacker who can distinguish "wrong password for an
+ * existing account" from "no such account" can harvest a list of
+ * valid email addresses from the signin endpoint without ever logging
+ * in. That list then becomes a high-precision credential-stuffing
+ * target list (try the email on every other site with leaked password
+ * dumps). Even better for the attacker: combine with rainbow-table
+ * leaks → automated takeover.
+ *
+ * MITIGATION: every signin failure — regardless of the underlying
+ * Supabase error code — returns the same opaque message
+ * ("Invalid email or password"). We deliberately collapse:
+ *   - invalid_credentials       (wrong password, valid account)
+ *   - user_not_found            (no such email)
+ *   - email_not_confirmed       (account exists but unverified)
+ *
+ * Signup, password-reset, and post-signin flows are NOT covered here
+ * — those have their own UX requirements (the user genuinely needs
+ * to know "this email is already in use" when signing up, etc.) and
+ * Supabase already throttles those endpoints aggressively.
+ *
+ * If you ever need to surface a real-account-state hint to the user,
+ * do it from a backend that requires the user to FIRST prove access
+ * to the email (magic link click), not from a public auth response.
+ * ───────────────────────────────────────────────────────────────────
  */
+
+/**
+ * Single canonical signin-failure message. Imported by the signin
+ * branches below. Kept as a const so a code-review diff makes any
+ * future divergence loudly visible.
+ */
+const GENERIC_SIGNIN_FAILURE = "Invalid email or password.";
+
 export function getAuthErrorMessage(raw: string | undefined): string {
   if (!raw) {
     log.warn("getAuthErrorMessage called with empty input");
@@ -20,12 +56,17 @@ export function getAuthErrorMessage(raw: string | undefined): string {
   const msg = raw.toLowerCase();
   log.debug("Mapping auth error:", raw);
 
-  // Duplicate / existing user
+  // Duplicate / existing user — signup-only path, safe to be specific
+  // (the user is TRYING to create this account; telling them it exists
+  // is the whole point of the flow). Not an enumeration vector.
   if (msg.includes("user already registered") || msg.includes("already been registered")) {
     return "An account with this email already exists. Try signing in instead.";
   }
 
-  // Invalid credentials — wrong email or password
+  // S-014 / F-16 — signin-failure unification. Every signin error
+  // surface (wrong password, no such user, unconfirmed email) collapses
+  // to the same generic message. See the security note at the top of
+  // this file for the threat model.
   if (
     msg.includes("invalid login credentials") ||
     msg.includes("invalid_credentials") ||
@@ -33,14 +74,14 @@ export function getAuthErrorMessage(raw: string | undefined): string {
     msg.includes("incorrect password") ||
     msg.includes("password is incorrect") ||
     msg.includes("email or password") ||
-    msg.includes("invalid email or password")
+    msg.includes("invalid email or password") ||
+    msg.includes("user not found") ||
+    msg.includes("no user found") ||
+    msg.includes("email not confirmed") ||
+    msg.includes("not confirmed") ||
+    msg.includes("email_not_confirmed")
   ) {
-    return "Incorrect email or password. Please double-check and try again.";
-  }
-
-  // User not found (Supabase may return this in some flows)
-  if (msg.includes("user not found") || msg.includes("no user found")) {
-    return "No account found with that email. Did you mean to sign up?";
+    return GENERIC_SIGNIN_FAILURE;
   }
 
   // Weak password
@@ -48,10 +89,9 @@ export function getAuthErrorMessage(raw: string | undefined): string {
     return "Password must be at least 8 characters long.";
   }
 
-  // Email not confirmed
-  if (msg.includes("email not confirmed") || msg.includes("not confirmed") || msg.includes("email_not_confirmed")) {
-    return "Please verify your email address before signing in. Check your inbox (and spam folder) for a confirmation link.";
-  }
+  // (Was: "Email not confirmed" → specific message. Now folded into
+  // GENERIC_SIGNIN_FAILURE above to close the account-enumeration
+  // vector. See the security note at the top of this file.)
 
   // Rate limited
   if (msg.includes("rate limit") || msg.includes("too many requests") || msg.includes("429") || msg.includes("email rate limit")) {

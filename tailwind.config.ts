@@ -107,6 +107,53 @@ export default {
         xl: "calc(var(--radius) + 4px)",
         "2xl": "calc(var(--radius) + 8px)",
       },
+
+      // ────────────────────────────────────────────────────────────
+      // Wave A PART G (2026-05-10): formalised brand spacing /
+      // shadow / motion tokens. These mirror the values already in
+      // the components (where we'd been using arbitrary `p-4`,
+      // `p-8`, `gap-12`, `[box-shadow:...]` etc.); naming them gives
+      // future agents a single canonical scale to pull from instead
+      // of inventing new ones. See docs/design-system.md.
+      // ────────────────────────────────────────────────────────────
+      spacing: {
+        // 8-pt base grid — explicit aliases for the ones we actually
+        // reach for. Tailwind's defaults already cover these via
+        // numeric scale (1=4px, 2=8px, …); the named aliases here
+        // make intent clearer in JSX (`p-brand-md` vs `p-4`).
+        "brand-xs": "0.25rem",   // 4px
+        "brand-sm": "0.5rem",    // 8px
+        "brand-md": "0.75rem",   // 12px
+        "brand-lg": "1rem",      // 16px
+        "brand-xl": "1.5rem",    // 24px
+        "brand-2xl": "2rem",     // 32px
+        "brand-3xl": "3rem",     // 48px
+        "brand-4xl": "4rem",     // 64px
+      },
+
+      boxShadow: {
+        // Brand-tinted shadows. Standard neutral shadows feel dead on
+        // dark surfaces; aqua/gold tints carry the brand glow through
+        // hover/active states. Use sparingly — only on hero CTAs,
+        // selected cards, focused inputs.
+        "brand-sm": "0 1px 2px 0 rgba(20, 200, 204, 0.10)",
+        "brand-md": "0 4px 12px -2px rgba(20, 200, 204, 0.20)",
+        "brand-lg": "0 8px 24px -4px rgba(20, 200, 204, 0.28)",
+        "gold-sm":  "0 1px 2px 0 rgba(228, 200, 117, 0.12)",
+        "gold-md":  "0 4px 12px -2px rgba(228, 200, 117, 0.22)",
+        "gold-lg":  "0 8px 24px -4px rgba(228, 200, 117, 0.30)",
+      },
+
+      transitionDuration: {
+        // Named motion scale. Component code should reach for these
+        // instead of inventing one-off `duration-[120ms]` values.
+        // Anchored at 150 / 250 / 400 — fast enough that hovers feel
+        // responsive, slow enough that page-level transitions read
+        // as deliberate motion (not abrupt cuts).
+        fast: "150ms",
+        base: "250ms",
+        slow: "400ms",
+      },
       keyframes: {
         "accordion-down": {
           from: { height: "0" },

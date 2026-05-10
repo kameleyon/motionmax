@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import * as Sentry from "@sentry/react";
 import { hasAnalyticsConsent } from "@/components/CookieConsent";
 import { hasAnswered, onConsentChange } from "@/lib/cookieConsent";
 
@@ -34,7 +35,16 @@ interface PendingEvent {
 let pendingAnalyticsEvents: PendingEvent[] = [];
 
 /** Push the GA4 / dataLayer fire of a single event. Bypasses the consent
- *  gate — callers must have already checked it. */
+ *  gate — callers must have already checked it.
+ *
+ *  Wave C Lens M-trackEvent-swallow: previously this swallowed errors
+ *  silently. If gtag threw (e.g. ad-blocker stub returning a non-fn,
+ *  CSP violation, or a malformed param) we'd lose the signal AND lose
+ *  the diagnostic — funnel queries looked fine but the data simply
+ *  wasn't there. We now emit a Sentry breadcrumb on failure (not an
+ *  exception: analytics dropping is not a user-facing failure and we
+ *  don't want to spam Sentry issues) so a paired user-facing bug has
+ *  context for why analytics didn't fire. */
 function dispatchEvent(name: string, params?: EventParams): void {
   try {
     if (typeof window !== "undefined" && typeof window.gtag === "function") {
@@ -48,8 +58,18 @@ function dispatchEvent(name: string, params?: EventParams): void {
     if (import.meta.env.DEV) {
       console.debug("[analytics]", name, params);
     }
-  } catch {
-    /* analytics should never break the app */
+  } catch (err) {
+    try {
+      Sentry.addBreadcrumb({
+        category: "analytics",
+        level: "warning",
+        message: "sendEvent failed",
+        data: {
+          event_name: name,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
+    } catch { /* never block on telemetry */ }
   }
 }
 
@@ -150,8 +170,23 @@ function sendEvent(name: string, params?: EventParams) {
       return;
     }
     dispatchEvent(name, params);
-  } catch {
-    // Silently swallow — analytics should never break the app
+  } catch (err) {
+    // Wave C Lens M-trackEvent-swallow: same forensic-breadcrumb hook as
+    // dispatchEvent's inner catch, but for failures originating in the
+    // consent-gate / buffer plumbing rather than the gtag call itself.
+    // Still a breadcrumb, not captureException — analytics outages are
+    // not user-visible bugs.
+    try {
+      Sentry.addBreadcrumb({
+        category: "analytics",
+        level: "warning",
+        message: "sendEvent failed",
+        data: {
+          event_name: name,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
+    } catch { /* never block on telemetry */ }
   }
 }
 

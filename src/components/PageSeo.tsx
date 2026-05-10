@@ -68,6 +68,9 @@ export default function PageSeo({
       <meta property="og:image" content={ogImage} />
       <meta property="og:image:width" content="1200" />
       <meta property="og:image:height" content="630" />
+      {/* Wave A PART E — explicit type lets crawlers (LinkedIn, Slack) skip
+          a HEAD probe to sniff the MIME on the og:image URL. */}
+      <meta property="og:image:type" content="image/png" />
       <meta property="og:image:alt" content={title} />
       <meta property="og:site_name" content="MotionMax" />
       <meta property="og:locale" content="en_US" />

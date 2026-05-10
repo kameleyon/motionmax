@@ -788,6 +788,13 @@ export async function handler(req: Request, deps: WebhookDeps = {}): Promise<Res
               period: periodStr,
               invoiceUrl,
               unsubscribeUrl,
+              // Wave C Herald — the Stripe event id doubles as our
+              // distributed trace id (see Sentry.setTag("trace_id",
+              // event.id) above). Surface it in the receipt footer so
+              // support can pull the exact webhook trace from a
+              // user-reported reference number without asking them to
+              // dig through Stripe.
+              traceId: event.id,
             });
             logStep("Branded receipt sent", { invoiceId: invoice.id, to: recipientEmail });
           } else if (invoice.amount_paid === 0) {

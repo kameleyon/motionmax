@@ -664,8 +664,13 @@ const STARTUP_COOLDOWN_MS = 10_000;
 /** Subscribe to Supabase Realtime so new pending jobs trigger an immediate poll
  *  rather than waiting for the 30s fallback interval. */
 function subscribeToQueue() {
+  // Per-instance channel name (was 'worker-job-queue' shared across all
+  // replicas, which caused CHANNEL_ERROR oscillation under horizontal scale —
+  // each replica subscribing the same name triggers Supabase Realtime
+  // contention. Unique-per-replica name eliminates the noise. Fallback poll
+  // covers any individual subscribe failure.
   realtimeChannel = supabase
-    .channel('worker-job-queue')
+    .channel(`worker-job-queue-${WORKER_ID}`)
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'video_generation_jobs', filter: 'status=eq.pending' },

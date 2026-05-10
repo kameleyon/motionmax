@@ -113,7 +113,7 @@ BEGIN
     PERFORM cron.schedule(
       'cleanup_regen_debounce',
       '* * * * *',  -- every minute
-      $$DELETE FROM public.regen_debounce WHERE created_at < NOW() - INTERVAL '1 minute';$$
+      $body$DELETE FROM public.regen_debounce WHERE created_at < NOW() - INTERVAL '1 minute';$body$
     );
   END IF;
 END;

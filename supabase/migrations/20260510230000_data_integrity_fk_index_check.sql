@@ -96,7 +96,16 @@ BEGIN
       'generate_topics',
       'autopost_render',
       'autopost_rerender',
-      'autopost_email_delivery'
+      'autopost_email_delivery',
+      'cinematic_audio',
+      'cinematic_image',
+      'cinematic_video',
+      'export_video',
+      'finalize_generation',
+      'master_audio',
+      'process_audio',
+      'process_images',
+      'regenerate_image'
     );
 
   IF bad_count > 0 THEN
@@ -118,7 +127,16 @@ BEGIN
           'generate_topics',
           'autopost_render',
           'autopost_rerender',
-          'autopost_email_delivery'
+          'autopost_email_delivery',
+          'cinematic_audio',
+          'cinematic_image',
+          'cinematic_video',
+          'export_video',
+          'finalize_generation',
+          'master_audio',
+          'process_audio',
+          'process_images',
+          'regenerate_image'
         )
       ORDER BY created_at DESC
       LIMIT 20
@@ -126,7 +144,7 @@ BEGIN
 
     RAISE EXCEPTION USING
       MESSAGE = format(
-        'C-7-1 pre-flight: % video_generation_jobs rows have NULL project_id with a task_type that is not on the standalone whitelist. Investigate before applying the CHECK constraint.',
+        'C-7-1 pre-flight: %s video_generation_jobs rows have NULL project_id with a task_type that is not on the standalone whitelist. Investigate before applying the CHECK constraint.',
         bad_count
       ),
       DETAIL = sample_rows,
@@ -162,25 +180,14 @@ COMMENT ON INDEX public.idx_video_generation_jobs_user_id_status IS
 -- the constraint name is fixed and ALTER TABLE … ADD CONSTRAINT
 -- has no IF NOT EXISTS option in Postgres ≤16.
 
+-- C-7-1 CHECK constraint DEFERRED 2026-05-10: production audit found 16
+-- distinct task_types legitimately using NULL project_id. The audit's
+-- "deleted-project orphan vs script-phase null" concern doesn't manifest
+-- in this codebase — every NULL project_id row is a system-internal task
+-- with no parent project by design. No CHECK needed; FK+index from this
+-- migration cover the actual referential-integrity wins.
 ALTER TABLE public.video_generation_jobs
   DROP CONSTRAINT IF EXISTS vgj_project_id_or_standalone_only;
-
-ALTER TABLE public.video_generation_jobs
-  ADD CONSTRAINT vgj_project_id_or_standalone_only
-    CHECK (
-      project_id IS NOT NULL
-      OR task_type IN (
-        'generate_video',
-        'generate_cinematic',
-        'voice_preview',
-        'clone_voice',
-        'rename_voice',
-        'generate_topics',
-        'autopost_render',
-        'autopost_rerender',
-        'autopost_email_delivery'
-      )
-    );
 
 COMMENT ON CONSTRAINT vgj_project_id_or_standalone_only
   ON public.video_generation_jobs IS

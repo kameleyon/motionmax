@@ -293,8 +293,8 @@ const faqJsonLd = {
     <section id="pricing" class="py-20 bg-background/95">
       <div class="mx-auto max-w-5xl px-4 sm:px-6">
         {promoActive && (
-          <div class="mx-auto max-w-[680px] mb-8 rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-500/10 to-primary/10 px-4 py-3 flex items-center gap-3">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-amber-400 shrink-0"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>
+          <div class="mx-auto max-w-[680px] mb-8 rounded-xl border border-[#E4C875]/40 bg-gradient-to-r from-[#E4C875]/10 to-primary/10 px-4 py-3 flex items-center gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-[#E4C875] shrink-0"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>
             <p class="text-sm text-foreground leading-snug">{PROMO_BANNER_COPY}</p>
           </div>
         )}
@@ -340,7 +340,7 @@ const faqJsonLd = {
               </div>
               <p class="mt-1 text-xs text-muted-foreground">{formatUsd(creator.price_yearly_total)} billed annually · save {yearlySavePct}%</p>
               {promoActive && (
-                <p class="mt-2 text-xs text-amber-400">
+                <p class="mt-2 text-xs text-[#E4C875]">
                   Or {formatUsd(creator.price_monthly_first3)}/mo for the first 3 months on monthly billing — then {formatUsd(creator.price_monthly_after)}/mo ({creatorPromoPct}% off).
                 </p>
               )}
@@ -369,7 +369,7 @@ const faqJsonLd = {
               </div>
               <p class="mt-1 text-xs text-muted-foreground">{formatUsd(studio.price_yearly_total)} billed annually</p>
               {promoActive && (
-                <p class="mt-2 text-xs text-amber-400">
+                <p class="mt-2 text-xs text-[#E4C875]">
                   Or {formatUsd(studio.price_monthly_first3)}/mo for the first 3 months on monthly billing — then {formatUsd(studio.price_monthly_after)}/mo ({studioPromoPct}% off).
                 </p>
               )}

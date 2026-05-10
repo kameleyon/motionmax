@@ -121,7 +121,7 @@ export function CharacterConsistencyToggle({ enabled, onToggle }: CharacterConsi
         
         <div className="flex items-center gap-2">
           {!canUseFeature && (
-            <span className="flex items-center gap-1 text-xs text-amber-500 font-medium">
+            <span className="flex items-center gap-1 text-xs text-[#E4C875] font-medium">
               <Crown className="h-3.5 w-3.5" />
               Pro
             </span>

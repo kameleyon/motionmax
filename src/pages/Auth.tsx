@@ -468,7 +468,7 @@ export default function Auth() {
               )}
 
               {showRateLimitHint && mode === "login" && (
-                <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl px-3 py-2">
+                <p className="text-xs text-[#E4C875] dark:text-[#E4C875] bg-[#E4C875] dark:bg-[#E4C875]/30 border border-[#E4C875] dark:border-[#E4C875]/50 rounded-xl px-3 py-2">
                   Too many failed attempts? You may be temporarily rate-limited. Wait a few minutes before trying again.
                 </p>
               )}

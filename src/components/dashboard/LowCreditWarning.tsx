@@ -13,9 +13,9 @@ export function LowCreditWarning({ balance, threshold = 5 }: LowCreditWarningPro
   if (balance >= threshold) return null;
 
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
-      <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
-      <p className="text-sm text-amber-700 dark:text-amber-400 flex-1">
+    <div className="flex items-center gap-3 rounded-xl border border-[#E4C875]/40 bg-[#E4C875]/10 px-4 py-3">
+      <AlertTriangle className="h-4 w-4 text-[#E4C875] shrink-0" />
+      <p className="text-sm text-[#E4C875] dark:text-[#E4C875] flex-1">
         {balance === 0
           ? "You have no credits remaining."
           : `Only ${balance} credit${balance === 1 ? "" : "s"} remaining.`}
@@ -23,7 +23,7 @@ export function LowCreditWarning({ balance, threshold = 5 }: LowCreditWarningPro
       <Button
         variant="outline"
         size="sm"
-        className="text-xs h-7 shrink-0 border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
+        className="text-xs h-7 shrink-0 border-[#E4C875]/40 text-[#E4C875] dark:text-[#E4C875] hover:bg-[#E4C875]/10"
         onClick={() => navigate("/pricing")}
       >
         Add Credits

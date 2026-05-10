@@ -55,10 +55,10 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
             initial={{ opacity: 0, y: -8 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="mx-auto max-w-[680px] mb-8 rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-500/10 to-primary/10 px-4 py-3 flex items-center gap-3"
+            className="mx-auto max-w-[680px] mb-8 rounded-xl border border-[#E4C875]/40 bg-gradient-to-r from-[#E4C875]/10 to-primary/10 px-4 py-3 flex items-center gap-3"
             data-testid="landing-promo-banner"
           >
-            <Sparkles className="h-4 w-4 text-amber-400 shrink-0" />
+            <Sparkles className="h-4 w-4 text-[#E4C875] shrink-0" />
             <p className="text-sm text-foreground leading-snug">
               {PROMO_BANNER_COPY}
             </p>
@@ -139,7 +139,7 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
         {/* EU cooling-off advisory (binding checkbox lives at /pricing) */}
         {isEU && (
           <div
-            className="mt-6 mx-auto max-w-[640px] rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs text-muted-foreground"
+            className="mt-6 mx-auto max-w-[640px] rounded-xl border border-[#E4C875]/30 bg-[#E4C875]/5 p-4 text-xs text-muted-foreground"
             data-testid="eu-cooling-off-advisory"
           >
             <p className="font-medium text-foreground mb-1">
@@ -258,7 +258,7 @@ function LandingPlanCard({
       <p className="text-xs text-muted-foreground mb-4">{billedAs}</p>
 
       {showStrike && (
-        <p className="text-xs text-amber-400 mb-4">
+        <p className="text-xs text-[#E4C875] mb-4">
           Save {promoPct}% for 3 months — then {formatUsd(plan.price_monthly_after)}/mo.
         </p>
       )}

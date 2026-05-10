@@ -17,8 +17,21 @@
  */
 
 import { supabase } from "../../lib/supabase.js";
+import { decryptSecret, encryptSecret, looksEncrypted } from "../../lib/encryption.js";
 import { writeSystemLog } from "../../lib/logger.js";
 import type { SocialAccount } from "./types.js";
+
+/**
+ * Decrypt a stored OAuth token. Tolerates pre-encryption rows so the
+ * worker keeps functioning while the migrate-encrypt-secrets backfill
+ * is in flight. After the CHECK constraints are validated this function
+ * can be replaced with a straight `decryptSecret` call.
+ */
+async function readToken(stored: string | null | undefined): Promise<string | null> {
+  if (!stored) return null;
+  if (!looksEncrypted(stored)) return stored;
+  return decryptSecret(stored);
+}
 
 const REFRESH_INTERVAL_MS = 5 * 60_000;
 /** Refresh tokens that expire within this window. */
@@ -157,10 +170,15 @@ async function refreshYoutube(acct: SocialAccount): Promise<void> {
   }
   if (!acct.refresh_token) return;
 
+  // Lazy decrypt: only materialize plaintext at the moment we hand it to
+  // Google's token endpoint, so it lives in memory for one HTTP call.
+  const refreshTokenPlain = await readToken(acct.refresh_token);
+  if (!refreshTokenPlain) return;
+
   const body = new URLSearchParams({
     client_id: clientId,
     client_secret: clientSecret,
-    refresh_token: acct.refresh_token,
+    refresh_token: refreshTokenPlain,
     grant_type: "refresh_token",
   });
 
@@ -190,12 +208,12 @@ async function refreshYoutube(acct: SocialAccount): Promise<void> {
   const tokenExpiresAt = new Date(Date.now() + expiresInSec * 1000).toISOString();
 
   const update: Record<string, unknown> = {
-    access_token: json.access_token,
+    access_token: await encryptSecret(json.access_token),
     token_expires_at: tokenExpiresAt,
     last_error: null,
   };
   // Google sometimes rotates refresh tokens; keep the new one if present.
-  if (json.refresh_token) update.refresh_token = json.refresh_token;
+  if (json.refresh_token) update.refresh_token = await encryptSecret(json.refresh_token);
 
   const { error } = await supabase
     .from("autopost_social_accounts")
@@ -218,11 +236,15 @@ async function refreshTikTok(acct: SocialAccount): Promise<void> {
   }
   if (!acct.refresh_token) return;
 
+  // Lazy decrypt — see refreshYoutube above for rationale.
+  const refreshTokenPlain = await readToken(acct.refresh_token);
+  if (!refreshTokenPlain) return;
+
   const body = new URLSearchParams({
     client_key: clientKey,
     client_secret: clientSecret,
     grant_type: "refresh_token",
-    refresh_token: acct.refresh_token,
+    refresh_token: refreshTokenPlain,
   });
 
   const res = await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
@@ -259,11 +281,11 @@ async function refreshTikTok(acct: SocialAccount): Promise<void> {
   const tokenExpiresAt = new Date(Date.now() + expiresInSec * 1000).toISOString();
 
   const update: Record<string, unknown> = {
-    access_token: json.access_token,
+    access_token: await encryptSecret(json.access_token),
     token_expires_at: tokenExpiresAt,
     last_error: null,
   };
-  if (json.refresh_token) update.refresh_token = json.refresh_token;
+  if (json.refresh_token) update.refresh_token = await encryptSecret(json.refresh_token);
 
   const { error } = await supabase
     .from("autopost_social_accounts")

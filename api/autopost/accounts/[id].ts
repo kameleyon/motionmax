@@ -18,6 +18,7 @@
 
 import { requireAdmin, isResponse } from '../../_shared/auth';
 import { handlePreflight, corsHeaders } from '../../_shared/cors';
+import { decryptSecret, looksEncrypted } from '../../_shared/encryption';
 import { logError } from '../../_shared/platformConfig';
 import { webHandler } from '../../_shared/webHandler';
 
@@ -154,28 +155,43 @@ export default webHandler(async (req: Request): Promise<Response> => {
     });
   }
 
-  // Best-effort revoke.
+  // Best-effort revoke. Decrypt the stored token immediately before use
+  // (see PART C lazy-decrypt rationale) so plaintext lives in memory only
+  // for the duration of the revoke fetch. Pre-encryption rows still exist
+  // until the migrate-encrypt-secrets backfill completes — handle both
+  // shapes: looks-encrypted -> decryptSecret(); otherwise -> use as-is.
   let revokeError: string | null = null;
   if (acct.access_token) {
+    let plaintextToken: string | null = null;
     try {
-      switch (acct.platform) {
-        case 'youtube':
-          await revokeYouTube(acct.access_token);
-          break;
-        case 'instagram':
-          await revokeInstagram(acct.platform_account_id, acct.access_token);
-          break;
-        case 'tiktok':
-          await revokeTikTok(acct.access_token);
-          break;
-      }
+      plaintextToken = looksEncrypted(acct.access_token)
+        ? await decryptSecret(acct.access_token)
+        : acct.access_token;
     } catch (e) {
-      revokeError = (e as Error).message;
-      logError('autopost.accounts.delete.revoke', e, {
-        id: acct.id,
-        platform: acct.platform,
-      });
-      // Fall through and still delete the row.
+      revokeError = `decrypt_failed: ${(e as Error).message}`;
+      logError('autopost.accounts.delete.decrypt', e, { id: acct.id });
+    }
+    if (plaintextToken) {
+      try {
+        switch (acct.platform) {
+          case 'youtube':
+            await revokeYouTube(plaintextToken);
+            break;
+          case 'instagram':
+            await revokeInstagram(acct.platform_account_id, plaintextToken);
+            break;
+          case 'tiktok':
+            await revokeTikTok(plaintextToken);
+            break;
+        }
+      } catch (e) {
+        revokeError = (e as Error).message;
+        logError('autopost.accounts.delete.revoke', e, {
+          id: acct.id,
+          platform: acct.platform,
+        });
+        // Fall through and still delete the row.
+      }
     }
   }
 

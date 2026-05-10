@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { selectActiveProfile } from '@/lib/profile-queries';
 import { format } from 'date-fns';
 import {
   getDefaultSpeaker,
@@ -108,11 +108,9 @@ export default function Hero() {
     queryKey: ['hero-profile', user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('display_name')
+      const { data } = await selectActiveProfile('display_name')
         .eq('user_id', user!.id)
-        .maybeSingle();
+        .maybeSingle<{ display_name: string | null }>();
       return data;
     },
   });

@@ -20,9 +20,25 @@
  */
 
 import { supabase } from "../../lib/supabase.js";
+import { decryptSecret, looksEncrypted } from "../../lib/encryption.js";
 import { writeSystemLog } from "../../lib/logger.js";
 import { parseRetryAfterMs } from "./retryPolicy.js";
 import type { PublishContext, PublishResult } from "./types.js";
+
+/**
+ * Lazy-decrypt a stored OAuth access token at the moment it's handed to a
+ * platform API. Pre-encryption rows are still possible during the
+ * migrate-encrypt-secrets backfill window — those are returned as-is.
+ * After the CHECK constraints in 20260510130000_encrypt_oauth_and_api_keys.sql
+ * are validated this can hard-require encrypted input.
+ *
+ * Centralized so every publisher uses the same path and the plaintext
+ * token stays in scope for as little time as possible.
+ */
+async function readAccessToken(stored: string): Promise<string> {
+  if (!looksEncrypted(stored)) return stored;
+  return decryptSecret(stored);
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // Stub-mode escape hatch
@@ -281,12 +297,26 @@ export async function publishYouTube(ctx: PublishContext): Promise<PublishResult
   });
 
   // 4. Resumable upload — step 1: initiate session.
+  // Lazy-decrypt the access token right before use so plaintext only
+  // lives in memory for the duration of this publish call.
+  let plaintextAccessToken: string;
+  try {
+    plaintextAccessToken = await readAccessToken(account.access_token);
+  } catch (e) {
+    return {
+      ok: false,
+      errorCode: "token_decrypt_failed",
+      errorMessage: e instanceof Error ? e.message : String(e),
+      retryable: false,
+    };
+  }
+
   const initRes = await fetch(
     "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${account.access_token}`,
+        Authorization: `Bearer ${plaintextAccessToken}`,
         "Content-Type": "application/json; charset=UTF-8",
         "X-Upload-Content-Type": "video/mp4",
         "X-Upload-Content-Length": String(videoSize),
@@ -508,13 +538,28 @@ export async function publishInstagram(ctx: PublishContext): Promise<PublishResu
     details: { jobId: job.id, runId: ctx.runId, platform: "instagram", accountId: account.id },
   });
 
+  // Lazy-decrypt the access token. IG uses it across three calls
+  // (create, status poll, publish), so we pay the decrypt cost once
+  // and keep the plaintext in this function's scope only.
+  let plaintextAccessToken: string;
+  try {
+    plaintextAccessToken = await readAccessToken(account.access_token);
+  } catch (e) {
+    return {
+      ok: false,
+      errorCode: "token_decrypt_failed",
+      errorMessage: e instanceof Error ? e.message : String(e),
+      retryable: false,
+    };
+  }
+
   // 3. Create media container.
   const createBody = new URLSearchParams({
     media_type: "REELS",
     video_url: videoUrl,
     caption: clamp(caption, 2200),
     share_to_feed: "true",
-    access_token: account.access_token,
+    access_token: plaintextAccessToken,
   });
   const createRes = await fetch(`${IG_GRAPH}/${encodeURIComponent(igUserId)}/media`, {
     method: "POST",
@@ -545,7 +590,7 @@ export async function publishInstagram(ctx: PublishContext): Promise<PublishResu
   // 4. Poll the container until FINISHED (or ERROR / timeout).
   const polled = await pollWithTimeout<{ statusCode: string }>(
     async () => {
-      const url = `${IG_GRAPH}/${encodeURIComponent(containerId)}?fields=status_code&access_token=${encodeURIComponent(account.access_token)}`;
+      const url = `${IG_GRAPH}/${encodeURIComponent(containerId)}?fields=status_code&access_token=${encodeURIComponent(plaintextAccessToken)}`;
       const res = await fetch(url);
       if (!res.ok) {
         const body = await readBodySafe(res);
@@ -575,7 +620,7 @@ export async function publishInstagram(ctx: PublishContext): Promise<PublishResu
 
   // 5. Publish.
   const pubRes = await fetch(
-    `${IG_GRAPH}/${encodeURIComponent(igUserId)}/media_publish?creation_id=${encodeURIComponent(containerId)}&access_token=${encodeURIComponent(account.access_token)}`,
+    `${IG_GRAPH}/${encodeURIComponent(igUserId)}/media_publish?creation_id=${encodeURIComponent(containerId)}&access_token=${encodeURIComponent(plaintextAccessToken)}`,
     { method: "POST" },
   );
 
@@ -799,10 +844,23 @@ export async function publishTikTok(ctx: PublishContext): Promise<PublishResult>
     },
   };
 
+  // Lazy-decrypt: TikTok uses the access token in init and status poll.
+  let plaintextAccessToken: string;
+  try {
+    plaintextAccessToken = await readAccessToken(account.access_token);
+  } catch (e) {
+    return {
+      ok: false,
+      errorCode: "token_decrypt_failed",
+      errorMessage: e instanceof Error ? e.message : String(e),
+      retryable: false,
+    };
+  }
+
   const initRes = await fetch("https://open.tiktokapis.com/v2/post/publish/video/init/", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${account.access_token}`,
+      Authorization: `Bearer ${plaintextAccessToken}`,
       "Content-Type": "application/json; charset=UTF-8",
     },
     body: JSON.stringify(initBody),
@@ -865,7 +923,7 @@ export async function publishTikTok(ctx: PublishContext): Promise<PublishResult>
       const res = await fetch("https://open.tiktokapis.com/v2/post/publish/status/fetch/", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${account.access_token}`,
+          Authorization: `Bearer ${plaintextAccessToken}`,
           "Content-Type": "application/json; charset=UTF-8",
         },
         body: JSON.stringify({ publish_id: publishId }),

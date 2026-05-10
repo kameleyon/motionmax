@@ -27,6 +27,7 @@ import { useTheme } from "next-themes";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { selectActiveProfile } from "@/lib/profile-queries";
 import { formatDistanceToNow } from "date-fns";
 import {
   Sidebar,
@@ -155,11 +156,9 @@ export function AppSidebar() {
     queryKey: ["user-profile", user?.id],
     queryFn: async () => {
       if (!user?.id) return null;
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("display_name")
+      const { data, error } = await selectActiveProfile("display_name")
         .eq("user_id", user.id)
-        .single();
+        .maybeSingle<{ display_name: string | null }>();
       if (error) return null;
       return data;
     },

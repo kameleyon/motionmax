@@ -14,7 +14,7 @@ const dist = path.resolve(__dirname, "..", "dist");
 // Pulled verbatim from vercel.json -> headers -> Content-Security-Policy.
 // If this changes in vercel.json, copy it here.
 const PROD_CSP =
-  "default-src 'self'; script-src 'self' https://js.stripe.com https://www.googletagmanager.com; " +
+  "default-src 'self'; script-src 'self' https://js.stripe.com https://www.googletagmanager.com https://*.sentry-cdn.com; " +
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
   "font-src 'self' https://fonts.gstatic.com data:; " +
   "img-src 'self' data: blob: https://*.supabase.co https://*.replicate.delivery https://replicate.delivery " +
@@ -24,9 +24,12 @@ const PROD_CSP =
   "connect-src 'self' blob: https://*.supabase.co wss://*.supabase.co https://api.replicate.com " +
   "https://api.openai.com https://api.stripe.com https://js.stripe.com https://openrouter.ai " +
   "https://api.hypereal.cloud https://*.google-analytics.com https://*.analytics.google.com " +
-  "https://*.googletagmanager.com; " +
+  "https://*.googletagmanager.com https://*.sentry.io https://*.ingest.sentry.io; " +
   "frame-src https://js.stripe.com https://hooks.stripe.com https://embed.app.guidde.com; " +
-  "frame-ancestors 'none'; worker-src 'self' blob:;";
+  "frame-ancestors 'none'; worker-src 'self' blob:; " +
+  "base-uri 'self'; object-src 'none'; " +
+  "form-action 'self' https://checkout.stripe.com https://billing.stripe.com; " +
+  "upgrade-insecure-requests; report-uri /api/csp-report";
 
 const types = {
   ".html": "text/html; charset=utf-8",
@@ -66,6 +69,15 @@ const server = http.createServer((req, res) => {
   res.setHeader("Content-Security-Policy", PROD_CSP);
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader(
+    "Permissions-Policy",
+    "camera=(), microphone=(self), geolocation=(), interest-cohort=()",
+  );
+  res.setHeader(
+    "Strict-Transport-Security",
+    "max-age=63072000; includeSubDomains; preload",
+  );
   res.statusCode = 200;
   fs.createReadStream(file).pipe(res);
 });

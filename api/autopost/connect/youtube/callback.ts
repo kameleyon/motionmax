@@ -10,6 +10,7 @@
  */
 
 import { handlePreflight } from '../../../_shared/cors';
+import { encryptSecret } from '../../../_shared/encryption';
 import { verifyState } from '../../../_shared/oauthState';
 import { createAdminClient } from '../../../_shared/supabaseAdmin';
 import {
@@ -133,6 +134,23 @@ export default webHandler(async (req: Request): Promise<Response> => {
   const avatarUrl =
     channel.snippet?.thumbnails?.medium?.url ?? channel.snippet?.thumbnails?.default?.url ?? null;
 
+  // Encrypt OAuth tokens before persisting. The DB-level CHECK constraint
+  // added by 20260510130000_encrypt_oauth_and_api_keys.sql rejects any
+  // INSERT/UPDATE whose access_token/refresh_token isn't in the v1: or
+  // v3: ciphertext format, so a missed call here would surface as a
+  // db_upsert_failed redirect rather than silently leaking plaintext.
+  let encryptedAccessToken: string;
+  let encryptedRefreshToken: string | null = null;
+  try {
+    encryptedAccessToken = await encryptSecret(tokens.access_token);
+    if (tokens.refresh_token) {
+      encryptedRefreshToken = await encryptSecret(tokens.refresh_token);
+    }
+  } catch (e) {
+    logError('autopost.oauth.youtube.callback.encrypt', e);
+    return connectRedirect({ platform: 'youtube', status: 'error', reason: 'token_encrypt_failed' });
+  }
+
   try {
     const supabase = createAdminClient();
     const { error } = await supabase
@@ -144,8 +162,8 @@ export default webHandler(async (req: Request): Promise<Response> => {
           platform_account_id: channel.id,
           display_name: displayName,
           avatar_url: avatarUrl,
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token ?? null,
+          access_token: encryptedAccessToken,
+          refresh_token: encryptedRefreshToken,
           token_expires_at: expiresAt,
           scopes,
           status: 'connected',

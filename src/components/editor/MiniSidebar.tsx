@@ -4,7 +4,7 @@ import { LogOut, Settings as SettingsIcon, History, Shield } from 'lucide-react'
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
-import { supabase } from '@/integrations/supabase/client';
+import { selectActiveProfile } from '@/lib/profile-queries';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -66,11 +66,9 @@ export default function MiniSidebar() {
     queryKey: ['mini-sidebar-profile', user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('display_name, avatar_url')
+      const { data } = await selectActiveProfile('display_name, avatar_url')
         .eq('user_id', user!.id)
-        .maybeSingle();
+        .maybeSingle<{ display_name: string | null; avatar_url: string | null }>();
       return data;
     },
   });

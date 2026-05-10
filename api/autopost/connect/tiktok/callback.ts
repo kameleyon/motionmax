@@ -9,6 +9,7 @@
  */
 
 import { handlePreflight } from '../../../_shared/cors';
+import { encryptSecret } from '../../../_shared/encryption';
 import { verifyState } from '../../../_shared/oauthState';
 import { createAdminClient } from '../../../_shared/supabaseAdmin';
 import {
@@ -153,6 +154,20 @@ export default webHandler(async (req: Request): Promise<Response> => {
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
   const scopes = tokens.scope ? tokens.scope.split(/[,\s]+/).filter(Boolean) : [];
 
+  // Encrypt OAuth tokens before persisting. See header note in
+  // youtube/callback.ts for the CHECK-constraint rationale.
+  let encryptedAccessToken: string;
+  let encryptedRefreshToken: string | null = null;
+  try {
+    encryptedAccessToken = await encryptSecret(tokens.access_token);
+    if (tokens.refresh_token) {
+      encryptedRefreshToken = await encryptSecret(tokens.refresh_token);
+    }
+  } catch (e) {
+    logError('autopost.oauth.tiktok.callback.encrypt', e);
+    return connectRedirect({ platform: 'tiktok', status: 'error', reason: 'token_encrypt_failed' });
+  }
+
   try {
     const supabase = createAdminClient();
     const { error } = await supabase
@@ -164,8 +179,8 @@ export default webHandler(async (req: Request): Promise<Response> => {
           platform_account_id: openId,
           display_name: displayName,
           avatar_url: avatarUrl,
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token ?? null,
+          access_token: encryptedAccessToken,
+          refresh_token: encryptedRefreshToken,
           token_expires_at: expiresAt,
           scopes,
           status: 'connected',

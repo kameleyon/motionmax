@@ -19,6 +19,7 @@
  */
 
 import { handlePreflight } from '../../../_shared/cors';
+import { encryptSecret } from '../../../_shared/encryption';
 import { verifyState } from '../../../_shared/oauthState';
 import { createAdminClient } from '../../../_shared/supabaseAdmin';
 import {
@@ -172,6 +173,16 @@ export default webHandler(async (req: Request): Promise<Response> => {
       ? new Date(Date.now() + userToken.expires_in * 1000).toISOString()
       : null;
 
+  // Encrypt the page token before persisting. See header note in
+  // youtube/callback.ts for the CHECK-constraint rationale.
+  let encryptedPageToken: string;
+  try {
+    encryptedPageToken = await encryptSecret(pageToken);
+  } catch (e) {
+    logError('autopost.oauth.instagram.callback.encrypt', e);
+    return connectRedirect({ platform: 'instagram', status: 'error', reason: 'token_encrypt_failed' });
+  }
+
   try {
     const supabase = createAdminClient();
     const { error } = await supabase
@@ -183,7 +194,7 @@ export default webHandler(async (req: Request): Promise<Response> => {
           platform_account_id: ig.id,
           display_name: ig.username ?? ig.name ?? `Instagram ${ig.id}`,
           avatar_url: ig.profile_picture_url ?? null,
-          access_token: pageToken,
+          access_token: encryptedPageToken,
           refresh_token: null,
           token_expires_at: expiresAt,
           scopes: [

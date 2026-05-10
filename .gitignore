@@ -79,3 +79,7 @@ scripts/clear-stuck-job.mjs
 
 # B-5 fix (2026-05-10): backup of pre-fix byte-identical PNG bundle
 public/_archive-pre-b5-fix/
+ADMIN_REBUILD_CHECKLIST.md
+AUTOPOST_ENV.md
+AUTOPOST_PLAN.md
+AUTOPOST_ROADMAP.md

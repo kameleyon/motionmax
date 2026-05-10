@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { selectActiveProfile } from '@/lib/profile-queries';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Settings as SettingsIcon, History, Shield, LogOut, Video, FlaskConical, MoreHorizontal, Trash2, LifeBuoy } from 'lucide-react';
@@ -96,11 +97,9 @@ export default function Sidebar() {
     queryKey: ['profile', user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('display_name, avatar_url')
+      const { data, error } = await selectActiveProfile('display_name, avatar_url')
         .eq('user_id', user!.id)
-        .maybeSingle();
+        .maybeSingle<{ display_name: string | null; avatar_url: string | null }>();
       if (error && error.code !== 'PGRST116') throw error;
       return data;
     },

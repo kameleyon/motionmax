@@ -13,6 +13,7 @@ import { CURRENT_POLICY_VERSION } from "@/lib/policyVersion";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import IntegrationsTab from "@/components/settings/IntegrationsTab";
+import DataExportSection from "@/components/settings/DataExportSection";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { PasswordStrengthMeter, getPasswordStrength } from "@/components/ui/password-strength";
@@ -523,6 +524,10 @@ export default function Settings() {
                   <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
                   <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a>
                 </div>
+              </div>
+
+              <div style={{ marginTop: 18 }}>
+                <DataExportSection />
               </div>
 
               <div className="card" style={{ marginTop: 18 }}>

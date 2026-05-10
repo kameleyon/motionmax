@@ -189,17 +189,7 @@ COMMENT ON INDEX public.idx_video_generation_jobs_user_id_status IS
 ALTER TABLE public.video_generation_jobs
   DROP CONSTRAINT IF EXISTS vgj_project_id_or_standalone_only;
 
-COMMENT ON CONSTRAINT vgj_project_id_or_standalone_only
-  ON public.video_generation_jobs IS
-  'Atlas F-D3 (C-7-1). project_id is nullable to support script-'
-  'phase jobs (generate_video runs before the project row is '
-  'committed) and standalone jobs (voice_preview, clone_voice, '
-  'generate_topics, autopost_email_delivery, autopost_render/'
-  'rerender). For every other task_type project_id is mandatory; '
-  'a NULL on a non-whitelist task_type is an orphan and must be '
-  'investigated. If a new standalone task_type is introduced, '
-  'extend this whitelist in a follow-up migration before inserting '
-  'rows with the new value.';
+-- (COMMENT ON CONSTRAINT removed since the constraint itself was deferred — see note above.)
 
 
 -- ── 4. Defensive FK re-assertion (C-7-2) ─────────────────────

@@ -123,7 +123,7 @@ export function buildImagePrompt(
 
   // Character requirements go FIRST (after the create directive) so image models
   // weight them heavily. Style description comes AFTER character so style can't
-  // override appearance (e.g. 3D-Pix style defaulting to generic Pixar characters).
+  // override appearance (e.g. 3D style defaulting to generic 3D character looks).
   return `CREATE A HIGHLY DETAILED, PRECISE, AND ACCURATE ILLUSTRATION:
 ${characterInstructions}
 

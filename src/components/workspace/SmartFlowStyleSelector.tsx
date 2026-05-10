@@ -16,7 +16,7 @@ import doodlePreview from "@/assets/styles/doodle-preview.webp";
 import stickPreview from "@/assets/styles/stick-preview.webp";
 import animePreview from "@/assets/styles/anime-preview.webp";
 import realisticPreview from "@/assets/styles/realistic-preview.webp";
-import pixarPreview from "@/assets/styles/3d-pixar-preview.webp";
+import pixarPreview from "@/assets/styles/3d-preview.webp";
 import claymationPreview from "@/assets/styles/claymation-preview.webp";
 import storybookPreview from "@/assets/styles/painterly-preview.webp";
 import caricaturePreview from "@/assets/styles/caricature-preview.webp";
@@ -26,7 +26,7 @@ import crayonPreview from "@/assets/styles/crayon-preview.webp";
 import chalkboardPreview from "@/assets/styles/chalkboard-preview.webp";
 import legoPreview from "@/assets/styles/lego-preview.webp";
 import cardboardPreview from "@/assets/styles/cardboard-preview.webp";
-import babiePreview from "@/assets/styles/barbie-preview.webp";
+import barbiePreview from "@/assets/styles/barbie-preview.webp";
 import customPreview from "@/assets/styles/custom-preview.webp";
 
 /**
@@ -34,7 +34,7 @@ import customPreview from "@/assets/styles/custom-preview.webp";
  */
 const log = createScopedLogger("SmartFlowStyleSelector");
 
-export type SmartFlowStyle = "minimalist" | "doodle" | "stick" | "anime" | "realistic" | "3d-pixar" | "claymation" | "storybook" | "caricature" | "moody" | "sketch" | "crayon" | "chalkboard" | "lego" | "cardboard" | "babie" | "custom";
+export type SmartFlowStyle = "minimalist" | "doodle" | "stick" | "anime" | "realistic" | "3d" | "claymation" | "storybook" | "caricature" | "moody" | "sketch" | "crayon" | "chalkboard" | "lego" | "cardboard" | "barbie" | "custom";
 
 interface SmartFlowStyleSelectorProps {
   selected: SmartFlowStyle;
@@ -51,13 +51,13 @@ const styles: { id: SmartFlowStyle; label: string; icon: React.ElementType; prev
   { id: "lego", label: "LEGO", icon: Blocks, preview: legoPreview },
   { id: "moody", label: "Moody", icon: CloudMoon, preview: moodyPreview },
   { id: "cardboard", label: "Cardboard", icon: Package, preview: cardboardPreview },
-  { id: "babie", label: "Babie", icon: Crown, preview: babiePreview },
+  { id: "barbie", label: "Barbie", icon: Crown, preview: barbiePreview },
   { id: "doodle", label: "Urban Doodle", icon: Pencil, preview: doodlePreview },
   { id: "storybook", label: "Storybook", icon: Palette, preview: storybookPreview },
   { id: "realistic", label: "Realistic", icon: Camera, preview: realisticPreview },
   { id: "sketch", label: "Papercut 3D", icon: PenTool, preview: sketchPreview },
   { id: "minimalist", label: "Minimalist", icon: Wand2, preview: minimalistPreview },
-  { id: "3d-pixar", label: "3D Style", icon: Box, preview: pixarPreview },
+  { id: "3d", label: "3D Style", icon: Box, preview: pixarPreview },
   { id: "anime", label: "Anime", icon: Cherry, preview: animePreview },
   { id: "claymation", label: "Claymation", icon: Hand, preview: claymationPreview },
   { id: "crayon", label: "Crayon", icon: Baby, preview: crayonPreview },

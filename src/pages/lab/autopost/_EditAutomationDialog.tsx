@@ -56,7 +56,7 @@ const LANGUAGES: Array<{ code: string; label: string; flag: string }> = [
 // where the picker is a visual grid.
 const VISUAL_STYLES: Array<{ id: string; label: string }> = [
   { id: 'realistic',  label: 'Realistic' },
-  { id: '3d-pixar',   label: '3D Style' },
+  { id: '3d',   label: '3D Style' },
   { id: 'anime',      label: 'Anime' },
   { id: 'claymation', label: 'Claymation' },
   { id: 'storybook',  label: 'Storybook' },
@@ -70,7 +70,7 @@ const VISUAL_STYLES: Array<{ id: string; label: string }> = [
   { id: 'chalkboard', label: 'Chalkboard' },
   { id: 'lego',       label: 'LEGO' },
   { id: 'cardboard',  label: 'Cardboard' },
-  { id: 'babie',      label: 'Babie' },
+  { id: 'barbie',      label: 'Barbie' },
   { id: 'custom',     label: 'Custom' },
 ];
 

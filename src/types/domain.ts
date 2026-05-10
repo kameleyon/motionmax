@@ -11,8 +11,8 @@ export type ProductId = "doc2video" | "smartflow" | "cinematic";
 
 export type VisualStyle =
   | "minimalist" | "doodle" | "stick" | "anime" | "realistic"
-  | "3d-pixar" | "claymation" | "sketch" | "caricature" | "storybook"
-  | "crayon" | "moody" | "chalkboard" | "lego" | "cardboard" | "babie" | "custom";
+  | "3d" | "claymation" | "sketch" | "caricature" | "storybook"
+  | "crayon" | "moody" | "chalkboard" | "lego" | "cardboard" | "barbie" | "custom";
 
 export type Language = "en" | "fr" | "es" | "ht" | "pt" | "de" | "it" | "ru" | "zh" | "ja" | "ko";
 

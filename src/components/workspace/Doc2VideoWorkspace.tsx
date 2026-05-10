@@ -245,7 +245,7 @@ export const Doc2VideoWorkspace = forwardRef<WorkspaceHandle, Doc2VideoWorkspace
         savedStyle === "stick" ||
         savedStyle === "anime" ||
         savedStyle === "realistic" ||
-        savedStyle === "3d-pixar" ||
+        savedStyle === "3d" ||
         savedStyle === "claymation" ||
         savedStyle === "sketch" ||
         savedStyle === "caricature" ||

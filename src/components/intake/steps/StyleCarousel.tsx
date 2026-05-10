@@ -22,7 +22,7 @@ import { IntakeLabel } from '../primitives';
 // JS bundle that only downloads when the form renders.
 const STYLES: Array<{ id: string; label: string; preview: string; previewPng: string }> = [
   { id: 'realistic',  label: 'Realistic',   preview: new URL('../../../assets/styles/realistic-preview.webp',  import.meta.url).href, previewPng: new URL('../../../assets/styles/realistic-preview.png',  import.meta.url).href },
-  { id: '3d-pixar',   label: '3D Style',    preview: new URL('../../../assets/styles/3d-pixar-preview.webp',   import.meta.url).href, previewPng: new URL('../../../assets/styles/3d-pixar-preview.png',   import.meta.url).href },
+  { id: '3d',   label: '3D Style',    preview: new URL('../../../assets/styles/3d-preview.webp',   import.meta.url).href, previewPng: new URL('../../../assets/styles/3d-preview.png',   import.meta.url).href },
   { id: 'anime',      label: 'Anime',       preview: new URL('../../../assets/styles/anime-preview.webp',      import.meta.url).href, previewPng: new URL('../../../assets/styles/anime-preview.png',      import.meta.url).href },
   { id: 'claymation', label: 'Claymation',  preview: new URL('../../../assets/styles/claymation-preview.webp', import.meta.url).href, previewPng: new URL('../../../assets/styles/claymation-preview.png', import.meta.url).href },
   { id: 'storybook',  label: 'Storybook',   preview: new URL('../../../assets/styles/painterly-preview.webp',  import.meta.url).href, previewPng: new URL('../../../assets/styles/painterly-preview.png',  import.meta.url).href },
@@ -36,7 +36,7 @@ const STYLES: Array<{ id: string; label: string; preview: string; previewPng: st
   { id: 'chalkboard', label: 'Chalkboard',  preview: new URL('../../../assets/styles/chalkboard-preview.webp', import.meta.url).href, previewPng: new URL('../../../assets/styles/chalkboard-preview.png', import.meta.url).href },
   { id: 'lego',       label: 'LEGO',        preview: new URL('../../../assets/styles/lego-preview.webp',       import.meta.url).href, previewPng: new URL('../../../assets/styles/lego-preview.png',       import.meta.url).href },
   { id: 'cardboard',  label: 'Cardboard',   preview: new URL('../../../assets/styles/cardboard-preview.webp',  import.meta.url).href, previewPng: new URL('../../../assets/styles/cardboard-preview.png',  import.meta.url).href },
-  { id: 'babie',      label: 'Babie',       preview: new URL('../../../assets/styles/barbie-preview.webp',     import.meta.url).href, previewPng: new URL('../../../assets/styles/barbie-preview.png',     import.meta.url).href },
+  { id: 'barbie',      label: 'Barbie',       preview: new URL('../../../assets/styles/barbie-preview.webp',     import.meta.url).href, previewPng: new URL('../../../assets/styles/barbie-preview.png',     import.meta.url).href },
   { id: 'custom',     label: 'Custom',      preview: new URL('../../../assets/styles/custom-preview.webp',     import.meta.url).href, previewPng: new URL('../../../assets/styles/custom-preview.png',     import.meta.url).href },
 ];
 

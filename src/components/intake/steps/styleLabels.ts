@@ -6,7 +6,7 @@
 
 export const STYLE_LABELS: Record<string, string> = {
   'realistic':  'Realistic',
-  '3d-pixar':   '3D Style',
+  '3d':   '3D Style',
   'anime':      'Anime',
   'claymation': 'Claymation',
   'storybook':  'Storybook',
@@ -20,7 +20,7 @@ export const STYLE_LABELS: Record<string, string> = {
   'chalkboard': 'Chalkboard',
   'lego':       'LEGO',
   'cardboard':  'Cardboard',
-  'babie':      'Babie',
+  'barbie':      'Barbie',
   'custom':     'Custom',
 };
 

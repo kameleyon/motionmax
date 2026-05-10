@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars (gitignored) and fill in real values, OR
+# export TF_VAR_* env vars instead — both work. Anything sensitive
+# (API tokens) should go through env vars, not this file.
+
+# Required: pull from Cloudflare dashboard → motionmax.io → Overview.
+cloudflare_zone_id = "REPLACE_ME"
+
+# Optional overrides (defaults are fine for prod).
+# vercel_cname_target = "cname.vercel-dns.com"
+# apex_domain         = "motionmax.io"
+
+# Do NOT put cloudflare_api_token here. Export it instead:
+#   export TF_VAR_cloudflare_api_token=<token>

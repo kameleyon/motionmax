@@ -1,0 +1,164 @@
+name: Deploy Staging
+
+# ──────────────────────────────────────────────────────────────────────
+# Staging deploy — runs on every push to main, BEFORE production
+# (which is gated on this job's success in deploy-prod.yml).
+#
+# Targets:
+#   - Vercel preview build, aliased to staging.motionmax.io
+#   - Staging Supabase project (SUPABASE_PROJECT_ID_STAGING secret)
+#
+# After deploy: smoke tests against the staging URL.
+# ──────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false # don't cancel mid-deploy
+
+jobs:
+  # Re-run the test gate on the merged main commit so a flaky / cached
+  # PR check can't sneak past. CI's `lint-test-build` ran on the PR head;
+  # this runs on the merged commit and is the actual contract for "main
+  # is green right now."
+  recheck-tests:
+    name: Recheck (lint + test + build) on main
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm run test
+      - run: npm run build
+        env:
+          # Staging publishable key + URL — separate from prod secrets.
+          VITE_SUPABASE_URL: ${{ secrets.STAGING_VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_VITE_SUPABASE_PUBLISHABLE_KEY }}
+
+  deploy-supabase-staging:
+    name: Deploy edge functions + migrations (staging Supabase)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [recheck-tests]
+    environment:
+      name: staging
+      url: https://staging.motionmax.io
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: supabase/setup-cli@b60b5899c73b63a2d2d651b1e90db8d4c9392f51  # v1
+        with:
+          version: latest
+
+      - name: Push migrations to staging Supabase
+        run: |
+          supabase db push \
+            --project-ref "$SUPABASE_PROJECT_ID" \
+            --password "$SUPABASE_DB_PASSWORD"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID_STAGING }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD_STAGING }}
+
+      - name: Deploy edge functions to staging Supabase
+        run: |
+          supabase functions deploy \
+            --project-ref "$SUPABASE_PROJECT_ID"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID_STAGING }}
+
+  deploy-vercel-staging:
+    name: Deploy frontend to Vercel (staging alias)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [recheck-tests]
+    environment:
+      name: staging
+      url: https://staging.motionmax.io
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel preview env
+        run: vercel pull --yes --environment=preview --token=$VERCEL_TOKEN
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Build (Vercel preview)
+        run: vercel build --token=$VERCEL_TOKEN
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy preview
+        id: deploy
+        run: |
+          DEPLOY_URL=$(vercel deploy --prebuilt --token=$VERCEL_TOKEN)
+          echo "deploy_url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Alias to staging.motionmax.io
+        run: |
+          vercel alias set "${{ steps.deploy.outputs.deploy_url }}" staging.motionmax.io --token=$VERCEL_TOKEN
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+  smoke-tests:
+    name: Smoke tests (against staging)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [deploy-supabase-staging, deploy-vercel-staging]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Wait for staging to respond
+        run: |
+          for i in {1..30}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://staging.motionmax.io || echo "000")
+            if [ "$STATUS" = "200" ] || [ "$STATUS" = "304" ]; then
+              echo "staging.motionmax.io is up (HTTP $STATUS)"
+              exit 0
+            fi
+            echo "attempt $i: HTTP $STATUS — sleeping 5s"
+            sleep 5
+          done
+          echo "::error::staging.motionmax.io did not respond after 150s"
+          exit 1
+
+      - name: HEAD /api/health (Supabase edge fn proxy)
+        run: |
+          curl -fsS -I https://staging.motionmax.io/ \
+            -H "Cache-Control: no-cache" \
+            | head -1
+          curl -fsS https://${{ secrets.SUPABASE_PROJECT_ID_STAGING }}.supabase.co/functions/v1/health \
+            -H "Authorization: Bearer ${{ secrets.STAGING_VITE_SUPABASE_PUBLISHABLE_KEY }}" \
+            -H "apikey: ${{ secrets.STAGING_VITE_SUPABASE_PUBLISHABLE_KEY }}"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            curl -X POST -H 'Content-Type: application/json' \
+              --data "{\"text\":\":x: Staging smoke tests failed for ${GITHUB_SHA::7} — see ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" \
+              "${{ secrets.SLACK_WEBHOOK_URL }}"
+          else
+            echo "::warning::SLACK_WEBHOOK_URL not configured — skipping Slack notification"
+          fi

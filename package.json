@@ -16,6 +16,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:edge": "deno test --allow-all supabase/functions/",
     "prepare": "husky"
   },
   "lint-staged": {

@@ -9,6 +9,20 @@ const ENV_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 if (!ENV_URL) throw new Error("VITE_SUPABASE_URL is required");
 if (!ENV_KEY) throw new Error("VITE_SUPABASE_PUBLISHABLE_KEY is required");
 
+// Surface which Supabase project we actually wired up so cross-env
+// mistakes ("did we ship staging keys to prod?") are obvious in the
+// browser console rather than discovered by failing queries.
+const _refMatch = ENV_URL.match(/^https:\/\/([a-z0-9]+)\.supabase\.co/i);
+const SUPABASE_PROJECT_REF = _refMatch ? _refMatch[1] : null;
+if (!SUPABASE_PROJECT_REF) {
+  console.warn(
+    `[Supabase] ⚠ VITE_SUPABASE_URL ("${ENV_URL}") did not match the expected ` +
+      `https://<ref>.supabase.co shape. Running against an undefined Supabase project.`
+  );
+} else if (import.meta.env.DEV) {
+  console.info(`[Supabase] connected to project ref: ${SUPABASE_PROJECT_REF}`);
+}
+
 export const SUPABASE_URL = ENV_URL;
 export const SUPABASE_ANON_KEY = ENV_KEY;
 const SUPABASE_PUBLISHABLE_KEY = ENV_KEY;

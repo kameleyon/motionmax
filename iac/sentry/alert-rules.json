@@ -1,0 +1,251 @@
+{
+  "$schema": "https://docs.sentry.io/api/alerts/",
+  "_doc": [
+    "Sentry alert rules for MotionMax. Each rule maps to a Sentry 'Issue Alert'",
+    "or 'Metric Alert'. Importable via the Sentry HTTP API:",
+    "  POST /api/0/projects/{org}/{project}/rules/        (issue alerts)",
+    "  POST /api/0/organizations/{org}/alert-rules/       (metric alerts)",
+    "or via the official Terraform provider 'jianyuan/sentry':",
+    "  resource \"sentry_issue_alert\" \"<name>\" { ... }",
+    "  resource \"sentry_metric_alert\" \"<name>\" { ... }",
+    "See ./README.md for the import script.",
+    "",
+    "Severity tiers:",
+    "  - 'page'  → routed to PagerDuty 'motionmax-oncall' service via Sentry → PagerDuty integration.",
+    "  - 'warn'  → routed to Slack #alerts-prod (informational, no page).",
+    "",
+    "Action references use Sentry's integration IDs which differ per workspace.",
+    "Replace '<PAGERDUTY_INTEGRATION_ID>' and '<SLACK_INTEGRATION_ID>' before import."
+  ],
+  "organization_slug": "motionmax",
+  "project_slug": "motionmax",
+  "environment": "production",
+
+  "issue_alerts": [
+    {
+      "name": "Worker error rate > 5/min for 10 min",
+      "severity": "page",
+      "owner": "team:platform",
+      "actionMatch": "all",
+      "filterMatch": "all",
+      "frequency": 10,
+      "conditions": [
+        {
+          "id": "sentry.rules.conditions.event_frequency.EventFrequencyCondition",
+          "interval": "1m",
+          "value": 5,
+          "comparisonType": "count"
+        }
+      ],
+      "filters": [
+        { "id": "sentry.rules.filters.tagged_event.TaggedEventFilter", "key": "service", "match": "eq", "value": "worker" },
+        { "id": "sentry.rules.filters.event_attribute.EventAttributeFilter", "attribute": "environment", "match": "eq", "value": "production" }
+      ],
+      "actions": [
+        {
+          "id": "sentry.integrations.pagerduty.notify_action.PagerDutyNotifyServiceAction",
+          "account": "<PAGERDUTY_INTEGRATION_ID>",
+          "service": "motionmax-oncall",
+          "severity": "critical"
+        }
+      ]
+    },
+
+    {
+      "name": "Edge Function error rate > 10/min",
+      "severity": "page",
+      "owner": "team:platform",
+      "actionMatch": "all",
+      "filterMatch": "any",
+      "frequency": 10,
+      "conditions": [
+        {
+          "id": "sentry.rules.conditions.event_frequency.EventFrequencyCondition",
+          "interval": "1m",
+          "value": 10,
+          "comparisonType": "count"
+        }
+      ],
+      "filters": [
+        { "id": "sentry.rules.filters.tagged_event.TaggedEventFilter", "key": "runtime", "match": "eq", "value": "deno" }
+      ],
+      "actions": [
+        {
+          "id": "sentry.integrations.pagerduty.notify_action.PagerDutyNotifyServiceAction",
+          "account": "<PAGERDUTY_INTEGRATION_ID>",
+          "service": "motionmax-oncall",
+          "severity": "critical"
+        }
+      ]
+    },
+
+    {
+      "name": "Stripe webhook signature validation failures > 3 in 5 min (ATO indicator)",
+      "severity": "page",
+      "owner": "team:billing",
+      "actionMatch": "all",
+      "filterMatch": "all",
+      "frequency": 5,
+      "conditions": [
+        {
+          "id": "sentry.rules.conditions.event_frequency.EventFrequencyCondition",
+          "interval": "5m",
+          "value": 3,
+          "comparisonType": "count"
+        }
+      ],
+      "filters": [
+        { "id": "sentry.rules.filters.tagged_event.TaggedEventFilter", "key": "function", "match": "eq", "value": "stripe-webhook" },
+        { "id": "sentry.rules.filters.event_attribute.EventAttributeFilter", "attribute": "message", "match": "co", "value": "signature" }
+      ],
+      "actions": [
+        {
+          "id": "sentry.integrations.pagerduty.notify_action.PagerDutyNotifyServiceAction",
+          "account": "<PAGERDUTY_INTEGRATION_ID>",
+          "service": "motionmax-oncall",
+          "severity": "critical"
+        },
+        {
+          "id": "sentry.integrations.slack.notify_action.SlackNotifyServiceAction",
+          "workspace": "<SLACK_INTEGRATION_ID>",
+          "channel": "#alerts-billing",
+          "tags": "function,environment"
+        }
+      ]
+    },
+
+    {
+      "name": "encryption.ts errors at module load (config drift)",
+      "severity": "page",
+      "owner": "team:platform",
+      "actionMatch": "all",
+      "filterMatch": "any",
+      "frequency": 1,
+      "conditions": [
+        { "id": "sentry.rules.conditions.first_seen_event.FirstSeenEventCondition" },
+        { "id": "sentry.rules.conditions.regression_event.RegressionEventCondition" }
+      ],
+      "filters": [
+        { "id": "sentry.rules.filters.event_attribute.EventAttributeFilter", "attribute": "stack.module", "match": "co", "value": "encryption" }
+      ],
+      "actions": [
+        {
+          "id": "sentry.integrations.pagerduty.notify_action.PagerDutyNotifyServiceAction",
+          "account": "<PAGERDUTY_INTEGRATION_ID>",
+          "service": "motionmax-oncall",
+          "severity": "critical"
+        }
+      ]
+    },
+
+    {
+      "name": "claim_pending_job query timeout > 1s (warn)",
+      "severity": "warn",
+      "owner": "team:platform",
+      "actionMatch": "all",
+      "filterMatch": "all",
+      "frequency": 30,
+      "conditions": [
+        {
+          "id": "sentry.rules.conditions.event_frequency.EventFrequencyCondition",
+          "interval": "10m",
+          "value": 5,
+          "comparisonType": "count"
+        }
+      ],
+      "filters": [
+        { "id": "sentry.rules.filters.tagged_event.TaggedEventFilter", "key": "operation", "match": "eq", "value": "claim_pending_job" },
+        { "id": "sentry.rules.filters.event_attribute.EventAttributeFilter", "attribute": "measurements.duration_ms.value", "match": "gt", "value": "1000" }
+      ],
+      "actions": [
+        {
+          "id": "sentry.integrations.slack.notify_action.SlackNotifyServiceAction",
+          "workspace": "<SLACK_INTEGRATION_ID>",
+          "channel": "#alerts-prod",
+          "tags": "operation,environment"
+        }
+      ]
+    },
+
+    {
+      "name": "Cinematic_video job duration > 60min (warn)",
+      "severity": "warn",
+      "owner": "team:platform",
+      "actionMatch": "all",
+      "filterMatch": "all",
+      "frequency": 30,
+      "conditions": [
+        { "id": "sentry.rules.conditions.first_seen_event.FirstSeenEventCondition" }
+      ],
+      "filters": [
+        { "id": "sentry.rules.filters.tagged_event.TaggedEventFilter", "key": "job_type", "match": "eq", "value": "cinematic_video" },
+        { "id": "sentry.rules.filters.event_attribute.EventAttributeFilter", "attribute": "tags.duration_min", "match": "gt", "value": "60" }
+      ],
+      "actions": [
+        {
+          "id": "sentry.integrations.slack.notify_action.SlackNotifyServiceAction",
+          "workspace": "<SLACK_INTEGRATION_ID>",
+          "channel": "#alerts-prod",
+          "tags": "job_type,duration_min"
+        }
+      ]
+    },
+
+    {
+      "name": "Frontend error rate > 50/min (warn)",
+      "severity": "warn",
+      "owner": "team:frontend",
+      "actionMatch": "all",
+      "filterMatch": "all",
+      "frequency": 30,
+      "conditions": [
+        {
+          "id": "sentry.rules.conditions.event_frequency.EventFrequencyCondition",
+          "interval": "1m",
+          "value": 50,
+          "comparisonType": "count"
+        }
+      ],
+      "filters": [
+        { "id": "sentry.rules.filters.tagged_event.TaggedEventFilter", "key": "runtime", "match": "eq", "value": "browser" }
+      ],
+      "actions": [
+        {
+          "id": "sentry.integrations.slack.notify_action.SlackNotifyServiceAction",
+          "workspace": "<SLACK_INTEGRATION_ID>",
+          "channel": "#alerts-prod",
+          "tags": "release,url"
+        }
+      ]
+    }
+  ],
+
+  "metric_alerts": [
+    {
+      "name": "Worker error rate (events/min)",
+      "severity": "page",
+      "dataset": "events",
+      "query": "service:worker environment:production",
+      "aggregate": "count()",
+      "timeWindow": 10,
+      "thresholdType": 0,
+      "resolveThreshold": 0,
+      "triggers": [
+        { "label": "critical", "alertThreshold": 50, "actions": [{ "type": "pagerduty", "targetIdentifier": "motionmax-oncall" }] },
+        { "label": "warning",  "alertThreshold": 20, "actions": [{ "type": "slack", "targetIdentifier": "#alerts-prod" }] }
+      ]
+    },
+    {
+      "name": "Edge Function p95 latency",
+      "severity": "warn",
+      "dataset": "transactions",
+      "query": "transaction.op:http.server runtime:deno",
+      "aggregate": "p95(transaction.duration)",
+      "timeWindow": 5,
+      "thresholdType": 0,
+      "triggers": [
+        { "label": "warning", "alertThreshold": 5000, "actions": [{ "type": "slack", "targetIdentifier": "#alerts-prod" }] }
+      ]
+    }
+  ]
+}

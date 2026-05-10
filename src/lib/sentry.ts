@@ -1,5 +1,5 @@
 /**
- * Sentry error-tracking bootstrap.
+ * Sentry error-tracking bootstrap (browser).
  *
  * Call `initSentry()` once at app startup (before React renders).
  * Session Replay is NOT registered here — it requires analytics consent
@@ -9,27 +9,8 @@
  * Also wires up the structured logger's `registerErrorSink` hook so
  * every `slog.warn()` / `slog.error()` is forwarded to Sentry.
  *
- * ── Required Sentry alert rules (configure in Sentry Dashboard → Alerts) ──
- *
- * 1. Error spike — "New issue or regression"
- *    Trigger: any new unhandled exception (or regressed issue)
- *    Destination: email + Slack #alerts-prod
- *    Environments: production
- *
- * 2. High error rate — "Number of events"
- *    Trigger: >50 errors in 1 hour across all issues
- *    Destination: Slack #alerts-prod
- *    Environments: production
- *
- * 3. Performance — "Transaction duration"
- *    Trigger: p95 LCP > 4 000 ms on /app routes
- *    Destination: email
- *    Environments: production
- *
- * 4. Worker edge-function errors (via Sentry Deno SDK, if configured)
- *    DSN: set via `supabase secrets set SENTRY_DSN=…`
- *    Alert: any unhandled exception in generate-cinematic or stripe-webhook
- *    Destination: Slack #alerts-billing (for stripe-webhook)
+ * Alert rules: see `iac/sentry/alert-rules.json` (committed as code).
+ * Setup runbook: see `docs/observability-setup.md`.
  *
  * Required environment variables:
  *   VITE_SENTRY_DSN      — frontend (Vercel env)
@@ -40,6 +21,7 @@
 
 import * as Sentry from "@sentry/react";
 import { registerErrorSink } from "@/lib/structuredLogger";
+import { scrubSentryEvent } from "@/lib/sentry-scrubber";
 
 const DSN = import.meta.env.VITE_SENTRY_DSN ?? "";
 const IS_PROD = import.meta.env.PROD;
@@ -55,15 +37,6 @@ export function initSentry(): void {
     return;
   }
 
-  const SENSITIVE_KEY_RE = /password|token|email|jwt|key|secret/i;
-
-  function scrubSensitive(obj: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
-    if (!obj) return obj;
-    return Object.fromEntries(
-      Object.entries(obj).map(([k, v]) => [k, SENSITIVE_KEY_RE.test(k) ? "[Redacted]" : v])
-    );
-  }
-
   Sentry.init({
     dsn: DSN,
     environment: IS_PROD ? "production" : "development",
@@ -77,17 +50,15 @@ export function initSentry(): void {
     // Performance: sample 10 % of transactions in production
     tracesSampleRate: IS_PROD ? 0.1 : 1.0,
     // Replay rates start at 0; grantAnalyticsConsent() enables on-error replay.
+    // The cookie banner (B-NEW-9) calls grantAnalyticsConsent() only after
+    // explicit user opt-in, satisfying the consent gate for replay.
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: 0,
     // Only send errors from our own code (including Vercel preview deployments)
     allowUrls: [/motionmax\.io/, /\.vercel\.app/, /localhost/],
-    beforeSend(event) {
-      if (event.extra) event.extra = scrubSensitive(event.extra as Record<string, unknown>);
-      if (event.request?.data && typeof event.request.data === "object") {
-        event.request.data = scrubSensitive(event.request.data as Record<string, unknown>);
-      }
-      return event;
-    },
+    // PII scrubbing — see src/lib/sentry-scrubber.ts. Strips emails, Stripe IDs,
+    // JWTs, OAuth tokens, last4 in card contexts, and drops noise events.
+    beforeSend: scrubSentryEvent,
   });
 
   // Bridge: forward structured logger warn/error → Sentry

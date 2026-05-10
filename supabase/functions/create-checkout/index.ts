@@ -17,10 +17,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rateLimit.ts";
 import * as Sentry from "https://deno.land/x/sentry/index.mjs";
+import { scrubSentryEvent } from "../_shared/sentry-scrubber.ts";
 
 Sentry.init({
   dsn: Deno.env.get("SENTRY_DSN") || "",
   environment: Deno.env.get("DENO_DEPLOYMENT_ID") ? "production" : "development",
+  beforeSend: scrubSentryEvent,
 });
 
 const logStep = (step: string, details?: Record<string, unknown>) => {
@@ -56,14 +58,32 @@ const VALID_PRODUCT_IDS = new Set([
   "prod_Ts3rl1zDT9oLVt", // Credit 500 (legacy)
 ]);
 
-export async function handler(req: Request): Promise<Response> {
+/**
+ * Optional dependency-injection seam for tests (Probe F-10-04 / B-NEW-20).
+ */
+export interface CreateCheckoutDeps {
+  // deno-lint-ignore no-explicit-any
+  stripe?: any;
+  // deno-lint-ignore no-explicit-any
+  supabaseClient?: any;
+  /** Override for the dynamic import of ../_shared/killSwitch.ts. */
+  rejectIfMaintenanceOrKilled?: (
+    // deno-lint-ignore no-explicit-any
+    supabase: any,
+    key: string,
+    headers: Record<string, string>,
+    req: Request,
+  ) => Promise<Response | null>;
+}
+
+export async function handler(req: Request, deps: CreateCheckoutDeps = {}): Promise<Response> {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   if (req.method === "OPTIONS") {
     return handleCorsPreflightRequest(req.headers.get("origin"));
   }
 
-  const supabaseClient = createClient(
+  const supabaseClient = deps.supabaseClient ?? createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
   );
@@ -74,7 +94,9 @@ export async function handler(req: Request): Promise<Response> {
     // Phase 17.2 + 17.3 — master kill OR `payments` kill switch.
     // Admins are exempt so admin-side reconciliation tools keep
     // working during a maintenance window.
-    const { rejectIfMaintenanceOrKilled } = await import("../_shared/killSwitch.ts");
+    const rejectIfMaintenanceOrKilled = deps.rejectIfMaintenanceOrKilled ?? (
+      await import("../_shared/killSwitch.ts")
+    ).rejectIfMaintenanceOrKilled;
     const blocked = await rejectIfMaintenanceOrKilled(supabaseClient, "pause_payments", corsHeaders, req);
     if (blocked) return blocked;
 
@@ -138,7 +160,7 @@ export async function handler(req: Request): Promise<Response> {
       eu_cooling_off_waived: euCoolingOffWaived,
     } = body;
 
-    const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
+    const stripe = deps.stripe ?? new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
       apiVersion: "2024-12-18.acacia",
     });
 
@@ -315,4 +337,9 @@ export async function handler(req: Request): Promise<Response> {
     });
   }
 }
-serve(handler);
+// Test-only export.
+export const __forTesting = { handler };
+
+if (import.meta.main) {
+  serve(handler);
+}

@@ -1,0 +1,177 @@
+name: Deploy Production
+
+# ──────────────────────────────────────────────────────────────────────
+# Production deploy — gated.
+#
+# Trigger:
+#   - On successful completion of "Deploy Staging" workflow on main.
+#   - Manually via workflow_dispatch (e.g. for rollback hotfixes).
+#
+# Gates:
+#   1. Hard dependency on staging being green (workflow_run filter +
+#      explicit conclusion check below).
+#   2. The `production` GitHub Environment requires manual approval
+#      from a designated reviewer before this job's steps execute.
+#      Configure in repo Settings → Environments → production:
+#        - Required reviewers: <SRE / on-call rotation>
+#        - Wait timer: 0 (or set if you want a forced cooldown)
+#        - Deployment branches: main only
+#
+# Targets: prod Supabase project, prod Vercel deploy, prod Railway
+# worker (auto-deploys via webhook on push to main; this workflow
+# does NOT separately ping Railway, that's already wired to the
+# Railway GitHub integration).
+#
+# Failures: notifies via SLACK_WEBHOOK_URL if configured.
+# ──────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_run:
+    workflows: ["Deploy Staging"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Why are you deploying to prod manually? (audit trail)"
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: Verify staging is green
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    steps:
+      - name: Confirm trigger
+        run: |
+          echo "Trigger: ${{ github.event_name }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual deploy reason: ${{ inputs.reason }}"
+          else
+            echo "Staging workflow conclusion: ${{ github.event.workflow_run.conclusion }}"
+          fi
+
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [gate]
+    # The `production` environment is what makes this gated.
+    # Required reviewers are configured in the repo settings, NOT in
+    # YAML. See the comment block at the top of this file.
+    environment:
+      name: production
+      url: https://motionmax.io
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      # ── Supabase: migrations + edge functions ────────────────────
+      - uses: supabase/setup-cli@b60b5899c73b63a2d2d651b1e90db8d4c9392f51  # v1
+        with:
+          version: latest
+
+      - name: Run database migrations (prod)
+        run: |
+          supabase db push \
+            --project-ref "$SUPABASE_PROJECT_ID" \
+            --password "$SUPABASE_DB_PASSWORD"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      - name: Deploy edge functions (prod)
+        # JWT verification is configured per-function in supabase/config.toml
+        # ([functions.<name>].verify_jwt). Do NOT pass --no-verify-jwt here:
+        # it disables JWT verification globally, including for sensitive
+        # admin/* and delete-* functions. Public-by-design functions
+        # (stripe-webhook, resend-webhook, share-meta, get-shared-project,
+        # serve-media, health, announcement-click) opt out individually
+        # in config.toml and validate auth server-side themselves.
+        run: |
+          supabase functions deploy \
+            --project-ref "$SUPABASE_PROJECT_ID"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+
+      # ── Vercel: prod promotion ───────────────────────────────────
+      # Vercel auto-deploys main as a production build via its GitHub
+      # integration. This step explicitly promotes the latest prod
+      # build to the live alias so the gate is the source of truth
+      # (instead of a "promote whatever Vercel built last" race).
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel prod env
+        run: vercel pull --yes --environment=production --token=$VERCEL_TOKEN
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Build (Vercel prod)
+        run: vercel build --prod --token=$VERCEL_TOKEN
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy prod
+        id: deploy
+        run: |
+          DEPLOY_URL=$(vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN)
+          echo "deploy_url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      # ── Worker (Railway) ─────────────────────────────────────────
+      # Railway auto-deploys on push to main via its GitHub integration
+      # (configured in the Railway dashboard, not here). No deploy hook
+      # to ping. If/when we want gated worker deploys we'd disable
+      # auto-deploy in Railway and add a `railway up` step here.
+      - name: Note — Railway worker auto-deploys via GitHub integration
+        run: |
+          echo "Railway is configured to auto-deploy on push to main."
+          echo "If the worker hasn't picked up this commit, check the Railway"
+          echo "dashboard → motionmax-worker → Deployments."
+
+      # ── Post-deploy smoke ────────────────────────────────────────
+      - name: Smoke — motionmax.io 200
+        run: |
+          for i in {1..30}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://motionmax.io || echo "000")
+            if [ "$STATUS" = "200" ] || [ "$STATUS" = "304" ]; then
+              echo "motionmax.io is up (HTTP $STATUS)"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::motionmax.io did not respond after 150s"
+          exit 1
+
+      - name: Notify success
+        if: success()
+        run: |
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            curl -X POST -H 'Content-Type: application/json' \
+              --data "{\"text\":\":white_check_mark: Production deploy succeeded — ${GITHUB_SHA::7}\"}" \
+              "${{ secrets.SLACK_WEBHOOK_URL }}"
+          fi
+
+      - name: Notify failure
+        if: failure()
+        run: |
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            curl -X POST -H 'Content-Type: application/json' \
+              --data "{\"text\":\":rotating_light: Production deploy FAILED — ${GITHUB_SHA::7} — see ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" \
+              "${{ secrets.SLACK_WEBHOOK_URL }}"
+          else
+            echo "::warning::SLACK_WEBHOOK_URL not configured — skipping Slack alert"
+          fi

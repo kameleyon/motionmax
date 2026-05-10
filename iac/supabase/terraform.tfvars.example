@@ -1,0 +1,15 @@
+# Copy to terraform.tfvars (gitignored). The provider reads
+# SUPABASE_ACCESS_TOKEN from the environment, NOT from this file.
+
+# Production:
+supabase_project_ref = "ayjbvcikuwknqdrpsdmj"
+
+# Staging — apply this module a second time with a different
+# .tfvars file:
+#   terraform apply -var-file=staging.tfvars
+# supabase_project_ref = "<staging-ref>"
+
+# Optional overrides (defaults are fine for prod):
+# site_url          = "https://motionmax.io"
+# max_rows          = 1000
+# statement_timeout = "10s"

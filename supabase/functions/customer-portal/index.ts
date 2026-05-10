@@ -5,10 +5,12 @@ import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rateLimit.ts";
 import { writeSystemLog } from "../_shared/log.ts";
 import * as Sentry from "https://deno.land/x/sentry/index.mjs";
+import { scrubSentryEvent } from "../_shared/sentry-scrubber.ts";
 
 Sentry.init({
   dsn: Deno.env.get("SENTRY_DSN") || "",
   environment: Deno.env.get("DENO_DEPLOYMENT_ID") ? "production" : "development",
+  beforeSend: scrubSentryEvent,
 });
 
 const logStep = (step: string, details?: any) => {
@@ -23,7 +25,17 @@ class UserFacingError extends Error {
   }
 }
 
-export async function handler(req: Request): Promise<Response> {
+/**
+ * Optional dependency-injection seam for tests (Probe F-10-04 / B-NEW-20).
+ */
+export interface CustomerPortalDeps {
+  // deno-lint-ignore no-explicit-any
+  stripe?: any;
+  // deno-lint-ignore no-explicit-any
+  supabaseClient?: any;
+}
+
+export async function handler(req: Request, deps: CustomerPortalDeps = {}): Promise<Response> {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   if (req.method === "OPTIONS") {
@@ -34,9 +46,9 @@ export async function handler(req: Request): Promise<Response> {
     logStep("Function started");
 
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) throw new Error("Stripe configuration missing");
+    if (!deps.stripe && !stripeKey) throw new Error("Stripe configuration missing");
 
-    const supabaseClient = createClient(
+    const supabaseClient = deps.supabaseClient ?? createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
       { auth: { persistSession: false } }
@@ -88,7 +100,7 @@ export async function handler(req: Request): Promise<Response> {
       });
     }
 
-    const stripe = new Stripe(stripeKey, { apiVersion: "2024-12-18.acacia" });
+    const stripe = deps.stripe ?? new Stripe(stripeKey ?? "", { apiVersion: "2024-12-18.acacia" });
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
     
     if (customers.data.length === 0) {
@@ -133,4 +145,9 @@ export async function handler(req: Request): Promise<Response> {
     });
   }
 }
-serve(handler);
+// Test-only export.
+export const __forTesting = { handler };
+
+if (import.meta.main) {
+  serve(handler);
+}

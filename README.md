@@ -1,5 +1,7 @@
 # MotionMax — AI Video Generator
 
+[![CI](https://github.com/motionmax/motionmax/actions/workflows/ci.yml/badge.svg)](https://github.com/motionmax/motionmax/actions/workflows/ci.yml)
+
 MotionMax is a full-stack AI video creation platform that transforms text, articles, and ideas into professional cinematic videos, explainer content, visual stories, and infographics — all powered by AI.
 
 ## What MotionMax Does
@@ -31,7 +33,7 @@ MotionMax is a full-stack AI video creation platform that transforms text, artic
 - **Supabase Realtime** for live progress tracking
 
 ### Backend
-- **Node.js worker** on Render.com — handles all heavy processing
+- **Node.js worker** on Railway — handles all heavy processing (see `worker/README.md`)
 - **Supabase** — PostgreSQL database, Auth, Storage, Edge Functions
 - **FFmpeg** — video encoding, concatenation, caption burn-in
 - **OpenRouter** — LLM API (Claude Sonnet 4.6)
@@ -49,7 +51,7 @@ MotionMax is a full-stack AI video creation platform that transforms text, artic
 ```
 Frontend (Vite/React) → Supabase (Auth + DB + Storage + Realtime)
                                     ↓
-                         Worker (Render.com Node.js)
+                         Worker (Railway Node.js)
                          ├── Script Generation (OpenRouter/Claude)
                          ├── Research Phase (OpenRouter/Claude)
                          ├── Audio Generation (Qwen3/Fish/LemonFox/ElevenLabs/Gemini)
@@ -82,6 +84,49 @@ supabase/                     # Supabase configuration
 - **Starter** — 30 credits/month, short/brief videos, all formats, infographics
 - **Creator** — 100 credits/month, all lengths, custom styles, brand mark, voice cloning
 - **Professional** — 300 credits/month, cinematic videos, priority rendering
+
+## Testing
+
+MotionMax has three test surfaces. CI runs all three on every PR.
+
+### Unit + integration (Vitest)
+
+Frontend + worker unit tests, fast feedback, no external services.
+
+```bash
+npm run test            # one-shot
+npm run test:watch      # watch mode
+npm run test:coverage   # with v8 coverage
+cd worker && npm run test   # worker unit tests
+```
+
+### Edge function tests (Deno)
+
+Tests for `supabase/functions/*/index.test.ts` exercise the REAL deployed
+handlers via dependency injection — no mirrored copies, no production
+network calls. Mocked Stripe + Supabase clients are passed through the
+`__forTesting` / `WebhookDeps` seam each function exports.
+
+```bash
+npm run test:edge
+# Or one function at a time:
+deno test --allow-all supabase/functions/stripe-webhook/index.test.ts
+```
+
+### End-to-end (Playwright)
+
+Browser-driven flows against a fully isolated local Supabase stack.
+Requires Docker for `supabase start`.
+
+```bash
+npm run test:e2e        # headless
+npm run test:e2e:ui     # interactive runner
+```
+
+The Playwright config (`playwright.config.ts`) auto-starts `npm run dev`
+on `:8080` via the `webServer` block. CI runs the same flow but spins up
+a fresh local Supabase via `supabase start --no-studio`. See
+[`e2e/README.md`](./e2e/README.md) for the test-isolation strategy.
 
 ## Links
 

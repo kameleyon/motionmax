@@ -17,7 +17,17 @@ import { checkRateLimit, getRateLimitHeaders } from "../_shared/rateLimit.ts";
 const MAX_EXPORT_SIZE_MB = 10;
 const MAX_EXPORT_SIZE_BYTES = MAX_EXPORT_SIZE_MB * 1024 * 1024;
 
-export async function handler(req: Request): Promise<Response> {
+/**
+ * Optional dependency-injection seam for tests (Probe F-10-04 / B-NEW-20).
+ */
+export interface ExportDeps {
+  // deno-lint-ignore no-explicit-any
+  supabaseUser?: any;
+  // deno-lint-ignore no-explicit-any
+  supabaseAdmin?: any;
+}
+
+export async function handler(req: Request, deps: ExportDeps = {}): Promise<Response> {
   const origin = req.headers.get("origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -35,7 +45,7 @@ export async function handler(req: Request): Promise<Response> {
     }
 
     // Create client with user's JWT to respect RLS
-    const supabaseUser = createClient(
+    const supabaseUser = deps.supabaseUser ?? createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_ANON_KEY") ?? "",
       {
@@ -87,7 +97,7 @@ export async function handler(req: Request): Promise<Response> {
     }
 
     // Use service role to gather all data for this user
-    const supabaseAdmin = createClient(
+    const supabaseAdmin = deps.supabaseAdmin ?? createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
       { auth: { persistSession: false } }
@@ -220,4 +230,9 @@ export async function handler(req: Request): Promise<Response> {
     });
   }
 }
-serve(handler);
+// Test-only export.
+export const __forTesting = { handler };
+
+if (import.meta.main) {
+  serve(handler);
+}

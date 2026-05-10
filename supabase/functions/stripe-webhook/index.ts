@@ -23,10 +23,12 @@ function eventTypeToSystem(stripeType: string): { event_type: string; category: 
   }
 }
 import * as Sentry from "https://deno.land/x/sentry/index.mjs";
+import { scrubSentryEvent } from "../_shared/sentry-scrubber.ts";
 
 Sentry.init({
   dsn: Deno.env.get("SENTRY_DSN") || "",
   environment: Deno.env.get("DENO_DEPLOYMENT_ID") ? "production" : "development",
+  beforeSend: scrubSentryEvent,
 });
 
 const maskId = (id: string | undefined | null): string => {
@@ -84,7 +86,22 @@ async function trackConversion(params: {
   }
 }
 
-export async function handler(req: Request): Promise<Response> {
+/**
+ * Optional dependency-injection seam for tests (Probe F-10-03 / B-NEW-20).
+ * Production code calls `handler(req)` and we construct Stripe + Supabase
+ * from environment variables exactly as before. Tests call
+ * `handler(req, { stripe, supabaseAdmin })` with controllable mocks so the
+ * REAL handler logic — signature verification, idempotency, switch arms —
+ * is exercised end-to-end instead of a mirrored copy in the test file.
+ */
+export interface WebhookDeps {
+  // deno-lint-ignore no-explicit-any
+  stripe?: any;
+  // deno-lint-ignore no-explicit-any
+  supabaseAdmin?: any;
+}
+
+export async function handler(req: Request, deps: WebhookDeps = {}): Promise<Response> {
   const corsHeaders = {
     ...getCorsHeaders(req.headers.get("origin")),
     // Stripe webhook signature header must be allowed
@@ -95,11 +112,11 @@ export async function handler(req: Request): Promise<Response> {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
-  const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
+  const stripe = deps.stripe ?? new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
     apiVersion: "2024-12-18.acacia",
   });
 
-  const supabaseAdmin = createClient(
+  const supabaseAdmin = deps.supabaseAdmin ?? createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     { auth: { persistSession: false } }
@@ -618,4 +635,11 @@ export async function handler(req: Request): Promise<Response> {
     });
   }
 }
-serve(handler);
+// Test-only export: importable from index.test.ts without booting the server.
+export const __forTesting = { handler };
+
+// Only spin up the HTTP listener when this module is the entry point. Tests
+// `import { handler } from "./index.ts"` and exercise it directly.
+if (import.meta.main) {
+  serve(handler);
+}

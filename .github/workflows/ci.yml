@@ -132,53 +132,105 @@ jobs:
             fi
           done
 
-  deploy:
-    name: Deploy (Edge Functions + Worker)
+  # ──────────────────────────────────────────────────────────────────────
+  # E2E job (B-NEW-20 / Probe F-10-01).
+  #
+  # Boots a local Supabase stack (Postgres + GoTrue + PostgREST + Storage +
+  # edge runtime) via the Supabase CLI, applies migrations + the test seed,
+  # then runs Playwright against `npm run dev` (started automatically by
+  # the `webServer` block in playwright.config.ts).
+  #
+  # The local Supabase URL + anon key are exported as GITHUB_ENV vars so the
+  # frontend (Vite, started by Playwright's webServer) points at it instead
+  # of the production project.
+  #
+  # IMPORTANT: branch-protection rules in repo Settings should mark this
+  # check as REQUIRED on `main` so a red E2E blocks merges — and therefore
+  # blocks deploy-staging.yml (which triggers on push to main) and
+  # deploy-prod.yml (which is gated on staging being green).
+  # ──────────────────────────────────────────────────────────────────────
+  e2e:
+    name: E2E (Playwright + local Supabase)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    # Only deploy on pushes to main after all checks pass.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [lint-test-build, worker-build, edge-functions-check]
+    timeout-minutes: 25
+    needs: [lint-test-build]
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
-      # ── Supabase Migrations + Edge Functions ────────────────────────
-      # Requires secrets: SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_ID, SUPABASE_DB_PASSWORD
-      - name: Deploy edge functions
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Supabase CLI
         uses: supabase/setup-cli@b60b5899c73b63a2d2d651b1e90db8d4c9392f51  # v1
         with:
           version: latest
-      - name: Run database migrations
-        run: |
-          supabase db push \
-            --project-ref "$SUPABASE_PROJECT_ID" \
-            --password "$SUPABASE_DB_PASSWORD"
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-      - name: Push edge functions to Supabase
-        # JWT verification is configured per-function in supabase/config.toml
-        # ([functions.<name>].verify_jwt). Do NOT pass --no-verify-jwt here:
-        # it disables JWT verification globally, including for sensitive
-        # admin/* and delete-* functions. Public-by-design functions
-        # (stripe-webhook, resend-webhook, share-meta, get-shared-project,
-        # serve-media, health, announcement-click) opt out individually
-        # in config.toml and validate auth server-side themselves.
-        run: |
-          supabase functions deploy \
-            --project-ref "$SUPABASE_PROJECT_ID"
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
 
-      # ── Worker (Render) ──────────────────────────────────────────────
-      # Requires secret: RENDER_DEPLOY_HOOK_URL
-      # Create at: Render dashboard → service → Settings → Deploy Hook
-      - name: Trigger Render worker deploy
+      # Boot a local Supabase stack — fully isolated, torn down at job end.
+      # `--ignore-health-check` skips the slow remote-version check.
+      - name: Start local Supabase
+        run: supabase start --workdir . --ignore-health-check
+
+      - name: Apply migrations + test seed
         run: |
-          curl --silent --show-error --fail \
-            -X POST "$RENDER_DEPLOY_HOOK_URL"
+          supabase db reset --workdir . --no-seed
+          if [ -f supabase/seed.test.sql ]; then
+            DB_URL=$(supabase status -o json | jq -r '.DB_URL // .db_url // empty')
+            if [ -n "$DB_URL" ]; then
+              psql "$DB_URL" -f supabase/seed.test.sql
+            fi
+          fi
+
+      - name: Capture local Supabase URL + anon key
+        run: |
+          STATUS_JSON=$(supabase status -o json)
+          API_URL=$(echo "$STATUS_JSON" | jq -r '.API_URL // .api_url')
+          ANON_KEY=$(echo "$STATUS_JSON" | jq -r '.ANON_KEY // .anon_key')
+          {
+            echo "TEST_SUPABASE_URL=$API_URL"
+            echo "TEST_SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "VITE_SUPABASE_URL=$API_URL"
+            echo "VITE_SUPABASE_ANON_KEY=$ANON_KEY"
+          } >> "$GITHUB_ENV"
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright E2E tests
+        run: npm run test:e2e
         env:
-          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          CI: "true"
+          BASE_URL: http://localhost:8080
+
+      - name: Upload Playwright HTML report
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --workdir . || true
+
+  # NOTE (B-NEW-17): the production deploy used to live here as the
+  # `deploy` job, but it ran straight to prod with no manual gate. It
+  # has moved to .github/workflows/deploy-prod.yml, which:
+  #   1. Waits for deploy-staging.yml to succeed first
+  #   2. Requires manual approval via the `production` GitHub
+  #      Environment (configure required reviewers in repo Settings →
+  #      Environments → production)
+  # See docs/deploy-flow.md for the full sequence and rollback runbook.
+  #
+  # B-NEW-20: deploy-staging.yml (which triggers on push to main) is
+  # blocked transitively by this `e2e` job — branch protection on `main`
+  # marks `E2E (Playwright + local Supabase)` as a required check, so a
+  # red E2E prevents the merge that would otherwise kick off staging.
+  # Promotion to production also requires staging green, so the E2E
+  # gate cascades all the way to prod without modifying deploy-*.yml.

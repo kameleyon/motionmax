@@ -4,7 +4,19 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { writeSystemLog } from "../_shared/log.ts";
 
-export async function handler(req: Request): Promise<Response> {
+/**
+ * Optional dependency-injection seam for tests (Probe F-10-04 / B-NEW-20).
+ * Production code calls `handler(req)` and we construct the clients from env.
+ * Tests call `handler(req, { stripe, supabaseAdmin })` with mocks.
+ */
+export interface DeleteAccountDeps {
+  // deno-lint-ignore no-explicit-any
+  stripe?: any;
+  // deno-lint-ignore no-explicit-any
+  supabaseAdmin?: any;
+}
+
+export async function handler(req: Request, deps: DeleteAccountDeps = {}): Promise<Response> {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   if (req.method === "OPTIONS") {
@@ -22,7 +34,7 @@ export async function handler(req: Request): Promise<Response> {
 
     const token = authHeader.replace("Bearer ", "");
 
-    const supabaseAdmin = createClient(
+    const supabaseAdmin = deps.supabaseAdmin ?? createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
@@ -46,8 +58,8 @@ export async function handler(req: Request): Promise<Response> {
     // doesn't continue charging a deleted customer
     if (sub?.stripe_subscription_id && sub.status === "active") {
       const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-      if (stripeKey) {
-        const stripe = new Stripe(stripeKey, { apiVersion: "2024-12-18.acacia" });
+      if (deps.stripe || stripeKey) {
+        const stripe = deps.stripe ?? new Stripe(stripeKey ?? "", { apiVersion: "2024-12-18.acacia" });
         try {
           await stripe.subscriptions.cancel(sub.stripe_subscription_id);
           console.log(`Cancelled Stripe subscription ${sub.stripe_subscription_id} for user ${user.id}`);
@@ -104,4 +116,9 @@ export async function handler(req: Request): Promise<Response> {
     });
   }
 }
-serve(handler);
+// Test-only export.
+export const __forTesting = { handler };
+
+if (import.meta.main) {
+  serve(handler);
+}

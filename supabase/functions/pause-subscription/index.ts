@@ -4,10 +4,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rateLimit.ts";
 import * as Sentry from "https://deno.land/x/sentry/index.mjs";
+import { scrubSentryEvent } from "../_shared/sentry-scrubber.ts";
 
 Sentry.init({
   dsn: Deno.env.get("SENTRY_DSN") || "",
   environment: Deno.env.get("DENO_DEPLOYMENT_ID") ? "production" : "development",
+  beforeSend: scrubSentryEvent,
 });
 
 const logStep = (step: string, details?: unknown) => {

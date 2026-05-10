@@ -1,0 +1,15 @@
+# Copy to terraform.tfvars (gitignored). Sensitive values should be
+# exported as TF_VAR_* env vars rather than written to this file.
+
+vercel_team_id = "team_REPLACE_ME"
+
+# Optional overrides — defaults usually fine.
+# github_repo       = "kameleyon/motionmax"
+# production_branch = "main"
+
+# Supabase wiring — set via env vars, not here:
+#   export TF_VAR_supabase_url_production=https://ayjbvcikuwknqdrpsdmj.supabase.co
+#   export TF_VAR_supabase_publishable_key_production=...
+#   export TF_VAR_supabase_url_preview=https://<staging-ref>.supabase.co
+#   export TF_VAR_supabase_publishable_key_preview=...
+#   export TF_VAR_vercel_api_token=...

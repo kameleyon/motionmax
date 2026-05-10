@@ -251,12 +251,15 @@ export default function EditorTopBar({
         <Menu className="w-4 h-4" />
       </button>
 
-      {/* Back button */}
+      {/* Back button — browser-style: returns to the previous page in
+          history rather than always landing on /dashboard-new, so a user
+          who opened the editor from /projects (or anywhere else) goes
+          back where they came from. */}
       <button
         type="button"
-        onClick={() => navigate('/dashboard-new')}
-        aria-label="Back to dashboard"
-        title="Back to Studio"
+        onClick={() => navigate(-1)}
+        aria-label="Go back"
+        title="Back"
         className="w-11 h-11 rounded-md grid place-items-center text-[#8A9198] hover:bg-[#151B20] hover:text-[#ECEAE4] transition-colors shrink-0"
       >
         <ArrowLeft className="w-4 h-4" />

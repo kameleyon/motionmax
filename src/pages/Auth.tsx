@@ -292,7 +292,7 @@ export default function Auth() {
     <div className="flex min-h-screen flex-col bg-background">
       <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-2 focus:bg-background focus:text-foreground">Skip to content</a>
-      <AuthPageHeader onLogoClick={() => navigate("/")} />
+      <AuthPageHeader onLogoClick={goToAstroLanding} />
 
       <main id="main-content" className="flex flex-1 items-center justify-center px-6 pt-16">
         <motion.div

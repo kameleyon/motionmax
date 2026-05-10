@@ -4,7 +4,7 @@
 **Date:** 2026-05-10
 **Source verdict:** `.audits/2026-05-10-360/verdict.md` (Studio Zero full-360 audit — 6 core reviewers + 28 specialists, $66.82 cost)
 **Supersedes:** `archive/360roadmap_fix.md` (v1 baseline) and the prior 5-blocker v1 roll-up
-**Status (2026-05-10):** v1 (5/5) `9601306`. Wave 1 `c6ec5a4` (B-NEW-3/4/5ab/13/18 + B-V1-5). Wave 2 `78fd5e2` (B-NEW-1/2/6). B-NEW-16 verified. B-NEW-21 `1cef0a4` (pricing mirror, scaffold). Wave 3 `0c4dcd0` (B-NEW-9/10/11/12/14). Wave 4 `e306720` (B-NEW-17 IaC, B-NEW-19 Sentry+runbooks, B-NEW-20 E2E infra). **19 of 22 v2 Blockers closed**; 3 remaining (B-NEW-7 + B-NEW-8 in Wave 5; B-NEW-15 human action) + DMCA filing pending.
+**Status (2026-05-10):** v1 (5/5) `9601306`. W1 `c6ec5a4` (B-NEW-3/4/5ab/13/18+B-V1-5). W2 `78fd5e2` (B-NEW-1/2/6). B-NEW-16 verified. B-NEW-21 `1cef0a4` (pricing mirror, scaffold). W3 `0c4dcd0` (B-NEW-9/10/11/12/14). W4 `e306720` (B-NEW-17/19/20). W5 `4d6ef48` (B-NEW-7 analytics+UTM; B-NEW-8 lifecycle drips+branded receipt). **🎉 22 of 22 v2 Blockers code-shipped.** Remaining = 3 human-action items: B-NEW-8 DMCA filing, B-NEW-15 EU Art. 27 rep, B-NEW-21 Stripe sync (run `scripts/sync-stripe-products.mjs`).
 **Coverage note:** Curated body section has **129 checkboxes** (27 Blockers + 102 Criticals — convergence-elevated clusters with per-agent attribution). Appendix has the full **751 raw findings** extracted from all 34 reviewer/specialist files. Grand total: **880 checkboxes** (curated section is a re-grouped view of the appendix's Blocker+Critical subset, not additive). Individual `file:line` detail lives in `.audits/2026-05-10-360/{reviewer}.md` (6 core) + `specialists/{agent}.md` (28 specialists).
 
 ---
@@ -73,8 +73,8 @@ Grouped by 14-category mapping from `360assessment.md`. Per-agent attribution pr
 
 ## §11 Analytics & Marketing (2 Blockers)
 
-- [ ] **[BLOCKER][ANALYTICS]** B-NEW-7: (a) Marketing Astro site ships zero analytics — funnel cannot start where paid ads land; (b) UTMs lost across marketing→app handoff; (c) no `gtag('config', { user_id })` identify call on signup/login — anonymous→authenticated identity is broken — _Reviewers: **Lens B1/B2/B3**_ — Owner: **Signal + Vega** — Re-audit: Lens
-- [ ] **[BLOCKER][LIFECYCLE]** B-NEW-8: (a) No onboarding drip beyond day-0 welcome (no day-1/day-3/day-7/day-14); (b) no win-back / dormant re-engagement; (c) no branded purchase-receipt email (relies on Stripe's unbranded default); (d) no DMCA Designated Agent registered with U.S. Copyright Office — every user upload uninsured under §512(c)(2) safe harbor — _Reviewers: **Herald (lifecycle gap × 3) + Comply L-C-01**_ — Owner: **Herald + Comply** — Re-audit: Herald + Comply
+- [x] **[BLOCKER][ANALYTICS]** B-NEW-7 (✅ Wave 5 — UTM passthrough via .motionmax.io cookie + identify gtag with sha256 user_id + funnel events): (a) Marketing Astro site ships zero analytics — funnel cannot start where paid ads land; (b) UTMs lost across marketing→app handoff; (c) no `gtag('config', { user_id })` identify call on signup/login — anonymous→authenticated identity is broken — _Reviewers: **Lens B1/B2/B3**_ — Owner: **Signal + Vega** — Re-audit: Lens
+- [~] **[BLOCKER][LIFECYCLE]** B-NEW-8 (✅ Wave 5 lifecycle parts: 4 onboarding drips + 2 win-back + branded receipt + 9 templates + cron orchestrator + dormancy detector. ⏳ DMCA filing remains human action): (a) No onboarding drip beyond day-0 welcome (no day-1/day-3/day-7/day-14); (b) no win-back / dormant re-engagement; (c) no branded purchase-receipt email (relies on Stripe's unbranded default); (d) no DMCA Designated Agent registered with U.S. Copyright Office — every user upload uninsured under §512(c)(2) safe harbor — _Reviewers: **Herald (lifecycle gap × 3) + Comply L-C-01**_ — Owner: **Herald + Comply** — Re-audit: Herald + Comply
 
 ## §13 Legal & Compliance (8 Blockers — the highest-Blocker category)
 

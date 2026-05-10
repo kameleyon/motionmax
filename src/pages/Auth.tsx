@@ -119,7 +119,16 @@ export default function Auth() {
   const [lockedUntil, setLockedUntil] = useState<number>(0);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const navigate = useNavigate();
-  const rawReturnUrl = searchParams.get("returnUrl") || "/app";
+  // C-2-1 fix (Hook B1) — accept `next` as an alias for `returnUrl`
+  // (the Pricing CTA uses `next` to match the audit-prescribed shape).
+  // The Pricing page also passes a `plan` param; we don't consume it
+  // directly here (the plan + cycle survive inside the `next` URL's
+  // own query string, e.g. `next=/pricing?autocheckout=creator_yearly`)
+  // — Pricing.tsx auto-resumes checkout on landing. We do, however,
+  // forward the raw `next` value through OAuth redirect + the email-
+  // confirmation hop so the funnel completes end-to-end.
+  const rawReturnUrl =
+    searchParams.get("next") || searchParams.get("returnUrl") || "/app";
   const returnUrl = rawReturnUrl.startsWith("/") && !rawReturnUrl.startsWith("//")
     ? rawReturnUrl
     : "/app";
@@ -215,7 +224,11 @@ export default function Auth() {
             : {};
           trackEvent("signup_started", { method: "email", ...utmEvt });
         } catch { /* analytics non-critical */ }
-        const { data: signUpData, error } = await signUp(email, password);
+        // C-2-1 (Hook B1) — pass returnUrl through so the Supabase
+        // confirmation email lands the user back on /pricing (with
+        // autocheckout flag) rather than /app. Safe-default when no
+        // plan-aware redirect was requested.
+        const { data: signUpData, error } = await signUp(email, password, returnUrl);
         if (error) {
           const msg = getAuthErrorMessage(error.message);
           setErrors({ email: msg });

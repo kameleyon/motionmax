@@ -1,3 +1,10 @@
+// Worker entrypoint. See worker/src/lib/* for extracted sub-systems
+// (added 2026-05-10 per audit C-4-3): concurrencyBudget, masterKillSwitch,
+// staleClaimReaper, startupDiagnostic, heartbeat, lifecycle,
+// providerKeysBanner. Per-task-type handler dispatch and the main
+// pollQueue/processJob loop remain here because they own the module-
+// level pool state (activeExportJobs / activeLlmJobs / MAX_*_SLOTS).
+
 import * as Sentry from '@sentry/node';
 import { scrubSentryEvent } from './lib/sentry-scrubber.js';
 Sentry.init({
@@ -11,15 +18,7 @@ Sentry.init({
 
 import { supabase } from "./lib/supabase.js";
 import { Job } from "./types/job.js";
-import { handleGenerateVideo } from "./handlers/generateVideo.js";
-import { handleFinalizePhase } from "./handlers/handleFinalize.js";
-import { handleExportVideo } from "./handlers/exportVideo.js";
-import { handleRegenerateImage } from "./handlers/handleRegenerateImage.js";
-import { handleRegenerateAudio } from "./handlers/handleRegenerateAudio.js";
-import { handleCinematicVideo } from "./handlers/handleCinematicVideo.js";
-import { handleCinematicAudio } from "./handlers/handleCinematicAudio.js";
-import { handleCinematicImage } from "./handlers/handleCinematicImage.js";
-import { handleUndoRegeneration } from "./handlers/handleUndoRegeneration.js";
+import { dispatchJob } from "./handlers/dispatch.js";
 import {
   startAutopostDispatcher,
   startTokenRefresher,
@@ -30,171 +29,22 @@ import { startScheduledNotificationDispatcher } from "./handlers/notification/ha
 import { writeSystemLog } from "./lib/logger.js";
 import { wlog } from "./lib/workerLogger.js";
 import { isTransientError, retryDelayMs } from "./lib/retryClassifier.js";
-import { startHealthServer, stopHealthServer } from "./healthServer.js";
+import { startHealthServer } from "./healthServer.js";
 
-/* ---- Auto-tune concurrency based on system resources ---- */
 import os from "os";
-import fs from "fs";
 import { randomUUID } from "crypto";
 
-/**
- * Get the actual memory available to this process.
- * In containers (Docker/Render), os.totalmem() returns the HOST memory,
- * not the container's cgroup limit. We read the cgroup limit directly.
- */
-function getContainerMemoryBytes(): number {
-  const hostMem = os.totalmem();
-
-  // Try cgroup v2 first (newer Linux kernels / Render)
-  try {
-    const raw = fs.readFileSync("/sys/fs/cgroup/memory.max", "utf-8").trim();
-    if (raw !== "max") {
-      const limit = parseInt(raw, 10);
-      if (limit > 0 && limit < hostMem) return limit;
-    }
-  } catch { /* not cgroup v2 */ }
-
-  // Try cgroup v1
-  try {
-    const raw = fs.readFileSync("/sys/fs/cgroup/memory/memory.limit_in_bytes", "utf-8").trim();
-    const limit = parseInt(raw, 10);
-    // cgroup v1 returns a huge number (9223372036854771712) when unlimited
-    if (limit > 0 && limit < hostMem) return limit;
-  } catch { /* not cgroup v1 */ }
-
-  // Fallback: host memory (non-containerized or Windows)
-  return hostMem;
-}
-
-/**
- * Get the CPU quota allocated to this container, in whole-CPU units.
- * `os.cpus().length` returns HOST cores even inside a container — on
- * Render's multi-tenant infra that means a 2-vCPU Pro pod reports 16
- * cores, which is what previously caused MAX_EXPORT_SLOTS to balloon
- * to 16 and oversubscribe the cgroup. We read the actual quota from
- * the cgroup CPU controller instead.
- */
-function getContainerCpuCount(): number {
-  const hostCpus = Math.max(1, os.cpus().length);
-
-  // cgroup v2: /sys/fs/cgroup/cpu.max → "<quota> <period>" or "max <period>"
-  try {
-    const raw = fs.readFileSync("/sys/fs/cgroup/cpu.max", "utf-8").trim();
-    const [quotaStr, periodStr] = raw.split(/\s+/);
-    if (quotaStr !== "max") {
-      const quota = parseInt(quotaStr, 10);
-      const period = parseInt(periodStr, 10);
-      if (quota > 0 && period > 0) {
-        const cpus = Math.max(1, Math.round(quota / period));
-        if (cpus < hostCpus) return cpus;
-      }
-    }
-  } catch { /* not cgroup v2 */ }
-
-  // cgroup v1: separate quota + period files
-  try {
-    const quota = parseInt(
-      fs.readFileSync("/sys/fs/cgroup/cpu/cpu.cfs_quota_us", "utf-8").trim(),
-      10,
-    );
-    const period = parseInt(
-      fs.readFileSync("/sys/fs/cgroup/cpu/cpu.cfs_period_us", "utf-8").trim(),
-      10,
-    );
-    if (quota > 0 && period > 0) {
-      const cpus = Math.max(1, Math.round(quota / period));
-      if (cpus < hostCpus) return cpus;
-    }
-  } catch { /* not cgroup v1 */ }
-
-  // Fallback: host count (non-containerized or unrestricted cgroup)
-  return hostCpus;
-}
-
-/**
- * Pool sizes split by workload type:
- *   - export pool   → CPU-bound  (FFmpeg encoding, color grade, mux)
- *   - LLM/IO pool   → memory-bound (await fetch() to Hypereal/Gemini/ElevenLabs)
- *
- * HOTFIX 2026-05-05: previous formula at 120MB/job triggered repeated
- * OOM kills at 2GB on Render — pods were getting reaped every ~30 min
- * during heavy generation traffic. Three things were wrong with the
- * old math:
- *   1. The 120MB/job budget assumed steady-state RSS but ignored brief
- *      spikes (PDF parse hits 250-300MB, FFmpeg children spawn from
- *      LLM jobs hit 200-400MB during regen flows).
- *   2. The container memory limit on this Render plan is 2GB, not 4GB
- *      — so `availableMb / 120` produced 27 LLM slots × ~150MB avg =
- *      ~4GB working set on a 2GB pod. Guaranteed OOM.
- *   3. Realtime channels + Sentry transports + Supabase clients sit
- *      around ~250-350MB even before the first job claim.
- *
- * New conservative scheme:
- *   exportSlots = max(1, cpuCount)                       — one FFmpeg per core
- *   llmSlots    = clamp(2, 8, floor(availableMb / 350))  — memory-bound, conservative
- *   total       = export + llm, hard-capped at 12
- *
- * Math on 2GB pod: (2048 - 768 reserved) / 350 = 3.6 → 4 LLM slots,
- * floor bumps to 8 only on 4GB+ pods. On a real 4GB pod (3328 / 350 = 9)
- * we land at 8 LLM slots. Total never exceeds 10-12 jobs in flight per
- * instance — well under the 2GB ceiling even with full spikes.
- *
- * For higher throughput, scale horizontally (render.yaml maxInstances)
- * rather than packing more jobs per pod. Memory-bound concurrency
- * reaches diminishing returns fast; horizontal scaling is the right
- * lever for an I/O-bound workload like ours.
- */
-interface ConcurrencyBudget { exportSlots: number; llmSlots: number; total: number; }
-
-function detectOptimalConcurrency(): ConcurrencyBudget {
-  const hostCpuCount    = os.cpus().length;
-  const containerCpus   = getContainerCpuCount();
-  const hostMemMb       = Math.round(os.totalmem() / 1048576);
-  const containerMemMb  = Math.round(getContainerMemoryBytes() / 1048576);
-
-  // Reserve 768MB for OS/Node.js overhead (FFmpeg + pdfjs occasionally
-  // spike past the old 512MB reservation under load).
-  const availableMemMb = Math.max(256, containerMemMb - 768);
-
-  // Env override path: split a flat WORKER_CONCURRENCY value across
-  // pools using the same 25/75 ratio applyConcurrencyOverride uses,
-  // so manual tuning still gets reasonable pool sizes without two env vars.
-  const envOverride = process.env.WORKER_CONCURRENCY;
-  if (envOverride) {
-    const total = Math.max(3, parseInt(envOverride, 10));
-    const exportSlots = Math.max(1, Math.floor(total * 0.25));
-    const llmSlots    = Math.max(2, total - exportSlots);
-    wlog.info("Concurrency from env override", { total, exportSlots, llmSlots });
-    return { exportSlots, llmSlots, total: exportSlots + llmSlots };
-  }
-
-  // Export pool: bound by BOTH cgroup CPU quota AND memory headroom.
-  // Each ffmpeg child with xfade+Ken Burns runs 500-700MB resident, so
-  // even on a 2-vCPU pod with "enough" cores the 2GB cgroup can only
-  // safely host 1-2 simultaneous exports. Hard ceiling of 4 per instance
-  // — beyond that, scale horizontally.
-  const exportByCpu    = Math.max(1, containerCpus);
-  const exportByMemory = Math.max(1, Math.floor(availableMemMb / 700));
-  const exportSlots    = Math.max(1, Math.min(exportByCpu, exportByMemory, 4));
-
-  // LLM/IO pool: memory-bound, CONSERVATIVE 350MB/job to cover spikes.
-  // Hard ceiling of 8 per instance — any further parallelism comes
-  // from scaling out (more instances), not packing more in.
-  const llmByMemory = Math.floor(availableMemMb / 350);
-  const llmSlots    = Math.max(2, Math.min(llmByMemory, 8));
-
-  const total = exportSlots + llmSlots;
-
-  wlog.info("Auto-tuned concurrency", {
-    hostCpus: hostCpuCount, containerCpus,
-    hostRamMb: hostMemMb, containerRamMb: containerMemMb,
-    availableMb: availableMemMb,
-    exportSlots, exportByCpu, exportByMemory,
-    llmSlots, llmByMemory,
-    total,
-  });
-  return { exportSlots, llmSlots, total };
-}
+import {
+  detectOptimalConcurrency,
+  isExportTask,
+} from "./lib/concurrencyBudget.js";
+import { isMasterKillEngaged } from "./lib/masterKillSwitch.js";
+import { runStaleClaimReaper } from "./lib/staleClaimReaper.js";
+import { runStartupDiagnostic } from "./lib/startupDiagnostic.js";
+import { startHeartbeatWriter } from "./lib/heartbeat.js";
+import { logProviderKeysBanner } from "./lib/providerKeysBanner.js";
+import { makeGracefulShutdown, registerProcessSignalHandlers } from "./lib/lifecycle.js";
+import { emitQueueDepthAlert } from "./lib/queueDepthAlert.js";
 
 /* ---- Per-task-type worker pools ----
  * FFmpeg exports (export_video) are CPU+memory-bound and compete with AI API calls
@@ -202,10 +52,6 @@ function detectOptimalConcurrency(): ConcurrencyBudget {
  */
 const activeExportJobs = new Set<string>(); // export_video — FFmpeg, CPU/memory-heavy
 const activeLlmJobs    = new Set<string>(); // all other task types — AI APIs, network-bound
-
-function isExportTask(taskType: string): boolean {
-  return taskType === 'export_video';
-}
 
 function getActivePool(taskType: string): Set<string> {
   return isExportTask(taskType) ? activeExportJobs : activeLlmJobs;
@@ -220,7 +66,6 @@ function totalActiveJobs(): number {
 }
 
 const _baselineBudget = detectOptimalConcurrency();
-const _baselineTotalSlots = _baselineBudget.total;
 
 // Auto-tune is now pool-aware: detectOptimalConcurrency returns sizes
 // for each pool separately rather than a single total to be split.
@@ -335,14 +180,6 @@ let realtimeStatus: string = 'unknown';
 let totalJobsProcessed = 0;
 let totalJobsFailed = 0;
 
-/** Maximum time (ms) to wait for active jobs to drain during shutdown.
- *  Default: 60 s. Anything still running past this is released back to
- *  'pending' so the new worker can re-claim within seconds (vs. the
- *  10-min stale-claim threshold). Resumable handlers (e.g.
- *  handleCinematicVideo) read their saved checkpoint and skip
- *  external-API re-submits, so the in-flight work isn't lost. */
-const SHUTDOWN_DRAIN_TIMEOUT_MS = parseInt(process.env.SHUTDOWN_DRAIN_TIMEOUT || "60000", 10); // 60s
-
 /* ---- Transient-error retry helpers ---- */
 // isTransientError and retryDelayMs imported from ./lib/retryClassifier.js
 
@@ -442,127 +279,12 @@ async function processJob(job: Job) {
         });
       }
 
-      if (job.task_type === 'generate_video' || (job.task_type as string) === 'generate_cinematic') {
-        const scriptResult = await handleGenerateVideo(job.id, job.payload, job.user_id);
-        // Merge result into finalPayload so both `payload` and `result` columns
-        // carry the output — the frontend polls `payload` (old builds) or
-        // `result` (new builds).
-        if (scriptResult && typeof scriptResult === "object") {
-          finalPayload = { ...finalPayload, ...scriptResult };
-        }
-      } else if (job.task_type === 'finalize_generation' as any) {
-        const finalizeResult = await handleFinalizePhase(job.id, job.payload as any, job.user_id);
-        finalPayload = { ...finalPayload, ...finalizeResult };
-      } else if (job.task_type === 'export_video' as any) {
-        const exportResult = await handleExportVideo(job.id, job.payload, job.user_id);
-        finalPayload.finalUrl = exportResult.url;
-      } else if (job.task_type === 'regenerate_image' as any) {
-        const regenResult = await handleRegenerateImage(job.id, job.payload as any, job.user_id);
-        finalPayload = { ...finalPayload, ...regenResult };
-      } else if (job.task_type === 'regenerate_audio' as any) {
-        const audioRegenResult = await handleRegenerateAudio(job.id, job.payload as any, job.user_id);
-        finalPayload = { ...finalPayload, ...audioRegenResult };
-      } else if (job.task_type === 'voice_preview' as any) {
-        const { handleVoicePreview } = await import("./handlers/handleVoicePreview.js");
-        const previewResult = await handleVoicePreview(job.id, job.payload as any, job.user_id);
-        finalPayload = { ...finalPayload, ...previewResult };
-      } else if (job.task_type === 'clone_voice' as any) {
-        // Fish Audio Instant Voice Cloning — receives a sample path,
-        // transcodes to MP3 via ffmpeg, POSTs to /model with
-        // enhance_audio_quality=true, persists the new voice id to
-        // user_voices with provider='fish'. Browser polls this job
-        // for the result.voiceId.
-        if (!job.user_id) throw new Error("clone_voice job is missing user_id");
-        const { handleCloneVoice } = await import("./handlers/handleCloneVoice.js");
-        const cloneResult = await handleCloneVoice(job.id, job.payload as any, job.user_id);
-        finalPayload = { ...finalPayload, ...cloneResult };
-      } else if (job.task_type === 'rename_voice' as any) {
-        // Friendly-name rename for a user's clone. PATCHes Fish's
-        // /model/{id} title + description, then mirrors the change
-        // into user_voices so MotionMax surfaces the new label
-        // everywhere on next refetch.
-        if (!job.user_id) throw new Error("rename_voice job is missing user_id");
-        const { handleRenameVoice } = await import("./handlers/handleRenameVoice.js");
-        const renameResult = await handleRenameVoice(job.id, job.payload as any, job.user_id);
-        finalPayload = { ...finalPayload, ...renameResult };
-      } else if (job.task_type === 'cinematic_video' as any) {
-        const result = await handleCinematicVideo(job.id, job.payload as any, job.user_id);
-        finalPayload = { ...finalPayload, ...result };
-      } else if (job.task_type === 'cinematic_video_edit' as any) {
-        // Text-prompt video edit via grok-imagine-video-edit. Replaces
-        // the legacy "regen 2 scenes from new keyframes" path used after
-        // a Nano Banana Pro image edit. Dynamic import keeps the main
-        // bundle slim — handler is only loaded when an edit job claims
-        // a slot.
-        const { handleCinematicVideoEdit } = await import("./handlers/handleCinematicVideoEdit.js");
-        const result = await handleCinematicVideoEdit(job.id, job.payload as any, job.user_id);
-        finalPayload = { ...finalPayload, ...result };
-      } else if (job.task_type === 'cinematic_audio' as any) {
-        const result = await handleCinematicAudio(job.id, job.payload as any, job.user_id);
-        finalPayload = { ...finalPayload, ...result };
-      } else if (job.task_type === 'master_audio' as any) {
-        // ONE continuous TTS track per generation for doc2video +
-        // cinematic. Replaces N per-scene cinematic_audio jobs — cuts
-        // Gemini quota burn from 15× to 1× and eliminates cross-scene
-        // tonality jumps. Handler back-fills every scene's audioUrl
-        // with the master URL so existing editor + export paths work.
-        const { handleMasterAudio } = await import("./handlers/handleMasterAudio.js");
-        const result = await handleMasterAudio(job.id, job.payload as any, job.user_id);
-        finalPayload = { ...finalPayload, ...result };
-      } else if (job.task_type === 'cinematic_image' as any) {
-        const result = await handleCinematicImage(job.id, job.payload as any, job.user_id);
-        finalPayload = { ...finalPayload, ...result };
-      } else if (job.task_type === 'undo_regeneration' as any) {
-        const result = await handleUndoRegeneration(job.id, job.payload as any, job.user_id);
-        finalPayload = { ...finalPayload, ...result };
-      } else if (job.task_type === 'generate_topics' as any) {
-        // Wave B1 (Autopost UI redesign) — produces 15 video topic
-        // ideas for the intake-form ScheduleBlock. The front-end
-        // polls this job (1.5s interval) and reads `result.topics`.
-        if (!job.user_id) throw new Error("generate_topics job is missing user_id");
-        const { handleGenerateTopics } = await import("./handlers/handleGenerateTopics.js");
-        const result = await handleGenerateTopics(job.id, job.payload as any, job.user_id);
-        finalPayload = { ...finalPayload, ...result };
-      } else if (job.task_type === 'autopost_render' as any) {
-        // Autopost orchestrator — the cron tick (autopost_tick) and
-        // user-driven Run-now (autopost_fire_now RPC) both insert
-        // autopost_render jobs. Without this branch they would sit
-        // pending forever. Walks the script→audio→images→[video]→
-        // finalize→export pipeline in one long-running task,
-        // returning finalUrl in result so autopost_on_video_completed
-        // fans out publish/email/library based on delivery_method.
-        if (!job.user_id) throw new Error("autopost_render job is missing user_id");
-        const { handleAutopostRun } = await import("./handlers/autopost/handleAutopostRun.js");
-        const result = await handleAutopostRun(job.id, job.payload as any, job.user_id);
-        finalPayload = { ...finalPayload, ...result };
-      } else if (job.task_type === 'autopost_rerender' as any) {
-        // Re-render an EXISTING autopost project (same script, fresh
-        // audio + images + videos + export). Triggered from the Run
-        // History "Regenerate" button. Skips the script phase entirely
-        // — the existing scene voiceovers/visualPrompts drive media
-        // regeneration directly.
-        if (!job.user_id) throw new Error("autopost_rerender job is missing user_id");
-        const { handleAutopostRerender } = await import("./handlers/autopost/handleAutopostRerender.js");
-        const result = await handleAutopostRerender(job.id, job.payload as any, job.user_id);
-        finalPayload = { ...finalPayload, ...result };
-      } else if (job.task_type === 'autopost_email_delivery' as any) {
-        // Wave E (Autopost delivery modes) — when an autopost render
-        // completes for a schedule with delivery_method='email', the
-        // autopost_on_video_completed trigger queues this job. The
-        // handler signs the rendered video URL and POSTs to Resend.
-        if (!job.user_id) throw new Error("autopost_email_delivery job is missing user_id");
-        const { handleAutopostEmailDelivery } = await import("./handlers/autopost/handleEmailDelivery.js");
-        const result = await handleAutopostEmailDelivery(job.id, job.payload as any, job.user_id);
-        finalPayload = { ...finalPayload, ...result };
-      } else {
-        await writeSystemLog({
-          jobId: job.id,
-          userId: job.user_id,
-          category: "system_warning",
-          eventType: "unknown_task",
-          message: `No handler for task type: ${job.task_type}`
-        });
-      }
+      // Per-task-type dispatch lives in worker/src/handlers/dispatch.ts.
+      // Each handler returns a partial result object; we merge into
+      // finalPayload so both the legacy `payload` column and the new
+      // `result` column carry the same data.
+      const patch = await dispatchJob(job);
+      finalPayload = { ...finalPayload, ...patch };
     }, { jobId: job.id });
 
     await writeSystemLog({
@@ -675,50 +397,7 @@ async function processJob(job: Job) {
 }
 
 let pollCount = 0;
-
-/* ---- Master kill-switch (admin tab → app_settings.master_kill_switch) ----
- * The Admin → Kill Switches UI flips a row in `app_settings` with key
- * `master_kill_switch` and value `{ enabled, message, set_by, set_at }`.
- * When enabled, this worker MUST stop claiming new generation jobs so the
- * site enters a true read-only maintenance state.
- *
- * Cached with a 10s TTL so the worker doesn't add a per-tick DB hit while
- * the switch is off — which is the steady-state. Logging is throttled to
- * once per 60s while the kill is engaged so the worker logs surface the
- * state without flooding when polling cadence is short.
- */
-const MASTER_KILL_TTL_MS = 10_000;
-let masterKillCache: { engaged: boolean; fetchedAt: number } = { engaged: false, fetchedAt: 0 };
 let lastMasterKillLogAt = 0;
-
-async function isMasterKillEngaged(): Promise<boolean> {
-  const now = Date.now();
-  if (now - masterKillCache.fetchedAt < MASTER_KILL_TTL_MS) {
-    return masterKillCache.engaged;
-  }
-  try {
-    const { data, error } = await supabase
-      .from("app_settings")
-      .select("value")
-      .eq("key", "master_kill_switch")
-      .maybeSingle();
-    if (error) {
-      // Fail-open on read errors — never let a flaky DB lookup wedge the
-      // worker. Log + use the previous cached value (defaults to false).
-      wlog.warn("master_kill_switch read failed", { error: error.message });
-      masterKillCache = { engaged: masterKillCache.engaged, fetchedAt: now };
-      return masterKillCache.engaged;
-    }
-    const v = (data as { value?: { enabled?: unknown } } | null)?.value ?? null;
-    const engaged = v !== null && v.enabled === true;
-    masterKillCache = { engaged, fetchedAt: now };
-    return engaged;
-  } catch (err) {
-    wlog.warn("master_kill_switch poll exception", { err: String(err) });
-    masterKillCache = { engaged: masterKillCache.engaged, fetchedAt: now };
-    return masterKillCache.engaged;
-  }
-}
 
 async function pollQueue() {
   // Do not pick up new jobs if shutting down
@@ -754,155 +433,11 @@ async function pollQueue() {
 
     if (exportAvailable <= 0 && llmAvailable <= 0) return;
 
-    // Stale-claim reaper. Render redeploys SIGTERM the worker mid-job;
-    // the claim-RPC stamps status='processing' but there's no
-    // heartbeat, so on restart those jobs are zombies — finalize stays
-    // pending behind a depends_on chain that will never resolve, and
-    // the autopost run sits at GENERATING 35% indefinitely.
-    //
-    // Once every ~1 min (12 polls @ 5s), reset any 'processing' job
-    // whose updated_at is older than its per-task-type stale window.
-    // The next claim_pending_job RPC re-acquires it.
-    //
-    // ── Window sizing rationale (B-NEW-18 fix, 2026-05-10) ──────────
-    // Previous global window was 30 min. cinematic_video's hard
-    // timeout is CINEMATIC_VIDEO_TIMEOUT_MS = 45 min and Hypereal's
-    // inner poll cap is ~47 min — i.e. legit cinematic_video runtime
-    // strictly EXCEEDED the reaper window. Result (2026-05-08
-    // incident pattern): a still-running cinematic_video job got
-    // reset to pending mid-Hypereal-poll, a sibling worker re-claimed
-    // and submitted a SECOND Hypereal render, and both the original
-    // worker and the sibling raced to write the scene URL —
-    // double-spending Hypereal credits and producing non-deterministic
-    // scene output.
-    //
-    // Fix: per-task-type stale windows that strictly dominate each
-    // task's legitimate runtime ceiling, with comfortable headroom.
-    //
-    //   cinematic_video : 90 min  (2× the 45 min hard timeout — covers
-    //                              Hypereal inner poll of 47 min and
-    //                              gives 2× P95 headroom per the audit
-    //                              spec)
-    //   export_video    : 120 min (1.33× EXPORT_JOB_TIMEOUT_MS = 90 min;
-    //                              ffmpeg + storage upload spike under
-    //                              concurrent export load)
-    //   default         : 90 min  (global floor — covers any
-    //                              future-added long task we forgot to
-    //                              enumerate; pure-LLM jobs still
-    //                              naturally fail at LLM_JOB_TIMEOUT_MS
-    //                              = 15 min so the wider reaper window
-    //                              just defers the cleanup, it doesn't
-    //                              hide bugs)
-    //
-    // autopost_render / autopost_rerender keep their fail-closed
-    // policy (any reap = mark failed). They run for up to 3.5 h
-    // legitimately, but resuming them double-spends so we hold the
-    // line at 90 min and accept a false-positive failure for any
-    // genuine orchestrator that happens to take longer than 90 min.
-    // The orchestrator's own per-poll heartbeat (handleAutopostRun
-    // heartbeatJob) keeps updated_at fresh while it's actually alive.
-    //
-    // Cadence: every 12 polls (~1 min @ 5s polling). Was 60 polls
-    // (5 min) but that was too slow for OOM-restart loops — the
-    // worker often died before the reaper ever ran. Faster cadence
-    // is cheap (a single bounded UPDATE per task-type bucket) and
-    // catches stragglers alongside startupDiagnostic.
-    const STALE_DEFAULT_MS         = 90 * 60 * 1000;   // 90 min global floor
-    const STALE_CINEMATIC_VIDEO_MS = 90 * 60 * 1000;   // 2× CINEMATIC_VIDEO_TIMEOUT_MS (45m)
-    const STALE_EXPORT_VIDEO_MS    = 120 * 60 * 1000;  // 1.33× EXPORT_JOB_TIMEOUT_MS (90m)
-    const STALE_ORCHESTRATOR_MS    = 90 * 60 * 1000;   // fail-closed cap
+    // Stale-claim reaper — runs every 12 polls (~1 min @ 5s polling).
+    // See worker/src/lib/staleClaimReaper.ts for per-task-type windows
+    // and fail-closed behavior for autopost orchestrators.
     if (pollCount % 12 === 0) {
-      const nowMs = Date.now();
-      const cutoffOrchestrator = new Date(nowMs - STALE_ORCHESTRATOR_MS).toISOString();
-      const cutoffCinematic    = new Date(nowMs - STALE_CINEMATIC_VIDEO_MS).toISOString();
-      const cutoffExport       = new Date(nowMs - STALE_EXPORT_VIDEO_MS).toISOString();
-      const cutoffDefault      = new Date(nowMs - STALE_DEFAULT_MS).toISOString();
-
-      // ── Fail-closed for autopost orchestrators ─────────────────────
-      // autopost_render / autopost_rerender are non-idempotent: they
-      // create projects, generate scripts, and submit child jobs. Re-
-      // running from scratch on a stale-revive double-spends Hypereal
-      // credits + LLM calls (verified 2026-05-08: a single revived
-      // run produced two full Uruguay scripts + image/video batches).
-      // Mark them failed instead so the user-visible run row stops
-      // showing GENERATING and we don't burn a second pass of credits.
-      // The handler's defensive check then catches any orchestrator
-      // that slipped past this gate.
-      const { data: orphanedOrchestrators, error: orchErr } = await supabase
-        .from("video_generation_jobs")
-        .update({
-          status: "failed",
-          error_message: "Orchestrator orphaned (worker died mid-pipeline). Failed-closed by stale-claim reaper to prevent duplicate spend on retry.",
-        })
-        .eq("status", "processing")
-        .lt("updated_at", cutoffOrchestrator)
-        .in("task_type", ["autopost_render", "autopost_rerender"])
-        .select("id, task_type, payload");
-      if (orchErr) {
-        console.warn(`[Worker] Orchestrator fail-closed reaper error: ${orchErr.message}`);
-      } else if (orphanedOrchestrators && orphanedOrchestrators.length > 0) {
-        // Mirror the failure to autopost_runs so the dashboard updates.
-        for (const j of orphanedOrchestrators as Array<{ payload: { autopost_run_id?: string } | null }>) {
-          const runId = j?.payload?.autopost_run_id;
-          if (typeof runId === "string") {
-            await supabase.from("autopost_runs")
-              .update({ status: "failed", error_summary: "Orchestrator orphaned by worker restart (refused to retry)", progress_pct: null })
-              .eq("id", runId)
-              .neq("status", "completed");
-          }
-        }
-        console.warn(`[Worker] Failed-closed ${orphanedOrchestrators.length} orphaned orchestrator(s)`);
-      }
-
-      // ── Revive everything else ─────────────────────────────────────
-      // Idempotent task types (cinematic_video has resume checkpoints,
-      // image gen / TTS are single API calls that retry cleanly).
-      // Per-task-type windows so we never reap a job that's still
-      // legitimately running its hard timeout.
-      const reaperBuckets: Array<{ taskTypes: string[] | null; cutoff: string; label: string; staleMin: number }> = [
-        { taskTypes: ["cinematic_video"],                   cutoff: cutoffCinematic, label: "cinematic_video",  staleMin: STALE_CINEMATIC_VIDEO_MS / 60000 },
-        { taskTypes: ["export_video"],                      cutoff: cutoffExport,    label: "export_video",     staleMin: STALE_EXPORT_VIDEO_MS    / 60000 },
-        { taskTypes: null /* everything else, exclusive */, cutoff: cutoffDefault,   label: "default",          staleMin: STALE_DEFAULT_MS         / 60000 },
-      ];
-
-      for (const bucket of reaperBuckets) {
-        let q = supabase
-          .from("video_generation_jobs")
-          .update({ status: "pending", worker_id: null })
-          .eq("status", "processing")
-          .lt("updated_at", bucket.cutoff);
-        if (bucket.taskTypes && bucket.taskTypes.length > 0) {
-          q = q.in("task_type", bucket.taskTypes);
-        } else {
-          // "default" bucket: anything that isn't an orchestrator and
-          // isn't covered by a more-specific bucket above.
-          q = q.not("task_type", "in", "(autopost_render,autopost_rerender,cinematic_video,export_video)");
-        }
-        const { data: reclaimed, error: reapErr } = await q.select("id, task_type");
-        if (reapErr) {
-          console.warn(`[Worker] Stale-claim reaper (${bucket.label}) failed: ${reapErr.message}`);
-          continue;
-        }
-        if (reclaimed && reclaimed.length > 0) {
-          const taskTypes = (reclaimed as Array<{ task_type: string }>).map((r) => r.task_type);
-          console.warn(
-            `[Worker] Stale-claim reaper revived ${reclaimed.length} zombie job(s) ` +
-            `[bucket=${bucket.label}, staleAfterMin=${bucket.staleMin}] ` +
-            `(types: ${[...new Set(taskTypes)].join(", ")}) — likely orphaned by a prior worker restart`,
-          );
-          await writeSystemLog({
-            category: "system_warning",
-            eventType: "stale_jobs_reaped",
-            message: `Reset ${reclaimed.length} stale processing job(s) to pending [${bucket.label}]`,
-            details: {
-              bucket: bucket.label,
-              count: reclaimed.length,
-              taskTypes: [...new Set(taskTypes)],
-              staleAfterMin: bucket.staleMin,
-            },
-          }).catch((e) => console.warn(`[Worker] reap log failed: ${(e as Error).message}`));
-        }
-      }
+      await runStaleClaimReaper();
     }
 
     const claimedJobs: any[] = [];
@@ -950,77 +485,15 @@ async function pollQueue() {
 
       if ((totalPending ?? 0) > queueDepthAlertThreshold && Date.now() - lastQueueAlert > QUEUE_ALERT_COOLDOWN_MS) {
         lastQueueAlert = Date.now();
-        const mem = process.memoryUsage();
-        console.warn(
-          `[Worker] ⚠️ QUEUE DEPTH ALERT: ${totalPending} pending jobs (threshold: ${queueDepthAlertThreshold}), ` +
-          `active: export=${activeExportJobs.size}/${MAX_EXPORT_SLOTS} llm=${activeLlmJobs.size}/${MAX_LLM_SLOTS}, ` +
-          `RSS: ${Math.round(mem.rss / 1048576)}MB`
-        );
-
-        // Two webhook channels supported:
-        //   - ALERT_WEBHOOK_URL: legacy generic alert sink (kept for
-        //     back-compat — anything that already consumes our older
-        //     `{ text, queue_depth }` payload).
-        //   - AUTOPOST_ALERT_WEBHOOK_URL: production-readiness alert
-        //     channel (Slack/Discord/PagerDuty incoming webhook). Uses
-        //     the structured `[MotionMax]`-prefixed payload spec'd in
-        //     the autopost ship plan so a single sink can fan out to
-        //     ops without per-channel parsing.
-        // Both are independent: setting one does not silence the other.
-        // If neither is set, both branches no-op silently — never let a
-        // missing webhook break a worker tick.
-        const legacyAlertUrl = process.env.ALERT_WEBHOOK_URL;
-        if (legacyAlertUrl) {
-          fetch(legacyAlertUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              text: `MotionMax queue depth alert: ${totalPending} jobs pending`,
-              queue_depth: totalPending,
-            }),
-          }).catch(() => {
-            // Silently ignore webhook failures — never let an alert break the worker
-          });
-        }
-
-        const autopostAlertUrl = process.env.AUTOPOST_ALERT_WEBHOOK_URL;
-        if (autopostAlertUrl) {
-          fetch(autopostAlertUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              text: `[MotionMax] Queue depth alert: ${totalPending} pending`,
-              details: {
-                pendingJobs: totalPending,
-                threshold: queueDepthAlertThreshold,
-                activeExportJobs: activeExportJobs.size,
-                activeLlmJobs: activeLlmJobs.size,
-                maxExportSlots: MAX_EXPORT_SLOTS,
-                maxLlmSlots: MAX_LLM_SLOTS,
-                rssMb: Math.round(mem.rss / 1048576),
-                workerId: WORKER_ID,
-              },
-            }),
-          }).catch(() => {
-            // Silently ignore webhook failures — never let an alert break the worker
-          });
-        }
-
-        writeSystemLog({
-          category: "system_warning",
-          eventType: "queue_depth_alert",
-          message: `Queue depth ${totalPending} exceeds threshold ${queueDepthAlertThreshold} — consider scaling workers`,
-          details: {
-            pendingJobs: totalPending,
-            activeExportJobs: activeExportJobs.size,
-            activeLlmJobs: activeLlmJobs.size,
-            maxExportSlots: MAX_EXPORT_SLOTS,
-            maxLlmSlots: MAX_LLM_SLOTS,
-            rssMb: Math.round(mem.rss / 1048576),
-            cpuCount: os.cpus().length,
-            totalMemMb: Math.round(os.totalmem() / 1048576),
-          },
-        }).catch((err) => { console.warn('[Worker] background log failed:', (err as Error).message); });
+        emitQueueDepthAlert({
+          totalPending: totalPending ?? 0,
+          threshold: queueDepthAlertThreshold,
+          activeExportJobs: activeExportJobs.size,
+          activeLlmJobs: activeLlmJobs.size,
+          maxExportSlots: MAX_EXPORT_SLOTS,
+          maxLlmSlots: MAX_LLM_SLOTS,
+          workerId: WORKER_ID,
+        });
       }
     }
 
@@ -1096,107 +569,9 @@ function getJobTimeoutMs(taskType: string): number {
   return isExportTask(taskType) ? EXPORT_JOB_TIMEOUT_MS : LLM_JOB_TIMEOUT_MS;
 }
 
-const MAX_RESTART_RETRIES = 3;
-
 /** Cooldown (ms) before first poll after recovering orphaned jobs.
  *  Prevents the crash-restart-pick-up-crash loop. */
 const STARTUP_COOLDOWN_MS = 10_000;
-
-/** Run once at startup to verify DB connectivity and rescue orphaned jobs.
- *  Tracks retries via payload._restartCount — after 3 restarts, marks as failed.
- *  Returns true if orphaned jobs were recovered (triggers cooldown). */
-async function startupDiagnostic(): Promise<boolean> {
-  let recoveredOrphans = false;
-  try {
-    const { count, error } = await supabase
-      .from("video_generation_jobs")
-      .select("id", { count: "exact", head: true });
-
-    if (error) {
-      console.error("[Worker] ❌ Startup diagnostic FAILED — cannot read video_generation_jobs:", error.code, error.message);
-      return false;
-    }
-    console.log(`[Worker] ✅ Startup diagnostic OK — video_generation_jobs has ${count ?? 0} total row(s)`);
-
-    // Find processing jobs that are safe to reclaim:
-    //   (a) rows this exact worker_id previously claimed — same
-    //       process restarting, or
-    //   (b) ANY row stale-stuck for >10 min — covers orphans from
-    //       a dead sibling replica or a previous Render instance
-    //       that was killed mid-job (OOM, deploy SIGTERM, crash).
-    // Sibling replicas update their jobs on every progress tick and
-    // finalize completes within minutes, so a 10-min staleness gate
-    // is well past any legit in-flight work — anything older is
-    // orphaned regardless of which worker_id is stamped on it.
-    //
-    // This was the root cause of the 2026-05-04 OOM-restart loop:
-    // the previous filter only matched rows the *current* worker_id
-    // had touched, so jobs orphaned by an OOM'd predecessor (with a
-    // different worker_id) sat as zombies forever, the per-job
-    // _restartCount never incremented, and MAX_RESTART_RETRIES never
-    // tripped to fail the offending job.
-    const staleThreshold = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-    const { data: processingRows } = await supabase
-      .from("video_generation_jobs")
-      .select("id, task_type, payload, created_at, updated_at")
-      .eq("status", "processing")
-      .or(`worker_id.eq.${WORKER_ID},updated_at.lt.${staleThreshold}`)
-      .order("created_at", { ascending: true });
-
-    if (processingRows && processingRows.length > 0) {
-      recoveredOrphans = true;
-      for (const row of processingRows as any[]) {
-        const payload = (row.payload && typeof row.payload === "object") ? row.payload : {};
-        const restartCount = (typeof payload._restartCount === "number" ? payload._restartCount : 0) + 1;
-
-        if (restartCount > MAX_RESTART_RETRIES) {
-          // Too many restarts — mark as failed to break the loop
-          console.error(`[Worker] 🛑 Job ${row.id} exceeded ${MAX_RESTART_RETRIES} restart retries → marking FAILED`);
-          await supabase
-            .from("video_generation_jobs")
-            .update({
-              status: "failed",
-              error_message: `Export failed after ${MAX_RESTART_RETRIES} worker restarts. The video may be too large for the current server. Please retry or try a shorter video.`,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", row.id);
-        } else {
-          // Reset to pending with incremented restart counter
-          console.warn(`[Worker] ⚠️  Orphaned job: ${row.id} (${row.task_type}) restart #${restartCount} → resetting to pending`);
-          await supabase
-            .from("video_generation_jobs")
-            .update({
-              status: "pending",
-              progress: 0,
-              error_message: null,
-              payload: { ...payload, _restartCount: restartCount },
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", row.id);
-        }
-      }
-    }
-
-    // Show pending jobs remaining after cleanup
-    const { data: pendingRows } = await supabase
-      .from("video_generation_jobs")
-      .select("id, status, task_type, created_at")
-      .eq("status", "pending")
-      .order("created_at", { ascending: true })
-      .limit(5);
-
-    if (pendingRows && pendingRows.length > 0) {
-      console.log(`[Worker] 📋 ${pendingRows.length} job(s) queued:`,
-        pendingRows.map((r: any) => ({ id: r.id, task_type: r.task_type, status: r.status }))
-      );
-    } else {
-      console.log("[Worker] 📋 No pending jobs at startup.");
-    }
-  } catch (err) {
-    console.error("[Worker] ❌ Startup diagnostic exception:", err);
-  }
-  return recoveredOrphans;
-}
 
 /** Subscribe to Supabase Realtime so new pending jobs trigger an immediate poll
  *  rather than waiting for the 30s fallback interval. */
@@ -1226,170 +601,25 @@ function subscribeToQueue() {
     });
 }
 
-/* ---- Graceful shutdown ---- */
-
-/**
- * Initiate graceful shutdown.
- * 1. Stop accepting new jobs (isShuttingDown = true)
- * 2. Unsubscribe realtime channel and stop fallback poll
- * 3. Wait for all active jobs to finish (with timeout)
- * 4. Close health server
- * 5. Exit
+/* ---- Graceful shutdown + signal/crash handlers ----
+ * gracefulShutdown / SIGTERM / SIGINT / uncaughtException / unhandledRejection
+ * live in worker/src/lib/lifecycle.ts. We pass closures over the entrypoint's
+ * module-level state (active pools, timers, realtime channel) so the
+ * extracted module can read/clear them without owning the state itself.
  */
-async function gracefulShutdown(signal: string) {
-  if (isShuttingDown) {
-    console.log(`[Worker] Already shutting down — ignoring duplicate ${signal}`);
-    return;
-  }
-
-  isShuttingDown = true;
-  const activeCount = totalActiveJobs();
-  console.log(`[Worker] 🛑 Received ${signal} — initiating graceful shutdown`);
-  console.log(`[Worker] Active jobs: ${activeCount} — will wait up to ${SHUTDOWN_DRAIN_TIMEOUT_MS / 1000}s for them to finish`);
-
-  // Stop all job intake
-  if (realtimeChannel) {
-    await supabase.removeChannel(realtimeChannel);
-    realtimeChannel = null;
-  }
-  if (fallbackPollTimer) {
-    clearInterval(fallbackPollTimer);
-    fallbackPollTimer = null;
-  }
-
-  await writeSystemLog({
-    category: "system_info",
-    eventType: "worker_shutdown_started",
-    message: `Graceful shutdown initiated by ${signal} — ${activeCount} active job(s)`,
-    details: { signal, activeJobCount: activeCount, activeJobIds: allActiveJobIds() },
-  });
-
-  // Wait for active jobs to drain
-  if (totalActiveJobs() > 0) {
-    const drainStart = Date.now();
-    const DRAIN_CHECK_INTERVAL = 2000;
-
-    await new Promise<void>((resolve) => {
-      const checkDrained = () => {
-        const elapsed = Date.now() - drainStart;
-
-        if (totalActiveJobs() === 0) {
-          console.log(`[Worker] ✅ All active jobs drained in ${Math.round(elapsed / 1000)}s`);
-          resolve();
-          return;
-        }
-
-        if (elapsed >= SHUTDOWN_DRAIN_TIMEOUT_MS) {
-          const stillActive = allActiveJobIds();
-          console.error(
-            `[Worker] ⚠️  Shutdown drain timeout after ${SHUTDOWN_DRAIN_TIMEOUT_MS / 1000}s — ` +
-            `${stillActive.length} job(s) still active: ${stillActive.join(", ")}. ` +
-            `Releasing them back to 'pending' so a sibling/successor worker can re-claim.`,
-          );
-          // Release the still-running jobs to 'pending' so the new worker
-          // instance picks them up within seconds via realtime, instead of
-          // waiting for the 10-min stale-claim reaper. Resumable handlers
-          // (handleCinematicVideo) consult their saved checkpoint and
-          // skip the external-API re-submit, preserving Hypereal credits.
-          // Race window: this old worker may finish a few more in-flight
-          // ms of work after release; the checkpoint mechanism makes that
-          // safe (last-write-wins on scene fields; no duplicate provider
-          // submissions because the new worker resumes polling).
-          (async () => {
-            try {
-              const { error: relErr } = await supabase
-                .from("video_generation_jobs")
-                .update({
-                  status: "pending",
-                  worker_id: null,
-                  error_message: null,
-                  updated_at: new Date().toISOString(),
-                })
-                .in("id", stillActive)
-                .eq("status", "processing");
-              if (relErr) {
-                console.error(`[Worker] Failed to release jobs on drain timeout:`, relErr.message);
-              } else {
-                console.log(`[Worker] ✅ Released ${stillActive.length} job(s) to 'pending' for fast hand-off`);
-              }
-            } catch (err) {
-              console.error(`[Worker] Exception releasing jobs:`, (err as Error).message);
-            }
-          })();
-          resolve();
-          return;
-        }
-
-        console.log(
-          `[Worker] Waiting for ${totalActiveJobs()} active job(s) to finish... ` +
-          `(${Math.round(elapsed / 1000)}s / ${SHUTDOWN_DRAIN_TIMEOUT_MS / 1000}s)`
-        );
-        setTimeout(checkDrained, DRAIN_CHECK_INTERVAL);
-      };
-
-      checkDrained();
-    });
-  }
-
-  // Close health server
-  await stopHealthServer();
-
-  await writeSystemLog({
-    category: "system_info",
-    eventType: "worker_shutdown_complete",
-    message: `Worker shutdown complete — processed ${totalJobsProcessed} jobs, ${totalJobsFailed} failed`,
-    details: { totalJobsProcessed, totalJobsFailed },
-  });
-
-  console.log(`[Worker] 👋 Shutdown complete. Total: ${totalJobsProcessed} processed, ${totalJobsFailed} failed.`);
-  process.exit(0);
-}
-
-/* ---- Signal handlers for graceful shutdown ---- */
-process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-process.on("SIGINT", () => gracefulShutdown("SIGINT"));
-
-// Intentional crash: capture to Sentry then exit so Render restarts the process.
-// Keeping the process alive after uncaught errors risks processing jobs in a corrupt state.
-process.on("uncaughtException", (err: Error) => {
-  console.error("[Worker] 💥 Uncaught exception — marking jobs failed and exiting:", err.message);
-  Sentry.captureException(err);
-  // Mark this worker's in-flight jobs as failed so they are not orphaned.
-  // Scope to WORKER_ID so sibling replicas' rows are not touched.
-  // Fire-and-forget: do not await — we must exit promptly so the orchestrator can restart.
-  supabase
-    .from("video_generation_jobs")
-    .update({ status: "failed", error_message: "Worker process crashed" })
-    .eq("status", "processing")
-    .eq("worker_id", WORKER_ID)
-    .then(() => process.exit(1), () => process.exit(1));
+const gracefulShutdown = makeGracefulShutdown({
+  workerId: WORKER_ID,
+  totalActiveJobs,
+  allActiveJobIds,
+  getRealtimeChannel: () => realtimeChannel,
+  clearRealtimeChannel: () => { realtimeChannel = null; },
+  getFallbackPollTimer: () => fallbackPollTimer,
+  clearFallbackPollTimer: () => { fallbackPollTimer = null; },
+  setShuttingDown: (v) => { isShuttingDown = v; },
+  isShuttingDown: () => isShuttingDown,
+  getTotalsSnapshot: () => ({ totalJobsProcessed, totalJobsFailed }),
 });
-process.on("unhandledRejection", (reason: unknown) => {
-  console.error("[Worker] 💥 Unhandled rejection — marking jobs failed and exiting:", reason);
-  const err = reason instanceof Error ? reason : new Error(String(reason));
-  Sentry.captureException(err);
-  // Mark this worker's in-flight jobs as failed so they are not orphaned.
-  supabase
-    .from("video_generation_jobs")
-    .update({ status: "failed", error_message: "Worker process crashed" })
-    .eq("status", "processing")
-    .eq("worker_id", WORKER_ID)
-    .then(() => process.exit(1), () => process.exit(1));
-});
-
-/**
- * Mask an API key for safe logging.
- * Only reveals total length and last 4 chars; never prints leading characters
- * to avoid accidental partial-key exposure in log aggregation services.
- */
-function maskKey(key: string | undefined): string {
-  if (!key) return "(NOT SET)";
-  const trimmed = key.trim();
-  if (trimmed.length === 0) return "(EMPTY)";
-  if (trimmed !== key) return `⚠️ HAS WHITESPACE — len=${trimmed.length} (trimmed)`;
-  const tail = trimmed.length > 4 ? trimmed.substring(trimmed.length - 4) : "****";
-  return `[SET, ${trimmed.length} chars, …${tail}]`;
-}
+registerProcessSignalHandlers(WORKER_ID, gracefulShutdown);
 
 /* ---- Start health server ---- */
 const workerStartedAt = Date.now();
@@ -1416,36 +646,8 @@ console.log(
   `Realtime + ${FALLBACK_POLL_INTERVAL_MS / 1000}s fallback poll.`
 );
 // Comprehensive startup banner — every external provider the worker
-// can talk to. Missing keys are surfaced here at boot instead of as
-// runtime throws inside a handler 5 minutes into a generation. We
-// don't EXIT on missing keys (some are optional / used only by
-// specific project types) — just log a warning so deploy logs make
-// the gap obvious.
-const PROVIDER_KEYS: Array<[string, string, 'required' | 'optional']> = [
-  ['HYPEREAL_API_KEY',     'Hypereal (image, ASR, video, edit)', 'required'],
-  ['REPLICATE_API_KEY',    'Replicate (fallback image, audio)',   'required'],
-  ['OPENROUTER_API_KEY',   'OpenRouter (LLM script)',             'required'],
-  ['ELEVENLABS_API_KEY',   'ElevenLabs TTS',                      'optional'],
-  ['SMALLEST_API_KEY',     'Smallest.ai TTS',                     'optional'],
-  ['GEMINI_API_KEY',       'Gemini Flash TTS',                    'optional'],
-  ['LYRIA_API_KEY',        'Lyria music generation',              'optional'],
-  ['LTX_API_KEY',          'LTX video',                           'optional'],
-  ['QWEN3_API_KEY',        'Qwen3 TTS',                           'optional'],
-  ['FISH_AUDIO_API_KEY',   'Fish Audio TTS',                      'optional'],
-  ['LEMONFOX_API_KEY',     'Lemonfox TTS',                        'optional'],
-];
-let missingRequired = 0;
-console.log(`[Worker] ── Provider key check ────────────────────────`);
-for (const [envName, label, requirement] of PROVIDER_KEYS) {
-  const key = process.env[envName];
-  const status = key ? `🔑 ${maskKey(key)}` : (requirement === 'required' ? '❌ MISSING (required)' : '○ not set (optional)');
-  if (!key && requirement === 'required') missingRequired++;
-  console.log(`[Worker]   ${envName.padEnd(22)} ${label.padEnd(40)} ${status}`);
-}
-console.log(`[Worker] ──────────────────────────────────────────────`);
-if (missingRequired > 0) {
-  console.warn(`[Worker] ⚠ ${missingRequired} REQUIRED provider key(s) missing — generations will fail until these are set.`);
-}
+// can talk to. See worker/src/lib/providerKeysBanner.ts.
+logProviderKeysBanner();
 
 // Initial concurrency override read before any polling — picks up admin
 // adjustments made while the worker was offline. Then keep polling every
@@ -1455,64 +657,20 @@ pollConcurrencyOverride().then(() => {
 });
 
 // ── Phase 10.4 — worker heartbeat writer ────────────────────────────
-// Every 15 s, UPSERT a row into worker_heartbeats so the admin
-// Performance tab can see this pod (concurrency / in-flight / memory /
-// CPU / version / uptime). Also polls our row's restart_requested
-// flag — if an admin clicked Restart in TabPerformance, we exit
-// cleanly and Render's supervisor cycles the pod.
+// See worker/src/lib/heartbeat.ts. Polls worker_heartbeats.restart_requested
+// each beat and triggers gracefulShutdown("ADMIN_RESTART") when the admin
+// clicks Restart in TabPerformance.
 const WORKER_STARTED_AT = new Date().toISOString();
-const HEARTBEAT_INTERVAL_MS = 15_000;
-async function writeHeartbeat(): Promise<void> {
-  try {
-    // Memory: prefer cgroup-aware container limit (set on Render),
-    // fall back to process RSS / host total. cpu_pct uses 1-min
-    // loadavg normalised by container CPU count — > 100 % is over-
-    // saturated, so the UI's >80 % warn threshold catches it early.
-    const memTotal = getContainerMemoryBytes();
-    const memUsed  = process.memoryUsage().rss;
-    const memoryPct = memTotal > 0 ? Math.min(100, (memUsed / memTotal) * 100) : 0;
-    const cpuCount = getContainerCpuCount();
-    const load1    = os.loadavg()[0];
-    const cpuPct   = cpuCount > 0 ? Math.min(999, (load1 / cpuCount) * 100) : 0;
+startHeartbeatWriter({
+  workerId: WORKER_ID,
+  workerStartedAt: WORKER_STARTED_AT,
+  totalActiveJobs,
+  getMaxConcurrentJobs: () => MAX_CONCURRENT_JOBS,
+  isShuttingDown: () => isShuttingDown,
+  onRestartRequested: () => { void gracefulShutdown("ADMIN_RESTART"); },
+});
 
-    const { data: row, error } = await supabase
-      .from("worker_heartbeats")
-      .upsert({
-        worker_id: WORKER_ID,
-        host: os.hostname(),
-        last_beat_at: new Date().toISOString(),
-        in_flight: totalActiveJobs(),
-        concurrency: MAX_CONCURRENT_JOBS,
-        memory_pct: Math.round(memoryPct * 10) / 10,
-        cpu_pct: Math.round(cpuPct * 10) / 10,
-        version: process.env.RENDER_GIT_COMMIT?.slice(0, 7) ?? process.env.npm_package_version ?? null,
-        started_at: WORKER_STARTED_AT,
-      }, { onConflict: "worker_id" })
-      .select("restart_requested")
-      .single();
-
-    if (error) {
-      console.warn(`[Heartbeat] write failed:`, error.message);
-      return;
-    }
-    if ((row as { restart_requested?: boolean } | null)?.restart_requested && !isShuttingDown) {
-      console.log(`[Worker] 🔄 restart_requested flag set by admin — initiating graceful shutdown`);
-      // Clear the flag so the new pod doesn't immediately restart again.
-      await supabase
-        .from("worker_heartbeats")
-        .update({ restart_requested: false })
-        .eq("worker_id", WORKER_ID);
-      void gracefulShutdown("ADMIN_RESTART");
-    }
-  } catch (err) {
-    console.warn(`[Heartbeat] exception:`, (err as Error).message);
-  }
-}
-// Fire once on boot so the row appears immediately, then on interval.
-void writeHeartbeat();
-setInterval(writeHeartbeat, HEARTBEAT_INTERVAL_MS);
-
-startupDiagnostic().then((hadOrphans) => {
+runStartupDiagnostic(WORKER_ID).then((hadOrphans) => {
   const startPolling = () => {
     subscribeToQueue();
     pollQueue();

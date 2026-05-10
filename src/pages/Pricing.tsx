@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Check, X, Loader2, Coins, Sparkles } from "lucide-react";
 import AppShell from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,7 @@ type PaidPlanId = Exclude<PlanId, "free">;
 
 export default function Pricing() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const { createCheckout } = useSubscription();
   const [pendingPlan, setPendingPlan] = useState<string | null>(null);
@@ -73,9 +74,30 @@ export default function Pricing() {
     setIsEU(isLikelyEUUser());
   }, []);
 
-  const handleSubscribe = async (planId: PaidPlanId) => {
+  const handleSubscribe = async (planId: PaidPlanId, cycleOverride?: CycleKey) => {
+    // C-2-1 (Hook B1): the autocheckout resumption path needs to pin
+    // the cycle the user originally chose pre-auth — passing it in
+    // explicitly avoids any race with `setCycle` state updates that
+    // haven't flushed yet by the time the post-auth `setTimeout` fires.
+    const effectiveCycle: CycleKey = cycleOverride ?? cycle;
     if (!user) {
-      navigate(`/auth?next=/pricing&plan=${planId}`);
+      // C-2-1 fix (Hook B1): preserve plan + cycle across the auth
+      // bounce so the most-expensive customer in the funnel doesn't
+      // get dumped on /app empty-handed after signup. The `next` URL
+      // points back at /pricing with an `autocheckout=<plan>_<cycle>`
+      // flag — when the now-signed-in user lands here, the auto-resume
+      // effect below picks it up. SessionStorage is a belt-and-
+      // suspenders backup that survives the email-confirmation hop.
+      try {
+        sessionStorage.setItem(
+          "mm_pending_checkout",
+          JSON.stringify({ planId, cycle: effectiveCycle }),
+        );
+      } catch { /* sessionStorage may be unavailable — query params still carry it */ }
+      const nextUrl = `/pricing?autocheckout=${encodeURIComponent(`${planId}_${effectiveCycle}`)}`;
+      navigate(
+        `/auth?mode=signup&next=${encodeURIComponent(nextUrl)}&plan=${encodeURIComponent(`${planId}_${effectiveCycle}`)}`,
+      );
       return;
     }
     // B-NEW-7 (Lens B) — emit paid_plan_selected BEFORE the EU
@@ -96,7 +118,7 @@ export default function Pricing() {
         : {};
       trackEvent("paid_plan_selected", {
         plan_id: planId,
-        cycle,
+        cycle: effectiveCycle,
         ...utmEvt,
       });
     } catch { /* analytics non-critical */ }
@@ -107,7 +129,7 @@ export default function Pricing() {
 
     const plan = PLANS[planId];
     const priceId =
-      cycle === "monthly" ? plan.getMonthlyPriceId() : plan.getYearlyPriceId();
+      effectiveCycle === "monthly" ? plan.getMonthlyPriceId() : plan.getYearlyPriceId();
 
     if (!priceId) {
       // The sync script hasn't been run yet — surface a clear message
@@ -119,7 +141,7 @@ export default function Pricing() {
       return;
     }
 
-    setPendingPlan(`${planId}-${cycle}`);
+    setPendingPlan(`${planId}-${effectiveCycle}`);
     try {
       const url = await createCheckout(priceId, "subscription", {
         euCoolingOffWaived: isEU ? euWaived : false,
@@ -132,6 +154,56 @@ export default function Pricing() {
       setPendingPlan(null);
     }
   };
+
+  // C-2-1 fix (Hook B1) — auto-resume checkout when a freshly-authed
+  // user lands on /pricing carrying an `?autocheckout=<plan>_<cycle>`
+  // flag (set by the pre-auth CTA), or when sessionStorage has the
+  // same intent (belt-and-suspenders for the email-confirmation hop).
+  // Runs once per session — `autocheckoutFiredRef` guards against
+  // double-fire on re-renders. Declared AFTER handleSubscribe so the
+  // closure captures the bound function, not a TDZ reference.
+  const autocheckoutFiredRef = useRef(false);
+  useEffect(() => {
+    if (!user || autocheckoutFiredRef.current) return;
+
+    const params = new URLSearchParams(location.search);
+    const queryFlag = params.get("autocheckout");
+    let stashed: { planId: PaidPlanId; cycle: CycleKey } | null = null;
+    try {
+      const raw = sessionStorage.getItem("mm_pending_checkout");
+      if (raw) stashed = JSON.parse(raw);
+    } catch { /* ignore */ }
+
+    let planId: PaidPlanId | null = null;
+    let targetCycle: CycleKey | null = null;
+    if (queryFlag) {
+      const [p, c] = queryFlag.split("_");
+      if ((p === "creator" || p === "studio") && (c === "monthly" || c === "yearly")) {
+        planId = p;
+        targetCycle = c;
+      }
+    } else if (stashed && (stashed.planId === "creator" || stashed.planId === "studio")) {
+      planId = stashed.planId;
+      targetCycle = stashed.cycle;
+    }
+
+    if (!planId || !targetCycle) return;
+
+    autocheckoutFiredRef.current = true;
+    try { sessionStorage.removeItem("mm_pending_checkout"); } catch { /* ignore */ }
+    if (queryFlag) {
+      window.history.replaceState({}, document.title, "/pricing");
+    }
+    if (targetCycle !== cycle) setCycle(targetCycle);
+
+    // EU users must still tick the cooling-off waiver — handleSubscribe
+    // will toast + return if needed. Pass the cycle explicitly so we
+    // don't race the setCycle state update.
+    const capturedPlan = planId;
+    const capturedCycle = targetCycle;
+    setTimeout(() => { void handleSubscribe(capturedPlan, capturedCycle); }, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, location.search]);
 
   return (
     <AppShell breadcrumb="Pricing">

@@ -9,7 +9,14 @@ import { useForceDarkMode } from "@/hooks/useForceDarkMode";
 import SeoHead from "@/components/landing/SeoHead";
 import FeatureCard from "@/components/landing/FeatureCard";
 import TrustIndicators from "@/components/landing/TrustIndicators";
-import { Testimonials } from "@/components/landing/Testimonials";
+// C-2-5 fix (Compass 2.1 + Herald + Hook C4) — Testimonials component
+// removed. Prior implementation rendered three quotes attributed only
+// to role categories ("Content Creators", "Social Media Managers",
+// "Learning & Development Teams") with no named source, photo, or
+// company — FTC §255 endorsement-rule exposure. A fake testimonial
+// section is worse than no testimonial section. Re-add the import +
+// mount only when verified testimonials (name, photo, company,
+// source URL or signed consent) are available.
 import FaqSection from "@/components/landing/FaqSection";
 import motionmaxLogo from "@/assets/motionmax-logo.webp";
 import styles from "./Landing.module.css";
@@ -502,8 +509,12 @@ export default function Landing() {
       {/* Before/After Comparison — time-saved metric */}
       <BeforeAfterComparison />
 
-      {/* Testimonials */}
-      <Testimonials />
+      {/* C-2-5 fix (Compass 2.1 + Herald + Hook C4): Testimonials
+          section removed. Quotes were attributed to role categories
+          only ("Content Creators", "Social Media Managers", etc.) with
+          no named source, photo, company, or written-consent record —
+          FTC §255 endorsement-rule violation. Re-mount <Testimonials />
+          only when verified, named, sourced content is available. */}
 
       {/* Pricing Section */}
       <LandingPricing onCtaClick={handleCta} />

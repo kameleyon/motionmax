@@ -20,7 +20,7 @@ interface AuthContextValue {
   session: Session | null;
   loading: boolean;
   isAuthenticated: boolean;
-  signUp: (email: string, password: string) => Promise<{ data: unknown; error: AuthError | null }>;
+  signUp: (email: string, password: string, postConfirmPath?: string) => Promise<{ data: unknown; error: AuthError | null }>;
   signIn: (email: string, password: string) => Promise<{ data: unknown; error: AuthError | null }>;
   signOut: () => Promise<{ error: AuthError | null }>;
   resetPassword: (email: string) => Promise<{ data: unknown; error: AuthError | null }>;
@@ -237,13 +237,30 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
   }, [user]);
 
-  const signUp = useCallback(async (email: string, password: string) => {
+  const signUp = useCallback(async (
+    email: string,
+    password: string,
+    /**
+     * C-2-1 fix (Hook B1) — optional post-confirmation redirect path
+     * (must start with `/`). Lets the Pricing CTA preserve plan + cycle
+     * intent across the email confirmation hop so the user lands back
+     * on /pricing with `?autocheckout=...` rather than /app empty-
+     * handed. Falls back to `/app` when omitted or invalid.
+     */
+    postConfirmPath?: string,
+  ) => {
     const redirectUrl = import.meta.env.VITE_APP_URL || window.location.origin;
+    const safePostConfirm =
+      postConfirmPath &&
+      postConfirmPath.startsWith("/") &&
+      !postConfirmPath.startsWith("//")
+        ? postConfirmPath
+        : "/app";
     const utmParams = getStoredUtm();
     const acceptedAtIso = new Date().toISOString();
     const { data, error } = await supabase.auth.signUp({
       options: {
-        emailRedirectTo: `${redirectUrl}/app`,
+        emailRedirectTo: `${redirectUrl}${safePostConfirm}`,
         data: {
           accepted_policy_version: CURRENT_POLICY_VERSION,
           accepted_policy_at: acceptedAtIso,

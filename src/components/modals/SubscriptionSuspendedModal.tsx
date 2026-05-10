@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { createScopedLogger } from "@/lib/logger";
 import { AlertTriangle, CreditCard, ExternalLink } from "lucide-react";
 import {
@@ -10,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useSubscription, CREDIT_PACKS } from "@/hooks/useSubscription";
 import { toast } from "sonner";
+import { isLikelyEUUser } from "@/lib/euCoolingOff";
 
 const log = createScopedLogger("SubscriptionModal");
 
@@ -25,6 +28,14 @@ export function SubscriptionSuspendedModal({
   status,
 }: SubscriptionSuspendedModalProps) {
   const { openCustomerPortal, createCheckout } = useSubscription();
+  const navigate = useNavigate();
+
+  // B-V1-5 / Comply L-B-05 — route EU users to /pricing for the binding
+  // cooling-off waiver before any new charge.
+  const [isEU, setIsEU] = useState(false);
+  useEffect(() => {
+    setIsEU(isLikelyEUUser());
+  }, []);
 
   const handleUpdatePayment = async () => {
     try {
@@ -36,6 +47,14 @@ export function SubscriptionSuspendedModal({
   };
 
   const handleBuyCredits = async () => {
+    if (isEU) {
+      onOpenChange(false);
+      navigate("/pricing");
+      toast.info(
+        "Tick the EU/UK cooling-off waiver on the pricing page to continue.",
+      );
+      return;
+    }
     try {
       await createCheckout(CREDIT_PACKS[300].priceId, "payment");
     } catch (error) {

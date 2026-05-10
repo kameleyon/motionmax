@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { createScopedLogger } from "@/lib/logger";
 import { AlertCircle, CreditCard, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -11,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useSubscription, CREDIT_PACKS } from "@/hooks/useSubscription";
 import { toast } from "sonner";
+import { isLikelyEUUser } from "@/lib/euCoolingOff";
 
 const log = createScopedLogger("UpgradeModal");
 
@@ -30,12 +32,29 @@ export function UpgradeRequiredModal({
   const navigate = useNavigate();
   const { createCheckout, plan } = useSubscription();
 
+  // B-V1-5 / Comply L-B-05 — EU/EEA/UK users cannot complete a quick credit
+  // top-up from this modal because there's no room here for the cooling-off
+  // waiver checkbox. We route them to /pricing where the binding consent UI
+  // lives instead.
+  const [isEU, setIsEU] = useState(false);
+  useEffect(() => {
+    setIsEU(isLikelyEUUser());
+  }, []);
+
   const handleUpgrade = () => {
     onOpenChange(false);
     navigate("/pricing");
   };
 
   const handleBuyCredits = async () => {
+    if (isEU) {
+      onOpenChange(false);
+      navigate("/pricing");
+      toast.info(
+        "Tick the EU/UK cooling-off waiver on the pricing page to continue.",
+      );
+      return;
+    }
     try {
       await createCheckout(CREDIT_PACKS[300].priceId, "payment");
     } catch (error) {

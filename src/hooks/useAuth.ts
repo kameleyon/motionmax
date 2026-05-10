@@ -3,6 +3,7 @@ import { User, Session, AuthError } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { trackEvent, getStoredUtm } from "@/hooks/useAnalytics";
 import { CURRENT_POLICY_VERSION } from "@/lib/policyVersion";
+import { LEGAL_VERSIONS } from "@/config/legal-versions";
 
 // ---------------------------------------------------------------------------
 // Auth context shape — mirrors the original useAuth() return value exactly so
@@ -19,6 +20,14 @@ interface AuthContextValue {
   signOut: () => Promise<{ error: AuthError | null }>;
   resetPassword: (email: string) => Promise<{ data: unknown; error: AuthError | null }>;
   updatePassword: (password: string) => Promise<{ data: unknown; error: AuthError | null }>;
+  /**
+   * B-NEW-13 (Comply L-B-02): true when the signed-in user's stored legal-doc
+   * versions do not match the current LEGAL_VERSIONS constants. The
+   * <TermsUpdateModal/> consumes this to prompt re-acceptance.
+   */
+  legalVersionMismatch: boolean;
+  /** Persists current LEGAL_VERSIONS to profiles, then clears legalVersionMismatch. */
+  acceptLegalVersions: () => Promise<{ error: Error | null }>;
 }
 
 // Sentinel — throws a helpful error if a consumer is rendered outside the provider.
@@ -37,6 +46,8 @@ export const AuthContext = createContext<AuthContextValue>({
   signOut: () => { throw new Error(MISSING_PROVIDER_ERROR); },
   resetPassword: () => { throw new Error(MISSING_PROVIDER_ERROR); },
   updatePassword: () => { throw new Error(MISSING_PROVIDER_ERROR); },
+  legalVersionMismatch: false,
+  acceptLegalVersions: () => { throw new Error(MISSING_PROVIDER_ERROR); },
 });
 
 // ---------------------------------------------------------------------------
@@ -52,6 +63,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  // B-NEW-13 (Comply L-B-02): tracks whether the signed-in user's stored
+  // legal-doc versions differ from the current LEGAL_VERSIONS. Drives
+  // <TermsUpdateModal/>. Reset to false on signOut.
+  const [legalVersionMismatch, setLegalVersionMismatch] = useState(false);
 
   useEffect(() => {
     // Restore session on mount — handles page refresh / deep links.
@@ -59,6 +74,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+      // Compare legal versions on session restore so a refresh on an
+      // already-signed-in tab still triggers the re-acceptance modal.
+      if (session?.user) {
+        void checkLegalVersionMismatch(session.user.id, setLegalVersionMismatch);
+      }
     }).catch((err) => {
       console.error("[Auth] Failed to restore session:", err);
       setLoading(false);
@@ -70,6 +90,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
+
+        if (_event === "SIGNED_OUT") {
+          setLegalVersionMismatch(false);
+        }
 
         // Persist accepted_policy_version to profiles on first sign-in after sign-up.
         // The column is NULL for legacy accounts — only write if metadata carries the version.
@@ -86,6 +110,41 @@ export function AuthProvider({ children }: AuthProviderProps) {
               .is("accepted_policy_version", null)
               .then(() => {});
           }
+
+          // B-NEW-13 (Comply L-B-02): on first sign-in after signup the
+          // signUp() call stamped user_metadata with the per-doc legal
+          // versions. Persist them to the new profiles columns so the
+          // server has authoritative proof of which version the user
+          // was bound to. Idempotent: ON CONFLICT-style upsert on the
+          // profile row that the signup trigger already created.
+          const tos = session.user.user_metadata?.tos_version_accepted as string | undefined;
+          const privacy = session.user.user_metadata?.privacy_version_accepted as string | undefined;
+          const aup = session.user.user_metadata?.aup_version_accepted as string | undefined;
+          const acceptedAt = (session.user.user_metadata?.legal_accepted_at as string | undefined)
+            ?? new Date().toISOString();
+          if (tos || privacy || aup) {
+            supabase
+              .from("profiles")
+              .update({
+                tos_version_accepted: tos ?? LEGAL_VERSIONS.tos,
+                tos_version_accepted_at: acceptedAt,
+                privacy_version_accepted: privacy ?? LEGAL_VERSIONS.privacy,
+                privacy_version_accepted_at: acceptedAt,
+                aup_version_accepted: aup ?? LEGAL_VERSIONS.aup,
+                aup_version_accepted_at: acceptedAt,
+              } as unknown as Record<string, unknown>)
+              .eq("user_id", session.user.id)
+              .then(({ error }) => {
+                if (error) {
+                  console.warn("[Auth] Failed to persist legal versions:", error.message);
+                }
+              });
+          }
+
+          // After persisting (or for returning users who just signed in),
+          // run the version-mismatch check. Backfilled '2026.02-v0' rows
+          // will mismatch and trigger the re-acceptance modal.
+          void checkLegalVersionMismatch(session.user.id, setLegalVersionMismatch);
 
           // Fire-and-forget welcome email on first sign-in. The edge fn
           // is idempotent (atomic claim on profiles.welcome_email_sent_at)
@@ -131,12 +190,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const signUp = useCallback(async (email: string, password: string) => {
     const redirectUrl = import.meta.env.VITE_APP_URL || window.location.origin;
     const utmParams = getStoredUtm();
+    const acceptedAtIso = new Date().toISOString();
     const { data, error } = await supabase.auth.signUp({
       options: {
         emailRedirectTo: `${redirectUrl}/app`,
         data: {
           accepted_policy_version: CURRENT_POLICY_VERSION,
-          accepted_policy_at: new Date().toISOString(),
+          accepted_policy_at: acceptedAtIso,
+          // B-NEW-13 (Comply L-B-02): stamp the binding version of EACH
+          // legal doc into user_metadata. The onAuthStateChange handler
+          // above persists these to profiles.{tos,privacy,aup}_version_accepted
+          // on first SIGNED_IN — that's the only point where we have an
+          // authenticated session that satisfies the profiles RLS policy.
+          tos_version_accepted: LEGAL_VERSIONS.tos,
+          privacy_version_accepted: LEGAL_VERSIONS.privacy,
+          aup_version_accepted: LEGAL_VERSIONS.aup,
+          legal_accepted_at: acceptedAtIso,
           ...utmParams,
         },
       },
@@ -181,6 +250,30 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return { data, error };
   }, []);
 
+  // B-NEW-13 (Comply L-B-02): user clicked "I accept" in <TermsUpdateModal/>.
+  // Persist the current LEGAL_VERSIONS as authoritative proof of binding,
+  // then clear the mismatch flag so the modal closes.
+  const acceptLegalVersions = useCallback(async (): Promise<{ error: Error | null }> => {
+    if (!user?.id) return { error: new Error("Not signed in") };
+    const acceptedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        tos_version_accepted: LEGAL_VERSIONS.tos,
+        tos_version_accepted_at: acceptedAt,
+        privacy_version_accepted: LEGAL_VERSIONS.privacy,
+        privacy_version_accepted_at: acceptedAt,
+        aup_version_accepted: LEGAL_VERSIONS.aup,
+        aup_version_accepted_at: acceptedAt,
+      } as unknown as Record<string, unknown>)
+      .eq("user_id", user.id);
+    if (!error) {
+      setLegalVersionMismatch(false);
+      try { trackEvent("legal_versions_accepted", LEGAL_VERSIONS as unknown as Record<string, string>); } catch { /* analytics non-critical */ }
+    }
+    return { error: error ? new Error(error.message) : null };
+  }, [user?.id]);
+
   const value: AuthContextValue = {
     user,
     session,
@@ -191,9 +284,47 @@ export function AuthProvider({ children }: AuthProviderProps) {
     signOut,
     resetPassword,
     updatePassword,
+    legalVersionMismatch,
+    acceptLegalVersions,
   };
 
   return createElement(AuthContext.Provider, { value }, children);
+}
+
+// ---------------------------------------------------------------------------
+// B-NEW-13 (Comply L-B-02) — version-mismatch helper.
+//
+// Reads the user's stored legal-doc versions from profiles and compares to
+// LEGAL_VERSIONS. Sets the mismatch flag when ANY of the three differ.
+// Failures are swallowed (best-effort): a network blip should not falsely
+// gate the user behind a re-acceptance modal.
+// ---------------------------------------------------------------------------
+async function checkLegalVersionMismatch(
+  userId: string,
+  setFlag: (v: boolean) => void,
+): Promise<void> {
+  try {
+    const { data, error } = await (supabase
+      .from("profiles")
+      .select("tos_version_accepted, privacy_version_accepted, aup_version_accepted")
+      .eq("user_id", userId)
+      .maybeSingle() as unknown as Promise<{
+        data: {
+          tos_version_accepted: string | null;
+          privacy_version_accepted: string | null;
+          aup_version_accepted: string | null;
+        } | null;
+        error: { message: string } | null;
+      }>);
+    if (error || !data) return;
+    const mismatch =
+      data.tos_version_accepted !== LEGAL_VERSIONS.tos
+      || data.privacy_version_accepted !== LEGAL_VERSIONS.privacy
+      || data.aup_version_accepted !== LEGAL_VERSIONS.aup;
+    setFlag(mismatch);
+  } catch {
+    // Best-effort. Do not gate the user on telemetry failures.
+  }
 }
 
 // ---------------------------------------------------------------------------

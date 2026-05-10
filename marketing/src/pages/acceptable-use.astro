@@ -1,14 +1,19 @@
 ---
 import LegalLayout from "../layouts/LegalLayout.astro";
+// B-NEW-13: shared single source of truth.
+import { LEGAL_VERSIONS, LEGAL_LAST_UPDATED_LABEL } from "@/config/legal-versions";
 ---
 
 <LegalLayout
   title="Acceptable Use Policy — MotionMax"
   description="MotionMax acceptable use policy. Understand the permitted and prohibited uses of our AI video generation platform."
   canonical="https://motionmax.io/acceptable-use"
+  documentVersion={LEGAL_VERSIONS.aup}
 >
   <h1 class="text-3xl font-bold tracking-tight text-foreground mb-2">Acceptable Use Policy</h1>
-  <p class="text-sm text-muted-foreground mb-10">Last updated: February 2026</p>
+  <p class="text-sm text-muted-foreground mb-10">
+    Version <span class="font-mono">{LEGAL_VERSIONS.aup}</span> &nbsp;·&nbsp; Last updated: {LEGAL_LAST_UPDATED_LABEL}
+  </p>
 
   <div class="space-y-8 text-muted-foreground">
 

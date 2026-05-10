@@ -9,6 +9,12 @@ interface Props {
   darkMode?: boolean;
   noIndex?: boolean;
   breadcrumbs?: { name: string; item: string }[];
+  /**
+   * B-NEW-13 (Comply L-B-02): when set, emits
+   * <meta name="document-version" content="..."/>
+   * so the binding version of legal pages is machine-readable.
+   */
+  documentVersion?: string;
 }
 
 const {
@@ -19,6 +25,7 @@ const {
   darkMode = false,
   noIndex = false,
   breadcrumbs,
+  documentVersion,
 } = Astro.props;
 
 const structuredData = breadcrumbs
@@ -48,6 +55,7 @@ const structuredData = breadcrumbs
       : <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
     }
     <link rel="canonical" href={canonical} />
+    {documentVersion && <meta name="document-version" content={documentVersion} />}
 
     <meta property="og:type" content="website" />
     <meta property="og:url" content={canonical} />

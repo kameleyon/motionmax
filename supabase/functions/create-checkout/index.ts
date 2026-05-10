@@ -1,4 +1,17 @@
-﻿import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+﻿// B-V1-5 (Comply L-B-05) — EU/EEA/UK 14-day right of withdrawal waiver.
+//
+// Directive 2011/83/EU Art. 16(m) (and UK Consumer Rights Act 2015 + CCRs 2013
+// reg. 37) require express, evidenced consent before a consumer loses the
+// 14-day cooling-off period for a digital service. The frontend captures the
+// consent via a checkbox (see src/lib/euCoolingOff.ts and src/pages/Pricing.tsx)
+// and passes `eu_cooling_off_waived: true` in this function's request body.
+// When that flag is true and we have an authenticated user, we stamp
+// `profiles.eu_cooling_off_waived_at` BEFORE creating the Stripe Checkout
+// Session so we have a server-side, timestamped record of the waiver. A DB
+// failure does NOT block checkout — the Stripe customer record itself
+// preserves the evidence and we can reconcile any missing rows out-of-band.
+
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
@@ -90,7 +103,7 @@ export async function handler(req: Request): Promise<Response> {
       });
     }
 
-    const { priceId, mode } = await req.json();
+    const { priceId, mode, eu_cooling_off_waived: euCoolingOffWaived } = await req.json();
     if (!priceId) throw new UserFacingError("Price ID is required");
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
@@ -117,6 +130,31 @@ export async function handler(req: Request): Promise<Response> {
     }
 
     logStep("Price validated", { priceId, productId, active: price.active, sku: productMeta.motionmax_sku });
+
+    // B-V1-5 — record the EU/EEA/UK 14-day cooling-off waiver, if the user
+    // ticked the binding checkbox on the frontend. We stamp the profile row
+    // BEFORE creating the Stripe Checkout Session so the evidence exists at
+    // the moment the consumer loses the statutory right. A DB failure here
+    // does NOT block checkout: the Stripe customer record will still carry
+    // the same intent (the user is about to pay) and we can reconcile any
+    // missing rows from Stripe webhooks out-of-band. See
+    // supabase/migrations/20260510120100_eu_cooling_off_waived_at.sql for
+    // the column definition and Directive 2011/83/EU Art. 16(m) citation.
+    if (euCoolingOffWaived === true && user?.id) {
+      const { error: waiverErr } = await supabaseClient
+        .from("profiles")
+        .update({ eu_cooling_off_waived_at: new Date().toISOString() })
+        .eq("id", user.id);
+      if (waiverErr) {
+        // Non-fatal — log so an operator can reconcile, but proceed.
+        logStep("EU cooling-off waiver persist FAILED (non-blocking)", {
+          userId: user.id,
+          error: waiverErr.message,
+        });
+      } else {
+        logStep("EU cooling-off waiver persisted", { userId: user.id });
+      }
+    }
 
     // Check for existing Stripe customer
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });

@@ -18,12 +18,12 @@
     "openai": "^4.77.0",
     "pdf-parse": "^2.4.5",
     "replicate": "^1.4.0",
-    "uuid": "^11.0.3"
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.9"
+    "vitest": "^3.2.4"
   }
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -13,6 +13,10 @@ import { CREDIT_PACKAGES } from "@/config/pricingPlans";
 import { Coins } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import {
+  isLikelyEUUser,
+  EU_COOLING_OFF_CONSENT_COPY,
+} from "@/lib/euCoolingOff";
 
 /** Pricing — mirrors the landing-page 3-up plan grid (Free / Creator
  *  / Studio) inside the dashboard chrome. Same visual language as
@@ -94,6 +98,15 @@ export default function Pricing() {
   const { createCheckout } = useSubscription();
   const [pendingPlan, setPendingPlan] = useState<string | null>(null);
 
+  // B-V1-5 / Comply L-B-05 — EU/EEA/UK 14-day cooling-off waiver.
+  // Detection runs post-mount so SSR/hydration matches; default unchecked
+  // per Directive 2011/83/EU Art. 16(m) (active opt-in required).
+  const [isEU, setIsEU] = useState(false);
+  const [euWaived, setEuWaived] = useState(false);
+  useEffect(() => {
+    setIsEU(isLikelyEUUser());
+  }, []);
+
   const handleCta = async (plan: Plan) => {
     if (!plan.priceId) {
       if (!user) navigate("/auth");
@@ -104,9 +117,15 @@ export default function Pricing() {
       navigate(`/auth?next=/pricing&plan=${plan.id}`);
       return;
     }
+    if (isEU && !euWaived) {
+      toast.error("Please confirm the EU/UK cooling-off waiver to continue.");
+      return;
+    }
     setPendingPlan(plan.id);
     try {
-      const url = await createCheckout(plan.priceId, "subscription");
+      const url = await createCheckout(plan.priceId, "subscription", {
+        euCoolingOffWaived: isEU ? euWaived : false,
+      });
       if (url) window.location.href = url;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -141,11 +160,48 @@ export default function Pricing() {
               key={plan.id}
               plan={plan}
               pending={pendingPlan === plan.id}
+              // Block paid plans for EU users until the cooling-off waiver
+              // is ticked. Free tier (priceId === null) is unaffected.
+              blocked={!!plan.priceId && isEU && !euWaived}
               onCta={() => handleCta(plan)}
               delay={i * 0.05}
             />
           ))}
         </div>
+
+        {/* EU/EEA/UK cooling-off waiver — Directive 2011/83/EU Art. 16(m).
+            Rendered only when the timezone heuristic flags an EU user; the
+            checkbox is unchecked by default and gates every Continue button
+            on this page (subscription + credit packs). The legal binding is
+            persisted server-side in profiles.eu_cooling_off_waived_at by
+            create-checkout before the Stripe session is created. */}
+        {isEU && (
+          <div
+            className="mt-8 mx-auto max-w-[640px] rounded-xl border border-[#E4C875]/30 bg-[#10151A] p-4 sm:p-5"
+            data-testid="eu-cooling-off-block"
+          >
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={euWaived}
+                onChange={(e) => setEuWaived(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[#14C8CC]"
+                aria-describedby="eu-cooling-off-copy"
+              />
+              <span
+                id="eu-cooling-off-copy"
+                className="text-[12.5px] leading-[1.55] text-[#ECEAE4]"
+              >
+                {EU_COOLING_OFF_CONSENT_COPY}
+              </span>
+            </label>
+            {!euWaived && (
+              <p className="text-[11px] text-[#8A9198] mt-2 ml-7">
+                You must tick this box to continue to checkout.
+              </p>
+            )}
+          </div>
+        )}
 
         <p className="text-center text-[12px] text-[#5A6268] mt-8">
           All plans include a 7-day money-back guarantee. Annual billing saves 20%.
@@ -177,14 +233,21 @@ export default function Pricing() {
                 perCredit={pack.perCredit}
                 priceId={pack.priceId}
                 pending={pendingPlan === `pack-${pack.credits}`}
+                blocked={isEU && !euWaived}
                 onCta={async () => {
                   if (!user) {
                     navigate(`/auth?next=/pricing`);
                     return;
                   }
+                  if (isEU && !euWaived) {
+                    toast.error("Please confirm the EU/UK cooling-off waiver to continue.");
+                    return;
+                  }
                   setPendingPlan(`pack-${pack.credits}`);
                   try {
-                    const url = await createCheckout(pack.priceId, "payment");
+                    const url = await createCheckout(pack.priceId, "payment", {
+                      euCoolingOffWaived: isEU ? euWaived : false,
+                    });
                     if (url) window.location.href = url;
                   } catch (err) {
                     const msg = err instanceof Error ? err.message : String(err);
@@ -205,7 +268,7 @@ export default function Pricing() {
 }
 
 function CreditPackCard({
-  credits, price, perCredit, pending, onCta, highlight, delay,
+  credits, price, perCredit, pending, onCta, highlight, delay, blocked = false,
 }: {
   credits: number;
   price: string;
@@ -215,6 +278,8 @@ function CreditPackCard({
   onCta: () => void;
   highlight: boolean;
   delay: number;
+  /** EU cooling-off waiver unchecked — visually disable + label the CTA. */
+  blocked?: boolean;
 }) {
   return (
     <motion.div
@@ -239,7 +304,9 @@ function CreditPackCard({
       <Button
         type="button"
         onClick={onCta}
-        disabled={pending}
+        disabled={pending || blocked}
+        aria-disabled={pending || blocked}
+        title={blocked ? "Confirm the EU/UK cooling-off waiver above to continue." : undefined}
         className={cn(
           "w-full mt-4 h-9 rounded-full font-semibold text-[12px] disabled:opacity-50",
           highlight
@@ -248,19 +315,25 @@ function CreditPackCard({
         )}
       >
         {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : null}
-        {pending ? "Opening checkout…" : "Buy pack"}
+        {pending
+          ? "Opening checkout…"
+          : blocked
+            ? "Confirm EU/UK waiver"
+            : "Buy pack"}
       </Button>
     </motion.div>
   );
 }
 
 function PlanCard({
-  plan, pending, onCta, delay,
+  plan, pending, onCta, delay, blocked = false,
 }: {
   plan: Plan;
   pending: boolean;
   onCta: () => void;
   delay: number;
+  /** EU cooling-off waiver unchecked — visually disable + label the CTA. */
+  blocked?: boolean;
 }) {
   // Per-accent border + glow tokens. Teal = popular Creator card,
   // gold = Studio, neutral = Free. Same hue family as the rest of
@@ -323,11 +396,17 @@ function PlanCard({
       <Button
         type="button"
         onClick={onCta}
-        disabled={pending}
+        disabled={pending || blocked}
+        aria-disabled={pending || blocked}
+        title={blocked ? "Confirm the EU/UK cooling-off waiver above to continue." : undefined}
         className={cn("w-full mt-6 h-10 rounded-full font-semibold text-[12.5px] disabled:opacity-50", ctaClass)}
       >
         {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : null}
-        {pending ? "Opening checkout…" : plan.cta}
+        {pending
+          ? "Opening checkout…"
+          : blocked
+            ? "Confirm EU/UK waiver above"
+            : plan.cta}
       </Button>
     </motion.div>
   );

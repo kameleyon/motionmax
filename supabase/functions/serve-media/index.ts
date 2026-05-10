@@ -16,6 +16,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { checkRateLimit } from "../_shared/rateLimit.ts";
 import { writeSystemLog } from "../_shared/log.ts";
+import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 
 const ALLOWED_BUCKETS = ["videos", "scene-images", "scene-videos", "audio"];
 
@@ -31,14 +32,17 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 export async function handler(req: Request): Promise<Response> {
+  const requestOrigin = req.headers.get("origin");
+
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "range, authorization",
-        "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-      },
-    });
+    // Use the shared allowlist instead of "*". Range + Authorization
+    // headers must still be advertised for byte-range video playback.
+    const preflight = handleCorsPreflightRequest(requestOrigin);
+    if (preflight.status !== 204) return preflight;
+    const headers = new Headers(preflight.headers);
+    headers.set("Access-Control-Allow-Headers", "range, authorization");
+    headers.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+    return new Response(null, { status: 204, headers });
   }
 
   // Require authentication
@@ -105,10 +109,15 @@ export async function handler(req: Request): Promise<Response> {
   const contentType = CONTENT_TYPES[ext] || "application/octet-stream";
   const filename = filePath.split("/").pop() || "file";
 
+  // Build response headers off the shared CORS helper so the 302 only
+  // advertises ACAO for allowlisted origins. Same-origin callers
+  // (motionmax.io rewrite path) don't need ACAO; cross-origin direct
+  // callers are gated by the allowlist.
+  const cors = getCorsHeaders(requestOrigin);
   const headers: Record<string, string> = {
+    ...cors,
     "Location": data.signedUrl,
     "Cache-Control": "private, max-age=120",
-    "Access-Control-Allow-Origin": "*",
   };
 
   if (download) {

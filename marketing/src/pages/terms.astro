@@ -1,18 +1,23 @@
 ---
 import LegalLayout from "../layouts/LegalLayout.astro";
+// B-NEW-13: shared single source of truth — same constant used by the React app.
+import { LEGAL_VERSIONS, LEGAL_LAST_UPDATED_LABEL } from "@/config/legal-versions";
 ---
 
 <LegalLayout
   title="Terms of Service — MotionMax"
   description="MotionMax terms of service. Review our usage policies, subscription terms, and user agreement."
   canonical="https://motionmax.io/terms"
+  documentVersion={LEGAL_VERSIONS.tos}
   breadcrumbs={[
     { name: "Home", item: "https://motionmax.io" },
     { name: "Terms of Service", item: "https://motionmax.io/terms" },
   ]}
 >
   <h1 class="text-3xl font-bold tracking-tight text-foreground mb-2">Terms of Service</h1>
-  <p class="text-sm text-muted-foreground mb-10">Last updated: February 2026</p>
+  <p class="text-sm text-muted-foreground mb-10">
+    Version <span class="font-mono">{LEGAL_VERSIONS.tos}</span> &nbsp;·&nbsp; Last updated: {LEGAL_LAST_UPDATED_LABEL}
+  </p>
 
   <div class="prose prose-sm max-w-none space-y-8 text-muted-foreground">
 

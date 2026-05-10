@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
@@ -9,6 +9,10 @@ import { PLAN_LIMITS } from "@/lib/planLimits";
 import { PackSelect, type PackOption } from "../_shared/PackSelect";
 import { fetchBillingOverview, callUpdatePackQuantity } from "../_shared/billingApi";
 import { num } from "../_shared/format";
+import {
+  isLikelyEUUser,
+  EU_COOLING_OFF_CONSENT_COPY,
+} from "@/lib/euCoolingOff";
 
 type Interval = "monthly" | "yearly";
 
@@ -26,6 +30,13 @@ export default function TabPlans() {
   const qc = useQueryClient();
   const [interval, setInterval] = useState<Interval>("yearly");
   const [pendingPlan, setPendingPlan] = useState<string | null>(null);
+
+  // B-V1-5 / Comply L-B-05 — EU/EEA/UK cooling-off waiver gate.
+  const [isEU, setIsEU] = useState(false);
+  const [euWaived, setEuWaived] = useState(false);
+  useEffect(() => {
+    setIsEU(isLikelyEUUser());
+  }, []);
 
   const overviewQ = useQuery({
     queryKey: ["billing", "overview"],
@@ -50,9 +61,15 @@ export default function TabPlans() {
     const sp = STRIPE_PLANS[planId];
     const priceId = interval === "yearly" ? sp.yearly.priceId : sp.monthly.priceId;
     if (!priceId) { toast.error("Plan not yet configured"); return; }
+    if (isEU && !euWaived) {
+      toast.error("Please confirm the EU/UK cooling-off waiver to continue.");
+      return;
+    }
     setPendingPlan(planId);
     try {
-      const url = await createCheckout(priceId, "subscription");
+      const url = await createCheckout(priceId, "subscription", {
+        euCoolingOffWaived: isEU ? euWaived : false,
+      });
       if (url) window.location.href = url;
     } catch (err) {
       toast.error("Could not start checkout", { description: err instanceof Error ? err.message : String(err) });
@@ -102,6 +119,43 @@ export default function TabPlans() {
           </button>
         </div>
       </div>
+
+      {/* EU/EEA/UK cooling-off waiver — Directive 2011/83/EU Art. 16(m).
+          Unchecked by default; gates Choose-plan buttons when EU detected. */}
+      {isEU && (
+        <div
+          data-testid="eu-cooling-off-block"
+          style={{
+            margin: "16px auto 0",
+            maxWidth: 640,
+            border: "1px solid rgba(228, 200, 117, 0.30)",
+            background: "#10151A",
+            borderRadius: 12,
+            padding: "14px 16px",
+          }}
+        >
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={euWaived}
+              onChange={(e) => setEuWaived(e.target.checked)}
+              style={{ marginTop: 3, width: 16, height: 16, accentColor: "#14C8CC", flexShrink: 0 }}
+              aria-describedby="tabplans-eu-cooling-off-copy"
+            />
+            <span
+              id="tabplans-eu-cooling-off-copy"
+              style={{ fontSize: 12.5, lineHeight: 1.55, color: "var(--ink, #ECEAE4)" }}
+            >
+              {EU_COOLING_OFF_CONSENT_COPY}
+            </span>
+          </label>
+          {!euWaived && (
+            <p style={{ fontSize: 11, color: "var(--ink-dim, #8A9198)", margin: "8px 0 0 28px" }}>
+              You must tick this box to continue to checkout.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="plans">
         {plans.map((plan) => {
@@ -158,19 +212,30 @@ export default function TabPlans() {
               ) : null}
 
               <div className="cta">
-                <button
-                  type="button"
-                  onClick={() => handleCta(plan.id)}
-                  disabled={isCur || pendingPlan === plan.id}
-                >
-                  {isCur ? `Current ${plan.name.toLowerCase()} plan` :
-                    plan.id === "free" ? "Free tier" :
-                    pendingPlan === plan.id ? "Opening checkout…" : `Choose ${plan.name}`}
-                  <span className="sub">
-                    {isCur ? "Manage above" :
-                      plan.id === "free" ? "Always free" : "Switch in one click"}
-                  </span>
-                </button>
+                {(() => {
+                  const blockedByEU = plan.id !== "free" && isEU && !euWaived;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => handleCta(plan.id)}
+                      disabled={isCur || pendingPlan === plan.id || blockedByEU}
+                      aria-disabled={isCur || pendingPlan === plan.id || blockedByEU}
+                      title={blockedByEU ? "Confirm the EU/UK cooling-off waiver above to continue." : undefined}
+                    >
+                      {isCur ? `Current ${plan.name.toLowerCase()} plan` :
+                        plan.id === "free" ? "Free tier" :
+                        pendingPlan === plan.id ? "Opening checkout…" :
+                        blockedByEU ? "Confirm EU/UK waiver above" :
+                        `Choose ${plan.name}`}
+                      <span className="sub">
+                        {isCur ? "Manage above" :
+                          plan.id === "free" ? "Always free" :
+                          blockedByEU ? "Required by EU/UK law" :
+                          "Switch in one click"}
+                      </span>
+                    </button>
+                  );
+                })()}
               </div>
 
               <ul className="feats">

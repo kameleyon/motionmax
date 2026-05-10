@@ -79,6 +79,7 @@ import { toast } from "sonner";
 // No external props needed — navigation is handled internally
 
 import { PLAN_LIMITS, normalizePlanName } from "@/lib/planLimits";
+import { isLikelyEUUser } from "@/lib/euCoolingOff";
 import { getProjectTypeMeta } from "@/lib/projectUtils";
 import { PLAN_PRICES } from "@/config/products";
 
@@ -118,6 +119,16 @@ export function AppSidebar() {
   // (triggered by workspace validation, not auto-shown on session start)
 
   const handleUpgradeNow = async () => {
+    // B-V1-5 / Comply L-B-05 — EU/EEA/UK users must consent to immediate
+    // performance via the binding checkbox on /pricing before any new charge.
+    if (isLikelyEUUser()) {
+      setUpgradeModalOpen(false);
+      navigate("/pricing");
+      toast.info(
+        "Tick the EU/UK cooling-off waiver on the pricing page to continue.",
+      );
+      return;
+    }
     try {
       setUpgradeLoading(true);
       await createCheckout(STRIPE_PLANS.starter.monthly.priceId, "subscription");

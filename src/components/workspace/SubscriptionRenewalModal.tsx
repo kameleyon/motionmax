@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useSubscription, CREDIT_PACKS } from "@/hooks/useSubscription";
 import { toast } from "sonner";
+import { isLikelyEUUser } from "@/lib/euCoolingOff";
 
 const DISMISS_KEY = "sub_alert_dismissed_until";
 const DISMISS_HOURS = 24;
@@ -81,6 +82,16 @@ export function SubscriptionRenewalModal() {
   };
 
   const handleTopUp = async () => {
+    // B-V1-5 / Comply L-B-05 — EU/EEA/UK users must consent to immediate
+    // performance via the checkbox on /pricing before any new charge.
+    if (isLikelyEUUser()) {
+      handleDismiss();
+      navigate("/pricing");
+      toast.info(
+        "Tick the EU/UK cooling-off waiver on the pricing page to continue.",
+      );
+      return;
+    }
     setTopUpLoading(true);
     try {
       await createCheckout(CREDIT_PACKS[300].priceId, "payment");

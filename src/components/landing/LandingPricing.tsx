@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/button";
 import { BillingToggle } from "@/components/pricing/BillingToggle";
 import { useExperiment } from "@/hooks/useExperiment";
 import { EXPERIMENTS } from "@/lib/experiments";
+import {
+  isLikelyEUUser,
+  EU_COOLING_OFF_CONSENT_COPY,
+} from "@/lib/euCoolingOff";
 
 // ─── Configurable urgency date ────────────────────────────────────────────────
 // Update this when you want to reset the countdown. Keep ~30 days out.
@@ -112,6 +116,15 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
   const isClient = useIsClient();
   // A/B: test ROI-focused headline vs current generic headline
   const pricingHeadlineVariant = useExperiment(EXPERIMENTS.landing_pricing_headline);
+
+  // B-V1-5 / Comply L-B-05 — advisory notice on the marketing surface so EU
+  // users see the cooling-off-waiver requirement BEFORE auth. The binding
+  // checkbox + server-side timestamp lives at /pricing (Pricing.tsx) where
+  // the actual checkout call happens; this CTA only routes to /auth.
+  const [isEU, setIsEU] = useState(false);
+  useEffect(() => {
+    setIsEU(isLikelyEUUser());
+  }, []);
 
   return (
     <section id="pricing" className="py-16 sm:py-24 bg-white/[0.02]">
@@ -271,6 +284,23 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
         <p className="text-center text-xs text-muted-foreground mt-6">
           🛡️ 7-day money-back guarantee on first subscription payment. No questions asked.
         </p>
+
+        {/* EU/EEA/UK cooling-off advisory — heuristic timezone match. Binding
+            checkbox + timestamp capture happens at /pricing before checkout. */}
+        {isEU && (
+          <div
+            className="mt-6 mx-auto max-w-[640px] rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs text-muted-foreground"
+            data-testid="eu-cooling-off-advisory"
+          >
+            <p className="font-medium text-foreground mb-1">
+              EU / UK customers — important notice
+            </p>
+            <p className="leading-relaxed">
+              {EU_COOLING_OFF_CONSENT_COPY} You will be asked to confirm this
+              at checkout.
+            </p>
+          </div>
+        )}
 
         {/* Credit packs note */}
         <p className="text-center text-xs text-muted-foreground mt-3">

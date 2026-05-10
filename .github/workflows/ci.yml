@@ -20,9 +20,9 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
         with:
           node-version: 20
           cache: npm
@@ -67,7 +67,7 @@ jobs:
 
       - name: Upload build artifact
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: dist
           path: dist/
@@ -78,8 +78,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
         with:
           node-version: 20
           cache: npm
@@ -100,8 +100,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: denoland/setup-deno@v1
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: denoland/setup-deno@11b63cf76cfcafb4e43f97b6cad24d8e8438f62d  # v1
         with:
           deno-version: v1.x
       - name: Generate Deno lock file
@@ -141,12 +141,12 @@ jobs:
     needs: [lint-test-build, worker-build, edge-functions-check]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
       # ── Supabase Migrations + Edge Functions ────────────────────────
       # Requires secrets: SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_ID, SUPABASE_DB_PASSWORD
       - name: Deploy edge functions
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@b60b5899c73b63a2d2d651b1e90db8d4c9392f51  # v1
         with:
           version: latest
       - name: Run database migrations
@@ -159,10 +159,16 @@ jobs:
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       - name: Push edge functions to Supabase
+        # JWT verification is configured per-function in supabase/config.toml
+        # ([functions.<name>].verify_jwt). Do NOT pass --no-verify-jwt here:
+        # it disables JWT verification globally, including for sensitive
+        # admin/* and delete-* functions. Public-by-design functions
+        # (stripe-webhook, resend-webhook, share-meta, get-shared-project,
+        # serve-media, health, announcement-click) opt out individually
+        # in config.toml and validate auth server-side themselves.
         run: |
           supabase functions deploy \
-            --project-ref "$SUPABASE_PROJECT_ID" \
-            --no-verify-jwt
+            --project-ref "$SUPABASE_PROJECT_ID"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}

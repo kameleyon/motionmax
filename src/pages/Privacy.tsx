@@ -1,10 +1,11 @@
 import { useNavigate } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
 import PageSeo from "@/components/PageSeo";
 import { ArrowLeft } from "lucide-react";
 import { ThemedLogo } from "@/components/ThemedLogo";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { CURRENT_POLICY_VERSION } from "@/lib/policyVersion";
+import { LEGAL_VERSIONS, LEGAL_LAST_UPDATED_LABEL } from "@/config/legal-versions";
 
 export default function Privacy() {
   const navigate = useNavigate();
@@ -20,6 +21,10 @@ export default function Privacy() {
           { name: "Privacy Policy", item: "https://motionmax.io/privacy" },
         ]}
       />
+      {/* B-NEW-13 (Comply L-B-02): document-version meta — see Terms.tsx. */}
+      <Helmet>
+        <meta name="document-version" content={LEGAL_VERSIONS.privacy} />
+      </Helmet>
       <header className="sticky top-0 z-50 border-b border-border/30 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
@@ -37,7 +42,7 @@ export default function Privacy() {
       <main className="mx-auto max-w-3xl px-4 sm:px-6 py-12 sm:py-16">
         <h1 className="text-3xl font-bold tracking-tight text-foreground mb-2">Privacy Policy</h1>
         <p className="text-sm text-muted-foreground mb-10">
-          Last updated: April 2026 &nbsp;·&nbsp; Version <span className="font-mono">{CURRENT_POLICY_VERSION}</span>
+          Version <span className="font-mono">{LEGAL_VERSIONS.privacy}</span> &nbsp;·&nbsp; Last updated: {LEGAL_LAST_UPDATED_LABEL}
         </p>
 
         <div className="prose prose-sm max-w-none space-y-8 text-muted-foreground">

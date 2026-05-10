@@ -1,8 +1,10 @@
 import { useNavigate } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemedLogo } from "@/components/ThemedLogo";
 import PageSeo from "@/components/PageSeo";
+import { LEGAL_VERSIONS, LEGAL_LAST_UPDATED_LABEL } from "@/config/legal-versions";
 
 export default function AcceptableUse() {
   const navigate = useNavigate();
@@ -13,6 +15,10 @@ export default function AcceptableUse() {
         description="MotionMax acceptable use policy. Understand the permitted and prohibited uses of our AI video generation platform."
         canonical="https://motionmax.io/acceptable-use"
       />
+      {/* B-NEW-13 (Comply L-B-02): document-version meta. */}
+      <Helmet>
+        <meta name="document-version" content={LEGAL_VERSIONS.aup} />
+      </Helmet>
       <header className="sticky top-0 z-50 border-b border-border/30 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-3xl items-center gap-4 px-4 sm:px-6">
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="rounded-lg">
@@ -24,7 +30,9 @@ export default function AcceptableUse() {
       <main className="mx-auto max-w-3xl px-4 sm:px-6 py-10 space-y-8">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Acceptable Use Policy</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Last updated: February 2026</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Version <span className="font-mono">{LEGAL_VERSIONS.aup}</span> &nbsp;·&nbsp; Last updated: {LEGAL_LAST_UPDATED_LABEL}
+          </p>
         </div>
 
         <section className="space-y-3">

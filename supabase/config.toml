@@ -1,5 +1,19 @@
 project_id = "ayjbvcikuwknqdrpsdmj"
 
+# ──────────────────────────────────────────────────────────────────────
+# Per-function JWT verification policy.
+#
+# Default platform behavior is verify_jwt = true. We list every function
+# explicitly so the security posture is auditable in one place — no
+# silent inheritance for sensitive endpoints.
+#
+# Removing a verify_jwt block effectively defaults the function to
+# JWT-required. Setting verify_jwt = false should ONLY happen for
+# functions that validate auth server-side via another mechanism
+# (Stripe signature, svix signature, service-role key, signed URL,
+# bot-crawler share endpoints). Each such exception is annotated.
+# ──────────────────────────────────────────────────────────────────────
+
 # ── Authenticated functions (require valid JWT) ──
 [functions.generate-video]
 verify_jwt = true
@@ -22,27 +36,94 @@ verify_jwt = true
 [functions.clone-voice]
 verify_jwt = true
 
+[functions.clone-voice-fish]
+verify_jwt = true
+
 [functions.delete-voice]
+verify_jwt = true
+
+[functions.delete-voice-fish]
+verify_jwt = true
+
+[functions.delete-account]
 verify_jwt = true
 
 [functions.admin-stats]
 verify_jwt = true
 
-[functions.migrate-storage]
+[functions.admin-force-signout]
+verify_jwt = true
+
+[functions.admin-hard-delete-user]
+verify_jwt = true
+
+[functions.admin-send-newsletter]
+verify_jwt = true
+
+[functions.admin-send-reset-link]
+verify_jwt = true
+
+[functions.list-invoices]
+verify_jwt = true
+
+[functions.update-pack-quantity]
+verify_jwt = true
+
+[functions.pause-subscription]
+verify_jwt = true
+
+[functions.cancel-with-reason]
+verify_jwt = true
+
+[functions.notify-signup-welcome]
+verify_jwt = true
+
+[functions.notify-user-of-message]
+verify_jwt = true
+
+[functions.submit-support-ticket]
 verify_jwt = true
 
 [functions.export-my-data]
 verify_jwt = true
 
+[functions.migrate-storage]
+verify_jwt = true
+
+[functions.refresh-project-thumbnails]
+verify_jwt = true
+
 # ── Public functions (no JWT required) ──
+# Each MUST validate auth server-side via the noted mechanism.
+
 [functions.stripe-webhook]
+# anon access OK; validates Stripe-Signature HMAC server-side via stripe.webhooks.constructEvent
+verify_jwt = false
+
+[functions.resend-webhook]
+# anon access OK; validates svix-signature HMAC server-side (verifySvixSignature)
 verify_jwt = false
 
 [functions.get-shared-project]
+# anon access OK; only returns rows where project_shares.is_public = true (RLS-enforced)
 verify_jwt = false
 
 [functions.share-meta]
+# anon access OK; bot-crawler OG-tag endpoint, returns only public share metadata
 verify_jwt = false
 
 [functions.serve-media]
+# anon access OK; returns signed Supabase Storage URLs gated by share token in query
+verify_jwt = false
+
+[functions.health]
+# anon access OK; uptime probe for external monitors (UptimeRobot, BetterStack)
+verify_jwt = false
+
+[functions.announcement-click]
+# anon access OK; redirect tracker invoked by browser navigation (no Authorization header), validates UUID + http(s)-only redirect target
+verify_jwt = false
+
+[functions.drain-deletion-tasks]
+# anon access OK; cron-only entry, validates Authorization == SUPABASE_SERVICE_ROLE_KEY server-side
 verify_jwt = false

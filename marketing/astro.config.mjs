@@ -1,17 +1,15 @@
 import { defineConfig } from "astro/config";
-import tailwind from "@astrojs/tailwind";
 
 export default defineConfig({
   output: "static",
   outDir: "./dist",
   // Share root public/ assets (favicon, logo, etc.)
   publicDir: "../public",
-  integrations: [
-    tailwind({
-      configFile: "./tailwind.config.cjs",
-      applyBaseStyles: false,
-    }),
-  ],
+  // Tailwind v3 is wired via PostCSS (postcss.config.cjs) and the
+  // global stylesheet imported in src/layouts/BaseLayout.astro.
+  // The @astrojs/tailwind integration was removed during the Astro 6
+  // upgrade because it does not yet support Astro v6 (peer pinned to <=5).
+  integrations: [],
   build: {
     // Generates /terms/index.html, /privacy/index.html etc.
     format: "directory",

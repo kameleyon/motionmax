@@ -1,15 +1,26 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
 import { TOPUP_SKUS, tieredRate, closestSkuFor } from "@/config/billingProducts";
 import { num } from "../_shared/format";
+import {
+  isLikelyEUUser,
+  EU_COOLING_OFF_CONSENT_COPY,
+} from "@/lib/euCoolingOff";
 
 export default function TabTopup() {
   const { user } = useAuth();
   const { createCheckout } = useSubscription();
   const [selectedCredits, setSelectedCredits] = useState<number>(TOPUP_SKUS[1].credits);
   const [pending, setPending] = useState(false);
+
+  // B-V1-5 / Comply L-B-05 — EU/EEA/UK cooling-off waiver gate.
+  const [isEU, setIsEU] = useState(false);
+  const [euWaived, setEuWaived] = useState(false);
+  useEffect(() => {
+    setIsEU(isLikelyEUUser());
+  }, []);
 
   const tile = useMemo(
     () => TOPUP_SKUS.find((t) => t.credits === selectedCredits) ?? null,
@@ -27,10 +38,16 @@ export default function TabTopup() {
 
   async function buy() {
     if (!user) { toast.error("Please sign in"); return; }
+    if (isEU && !euWaived) {
+      toast.error("Please confirm the EU/UK cooling-off waiver to continue.");
+      return;
+    }
     setPending(true);
     try {
       // Slider amounts that don't match a SKU map up to the closest-up SKU.
-      const url = await createCheckout(sku.priceId, "payment");
+      const url = await createCheckout(sku.priceId, "payment", {
+        euCoolingOffWaived: isEU ? euWaived : false,
+      });
       if (url) window.location.href = url;
     } catch (err) {
       toast.error("Could not start checkout", { description: err instanceof Error ? err.message : String(err) });
@@ -96,8 +113,43 @@ export default function TabTopup() {
         <div className="ticks">
           <span>500</span><span>5K</span><span>20K</span><span>50K</span><span>100K</span>
         </div>
+        {/* EU/EEA/UK cooling-off waiver — Directive 2011/83/EU Art. 16(m). */}
+        {isEU && (
+          <div
+            data-testid="eu-cooling-off-block"
+            style={{
+              marginTop: 18,
+              border: "1px solid rgba(228, 200, 117, 0.30)",
+              background: "rgba(255,255,255,.02)",
+              borderRadius: 12,
+              padding: "12px 14px",
+            }}
+          >
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={euWaived}
+                onChange={(e) => setEuWaived(e.target.checked)}
+                style={{ marginTop: 3, width: 16, height: 16, accentColor: "#14C8CC", flexShrink: 0 }}
+                aria-describedby="topup-eu-cooling-off-copy"
+              />
+              <span
+                id="topup-eu-cooling-off-copy"
+                style={{ fontSize: 12.5, lineHeight: 1.55, color: "var(--ink, #ECEAE4)" }}
+              >
+                {EU_COOLING_OFF_CONSENT_COPY}
+              </span>
+            </label>
+          </div>
+        )}
+
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18 }}>
-          <button type="button" className="btn-cyan" onClick={buy} disabled={pending}>
+          <button
+            type="button"
+            className="btn-cyan"
+            onClick={buy}
+            disabled={pending || (isEU && !euWaived)}
+          >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
               <path d="M5 12h14M13 6l6 6-6 6" />
             </svg>

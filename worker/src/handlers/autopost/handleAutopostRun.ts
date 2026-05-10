@@ -179,7 +179,8 @@ const SCRIPT_TIMEOUT_MS = 12 * 60 * 1000;
 // Under Hypereal queue pressure each cinematic scene can spend up to ~6 min in
 // 429 backoff alone, so a 15-scene job at llm-pool=3 can legitimately need
 // 45+ min. 60 min gives headroom; the stale-claim reaper still covers genuine
-// worker death at STALE_PROCESSING_MS = 30 min.
+// worker death at the per-task-type windows (90 min for orchestrators / cinematic_video,
+// 120 min for export_video — see STALE_*_MS in index.ts pollQueue).
 const PHASE_TIMEOUT_MS = 60 * 60 * 1000;
 const EXPORT_TIMEOUT_MS = 15 * 60 * 1000;
 
@@ -201,8 +202,9 @@ async function setRunProgress(runId: string, pct: number): Promise<void> {
  * Liveness heartbeat for the autopost_render coordinator job.
  *
  * The worker's stale-claim reaper (index.ts pollQueue) resets any
- * 'processing' job whose updated_at is older than STALE_PROCESSING_MS
- * (30 min) back to 'pending'. autopost_render is a coordinator that
+ * 'processing' job whose updated_at is older than its per-task-type
+ * stale window (90 min for autopost orchestrators — fail-closed)
+ * back to 'pending'. autopost_render is a coordinator that
  * legitimately spends 10-30 min waiting on its child jobs (script,
  * audio, images, videos, finalize, export) without doing any DB work
  * itself — so its updated_at stays frozen at claim time and the reaper
@@ -282,8 +284,9 @@ async function waitForJobWithSubProgress(
   const deadline = Date.now() + timeoutMs;
   let lastReportedDone = 0;
   // Heartbeat on every poll iteration. With POLL_INTERVAL_MS = 5_000ms
-  // and STALE_PROCESSING_MS = 30 min on the worker reaper, even
-  // missing every other heartbeat (DB blip) leaves a wide safety margin.
+  // and the orchestrator's per-task-type stale window of 90 min on the
+  // worker reaper (fail-closed), even missing many consecutive
+  // heartbeats (DB blip) leaves a wide safety margin.
   while (Date.now() < deadline) {
     if (coordinatorJobId) await heartbeatJob(coordinatorJobId);
     // Sub-progress poll. Skipped when there are no sub-jobs to track

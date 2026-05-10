@@ -12,6 +12,7 @@ import {
   type ValidationResult
 } from "@/lib/planLimits";
 import { createScopedLogger } from "@/lib/logger";
+import { isLikelyEUUser, EUCoolingOffConsentRequired } from "@/lib/euCoolingOff";
 
 const log = createScopedLogger("Subscription");
 
@@ -197,16 +198,31 @@ export function useSubscription() {
     await refetch();
   }, [refetch]);
 
-  const createCheckout = useCallback(async (priceId: string, mode: "subscription" | "payment" = "subscription") => {
+  const createCheckout = useCallback(async (
+    priceId: string,
+    mode: "subscription" | "payment" = "subscription",
+    options?: { euCoolingOffWaived?: boolean },
+  ) => {
     if (!session?.access_token) {
       throw new Error("Please sign in to continue");
+    }
+
+    // EU/EEA/UK Directive 2011/83/EU Art. 16(m): for digital services, the
+    // consumer keeps a 14-day right of withdrawal UNLESS they have given
+    // explicit prior consent to immediate performance AND acknowledged loss
+    // of the withdrawal right. We surface a consent checkbox in the UI
+    // (Pricing/TabPlans/landing). If a caller forgets to wire it through,
+    // throw a typed error so the UI can prompt rather than silently bypass.
+    const euCoolingOffWaived = options?.euCoolingOffWaived === true;
+    if (isLikelyEUUser() && !euCoolingOffWaived) {
+      throw new EUCoolingOffConsentRequired();
     }
 
     const { data, error } = await supabase.functions.invoke("create-checkout", {
       headers: {
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: { priceId, mode },
+      body: { priceId, mode, eu_cooling_off_waived: euCoolingOffWaived },
     });
 
     if (error) throw error;

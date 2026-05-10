@@ -10,6 +10,7 @@ import { AdminRoute } from "@/components/AdminRoute";
 import { AdminOnlyRoute } from "@/components/auth/AdminOnlyRoute";
 import { SubscriptionRenewalModal } from "@/components/workspace/SubscriptionRenewalModal";
 import { V2AnnouncementModal } from "@/components/announcements/V2AnnouncementModal";
+import { TermsUpdateModal } from "@/components/modals/TermsUpdateModal";
 import { lazy, Suspense } from "react";
 import { GlobalErrorBoundary } from "./components/GlobalErrorBoundary";
 import { RouteErrorBoundary } from "./components/RouteErrorBoundary";
@@ -99,6 +100,12 @@ const App = () => (
               checks "Don't show this again" (per-user flag on profiles).
               Self-skips on /, /auth, /share/*, /legal/*. */}
           <V2AnnouncementModal />
+          {/* B-NEW-13 (Comply L-B-02): re-acceptance modal triggered when
+              the signed-in user's stored legal-doc versions don't match
+              LEGAL_VERSIONS in src/config/legal-versions.ts. Mounted
+              globally so it catches the user at the next authenticated
+              surface after a ToS/Privacy/AUP version bump. */}
+          <TermsUpdateModal />
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/auth" element={<Auth />} />

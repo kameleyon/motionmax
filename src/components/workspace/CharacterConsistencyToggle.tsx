@@ -1,6 +1,8 @@
 import { createScopedLogger } from "@/lib/logger";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Lock, Users, Crown, Info } from "lucide-react";
+import { isLikelyEUUser } from "@/lib/euCoolingOff";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -24,6 +26,7 @@ interface CharacterConsistencyToggleProps {
 
 export function CharacterConsistencyToggle({ enabled, onToggle }: CharacterConsistencyToggleProps) {
   const { plan, createCheckout } = useSubscription();
+  const navigate = useNavigate();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -59,6 +62,16 @@ export function CharacterConsistencyToggle({ enabled, onToggle }: CharacterConsi
   };
 
   const handleUpgrade = async () => {
+    // B-V1-5 / Comply L-B-05 — EU/EEA/UK users must consent to immediate
+    // performance via the binding checkbox on /pricing before any new charge.
+    if (isLikelyEUUser()) {
+      setShowUpgradeModal(false);
+      navigate("/pricing");
+      toast.info(
+        "Tick the EU/UK cooling-off waiver on the pricing page to continue.",
+      );
+      return;
+    }
     try {
       setIsLoading(true);
       // Use the professional plan price ID

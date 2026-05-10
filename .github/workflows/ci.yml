@@ -33,6 +33,15 @@ jobs:
       - name: Security audit
         run: npm audit --audit-level=high
 
+      # Atlas F-D9 / C-6-9 regression guard. Fails the build if any
+      # migration dated >= 20260510 introduces an RLS policy with
+      # USING(true) or WITH CHECK(true) for anon / authenticated /
+      # public. Pre-baseline violations are already audited by
+      # 20260510210000_anon_access_audit.sql; pass
+      # --include-pre-baseline locally to inspect the full history.
+      - name: RLS permissive policy lint
+        run: node scripts/lint-rls-permissive.mjs
+
       - name: Lint
         run: npm run lint
 

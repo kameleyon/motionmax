@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { writeSystemLog } from "../_shared/log.ts";
+import { requireAdmin, writeAuditLogOrFail } from "../_shared/adminGate.ts";
 
 // Phase 8.6.5 — admin-triggered password reset.
 //
@@ -42,41 +43,23 @@ export async function handler(req: Request): Promise<Response> {
   try {
     logStep("Function started");
 
-    // ── Auth: extract caller from JWT ─────────────────────────────────────
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(
-        JSON.stringify({ error: "No authorization header provided" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 },
-      );
+    // ── Auth + admin + freshness gate ───────────────────────────────────
+    // C-6-4 / Shield S-008 — admin-triggered password reset can lock a
+    // user out of their account if abused. We require admin role +
+    // a freshly-authenticated session. MFA is NOT required here (this
+    // op is sensitive but not strictly destructive — the target can
+    // recover via their email), but freshness still defends against
+    // long-lived stolen tokens.
+    const gate = await requireAdmin(req, supabaseAdmin, corsHeaders, {
+      freshnessMinutes: 60,
+      requireMfa: false,
+    });
+    if (!gate.ok) {
+      logStep("Admin gate failed");
+      return gate.response;
     }
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } =
-      await supabaseAdmin.auth.getUser(token);
-    if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Authentication error: Invalid session" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 },
-      );
-    }
-    const callerUserId = user.id;
-    logStep("User authenticated", { callerUserId });
-
-    // ── Admin check (mirrors admin-force-signout) ────────────────────────
-    const { data: adminRole, error: roleError } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", callerUserId)
-      .eq("role", "admin")
-      .single();
-
-    if (roleError || !adminRole) {
-      logStep("Access denied - not admin", { callerUserId });
-      return new Response(
-        JSON.stringify({ error: "Access denied. Admin privileges required." }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403 },
-      );
-    }
+    const callerUserId = gate.userId;
+    logStep("Admin access verified", { callerUserId });
 
     // ── Parse + validate body ────────────────────────────────────────────
     let body: { user_id?: unknown };
@@ -133,18 +116,29 @@ export async function handler(req: Request): Promise<Response> {
     // streaming activity feed). The actual recovery URL is captured
     // in admin_logs.details so it can be re-sent if email delivery
     // fails — but we never echo it back in the response.
-    await supabaseAdmin.from("admin_logs").insert({
-      admin_id: callerUserId,
-      action: "send_reset_link",
-      target_type: "user",
-      target_id: targetUserId,
-      details: {
-        email: targetEmail,
-        action_link_present: Boolean(linkData?.properties?.action_link),
+    // C-6-4 / Shield S-008 — fail-loud. Admin-triggered password
+    // reset CAN lock a user out, so a silent audit failure here is
+    // not acceptable.
+    const auditWrite = await writeAuditLogOrFail(
+      supabaseAdmin,
+      {
+        admin_id: callerUserId,
+        action: "send_reset_link",
+        target_type: "user",
+        target_id: targetUserId,
+        details: {
+          email: targetEmail,
+          action_link_present: Boolean(linkData?.properties?.action_link),
+        },
+        ip_address: req.headers.get("x-forwarded-for") || null,
+        user_agent: req.headers.get("user-agent") || null,
       },
-      ip_address: req.headers.get("x-forwarded-for") || null,
-      user_agent: req.headers.get("user-agent") || null,
-    });
+      corsHeaders,
+    );
+    if (!auditWrite.ok) {
+      logStep("ERROR: audit log insert failed");
+      return auditWrite.response;
+    }
 
     await writeSystemLog({
       supabase: supabaseAdmin,

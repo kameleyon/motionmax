@@ -48,6 +48,63 @@ export async function handler(req: Request, deps: DeleteAccountDeps = {}): Promi
       });
     }
 
+    // C-6-4 / Shield S-008 — MFA gate for self-delete.
+    // Account deletion is destructive (cascades to projects, generations,
+    // credits, etc. after the 7-day cooling-off window). If the user
+    // has MFA enrolled, require the current session to carry aal2 —
+    // a stolen access token without TOTP can't trigger this op.
+    // If the user has NOT enrolled MFA, we allow the delete to proceed
+    // (we can't gate users who never opted in to TOTP), but we record
+    // the aal level in the audit trail.
+    //
+    // We DO NOT require freshness here — the delete-account UI runs
+    // a typed-confirm flow already, and forcing a re-signin would
+    // create a UX cliff for legitimate users abandoning the product.
+    // The 7-day cooling-off window + out-of-band confirmation email
+    // below provide the recovery path.
+    const tokenParts = token.split(".");
+    let sessionAal: "aal1" | "aal2" | null = null;
+    if (tokenParts.length >= 2) {
+      try {
+        const payload = tokenParts[1].replace(/-/g, "+").replace(/_/g, "/");
+        const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
+        const decoded = JSON.parse(atob(padded));
+        if (decoded?.aal === "aal2") sessionAal = "aal2";
+        else if (decoded?.aal === "aal1") sessionAal = "aal1";
+      } catch {
+        sessionAal = null;
+      }
+    }
+
+    // Look up the user's enrolled MFA factors. If any verified factor
+    // exists, require this session to be aal2.
+    let hasVerifiedMfa = false;
+    try {
+      const { data: factorsData } =
+        await supabaseAdmin.auth.admin.mfa.listFactors({ userId: user.id });
+      const factors = (factorsData?.factors ?? []) as Array<{ status?: string }>;
+      hasVerifiedMfa = factors.some((f) => f.status === "verified");
+    } catch (mfaErr) {
+      // Auth admin MFA introspection isn't available in older SDKs.
+      // Fail open so the existing delete flow keeps working; the
+      // primary safeguard is the 7-day cooling-off window.
+      console.warn("[delete-account] MFA factor lookup failed", mfaErr);
+    }
+
+    if (hasVerifiedMfa && sessionAal !== "aal2") {
+      return new Response(
+        JSON.stringify({
+          error: "MFA required for account deletion. Please sign in again with your authenticator.",
+          code: "MFA_REQUIRED",
+          required_aal: "aal2",
+        }),
+        {
+          status: 412,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     // Fetch active subscription to get Stripe customer ID
     const { data: sub } = await supabaseAdmin
       .from("subscriptions")

@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rateLimit.ts";
 import { writeSystemLog } from "../_shared/log.ts";
+import { writeAuditLogBestEffort } from "../_shared/adminGate.ts";
 
 const logStep = (step: string, details?: unknown) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -383,8 +384,12 @@ export async function handler(req: Request): Promise<Response> {
           totalPages: Math.ceil(total / limit),
         };
 
-        // Audit log: admin listed users (fire-and-forget)
-        supabaseAdmin.from("admin_logs").insert({
+        // C-6-4 / Shield S-008 — audit log with retry-once. Non-destructive
+        // read op, so we don't block the response on audit failure, but
+        // we DO log to console + retry once so a transient DB blip
+        // doesn't silently lose the trail (which was the prior behaviour
+        // with `.catch(() => {})`).
+        await writeAuditLogBestEffort(supabaseAdmin, {
           admin_id: userId,
           action: "admin_list_users",
           target_type: "user_list",
@@ -392,7 +397,7 @@ export async function handler(req: Request): Promise<Response> {
           details: { page, limit, search: search || null, result_count: paginatedUsers.length, total_matched: total },
           ip_address: req.headers.get("x-forwarded-for") || null,
           user_agent: req.headers.get("user-agent") || null,
-        }).catch(() => {});
+        });
 
         break;
       }
@@ -564,8 +569,8 @@ export async function handler(req: Request): Promise<Response> {
           limit,
         };
 
-        // Audit log: admin listed flags (fire-and-forget)
-        supabaseAdmin.from("admin_logs").insert({
+        // C-6-4 / Shield S-008 — audit log with retry-once.
+        await writeAuditLogBestEffort(supabaseAdmin, {
           admin_id: userId,
           action: "admin_list_flags",
           target_type: "user_flag_list",
@@ -573,7 +578,7 @@ export async function handler(req: Request): Promise<Response> {
           details: { page, limit, includeResolved, result_count: flags?.length ?? 0 },
           ip_address: req.headers.get("x-forwarded-for") || null,
           user_agent: req.headers.get("user-agent") || null,
-        }).catch(() => {});
+        });
 
         break;
       }
@@ -621,8 +626,11 @@ export async function handler(req: Request): Promise<Response> {
 
         if (flagError) throw flagError;
 
-        // Log the action (fire-and-forget to keep consistent with other audit logs)
-        supabaseAdmin.from("admin_logs").insert({
+        // C-6-4 / Shield S-008 — flag-creation is a write action, but
+        // we use retry-best-effort rather than fail-loud because the
+        // flag itself is the authoritative record of the admin's
+        // intent (admin's user_id is stamped onto user_flags.flagged_by).
+        await writeAuditLogBestEffort(supabaseAdmin, {
           admin_id: userId,
           action: "admin_create_flag",
           target_type: "user",
@@ -630,7 +638,7 @@ export async function handler(req: Request): Promise<Response> {
           details: { flagType, reason },
           ip_address: req.headers.get("x-forwarded-for") || null,
           user_agent: req.headers.get("user-agent") || null,
-        }).catch(() => {});
+        });
 
         result = { flag };
         break;
@@ -660,8 +668,10 @@ export async function handler(req: Request): Promise<Response> {
 
         if (flagError) throw flagError;
 
-        // Audit log: admin resolved a flag (fire-and-forget)
-        supabaseAdmin.from("admin_logs").insert({
+        // C-6-4 / Shield S-008 — retry-best-effort. The user_flags row
+        // itself carries resolved_by/resolved_at so audit loss is
+        // recoverable; we still try hard to record the admin action.
+        await writeAuditLogBestEffort(supabaseAdmin, {
           admin_id: userId,
           action: "admin_resolve_flag",
           target_type: "user_flag",
@@ -669,7 +679,7 @@ export async function handler(req: Request): Promise<Response> {
           details: { resolutionNotes: resolutionNotes || null, flagged_user_id: flag?.user_id || null },
           ip_address: req.headers.get("x-forwarded-for") || null,
           user_agent: req.headers.get("user-agent") || null,
-        }).catch(() => {});
+        });
 
         result = { flag };
         break;
@@ -860,8 +870,11 @@ export async function handler(req: Request): Promise<Response> {
           recentUserLogs: userLogs,
         };
 
-        // Audit log: admin read full user detail (fire-and-forget)
-        supabaseAdmin.from("admin_logs").insert({
+        // C-6-4 / Shield S-008 — PII access trail. Retry-best-effort
+        // because the writeSystemLog mirror below also records the
+        // event for the Activity Feed; complete audit loss requires
+        // BOTH systems to fail.
+        await writeAuditLogBestEffort(supabaseAdmin, {
           admin_id: userId,
           action: "admin_read_user_detail",
           target_type: "user",
@@ -874,7 +887,7 @@ export async function handler(req: Request): Promise<Response> {
           },
           ip_address: req.headers.get("x-forwarded-for") || null,
           user_agent: req.headers.get("user-agent") || null,
-        }).catch(() => {});
+        });
 
         // Mirror to system_logs so the Activity Feed surfaces sensitive
         // admin reads (PII access). admin_logs is the authoritative
@@ -1023,8 +1036,8 @@ export async function handler(req: Request): Promise<Response> {
           system_logs: systemLogs,
         };
 
-        // Audit log: admin read a specific API call record (fire-and-forget)
-        supabaseAdmin.from("admin_logs").insert({
+        // C-6-4 / Shield S-008 — retry-best-effort audit trail.
+        await writeAuditLogBestEffort(supabaseAdmin, {
           admin_id: userId,
           action: "admin_read_api_call_detail",
           target_type: "api_call_log",
@@ -1036,7 +1049,7 @@ export async function handler(req: Request): Promise<Response> {
           },
           ip_address: req.headers.get("x-forwarded-for") || null,
           user_agent: req.headers.get("user-agent") || null,
-        }).catch(() => {});
+        });
 
         await writeSystemLog({
           supabase: supabaseAdmin,

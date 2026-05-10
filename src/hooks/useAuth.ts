@@ -306,10 +306,70 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
+    // C-6-3 / Shield S-007 — server-side throttle pre-check.
+    //
+    // BEFORE we hand the credentials to Supabase Auth, ask the
+    // auth_throttle RPC whether this email is currently locked out.
+    // The RPC also records the pre-attempt so each unsuccessful
+    // round-trip burns one of the 5 allowed attempts even if the
+    // attacker disconnects before seeing the Auth response.
+    //
+    // We intentionally DO NOT short-circuit on any RPC error here —
+    // a momentarily-flaky DB shouldn't block legitimate users from
+    // signing in. The RPC is fail-open at the network layer; the
+    // database lockout itself is fail-closed (returns allowed=false
+    // when locked).
+    //
+    // NOTE: the only enforcement layer for Supabase-hosted Auth is
+    // this client-side gate (Supabase doesn't expose a pre-signin
+    // hook). A hostile client can skip this call entirely. For
+    // stronger protection, route signins through a custom Edge
+    // Function that calls the throttle THEN supabase.auth.signInWithPassword
+    // server-side. Documented as a follow-up in docs/admin-mfa.md.
+    const throttleKey = `email:${email.trim().toLowerCase()}`;
+    try {
+      const { data: throttle, error: throttleErr } = await (supabase.rpc(
+        "check_and_record_auth_attempt" as never,
+        { p_key: throttleKey, p_success: false } as never,
+      ) as unknown as Promise<{
+        data: { allowed: boolean; attempts_remaining: number; locked_until: string | null } | null;
+        error: { message: string } | null;
+      }>);
+      if (!throttleErr && throttle && throttle.allowed === false) {
+        // Surface as an AuthError-shaped object so existing UI code
+        // (LoginPage etc.) can render the message without branching
+        // on a separate error type.
+        const lockedUntilText = throttle.locked_until
+          ? ` Try again at ${new Date(throttle.locked_until).toLocaleTimeString()}.`
+          : "";
+        const err = new Error(
+          `Too many failed sign-in attempts.${lockedUntilText}`,
+        ) as unknown as AuthError;
+        return { data: null, error: err };
+      }
+    } catch {
+      // Throttle RPC unreachable — fail open. The server is still
+      // safer than no enforcement (subsequent successful attempts
+      // will normalise the row).
+    }
+
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
+
+    // Record the outcome so the row reflects reality.
+    //   • success → resets attempts to 0.
+    //   • failure → increments; locks at attempt 5.
+    try {
+      await (supabase.rpc(
+        "check_and_record_auth_attempt" as never,
+        { p_key: throttleKey, p_success: !error } as never,
+      ) as unknown as Promise<unknown>);
+    } catch {
+      // Best-effort; the previous pre-check is the authoritative gate.
+    }
+
     if (!error) {
       try { trackEvent("login", { method: "email" }); } catch { /* analytics non-critical */ }
     }

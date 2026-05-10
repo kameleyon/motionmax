@@ -24,6 +24,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
+import { requireAdmin, writeAuditLogOrFail } from "../_shared/adminGate.ts";
 
 const RESEND_API_URL = "https://api.resend.com/emails";
 const FROM_ADDRESS = "MotionMax <noreply@motionmax.io>";
@@ -105,37 +106,16 @@ export async function handler(req: Request): Promise<Response> {
   );
 
   try {
-    // 1. Bearer auth
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "missing bearer token" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const token = authHeader.replace("Bearer ", "");
-    const { data: userData, error: userErr } = await supabaseAdmin.auth.getUser(token);
-    if (userErr || !userData?.user) {
-      return new Response(JSON.stringify({ error: "invalid session" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const callerId = userData.user.id;
-
-    // 2. Admin gate via is_admin(uid). Service role bypasses RLS.
-    const { data: roleRow, error: roleErr } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", callerId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (roleErr || !roleRow) {
-      return new Response(JSON.stringify({ error: "forbidden — admin only" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    // C-6-4 / Shield S-008 — admin + freshness gate via shared helper.
+    // Newsletter blasts can be operationally large but aren't strictly
+    // destructive, so we require freshness but not MFA. Future hardening
+    // could require MFA when audience size > N recipients.
+    const gate = await requireAdmin(req, supabaseAdmin, corsHeaders, {
+      freshnessMinutes: 60,
+      requireMfa: false,
+    });
+    if (!gate.ok) return gate.response;
+    const callerId = gate.userId;
 
     // 3. Parse body
     const body = await req.json().catch(() => ({}));
@@ -365,16 +345,27 @@ export async function handler(req: Request): Promise<Response> {
       })
       .eq("id", campaign.id);
 
-    // 9. Audit log
-    await supabaseAdmin.from("admin_logs").insert({
-      admin_id: callerId,
-      action: "campaign_dispatched",
-      target_type: "newsletter_campaign",
-      target_id: campaign.id,
-      details: { recipients: validRecipients.length, sent: okCount, failed: errCount, audience: campaign.audience },
-      ip_address: req.headers.get("x-forwarded-for") || null,
-      user_agent: req.headers.get("user-agent") || null,
-    });
+    // 9. Audit log — fail-loud. A newsletter blast that ran without
+    // an admin_logs row is an undocumented mass-email operation; we'd
+    // rather have a successful send + 500 response (so the operator
+    // re-confirms the audit row got written by some other mechanism)
+    // than silently lose the trail.
+    const auditWrite = await writeAuditLogOrFail(
+      supabaseAdmin,
+      {
+        admin_id: callerId,
+        action: "campaign_dispatched",
+        target_type: "newsletter_campaign",
+        target_id: campaign.id,
+        details: { recipients: validRecipients.length, sent: okCount, failed: errCount, audience: campaign.audience },
+        ip_address: req.headers.get("x-forwarded-for") || null,
+        user_agent: req.headers.get("user-agent") || null,
+      },
+      corsHeaders,
+    );
+    if (!auditWrite.ok) {
+      return auditWrite.response;
+    }
 
     logStep("done", { id: campaign.id, sent: okCount, failed: errCount, recipients: validRecipients.length });
 

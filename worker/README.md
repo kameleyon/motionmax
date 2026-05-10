@@ -52,7 +52,7 @@ The worker reads these at boot (see `worker/src/lib/supabase.ts`,
 | `LEMONFOX_API_KEY`             | TTS (English)                                        |
 | `GOOGLE_TTS_API_KEY`           | TTS (Haitian Creole)                                 |
 | `SENTRY_DSN`                   | Owned by Cipher / B-NEW-19                            |
-| `HEALTH_AUTH_TOKEN`            | Bearer for `/health` (see `src/index.ts`)             |
+| `HEALTH_AUTH_TOKEN`            | Bearer for `/metrics` and `/health/full` (see `src/healthServer.ts`) |
 | `HEALTH_PORT`                  | Default `10000`                                       |
 | `WORKER_CONCURRENCY`           | Per-instance LLM concurrency cap (see detectOptimalConcurrency) |
 | `JOB_TIMEOUT_MS`               | Hard timeout per job                                  |
@@ -88,3 +88,52 @@ a fixed-replica baseline; tune in the Railway dashboard or by editing
 Per-instance LLM concurrency is hard-capped at 8 by
 `detectOptimalConcurrency` in `worker/src/index.ts`, so the 3-replica
 default supports ~24 LLM jobs in flight.
+
+## HTTP endpoints (health server)
+
+Bound by `worker/src/healthServer.ts` on `HEALTH_PORT` (default `10000`).
+
+| Endpoint        | Auth                  | Purpose                                                                                  |
+| --------------- | --------------------- | ---------------------------------------------------------------------------------------- |
+| `GET /health`   | Public                | Liveness probe for Railway / load balancers. Body: `{ status: "ok", timestamp }`. No PID, Node version, memory, or job counts. |
+| `GET /ready`    | Public                | Readiness — 200 if the worker is accepting jobs, 503 if draining or both delivery paths (Realtime + poll) are dead. |
+| `GET /health/full` | Bearer `HEALTH_AUTH_TOKEN` | Full diagnostic: PID, Node version, memory, active/max jobs, last poll timestamp, realtime status. Same shape as the pre-Wave-6 `/health`. |
+| `GET /metrics`  | Bearer `HEALTH_AUTH_TOKEN` | JSON metrics (default) or Prometheus format (request `Accept: text/plain` or `?format=prometheus`). |
+
+### Wave 6 hardening (Cipher §6)
+
+- **C-6-7 — `/health` info-disclosure closed.** The public `/health`
+  response was previously echoing `process.pid`, `process.version`,
+  `os.hostname()`-equivalent metadata, full `process.memoryUsage()`, and
+  active/max job counts to any caller, including arbitrary browsers
+  because the response also carried `Access-Control-Allow-Origin: *`. An
+  attacker scraping `/health` could fingerprint the worker (exact Node
+  patch version + memory profile + concurrency budget) and match it to
+  CVEs before launching a targeted exploit. The detailed diagnostic now
+  lives behind the Bearer token at `/health/full`, and the wildcard CORS
+  header is removed (Railway probes don't need CORS; browsers shouldn't
+  be calling these endpoints at all).
+- **C-6-8 — `/metrics` timing-oracle closed.** The Bearer-token compare
+  was `if (token !== expected)` — JavaScript's `!==` short-circuits on
+  the first differing byte, leaking the secret a byte at a time to a
+  remote attacker willing to measure response timing. The compare is
+  now `crypto.timingSafeEqual` via the `safeEq` helper in
+  `worker/src/healthServer.ts`, which inspects every byte regardless.
+  The same helper is reused for `/health/full`.
+
+### Probing examples
+
+```bash
+# Liveness — fine for Railway, ELB, kubelet, etc.
+curl https://worker.motionmax.io/health
+# → {"status":"ok","timestamp":"2026-05-10T12:00:00.000Z"}
+
+# Full diagnostic — token required
+curl -H "Authorization: Bearer $HEALTH_AUTH_TOKEN" \
+     https://worker.motionmax.io/health/full
+
+# Prometheus scrape — token required
+curl -H "Authorization: Bearer $HEALTH_AUTH_TOKEN" \
+     -H "Accept: text/plain" \
+     https://worker.motionmax.io/metrics
+```

@@ -58,6 +58,70 @@ Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
 
 **Purpose**: Forces HTTPS for all connections (only set on HTTPS responses)
 
+### 7. `style-src 'unsafe-inline'` — known finding, retained intentionally
+
+**Status:** retained as of Wave 6 (Cipher §6 C-6-6). Tracked for removal.
+
+The production CSP in `vercel.json` includes:
+
+```
+style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+```
+
+This is a real CSS-exfiltration surface (attribute-selector tricks can
+read attribute values from the authenticated DOM via crafted CSS
+rules). It is retained for the following architectural reasons:
+
+1. **MotionMax is a Vite SPA served as static files from `dist/` on
+   Vercel — there is no SSR layer to inject a per-request nonce into
+   the HTML head.** The marketing site has an Astro build, but the
+   `/app` workspace where authenticated data lives is pure static.
+   Adding a Vercel Edge Middleware to rewrite static HTML on every
+   request just to insert a `<meta name="csp-nonce">` tag would (a)
+   break Vite's build hashes and immutable asset caching, and (b)
+   still leave a window where the inline `style` attributes Radix UI
+   and ~89 of our own components emit must be allowed somehow.
+2. **`'unsafe-hashes'` is not a viable substitute on its own.**
+   `'unsafe-hashes'` only takes effect when paired with an enumerated
+   SHA-hash for each unique inline-style value. The app has ~963
+   `style={...}` sites with values computed at render time (animation
+   transforms, dynamic widths, theme tokens) — they cannot be
+   exhaustively hashed at build time.
+3. **`framer-motion` injects `<style>` tags via
+   `document.createElement('style')` and supports a nonce via
+   `MotionConfigContext`, but without an SSR-injected nonce there is
+   nothing to pass.** Generating a build-time fixed nonce is exactly
+   equivalent to `'unsafe-inline'` from a defence standpoint — once
+   the nonce is in the static HTML, an attacker who can inject DOM
+   can read it.
+
+**Migration path (out of scope for §6):**
+
+- Move `/app` routes to an SSR-capable platform layer (e.g. add a
+  Vercel Function that renders `app-shell.html` on demand, OR migrate
+  to Next.js App Router) so a per-request nonce can be inserted into
+  the HTML head AND the response CSP header.
+- Pass the nonce through `MotionConfigProvider`'s `nonce` prop so
+  framer-motion's runtime `<style>` tags inherit it.
+- Audit the ~89 component files that use inline `style={...}` and
+  refactor each to a Tailwind class or CSS variable; for animation-
+  driven dynamic styles, scope them via CSS custom properties set on
+  a wrapper element so the inline declaration becomes
+  `style={{ '--w': widthPx }}` — a fixed shape we CAN hash.
+- Once all three are done, replace `'unsafe-inline'` with
+  `'nonce-<perRequest>' 'strict-dynamic'` and drop `'unsafe-hashes'`.
+
+The XSS-→-data-exfiltration risk is mitigated in the interim by:
+
+- `script-src` has NO `'unsafe-inline'` and NO `'unsafe-eval'` — DOM
+  XSS via script execution is the actual catastrophic vector, and it
+  is closed.
+- Supabase JWT lives in `sessionStorage` per Wave 2 (§6 C-6-1) — an
+  attacker who lands a CSS-exfiltration primitive cannot escalate to
+  account takeover without also breaking script CSP.
+- `report-uri /api/csp-report` is wired so any drift toward `<style>`
+  injection in production is observed.
+
 ---
 
 ## Platform-Specific Configuration

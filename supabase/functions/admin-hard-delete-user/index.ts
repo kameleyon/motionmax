@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { writeSystemLog } from "../_shared/log.ts";
+import { requireAdmin, writeAuditLogOrFail } from "../_shared/adminGate.ts";
 
 const logStep = (step: string, details?: unknown) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : "";
@@ -36,57 +37,24 @@ export async function handler(req: Request): Promise<Response> {
   try {
     logStep("Function started");
 
-    // ── Auth: extract caller from JWT ─────────────────────────────────────
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(
-        JSON.stringify({ error: "No authorization header provided" }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 401,
-        }
-      );
+    // ── Auth + admin + MFA + freshness gate ─────────────────────────────
+    // C-6-4 / Shield S-008 — hard-delete is irreversible (auth.users
+    // row + CASCADE'd FKs). It's the most destructive admin op in the
+    // system, so we require:
+    //   • valid bearer JWT
+    //   • admin role row
+    //   • session ≤ 60 min old
+    //   • AAL2 — admin completed TOTP this session
+    const gate = await requireAdmin(req, supabaseAdmin, corsHeaders, {
+      freshnessMinutes: 60,
+      requireMfa: true,
+    });
+    if (!gate.ok) {
+      logStep("Admin gate failed");
+      return gate.response;
     }
-
-    const token = authHeader.replace("Bearer ", "");
-
-    const { data: { user }, error: userError } =
-      await supabaseAdmin.auth.getUser(token);
-    if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Authentication error: Invalid session" }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 401,
-        }
-      );
-    }
-
-    const callerUserId = user.id;
-    logStep("User authenticated", { callerUserId });
-
-    // ── Admin check: same pattern as admin-force-signout / admin-stats
-    // (user_roles.role = 'admin'), executed via service-role so RLS
-    // doesn't filter the row out from under us.
-    const { data: adminRole, error: roleError } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", callerUserId)
-      .eq("role", "admin")
-      .single();
-
-    if (roleError || !adminRole) {
-      logStep("Access denied - not admin", { callerUserId });
-      return new Response(
-        JSON.stringify({ error: "Access denied. Admin privileges required." }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 403,
-        }
-      );
-    }
-
-    logStep("Admin access verified");
+    const callerUserId = gate.userId;
+    logStep("Admin access verified", { callerUserId });
 
     // ── Parse + validate body ─────────────────────────────────────────────
     let body: { user_id?: unknown; confirmation?: unknown };
@@ -198,37 +166,29 @@ export async function handler(req: Request): Promise<Response> {
     // intent. admin_logs.target_id has no FK to auth.users (per
     // 20260201152356 + 20260419000021 which only added a FK on
     // admin_id), so the audit row survives the cascade.
+    // C-6-4 / Shield S-008 — fail-loud via the shared helper so this
+    // matches the other destructive admin ops.
     const ipAddress = req.headers.get("x-forwarded-for") || null;
     const userAgent = req.headers.get("user-agent") || null;
-
-    const { error: logError } = await supabaseAdmin.from("admin_logs").insert({
-      admin_id: callerUserId,
-      action: "hard_delete_user",
-      target_type: "user",
-      target_id: targetUserId,
-      details: {
-        deleted_email: targetEmail,
-        ip: ipAddress,
+    const auditWrite = await writeAuditLogOrFail(
+      supabaseAdmin,
+      {
+        admin_id: callerUserId,
+        action: "hard_delete_user",
+        target_type: "user",
+        target_id: targetUserId,
+        details: {
+          deleted_email: targetEmail,
+          ip: ipAddress,
+        },
+        ip_address: ipAddress,
+        user_agent: userAgent,
       },
-      ip_address: ipAddress,
-      user_agent: userAgent,
-    });
-
-    if (logError) {
-      // Refuse to proceed if we can't write the audit row. For an
-      // irreversible action, no audit trail = no go.
-      logStep("ERROR: admin_logs insert failed; aborting hard delete", {
-        error: logError.message,
-      });
-      return new Response(
-        JSON.stringify({
-          error: "Failed to write audit log; hard delete aborted",
-        }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 500,
-        }
-      );
+      corsHeaders,
+    );
+    if (!auditWrite.ok) {
+      logStep("ERROR: admin_logs insert failed; aborting hard delete");
+      return auditWrite.response;
     }
 
     logStep("Audit row written, proceeding with deleteUser");

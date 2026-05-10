@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { writeSystemLog } from "../_shared/log.ts";
+import { requireAdmin, writeAuditLogOrFail } from "../_shared/adminGate.ts";
 
 const logStep = (step: string, details?: unknown) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : "";
@@ -38,54 +39,23 @@ export async function handler(req: Request): Promise<Response> {
   try {
     logStep("Function started");
 
-    // ── Auth: extract caller from JWT ─────────────────────────────────────
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(
-        JSON.stringify({ error: "No authorization header provided" }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 401,
-        }
-      );
+    // ── Auth + admin + MFA + freshness gate ─────────────────────────────
+    // C-6-4 / Shield S-008 — force-signout is destructive (kicks the
+    // target out of every session), so we require:
+    //   • valid bearer JWT resolving to a user
+    //   • admin role row
+    //   • session ≤ 60 min old (forces re-auth on long-lived tokens)
+    //   • AAL2 — admin completed TOTP this session
+    const gate = await requireAdmin(req, supabaseAdmin, corsHeaders, {
+      freshnessMinutes: 60,
+      requireMfa: true,
+    });
+    if (!gate.ok) {
+      logStep("Admin gate failed");
+      return gate.response;
     }
-
-    const token = authHeader.replace("Bearer ", "");
-
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-    if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Authentication error: Invalid session" }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 401,
-        }
-      );
-    }
-
-    const callerUserId = user.id;
-    logStep("User authenticated", { callerUserId });
-
-    // ── Admin check: same pattern as admin-stats (user_roles.role = 'admin') ─
-    const { data: adminRole, error: roleError } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", callerUserId)
-      .eq("role", "admin")
-      .single();
-
-    if (roleError || !adminRole) {
-      logStep("Access denied - not admin", { callerUserId });
-      return new Response(
-        JSON.stringify({ error: "Access denied. Admin privileges required." }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 403,
-        }
-      );
-    }
-
-    logStep("Admin access verified");
+    const callerUserId = gate.userId;
+    logStep("Admin access verified", { callerUserId });
 
     // ── Parse + validate body ─────────────────────────────────────────────
     let body: { user_id?: unknown; reason?: unknown };
@@ -135,6 +105,35 @@ export async function handler(req: Request): Promise<Response> {
 
     logStep("Force-signout requested", { targetUserId, hasReason: !!reason });
 
+    // ── C-6-4 / Shield S-008: write the audit log FIRST and FAIL the
+    // request if it doesn't land. Force-signout has a real (if
+    // reversible) effect on the target; an undocumented force-signout
+    // is exactly the kind of silent compromise this finding flags.
+    const ipAddress = req.headers.get("x-forwarded-for") || null;
+    const userAgent = req.headers.get("user-agent") || null;
+    const auditWrite = await writeAuditLogOrFail(
+      supabaseAdmin,
+      {
+        admin_id: callerUserId,
+        action: "force_signout",
+        target_type: "user",
+        target_id: targetUserId,
+        details: {
+          reason: reason ?? null,
+          banned_until: BANNED_UNTIL,
+        },
+        ip_address: ipAddress,
+        user_agent: userAgent,
+      },
+      corsHeaders,
+    );
+    if (!auditWrite.ok) {
+      logStep("ERROR: audit log insert failed; aborting force-signout");
+      return auditWrite.response;
+    }
+
+    logStep("Audit row written, applying ban");
+
     // ── Apply ban via Auth admin API. Setting banned_until causes
     // GoTrue to reject any existing JWT for this user on its next
     // refresh / verification, which is what actually kicks them off.
@@ -157,30 +156,6 @@ export async function handler(req: Request): Promise<Response> {
     }
 
     logStep("User banned_until applied", { targetUserId, banned_until: BANNED_UNTIL });
-
-    // ── Audit log. Column names match the live admin_logs schema
-    // (see migration 20260201152356) used everywhere in admin-stats:
-    // admin_id, action, target_type, target_id, details, ip_address, user_agent.
-    // Awaited (not fire-and-forget) so the orchestrator sees the audit
-    // trail before the response returns; this is a privileged action.
-    const { error: logError } = await supabaseAdmin.from("admin_logs").insert({
-      admin_id: callerUserId,
-      action: "force_signout",
-      target_type: "user",
-      target_id: targetUserId,
-      details: {
-        reason: reason ?? null,
-        banned_until: BANNED_UNTIL,
-      },
-      ip_address: req.headers.get("x-forwarded-for") || null,
-      user_agent: req.headers.get("user-agent") || null,
-    });
-
-    if (logError) {
-      // The ban already took effect; surface the audit failure but
-      // don't pretend the ban itself failed.
-      logStep("WARNING: admin_logs insert failed", { error: logError.message });
-    }
 
     // Mirror to system_logs so admin actions show on the unified
     // Activity Feed alongside non-admin events. admin_logs is the

@@ -6,7 +6,7 @@
   },
   "buildAptPackages": ["ffmpeg"],
   "deploy": {
-    "startCommand": "npm start",
+    "startCommand": "node --import tsx/esm src/index.ts",
     "aptPackages": ["ffmpeg"]
   }
 }

@@ -19,6 +19,13 @@ import { AdminTabStrip } from "@/components/admin/shell/AdminTabStrip";
 import { AdminTopBar } from "@/components/admin/shell/AdminTopBar";
 import { supabase } from "@/integrations/supabase/client";
 import { breadcrumbAdminTabOpen } from "@/lib/sentryBreadcrumbs";
+import { loadAdminFonts } from "@/lib/loadCaptionFonts";
+
+// §5 PERF-002 fix (2026-05-10): admin-tokens.css references Instrument
+// Serif + JetBrains Mono via the --serif / --mono custom properties.
+// Those families are no longer in index.html — this kicks the dynamic
+// stylesheet inject as soon as an admin route loads. Idempotent.
+loadAdminFonts();
 
 /* ── Lazy tab content ─────────────────────────────────────────────────
  * Each existing tab component is split out into its own chunk so the

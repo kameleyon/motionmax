@@ -9,24 +9,28 @@ import { useRef, useState, useEffect } from "react";
 import { uploadStyleReference } from "@/lib/uploadStyleReference";
 import { toast } from "sonner";
 
-// Import style preview images
-import minimalistPreview from "@/assets/styles/minimalist-preview.png";
-import doodlePreview from "@/assets/styles/doodle-preview.png";
-import stickPreview from "@/assets/styles/stick-preview.png";
-import animePreview from "@/assets/styles/anime-preview.png";
-import realisticPreview from "@/assets/styles/realistic-preview.png";
-import pixarPreview from "@/assets/styles/3d-pixar-preview.png";
-import claymationPreview from "@/assets/styles/claymation-preview.png";
-import sketchPreview from "@/assets/styles/sketch-preview.png";
-import caricaturePreview from "@/assets/styles/caricature-preview.png";
-import storybookPreview from "@/assets/styles/painterly-preview.png";
-import customPreview from "@/assets/styles/custom-preview.png";
-import crayonPreview from "@/assets/styles/crayon-preview.png";
-import moodyPreview from "@/assets/styles/moody-preview.png";
-import chalkboardPreview from "@/assets/styles/chalkboard-preview.png";
-import legoPreview from "@/assets/styles/lego-preview.png";
-import cardboardPreview from "@/assets/styles/cardboard-preview.png";
-import babiePreview from "@/assets/styles/barbie-preview.png";
+// §5 PERF-003 fix (2026-05-10): swap eager PNG imports for WebP. The
+// workspace style picker chunk previously inlined every PNG via Vite's
+// asset graph (cardboard alone was 1.84 MB). WebP equivalents collapse
+// the picker chunk by ~84%. PNG originals are kept on disk so legacy
+// references and the `<picture>` fallback still resolve.
+import minimalistPreview from "@/assets/styles/minimalist-preview.webp";
+import doodlePreview from "@/assets/styles/doodle-preview.webp";
+import stickPreview from "@/assets/styles/stick-preview.webp";
+import animePreview from "@/assets/styles/anime-preview.webp";
+import realisticPreview from "@/assets/styles/realistic-preview.webp";
+import pixarPreview from "@/assets/styles/3d-pixar-preview.webp";
+import claymationPreview from "@/assets/styles/claymation-preview.webp";
+import sketchPreview from "@/assets/styles/sketch-preview.webp";
+import caricaturePreview from "@/assets/styles/caricature-preview.webp";
+import storybookPreview from "@/assets/styles/painterly-preview.webp";
+import customPreview from "@/assets/styles/custom-preview.webp";
+import crayonPreview from "@/assets/styles/crayon-preview.webp";
+import moodyPreview from "@/assets/styles/moody-preview.webp";
+import chalkboardPreview from "@/assets/styles/chalkboard-preview.webp";
+import legoPreview from "@/assets/styles/lego-preview.webp";
+import cardboardPreview from "@/assets/styles/cardboard-preview.webp";
+import babiePreview from "@/assets/styles/barbie-preview.webp";
 
 /**
  * Main StyleSelector used by Doc2Video, and Cinematic workspaces.

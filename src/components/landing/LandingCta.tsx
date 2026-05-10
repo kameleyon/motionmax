@@ -1,9 +1,18 @@
-import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /* ──────────────────────────────────────────────
  * Bottom call-to-action banner.
+ *
+ * §5 PERF-009 fix (2026-05-10): swapped framer-motion's <motion.div
+ * initial/whileInView> for the .animate-fade-in-up CSS keyframe class
+ * defined in src/index.css. This component used the animation runtime
+ * for a single one-shot fade-up — every byte saved here multiplies
+ * across the whole landing chunk now that framer-motion is no longer
+ * pulled in by any landing component. The global
+ * `prefers-reduced-motion: reduce` rule in index.css already collapses
+ * the animation duration to ~0ms, so accessibility behaviour matches
+ * what framer-motion was giving us.
  * ────────────────────────────────────────────── */
 
 interface LandingCtaProps {
@@ -14,11 +23,7 @@ export default function LandingCta({ onCtaClick }: LandingCtaProps) {
   return (
     <section className="py-16 sm:py-24">
       <div className="mx-auto max-w-3xl px-6 sm:px-8 text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-        >
+        <div className="animate-fade-in-up">
           <h2 className="type-h1 tracking-tight text-foreground">
             Ready to get started?
           </h2>
@@ -39,7 +44,7 @@ export default function LandingCta({ onCtaClick }: LandingCtaProps) {
               </Button>
             </a>
           </div>
-        </motion.div>
+        </div>
       </div>
     </section>
   );

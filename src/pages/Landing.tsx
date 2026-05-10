@@ -230,12 +230,10 @@ export default function Landing() {
 
         <div className="relative z-10 mx-auto max-w-7xl px-6 sm:px-8 w-full pb-8 md:pb-24">
           <h1 className="sr-only">MotionMax &#x2013; AI Video Generation</h1>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="max-w-2xl mx-auto text-center"
-          >
+          {/* §5 PERF-009 fix (2026-05-10): hero entrance fade is CSS now.
+              See src/index.css `.animate-fade-in-up` and the rationale in
+              src/components/landing/LandingCta.tsx. */}
+          <div className="animate-fade-in-up max-w-2xl mx-auto text-center">
             <img
               src="/motion.png"
               alt=""
@@ -311,7 +309,7 @@ export default function Landing() {
                 (e.g., "X videos generated last week" from analytics, or named customer logos)
                 only when those metrics are real. Per FTC §255.1, fabricated counts carry
                 endorsement-rule exposure. */}
-          </motion.div>
+          </div>
         </div>
       </section>
 
@@ -327,26 +325,18 @@ export default function Landing() {
         className="py-12 sm:py-20 bg-white/[0.02] focus:outline-none scroll-mt-24"
       >
         <div className="mx-auto max-w-4xl px-6 sm:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-8"
-          >
+          <div className="animate-fade-in-up text-center mb-8">
             <span className="inline-block mb-3 text-xs font-medium uppercase tracking-widest text-primary">
               See It in Action
             </span>
             <h2 id="demo-walkthrough-heading" className="type-h1 tracking-tight text-foreground">
               From text to cinematic video in minutes
             </h2>
-          </motion.div>
+          </div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.1 }}
-            className="relative rounded-xl overflow-hidden border border-border/50 bg-black aspect-video"
+          <div
+            className="animate-fade-in-up relative rounded-xl overflow-hidden border border-border/50 bg-black aspect-video"
+            style={{ animationDelay: "0.1s" }}
           >
             {/* C-1-11 (Halo F-A11Y-015): Guidde auto-generates captions
                 from the recorded narration; `cc=1` opts in by default
@@ -362,17 +352,14 @@ export default function Landing() {
               sandbox="allow-popups allow-popups-to-escape-sandbox allow-scripts allow-forms allow-same-origin allow-presentation"
               className="w-full h-full rounded-xl"
             />
-          </motion.div>
+          </div>
 
-          <motion.p
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.3 }}
-            className="text-center mt-4 text-sm text-muted-foreground"
+          <p
+            className="animate-fade-in-up text-center mt-4 text-sm text-muted-foreground"
+            style={{ animationDelay: "0.3s" }}
           >
             Paste any topic. AI writes the script, generates visuals, adds voiceover, and renders your video.
-          </motion.p>
+          </p>
         </div>
       </section>
 
@@ -385,12 +372,7 @@ export default function Landing() {
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/[0.03] to-transparent" />
 
         <div className="mx-auto max-w-6xl px-6 sm:px-8 relative z-10">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-12"
-          >
+          <div className="animate-fade-in-up text-center mb-12">
             <span className="inline-block mb-3 text-xs font-medium uppercase tracking-widest text-primary">
               Features
             </span>
@@ -400,7 +382,7 @@ export default function Landing() {
             <p className="mt-4 text-base max-w-xl mx-auto text-white/70">
               AI handles research, scriptwriting, visuals, voiceover, and editing. You bring the idea.
             </p>
-          </motion.div>
+          </div>
 
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {LANDING_FEATURES.map((feature, index) => (
@@ -413,12 +395,7 @@ export default function Landing() {
       {/* Product Modes Showcase */}
       <section className="py-16 sm:py-24 relative bg-white/[0.02]">
         <div className="mx-auto max-w-6xl px-6 sm:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-12"
-          >
+          <div className="animate-fade-in-up text-center mb-12">
             <span className="inline-block mb-3 text-xs font-medium uppercase tracking-widest text-primary">
               3 Ways to Create
             </span>
@@ -430,7 +407,7 @@ export default function Landing() {
             <p className="mt-4 text-base max-w-xl mx-auto text-white/70">
               Pick the format that fits your content. Each mode is purpose-built.
             </p>
-          </motion.div>
+          </div>
 
           <div className="grid gap-6 md:grid-cols-2">
             {[
@@ -468,13 +445,10 @@ export default function Landing() {
                 mode: "smartflow",
               },
             ].map((product, index) => (
-              <motion.div
+              <div
                 key={product.mode}
-                initial={{ opacity: 0, y: 24 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1, duration: 0.5 }}
-                className={`group relative rounded-2xl border border-white/10 bg-gradient-to-br ${product.color} p-6 sm:p-8 transition-all duration-300 ${product.borderColor}`}
+                className={`animate-fade-in-up group relative rounded-2xl border border-white/10 bg-gradient-to-br ${product.color} p-6 sm:p-8 transition-all duration-300 ${product.borderColor}`}
+                style={{ animationDelay: `${index * 0.1}s` }}
               >
                 <div className="flex items-start justify-between mb-4">
                   <div>
@@ -497,7 +471,7 @@ export default function Landing() {
                   Try {product.title}
                   <span className="text-primary">→</span>
                 </Button>
-              </motion.div>
+              </div>
             ))}
           </div>
         </div>

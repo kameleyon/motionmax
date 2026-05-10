@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
 import { Check, X, Crown, Gem, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -76,28 +75,22 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
   return (
     <section id="pricing" className="py-16 sm:py-24 bg-white/[0.02]">
       <div className="mx-auto max-w-5xl px-6 sm:px-8">
-        {/* Promo banner — surfaces the "first 3 months" offer. */}
+        {/* Promo banner — surfaces the "first 3 months" offer.
+            §5 PERF-009 fix (2026-05-10): CSS keyframe in place of
+            framer-motion. See LandingCta.tsx for the rationale. */}
         {promoActive && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="mx-auto max-w-[680px] mb-8 rounded-xl border border-[#E4C875]/40 bg-gradient-to-r from-[#E4C875]/10 to-primary/10 px-4 py-3 flex items-center gap-3"
+          <div
+            className="animate-fade-in-down mx-auto max-w-[680px] mb-8 rounded-xl border border-[#E4C875]/40 bg-gradient-to-r from-[#E4C875]/10 to-primary/10 px-4 py-3 flex items-center gap-3"
             data-testid="landing-promo-banner"
           >
             <Sparkles className="h-4 w-4 text-[#E4C875] shrink-0" />
             <p className="text-sm text-foreground leading-snug">
               {PROMO_BANNER_COPY}
             </p>
-          </motion.div>
+          </div>
         )}
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="text-center mb-10"
-        >
+        <div className="animate-fade-in-up text-center mb-10">
           <h2 className="type-h1 tracking-tight text-foreground">
             {pricingHeadlineVariant === "roi_headline"
               ? "Stop paying $500/video. Make them yourself."
@@ -121,7 +114,7 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
               </span>
             </CycleBtn>
           </div>
-        </motion.div>
+        </div>
 
         {/* Plans grid — Free + Creator + Studio.
             C-2-4 fix (Hook C2): the hero promises "Free to start" four
@@ -243,12 +236,9 @@ function LandingPlanCard({
         : "billed monthly";
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
+    <div
       className={cn(
-        "relative rounded-2xl border p-6 sm:p-8",
+        "animate-fade-in-up relative rounded-2xl border p-6 sm:p-8",
         popular ? "border-primary/50 bg-primary/5" : "border-border/40 bg-card/50",
       )}
     >
@@ -311,7 +301,7 @@ function LandingPlanCard({
           <Bullet key={e} on>{e}</Bullet>
         ))}
       </ul>
-    </motion.div>
+    </div>
   );
 }
 
@@ -325,12 +315,7 @@ function LandingPlanCard({
 function LandingFreeCard({ onCta }: { onCta: () => void }) {
   const p = PLANS.free;
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      className="relative rounded-2xl border border-border/40 bg-card/50 p-6 sm:p-8 flex flex-col"
-    >
+    <div className="animate-fade-in-up relative rounded-2xl border border-border/40 bg-card/50 p-6 sm:p-8 flex flex-col">
       <div className="flex items-center gap-3 mb-4">
         <Sparkles className="h-5 w-5 text-muted-foreground" />
         <h3 className="type-h3">{p.name}</h3>
@@ -364,7 +349,7 @@ function LandingFreeCard({ onCta }: { onCta: () => void }) {
         <Bullet on={false}>Voice cloning</Bullet>
         <Bullet on={false}>Automation slots</Bullet>
       </ul>
-    </motion.div>
+    </div>
   );
 }
 

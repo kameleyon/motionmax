@@ -119,19 +119,23 @@
     </script>
     <!-- Preload LCP hero background to avoid render-blocking -->
     <link rel="preload" as="image" href="/herobackground.webp" fetchpriority="high">
-    <!-- Google Fonts — loaded as a blocking stylesheet so the
-         @font-face rules are available BEFORE React renders. The
-         deferred (media="print" + onload swap) pattern was racing
-         the caption-style dropdown opening — by the time the user
-         opened it, the fonts hadn't been added to document.fonts
-         yet, so every preview fell back to the system sans.
-         font-display:swap on each face means we still avoid the
-         FOIT — chunky display fonts swap in cleanly when ready. -->
+    <!-- §5 PERF-002 / Edge F12 (2026-05-10): font triage.
+         Public landing only needs Inter — every other family was caption
+         decoratives or admin/billing chrome. Loading 17 families render-
+         blocking on every visit was wasting ~14 HTTP requests + ~280 KB
+         WOFF2 fetches before paint, just so the gated CreateNew/Editor
+         caption picker would have its previews ready.
+         Caption fonts (Bebas Neue, Bangers, Comfortaa, Oswald, Pangolin,
+         Flavors, Chango, Luckiest Guy, Vina Sans, Special Elite, Rubik
+         Mono One, Pacifico, Montserrat, Poppins) now load on demand from
+         src/lib/loadCaptionFonts.ts when the workspace mounts.
+         Admin/billing fonts (Instrument Serif, JetBrains Mono) are
+         dynamically injected via the admin tokens CSS layer — NOT here.
+         font-display:swap kept so first-paint isn't blocked while Inter
+         loads from cache or network. -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@700;800;900&family=Bebas+Neue&family=Poppins:wght@700;900&family=Bangers&family=Comfortaa:wght@700&family=Oswald:wght@700&family=Pangolin&family=Flavors&family=Chango&family=Luckiest+Guy&family=Vina+Sans&family=Special+Elite&family=Rubik+Mono+One&family=Pacifico&display=swap">
-    <!-- Admin design uses Instrument Serif (italic + upright) for hero headlines. Loaded once here. -->
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@300;400;500&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
   </head>
   <body>
     <div id="root"></div>

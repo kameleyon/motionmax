@@ -3,6 +3,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { writeSystemLog } from "../_shared/log.ts";
+import { buildEmail } from "../_shared/emailTemplate.ts";
 
 /**
  * Optional dependency-injection seam for tests (Probe F-10-04 / B-NEW-20).
@@ -102,6 +103,74 @@ export async function handler(req: Request, deps: DeleteAccountDeps = {}): Promi
       message: `Account deletion scheduled for ${user.email ?? user.id}`,
       details: { scheduled_at: scheduledAt, hadActiveSubscription: sub?.status === "active" },
     });
+
+    // C-3-5: Out-of-band confirmation. The previous flow scheduled
+    // deletion with ZERO email signal — a session-stealing attacker
+    // could nuke the account and the real user wouldn't know until day
+    // 7. We now email the address on file with a cancel link. Failure
+    // here is non-fatal (we already scheduled deletion + logged it);
+    // we just log a warning so SRE can see if Resend is down.
+    if (user.email) {
+      try {
+        const formattedDate = new Date(scheduledAt).toLocaleDateString("en-US", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+        const cancelUrl = "https://motionmax.io/settings#deletion";
+        const html = buildEmail({
+          preheader: `Your MotionMax account is scheduled for deletion on ${formattedDate}.`,
+          greeting: "Hi there,",
+          headline: "Account deletion scheduled",
+          bodyHtml: `
+            <p>We received a request to delete your MotionMax account. Your account and all data will be permanently removed on <strong style="color:#E4C875;">${formattedDate}</strong>.</p>
+            <p><strong style="color:#E4C875;">Didn't request this?</strong> Sign back in and click the button below to cancel — you have until the scheduled date.</p>
+            <p>This includes:</p>
+            <ul style="padding-left:20px;margin:8px 0 0 0;color:#C8CCCE;">
+              <li style="margin-bottom:6px;">All projects and video generations</li>
+              <li style="margin-bottom:6px;">Voice clones and audio files</li>
+              <li style="margin-bottom:6px;">Remaining credits (no refund)</li>
+              <li style="margin-bottom:6px;">Your account and profile</li>
+            </ul>
+          `,
+          cta: { label: "Cancel deletion request", href: cancelUrl },
+          footerNote:
+            "If you didn't ask to delete your account and the cancel button doesn't work, reply to this email and we'll cancel it manually.",
+        });
+        const apiKey = Deno.env.get("RESEND_API_KEY");
+        if (apiKey) {
+          const fromAddr =
+            Deno.env.get("RESEND_FROM_EMAIL") ?? "MotionMax <noreply@motionmax.io>";
+          const res = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              from: fromAddr,
+              to: user.email,
+              subject: "Your MotionMax account is scheduled for deletion",
+              html,
+            }),
+          });
+          if (!res.ok) {
+            const txt = await res.text();
+            console.warn("[delete-account] confirmation email failed", {
+              status: res.status,
+              body: txt,
+            });
+          }
+        } else {
+          console.warn("[delete-account] RESEND_API_KEY not set — confirmation email skipped");
+        }
+      } catch (mailErr) {
+        // Best-effort — deletion already scheduled, don't fail the
+        // request if Resend has an outage.
+        console.warn("[delete-account] confirmation email threw", mailErr);
+      }
+    }
 
     return new Response(
       JSON.stringify({ success: true, scheduled_at: scheduledAt }),

@@ -4,6 +4,12 @@ import { Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import AppShell from "@/components/dashboard/AppShell";
+import { loadAdminFonts } from "@/lib/loadCaptionFonts";
+
+// §5 PERF-002 fix (2026-05-10): support-tokens.css references Instrument
+// Serif + JetBrains Mono. Both were removed from the public index.html
+// font load. Idempotent inject when this page mounts.
+loadAdminFonts();
 import {
   AlertDialog,
   AlertDialogAction,

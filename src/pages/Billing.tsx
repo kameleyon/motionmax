@@ -7,6 +7,13 @@ import AppShell from "@/components/dashboard/AppShell";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchBillingOverview } from "@/components/billing/_shared/billingApi";
 import "@/styles/billing-tokens.css";
+import { loadAdminFonts } from "@/lib/loadCaptionFonts";
+
+// §5 PERF-002 fix (2026-05-10): billing-tokens.css references Instrument
+// Serif + JetBrains Mono via --serif / --mono. Those families were
+// removed from the public index.html font load — kick the dynamic
+// stylesheet inject when the billing page mounts. Idempotent.
+loadAdminFonts();
 // B-NEW-7 (Lens B) — closes the funnel: paid_plan_selected was fired
 // on Pricing.tsx, signup_completed in useAuth, this event lands when
 // Stripe redirects back to /billing?success=true (or ?checkout=success

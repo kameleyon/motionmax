@@ -2,6 +2,7 @@ import { useState, useEffect, memo } from "react";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import { Subtitles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { loadCaptionFonts } from "@/lib/loadCaptionFonts";
 import {
   Select,
   SelectContent,
@@ -9,6 +10,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+// §5 PERF-002 fix (2026-05-10): trigger the on-demand caption font
+// stylesheet fetch as soon as the module is loaded. The 14 decorative
+// caption families used to render-block the public landing — they now
+// only download for users who reach a gated workspace, intake form, or
+// editor inspector that imports CaptionStyleSelector. Idempotent across
+// navigations.
+loadCaptionFonts();
 
 export type CaptionStyle =
   | "none"

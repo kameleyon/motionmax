@@ -10,6 +10,13 @@ import {
   Shield,
 } from "lucide-react";
 import { CURRENT_POLICY_VERSION } from "@/lib/policyVersion";
+import { loadAdminFonts } from "@/lib/loadCaptionFonts";
+
+// §5 PERF-002 fix (2026-05-10): settings-tokens.css references
+// Instrument Serif + JetBrains Mono via --serif / --mono. Both were
+// removed from the public index.html font load to keep the landing
+// critical path lean. Idempotent inject when this page mounts.
+loadAdminFonts();
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import IntegrationsTab from "@/components/settings/IntegrationsTab";
@@ -54,7 +61,22 @@ export default function Settings() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  // C-3-5: Multi-step deletion. The original flow let any user with an
+  // open session schedule a 7-day-fuse deletion by typing "DELETE" — no
+  // password reprompt, no out-of-band confirmation. A logged-in attacker
+  // (shared device, cookie-stealing extension, lost laptop) could nuke
+  // the account with no signal to the real user. The flow is now:
+  //   1. Type the account email exactly (intent + identifier match)
+  //   2. Re-enter password (proves identity even mid-session)
+  //   3. Edge function schedules deletion + sends a confirmation email
+  //      with a cancel link, so the real user gets an out-of-band notice
+  //      and can cancel within the 7-day window even if their session
+  //      was hijacked.
+  const [deleteStep, setDeleteStep] = useState<"email" | "password" | "scheduled">("email");
+  const [deleteEmailInput, setDeleteEmailInput] = useState("");
+  const [deletePasswordInput, setDeletePasswordInput] = useState("");
+  const [deletePasswordError, setDeletePasswordError] = useState<string | null>(null);
+  const [deleteScheduledAt, setDeleteScheduledAt] = useState<string | null>(null);
   const [emailChangePending, setEmailChangePending] = useState(false);
   const [pendingEmail, setPendingEmail] = useState("");
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
@@ -212,26 +234,110 @@ export default function Settings() {
     }
   };
 
-  const handleDeleteAccount = async () => {
-    if (deleteConfirmText.toUpperCase() !== "DELETE") return;
+  // C-3-5: Reset every step's transient state. Called on cancel / on
+  // dialog close. Without this, re-opening the modal would land on the
+  // 'scheduled' step with the email/password blanks pre-filled.
+  const resetDeleteFlow = () => {
+    setDeleteStep("email");
+    setDeleteEmailInput("");
+    setDeletePasswordInput("");
+    setDeletePasswordError(null);
+    setDeleteScheduledAt(null);
+  };
+
+  // C-3-5 step 1 → 2: user typed the account email correctly. We do a
+  // case-insensitive trim/match so a user with shift-lock-on or a
+  // trailing space doesn't get gaslit by the form. The match is
+  // strictly informational — the actual destructive call happens after
+  // a password verify in step 2.
+  const handleDeleteEmailNext = () => {
+    const expected = (user?.email ?? "").trim().toLowerCase();
+    const got = deleteEmailInput.trim().toLowerCase();
+    if (!expected) {
+      toast.error("Couldn't read your account email. Please refresh and try again.");
+      return;
+    }
+    if (got !== expected) {
+      toast.error("That email doesn't match your account. Please type it exactly.");
+      return;
+    }
+    setDeleteStep("password");
+  };
+
+  // C-3-5 step 2 → 3: re-authenticate via signInWithPassword. This
+  // proves the user knows the current password even if their session
+  // was hijacked (the attacker would have a valid session token but no
+  // password). On success we hand off to the delete-account edge
+  // function which:
+  //   - cancels Stripe (existing behaviour)
+  //   - inserts the deletion_requests row with a 7-day fuse
+  //   - sends a confirmation email with a cancel link (NEW — see
+  //     supabase/functions/delete-account/index.ts)
+  // Then we IMMEDIATELY sign out the session so the same device can't
+  // be used to immediately cancel the request without re-authing.
+  const handleDeletePasswordSubmit = async () => {
+    if (!user?.email) {
+      setDeletePasswordError("Account email missing — please refresh and try again.");
+      return;
+    }
+    if (!deletePasswordInput) {
+      setDeletePasswordError("Please enter your password.");
+      return;
+    }
     setIsDeletingAccount(true);
+    setDeletePasswordError(null);
     try {
-      // Log deletion request with 7-day grace period (replaces mailto: flow)
-      const { error } = await supabase
-        .from("deletion_requests" as never)
-        .insert({ user_id: user!.id, email: user?.email } as never);
-      if (error) throw error;
-      toast.success("Deletion request submitted. Your account will be permanently deleted in 7 days. You have been signed out.");
-      setShowDeleteDialog(false);
-      setDeleteConfirmText("");
-      setPendingDeletion(null);
-      // Sign out immediately so the session can't be used after the request
-      await supabase.auth.signOut();
+      // Reauth — Supabase's signInWithPassword refreshes the session
+      // when the credentials are correct (no separate verify endpoint
+      // exists). On wrong password it errors WITHOUT touching the
+      // current session, so the user stays logged in either way.
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: deletePasswordInput,
+      });
+      if (reauthError) {
+        setDeletePasswordError("That password didn't match. Try again.");
+        return;
+      }
+
+      // Reauth succeeded — fire the edge function. Pass the access
+      // token explicitly because functions.invoke does this anyway, but
+      // documenting it in the call signature catches future regressions.
+      const { data, error: invokeError } = await supabase.functions.invoke<{
+        success?: boolean;
+        scheduled_at?: string;
+        error?: string;
+      }>("delete-account", { method: "POST" });
+      if (invokeError) throw new Error(invokeError.message);
+      if (data?.error) throw new Error(data.error);
+
+      const scheduledAt =
+        data?.scheduled_at ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      setDeleteScheduledAt(scheduledAt);
+      setPendingDeletion({ id: "pending", scheduled_at: scheduledAt });
+      setDeleteStep("scheduled");
+      // Wipe sensitive transient state — password should not linger in
+      // React tree memory after we're done with it.
+      setDeletePasswordInput("");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to submit deletion request. Please contact support@motionmax.io.");
+      const msg = error instanceof Error ? error.message : "Failed to schedule deletion.";
+      setDeletePasswordError(msg);
+      toast.error(msg);
     } finally {
       setIsDeletingAccount(false);
     }
+  };
+
+  // C-3-5 step 3 close: user has seen the "scheduled" confirmation;
+  // sign them out so the device they used can't be used to immediately
+  // cancel without re-auth. (Cancel-deletion is gated by an authed
+  // session — anyone re-signing-in with the password can cancel within
+  // the 7-day window. The confirmation email also includes a cancel
+  // link tokenized for that same flow.)
+  const handleDeleteScheduledAcknowledge = async () => {
+    setShowDeleteDialog(false);
+    resetDeleteFlow();
+    await supabase.auth.signOut();
   };
 
   // Avatar initial — first char of display name or email
@@ -689,56 +795,165 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Delete Account Confirmation — settings-modal chrome (gold rim, no red) */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      {/* C-3-5: Delete Account flow — three steps. Modal chrome stays
+          gold-on-dark (brand: aqua + gold only, no red). Each step
+          guards the next so a user can't speedrun past identity
+          verification by tabbing fast. */}
+      <AlertDialog
+        open={showDeleteDialog}
+        onOpenChange={(next) => {
+          setShowDeleteDialog(next);
+          if (!next) resetDeleteFlow();
+        }}
+      >
         <AlertDialogContent className="settings-modal-content">
           <AlertDialogHeader>
             <AlertDialogTitle style={{ display: "flex", alignItems: "center", gap: 8, color: "#E4C875" }}>
               <AlertTriangle size={20} />
-              Delete your account?
+              {deleteStep === "scheduled" ? "Deletion scheduled" : "Delete your account?"}
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div style={{ display: "flex", flexDirection: "column", gap: 12, color: "#8A9198", fontSize: 13.5, lineHeight: 1.55 }}>
-                <p style={{ margin: 0 }}>
-                  This will <strong style={{ color: "#ECEAE4" }}>submit a deletion request</strong>. Once processed, all of your data
-                  will be permanently removed, including:
-                </p>
-                <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, lineHeight: 1.7 }}>
-                  <li>All projects and video generations</li>
-                  <li>Voice clones and audio files</li>
-                  <li>Remaining credits (no refund)</li>
-                  <li>Your account and profile</li>
-                </ul>
-                <p style={{ margin: 0, fontSize: 12, fontStyle: "italic", color: "#5A6268" }}>
-                  Your account is scheduled for deletion 7 days after the request, which gives you a window to cancel.
-                </p>
-                <p style={{ margin: "4px 0 0", color: "#ECEAE4" }}>
-                  Type <strong>DELETE</strong> below to confirm:
-                </p>
-                <Input
-                  value={deleteConfirmText}
-                  onChange={(e) => setDeleteConfirmText(e.target.value)}
-                  placeholder="Type DELETE to confirm"
-                  className="bg-[#151B20] border-white/10 text-[#ECEAE4]"
-                />
+                {deleteStep === "email" && (
+                  <>
+                    <p style={{ margin: 0 }}>
+                      This will <strong style={{ color: "#ECEAE4" }}>submit a deletion request</strong>. Once processed, all of your data
+                      will be permanently removed, including:
+                    </p>
+                    <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, lineHeight: 1.7 }}>
+                      <li>All projects and video generations</li>
+                      <li>Voice clones and audio files</li>
+                      <li>Remaining credits (no refund)</li>
+                      <li>Your account and profile</li>
+                    </ul>
+                    <p style={{ margin: 0, fontSize: 12, fontStyle: "italic", color: "#5A6268" }}>
+                      Your account is scheduled for deletion 7 days after the request, which gives you a window to cancel.
+                    </p>
+                    <p style={{ margin: "4px 0 0", color: "#ECEAE4" }}>
+                      To start, type your account email exactly:
+                    </p>
+                    <Input
+                      type="email"
+                      autoComplete="off"
+                      value={deleteEmailInput}
+                      onChange={(e) => setDeleteEmailInput(e.target.value)}
+                      placeholder={user?.email ?? "you@example.com"}
+                      className="bg-[#151B20] border-white/10 text-[#ECEAE4]"
+                    />
+                  </>
+                )}
+
+                {deleteStep === "password" && (
+                  <>
+                    <p style={{ margin: 0 }}>
+                      Confirm your <strong style={{ color: "#ECEAE4" }}>password</strong> to schedule deletion. We do this even though you're
+                      signed in so a forgotten session on a shared device can't nuke your account.
+                    </p>
+                    <Input
+                      type="password"
+                      autoComplete="current-password"
+                      value={deletePasswordInput}
+                      onChange={(e) => {
+                        setDeletePasswordInput(e.target.value);
+                        if (deletePasswordError) setDeletePasswordError(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !isDeletingAccount) {
+                          e.preventDefault();
+                          void handleDeletePasswordSubmit();
+                        }
+                      }}
+                      placeholder="Enter your current password"
+                      className="bg-[#151B20] border-white/10 text-[#ECEAE4]"
+                    />
+                    {deletePasswordError && (
+                      <p style={{ margin: 0, fontSize: 12, color: "#E4C875" }}>{deletePasswordError}</p>
+                    )}
+                    <p style={{ margin: 0, fontSize: 12, color: "#5A6268" }}>
+                      A confirmation email will be sent to <strong style={{ color: "#ECEAE4" }}>{user?.email}</strong> with a cancel link, so even if your session was compromised, you'll still get the heads-up.
+                    </p>
+                  </>
+                )}
+
+                {deleteStep === "scheduled" && (
+                  <>
+                    <p style={{ margin: 0, color: "#ECEAE4" }}>
+                      Your account is scheduled for permanent deletion on{" "}
+                      <strong style={{ color: "#E4C875" }}>
+                        {deleteScheduledAt
+                          ? new Date(deleteScheduledAt).toLocaleDateString(undefined, {
+                              dateStyle: "long",
+                            })
+                          : "in 7 days"}
+                      </strong>
+                      .
+                    </p>
+                    <p style={{ margin: 0 }}>
+                      We just emailed <strong style={{ color: "#ECEAE4" }}>{user?.email}</strong> a confirmation with a cancel link. You can also cancel from the Profile tab any time before the scheduled date.
+                    </p>
+                    <p style={{ margin: 0, fontSize: 12, color: "#5A6268" }}>
+                      You'll be signed out when you close this dialog. Sign back in to cancel the deletion before the fuse runs out.
+                    </p>
+                  </>
+                )}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel
-              onClick={() => setDeleteConfirmText("")}
-              className="border-white/10 bg-transparent text-[#ECEAE4] hover:bg-white/5"
-            >
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteAccount}
-              disabled={deleteConfirmText.toUpperCase() !== "DELETE" || isDeletingAccount}
-              className="bg-[#E4C875] text-[#0A0D0F] hover:bg-[#C9A75A]"
-            >
-              {isDeletingAccount ? <Loader2 size={14} className="animate-spin" style={{ marginRight: 6 }} /> : null}
-              Submit deletion request
-            </AlertDialogAction>
+            {deleteStep === "email" && (
+              <>
+                <AlertDialogCancel
+                  onClick={resetDeleteFlow}
+                  className="border-white/10 bg-transparent text-[#ECEAE4] hover:bg-white/5"
+                >
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleDeleteEmailNext();
+                  }}
+                  disabled={!deleteEmailInput.trim()}
+                  className="bg-[#E4C875] text-[#0A0D0F] hover:bg-[#C9A75A]"
+                >
+                  Continue
+                </AlertDialogAction>
+              </>
+            )}
+            {deleteStep === "password" && (
+              <>
+                <AlertDialogCancel
+                  onClick={() => setDeleteStep("email")}
+                  className="border-white/10 bg-transparent text-[#ECEAE4] hover:bg-white/5"
+                >
+                  Back
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={(e) => {
+                    e.preventDefault();
+                    void handleDeletePasswordSubmit();
+                  }}
+                  disabled={!deletePasswordInput || isDeletingAccount}
+                  className="bg-[#E4C875] text-[#0A0D0F] hover:bg-[#C9A75A]"
+                >
+                  {isDeletingAccount ? (
+                    <Loader2 size={14} className="animate-spin" style={{ marginRight: 6 }} />
+                  ) : null}
+                  Confirm and schedule deletion
+                </AlertDialogAction>
+              </>
+            )}
+            {deleteStep === "scheduled" && (
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  void handleDeleteScheduledAcknowledge();
+                }}
+                className="bg-[#E4C875] text-[#0A0D0F] hover:bg-[#C9A75A]"
+              >
+                I understand · sign me out
+              </AlertDialogAction>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

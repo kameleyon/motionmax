@@ -176,8 +176,13 @@ export default function RightRail() {
   useEffect(() => () => stopPlayback(), [stopPlayback]);
 
   // ── Subscription / plan ────────────────────────────────────
+  // C-5-6: shared `['subscription', userId]` cache key with Sidebar so
+  // we don't fire two SELECTs against subscriptions on every dashboard
+  // mount. Sidebar's queryFn already returns `plan_name`; we widen the
+  // select to also include `status` so this hook covers the union of
+  // both call sites. tanstack-query merges them under one entry.
   const { data: subscription } = useQuery({
-    queryKey: ['rightrail-subscription', user?.id],
+    queryKey: ['subscription', user?.id],
     enabled: !!user,
     queryFn: async () => {
       const { data } = await supabase
@@ -191,8 +196,9 @@ export default function RightRail() {
   });
 
   // ── Credits balance ────────────────────────────────────────
+  // C-5-6: shared `['credits', userId]` cache key with Sidebar.
   const { data: credits } = useQuery({
-    queryKey: ['rightrail-credits', user?.id],
+    queryKey: ['credits', user?.id],
     enabled: !!user,
     queryFn: async () => {
       const { data } = await supabase
@@ -292,7 +298,9 @@ export default function RightRail() {
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'user_credits', filter: `user_id=eq.${user.id}` },
-        () => queryClient.invalidateQueries({ queryKey: ['rightrail-credits', user.id] }),
+        // C-5-6: shared `['credits', userId]` key now covers both the
+        // sidebar's "X credits" footer and the rail's credit-bar card.
+        () => queryClient.invalidateQueries({ queryKey: ['credits', user.id] }),
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };

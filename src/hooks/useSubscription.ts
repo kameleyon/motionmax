@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useTabVisible } from "@/hooks/useTabVisible";
 import { trackEvent, getStoredUtm } from "@/hooks/useAnalytics";
 import {
   PLAN_LIMITS,
@@ -181,6 +182,11 @@ async function fetchSubscription(accessToken: string | undefined): Promise<Subsc
 export function useSubscription() {
   const { session } = useAuth();
   const queryClient = useQueryClient();
+  // C-5-6 (Prism PERF-010): pause the 60s subscription poll when the
+  // tab is hidden. The user-supabase-functions edge call to
+  // /functions/v1/check-subscription is one of the more expensive
+  // hops in the dashboard fan-out (cold-start can be 800ms+).
+  const tabVisible = useTabVisible();
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: SUBSCRIPTION_QUERY_KEY,
@@ -188,7 +194,10 @@ export function useSubscription() {
     enabled: !!session?.access_token,
     staleTime: 60_000, // Consider data fresh for 60 seconds
     gcTime: 5 * 60_000, // Keep in cache for 5 minutes
-    refetchInterval: 60_000, // Auto-refresh every 60 seconds when window is focused
+    // Conditional poll — drop to `false` when tab is hidden so the
+    // timer stops entirely (no scheduled-then-skipped ticks).
+    refetchInterval: tabVisible ? 60_000 : false,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: false, // Avoid extra calls on tab switch
     retry: 1, // Only retry once on failure
   });

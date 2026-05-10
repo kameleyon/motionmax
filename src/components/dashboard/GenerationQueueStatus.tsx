@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2, Clock, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useTabVisible } from "@/hooks/useTabVisible";
 import { getProjectTypeMeta } from "@/lib/projectUtils";
 
 interface ActiveJob {
@@ -18,6 +19,10 @@ interface ActiveJob {
 export function GenerationQueueStatus() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  // C-5-6 (Prism PERF-010): pause the 10s active-job poll while the
+  // tab is backgrounded. A user who left this open in a sleeping tab
+  // was hammering Supabase 8,640× per day for nothing.
+  const tabVisible = useTabVisible();
 
   const { data: activeJobs = [] } = useQuery<ActiveJob[]>({
     queryKey: ["active-generations", user?.id],
@@ -63,7 +68,13 @@ export function GenerationQueueStatus() {
       }));
     },
     enabled: !!user?.id,
-    refetchInterval: 10_000, // Poll every 10s while active
+    // C-5-6: only poll while the tab is visible. `false` removes the
+    // timer entirely (vs `refetchIntervalInBackground: false` which
+    // still schedules ticks but skips them — semantically the same
+    // network impact, but conditional polling is cleaner under
+    // DevTools and matches the audit's recommendation).
+    refetchInterval: tabVisible ? 10_000 : false,
+    refetchIntervalInBackground: false,
     staleTime: 5_000,
   });
 

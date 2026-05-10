@@ -104,13 +104,20 @@ export default function Hero() {
     };
   }, [langMenuOpen, voiceMenuOpen, aspectMenuOpen]);
 
+  // C-5-6 (Prism PERF-010): unified `['profile', userId]` key so the
+  // sidebar and the hero share the same cache entry instead of firing
+  // two parallel SELECTs against profiles. Sidebar fetches the wider
+  // `display_name, avatar_url` shape; we just read display_name from
+  // whichever copy lands first. Without `enabled`, we rely on the
+  // sidebar's query landing — but we keep `enabled: !!user` here so
+  // a hero-only mount (deep link without sidebar) still resolves.
   const { data: profile } = useQuery({
-    queryKey: ['hero-profile', user?.id],
+    queryKey: ['profile', user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data } = await selectActiveProfile('display_name')
+      const { data } = await selectActiveProfile('display_name, avatar_url')
         .eq('user_id', user!.id)
-        .maybeSingle<{ display_name: string | null }>();
+        .maybeSingle<{ display_name: string | null; avatar_url: string | null }>();
       return data;
     },
   });

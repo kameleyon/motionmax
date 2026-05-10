@@ -31,7 +31,7 @@ export default function EditorFrame({
   state: EditorState;
   subView: SubView;
   onSubViewChange: (v: SubView) => void;
-  saveStatus: 'idle' | 'saving' | 'saved' | 'dirty';
+  saveStatus: 'idle' | 'saving' | 'saved' | 'dirty' | 'error';
   scenes: ReactNode;
   stage: ReactNode;
   inspector: ReactNode;

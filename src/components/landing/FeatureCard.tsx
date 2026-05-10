@@ -1,7 +1,11 @@
 import { useRef } from "react";
-import { motion } from "framer-motion";
 import { useTrackImpression } from "@/hooks/useAnalytics";
 import type { FeatureItem } from "@/config/landingContent";
+
+/* §5 PERF-009 fix (2026-05-10): fade-in via CSS keyframe instead of
+ * framer-motion. Stagger is preserved through inline `animationDelay`
+ * driven by the index prop. See LandingCta.tsx for the full rationale.
+ */
 
 interface FeatureCardProps {
   feature: FeatureItem;
@@ -15,13 +19,10 @@ export default function FeatureCard({ feature, index }: FeatureCardProps) {
   useTrackImpression("feature_view", ref, { feature_title: feature.title });
 
   return (
-    <motion.div
+    <div
       ref={ref}
-      initial={{ opacity: 0, y: 24 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ delay: index * 0.08, duration: 0.5 }}
-      className="group relative rounded-2xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur-sm transition-all duration-300 hover:border-primary/30 hover:bg-white/[0.07]"
+      className="animate-fade-in-up group relative rounded-2xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur-sm transition-all duration-300 hover:border-primary/30 hover:bg-white/[0.07]"
+      style={{ animationDelay: `${index * 0.08}s` }}
     >
       {/* Subtle top gradient line */}
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -35,6 +36,6 @@ export default function FeatureCard({ feature, index }: FeatureCardProps) {
       <p className="text-sm leading-relaxed text-white/60">
         {feature.description}
       </p>
-    </motion.div>
+    </div>
   );
 }

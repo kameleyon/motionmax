@@ -35,7 +35,7 @@ export default function EditorTopBar({
   state: EditorState;
   subView: SubView;
   onSubViewChange: (v: SubView) => void;
-  saveStatus: 'idle' | 'saving' | 'saved' | 'dirty';
+  saveStatus: 'idle' | 'saving' | 'saved' | 'dirty' | 'error';
   /** Opens the mobile navigation drawer (Studio / Projects / Voices /
    *  Settings / Log Out). Desktop users see the MiniSidebar instead. */
   onOpenMenuDrawer?: () => void;
@@ -108,11 +108,18 @@ export default function EditorTopBar({
       ? 'Smart Flow'
       : 'Cinematic';
 
+  // C-3-1: Real save-status pill. The 'error' state is sticky (set by
+  // the saveStatusBus when a write fails) and uses the warning gold so
+  // users notice — silently green "Saved" while writes were failing was
+  // the data-loss bug we're fixing. Tooltip on the chip explains the
+  // retry path; on click users can attempt the last save again via the
+  // Inspector control they were using (no global retry hook exists).
   const savePill = {
-    idle:   { text: '● Auto-saved', color: 'text-[#14C8CC]' },
-    saved:  { text: '● Auto-saved', color: 'text-[#14C8CC]' },
-    saving: { text: '● Saving…',    color: 'text-[#14C8CC]' },
-    dirty:  { text: '● Unsaved',    color: 'text-[#E4C875]' },
+    idle:   { text: 'Auto-saved',         color: 'text-primary',  dot: 'bg-primary' },
+    saved:  { text: 'Saved',              color: 'text-primary',  dot: 'bg-primary' },
+    saving: { text: 'Saving…',            color: 'text-primary',  dot: 'bg-primary animate-pulse' },
+    dirty:  { text: 'Unsaved changes',    color: 'text-[#E4C875]', dot: 'bg-[#E4C875]' },
+    error:  { text: 'Save failed · retry', color: 'text-[#E4C875]', dot: 'bg-[#E4C875] animate-pulse' },
   }[saveStatus];
 
   const exporting = exportState.status === 'submitting' || exportState.status === 'rendering';
@@ -276,7 +283,19 @@ export default function EditorTopBar({
       </div>
 
       {/* Autosave */}
-      <span className={`hidden md:inline font-mono text-[10px] tracking-[0.12em] uppercase shrink-0 ${savePill.color}`}>
+      <span
+        className={`hidden md:inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.12em] uppercase shrink-0 ${savePill.color}`}
+        title={
+          saveStatus === 'error'
+            ? "Last save didn't go through. Try the change again or check your connection."
+            : saveStatus === 'saving' ? 'Saving your changes…'
+              : saveStatus === 'dirty' ? 'You have unsaved changes'
+                : 'All changes are saved'
+        }
+        role="status"
+        aria-live="polite"
+      >
+        <span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full ${savePill.dot}`} />
         {savePill.text}
       </span>
 

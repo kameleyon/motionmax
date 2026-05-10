@@ -1,5 +1,4 @@
 import { useRef } from "react";
-import { motion } from "framer-motion";
 import { Clock, Zap, ArrowRight, FileText, Mic, Image, Film, CheckCircle2 } from "lucide-react";
 import { useTrackImpression } from "@/hooks/useAnalytics";
 
@@ -7,6 +6,11 @@ import { useTrackImpression } from "@/hooks/useAnalytics";
  * Before/After comparison section for the landing
  * page. Shows manual video editing workflow vs
  * MotionMax AI-assisted workflow with time-saved.
+ *
+ * §5 PERF-009 fix (2026-05-10): swapped four <motion.div initial=...
+ * whileInView=...> wrappers for the .animate-fade-in-up /
+ * .animate-fade-in-scale CSS keyframe classes. Stagger preserved via
+ * inline animationDelay. See LandingCta.tsx for the full rationale.
  * ────────────────────────────────────────────── */
 
 interface WorkflowStep {
@@ -40,19 +44,14 @@ export default function BeforeAfterComparison() {
   return (
     <section ref={ref} className="py-16 sm:py-20">
       <div className="mx-auto max-w-6xl px-6 sm:px-8">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="text-center mb-12"
-        >
+        <div className="animate-fade-in-up text-center mb-12">
           <h2 className="type-h1 tracking-tight text-foreground">
             Save {TIME_SAVED_PERCENT}% of Your Production Time
           </h2>
           <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
             What used to take a full day now takes minutes with AI-powered generation.
           </p>
-        </motion.div>
+        </div>
 
         <div className="grid gap-6 md:grid-cols-2 items-stretch">
           {/* Manual workflow */}
@@ -77,12 +76,9 @@ export default function BeforeAfterComparison() {
         </div>
 
         {/* Time-saved highlight */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          whileInView={{ opacity: 1, scale: 1 }}
-          viewport={{ once: true }}
-          transition={{ delay: 0.3 }}
-          className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 rounded-xl border border-primary/50 bg-primary/5 p-6"
+        <div
+          className="animate-fade-in-scale mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 rounded-xl border border-primary/50 bg-primary/5 p-6"
+          style={{ animationDelay: "0.3s" }}
         >
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/15">
@@ -95,7 +91,7 @@ export default function BeforeAfterComparison() {
           </div>
           <div className="hidden sm:block h-10 w-px bg-border" />
           <TimeSavedMetrics />
-        </motion.div>
+        </div>
       </div>
     </section>
   );
@@ -118,16 +114,13 @@ function WorkflowCard({ title, icon, steps, total, variant, delay }: WorkflowCar
   const isAi = variant === "ai";
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ delay }}
-      className={`rounded-xl border p-6 ${
+    <div
+      className={`animate-fade-in-up rounded-xl border p-6 ${
         isAi
           ? "border-primary/50 bg-primary/5"
           : "border-border/50 bg-muted/30"
       }`}
+      style={{ animationDelay: `${delay}s` }}
     >
       <div className="flex items-center gap-2.5 mb-5">
         {icon}
@@ -163,7 +156,7 @@ function WorkflowCard({ title, icon, steps, total, variant, delay }: WorkflowCar
           {total}
         </span>
       </div>
-    </motion.div>
+    </div>
   );
 }
 

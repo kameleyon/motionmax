@@ -9,24 +9,25 @@ import { useRef, useState, useEffect } from "react";
 import { uploadStyleReference } from "@/lib/uploadStyleReference";
 import { toast } from "sonner";
 
-// Import style preview images
-import minimalistPreview from "@/assets/styles/minimalist-preview.png";
-import doodlePreview from "@/assets/styles/doodle-preview.png";
-import stickPreview from "@/assets/styles/stick-preview.png";
-import animePreview from "@/assets/styles/anime-preview.png";
-import realisticPreview from "@/assets/styles/realistic-preview.png";
-import pixarPreview from "@/assets/styles/3d-pixar-preview.png";
-import claymationPreview from "@/assets/styles/claymation-preview.png";
-import storybookPreview from "@/assets/styles/painterly-preview.png";
-import caricaturePreview from "@/assets/styles/caricature-preview.png";
-import moodyPreview from "@/assets/styles/moody-preview.png";
-import sketchPreview from "@/assets/styles/sketch-preview.png";
-import crayonPreview from "@/assets/styles/crayon-preview.png";
-import chalkboardPreview from "@/assets/styles/chalkboard-preview.png";
-import legoPreview from "@/assets/styles/lego-preview.png";
-import cardboardPreview from "@/assets/styles/cardboard-preview.png";
-import babiePreview from "@/assets/styles/barbie-preview.png";
-import customPreview from "@/assets/styles/custom-preview.png";
+// §5 PERF-003 fix (2026-05-10): swap eager PNG imports for WebP — same
+// rationale as StyleSelector.tsx. PNGs stay on disk for legacy refs.
+import minimalistPreview from "@/assets/styles/minimalist-preview.webp";
+import doodlePreview from "@/assets/styles/doodle-preview.webp";
+import stickPreview from "@/assets/styles/stick-preview.webp";
+import animePreview from "@/assets/styles/anime-preview.webp";
+import realisticPreview from "@/assets/styles/realistic-preview.webp";
+import pixarPreview from "@/assets/styles/3d-pixar-preview.webp";
+import claymationPreview from "@/assets/styles/claymation-preview.webp";
+import storybookPreview from "@/assets/styles/painterly-preview.webp";
+import caricaturePreview from "@/assets/styles/caricature-preview.webp";
+import moodyPreview from "@/assets/styles/moody-preview.webp";
+import sketchPreview from "@/assets/styles/sketch-preview.webp";
+import crayonPreview from "@/assets/styles/crayon-preview.webp";
+import chalkboardPreview from "@/assets/styles/chalkboard-preview.webp";
+import legoPreview from "@/assets/styles/lego-preview.webp";
+import cardboardPreview from "@/assets/styles/cardboard-preview.webp";
+import babiePreview from "@/assets/styles/barbie-preview.webp";
+import customPreview from "@/assets/styles/custom-preview.webp";
 
 /**
  * SmartFlow style selector with all styles from Doc2Video Explainers + chalkboard.

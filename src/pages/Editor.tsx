@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Copy, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
@@ -173,6 +173,15 @@ export default function Editor() {
     setParams(next, { replace: true });
   };
 
+  // C-3-2: Track when the bounded kickoff probe has burned through its
+  // attempts without finding a generation row — surface a TERMINAL
+  // recovery UI instead of leaving the overlay frozen at "2%".
+  // 'idle'      → not yet run (no project loaded, or generation already exists)
+  // 'probing'   → first probe in flight or scheduled
+  // 'exhausted' → 8 probes (~60s) elapsed, still no generation row
+  const [probeState, setProbeState] = useState<'idle' | 'probing' | 'exhausted'>('idle');
+  const probeRunIdRef = useRef(0);
+
   // Aggressive probe while stuck on the awaiting screen. React Query's
   // own refetch mechanisms (staleTime: 0, refetchInterval,
   // invalidateQueries) can race against Supabase realtime handshakes,
@@ -187,7 +196,15 @@ export default function Editor() {
   // case left to paper over.
   useEffect(() => {
     const waiting = !!state?.project && !state?.generation && !!projectId && !!user;
-    if (!waiting) return;
+    if (!waiting) {
+      // We've found a generation (or unmounted) — clear any exhausted
+      // banner so a successful re-probe (after user clicks "Continue
+      // waiting") can paint normal UI again.
+      setProbeState((s) => (s === 'exhausted' ? s : 'idle'));
+      return;
+    }
+    setProbeState('probing');
+    const runId = ++probeRunIdRef.current;
     let cancelled = false;
     let attempts = 0;
     // Bounded backoff probe — was a forever-running 2s interval that ran
@@ -238,6 +255,7 @@ export default function Editor() {
           await queryClient.resetQueries({ queryKey: ['editor-state', projectId] });
           await queryClient.resetQueries({ queryKey: ['active-jobs', projectId] });
           void refetchEditor();
+          if (probeRunIdRef.current === runId) setProbeState('idle');
           return; // stop probing — generation is in flight or done
         }
       } catch (err) {
@@ -245,6 +263,12 @@ export default function Editor() {
       }
       if (attempts < MAX_PROBES && !cancelled) {
         timer = setTimeout(probe, delayFor(attempts));
+      } else if (!cancelled && probeRunIdRef.current === runId) {
+        // C-3-2: Probe budget exhausted with no generation row visible
+        // (and no project status flip to 'complete'). Flip to the
+        // terminal-error UI so the user gets recovery options instead
+        // of an indefinite "2%" overlay.
+        setProbeState('exhausted');
       }
     };
 
@@ -254,6 +278,18 @@ export default function Editor() {
       if (timer) clearTimeout(timer);
     };
   }, [state?.project, state?.generation, projectId, user, refetchEditor, queryClient]);
+
+  // C-3-2: User-driven recovery — re-runs the kickoff probe loop. Bumps
+  // the run id so the previous (cancelled) effect's late callbacks can't
+  // flip state back to 'exhausted' after the new probe starts.
+  const restartKickoffProbe = useCallback(() => {
+    probeRunIdRef.current += 1;
+    setProbeState('probing');
+    // Touch the editor-state query so the effect above re-runs with a
+    // fresh `state.project` reference and kicks off a new probe loop.
+    void queryClient.invalidateQueries({ queryKey: ['editor-state', projectId] });
+    void refetchEditor();
+  }, [projectId, queryClient, refetchEditor]);
 
   // Manual "Refresh" action exposed on the overlay. Full nuke + refetch.
   const forceRefresh = async () => {
@@ -331,13 +367,47 @@ export default function Editor() {
   // this to 'voice' so one click gets the user to Regenerate voice.
   const [inspectorFocusTab, setInspectorFocusTab] =
     useState<'scene' | 'voice' | 'captions' | 'motion' | undefined>(undefined);
-  const saveStatus: 'idle' | 'saving' | 'saved' | 'dirty' = 'saved';
+
+  // C-3-1: REAL save-status wiring. The autosave chip used to be a
+  // hardcoded `'saved'` string — perpetually green even when network
+  // writes failed (silent data loss). The persistence calls in
+  // useSceneRegen now publish onto a tiny in-process bus
+  // (saveStatusBus); we subscribe here and pass the live status into
+  // EditorTopBar via EditorFrame. EditorTopBar itself was already
+  // wired for the four states ('saving' / 'saved' / 'dirty' /
+  // 'error'-mapped-to-dirty); the only thing missing was a real
+  // signal source.
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'dirty' | 'error'>('idle');
+  useEffect(() => {
+    let mounted = true;
+    // Lazy import keeps the bus out of the main editor bundle for users
+    // who never trigger a save (read-only deep-links, unauthenticated
+    // share previews) — but the file is tiny so this is mostly an
+    // organizational choice. Synchronous import would also be fine.
+    import('@/components/editor/saveStatusBus').then(({ subscribeSaveStatus }) => {
+      if (!mounted) return;
+      const unsub = subscribeSaveStatus((s) => {
+        if (!mounted) return;
+        setSaveStatus(s);
+      });
+      // Stash unsubscribe on the closure so the cleanup below can call it.
+      // Closure capture is safe — `mounted` guard already short-circuits
+      // any late state updates after unmount.
+      cleanupRef.current = unsub;
+    });
+    return () => {
+      mounted = false;
+      cleanupRef.current?.();
+      cleanupRef.current = null;
+    };
+  }, []);
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   if (isLoading) {
     return (
       <div className="h-screen grid place-items-center bg-[#0A0D0F] text-[#ECEAE4]">
         <div className="flex flex-col items-center gap-2">
-          <Loader2 className="w-6 h-6 animate-spin text-[#14C8CC]" />
+          <Loader2 className="w-6 h-6 animate-spin text-primary" />
           <div className="font-mono text-[11px] text-[#8A9198] tracking-wider uppercase">
             Loading project…
           </div>
@@ -347,22 +417,22 @@ export default function Editor() {
   }
 
   if (isError || !state || !state.project) {
+    // C-3-3: Project-not-found page is no longer a dead-end. Surface
+    // the requested ID so support tickets carry it, and offer three
+    // escape paths instead of one.
+    return <ProjectNotFoundPage projectId={projectId} navigate={navigate} />;
+  }
+
+  // C-3-2: Kickoff probe exhausted — render terminal recovery UI so
+  // users never sit on "2%" forever. Two buttons (continue / dashboard)
+  // plus the project ID for support.
+  if (probeState === 'exhausted') {
     return (
-      <div className="h-screen grid place-items-center bg-[#0A0D0F] text-[#ECEAE4]">
-        <div className="text-center max-w-[320px]">
-          <div className="font-serif text-[22px] text-[#E4C875] mb-2">Project not found</div>
-          <p className="text-[13px] text-[#8A9198] mb-4">
-            This project may have been deleted, or you don't have access to it.
-          </p>
-          <button
-            type="button"
-            onClick={() => navigate('/dashboard-new')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#14C8CC]/10 border border-[#14C8CC]/30 text-[#14C8CC] text-[13px] hover:bg-[#14C8CC]/20"
-          >
-            Back to Studio
-          </button>
-        </div>
-      </div>
+      <ProbeExhaustedPage
+        projectId={projectId ?? ''}
+        onContinue={restartKickoffProbe}
+        onDashboard={() => navigate('/dashboard-new')}
+      />
     );
   }
 
@@ -383,14 +453,14 @@ export default function Editor() {
             <button
               type="button"
               onClick={retryStartGeneration}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-[#14C8CC] to-[#0FA6AE] text-[#0A0D0F] text-[13px] font-semibold hover:brightness-105"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-primary to-primary/80 text-[#0A0D0F] text-[13px] font-semibold hover:brightness-105"
             >
               Retry
             </button>
             <button
               type="button"
               onClick={() => navigate('/dashboard-new')}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#14C8CC]/10 border border-[#14C8CC]/30 text-[#14C8CC] text-[13px] hover:bg-[#14C8CC]/20"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary text-[13px] hover:bg-primary/20"
             >
               Back to Studio
             </button>
@@ -477,5 +547,147 @@ export default function Editor() {
       }
     />
     </>
+  );
+}
+
+/* ───────────────────────────────────────────────────────────────────
+ * C-3-3: Project-not-found page
+ *
+ * The previous "back to studio" button was a dead-end — no way to
+ * browse projects, no support escape, no project ID surfaced for
+ * support tickets. Three escape paths now: browse, contact support,
+ * or refetch (user may have just landed before the realtime sync
+ * caught up).
+ * ─────────────────────────────────────────────────────────────────── */
+function ProjectNotFoundPage({
+  projectId,
+  navigate,
+}: {
+  projectId: string | undefined;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const id = projectId ?? '(unknown)';
+  const supportSubject = encodeURIComponent(`Project not found: ${id}`);
+  const supportBody = encodeURIComponent(
+    `Hi MotionMax support,\n\nI tried to open project ${id} but the editor says it can't be found.\n\nThis might have been deleted, or there could be an access issue.\n\n— Sent from the editor's project-not-found page.`,
+  );
+  return (
+    <div className="h-screen grid place-items-center bg-[#0A0D0F] text-[#ECEAE4] px-6">
+      <div className="text-center max-w-[460px]">
+        <div className="font-serif text-[24px] text-[#E4C875] mb-2">Project not found</div>
+        <p className="text-[13px] text-[#8A9198] mb-4 leading-relaxed">
+          This project may have been deleted, or you may not have access to it. If you got here from a shared link, double-check it with whoever sent you.
+        </p>
+        <ProjectIdLine id={id} />
+        <div className="flex flex-wrap items-center justify-center gap-2 mt-5">
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard-new')}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-primary to-primary/80 text-[#0A0D0F] text-[13px] font-semibold hover:brightness-105"
+          >
+            Browse my projects
+          </button>
+          <a
+            href={`mailto:support@motionmax.io?subject=${supportSubject}&body=${supportBody}`}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary text-[13px] hover:bg-primary/20"
+          >
+            Contact support
+          </a>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-white/10 text-[#8A9198] text-[13px] hover:bg-white/5 hover:text-[#ECEAE4]"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────────────────────────────────────────────────────────────
+ * C-3-2: Probe-exhausted recovery page
+ *
+ * After the bounded ~60s kickoff probe burns through its 8 attempts
+ * without seeing a generation row, we surface this page instead of
+ * letting the loading overlay sit at "2%" indefinitely. Two CTAs:
+ * keep waiting (re-runs the probe) or bail to the dashboard. The
+ * project ID is surfaced for support tickets — generation may still
+ * be running on the worker; users can come back later.
+ * ─────────────────────────────────────────────────────────────────── */
+function ProbeExhaustedPage({
+  projectId,
+  onContinue,
+  onDashboard,
+}: {
+  projectId: string;
+  onContinue: () => void;
+  onDashboard: () => void;
+}) {
+  return (
+    <div className="h-screen grid place-items-center bg-[#0A0D0F] text-[#ECEAE4] px-6">
+      <div className="text-center max-w-[480px]">
+        <div className="font-serif text-[24px] text-[#E4C875] mb-2">
+          Generation taking longer than expected
+        </div>
+        <p className="text-[13px] text-[#8A9198] mb-2 leading-relaxed">
+          We're still working on your video, but the editor is waiting too long for the first scene to land. You can keep waiting or come back later — your generation isn't lost.
+        </p>
+        <p className="text-[12px] text-[#5A6268] mb-4 leading-relaxed sm:hidden">
+          Slow connection? This usually finishes in a minute or two.
+        </p>
+        <ProjectIdLine id={projectId} />
+        <div className="flex flex-wrap items-center justify-center gap-2 mt-5">
+          <button
+            type="button"
+            onClick={onContinue}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-primary to-primary/80 text-[#0A0D0F] text-[13px] font-semibold hover:brightness-105"
+          >
+            Continue waiting
+          </button>
+          <button
+            type="button"
+            onClick={onDashboard}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary text-[13px] hover:bg-primary/20"
+          >
+            Return to dashboard
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Small reusable component: shows the project ID with a copy-to-
+ *  clipboard affordance so users can drop it into a support email
+ *  without retyping a UUID by hand. */
+function ProjectIdLine({ id }: { id: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(id);
+      setCopied(true);
+      toast.success('Project ID copied');
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // Older browsers / iOS lockdown — fall through to selecting the text.
+      toast.error('Copy failed — long-press to select.');
+    }
+  };
+  return (
+    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-white/10 bg-white/[0.03] font-mono text-[11px] text-[#8A9198]">
+      <span className="text-[#5A6268] uppercase tracking-wider mr-1">Project ID</span>
+      <span className="text-[#ECEAE4] select-all break-all max-w-[260px] truncate">{id}</span>
+      <button
+        type="button"
+        onClick={handleCopy}
+        title="Copy project ID"
+        aria-label="Copy project ID"
+        className="ml-1 inline-flex items-center justify-center w-6 h-6 rounded text-[#8A9198] hover:bg-white/10 hover:text-[#ECEAE4] transition-colors"
+      >
+        {copied ? <Check className="w-3 h-3 text-primary" /> : <Copy className="w-3 h-3" />}
+      </button>
+    </div>
   );
 }

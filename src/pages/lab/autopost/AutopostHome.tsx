@@ -37,6 +37,12 @@ import AppShell from "@/components/dashboard/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { AutopostNav } from "./_AutopostNav";
+import { loadAdminFonts } from "@/lib/loadCaptionFonts";
+
+// §5 PERF-002 fix (2026-05-10): autopost-tokens.css uses Instrument
+// Serif + JetBrains Mono via --serif / --mono. Removed from public
+// index.html — kicked here when the autopost shell mounts. Idempotent.
+loadAdminFonts();
 import { AutomationCard } from "./_AutomationCard";
 import { platformLabel } from "./_autopostUi";
 import { formatRelativeTime } from "./_utils";

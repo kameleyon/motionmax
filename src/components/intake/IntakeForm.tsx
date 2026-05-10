@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { motion } from 'framer-motion';
 import {
-  AudioLines, Wand2, Camera, Palette, Link as LinkIcon, Paperclip,
-  ChevronLeft, ChevronRight, ImagePlus, X, Upload, Loader2,
+  AudioLines, Wand2, Link as LinkIcon, Paperclip,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -38,45 +36,56 @@ import {
   type MusicGenre, type CameraMotion, type ColorGrade, type SceneTransition,
   type IntakeSettings,
 } from './types';
-import { IntakeField, IntakeLabel, IntakeSlider, Pill } from './primitives';
+import { IntakeField, IntakeLabel, IntakeSlider } from './primitives';
 import FeatureToggle from './FeatureToggle';
 import IntakeRail from './IntakeRail';
 import { useIntakeRail } from './IntakeFrame';
 import { PLAN_LIMITS, normalizePlanName } from '@/lib/planLimits';
+import StepLoadingSkeleton from './steps/StepLoadingSkeleton';
+// styleLabelFor is in its own tiny module so importing it here doesn't
+// pull the StyleCarousel chunk's STYLES URL handles into this bundle.
+import { styleLabelFor } from './steps/styleLabels';
+
+// C-5-7 (Prism PERF-011): three of the heaviest sections of this form
+// are split into their own React.lazy chunks so the prompt textarea +
+// format/duration controls + language/voice/captions/brand row paint
+// before the rest of the form is parsed. Each lazy chunk loads under a
+// <Suspense> with a sized skeleton so the layout doesn't jump.
+//
+//  * StyleCarousel              — 17 image-preview URL handles +
+//                                  framer-motion + carousel scroll
+//                                  controls. Was the single largest
+//                                  contributor to the IntakeForm chunk.
+//  * DirectionBlock             — Tone slider + camera/transition/grade
+//                                  pill grids. Constant tables live in
+//                                  the chunk.
+//  * CharacterConsistencyBlock  — character textarea + image-upload
+//                                  affordance + reference grid + chip
+//                                  list. Only mounted when the mode
+//                                  features supports it (cinematic +
+//                                  explainer); other modes never load
+//                                  this chunk.
+const StyleCarousel = lazy(() => import('./steps/StyleCarousel'));
+const DirectionBlock = lazy(() => import('./steps/DirectionBlock'));
+const CharacterConsistencyBlock = lazy(() => import('./steps/CharacterConsistencyBlock'));
 
 // ── Real style preview thumbnails ──
-//
-// Each entry resolves to its asset URL via `new URL(..., import.meta.url)`.
-// Vite handles this lazily — the URLs are tree-shaken into the build but
-// the bytes only download when an `<img src=...>` actually requests them.
-// Combined with the IntersectionObserver-gated `<StylePreviewImg>` below,
-// only the thumbs the user actually sees on screen ever leave the wire.
-//
-// Previously these were eager `import` statements which Vite bundled into
-// the create-new chunk's asset graph (~3.2 MB raw of PNGs total, with
-// `cardboard-preview.png` alone at 1.84 MB). Re-encoding that single
-// image to WebP is still recommended (see the task list), but lazy-by-
-// default removes the immediate-blocking-LCP problem regardless of
-// individual file weight.
-const STYLES: Array<{ id: string; label: string; preview: string }> = [
-  { id: 'realistic',  label: 'Realistic',   preview: new URL('../../assets/styles/realistic-preview.png',  import.meta.url).href },
-  { id: '3d-pixar',   label: '3D Style',    preview: new URL('../../assets/styles/3d-pixar-preview.png',   import.meta.url).href },
-  { id: 'anime',      label: 'Anime',       preview: new URL('../../assets/styles/anime-preview.png',      import.meta.url).href },
-  { id: 'claymation', label: 'Claymation',  preview: new URL('../../assets/styles/claymation-preview.png', import.meta.url).href },
-  { id: 'storybook',  label: 'Storybook',   preview: new URL('../../assets/styles/painterly-preview.png',  import.meta.url).href },
-  { id: 'caricature', label: 'Caricature',  preview: new URL('../../assets/styles/caricature-preview.png', import.meta.url).href },
-  { id: 'doodle',     label: 'Urban Doodle',preview: new URL('../../assets/styles/doodle-preview.png',     import.meta.url).href },
-  { id: 'stick',      label: 'Stick Figure',preview: new URL('../../assets/styles/stick-preview.png',      import.meta.url).href },
-  { id: 'sketch',     label: 'Papercut 3D', preview: new URL('../../assets/styles/sketch-preview.png',     import.meta.url).href },
-  { id: 'crayon',     label: 'Crayon',      preview: new URL('../../assets/styles/crayon-preview.png',     import.meta.url).href },
-  { id: 'minimalist', label: 'Minimalist',  preview: new URL('../../assets/styles/minimalist-preview.png', import.meta.url).href },
-  { id: 'moody',      label: 'Moody',       preview: new URL('../../assets/styles/moody-preview.png',      import.meta.url).href },
-  { id: 'chalkboard', label: 'Chalkboard',  preview: new URL('../../assets/styles/chalkboard-preview.png', import.meta.url).href },
-  { id: 'lego',       label: 'LEGO',        preview: new URL('../../assets/styles/lego-preview.png',       import.meta.url).href },
-  { id: 'cardboard',  label: 'Cardboard',   preview: new URL('../../assets/styles/cardboard-preview.png',  import.meta.url).href },
-  { id: 'babie',      label: 'Babie',       preview: new URL('../../assets/styles/barbie-preview.png',     import.meta.url).href },
-  { id: 'custom',     label: 'Custom',      preview: new URL('../../assets/styles/custom-preview.png',     import.meta.url).href },
-];
+// C-5-7 (Prism PERF-011): the STYLES array, the carousel JSX, and its
+// scroll-controls now live in src/components/intake/steps/StyleCarousel.tsx.
+// The 17 webp/png URL handles + framer-motion + scroll ref logic ship
+// in their own lazy chunk, so the IntakeForm chunk no longer has to
+// parse them on first paint. `styleLabelFor()` is re-exported so the
+// rail summary can resolve a styleId to its display label without
+// dragging the entire array back into this chunk.
+
+// §5 PERF-003 fix (2026-05-10): all 17 thumbs are now WebP. Re-encoded
+// at q=80-82 with `ffmpeg -c:v libwebp` from the original PNGs in
+// src/assets/styles/. Total weight on the wire dropped from ~3.6 MB
+// (PNG) to ~570 KB (WebP) — an 84% reduction. The single worst
+// offender, `cardboard-preview.png` at 1.84 MB, is now 93 KB.
+// Regenerate any PNG → WebP with:
+//   ffmpeg -y -i src/assets/styles/<name>.png -c:v libwebp \
+//     -quality 80 -compression_level 6 -an src/assets/styles/<name>.webp
 
 // Full language catalogue — mirrors src/components/workspace/LanguageSelector.tsx
 // C-1-2: each row carries a BCP-47 `lang` code + an `englishName` so the
@@ -100,9 +109,10 @@ const LANGUAGES: Array<{ code: string; label: string; flag: string; englishName:
 // MUSIC_GENRES removed alongside the Music + SFX intake UI block while
 // Lyria is unstable. See git history for the constant + the JSX block
 // when re-enabling.
-const CAMERA_MOTIONS: CameraMotion[] = ['Default', 'Static', 'Dolly', 'Handheld', 'Drone', 'Crane', 'Whip Pan'];
-const SCENE_TRANSITIONS: SceneTransition[] = ['Default', 'Cut', 'Dissolve', 'Whip', 'Black'];
-const COLOR_GRADES: ColorGrade[] = ['Kodak 250D', 'Bleach Bypass', 'Teal & Orange', 'Warm Film', 'Cool Noir', 'Desaturated'];
+//
+// CAMERA_MOTIONS / SCENE_TRANSITIONS / COLOR_GRADES were moved into
+// src/components/intake/steps/DirectionBlock.tsx alongside the JSX that
+// renders them — see C-5-7 (Prism PERF-011) lazy-chunk split.
 
 // Default format = portrait (9:16) per product call.
 function aspectFromFormat(f: string): IntakeAspect {
@@ -226,28 +236,12 @@ export default function IntakeForm({
   // character-consistency block (additional text/link references that
   // describe the lead's look).
   const [characterAttachments, setCharacterAttachments] = useState<SourceAttachment[]>([]);
-  const charAttachmentInput = useRef<HTMLInputElement>(null);
-  const charImageInput = useRef<HTMLInputElement>(null);
 
   const [generating, setGenerating] = useState(false);
 
-  // ── Style carousel scroll controls ──
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [canLeft, setCanLeft] = useState(false);
-  const [canRight, setCanRight] = useState(true);
-  useEffect(() => {
-    const el = scrollRef.current; if (!el) return;
-    const check = () => {
-      setCanLeft(el.scrollLeft > 0);
-      setCanRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 10);
-    };
-    check();
-    el.addEventListener('scroll', check);
-    return () => el.removeEventListener('scroll', check);
-  }, []);
-  const scrollBy = (dir: 'left' | 'right') => {
-    scrollRef.current?.scrollBy({ left: dir === 'left' ? -240 : 240, behavior: 'smooth' });
-  };
+  // C-5-7: style carousel scroll-controls + ref now live inside
+  // <StyleCarousel /> (lazy chunk). The parent only owns the styleId
+  // value and the custom-style input/upload state.
 
   const speakersForLang = useMemo(() => getSpeakersForLanguage(language), [language]);
   // User's cloned voices — surfaced at the TOP of the voice select.
@@ -804,7 +798,7 @@ export default function IntakeForm({
           aspect={aspect}
           prompt={prompt}
           mode={mode}
-          visualStyle={{ name: STYLES.find((s) => s.id === styleId)?.label ?? 'Style' }}
+          visualStyle={{ name: styleLabelFor(styleId) }}
           language={language}
           voice={voice}
           captionStyle={caption}
@@ -831,7 +825,8 @@ export default function IntakeForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aspect, prompt, mode, styleId, language, voice, caption, duration, consistency, characterDescription, music, lipSync, features, costItems, totalCost, credits, creditsCap, generating, isAdmin, scheduleState]);
 
-  const selectedStyle = STYLES.find((s) => s.id === styleId);
+  // C-5-7: `selectedStyle` lookup moved into the lazy StyleCarousel
+  // chunk so this parent component doesn't need the STYLES table.
 
   return (
     <form onSubmit={(e) => { e.preventDefault(); handleGenerate(); }} className="flex flex-col gap-6 sm:gap-7">
@@ -1174,362 +1169,97 @@ export default function IntakeForm({
       when the provider is stable again.
       */}
 
-      {/* Character consistency — ALWAYS ON for cinematic + explainer (folded
-          into base cost). Renders a read-only "on" pill + the char
-          description + image-upload area that used to live in the Cast slot. */}
+      {/* Character consistency — ALWAYS ON for cinematic + explainer.
+          C-5-7 (Prism PERF-011): the entire block is now a lazy-loaded
+          React.lazy chunk so non-cinematic / non-explainer modes never
+          download it. Mounted under <Suspense> only when the mode's
+          features.characterAppearance is on. */}
       {consistency && features.characterAppearance && (
-        <div>
-          {/* Single-line header: label + "Always on" pill stay on the same
-              row at every breakpoint. Hand-rolled label classes so we can
-              control mb + whitespace at the container level. */}
-          <div className="flex items-center gap-2 mb-2 whitespace-nowrap">
-            <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#5A6268]">
-              Character consistency
-            </span>
-            <span className="inline-flex items-center font-mono text-[10px] tracking-[0.1em] uppercase text-[#14C8CC] px-2 py-0.5 rounded-md bg-[#14C8CC]/10 border border-[#14C8CC]/30 shrink-0">
-              Always on
-            </span>
-          </div>
-
-          <IntakeField className="p-3 sm:p-4">
-            <p className="text-[12px] text-[#8A9198] mb-3 leading-[1.5]">
-              Keep the same character across every scene. Describe your lead, and
-              optionally drop in up to {MAX_CHAR_IMAGES} reference images so the
-              model knows what they look like.
-            </p>
-
-            <textarea
-              value={characterDescription}
-              onChange={(e) => setCharacterDescription(e.target.value.slice(0, MAX_CHAR_DESC_CHARS))}
-              onPaste={handlePasteForCharacter}
-              onDrop={handleDropForCharacter}
-              onDragOver={(e) => e.preventDefault()}
-              rows={3}
-              maxLength={MAX_CHAR_DESC_CHARS}
-              placeholder="A 30-year-old man with short brown hair, warm brown eyes, a close-cropped beard, wearing a navy sweater. Earnest expression. Paste text, drop images, or attach reference links below."
-              aria-label="Character description"
-              className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2.5 text-base sm:text-[13px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 placeholder:text-[#5A6268] resize-y"
-            />
-
-            {/* Reference-image file input (kept — same 5 MB, image-only cap) */}
-            <input
-              ref={charImageInput}
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={(e) => { handleCharImageUpload(e.target.files); e.target.value = ''; }}
-              className="hidden"
-            />
-
-            {/* Generic attachment input — text / markdown / pdf /
-                images. Mirrors the Sources section so users can attach
-                non-image reference material (character notes, style
-                guide snippets) directly to the character block. */}
-            <input
-              ref={charAttachmentInput}
-              type="file"
-              accept=".txt,.md,.csv,.json,.rtf,.html,.pdf,image/*"
-              multiple
-              className="hidden"
-              onChange={(e) => {
-                const files = Array.from(e.target.files ?? []);
-                if (files.length === 0) return;
-                (async () => {
-                  const added: SourceAttachment[] = [];
-                  for (const f of files) {
-                    const isImage = f.type.startsWith('image/');
-                    // Image files go into the reference grid, not the
-                    // attachments list.
-                    if (isImage) {
-                      const dt = new DataTransfer();
-                      dt.items.add(f);
-                      handleCharImageUpload(dt.files);
-                      continue;
-                    }
-                    const isText = /text|json|xml|csv|rtf|html/i.test(f.type || '');
-                    let value = '';
-                    if (isText) { try { value = await f.text(); } catch { value = ''; } }
-                    else value = URL.createObjectURL(f);
-                    added.push({
-                      id: `${Date.now()}-${f.name}`,
-                      type: 'file',
-                      name: f.name,
-                      value,
-                    });
-                  }
-                  if (added.length > 0) {
-                    setCharacterAttachments((prev) => [...prev, ...added]);
-                    toast.success(`${added.length} reference${added.length === 1 ? '' : 's'} attached.`);
-                  }
-                })();
-                e.target.value = '';
-              }}
-            />
-
-            {/* Button row — matches the Sources & Direction layout:
-                + Add source / File / URL, with the char counter on the
-                right. Same hover + border styling so users recognise
-                the affordance immediately. */}
-            <div className="flex items-center gap-2 flex-wrap mt-3 pt-2.5 border-t border-white/5">
-              <button
-                type="button"
-                onClick={() => charAttachmentInput.current?.click()}
-                className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.1em] uppercase text-[#8A9198] px-2 py-1 border border-dashed border-white/10 rounded-md hover:text-[#ECEAE4]"
-              >
-                + Add source
-              </button>
-              <button
-                type="button"
-                onClick={() => charAttachmentInput.current?.click()}
-                className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.1em] uppercase text-[#8A9198] px-2 py-1 border border-white/5 rounded-md hover:text-[#ECEAE4]"
-              >
-                <Paperclip className="w-3 h-3" /> File
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const raw = window.prompt('Paste a URL to a character reference photo or profile:');
-                  if (!raw) return;
-                  if (!tryAttachUrl(raw, 'character')) {
-                    toast.error("That doesn't look like a valid URL.");
-                  }
-                }}
-                className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.1em] uppercase text-[#8A9198] px-2 py-1 border border-white/5 rounded-md hover:text-[#ECEAE4]"
-              >
-                <LinkIcon className="w-3 h-3" /> URL
-              </button>
-              <div className="flex-1" />
-              <span
-                className={cn(
-                  'font-mono text-[10px] tracking-[0.1em] uppercase px-2 py-1',
-                  characterDescription.length > MAX_CHAR_DESC_CHARS * 0.9
-                    ? 'text-[#E4C875]'
-                    : 'text-[#5A6268]',
-                )}
-                aria-label={`${characterDescription.length} of ${MAX_CHAR_DESC_CHARS} characters used`}
-              >
-                {characterDescription.length} / {MAX_CHAR_DESC_CHARS}
-              </span>
-            </div>
-
-            {/* Reference image grid (unchanged) */}
-            <div className="mt-3 flex flex-wrap gap-2.5">
-              {characterImages.map((src, i) => (
-                <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border border-white/10 bg-[#1B2228]">
-                  <img src={src} alt={`Reference ${i + 1}`} className="w-full h-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => setCharacterImages((p) => p.filter((_, j) => j !== i))}
-                    className="absolute top-1 right-1 p-1.5 rounded-full bg-black/70 hover:bg-black text-white"
-                    aria-label="Remove reference"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-              {characterImages.length < MAX_CHAR_IMAGES && (
-                <button
-                  type="button"
-                  onClick={() => charImageInput.current?.click()}
-                  className="w-16 h-16 rounded-lg border border-dashed border-white/10 hover:border-[#14C8CC]/40 hover:bg-[#14C8CC]/5 text-[#5A6268] hover:text-[#14C8CC] transition-colors flex flex-col items-center justify-center gap-0.5"
-                >
-                  <ImagePlus className="w-4 h-4" />
-                  <span className="text-[9px] font-mono tracking-wider uppercase">Add</span>
-                </button>
-              )}
-            </div>
-
-            {/* Chip list for text / link references */}
-            {characterAttachments.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5 mt-3">
-                {characterAttachments.map((a) => (
-                  <span
-                    key={a.id}
-                    className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-wider text-[#ECEAE4] px-2 py-0.5 rounded-md bg-[#1B2228] border border-white/10"
-                    title={`${a.type} · ${a.name}`}
-                  >
-                    <span className="uppercase text-[#14C8CC]">{a.type}</span>
-                    <span className="truncate max-w-[180px]">{a.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => setCharacterAttachments((prev) => prev.filter((x) => x.id !== a.id))}
-                      aria-label={`Remove ${a.name}`}
-                      className="text-[#8A9198] hover:text-[#E4C875]"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </IntakeField>
-        </div>
+        <Suspense fallback={<StepLoadingSkeleton height={200} />}>
+          <CharacterConsistencyBlock
+            characterDescription={characterDescription}
+            onCharacterDescriptionChange={setCharacterDescription}
+            onPaste={handlePasteForCharacter}
+            onDrop={handleDropForCharacter}
+            characterImages={characterImages}
+            onCharImageRemove={(i) => setCharacterImages((p) => p.filter((_, j) => j !== i))}
+            onCharImageUpload={handleCharImageUpload}
+            characterAttachments={characterAttachments}
+            onCharAttachmentRemove={(id) => setCharacterAttachments((prev) => prev.filter((x) => x.id !== id))}
+            onCharAttachmentFile={async (files) => {
+              const list = Array.from(files ?? []);
+              if (list.length === 0) return;
+              const added: SourceAttachment[] = [];
+              for (const f of list) {
+                const isImage = f.type.startsWith('image/');
+                // Image files go into the reference grid, not the
+                // attachments list.
+                if (isImage) {
+                  const dt = new DataTransfer();
+                  dt.items.add(f);
+                  handleCharImageUpload(dt.files);
+                  continue;
+                }
+                const isText = /text|json|xml|csv|rtf|html/i.test(f.type || '');
+                let value = '';
+                if (isText) { try { value = await f.text(); } catch { value = ''; } }
+                else value = URL.createObjectURL(f);
+                added.push({
+                  id: `${Date.now()}-${f.name}`,
+                  type: 'file',
+                  name: f.name,
+                  value,
+                });
+              }
+              if (added.length > 0) {
+                setCharacterAttachments((prev) => [...prev, ...added]);
+                toast.success(`${added.length} reference${added.length === 1 ? '' : 's'} attached.`);
+              }
+            }}
+            onCharAttachmentUrl={() => {
+              const raw = window.prompt('Paste a URL to a character reference photo or profile:');
+              if (!raw) return;
+              if (!tryAttachUrl(raw, 'character')) {
+                toast.error("That doesn't look like a valid URL.");
+              }
+            }}
+          />
+        </Suspense>
       )}
 
-      {/* Visual style — real thumbnails, horizontal scroll */}
-      <div>
-        <IntakeLabel>Visual style</IntakeLabel>
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => scrollBy('left')}
-            className={cn(
-              'absolute left-0 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full grid place-items-center border border-white/10 bg-[#0A0D0F]/90 backdrop-blur-sm text-[#ECEAE4] hover:bg-[#151B20] transition-opacity',
-              canLeft ? 'opacity-100' : 'opacity-0 pointer-events-none',
-            )}
-            aria-label="Scroll styles left"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollBy('right')}
-            className={cn(
-              'absolute right-0 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full grid place-items-center border border-white/10 bg-[#0A0D0F]/90 backdrop-blur-sm text-[#ECEAE4] hover:bg-[#151B20] transition-opacity',
-              canRight ? 'opacity-100' : 'opacity-0 pointer-events-none',
-            )}
-            aria-label="Scroll styles right"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
+      {/* Visual style — lazy-loaded chunk owns the 17 image-preview
+          handles + the carousel scroll controls (C-5-7 / PERF-011). */}
+      <Suspense fallback={<StepLoadingSkeleton height={180} />}>
+        <StyleCarousel
+          styleId={styleId}
+          onStyleChange={setStyleId}
+          customStyle={customStyle}
+          onCustomStyleChange={setCustomStyle}
+          customStyleImage={customStyleImage}
+          onCustomStyleImageChange={setCustomStyleImage}
+          uploadingStyle={uploadingStyle}
+          onCustomStyleImageUpload={handleCustomStyleImageUpload}
+        />
+      </Suspense>
 
-          <div
-            ref={scrollRef}
-            className="flex gap-2.5 overflow-x-auto scrollbar-hide px-1 py-1 snap-x snap-mandatory"
-            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-          >
-            {STYLES.map((s) => (
-              <motion.button
-                key={s.id}
-                type="button"
-                onClick={() => setStyleId(s.id)}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className={cn(
-                  'snap-start shrink-0 w-[108px] sm:w-[128px] rounded-xl overflow-hidden text-[#ECEAE4] transition-all border-2',
-                  s.id === styleId
-                    ? 'border-[#14C8CC] shadow-[0_0_0_4px_rgba(20,200,204,0.12)]'
-                    : 'border-white/5 hover:border-white/15',
-                )}
-              >
-                <div className="aspect-[4/3] bg-[#1B2228]">
-                  {/* loading=lazy + decoding=async + width/height hints
-                      so the browser can defer fetch and avoid blocking
-                      LCP. NB: cardboard-preview.png is currently 1.84 MB —
-                      flagged for WebP re-encode in Phase 0 bundle work
-                      (see newtemplate-roadmap.md). The other 16 thumbs
-                      are already small (10-300 KB). */}
-                  <img
-                    src={s.preview}
-                    alt={s.label}
-                    loading="lazy"
-                    decoding="async"
-                    width={256}
-                    height={192}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div className={cn(
-                  'py-1.5 px-1 text-center text-[11.5px] font-medium transition-colors',
-                  s.id === styleId ? 'bg-[#14C8CC]/10 text-[#14C8CC]' : 'bg-[#10151A] text-[#8A9198]',
-                )}>
-                  {s.label}
-                </div>
-              </motion.button>
-            ))}
-          </div>
-        </div>
-
-        {selectedStyle?.id === 'custom' && (
-          <div className="mt-3 grid gap-2.5">
-            <input
-              value={customStyle}
-              onChange={(e) => setCustomStyle(e.target.value)}
-              placeholder="Describe your custom visual style…"
-              className="w-full bg-[#151B20] border border-white/5 rounded-lg px-3 py-2.5 text-base sm:text-[13px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 placeholder:text-[#5A6268]"
-            />
-            {customStyleImage ? (
-              <div className="relative inline-block">
-                <img src={customStyleImage} alt="Style reference" className="h-24 rounded-lg border border-white/10" />
-                <button
-                  type="button"
-                  onClick={() => setCustomStyleImage(null)}
-                  className="absolute top-1 right-1 p-1 rounded-full bg-black/70 text-white"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ) : (
-              <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-white/10 text-[#8A9198] hover:text-[#ECEAE4] hover:border-white/20 cursor-pointer text-[12.5px] w-fit">
-                {uploadingStyle ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                {uploadingStyle ? 'Uploading…' : 'Upload reference image'}
-                <input
-                  type="file" accept="image/*" className="hidden"
-                  onChange={(e) => handleCustomStyleImageUpload(e.target.files?.[0] ?? null)}
-                />
-              </label>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Direction: Tone / Camera / Grade */}
-      <div>
-        <IntakeLabel>Direction</IntakeLabel>
-        <div className="grid gap-3">
-          <IntakeField>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="text-[12.5px] font-medium text-[#ECEAE4]">Tone & pacing</div>
-              <div className="font-mono text-[10px] text-[#5A6268] tracking-wider">
-                {tone < 25 ? 'CALM' : tone < 55 ? 'MEASURED' : tone < 80 ? 'ENERGETIC' : 'FRENETIC'}
-              </div>
-            </div>
-            <IntakeSlider value={tone} onChange={setTone} fmt={(v) => `${v}%`} />
-          </IntakeField>
-
-          {features.camera && (
-            <IntakeField>
-              <div className="text-[12.5px] font-medium text-[#ECEAE4] mb-2.5 flex items-center gap-1.5">
-                <Camera className="w-3.5 h-3.5" /> Camera movement
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {CAMERA_MOTIONS.map((c) => (
-                  <Pill key={c} on={c === camera} onClick={() => setCamera(c)}>{c}</Pill>
-                ))}
-              </div>
-            </IntakeField>
-          )}
-
-          {features.transition && (
-            <IntakeField>
-              <div className="text-[12.5px] font-medium text-[#ECEAE4] mb-2.5 flex items-center gap-1.5">
-                <Camera className="w-3.5 h-3.5" /> Transition
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {SCENE_TRANSITIONS.map((t) => (
-                  <Pill key={t} on={t === transition} onClick={() => setTransition(t)}>{t}</Pill>
-                ))}
-              </div>
-              <p className="text-[11px] text-[#5A6268] mt-2 leading-[1.45]">
-                Applied to every scene boundary. "Default" uses the current fade-in/out behaviour.
-              </p>
-            </IntakeField>
-          )}
-
-          {features.colorGrade && (
-            <IntakeField>
-              <div className="text-[12.5px] font-medium text-[#ECEAE4] mb-2.5 flex items-center gap-1.5">
-                <Palette className="w-3.5 h-3.5" /> Color grade
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {COLOR_GRADES.map((g) => (
-                  <Pill key={g} on={g === grade} onClick={() => setGrade(g)}>{g}</Pill>
-                ))}
-              </div>
-            </IntakeField>
-          )}
-        </div>
-      </div>
+      {/* Direction: Tone / Camera / Grade — lazy-loaded chunk owns the
+          CAMERA_MOTIONS / SCENE_TRANSITIONS / COLOR_GRADES tables and
+          the slider/pill JSX (C-5-7 / PERF-011). */}
+      <Suspense fallback={<StepLoadingSkeleton height={140} />}>
+        <DirectionBlock
+          tone={tone}
+          onToneChange={setTone}
+          showCamera={!!features.camera}
+          camera={camera}
+          onCameraChange={setCamera}
+          showTransition={!!features.transition}
+          transition={transition}
+          onTransitionChange={setTransition}
+          showColorGrade={!!features.colorGrade}
+          grade={grade}
+          onGradeChange={setGrade}
+        />
+      </Suspense>
 
       {/* Mobile Generate button (desktop uses the rail CTA) */}
       <button

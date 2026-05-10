@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import type { EditorState } from '@/hooks/useEditorState';
+import { notifySaving, notifySaved, notifySaveError } from './saveStatusBus';
 
 /** Focused helper for per-scene edits + regen. Keeps all Supabase job
  *  inserts in one place so UI code stays clean. */
@@ -71,6 +72,7 @@ export function useSceneRegen(state: EditorState | null) {
   const updateScenePrompt = useCallback(async (index: number, nextPrompt: string) => {
     if (!state?.generation) { toast.error('No generation loaded.'); return false; }
     const genId = state.generation.id;
+    notifySaving();
     // Update both casings — visualPrompt (camelCase) is what every new
     // handler reads; visual_prompt (snake_case) is the legacy key some
     // older code paths still touch. Both atomic, no array overwrite.
@@ -82,6 +84,7 @@ export function useSceneRegen(state: EditorState | null) {
       { p_generation_id: genId, p_scene_index: index, p_field: 'visualPrompt', p_value: nextPrompt },
     );
     if (r1.error) {
+      notifySaveError();
       toast.error(`Couldn't save prompt: ${r1.error.message}`);
       return false;
     }
@@ -93,6 +96,7 @@ export function useSceneRegen(state: EditorState | null) {
       'update_scene_field',
       { p_generation_id: genId, p_scene_index: index, p_field: 'visual_prompt', p_value: nextPrompt },
     );
+    notifySaved();
     return true;
   }, [state?.generation]);
 
@@ -103,6 +107,7 @@ export function useSceneRegen(state: EditorState | null) {
    *  jobs run serialised via depends_on. */
   const updateSceneMeta = useCallback(async (index: number, patch: Record<string, unknown>) => {
     if (!state?.generation) return false;
+    notifySaving();
     // Atomic _meta merge via the worker's update_scene_meta_merge RPC.
     // Same race-safety reasoning as updateScenePrompt above — never
     // overwrite the whole scenes array from a possibly-stale React state.
@@ -116,7 +121,11 @@ export function useSceneRegen(state: EditorState | null) {
       'update_scene_field_json',
       { p_generation_id: state.generation.id, p_scene_index: index, p_field: '_meta', p_value: merged },
     );
-    if (error) { toast.error(`Couldn't save: ${error.message}`); return false; }
+    if (error) {
+      notifySaveError();
+      toast.error(`Couldn't save: ${error.message}`);
+      return false;
+    }
     // Invalidate the editor-state cache so the Inspector's derived state
     // (active grade pill, per-scene transition highlight, etc.) reflects
     // the new _meta immediately. Without this the UI looked frozen on
@@ -125,6 +134,7 @@ export function useSceneRegen(state: EditorState | null) {
     if (state?.project?.id) {
       queryClient.invalidateQueries({ queryKey: ['editor-state', state.project.id] });
     }
+    notifySaved();
     return true;
   }, [state?.generation, state?.project?.id, queryClient]);
 
@@ -434,6 +444,7 @@ export function useSceneRegen(state: EditorState | null) {
   const updateProjectVoice = useCallback(async (voice: string, regenAll: boolean) => {
     if (!user || !state?.project || !state?.generation) return;
     setBusy('regen');
+    notifySaving();
     try {
       // Detect cloned-voice picker IDs (`clone:<external_id>`) and
       // write the project columns the audio router expects:
@@ -541,8 +552,10 @@ export function useSceneRegen(state: EditorState | null) {
       } else {
         toast.success(`Voice switched to ${voice}. New scenes will use it.`);
       }
+      notifySaved();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      notifySaveError();
       toast.error(`Voice switch failed: ${msg}`);
     } finally {
       setBusy('idle');
@@ -557,6 +570,7 @@ export function useSceneRegen(state: EditorState | null) {
    *  see the stale selection and consciously switch. */
   const updateProjectLanguage = useCallback(async (language: string) => {
     if (!state?.project) return false;
+    notifySaving();
     try {
       const { error } = await supabase
         .from('projects')
@@ -564,10 +578,12 @@ export function useSceneRegen(state: EditorState | null) {
         .eq('id', state.project.id);
       if (error) throw new Error(error.message);
       queryClient.invalidateQueries({ queryKey: ['editor-state', state.project.id] });
+      notifySaved();
       toast.success('Language updated. Pick a voice for this language and Apply to all.');
       return true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      notifySaveError();
       toast.error(`Language switch failed: ${msg}`);
       return false;
     }
@@ -579,6 +595,7 @@ export function useSceneRegen(state: EditorState | null) {
    *  the whole video. */
   const updateAllScenesMeta = useCallback(async (patch: Record<string, unknown>) => {
     if (!state?.generation) return false;
+    notifySaving();
     const scenes = (state.generation.scenes as Array<Record<string, unknown>> | null) ?? [];
     const patched = scenes.map((s) => {
       const meta = (s._meta as Record<string, unknown> | undefined) ?? {};
@@ -588,10 +605,15 @@ export function useSceneRegen(state: EditorState | null) {
       .from('generations')
       .update({ scenes: patched as unknown as never })
       .eq('id', state.generation.id);
-    if (error) { toast.error(`Couldn't save: ${error.message}`); return false; }
+    if (error) {
+      notifySaveError();
+      toast.error(`Couldn't save: ${error.message}`);
+      return false;
+    }
     if (state?.project?.id) {
       queryClient.invalidateQueries({ queryKey: ['editor-state', state.project.id] });
     }
+    notifySaved();
     return true;
   }, [state?.generation, state?.project?.id, queryClient]);
 
@@ -729,6 +751,7 @@ export function useSceneRegen(state: EditorState | null) {
     const current = (state.project.intake_settings as Record<string, unknown> | null) ?? {};
     const next = { ...current, ...patch };
     const projectId = state.project.id;
+    notifySaving();
     try {
       const { error } = await supabase
         .from('projects')
@@ -740,6 +763,7 @@ export function useSceneRegen(state: EditorState | null) {
         // would show the stale "Apply to all" target until the next
         // realtime UPDATE arrived (or never, on quiet projects).
         queryClient.invalidateQueries({ queryKey: ['editor-state', projectId] });
+        notifySaved();
         return true;
       }
 
@@ -751,6 +775,7 @@ export function useSceneRegen(state: EditorState | null) {
       const msg = error.message || '';
       const isSchemaMiss = msg.includes('intake_settings') && msg.toLowerCase().includes('schema cache');
       if (!isSchemaMiss) {
+        notifySaveError();
         toast.error(`Couldn't save: ${msg}`);
         return false;
       }
@@ -772,13 +797,16 @@ export function useSceneRegen(state: EditorState | null) {
         .update({ scenes: patchedScenes as unknown as never })
         .eq('id', state.generation.id);
       if (genErr) {
+        notifySaveError();
         console.warn('[updateIntakeSettings] fallback failed:', genErr.message);
         return false;
       }
       queryClient.invalidateQueries({ queryKey: ['editor-state', projectId] });
+      notifySaved();
       return true;
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
+      notifySaveError();
       toast.error(`Couldn't save: ${errMsg}`);
       return false;
     }

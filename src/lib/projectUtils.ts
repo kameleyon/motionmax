@@ -8,6 +8,16 @@ export function normalizeProjectType(type: string | null | undefined): string {
   return type === "smart-flow" ? "smartflow" : type;
 }
 
+/**
+ * Single source of truth for the "is this a smartflow project?" check.
+ * Replaces inline `=== "smartflow" || === "smart-flow"` patterns scattered
+ * across the codebase — those drift when the canonical name changes again
+ * and miss the legacy hyphenated form half the time.
+ */
+export function isSmartFlow(type: string | null | undefined): boolean {
+  return normalizeProjectType(type) === "smartflow";
+}
+
 // ---------------------------------------------------------------------------
 // PROJECT_TYPE_META — single source of truth for icon and label per project type
 // ---------------------------------------------------------------------------

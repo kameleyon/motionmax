@@ -17,6 +17,7 @@ import * as Sentry from "@sentry/node";
 import { supabase } from "./supabase.js";
 import { writeSystemLog } from "./logger.js";
 import { stopHealthServer } from "../healthServer.js";
+import { hasCheckpoint } from "./checkpoint.js";
 
 /** Maximum time (ms) to wait for active jobs to drain during shutdown.
  *  Default: 60 s. Anything still running past this is released back to
@@ -169,10 +170,115 @@ export function makeGracefulShutdown(deps: LifecycleDeps) {
 }
 
 /**
+ * Hard cap on how long crashHandleAndExit can spend triaging in-flight
+ * jobs before we exit. Render's supervisor kills SIGKILL in ~10s after
+ * receiving SIGTERM/exit signal, so be conservative. If we can't get
+ * through the triage in this window, the stale-claim reaper will catch
+ * orphaned 'processing' rows the long way (~30 min).
+ */
+const CRASH_TRIAGE_BUDGET_MS = 5_000;
+
+/**
+ * C-7-8: Release-vs-fail decision for crash recovery.
+ *
+ * The pre-fix behavior unconditionally marked every in-flight job as
+ * 'failed' on uncaughtException / unhandledRejection. That terminally
+ * killed jobs that had a valid resume checkpoint — even though a
+ * sibling worker could have picked up exactly where this one crashed
+ * (Hypereal jobId already submitted, in-progress polling). The user
+ * lost the credits and waited for a no-op.
+ *
+ * New behavior:
+ *  - Look up the in-flight jobs claimed by THIS worker.
+ *  - For each one, peek at `video_generation_jobs.checkpoint` (via
+ *    hasCheckpoint, which fail-closes to false on DB error).
+ *  - Has checkpoint → release: status='pending', worker_id=null,
+ *    claimed_at=null. The next polling worker will re-claim and the
+ *    handler will resume from the checkpoint (no double-spend).
+ *  - No checkpoint → fail: starting from scratch on another worker
+ *    would re-submit to Hypereal/Replicate. Better to surface the
+ *    failure so credits are refunded via dispatcher's refund path.
+ *
+ * Fire-and-forget after CRASH_TRIAGE_BUDGET_MS — Render expects a
+ * fast exit, so we cap total triage time and let the stale-claim
+ * reaper mop up anything still 'processing'.
+ */
+async function crashTriageInFlightJobs(workerId: string, reason: string): Promise<void> {
+  const triageStart = Date.now();
+  try {
+    const { data: rows, error } = await supabase
+      .from("video_generation_jobs")
+      .select("id, task_type")
+      .eq("status", "processing")
+      .eq("worker_id", workerId);
+    if (error) {
+      console.error(`[Worker] crashTriage: claim lookup failed — ${error.message}`);
+      return;
+    }
+    const inFlight = (rows ?? []) as Array<{ id: string; task_type: string }>;
+    if (inFlight.length === 0) return;
+    console.log(`[Worker] crashTriage: ${inFlight.length} in-flight job(s) to triage`);
+
+    for (const row of inFlight) {
+      if (Date.now() - triageStart > CRASH_TRIAGE_BUDGET_MS) {
+        console.warn(`[Worker] crashTriage: budget exceeded — remaining jobs left for stale-claim reaper`);
+        return;
+      }
+      const resumable = await hasCheckpoint(row.id);
+      if (resumable) {
+        // Release back to 'pending' so a sibling/successor worker can
+        // re-claim within seconds (via realtime). Resumable handler
+        // reads checkpoint and skips provider re-submit.
+        const { error: relErr } = await supabase
+          .from("video_generation_jobs")
+          .update({
+            status: "pending",
+            worker_id: null,
+            error_message: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", row.id)
+          .eq("worker_id", workerId) // C-7-11: avoid clobbering a row the reaper has already reassigned
+          .eq("status", "processing");
+        if (relErr) {
+          console.error(`[Worker] crashTriage: release ${row.id} failed — ${relErr.message}`);
+        } else {
+          console.log(`[Worker] crashTriage: released ${row.id} (${row.task_type}) to 'pending' (checkpoint exists)`);
+        }
+      } else {
+        // No resume signal — failing is safer than infinite-loop re-runs.
+        const { error: failErr } = await supabase
+          .from("video_generation_jobs")
+          .update({
+            status: "failed",
+            error_message: `Worker process crashed (${reason})`,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", row.id)
+          .eq("worker_id", workerId) // C-7-11
+          .eq("status", "processing");
+        if (failErr) {
+          console.error(`[Worker] crashTriage: fail ${row.id} failed — ${failErr.message}`);
+        } else {
+          console.log(`[Worker] crashTriage: marked ${row.id} (${row.task_type}) failed (no checkpoint)`);
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`[Worker] crashTriage exception:`, (err as Error).message);
+  }
+}
+
+/**
  * Register SIGTERM / SIGINT (graceful) and uncaughtException /
- * unhandledRejection (crash) handlers. Crash handlers mark this
- * worker's in-flight jobs failed (scoped to WORKER_ID so sibling
- * replicas aren't touched), then exit(1) so the orchestrator restarts.
+ * unhandledRejection (crash) handlers.
+ *
+ * Crash handlers (C-7-8) now triage in-flight jobs:
+ *  - Jobs with a checkpoint blob → released to 'pending' so a healthy
+ *    worker can resume them within seconds (preserving provider credits).
+ *  - Jobs without a checkpoint → marked 'failed' (refund path runs).
+ * Triage runs up to CRASH_TRIAGE_BUDGET_MS, then we exit(1) so Render
+ * restarts the pod regardless.
  */
 export function registerProcessSignalHandlers(
   workerId: string,
@@ -184,28 +290,21 @@ export function registerProcessSignalHandlers(
   // Intentional crash: capture to Sentry then exit so Render restarts the process.
   // Keeping the process alive after uncaught errors risks processing jobs in a corrupt state.
   process.on("uncaughtException", (err: Error) => {
-    console.error("[Worker] 💥 Uncaught exception — marking jobs failed and exiting:", err.message);
+    console.error("[Worker] 💥 Uncaught exception — triaging in-flight jobs and exiting:", err.message);
     Sentry.captureException(err);
-    // Mark this worker's in-flight jobs as failed so they are not orphaned.
-    // Scope to WORKER_ID so sibling replicas' rows are not touched.
-    // Fire-and-forget: do not await — we must exit promptly so the orchestrator can restart.
-    supabase
-      .from("video_generation_jobs")
-      .update({ status: "failed", error_message: "Worker process crashed" })
-      .eq("status", "processing")
-      .eq("worker_id", workerId)
-      .then(() => process.exit(1), () => process.exit(1));
+    // Triage (release-if-resumable, fail-if-not), capped by budget so we exit promptly.
+    Promise.race([
+      crashTriageInFlightJobs(workerId, `uncaughtException: ${err.message}`),
+      new Promise<void>((resolve) => setTimeout(resolve, CRASH_TRIAGE_BUDGET_MS)),
+    ]).then(() => process.exit(1), () => process.exit(1));
   });
   process.on("unhandledRejection", (reason: unknown) => {
-    console.error("[Worker] 💥 Unhandled rejection — marking jobs failed and exiting:", reason);
+    console.error("[Worker] 💥 Unhandled rejection — triaging in-flight jobs and exiting:", reason);
     const err = reason instanceof Error ? reason : new Error(String(reason));
     Sentry.captureException(err);
-    // Mark this worker's in-flight jobs as failed so they are not orphaned.
-    supabase
-      .from("video_generation_jobs")
-      .update({ status: "failed", error_message: "Worker process crashed" })
-      .eq("status", "processing")
-      .eq("worker_id", workerId)
-      .then(() => process.exit(1), () => process.exit(1));
+    Promise.race([
+      crashTriageInFlightJobs(workerId, `unhandledRejection: ${err.message}`),
+      new Promise<void>((resolve) => setTimeout(resolve, CRASH_TRIAGE_BUDGET_MS)),
+    ]).then(() => process.exit(1), () => process.exit(1));
   });
 }

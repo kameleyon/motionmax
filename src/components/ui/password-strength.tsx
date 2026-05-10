@@ -11,8 +11,10 @@ export function getPasswordStrength(password: string): { score: number; label: s
   if (/\d/.test(password)) score += 25;
   if (/[^a-zA-Z0-9]/.test(password)) score += 25;
 
+  // Brand palette has no orange — Fair sits between destructive (Weak)
+  // and yellow (Good) using a brand-safe muted-foreground tone.
   if (score <= 25) return { score, label: "Weak", color: "bg-destructive" };
-  if (score <= 50) return { score, label: "Fair", color: "bg-orange-500" };
+  if (score <= 50) return { score, label: "Fair", color: "bg-muted-foreground" };
   if (score <= 75) return { score, label: "Good", color: "bg-yellow-500" };
   return { score, label: "Strong", color: "bg-primary" };
 }
@@ -33,7 +35,7 @@ export function PasswordStrengthMeter({ password, showRequirements = true }: Pas
         <span className="text-muted-foreground">Password strength</span>
         <span className={`font-medium ${
           strength.score <= 25 ? "text-destructive" :
-          strength.score <= 50 ? "text-orange-500" :
+          strength.score <= 50 ? "text-muted-foreground" :
           strength.score <= 75 ? "text-yellow-600" :
           "text-primary"
         }`}>

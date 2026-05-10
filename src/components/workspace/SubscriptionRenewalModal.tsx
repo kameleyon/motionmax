@@ -128,7 +128,7 @@ export function SubscriptionRenewalModal() {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <div className="flex items-center gap-2 mb-1">
-            <Clock className="h-5 w-5 text-orange-500" />
+            <Clock className="h-5 w-5 text-primary" />
             <DialogTitle>{title}</DialogTitle>
           </div>
           <DialogDescription>{description}</DialogDescription>

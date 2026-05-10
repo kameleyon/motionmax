@@ -134,6 +134,38 @@ export default function Auth() {
     : "/app";
   const { signIn, signUp, resetPassword, updatePassword } = useAuth();
   const [oauthLoading, setOauthLoading] = useState<"google" | null>(null);
+  const [magicLinkLoading, setMagicLinkLoading] = useState(false);
+
+  // Passwordless sign-in via Supabase OTP magic link. Mobile-heavy iOS
+  // visitors (and Apple ID users who'd expect Sign-In-with-Apple) get a
+  // password-free path here until the dedicated Apple OAuth provider is
+  // wired up. shouldCreateUser=true so first-time visitors who type
+  // their email into login can still onboard.
+  const handleMagicLink = async () => {
+    if (!email) {
+      setErrors({ email: "Enter your email to receive a magic link." });
+      return;
+    }
+    setMagicLinkLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: mode === "signup",
+          emailRedirectTo: `${window.location.origin}${returnUrl}`,
+        },
+      });
+      if (error) {
+        const msg = getAuthErrorMessage(error.message);
+        setErrors({ email: msg });
+        toast.error("Magic link failed", { description: msg });
+        return;
+      }
+      setShowEmailSent(true);
+    } finally {
+      setMagicLinkLoading(false);
+    }
+  };
 
   const handleOAuthSignIn = async (provider: "google") => {
     setOauthLoading(provider);
@@ -381,6 +413,20 @@ export default function Auth() {
                     )}
                     Continue with Google
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full gap-3 rounded-lg"
+                    onClick={handleMagicLink}
+                    disabled={magicLinkLoading || !!oauthLoading || isLoading}
+                  >
+                    {magicLinkLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Mail className="h-4 w-4" aria-hidden="true" />
+                    )}
+                    Email me a sign-in link
+                  </Button>
                 </div>
                 <div className="relative mb-6">
                   <div className="absolute inset-0 flex items-center">
@@ -409,8 +455,8 @@ export default function Auth() {
                       onChange={(e) => { setEmail(e.target.value); if (errors.email) setErrors(prev => ({ ...prev, email: undefined })); }}
                       className="pl-10"
                       required
-                      aria-invalid={!!errors.email}
-                      aria-describedby={errors.email ? "email-error" : undefined}
+                      aria-invalid={!!(errors.email && errors.email.trim())}
+                      aria-describedby={errors.email && errors.email.trim() ? "email-error" : undefined}
                     />
                   </div>
                   {errors.email && errors.email.trim() && (
@@ -548,23 +594,64 @@ export default function Auth() {
                 </>
               )}
 
-              <Button
-                type="submit"
-                className="w-full gap-2 rounded-lg bg-primary py-5 font-medium text-primary-foreground"
-                disabled={isLoading || Date.now() < lockedUntil || (mode === "signup" && (!acceptedTerms || !ageVerified))}
-              >
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
+              {/* Compute the reason the submit button is disabled so screen
+                  readers know WHY pressing it has no effect. Without this
+                  the button is just inert and SR users hear "Create Account,
+                  dimmed" with no recovery path. */}
+              {(() => {
+                const lockoutActive = Date.now() < lockedUntil;
+                const signupBlockReason =
+                  mode === "signup"
+                    ? (!acceptedTerms && !ageVerified
+                        ? "Accept the Terms of Service and confirm you are 18 or older to continue."
+                        : !acceptedTerms
+                          ? "Accept the Terms of Service to continue."
+                          : !ageVerified
+                            ? "Confirm you are 18 or older to continue."
+                            : null)
+                    : null;
+                const lockoutMessage = lockoutActive
+                  ? "Too many failed attempts. Sign-in temporarily locked."
+                  : null;
+                const disabledMessage = signupBlockReason ?? lockoutMessage;
+                const submitDisabled =
+                  isLoading || lockoutActive ||
+                  (mode === "signup" && (!acceptedTerms || !ageVerified));
+
+                return (
                   <>
-                    {mode === "login" ? "Sign In"
-                      : mode === "signup" ? "Create Account"
-                      : mode === "reset" ? "Send Reset Link"
-                      : "Update Password"}
-                    <ArrowRight className="h-4 w-4" />
+                    {disabledMessage && (
+                      <p
+                        id="submit-disabled-reason"
+                        role="status"
+                        aria-live="polite"
+                        className="sr-only"
+                      >
+                        {disabledMessage}
+                      </p>
+                    )}
+                    <Button
+                      type="submit"
+                      className="w-full gap-2 rounded-lg bg-primary py-5 font-medium text-primary-foreground"
+                      disabled={submitDisabled}
+                      aria-disabled={submitDisabled}
+                      aria-describedby={disabledMessage ? "submit-disabled-reason" : undefined}
+                    >
+                      {isLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          {mode === "login" ? "Sign In"
+                            : mode === "signup" ? "Create Account"
+                            : mode === "reset" ? "Send Reset Link"
+                            : "Update Password"}
+                          <ArrowRight className="h-4 w-4" />
+                        </>
+                      )}
+                    </Button>
                   </>
-                )}
-              </Button>
+                );
+              })()}
 
               {/* Security/compliance trust indicators */}
               <div className="flex items-center justify-center gap-4 mt-4 flex-wrap">

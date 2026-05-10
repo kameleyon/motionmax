@@ -1,26 +1,67 @@
+# C-12-3 (Signal S-C3) refresh — 2026-05-10.
+# Authenticated SPA surfaces are explicitly disallowed; public marketing
+# routes (Astro `/`, React /pricing/help/terms/privacy/acceptable-use,
+# /share/:token public previews) stay allow-listed. Aligned with the
+# /app-shell.html `<meta name="robots" content="noindex, nofollow">`
+# default so the signal is consistent at both the robots and the HTML
+# layer. Stale /workspace and /voice-lab paths kept as legacy disallows
+# (no longer routes, but external bookmarks still point at them).
+
 User-agent: Googlebot
 Allow: /
+Allow: /pricing
+Allow: /help
+Allow: /terms
+Allow: /privacy
+Allow: /acceptable-use
+Allow: /share/
+Disallow: /app
 Disallow: /app/
 Disallow: /auth
+Disallow: /auth/
 Disallow: /dashboard
+Disallow: /dashboard-new
 Disallow: /admin
 Disallow: /settings
 Disallow: /projects
 Disallow: /usage
+Disallow: /billing
+Disallow: /billing/checkout
+Disallow: /unsubscribe
+Disallow: /editor
+Disallow: /lab
+Disallow: /lab/
 Disallow: /voice-lab
 Disallow: /workspace
+Disallow: /api/
 
 User-agent: Bingbot
 Allow: /
+Allow: /pricing
+Allow: /help
+Allow: /terms
+Allow: /privacy
+Allow: /acceptable-use
+Allow: /share/
+Disallow: /app
 Disallow: /app/
 Disallow: /auth
+Disallow: /auth/
 Disallow: /dashboard
+Disallow: /dashboard-new
 Disallow: /admin
 Disallow: /settings
 Disallow: /projects
 Disallow: /usage
+Disallow: /billing
+Disallow: /billing/checkout
+Disallow: /unsubscribe
+Disallow: /editor
+Disallow: /lab
+Disallow: /lab/
 Disallow: /voice-lab
 Disallow: /workspace
+Disallow: /api/
 
 User-agent: Twitterbot
 Allow: /
@@ -30,43 +71,98 @@ Allow: /
 
 User-agent: *
 Allow: /
+Allow: /pricing
+Allow: /help
+Allow: /terms
+Allow: /privacy
+Allow: /acceptable-use
+Allow: /share/
+Disallow: /app
 Disallow: /app/
 Disallow: /auth
+Disallow: /auth/
 Disallow: /dashboard
+Disallow: /dashboard-new
 Disallow: /admin
 Disallow: /settings
 Disallow: /projects
 Disallow: /usage
+Disallow: /billing
+Disallow: /billing/checkout
+Disallow: /unsubscribe
+Disallow: /editor
+Disallow: /lab
+Disallow: /lab/
 Disallow: /voice-lab
 Disallow: /workspace
+Disallow: /api/
 Crawl-delay: 10
 
-# AI training crawlers — disallow user-generated content areas
+# AI training crawlers — disallow user-generated content and
+# authenticated surfaces. Public marketing pages stay allowed (they're
+# already public; we lose nothing by letting AI surfaces summarise the
+# product page). CCBot remains a hard block per existing policy.
 User-agent: GPTBot
+Disallow: /app
 Disallow: /app/
 Disallow: /auth
 Disallow: /dashboard
+Disallow: /dashboard-new
 Disallow: /projects
+Disallow: /settings
+Disallow: /billing
+Disallow: /admin
+Disallow: /lab
+Disallow: /editor
+Disallow: /usage
+Disallow: /api/
 
 User-agent: ChatGPT-User
+Disallow: /app
 Disallow: /app/
 Disallow: /auth
 Disallow: /dashboard
+Disallow: /dashboard-new
 Disallow: /projects
+Disallow: /settings
+Disallow: /billing
+Disallow: /admin
+Disallow: /lab
+Disallow: /editor
+Disallow: /usage
+Disallow: /api/
 
 User-agent: CCBot
 Disallow: /
 
 User-agent: anthropic-ai
+Disallow: /app
 Disallow: /app/
 Disallow: /auth
 Disallow: /dashboard
+Disallow: /dashboard-new
 Disallow: /projects
+Disallow: /settings
+Disallow: /billing
+Disallow: /admin
+Disallow: /lab
+Disallow: /editor
+Disallow: /usage
+Disallow: /api/
 
 User-agent: Claude-Web
+Disallow: /app
 Disallow: /app/
 Disallow: /auth
 Disallow: /dashboard
+Disallow: /dashboard-new
 Disallow: /projects
+Disallow: /settings
+Disallow: /billing
+Disallow: /admin
+Disallow: /lab
+Disallow: /editor
+Disallow: /usage
+Disallow: /api/
 
 Sitemap: https://motionmax.io/sitemap.xml

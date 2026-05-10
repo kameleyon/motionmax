@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { isSmartFlow, normalizeProjectType } from "@/lib/projectUtils";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
@@ -65,7 +66,7 @@ const planDisplay: Record<PlanTier, { label: string; color: string; icon: Lucide
 
 /** Compute the credit cost for a generation based on project type + length */
 function getCreditCostForGeneration(projectType: string | undefined, length: string | undefined): number {
-  const type = (projectType === "smart-flow" ? "smartflow" : projectType || "doc2video") as "doc2video" | "smartflow" | "cinematic";
+  const type = normalizeProjectType(projectType) as "doc2video" | "smartflow" | "cinematic";
   return getCreditsRequired(type, length || "short");
 }
 
@@ -597,7 +598,7 @@ export default function Usage() {
                           const proj = activity.project as Record<string, unknown>;
                           const projectType = proj?.project_type;
                           const projectLength = proj?.length;
-                          const IconComponent = projectType === "smartflow" || projectType === "smart-flow"
+                          const IconComponent = isSmartFlow(projectType as string | null | undefined)
                               ? Wallpaper
                               : Video;
                           

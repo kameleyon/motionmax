@@ -31,25 +31,57 @@ const CREDIT_PACK_PRICE: Record<number, number> = {
 };
 
 export async function fetchDashboardStats() {
+  // C-7-4 (Atlas F-D17): admin overview queries must be bounded.
+  //
+  // - subscriptions: we only need (a) the COUNT of active subs for
+  //   the dashboard tile and (b) the column subset
+  //   (plan_name, status, stripe_subscription_id, current_period_start,
+  //   created_at) for revenue estimation. The previous SELECT * pulled
+  //   every column (including large JSONB metadata) for every row and
+  //   transferred ~5MB at 10k subs / ~50MB at 100k. We now:
+  //     • fetch only the columns we use,
+  //     • restrict the row set to status='active' (the only rows the
+  //       revenue maths cares about — inactive/cancelled subs were
+  //       filtered out client-side anyway),
+  //     • cap at SUBSCRIPTION_REVENUE_CAP rows. Real installs are
+  //       nowhere near this cap; if we ever cross it the revenue tile
+  //       degrades to "≥ X" rather than crashing the page, and an
+  //       operator should switch to a server-side aggregate RPC.
+  // - user_flags: we only need the unresolved COUNT for the tile, not
+  //   the row data. Switch to head + count='exact'.
+  const SUBSCRIPTION_REVENUE_CAP = 5000;
+
   const [
     { count: profileCount },
-    { data: subscriptions },
+    { data: subscriptions, count: activeSubCount },
     { count: genCount },
     { count: archiveCount },
-    { data: flags },
+    { count: activeFlagCount },
     { data: costs },
     { data: purchaseTxns },
   ] = await Promise.all([
     supabase.from("profiles").select("*", { count: "exact", head: true }),
-    supabase.from("subscriptions").select("*"),
+    supabase
+      .from("subscriptions")
+      .select(
+        "plan_name, status, stripe_subscription_id, current_period_start, created_at",
+        { count: "exact" },
+      )
+      .eq("status", "active")
+      .range(0, SUBSCRIPTION_REVENUE_CAP - 1),
     supabase.from("generations").select("*", { count: "exact", head: true }),
     supabase.from("generation_archives").select("*", { count: "exact", head: true }),
-    supabase.from("user_flags").select("*").is("resolved_at", null),
+    supabase
+      .from("user_flags")
+      .select("*", { count: "exact", head: true })
+      .is("resolved_at", null),
     (supabase.rpc.bind(supabase) as unknown as (fn: string) => Promise<{ data: Record<string, unknown> | null; error: unknown }>)("get_generation_costs_summary"),
     supabase.from("credit_transactions").select("amount, transaction_type").eq("transaction_type", "purchase"),
   ]);
 
-  const activeSubs = subscriptions?.filter(s => s.status === "active") || [];
+  // subscriptions now only contains active rows (server-side filter);
+  // keep the local alias to minimise the diff downstream.
+  const activeSubs = subscriptions || [];
 
   // ── Costs from RPC (bypasses RLS via SECURITY DEFINER) ──
   const costData = costs as Record<string, unknown> | null;
@@ -68,9 +100,10 @@ export async function fetchDashboardStats() {
   });
 
   // Subscription revenue: only count Stripe subscriptions (not manual entries)
-  // Manual subs have stripe_subscription_id starting with "manual_"
+  // Manual subs have stripe_subscription_id starting with "manual_".
+  // status='active' is enforced server-side (see SUBSCRIPTION_REVENUE_CAP
+  // block above), so no need to re-filter here.
   const paidSubs = (subscriptions || []).filter(s =>
-    s.status === "active" &&
     s.stripe_subscription_id &&
     !s.stripe_subscription_id.startsWith("manual_")
   );
@@ -86,12 +119,15 @@ export async function fetchDashboardStats() {
 
   return {
     totalUsers: profileCount || 0,
-    subscriberCount: activeSubs.length,
-    activeSubscriptions: activeSubs.length,
+    // True active-sub count from the exact-count query (not capped by
+    // SUBSCRIPTION_REVENUE_CAP). activeSubs may be a partial sample of
+    // the underlying population if the cap is exceeded.
+    subscriberCount: activeSubCount ?? activeSubs.length,
+    activeSubscriptions: activeSubCount ?? activeSubs.length,
     totalGenerations: (genCount || 0) + (archiveCount || 0),
     activeGenerations: genCount || 0,
     archivedGenerations: archiveCount || 0,
-    activeFlags: flags?.length || 0,
+    activeFlags: activeFlagCount || 0,
     creditPurchases: (purchaseTxns || []).length,
     costs: {
       openrouter: totalOpenRouter,

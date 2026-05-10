@@ -62,7 +62,14 @@ export function useActiveJobs(projectId: string | null | undefined) {
   const query = useQuery<ActiveJob[]>({
     queryKey: ['active-jobs', projectId, user?.id],
     enabled: !!user && !!projectId,
-    refetchInterval: 3000, // belt-and-suspenders on top of realtime
+    // §5 PERF — bumped from 3 s → 15 s. The supabase realtime
+    // subscription on `video_generation_jobs` is the primary signal
+    // (the page invalidates this query on INSERT/UPDATE). The poll is
+    // strictly belt-and-suspenders for the rare case the channel
+    // misses an event during a server-side reconnect; 15 s is fast
+    // enough to recover within one human-noticeable window while
+    // cutting the per-tab DB QPS by 5×.
+    refetchInterval: 15_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('video_generation_jobs')

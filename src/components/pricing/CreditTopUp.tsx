@@ -60,11 +60,11 @@ export default function CreditTopUp({
                 )}
                 onClick={() => canBuy && !isLoading && onBuyCredits(pkg.credits, pkg.priceId)}
               >
-                {pkg.popular && !pkg.bestValue && (
-                  <div className="absolute -top-2 right-2">
-                    <Badge variant="secondary" className="text-xs">Popular</Badge>
-                  </div>
-                )}
+                {/* Single badge per row — running both `Popular` and
+                    `Best Value` in the same column neutralises both and
+                    splits user attention. Plan cards already own
+                    "Most Popular"; credit packs keep only "Best Value"
+                    so each badge type carries one clear signal. */}
                 {pkg.bestValue && (
                   <div className="absolute -top-2 right-2">
                     <Badge className="bg-primary text-primary-foreground text-xs">Best Value</Badge>

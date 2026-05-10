@@ -90,8 +90,19 @@ function Timeline({
   const MIN_PX_PER_SCENE = 110;
   const tracksMinPx = Math.max(state.scenes.length * MIN_PX_PER_SCENE, 600);
 
+  // Polite SR announcement when the selected scene changes — without
+  // this, keyboard users hear the Prev/Next buttons activate but get no
+  // feedback that the active scene moved. WCAG 4.1.3 status messages.
+  const totalScenes = state.scenes.length;
+  const sceneAnnouncement = totalScenes > 0
+    ? `Scene ${Math.min(selectedSceneIndex + 1, totalScenes)} of ${totalScenes} selected.`
+    : "";
+
   return (
     <div className="h-full flex flex-col text-[#ECEAE4]">
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {sceneAnnouncement}
+      </div>
       {/* Transport */}
       <div className="flex items-center gap-2.5 px-3 py-2 border-b border-white/5 bg-[#10151A]">
         <button

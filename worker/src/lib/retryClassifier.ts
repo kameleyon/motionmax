@@ -56,6 +56,20 @@ const TRANSIENT_PATTERNS: RegExp[] = [
   /statement timeout/i,
   /\b57014\b/, // Postgres SQLSTATE for query_canceled
   /could not serialize access/i, // SQLSTATE 40001 — serialization failure
+
+  // Checkpoint reader fail-loud (C-7-6) — the readCheckpoint helper
+  // throws CheckpointReadError on any Supabase/PG error so callers do
+  // NOT misinterpret "DB transiently down" as "no checkpoint, start
+  // fresh" (which would re-submit to Hypereal and double-spend). Mark
+  // it transient so withTransientRetry re-attempts the handler rather
+  // than terminal-failing on a 5s PG blip.
+  /CheckpointReadError/i,
+
+  // Hypereal returned 200 with HTML / non-JSON body (auth wall, CDN
+  // error page, captcha). JSON.parse would throw SyntaxError which
+  // isn't otherwise classified; HyperealNonJsonError thrown by the
+  // hypereal service makes this a recognized transient infra issue.
+  /HyperealNonJsonError/i,
 ];
 
 /**

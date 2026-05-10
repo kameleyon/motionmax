@@ -94,9 +94,11 @@
     --sidebar-border: 184 10% 90%;
     --sidebar-ring: 184 85% 44%;
 
-    /* Explicit text hierarchy tokens */
+    /* Explicit text hierarchy tokens — both clear WCAG 1.4.3 AA (4.5:1)
+       for normal-sized body text. Tertiary was previously 52% which only
+       cleared AA-large; now darkened to hit AA-normal. */
     --text-secondary: 200 7% 40%;    /* ~5:1 contrast vs light background */
-    --text-tertiary: 200 7% 52%;     /* ~3.5:1 contrast vs light background — AA large text */
+    --text-tertiary: 200 7% 42%;     /* ~4.6:1 contrast vs light background — AA normal */
 
     /* Chart colors - Aqua and Gold palette */
     --chart-1: 184 85% 44%; /* Aqua */

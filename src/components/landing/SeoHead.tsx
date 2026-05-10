@@ -41,6 +41,14 @@ export default function SeoHead() {
         content="AI video generator, text to video, cinematic video maker, AI explainer videos, document to video, AI narration, voice cloning, video storytelling, automated video production, AI video editor, TikTok video maker, YouTube Shorts generator, AI captions, image to video, Kling video, AI voiceover, multilingual voiceover, MotionMax"
       />
       <link rel="canonical" href={SITE_URL} />
+      {/* C-12-2 (Signal S-C2) fix (2026-05-10): override app-shell.html's
+          default `noindex, nofollow` — the landing page is the most-
+          important indexable surface in the SPA fallback. (Note: the
+          Astro `/` route at marketing/src/pages/index.astro is what
+          actually serves the public homepage on motionmax.io; this React
+          Landing is the SPA fallback users see when they navigate from
+          inside the app to "/".) */}
+      <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
 
       {/* Open Graph */}
       <meta property="og:type" content="website" />

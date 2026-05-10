@@ -7,14 +7,32 @@
     <meta name="title" content="MotionMax &#x2013; AI Video Generator | Turn Text into Cinematic Videos" />
     <meta name="description" content="Create stunning AI-generated cinematic videos, explainers, and visual stories from any text. AI scriptwriting, multilingual voiceover, image-to-video with 25+ caption styles. Start free." />
     <meta name="author" content="MotionMax" />
-    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <!-- C-12-2 (Signal S-C2) fix (2026-05-10): app-shell.html is the entry
+         point for the authenticated React SPA (everything served behind
+         /app, /dashboard-new, /settings, /billing, /admin, /lab, /usage,
+         /editor, /auth and friends — see vercel.json rewrites). Default to
+         `noindex, nofollow` so crawlers don't index half-rendered shells
+         BEFORE Helmet hydrates. Public, indexable SPA routes (Pricing,
+         Help, Terms, Privacy, AcceptableUse, Landing) MUST override this
+         via <Helmet><meta name="robots" content="index, follow" /></Helmet>
+         AND declare their own <link rel="canonical">. The Astro marketing
+         site at `/` (and any future static pages) ships its own
+         BaseLayout.astro meta — this file does NOT govern those routes. -->
+    <meta name="robots" content="noindex, nofollow" />
     <meta name="language" content="English" />
     <meta name="rating" content="general" />
     <meta name="category" content="AI Video Generator, Content Creation, Video Production" />
 
     <meta name="keywords" content="AI video generator, text to video, cinematic video maker, AI explainer videos, document to video, AI narration, voice cloning, video storytelling, automated video production, AI video editor, TikTok video maker, YouTube Shorts generator, AI captions, image to video, Kling video, AI voiceover, multilingual voiceover, infographic maker, visual content creation, MotionMax" />
-    
-    <link rel="canonical" href="https://motionmax.io" />
+
+    <!-- C-12-1 (Signal S-C1) fix (2026-05-10): hardcoded canonical removed.
+         Previously every SPA route inherited <link rel="canonical"
+         href="https://motionmax.io"> from this shell, telling Google that
+         /pricing, /dashboard-new, /billing, etc. were all duplicates of the
+         homepage. Per-route canonicals are now declared via Helmet (see
+         src/components/PageSeo.tsx and the <Helmet> block in each public
+         page like src/pages/Pricing.tsx). hreflang stays because it's a
+         site-wide language/region signal, not a per-URL one. -->
     <link rel="alternate" hreflang="x-default" href="https://www.motionmax.io/" />
     <link rel="alternate" hreflang="en" href="https://www.motionmax.io/" />
 

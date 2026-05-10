@@ -5,6 +5,77 @@ const HYPEREAL_VIDEO_URL = "https://api.hypereal.cloud/v1/videos/generate";
 
 const truncate = (s: string, n = 100) => s.length > n ? s.substring(0, n) + '...[truncated]' : s;
 
+/**
+ * Typed error for the case where Hypereal returns a 200/2xx but the
+ * body is HTML or another non-JSON payload — typically an auth wall, a
+ * CDN error page, or a captcha challenge wedged in front of the API.
+ *
+ * Pre-fix the worker did `await response.json() as any` and a
+ * SyntaxError ("Unexpected token <") bubbled up; that string wasn't
+ * matched by isTransientError, so withTransientRetry terminal-failed
+ * the job on a recoverable infra glitch (and the dispatcher refunded
+ * credits + dead-lettered the job). The classifier now recognises
+ * `/HyperealNonJsonError/i` so this becomes a normal transient retry.
+ *
+ * C-7-16.
+ */
+export class HyperealNonJsonError extends Error {
+  readonly status: number;
+  readonly bodyPreview: string;
+  constructor(message: string, status: number, bodyPreview: string) {
+    super(message);
+    this.name = "HyperealNonJsonError";
+    this.status = status;
+    this.bodyPreview = bodyPreview;
+  }
+}
+
+/**
+ * Safely parse a Hypereal response body as JSON. Pulls the text,
+ * checks Content-Type AND the first non-whitespace character (some
+ * proxies return JSON with a `text/plain` content-type, and some
+ * return an HTML error page with `application/json` content-type), and
+ * throws `HyperealNonJsonError` when the body clearly isn't JSON.
+ *
+ * Returns the parsed object on success. Caller still casts to its
+ * expected shape — we only guarantee the body wasn't HTML.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function parseHyperealJson(response: Response, label: string): Promise<any> {
+  const ct = (response.headers.get("content-type") || "").toLowerCase();
+  let text: string;
+  try {
+    text = await response.text();
+  } catch (err) {
+    // Body read itself failed (socket reset mid-stream etc.). Map onto
+    // the same error class so the retry classifier picks it up.
+    throw new HyperealNonJsonError(
+      `${label}: body read failed: ${(err as Error).message}`,
+      response.status,
+      "",
+    );
+  }
+  const trimmed = text.trimStart();
+  const looksHtml = trimmed.startsWith("<");
+  const claimsJson = ct.includes("application/json") || ct.includes("+json");
+  if (looksHtml || (!claimsJson && trimmed.length > 0 && !/^[{\[]/.test(trimmed))) {
+    throw new HyperealNonJsonError(
+      `${label}: non-JSON response (content-type=${ct || "<none>"} body=${trimmed.slice(0, 200)})`,
+      response.status,
+      trimmed.slice(0, 200),
+    );
+  }
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    throw new HyperealNonJsonError(
+      `${label}: JSON.parse failed (${(err as Error).message}) body=${trimmed.slice(0, 200)}`,
+      response.status,
+      trimmed.slice(0, 200),
+    );
+  }
+}
+
 // ── Module-level rate state ────────────────────────────────────────
 let lastRequestTime = 0;
 const completedJobs = new Map<string, string>(); // jobId → videoUrl cache
@@ -84,7 +155,7 @@ export async function generateImage(prompt: string, apiKey: string, aspectRatio 
     throw new Error(`Hypereal Image API Error: ${response.status} - ${errorText}`);
   }
 
-  const data = await response.json() as any;
+  const data = await parseHyperealJson(response, "image-gen") as any;
   if (!data?.data?.[0]?.url) {
     throw new Error("No image URL returned from Hypereal");
   }
@@ -144,7 +215,7 @@ export async function generateGrokVideo(
     throw new Error(`Hypereal Grok Video API Error: ${response.status} - ${errorText}`);
   }
 
-  const data = await response.json() as any;
+  const data = await parseHyperealJson(response, "grok-video-i2v") as any;
   const jobId = data.jobId;
   const pollUrl = data.pollUrl || null;
 
@@ -219,7 +290,7 @@ export async function generateKlingV3Video(
     throw new Error(`Hypereal Kling V3 API Error: ${response.status} - ${errorText}`);
   }
 
-  const data = await response.json() as any;
+  const data = await parseHyperealJson(response, "kling-3-0-std-i2v") as any;
   const jobId = data.jobId;
   const pollUrl = data.pollUrl || null;
 
@@ -356,7 +427,7 @@ export async function generateKlingV3ProVideo(
     throw new Error(`Hypereal Kling V2.6 Pro API Error: ${response.status} - ${errorText}`);
   }
 
-  const data = await response.json() as any;
+  const data = await parseHyperealJson(response, "kling-2-6-i2v-pro") as any;
   const jobId = data.jobId;
   const pollUrl = data.pollUrl || null;
 
@@ -464,7 +535,7 @@ export async function generateSeedance2I2V(
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const data = await response.json() as any;
+  const data = await parseHyperealJson(response, "seedance-2-0-i2v") as any;
   const jobId = data.jobId;
   const pollUrl = data.pollUrl || null;
 
@@ -568,7 +639,7 @@ export async function generateKlingV3ProI2V(
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const data = await response.json() as any;
+  const data = await parseHyperealJson(response, "kling-3-0-pro-i2v") as any;
   const jobId = data.jobId;
   const pollUrl = data.pollUrl || null;
 
@@ -644,7 +715,7 @@ export async function editVideoWithGrokImagine(
     throw new Error(`Hypereal grok-imagine-video-edit API Error: ${response.status} - ${errorText}`);
   }
 
-  const data = await response.json() as any;
+  const data = await parseHyperealJson(response, "grok-imagine-video-edit") as any;
   const jobId = data.jobId;
   const pollUrl = data.pollUrl || null;
 
@@ -724,7 +795,7 @@ export async function generateKlingV26Video(
     throw new Error(`Hypereal Kling V2.6 API Error: ${response.status} - ${errorText}`);
   }
 
-  const data = await response.json() as any;
+  const data = await parseHyperealJson(response, "kling-2-6-i2v-pro-legacy") as any;
   const jobId = data.jobId;
   const pollUrl = data.pollUrl || null;
 
@@ -809,7 +880,23 @@ export async function pollHyperealJob(
     }
 
     consecutive429 = 0;
-    const data = await response.json() as any;
+    // C-7-16: parseHyperealJson rejects HTML/non-JSON bodies (auth wall,
+    // CDN error page). Inside the poll loop, a single non-JSON body
+    // shouldn't kill the whole job — keep polling, the next attempt
+    // usually returns clean JSON once the CDN's hiccup clears. Only
+    // bail on a streak. SUBMIT-time non-JSON is still terminal-by-throw
+    // (caller's withTransientRetry handles those via the classifier).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let data: any;
+    try {
+      data = await parseHyperealJson(response, `${model}-poll`);
+    } catch (parseErr) {
+      if (parseErr instanceof HyperealNonJsonError) {
+        console.warn(`[Hypereal] ${model} poll ${jobId} — non-JSON body (status=${parseErr.status}, body=${parseErr.bodyPreview.slice(0, 80)}); continuing`);
+        continue;
+      }
+      throw parseErr;
+    }
 
     if (data.status === "succeeded" || data.status === "completed") {
       const videoUrl = data.outputUrl || data.output_url || data.result?.url || data.output?.url || data.url;
@@ -930,7 +1017,7 @@ export async function generateKlingV25Video(
     throw new Error(`Hypereal Kling V2.5 API Error: ${response.status} - ${errorText}`);
   }
 
-  const data = await response.json() as any;
+  const data = await parseHyperealJson(response, "kling-2-5-i2v") as any;
   const jobId = data.jobId;
   const pollUrl = data.pollUrl || null;
 
@@ -1005,7 +1092,7 @@ export async function generateVeo31Video(
     throw new Error(`Hypereal Veo 3.1 API Error: ${response.status} - ${errorText}`);
   }
 
-  const data = await response.json() as any;
+  const data = await parseHyperealJson(response, "veo-3-1-i2v") as any;
   const jobId = data.jobId;
   const pollUrl = data.pollUrl || null;
 
@@ -1084,7 +1171,7 @@ export async function generatePixVerseTransition(
     throw new Error(`Hypereal PixVerse V6 API Error: ${response.status} - ${errorText}`);
   }
 
-  const data = await response.json() as any;
+  const data = await parseHyperealJson(response, "pixverse-v6-transitions") as any;
   const jobId = data.jobId;
   const pollUrl = data.pollUrl || null;
 

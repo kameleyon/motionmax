@@ -281,11 +281,18 @@ export function TabNewsletter(): JSX.Element {
     }
     if (audience.startsWith("plan:")) {
       const planName = audience.slice(5);
+      // C-7-4 (Atlas F-D17): cap the subscriber-id fetch so the audience
+      // estimator can't pull tens of thousands of rows into the browser
+      // when a plan grows. The estimator is a confirmation-dialog
+      // heuristic; if a plan ever exceeds this cap the true send-count
+      // is reported by the server-side edge fn at send time.
+      const PLAN_AUDIENCE_CAP = 5000;
       const { data: subs } = await supabase
         .from("subscriptions")
         .select("user_id")
         .eq("status", "active")
-        .ilike("plan_name", planName);
+        .ilike("plan_name", planName)
+        .range(0, PLAN_AUDIENCE_CAP - 1);
       const ids = Array.from(new Set((subs ?? []).map((s) => s.user_id as string)));
       if (ids.length === 0) return 0;
       const { count } = await supabase

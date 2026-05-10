@@ -195,13 +195,47 @@ export async function runUnifiedPipeline(
     } catch { /* ignore progress poll errors */ }
   }
 
-  // Realtime: instant update on any intermediate job status change
+  // Realtime: instant update on any intermediate job status change.
+  //
+  // Stream C-1: scope the postgres_changes subscription to this
+  // run's project. Without this filter the Realtime server pushed
+  // every UPDATE on video_generation_jobs to every connected
+  // client and we discarded the irrelevant ones via
+  // allJobSet.has(...) on the wire. At 10k jobs/day that is
+  // 10k × N-connected-clients of wasted fan-out. We filter by
+  // project_id because (a) every job in this pipeline carries the
+  // same project_id (script handler back-fills it before the audio
+  // and image phases enqueue), (b) it is strictly tighter than
+  // user_id (a single user can have multiple concurrent
+  // generations across tabs), and (c) it matches the pattern
+  // already used by useEditorState.ts and useActiveJobs.ts.
+  // Fallback to user_id if for some reason projectId is unknown
+  // (e.g. early-failure path during script phase).
+  const { data: { user } } = await supabase.auth.getUser();
+  let scopeFilter: string | undefined;
+  if (projectId) {
+    scopeFilter = `project_id=eq.${projectId}`;
+  } else if (user?.id) {
+    scopeFilter = `user_id=eq.${user.id}`;
+  } else {
+    log.warn("No projectId or user for realtime filter; subscription will receive all rows");
+  }
+
   const progressChannel = supabase
     .channel(`pipeline-progress-${generationId}`)
     .on(
       "postgres_changes",
-      { event: "UPDATE", schema: "public", table: "video_generation_jobs" },
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "video_generation_jobs",
+        ...(scopeFilter ? { filter: scopeFilter } : {}),
+      },
       (payload: { new: Record<string, unknown> }) => {
+        // Server-side filter pre-narrows to this project/user; the
+        // in-memory allJobSet.has check is the belt-and-braces guard
+        // against unrelated jobs in the same project (e.g. an
+        // export_video kicked off concurrently with this pipeline).
         if (allJobSet.has(payload.new?.id as string)) refreshProgress();
       },
     )

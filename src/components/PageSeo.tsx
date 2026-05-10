@@ -50,7 +50,15 @@ export default function PageSeo({
       <title>{title}</title>
       <meta name="description" content={description} />
       <link rel="canonical" href={canonical} />
-      {noIndex && <meta name="robots" content="noindex, nofollow" />}
+      {/* C-12-2 (Signal S-C2) fix (2026-05-10): app-shell.html defaults to
+          `noindex, nofollow` so authenticated SPA routes are NOT
+          accidentally indexed before Helmet hydrates. Public pages using
+          <PageSeo> MUST emit an explicit `index, follow` to override that
+          default — emitting nothing here would leave the shell's noindex
+          in place. */}
+      {noIndex
+        ? <meta name="robots" content="noindex, nofollow" />
+        : <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />}
 
       {/* Open Graph */}
       <meta property="og:type" content="website" />

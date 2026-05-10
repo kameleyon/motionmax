@@ -50,6 +50,16 @@ interface AutopostRenderPayload {
   motion_preset?: string | null;
   duration_seconds?: number | null;
   resolution?: string | null;
+  /**
+   * C-7-9: set by worker/src/index.ts withTransientRetry when re-invoking
+   * dispatchJob after a transient error within the SAME worker process.
+   * Tells the idempotence gate below to reset progress_pct back to 0 and
+   * proceed, rather than terminal-failing because "prior attempt reached
+   * progress_pct=5". Pre-fix, the retry was effectively single-shot —
+   * the second attempt always bailed at the progress_pct > 0 gate.
+   * Absent or 0 = first attempt by this worker.
+   */
+  _transientRetryAttempt?: number;
 }
 
 interface AutopostRenderResult {
@@ -537,11 +547,29 @@ async function runPipeline(
   // counters via setRunProgress; >= 25 % means a script was generated;
   // >= 35 % means image / audio / video children were submitted. Any
   // of those represents real spend we won't re-do.
-  if ((run.progress_pct ?? 0) > 0) {
+  //
+  // C-7-9: BUT if this is a within-process transient retry (set by
+  // worker/index.ts withTransientRetry), the prior attempt was THIS
+  // same process — it didn't actually fan out child jobs yet (because
+  // setRunProgress(25) only fires after the script-phase submitJob
+  // returns, well past any transient point that would cause a retry
+  // here). Reset progress_pct → 0 and proceed instead of bailing.
+  // Without this bypass the retry is a single-shot no-op: the first
+  // attempt sets pct=5 then dies on a transient PG blip, retry attempt
+  // hits this gate and terminal-fails the run.
+  const isTransientRetry = (payload._transientRetryAttempt ?? 0) > 0;
+  if ((run.progress_pct ?? 0) > 0 && !isTransientRetry) {
     const msg = `Orphaned autopost render — prior attempt reached progress_pct=${run.progress_pct}; refusing to restart from scratch (would double-spend Hypereal/LLM credits)`;
     console.warn(`[autopost_render] ${msg}`);
     await markRunFailed(runId, new Error(msg), jobId, userId);
     throw new Error(msg);
+  }
+  if (isTransientRetry && (run.progress_pct ?? 0) > 0) {
+    console.warn(
+      `[autopost_render] transient-retry bypass: run ${runId} progress_pct=${run.progress_pct}, ` +
+      `attempt=${payload._transientRetryAttempt} — resetting to 0 and proceeding`,
+    );
+    await setRunProgress(runId, 0);
   }
 
   const { data: schedData, error: schedErr } = await supabase
@@ -631,7 +659,13 @@ async function runPipeline(
   const projectId = randomUUID();
 
   await setRunStatus(runId, "generating");
-  await setRunProgress(runId, 5);
+  // C-7-10: setRunProgress moved BELOW the projects.insert. Pre-fix,
+  // the progress row was written before insert; if insert failed (FK
+  // violation, schema drift, etc.) the autopost_run row held
+  // progress_pct=5 referencing a projectId that never existed —
+  // permanent zombie. The dashboard showed "GENERATING 5%" forever
+  // and no other worker could safely retry (idempotence gate above
+  // refused at progress > 0). Now: insert first, then progress.
 
   // Insert the projects row up front. Two reasons:
   //   1. video_generation_jobs.project_id has a FK to projects(id), so
@@ -666,8 +700,14 @@ async function runPipeline(
     .from("projects")
     .insert(projectRow);
   if (projInsertErr) {
+    // Throw BEFORE writing progress. The autopost_run row stays at
+    // progress_pct=NULL/0 and a retry can start fresh without
+    // tripping the idempotence gate.
     throw new Error(`autopost_render: failed to insert projects row: ${projInsertErr.message}`);
   }
+
+  // Insert succeeded — now safe to mark the run as actively generating.
+  await setRunProgress(runId, 5);
 
   // Phase 1 — Script. handleGenerateVideo finds the project via
   // payload.projectId and updates it with title/status, then runs the

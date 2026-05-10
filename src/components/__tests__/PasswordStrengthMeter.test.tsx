@@ -28,7 +28,7 @@ describe("getPasswordStrength", () => {
     const result = getPasswordStrength("Abcdefgh");
     expect(result.score).toBe(50);
     expect(result.label).toBe("Fair");
-    expect(result.color).toBe("bg-orange-500");
+    expect(result.color).toBe("bg-muted-foreground");
   });
 
   it("scores Good for 8+ chars with mixed case and a digit", () => {

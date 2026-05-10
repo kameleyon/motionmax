@@ -239,6 +239,21 @@ export default function IntakeForm({
 
   const [generating, setGenerating] = useState(false);
 
+  // C-7-12 (Ghost G-C1+G-C2): synchronous client-side lock against
+  // Enter-mash / double-submit. `setGenerating(true)` flips React
+  // state but won't STOP a second handleGenerate call dispatched
+  // before React re-renders the disabled button — the lock has to be
+  // a ref that we read+write synchronously inside the same event
+  // tick. Server-side dedup (create_project_idempotent RPC) is the
+  // belt; this ref is the suspenders + saves a round-trip on the
+  // 99% case.
+  const submitLockRef = useRef(false);
+  // The idempotency key is generated ONCE per logical submit and
+  // re-used for any retry inside this submit. We bind it to the
+  // submitLockRef lifecycle: cleared when the submit completes
+  // (success or error) so the NEXT click gets a fresh key.
+  const idempotencyKeyRef = useRef<string | null>(null);
+
   // C-5-7: style carousel scroll-controls + ref now live inside
   // <StyleCarousel /> (lazy chunk). The parent only owns the styleId
   // value and the custom-style input/upload state.
@@ -525,6 +540,27 @@ export default function IntakeForm({
     if (!user) { toast.error('Please sign in to continue.'); return; }
     if (prompt.trim().length < 6) { toast.error('Describe your video first (at least a short sentence).'); return; }
 
+    // C-7-12 (Ghost G-C1+G-C2): synchronous submit lock. setGenerating
+    // is async (React batches state updates) so a second Enter press
+    // arriving in the same event loop tick would slip past a check on
+    // `generating` and fire a duplicate INSERT (= duplicate project
+    // row + double credit charge). The ref check runs synchronously
+    // — second click sees the locked ref and returns immediately.
+    if (submitLockRef.current) {
+      toast.info('Already generating — hold on.');
+      return;
+    }
+    submitLockRef.current = true;
+    // Mint a per-submit idempotency key. Stored on the ref so any
+    // server-side retry inside this submit reuses the same key; the
+    // server collapses both writes to one project row.
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+
     setGenerating(true);
     try {
       const intakeSettings: IntakeSettings = {
@@ -746,30 +782,64 @@ export default function IntakeForm({
         return;
       }
 
-      const insertResult = await supabase.from('projects').insert(projectInsert as never).select('id').single();
-      // Schema-drift detector: if the intake_settings column is missing
-      // (production missed migration 20260422010000), fail loudly instead
-      // of silently writing a sentinel-wrapped JSON blob into the project
-      // content column. Quiet fallback corrupted the LLM input downstream
-      // and masked a real ops problem — better to surface and block until
-      // the migration is applied.
-      if (insertResult.error && insertResult.error.message?.toLowerCase().includes('intake_settings')) {
-        const msg = 'Database is missing the intake_settings column. Apply migration 20260422010000 (intake settings JSONB) before generating.';
-        console.error('[IntakeForm] schema drift:', insertResult.error);
-        throw new Error(msg);
+      // C-7-12: route the insert through the idempotent RPC. The RPC
+      // does (user_id, idempotency_key) dedup + a 5-second soft window
+      // dedup on (title, content, project_type) so an Enter-mash from
+      // a stale client without a key still collapses to one row.
+      // Returns the (existing or new) project id; the client treats
+      // both cases identically — navigate to the editor.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rpcResult = await (supabase.rpc as any)('create_project_idempotent', {
+        p_idempotency_key: idempotencyKeyRef.current,
+        p_payload: projectInsert,
+      });
+      if (rpcResult.error) {
+        // Schema-drift / not-yet-migrated fallback: if the RPC doesn't
+        // exist on this DB (404 / PGRST202), fall back to the direct
+        // insert path. Production gets the safe path; staging that
+        // hasn't applied the migration yet still works (and surfaces
+        // the older duplicate-row risk until the migration lands).
+        const msg = (rpcResult.error.message || '').toLowerCase();
+        const missingRpc = msg.includes('does not exist')
+          || msg.includes('not found')
+          || msg.includes('pgrst202')
+          || msg.includes('schema cache');
+        if (!missingRpc) {
+          throw new Error(rpcResult.error.message || 'Project creation failed');
+        }
+        console.warn('[IntakeForm] create_project_idempotent RPC missing — falling back to direct insert');
+        const insertResult = await supabase.from('projects').insert(projectInsert as never).select('id').single();
+        if (insertResult.error && insertResult.error.message?.toLowerCase().includes('intake_settings')) {
+          const dbMsg = 'Database is missing the intake_settings column. Apply migration 20260422010000 (intake settings JSONB) before generating.';
+          console.error('[IntakeForm] schema drift:', insertResult.error);
+          throw new Error(dbMsg);
+        }
+        const { data, error } = insertResult;
+        if (error || !data) throw error || new Error('Insert returned no row');
+        toast.success('Project created. Taking you to the editor…');
+        navigate(`/app/editor/${data.id}?autostart=1`);
+        return;
       }
-      const { data, error } = insertResult;
-      if (error || !data) throw error || new Error('Insert returned no row');
+
+      const projectId = rpcResult.data as string | null;
+      if (!projectId) throw new Error('Project creation returned no id');
 
       toast.success('Project created. Taking you to the editor…');
       // Legacy WorkspaceRouter retired — always route to the unified
       // editor. UNIFIED_EDITOR flag is now effectively a no-op.
-      navigate(`/app/editor/${data.id}?autostart=1`);
+      navigate(`/app/editor/${projectId}?autostart=1`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Couldn't save project: ${msg}`);
     } finally {
       setGenerating(false);
+      // C-7-12: release the submit lock + clear the idempotency key
+      // so the next legitimate submit gets a fresh one. Error path
+      // also clears, which means the user CAN retry (with a fresh
+      // key) after fixing whatever the error was; the 5s soft-window
+      // dedup is the safety net against accidental rapid retries.
+      submitLockRef.current = false;
+      idempotencyKeyRef.current = null;
     }
   }
 

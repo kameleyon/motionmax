@@ -55,7 +55,13 @@ export default defineConfig(({ mode }) => ({
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
-        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024, // 3 MiB — covers herobackground.webp (~116 KB) + other assets
+        // §5 PERF: dropped from 3 MiB → 2 MiB. The PNG hero rasters
+        // (2.4 MB) are already excluded via globIgnores below; the
+        // largest legit precache asset is the WebP hero at ~116 KB and
+        // the largest JS chunk (~395 KB UserDrawer). 2 MiB leaves
+        // generous headroom while making the limit catch any future
+        // accidental >2 MB asset that should never end up cached.
+        maximumFileSizeToCacheInBytes: 2 * 1024 * 1024, // 2 MiB
         // §5 PERF-005 / Edge F4 fix (2026-05-10): exclude the heavy PNG
         // fallbacks from precache. herobackground.png (2.4 MB) and the
         // raster style-preview PNGs all have WebP equivalents that are

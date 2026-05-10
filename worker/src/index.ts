@@ -221,9 +221,30 @@ export {
   PRODUCT_MULT,
 } from "./refundCreditsOnFailure.js";
 
-async function processJob(job: Job) {
+/**
+ * C-7-7: timeoutAborted is set when the per-job hard-timeout
+ * AbortController fired before processJob finished. We use this to
+ * make the failed-write path atomic with the timeout decision: if
+ * timeoutAborted is true at the point we'd normally mark 'completed',
+ * we instead route through the catch path that marks 'failed' — so a
+ * still-running handler that resolves AFTER the timeout fired can
+ * never clobber the timeout's terminal 'failed' state.
+ */
+async function processJob(job: Job, signal?: AbortSignal) {
   const pool = getActivePool(job.task_type);
   pool.add(job.id);
+
+  // Helper: throws a recognizable AbortError if the hard-timeout fired
+  // mid-handler. Used at the boundaries between the handler returning
+  // and us writing the terminal status, so a late-arriving handler
+  // resolution can't race against a timeout-induced 'failed' mark.
+  const throwIfAborted = () => {
+    if (signal?.aborted) {
+      const err = new Error(`Job ${job.id} (${job.task_type}) hard-timeout aborted`);
+      err.name = "AbortError";
+      throw err;
+    }
+  };
 
   // Tag Sentry scope with job context so all events within this job are correlated.
   const traceId: string | undefined = job.payload?.traceId;
@@ -268,6 +289,7 @@ async function processJob(job: Job) {
     }
 
     await withTransientRetry(async (attempt) => {
+      throwIfAborted(); // C-7-7: stop retrying once the hard-timeout fired
       if (attempt > 0) {
         await writeSystemLog({
           jobId: job.id,
@@ -277,6 +299,12 @@ async function processJob(job: Job) {
           eventType: "job_retry",
           message: `Retrying job ${job.id} (attempt ${attempt + 1}/${MAX_JOB_RETRIES}) after transient error`,
         });
+        // C-7-9: tell idempotent orchestrators (e.g. handleAutopostRun)
+        // that this is an in-process transient retry, not a fresh claim.
+        // Without this, the autopost run's `progress_pct > 0` idempotence
+        // gate trips on the second attempt and terminal-fails the run,
+        // turning the retry into a single-shot no-op.
+        (job.payload as Record<string, unknown>)._transientRetryAttempt = attempt;
       }
 
       // Per-task-type dispatch lives in worker/src/handlers/dispatch.ts.
@@ -286,6 +314,13 @@ async function processJob(job: Job) {
       const patch = await dispatchJob(job);
       finalPayload = { ...finalPayload, ...patch };
     }, { jobId: job.id });
+
+    // C-7-7: if the hard-timeout fired while the handler was still
+    // running (i.e. the handler resolved AFTER the abort), route to
+    // the catch path instead of writing 'completed'. The timeout's
+    // .catch in pollQueue already wrote 'failed'; we must NOT clobber
+    // it with 'completed'.
+    throwIfAborted();
 
     await writeSystemLog({
       jobId: job.id,
@@ -299,7 +334,10 @@ async function processJob(job: Job) {
     // Strip restart bookkeeping before persisting
     const { _restartCount: _rc, ...cleanPayload } = finalPayload;
 
-    const { error: completeError } = await (supabase as any)
+    // C-7-11: scope the terminal UPDATE to (id, worker_id) so a stale
+    // reaper reset + re-claim by another worker is NOT clobbered by
+    // this worker's late completion. If 0 rows are affected, log it.
+    const { error: completeError, count: completeCount } = await (supabase as any)
       .from('video_generation_jobs')
       .update({
         status: 'completed',
@@ -307,16 +345,24 @@ async function processJob(job: Job) {
         payload: cleanPayload,
         result: cleanPayload,       // also write result so pollWorkerJob always finds it
         updated_at: new Date().toISOString()
-      })
-      .eq('id', job.id);
+      }, { count: 'exact' })
+      .eq('id', job.id)
+      .eq('worker_id', WORKER_ID);
 
     if (completeError) {
       console.error(`[Worker] Failed to mark job ${job.id} as completed:`, completeError.message);
-      // Retry once — this is critical, otherwise the frontend polls forever
+      // Retry once — this is critical, otherwise the frontend polls forever.
+      // Keep the worker_id filter on the retry; if the reaper handed off
+      // this row, refusing to clobber is correct (the new worker owns it).
       await supabase
         .from('video_generation_jobs')
         .update({ status: 'completed', progress: 100, result: cleanPayload, updated_at: new Date().toISOString() })
-        .eq('id', job.id);
+        .eq('id', job.id)
+        .eq('worker_id', WORKER_ID);
+    } else if (completeCount === 0) {
+      wlog.warn("Terminal 'completed' UPDATE matched 0 rows — claim handed off mid-run", {
+        jobId: job.id, workerId: WORKER_ID, taskType: job.task_type,
+      });
     }
 
     totalJobsProcessed++;
@@ -346,23 +392,28 @@ async function processJob(job: Job) {
       console.error(`[Worker] Refund failed for ${job.id}:`, refundErr);
     }
 
-    // CRITICAL: Mark the job as failed — if this doesn't happen, the frontend polls forever
-    const { error: failError } = await supabase
+    // CRITICAL: Mark the job as failed — if this doesn't happen, the frontend polls forever.
+    // C-7-11: scope to (id, worker_id) so a stale-claim reaper reset + re-claim by another
+    // worker is NOT clobbered by this worker's late failure. 0 rows-affected = log a warning.
+    const { error: failError, count: failCount } = await (supabase as any)
       .from('video_generation_jobs')
       .update({
         status: 'failed',
         error_message: errorMsg,
         updated_at: new Date().toISOString()
-      })
-      .eq('id', job.id);
+      }, { count: 'exact' })
+      .eq('id', job.id)
+      .eq('worker_id', WORKER_ID);
 
     if (failError) {
       console.error(`[Worker] CRITICAL: Failed to mark job ${job.id} as failed:`, failError.message);
-      // Last resort retry
+      // Last resort retry — still scoped to worker_id; if the reaper reassigned
+      // the row, we must NOT clobber the new worker's progress.
       await supabase
         .from('video_generation_jobs')
         .update({ status: 'failed', error_message: errorMsg, updated_at: new Date().toISOString() })
         .eq('id', job.id)
+        .eq('worker_id', WORKER_ID)
         .then(
           () => {},
           (retryErr: unknown) => {
@@ -370,6 +421,10 @@ async function processJob(job: Job) {
             Sentry.captureException(retryErr, { tags: { jobId: job.id, phase: "mark-failed-retry" } });
           },
         );
+    } else if (failCount === 0) {
+      wlog.warn("Terminal 'failed' UPDATE matched 0 rows — claim handed off mid-run", {
+        jobId: job.id, workerId: WORKER_ID, taskType: job.task_type,
+      });
     }
 
     // Move to dead-letter queue so permanently-failed jobs can be triaged
@@ -508,31 +563,48 @@ async function pollQueue() {
     for (const job of claimedJobs) {
       if (activeExportJobs.has(job.id) || activeLlmJobs.has(job.id)) continue;
       console.log(`[Worker] Claimed job ${job.id} (type: ${job.task_type})`);
-      // Fire and forget — job is already marked 'processing' by the RPC
-      Promise.race([
-        processJob(job as Job),
-        new Promise<void>((_, reject) => {
-          const timeoutMs = getJobTimeoutMs(job.task_type);
-          setTimeout(
-            () => reject(new Error(`Job ${job.id} (${job.task_type}) exceeded hard timeout of ${timeoutMs / 60000} min`)),
-            timeoutMs
-          );
-        }),
-      ]).catch(async (err) => {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        console.error(`[Worker] Job ${job.id} failed or timed out: ${errMsg}`);
-        Sentry.captureException(err instanceof Error ? err : new Error(errMsg));
-        // Ensure DB is updated and slot freed — processJob may still be running
-        const pool = getActivePool(job.task_type);
-        if (pool.has(job.id)) {
-          pool.delete(job.id);
-          await supabase.from('video_generation_jobs').update({
-            status: 'failed',
-            error_message: errMsg,
-            updated_at: new Date().toISOString(),
-          }).eq('id', job.id);
-        }
-      });
+
+      // C-7-7: AbortController-driven hard timeout. The previous
+      // Promise.race pattern let the handler keep running after the
+      // timeout fired, racing the final 'completed' write against the
+      // timeout's 'failed' write. With AbortController:
+      //   1. setTimeout fires ctrl.abort() at the hard-timeout boundary.
+      //   2. processJob checks signal.aborted at every safe point
+      //      (between retries + before the terminal-write). When set,
+      //      processJob's own catch block writes 'failed' atomically.
+      //   3. The outer .catch only needs to free the slot + log; it no
+      //      longer writes a duplicate 'failed' row that could race
+      //      with the inner success-write.
+      // Handlers don't yet thread `signal` down into Hypereal/Replicate
+      // fetches — that requires wider service surgery. The throwIfAborted
+      // guards inside processJob cover the worst case (handler runs to
+      // completion past the timeout): the success path is bypassed and
+      // we route to the failed-write path.
+      const ctrl = new AbortController();
+      const timeoutMs = getJobTimeoutMs(job.task_type);
+      const timeoutId = setTimeout(() => {
+        ctrl.abort();
+        wlog.warn("Hard timeout fired — aborting handler", {
+          jobId: job.id, taskType: job.task_type, timeoutMs,
+        });
+      }, timeoutMs);
+
+      // Fire and forget — job is already marked 'processing' by the RPC.
+      processJob(job as Job, ctrl.signal)
+        .catch((err) => {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          // processJob's own catch handler already wrote 'failed' and
+          // moved the row to dead_letter_jobs. This outer .catch only
+          // triggers when processJob itself throws (e.g. one of its
+          // wlog/Sentry writes blew up). Log + free the slot defensively.
+          console.error(`[Worker] processJob unexpected throw for ${job.id}: ${errMsg}`);
+          Sentry.captureException(err instanceof Error ? err : new Error(errMsg));
+          const pool = getActivePool(job.task_type);
+          if (pool.has(job.id)) pool.delete(job.id);
+        })
+        .finally(() => {
+          clearTimeout(timeoutId);
+        });
     }
   } catch (err) {
     console.error("[Worker] Polling exception:", err);

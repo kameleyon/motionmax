@@ -200,25 +200,72 @@ export default function BulkOpModal({
     if (!user || !projectId || cancelling) return;
     setCancelling(true);
     try {
-      const { error } = await supabase
-        .from('video_generation_jobs')
-        .update({
-          status: 'failed',
-          error_message: 'Cancelled by user',
-        })
-        .eq('project_id', projectId)
-        .eq('user_id', user.id)
-        .eq('task_type', 'export_video')
-        .in('status', ['pending', 'processing']);
-      if (error) throw error;
-      toast.success('Export cancelled. The worker will finish its current step then stop.');
+      // C-7-15 (Ghost G-C6): atomic cancel via CAS RPC. The previous
+      // plain UPDATE filtered on `.in('status', ['pending','processing'])`
+      // but returned no count, so we ALWAYS showed the "Cancelled"
+      // toast — even when the worker had finished a millisecond
+      // before the user clicked Cancel. User then saw BOTH toasts
+      // ("Cancelled" + "Export ready") and didn't know which one
+      // was true. The RPC does a true CAS update and returns the
+      // count of rows actually changed PLUS the count of jobs that
+      // already advanced to `completed`, so we can fire the correct
+      // toast (and skip the cancel toast entirely when the worker
+      // won the race).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rpcResult = await (supabase.rpc as any)('cancel_export_jobs_cas', {
+        p_project_id: projectId,
+      });
+
+      if (rpcResult.error) {
+        const msg = (rpcResult.error.message || '').toLowerCase();
+        // Fallback for the brief window after deploy + before the RPC
+        // is applied to prod — use the legacy plain UPDATE so cancel
+        // still works (just without the race-loss detection).
+        const missingRpc = msg.includes('does not exist')
+          || msg.includes('not found')
+          || msg.includes('pgrst202')
+          || msg.includes('schema cache');
+        if (!missingRpc) throw rpcResult.error;
+        const { error } = await supabase
+          .from('video_generation_jobs')
+          .update({ status: 'failed', error_message: 'Cancelled by user' })
+          .eq('project_id', projectId)
+          .eq('user_id', user.id)
+          .eq('task_type', 'export_video')
+          .in('status', ['pending', 'processing']);
+        if (error) throw error;
+        toast.success('Export cancelled. The worker will finish its current step then stop.');
+      } else {
+        // RPC returns a single-row table: { cancelled_count, already_completed_count }.
+        // Supabase wraps single-row returns in an array.
+        const row = Array.isArray(rpcResult.data) ? rpcResult.data[0] : rpcResult.data;
+        const cancelled = (row?.cancelled_count as number | undefined) ?? 0;
+        const alreadyDone = (row?.already_completed_count as number | undefined) ?? 0;
+
+        if (cancelled > 0) {
+          // We won the race — worker is still mid-render, our CAS
+          // flipped at least one job to failed. Fire the cancel toast.
+          toast.success('Export cancelled. The worker will finish its current step then stop.');
+        } else if (alreadyDone > 0) {
+          // Worker won the race — its completion write landed before
+          // our cancel. DO NOT show "Cancelled" — the realtime listener
+          // in useExport already (or will momentarily) fire the
+          // "Export ready" success toast.
+          toast.info('Export already finished — check the topbar to download.');
+        } else {
+          // No active export jobs at all (modal raced ahead of state).
+          // Quiet info to avoid a confusing "Cancelled" claim about
+          // nothing.
+          toast.info('Nothing to cancel — the export already wrapped.');
+        }
+      }
       // Hard-dismiss the modal immediately. The worker may still finish
       // whatever ffmpeg pass it's halfway through (we can't kill it
       // mid-encode without an AbortController on the child process), so
       // we don't wait for bulkOpActive to flip — the user gets their
       // editor back right now, and useExport's realtime handler will
-      // surface any late completion as a no-op error toast instead of
-      // an auto-download.
+      // surface any late completion via the realtime channel as the
+      // single source of truth for "what state is the export in".
       setUserCancelled(true);
       setCancelling(false);
     } catch (err) {

@@ -17,19 +17,76 @@ export function useSceneRegen(state: EditorState | null) {
   // queueing N parallel jobs for the same operation. The editor's
   // bulk-op lock helps too, but this is finer-grained: stops a user
   // mashing "Regenerate image" 3× in <1s from spawning 3 jobs that
-  // would race on write-back. 2.5s window matches the typical user
-  // "did anything happen?" re-click latency.
+  // would race on write-back.
+  //
+  // C-7-14 (Ghost G-C5): the previous implementation kept the debounce
+  // in a per-hook `useRef<Map<string, number>>`. That's PER-TAB only —
+  // two open tabs of the same editor both passed their local debounce
+  // and both fired the same regen → two Hypereal (image) or Kling
+  // (video) calls billed for one visible output. The new
+  // `debounceFire` is async (RPC round-trip) and writes through a
+  // server-side `regen_debounce` table so siblings tabs see each
+  // other's in-flight regens. We keep the in-memory ref as a fast-path
+  // tie-break (so a double-click in ONE tab doesn't even need to
+  // round-trip the RPC), but the authoritative answer is the RPC.
   const lastFiredRef = useRef<Map<string, number>>(new Map());
-  const debounceFire = useCallback((key: string, ms = 2500): boolean => {
+  const debounceFire = useCallback(async (key: string, ms = 2500): Promise<boolean> => {
+    // Fast path: in-memory check stops back-to-back clicks (<2.5s) in
+    // a single tab without a network round-trip. Doesn't help across
+    // tabs but avoids needlessly hammering the RPC on the common case.
     const now = Date.now();
     const last = lastFiredRef.current.get(key) ?? 0;
     if (now - last < ms) {
       toast.info('Already in flight — give it a moment.');
       return false;
     }
+
+    // Authoritative path: server-side cross-tab debounce. Acquires the
+    // row in regen_debounce with a 30s TTL. If a sibling tab already
+    // acquired it within the window, the RPC returns false and we
+    // surface "already in flight" instead of firing a duplicate call.
+    // We scope the server key with the user_id implicitly (the RPC
+    // uses auth.uid()) so two different users colliding on the same
+    // scene index don't interfere.
+    if (user?.id) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: acquired, error } = await (supabase.rpc as any)(
+          'try_acquire_regen_debounce',
+          { p_key: `${user.id}:${key}`, p_ttl_seconds: 30 },
+        );
+        if (error) {
+          // RPC unavailable (migration not yet applied) — degrade to
+          // in-memory-only debounce. Log once so missed deploys are
+          // visible in Sentry but don't block the user.
+          const msg = (error.message || '').toLowerCase();
+          const missingRpc = msg.includes('does not exist')
+            || msg.includes('not found')
+            || msg.includes('pgrst202')
+            || msg.includes('schema cache');
+          if (!missingRpc) {
+            // Real DB error — refuse the action so we don't fire a
+            // potentially-duplicate paid call without the safety net.
+            toast.error(`Regen guard failed: ${error.message}`);
+            return false;
+          }
+          console.warn('[useSceneRegen] try_acquire_regen_debounce RPC missing — using in-memory debounce only');
+        } else if (acquired === false) {
+          toast.info('Already in flight in another tab — wait for it to finish.');
+          return false;
+        }
+      } catch (e) {
+        // Network blip — refuse so we don't silently double-charge.
+        // Better to error than to fire a duplicate paid Hypereal call.
+        toast.error('Couldn\'t reach regen guard. Try again in a sec.');
+        console.error('[useSceneRegen] debounce RPC failed:', e);
+        return false;
+      }
+    }
+
     lastFiredRef.current.set(key, now);
     return true;
-  }, []);
+  }, [user?.id]);
 
   /** Realtime can miss postgres_changes events in practice (timing,
    *  connection blips, filter mismatches). After kicking a regen job
@@ -194,7 +251,7 @@ export function useSceneRegen(state: EditorState | null) {
    *  targeted edit via nanoBananaEdit). */
   const regenerateImage = useCallback(async (index: number, modification?: string) => {
     if (!user || !state?.generation || !state?.project) return;
-    if (!debounceFire(`image:${index}`)) return;
+    if (!(await debounceFire(`image:${index}`))) return;
     setBusy('regen');
     try {
       const { error } = await supabase
@@ -228,7 +285,7 @@ export function useSceneRegen(state: EditorState | null) {
    *  the clip rebuilt from the current keyframe. */
   const regenerateVideo = useCallback(async (index: number) => {
     if (!user || !state?.generation || !state?.project) return;
-    if (!debounceFire(`video:${index}`)) return;
+    if (!(await debounceFire(`video:${index}`))) return;
     setBusy('regen');
     try {
       const { error } = await supabase
@@ -275,7 +332,7 @@ export function useSceneRegen(state: EditorState | null) {
       toast.info('Type the edit you want first.');
       return;
     }
-    if (!debounceFire(`video-edit:${index}`)) return;
+    if (!(await debounceFire(`video-edit:${index}`))) return;
     setBusy('regen');
     try {
       const { error } = await supabase
@@ -351,7 +408,7 @@ export function useSceneRegen(state: EditorState | null) {
 
   const regenerateAudio = useCallback(async (index: number, nextVoiceover?: string) => {
     if (!user || !state?.generation || !state?.project) return;
-    if (!debounceFire(`audio:${index}`)) return;
+    if (!(await debounceFire(`audio:${index}`))) return;
     setBusy('regen');
     try {
       const scene = state.scenes[index];

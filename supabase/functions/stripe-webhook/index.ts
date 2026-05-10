@@ -516,25 +516,84 @@ export async function handler(req: Request, deps: WebhookDeps = {}): Promise<Res
 
             const credits = baseCredits + addonCredits;
             if (credits > 0) {
-              // Grant monthly credits (base + add-ons)
-              const { error: creditError } = await supabaseAdmin.rpc("increment_user_credits", {
-                p_user_id: subData.user_id,
-                p_credits: credits,
-              });
+              // ── C-7-13 (Ghost G-C3): per-invoice idempotency ─────────
+              // The check at the top of the handler already collapses
+              // duplicate events by event_id, but Stripe occasionally
+              // emits two DIFFERENT events for the same invoice
+              // (e.g. an at-least-once re-delivery from the dashboard
+              // after a failed webhook receipt, or a manual resend).
+              // grant_monthly_credits_idempotent reserves the
+              // invoice_id in stripe_processed_invoices and only
+              // grants credits when that INSERT actually adds a row.
+              // The RPC wraps the credit-grant + transaction-log writes
+              // in the same SQL transaction as the idempotency record,
+              // so credits and the invoice-row can never disagree.
+              const description = addonCredits > 0
+                ? `Monthly ${subData.plan_name} plan renewal: ${baseCredits} + ${addonCredits} pack add-on = ${credits} credits`
+                : `Monthly ${subData.plan_name} plan renewal: ${credits} credits`;
+
+              const { data: grantedRaw, error: creditError } = await supabaseAdmin.rpc(
+                "grant_monthly_credits_idempotent",
+                {
+                  p_invoice_id: invoice.id,
+                  p_user_id: subData.user_id,
+                  p_customer_id: customerId,
+                  p_plan_name: subData.plan_name,
+                  p_credits: credits,
+                  p_amount_paid_cents: invoice.amount_paid ?? 0,
+                  p_currency: invoice.currency ?? "usd",
+                  p_description: description,
+                },
+              );
 
               if (creditError) {
-                logStep("ERROR: Failed to grant monthly credits", { userId: subData.user_id, credits, error: creditError.message });
+                // RPC-missing fallback: brief window after deploy +
+                // before migration applied. Use the legacy direct path
+                // so users don't miss a renewal cycle. Once the
+                // migration lands, this branch is dead code.
+                const errMsg = (creditError.message || "").toLowerCase();
+                const missingRpc = errMsg.includes("does not exist")
+                  || errMsg.includes("not found")
+                  || errMsg.includes("schema cache")
+                  || errMsg.includes("pgrst202");
+                if (missingRpc) {
+                  logStep("WARN: grant_monthly_credits_idempotent RPC missing — using legacy non-idempotent path", { invoiceId: invoice.id });
+                  const { error: legacyErr } = await supabaseAdmin.rpc("increment_user_credits", {
+                    p_user_id: subData.user_id,
+                    p_credits: credits,
+                  });
+                  if (legacyErr) {
+                    logStep("ERROR: Failed to grant monthly credits (legacy path)", { userId: subData.user_id, credits, error: legacyErr.message });
+                  } else {
+                    await supabaseAdmin.from("credit_transactions").insert({
+                      user_id: subData.user_id,
+                      amount: credits,
+                      transaction_type: "monthly_renewal",
+                      description,
+                    });
+                    logStep("Monthly credits granted (legacy path)", { userId: subData.user_id, plan: subData.plan_name, base: baseCredits, addon: addonCredits });
+                  }
+                } else {
+                  logStep("ERROR: Failed to grant monthly credits", { userId: subData.user_id, credits, error: creditError.message });
+                }
               } else {
-                // Log the transaction
-                await supabaseAdmin.from("credit_transactions").insert({
-                  user_id: subData.user_id,
-                  amount: credits,
-                  transaction_type: "monthly_renewal",
-                  description: addonCredits > 0
-                    ? `Monthly ${subData.plan_name} plan renewal: ${baseCredits} + ${addonCredits} pack add-on = ${credits} credits`
-                    : `Monthly ${subData.plan_name} plan renewal: ${credits} credits`,
-                });
-                logStep("Monthly credits granted", { userId: subData.user_id, plan: subData.plan_name, base: baseCredits, addon: addonCredits });
+                const granted = typeof grantedRaw === "number" ? grantedRaw : Number(grantedRaw ?? 0);
+                if (granted === 0) {
+                  // Duplicate invoice — credits already granted on a
+                  // prior delivery. Return 200 so Stripe doesn't retry.
+                  logStep("Duplicate invoice, skipping monthly credit grant", {
+                    invoiceId: invoice.id,
+                    userId: subData.user_id,
+                  });
+                } else {
+                  logStep("Monthly credits granted (idempotent)", {
+                    userId: subData.user_id,
+                    plan: subData.plan_name,
+                    base: baseCredits,
+                    addon: addonCredits,
+                    invoiceId: invoice.id,
+                  });
+                }
               }
             }
           }

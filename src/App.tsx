@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
+import { MotionConfig } from "framer-motion";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
@@ -86,6 +87,11 @@ const App = () => (
   <AuthProvider>
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="light" disableTransitionOnChange>
+      {/* `reducedMotion="user"` makes every framer-motion <motion.*> node
+          honor the OS-level `prefers-reduced-motion: reduce` setting —
+          transforms/opacity tweens still run, but durations collapse to 0
+          when the user has requested reduced motion. WCAG 2.3.3. */}
+      <MotionConfig reducedMotion="user">
       <TooltipProvider>
         <Sonner />
         <CookieConsent />
@@ -264,6 +270,7 @@ const App = () => (
           </Suspense>
         </BrowserRouter>
       </TooltipProvider>
+      </MotionConfig>
     </ThemeProvider>
   </QueryClientProvider>
   </AuthProvider>

@@ -3,6 +3,7 @@ import { downloadVideo, rewriteStorageUrl } from "@/hooks/export/downloadHelpers
 import { createScopedLogger } from "@/lib/logger";
 import { trackEvent } from "@/hooks/useAnalytics";
 import { toSafeMessage } from "@/lib/appErrors";
+import { isSmartFlow } from "@/lib/projectUtils";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -968,7 +969,7 @@ export default function Projects() {
                       <TableCell className="py-2 px-1 sm:px-3 max-w-0" onClick={() => handleView(project)}>
                         <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
                           <div className="p-1 sm:p-2 rounded-lg bg-[hsl(var(--thumbnail-surface))] border border-border/20 shrink-0">
-                            {project.project_type === "smartflow" || project.project_type === "smart-flow" ? (
+                            {isSmartFlow(project.project_type) ? (
                               <Wallpaper className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
                             ) : (
                               <Video className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />

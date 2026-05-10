@@ -41,6 +41,14 @@ export function initSentry(): void {
     dsn: DSN,
     environment: IS_PROD ? "production" : "development",
     release: import.meta.env.VITE_SENTRY_RELEASE || undefined,
+    // §6 SEC — explicit false. The SDK default is already false but the
+    // audit (Cipher) flagged the absence as a privacy regression risk:
+    // a future Sentry SDK rev could flip the default. Pinning it here
+    // makes the no-PII posture a contractual choice instead of a
+    // defaulted one. We never want IP / cookies / auth headers leaving
+    // the browser via Sentry — beforeSend further scrubs anything that
+    // sneaks in via breadcrumbs.
+    sendDefaultPii: false,
     integrations: [
       // browserTracingIntegration is legitimate-interest (performance monitoring,
       // no session recording). replayIntegration is added later via

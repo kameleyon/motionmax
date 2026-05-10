@@ -35,7 +35,7 @@ import {
   // generateGrokVideo,           // Grok Video I2V — status-lookup failures on Hypereal, rolled back
   pollHyperealJob,                // Resume-from-checkpoint poll for an already-submitted Hypereal job.
 } from "../services/hypereal.js";
-import { saveCheckpoint, readCheckpointKey, clearCheckpointKey } from "../lib/checkpoint.js";
+import { saveCheckpoint, readCheckpointKey, clearCheckpointKey, CheckpointReadError } from "../lib/checkpoint.js";
 import { isKillSwitchArmed } from "../lib/featureFlags.js";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -405,12 +405,29 @@ async function _runCinematicVideo(
   // Resume polling directly — skips the prompt build + re-submit, which
   // would re-charge Hypereal credits for a job that's already running.
   const checkpointKey = `scene_${sceneIndex}`;
-  const cp = await readCheckpointKey<{
+  // C-7-6: readCheckpointKey now throws CheckpointReadError on DB
+  // failure (instead of silently returning undefined → "no checkpoint
+  // → re-submit"). Let it propagate so withTransientRetry retries the
+  // read; the job stays in 'processing' and Hypereal is NOT re-charged.
+  let cp: {
     stage?: string;
     providerJobId?: string;
     pollUrl?: string | null;
     model?: string;
-  }>(jobId, checkpointKey);
+  } | undefined;
+  try {
+    cp = await readCheckpointKey(jobId, checkpointKey);
+  } catch (err) {
+    if (err instanceof CheckpointReadError) {
+      // Surface as-is — retry-classifier marks CheckpointReadError as
+      // transient, so withTransientRetry will re-invoke this handler
+      // (which will hit the checkpoint again, this time hopefully
+      // reading it cleanly). Critically: we do NOT fall through to a
+      // fresh provider submit on a DB blip.
+      throw err;
+    }
+    throw err;
+  }
   if (cp?.stage === "polling" && typeof cp.providerJobId === "string" && typeof cp.model === "string") {
     console.log(
       `[CinematicVideo] Scene ${sceneIndex}: resuming Hypereal poll from checkpoint ` +

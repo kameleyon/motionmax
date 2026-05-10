@@ -205,9 +205,134 @@ export default function Pricing() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, location.search]);
 
+  // C-12-4 (Signal S-C4) fix (2026-05-10): /pricing is the highest-intent
+  // transactional URL — it MUST ship its own canonical, description, OG
+  // card, and `robots: index, follow` to override the app-shell.html
+  // `noindex` default. JSON-LD Product/Offer schema lets Google surface
+  // the Creator + Studio prices in rich results. Numbers come from
+  // src/config/pricing.ts so this block tracks the single source of truth.
+  const creator = PLANS.creator;
+  const studio = PLANS.studio;
+  const pricingJsonLd = useMemo(
+    () => ({
+      "@context": "https://schema.org",
+      "@type": "Product",
+      name: "motionmax — AI Video Generator subscription plans",
+      description:
+        "Subscription plans for motionmax, an AI video generator. Free tier with daily refresh credits, Creator from $14.50/mo billed annually, Studio from $64.50/mo billed annually.",
+      brand: { "@type": "Brand", name: "motionmax" },
+      url: "https://motionmax.io/pricing",
+      image: "https://motionmax.io/og-image.png?v=20260129",
+      offers: {
+        "@type": "AggregateOffer",
+        priceCurrency: "USD",
+        lowPrice: creator.price_yearly_monthly.toFixed(2),
+        highPrice: studio.price_monthly_after.toFixed(2),
+        offerCount: 4,
+        offers: [
+          {
+            "@type": "Offer",
+            name: `${creator.name} (yearly)`,
+            price: creator.price_yearly_total.toFixed(2),
+            priceCurrency: "USD",
+            url: "https://motionmax.io/pricing",
+            availability: "https://schema.org/InStock",
+            priceSpecification: {
+              "@type": "UnitPriceSpecification",
+              price: creator.price_yearly_monthly.toFixed(2),
+              priceCurrency: "USD",
+              referenceQuantity: { "@type": "QuantitativeValue", value: 1, unitCode: "MON" },
+              billingIncrement: 12,
+            },
+          },
+          {
+            "@type": "Offer",
+            name: `${creator.name} (monthly)`,
+            price: creator.price_monthly_after.toFixed(2),
+            priceCurrency: "USD",
+            url: "https://motionmax.io/pricing",
+            availability: "https://schema.org/InStock",
+            priceSpecification: {
+              "@type": "UnitPriceSpecification",
+              price: creator.price_monthly_after.toFixed(2),
+              priceCurrency: "USD",
+              referenceQuantity: { "@type": "QuantitativeValue", value: 1, unitCode: "MON" },
+              billingIncrement: 1,
+            },
+          },
+          {
+            "@type": "Offer",
+            name: `${studio.name} (yearly)`,
+            price: studio.price_yearly_total.toFixed(2),
+            priceCurrency: "USD",
+            url: "https://motionmax.io/pricing",
+            availability: "https://schema.org/InStock",
+            priceSpecification: {
+              "@type": "UnitPriceSpecification",
+              price: studio.price_yearly_monthly.toFixed(2),
+              priceCurrency: "USD",
+              referenceQuantity: { "@type": "QuantitativeValue", value: 1, unitCode: "MON" },
+              billingIncrement: 12,
+            },
+          },
+          {
+            "@type": "Offer",
+            name: `${studio.name} (monthly)`,
+            price: studio.price_monthly_after.toFixed(2),
+            priceCurrency: "USD",
+            url: "https://motionmax.io/pricing",
+            availability: "https://schema.org/InStock",
+            priceSpecification: {
+              "@type": "UnitPriceSpecification",
+              price: studio.price_monthly_after.toFixed(2),
+              priceCurrency: "USD",
+              referenceQuantity: { "@type": "QuantitativeValue", value: 1, unitCode: "MON" },
+              billingIncrement: 1,
+            },
+          },
+        ],
+      },
+    }),
+    [creator, studio],
+  );
+
   return (
     <AppShell breadcrumb="Pricing">
-      <Helmet><title>Pricing · MotionMax</title></Helmet>
+      <Helmet>
+        <title>Pricing — motionmax | Free, Creator $14.50/mo, Studio $64.50/mo</title>
+        <meta
+          name="description"
+          content="Choose Free, Creator ($14.50/mo billed annually) or Studio ($64.50/mo billed annually). Multilingual voiceover, watermark removal, top-up packs from $14.99. Limited-time 34% off first 3 months on monthly plans."
+        />
+        <link rel="canonical" href="https://motionmax.io/pricing" />
+        {/* Override app-shell.html `noindex, nofollow` default — /pricing
+            is the highest-intent transactional URL and must be indexable
+            even when served via the SPA shell. */}
+        <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://motionmax.io/pricing" />
+        <meta property="og:title" content="motionmax pricing — from $14.50/mo" />
+        <meta
+          property="og:description"
+          content="Free tier plus Creator and Studio subscriptions. AI video generation, multilingual voiceover, watermark removal, top-up credit packs from $14.99. Annual billing saves up to 50%."
+        />
+        <meta property="og:image" content="https://motionmax.io/og-image.png?v=20260129" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:site_name" content="MotionMax" />
+        <meta property="og:locale" content="en_US" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:url" content="https://motionmax.io/pricing" />
+        <meta name="twitter:title" content="motionmax pricing — from $14.50/mo" />
+        <meta
+          name="twitter:description"
+          content="Free tier plus Creator and Studio subscriptions. AI video generation, multilingual voiceover, watermark removal, top-up credit packs from $14.99."
+        />
+        <meta property="twitter:image" content="https://motionmax.io/og-image.png?v=20260129" />
+        <meta name="twitter:site" content="@motionmaxio" />
+        <meta name="twitter:creator" content="@motionmaxio" />
+        <script type="application/ld+json">{JSON.stringify(pricingJsonLd)}</script>
+      </Helmet>
 
       <div className="px-3 sm:px-4 md:px-6 lg:px-8 py-8 sm:py-12 max-w-[1100px] mx-auto">
         {/* Promo banner — only renders inside the limited-time window. */}

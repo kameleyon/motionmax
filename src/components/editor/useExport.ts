@@ -38,6 +38,14 @@ export function useExport(state: EditorState | null) {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const deadlineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const jobIdRef = useRef<string | null>(null);
+  // C-7-12 (Ghost G-C1+G-C2): synchronous submit lock against
+  // double-click / Enter-mash. The `exportState.status === 'submitting'`
+  // check is async (React state) so a second click in the same tick
+  // bypasses it. The ref check runs synchronously inside the same
+  // event-loop tick and stops the duplicate insert before it reaches
+  // Supabase — which would otherwise create two export_video jobs
+  // and double-charge.
+  const startLockRef = useRef(false);
 
   useEffect(() => () => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
@@ -127,6 +135,16 @@ export function useExport(state: EditorState | null) {
       toast.error('Your video isn\'t ready to export yet.');
       return;
     }
+    // C-7-12: synchronous lock against rapid double-fire. Released
+    // on success (after the job is queued) and on error in the catch
+    // below. We DON'T release on the early-return validation paths
+    // above because they don't acquire the lock — only the path that
+    // can actually mutate state does.
+    if (startLockRef.current) {
+      toast.info('Already exporting — hang on.');
+      return;
+    }
+    startLockRef.current = true;
 
     // Export format must FOLLOW the project's actual aspect. The old
     // "master" preset hardcoded 'landscape' which meant portrait
@@ -153,33 +171,58 @@ export function useExport(state: EditorState | null) {
 
     if (scenes.length === 0) {
       toast.error('No renderable scenes yet.');
+      startLockRef.current = false;
       return;
     }
 
     setExportState({ status: 'submitting', progress: 2 });
 
     try {
-      const { data: job, error } = await supabase
+      // C-7-12: server-side dedup before insert. If the user already
+      // has an in-flight export_video job for this project (pending
+      // or processing), DON'T create a second one — attach the
+      // realtime listener to the existing job id instead. This is
+      // belt-and-suspenders to the synchronous startLockRef above:
+      // covers the cross-tab case (two open editors both fire export)
+      // since the ref only locks within one tab.
+      const { data: inFlight } = await supabase
         .from('video_generation_jobs')
-        .insert({
-          project_id: state.project.id,
-          user_id: user.id,
-          task_type: 'export_video',
-          // Worker reads `format`, `scenes`, `project_id`, `project_type`,
-          // `caption_style` from the payload (see worker exportVideo.ts).
-          payload: {
-            project_id: state.project.id,
-            project_type: state.project.project_type,
-            format: presetCfg.format,
-            scenes,
-            caption_style: state.intake.captionStyle ?? 'none',
-            preset,
-          } as unknown as never,
-          status: 'pending',
-        })
         .select('id')
-        .single();
-      if (error || !job) throw new Error(error?.message || 'Queue failed');
+        .eq('project_id', state.project.id)
+        .eq('user_id', user.id)
+        .eq('task_type', 'export_video')
+        .in('status', ['pending', 'processing'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      let job: { id: string } | null = inFlight ? { id: inFlight.id as string } : null;
+      if (!job) {
+        const { data: inserted, error } = await supabase
+          .from('video_generation_jobs')
+          .insert({
+            project_id: state.project.id,
+            user_id: user.id,
+            task_type: 'export_video',
+            // Worker reads `format`, `scenes`, `project_id`, `project_type`,
+            // `caption_style` from the payload (see worker exportVideo.ts).
+            payload: {
+              project_id: state.project.id,
+              project_type: state.project.project_type,
+              format: presetCfg.format,
+              scenes,
+              caption_style: state.intake.captionStyle ?? 'none',
+              preset,
+            } as unknown as never,
+            status: 'pending',
+          })
+          .select('id')
+          .single();
+        if (error || !inserted) throw new Error(error?.message || 'Queue failed');
+        job = { id: inserted.id as string };
+      } else {
+        toast.info('Already exporting — attaching to the existing job.');
+      }
 
       jobIdRef.current = job.id;
       setExportState({ status: 'rendering', progress: 5 });
@@ -281,6 +324,14 @@ export function useExport(state: EditorState | null) {
       const msg = err instanceof Error ? err.message : String(err);
       setExportState({ status: 'error', progress: 0, error: msg });
       toast.error(`Couldn't queue export: ${msg}`);
+    } finally {
+      // C-7-12: release the synchronous submit lock. By this point the
+      // job is either queued (realtime + poll + deadline armed —
+      // re-clicking Export would correctly attach to the existing job
+      // via the server-side dedup above) or errored (user can legitimately
+      // retry). Either way the lock served its purpose: blocking the
+      // burst of duplicate INSERTs from a single rage-click sequence.
+      startLockRef.current = false;
     }
   }, [user, state, cancelPolling]);
 

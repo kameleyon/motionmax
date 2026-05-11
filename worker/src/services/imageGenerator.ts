@@ -51,6 +51,12 @@ const HYPEREAL_GPT_IMAGE2_RETRIES = 4;
 const HYPEREAL_MODEL = "gemini-3-1-flash-t2i";
 const HYPEREAL_RETRIES = 4;
 
+// Secondary Hypereal account — used only as a gpt-image-2 fallback
+// before OpenRouter. Different rate-limit pool / billing line, so a
+// throttle or slow-roll on the primary HYPEREAL_API_KEY doesn't burn
+// the whole chain. Unset → step skipped silently.
+const HYPEREAL_IMAGE_FALLBACK_KEY = (process.env.HYPEREALIMAGE_API_KEY || "").trim();
+
 // OpenRouter middle fallback — calls openai/gpt-5.4-image-2 via the
 // chat-completions API. Read at module scope so handlers don't have
 // to thread it through.
@@ -220,15 +226,16 @@ async function tryHyperealGptImage2(
 
   for (let attempt = 1; attempt <= HYPEREAL_GPT_IMAGE2_RETRIES; attempt++) {
     try {
-      // Per-attempt 90s client-side timeout. Without this, a stalled
-      // Hypereal upstream (the path that surfaces the E1002 "Request
-      // timed out" 500) can hang Node's fetch for several minutes per
-      // attempt — burning the worker slot while contributing nothing.
-      // 90s comfortably covers the typical 20-40s gpt-image-2 round
-      // trip while letting us bail and try the next attempt (or fall
-      // back to Gemini early) instead of waiting indefinitely.
+      // Per-attempt 180s client-side timeout. gpt-image-2 with a
+      // `reference_images` payload (our character-consistency path)
+      // routinely takes 60-120s server-side; the prior 90s budget was
+      // tripping on slower jobs, aborting the fetch AFTER Hypereal had
+      // already started generating — so we got billed for an image we
+      // never received and retried (re-billing each time). 180s covers
+      // the long tail without indefinitely hanging the worker slot if
+      // an E1002 "Request timed out" upstream is actually stuck.
       const ac = new AbortController();
-      const timer = setTimeout(() => ac.abort(), 90_000);
+      const timer = setTimeout(() => ac.abort(), 180_000);
       let res: Response;
       try {
         res = await fetch(HYPEREAL_API_URL, {
@@ -306,6 +313,21 @@ async function tryHyperealGptImage2(
       console.log(`[ImageGen] gpt-image-2 ✅ attempt ${attempt} — ${bytes.length} bytes`);
       return bytes;
     } catch (err) {
+      // AbortError = our own 180s client timer fired. The upstream
+      // request is already in flight at Hypereal and will keep running
+      // (and billing us) regardless of whether we retry — retrying just
+      // re-bills for a second image we won't receive any faster.
+      // Surface the timeout once and short-circuit to the next provider
+      // in the chain instead of burning the full 4-attempt budget.
+      const isAbort =
+        (err as Error)?.name === "AbortError" ||
+        (err as Error)?.message?.toLowerCase().includes("aborted");
+      if (isAbort) {
+        console.warn(
+          `[ImageGen] gpt-image-2 attempt ${attempt} aborted at 180s — server-side gen likely still completed (billed); short-circuiting to next provider`,
+        );
+        return null;
+      }
       console.warn(`[ImageGen] gpt-image-2 attempt ${attempt} threw: ${err}`);
       if (attempt < HYPEREAL_GPT_IMAGE2_RETRIES) await sleep(1500 * attempt);
     }
@@ -693,9 +715,34 @@ async function _generateImageUncached(
       }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
       return url;
     }
-    console.warn("[ImageGen] gpt-image-2 exhausted — falling back to OpenRouter gpt-5.4-image-2");
+    console.warn("[ImageGen] gpt-image-2 (primary key) exhausted — trying secondary Hypereal account");
   } else if (!gptImage2Enabled) {
     console.warn("[ImageGen] gpt-image-2 disabled via feature flag — skipping to OpenRouter");
+  }
+
+  // ── 1b. Hypereal gpt-image-2 (secondary HYPEREALIMAGE_API_KEY) ────
+  // Same model + same upstream, different Hypereal account. Skipped
+  // unless HYPEREALIMAGE_API_KEY is set in the worker env. Helps when
+  // the primary account is throttled or running into per-key rate
+  // limits — fires before the pricier OpenRouter path.
+  if (HYPEREAL_IMAGE_FALLBACK_KEY && hyperealEnabled && gptImage2Enabled) {
+    await acquireHypereal();
+    const bytes = await tryHyperealGptImage2(prompt, HYPEREAL_IMAGE_FALLBACK_KEY, format, referenceImages).finally(releaseHypereal);
+    if (bytes) {
+      const url = await uploadToStorage(bytes, projectId);
+      writeApiLog({
+        userId: attribution.userId,
+        generationId: attribution.generationId,
+        provider: "hypereal", model: `${HYPEREAL_GPT_IMAGE2_MODEL}-fallback-key`,
+        status: "success", totalDurationMs: Date.now() - startTime,
+        cost: imageCostUsd("hypereal_gpt_image2"),
+        error: undefined,
+      }).catch((err) => { console.warn('[ImageGen] background log failed:', (err as Error).message); });
+      return url;
+    }
+    console.warn("[ImageGen] gpt-image-2 (secondary key) exhausted — falling back to OpenRouter gpt-5.4-image-2");
+  } else if (!HYPEREAL_IMAGE_FALLBACK_KEY) {
+    console.log("[ImageGen] HYPEREALIMAGE_API_KEY not set — skipping secondary-account fallback");
   }
 
   // ── 2. OpenRouter openai/gpt-5.4-image-2 (middle fallback) ────────

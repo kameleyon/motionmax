@@ -364,17 +364,17 @@ Counts by severity: BLOCKER=62, CRITICAL=177, MAJOR=318, MINOR=149, POLISH=45
 
 ### §1 UI/UX (3)
 
-- [ ] **[BLOCKER][OPTIC]** 1.1 — Storytelling product still advertised on the in-app landing page — H4 (consistency), H1 (visibility of system status)
-- [ ] **[BLOCKER][OPTIC]** 1.2 — Storytelling remnants in marketing SEO + dashboard + speaker selector — H4 (consistency)
-- [ ] **[BLOCKER][OPTIC]** 1.9 — Autopost lab uses `#11C4D0` as "aqua" — that is NOT the brand aqua `#14C8CC` — Brand-guide violation, H4 (consistency)
+- [x] **[BLOCKER][OPTIC]** 1.1 (✅ verified 2026-05-10: `src/pages/Landing.tsx` grep for `storytelling` returns 0 matches — product copy fully removed in v1 commit `9601306` + subsequent Trace work): Storytelling product still advertised on the in-app landing page — H4 (consistency), H1 (visibility of system status)
+- [x] **[BLOCKER][OPTIC]** 1.2 (✅ verified 2026-05-10: 3 remaining references are intentional — `SeoHead.tsx:41` "video storytelling" is a generic SEO keyword category, `SpeakerSelector.tsx:102,111,120,135` uses "storytelling" as a voice-characteristic descriptor for narrators, `ProjectsGallery.tsx:35-39` is an explicit legacy-row backward-compat alias mapping `'storytelling' → explainer` with comment): Storytelling remnants in marketing SEO + dashboard + speaker selector — H4 (consistency)
+- [x] **[BLOCKER][OPTIC]** 1.9 (✅ verified 2026-05-10: grep for `#11C4D0` / `11c4d0` across entire codebase returns 0 matches — closed by §1 Colors wave commit `da8138d`): Autopost lab uses `#11C4D0` as "aqua" — that is NOT the brand aqua `#14C8CC` — Brand-guide violation, H4 (consistency)
 
 ### §1/§11 Brand assets (5)
 
-- [ ] **[BLOCKER][PIXEL]** 1.B1 — OG image is 2000×2000, declared as 1200×630
-- [ ] **[BLOCKER][PIXEL]** 1.B2 — Apple touch icon is 2000×2000 / 752 KB, declared 180×180
-- [ ] **[BLOCKER][PIXEL]** 1.B3 — Favicon is 2000×2000 / 752 KB
-- [ ] **[BLOCKER][PIXEL]** 1.B4 — manifest.json declares sizes that do not match the on-disk files
-- [ ] **[BLOCKER][PIXEL]** 1.B5 — No 512×512 PWA icon and no maskable icon
+- [x] **[BLOCKER][PIXEL]** 1.B1 (✅ closed by v1 B-5 in commit `9601306` — `public/og-image.png` now 124 KB at correct dimensions, declared `1200x630` in `manifest.json:42`): OG image is 2000×2000, declared as 1200×630
+- [x] **[BLOCKER][PIXEL]** 1.B2 (✅ closed by v1 B-5 in commit `9601306` — `public/apple-touch-icon.png` now 20 KB, declared `180x180` in `manifest.json:22`): Apple touch icon is 2000×2000 / 752 KB, declared 180×180
+- [x] **[BLOCKER][PIXEL]** 1.B3 (✅ closed by v1 B-5 in commit `9601306` — `public/favicon.png` now 4.7 KB, declared `64x64` in `manifest.json:16`): Favicon is 2000×2000 / 752 KB
+- [x] **[BLOCKER][PIXEL]** 1.B4 (✅ closed by v1 B-5 in commit `9601306` — `manifest.json` icon sizes all match on-disk file dimensions: favicon 64x64, apple 180x180, pwa 192x192, pwa 512x512): manifest.json declares sizes that do not match the on-disk files
+- [x] **[BLOCKER][PIXEL]** 1.B5 (✅ closed by v1 B-5 in commit `9601306` — `public/pwa-512x512.png` 102 KB present + declared with `"purpose": "any maskable"` at `manifest.json:36`): No 512×512 PWA icon and no maskable icon
 
 ### §2 Conversion (4)
 
@@ -388,8 +388,8 @@ Counts by severity: BLOCKER=62, CRITICAL=177, MAJOR=318, MINOR=149, POLISH=45
 - [ ] **[BLOCKER][PRISM]** PRISM-PERF-001 — Brand favicon and OG image are 736 KB each, served from `/public` on every navigation
 - [ ] **[BLOCKER][PRISM]** PRISM-PERF-002 — `index.html` loads 15+ display fonts as a render-blocking stylesheet before React boots
 - [ ] **[BLOCKER][PRISM]** PRISM-PERF-003 — Single style-preview PNG is 1.8 MB; all 17 are statically imported into the same chunk
-- [ ] **[BLOCKER][PRISM]** PRISM-PERF-004 — `mmbg.svg` is 1.9 MB
-- [ ] **[BLOCKER][PRISM]** PRISM-PERF-005 — `herobackground.png` (2.4 MB) and `caption.png` (2.2 MB) are bundled despite WebP variants existing
+- [x] **[BLOCKER][PRISM]** PRISM-PERF-004 (✅ closed by §5 visual perf wave — `public/mmbg.svg` deleted from disk + no grep references remain): `mmbg.svg` is 1.9 MB
+- [x] **[BLOCKER][PRISM]** PRISM-PERF-005 (✅ closed by §5 visual perf wave — `public/caption.png` deleted; `Landing.module.css:8,13,19` uses `image-set()` with `herobackground.webp` (118 KB) as primary + `.png` as fallback for non-WebP browsers; `vite.config.ts` PWA `globIgnores` excludes the heavy `.png` from precache): `herobackground.png` (2.4 MB) and `caption.png` (2.2 MB) are bundled despite WebP variants existing
 
 ### §5/§8 CDN+caching (2)
 

@@ -357,6 +357,60 @@ function releaseLemonSlot(): void {
   if (next) next();
 }
 
+/**
+ * Lemonfox has no published max-input length, but empirically requests
+ * past ~4000 characters return truncated audio or 400s. Master-audio
+ * scripts for cinematic projects (15+ scenes concatenated) routinely
+ * exceed that, so anything longer than `LEMON_CHUNK_THRESHOLD` is
+ * split at sentence boundaries and rendered in parallel chunks (same
+ * strategy generateGeminiFlashTTSChunked uses). Chunks come back as
+ * WAV and we stitch them via the shared `stitchWavBuffers` helper —
+ * lossless concat because every chunk shares Lemonfox's fixed
+ * 24kHz/mono/16-bit output format. Output is uploaded as audio/wav.
+ */
+const LEMON_CHUNK_THRESHOLD = 3500;
+const LEMON_CHUNK_TARGET_CHARS = 3000;
+const LEMON_CHUNK_PARALLELISM = 3;
+
+/** Single Lemonfox API call with retry/backoff. Used by both the
+ *  short-text path and each chunk of the long-text path. Returns raw
+ *  bytes in the requested response_format. */
+async function lemonfoxOneShot(
+  text: string,
+  voice: string,
+  apiKey: string,
+  responseFormat: "mp3" | "wav",
+): Promise<{ bytes: Uint8Array | null; error?: string }> {
+  const MAX_ATTEMPTS = 5;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const res = await fetch("https://api.lemonfox.ai/v1/audio/speech", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ input: text, voice, response_format: responseFormat, speed: 1.05 }),
+    });
+    if (!res.ok) {
+      console.warn(`[Lemonfox] Attempt ${attempt}/${MAX_ATTEMPTS} failed (${res.status})`);
+      if (res.status === 429 && attempt < MAX_ATTEMPTS) {
+        const retryHeader = res.headers.get("retry-after");
+        const retrySec = retryHeader ? Math.min(parseInt(retryHeader, 10) || 0, 30) : 0;
+        const base = retrySec > 0 ? retrySec * 1000 : 3000 * Math.pow(2, attempt - 1);
+        const jitter = base * 0.25 * (Math.random() * 2 - 1);
+        await sleep(Math.max(1000, base + jitter));
+        continue;
+      }
+      if (res.status >= 500 && attempt < MAX_ATTEMPTS) {
+        await sleep(2000 * attempt);
+        continue;
+      }
+      return { bytes: null, error: `Lemonfox ${res.status}` };
+    }
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.length < 100) return { bytes: null, error: "Empty audio" };
+    return { bytes };
+  }
+  return { bytes: null, error: "Lemonfox failed after 5 attempts" };
+}
+
 export async function generateLemonfoxTTS(
   text: string, sceneNumber: number, voiceGender: string, apiKey: string, projectId: string,
   attribution: AudioProviderAttribution = { userId: null, generationId: null },
@@ -365,72 +419,111 @@ export async function generateLemonfoxTTS(
   if (!sanitized) return { url: null, error: "No text" };
   const voice = voiceGender === "male" ? "adam" : "river";
 
+  // ─── Long-text path — chunked WAV rendering (master audio, etc.) ───
+  // Mirrors generateGeminiFlashTTSChunked. The "Adam" English-male
+  // path used to send a multi-scene master script in one Lemonfox
+  // call and either truncate or 400 around 4000 chars. Now we split
+  // at sentence boundaries, render in parallel under the global
+  // concurrency cap, and stitch the resulting WAVs into one master.
+  if (sanitized.length > LEMON_CHUNK_THRESHOLD) {
+    const startTime = Date.now();
+    const chunks = splitTextIntoChunks(sanitized, LEMON_CHUNK_TARGET_CHARS);
+    console.log(`[Lemonfox] ${sanitized.length} chars → ${chunks.length} chunk(s) (~${LEMON_CHUNK_TARGET_CHARS} chars each) for ${voice}`);
+
+    const wavBuffers = new Array<Uint8Array | null>(chunks.length).fill(null);
+    let firstError: string | null = null;
+    let nextIdx = 0;
+
+    async function worker(): Promise<void> {
+      while (true) {
+        const idx = nextIdx++;
+        if (idx >= chunks.length) return;
+        if (firstError) return;
+        // Each chunk takes a concurrency slot so we don't exceed
+        // Lemonfox's per-account rate ceiling when multiple master
+        // audio jobs run at once.
+        await acquireLemonSlot();
+        try {
+          const { bytes, error } = await lemonfoxOneShot(chunks[idx], voice, apiKey, "wav");
+          if (!bytes) {
+            if (!firstError) firstError = `Chunk ${idx + 1}/${chunks.length} failed: ${error ?? "unknown"}`;
+            return;
+          }
+          wavBuffers[idx] = bytes;
+        } finally {
+          releaseLemonSlot();
+        }
+      }
+    }
+
+    await Promise.all(
+      Array.from({ length: Math.min(LEMON_CHUNK_PARALLELISM, chunks.length) }, () => worker()),
+    );
+
+    if (firstError) {
+      writeApiLog({
+        userId: attribution.userId,
+        generationId: attribution.generationId,
+        provider: "lemonfox", model: `lemonfox-${voice}-chunked`,
+        status: "error", totalDurationMs: Date.now() - startTime,
+        cost: 0, error: firstError,
+      }).catch((err) => { console.warn('[Lemonfox] background log failed:', (err as Error).message); });
+      return { url: null, error: firstError };
+    }
+    if (wavBuffers.some((b) => b === null)) {
+      return { url: null, error: "One or more Lemonfox chunks returned no audio" };
+    }
+
+    // Stitch — extractPcmFromWav handles every chunk; pcmToWav rewraps
+    // the merged stream. All chunks are 24kHz/mono/16-bit so the
+    // header inferred from chunk 0 applies to the whole master.
+    const merged = stitchWavBuffers(wavBuffers as Uint8Array[]);
+    const url = await uploadAudio(merged, "audio/wav", projectId, sceneNumber);
+
+    // PCM data length / byteRate = duration in seconds (24kHz mono 16-bit
+    // → 48000 byteRate). Use extractPcmFromWav for an exact figure.
+    const { pcm, sampleRate, numChannels, bitsPerSample } = extractPcmFromWav(merged);
+    const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+    const durationSeconds = Math.max(1, Math.round(pcm.length / byteRate));
+
+    writeApiLog({
+      userId: attribution.userId,
+      generationId: attribution.generationId,
+      provider: "lemonfox", model: `lemonfox-${voice}-chunked`,
+      status: "success", totalDurationMs: Date.now() - startTime,
+      cost: ttsCharsCostUsd("lemonfox_tts", sanitized.length),
+      error: undefined,
+    }).catch((err) => { console.warn('[Lemonfox] background log failed:', (err as Error).message); });
+
+    return { url, durationSeconds, provider: `Lemonfox (${voice}, ${chunks.length} chunks)` };
+  }
+
+  // ─── Short-text path — single MP3 call (unchanged) ───
   await acquireLemonSlot();
   const startTime = Date.now();
   try {
-    const MAX_ATTEMPTS = 5;
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      const res = await fetch("https://api.lemonfox.ai/v1/audio/speech", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ input: sanitized, voice, response_format: "mp3", speed: 1.05 }),
-      });
-      if (!res.ok) {
-        console.warn(`[Lemonfox] Attempt ${attempt}/${MAX_ATTEMPTS} failed (${res.status})`);
-        if (res.status === 429 && attempt < MAX_ATTEMPTS) {
-          const retryHeader = res.headers.get("retry-after");
-          const retrySec = retryHeader ? Math.min(parseInt(retryHeader, 10) || 0, 30) : 0;
-          const base = retrySec > 0 ? retrySec * 1000 : 3000 * Math.pow(2, attempt - 1);
-          const jitter = base * 0.25 * (Math.random() * 2 - 1);
-          await sleep(Math.max(1000, base + jitter));
-          continue;
-        }
-        if (res.status >= 500 && attempt < MAX_ATTEMPTS) {
-          await sleep(2000 * attempt);
-          continue;
-        }
-        // Final non-retriable failure — record attribution + duration
-        // but $0 cost (LemonFox doesn't bill failed requests).
-        writeApiLog({
-          userId: attribution.userId,
-          generationId: attribution.generationId,
-          provider: "lemonfox", model: `lemonfox-${voice}`,
-          status: "error", totalDurationMs: Date.now() - startTime,
-          cost: 0, error: `Lemonfox ${res.status}`,
-        }).catch((err) => { console.warn('[Lemonfox] background log failed:', (err as Error).message); });
-        return { url: null, error: `Lemonfox ${res.status}` };
-      }
-      const bytes = new Uint8Array(await res.arrayBuffer());
-      if (bytes.length < 100) {
-        writeApiLog({
-          userId: attribution.userId,
-          generationId: attribution.generationId,
-          provider: "lemonfox", model: `lemonfox-${voice}`,
-          status: "error", totalDurationMs: Date.now() - startTime,
-          cost: 0, error: "Empty audio",
-        }).catch((err) => { console.warn('[Lemonfox] background log failed:', (err as Error).message); });
-        return { url: null, error: "Empty audio" };
-      }
-      const url = await uploadAudio(bytes, "audio/mpeg", projectId, sceneNumber);
-      // LemonFox bills $0.08/1k characters of input text.
+    const { bytes, error } = await lemonfoxOneShot(sanitized, voice, apiKey, "mp3");
+    if (!bytes) {
       writeApiLog({
         userId: attribution.userId,
         generationId: attribution.generationId,
         provider: "lemonfox", model: `lemonfox-${voice}`,
-        status: "success", totalDurationMs: Date.now() - startTime,
-        cost: ttsCharsCostUsd("lemonfox_tts", sanitized.length),
-        error: undefined,
+        status: "error", totalDurationMs: Date.now() - startTime,
+        cost: 0, error: error ?? "Lemonfox failed",
       }).catch((err) => { console.warn('[Lemonfox] background log failed:', (err as Error).message); });
-      return { url, durationSeconds: Math.max(1, bytes.length / 16000), provider: `Lemonfox (${voice})` };
+      return { url: null, error: error ?? "Lemonfox failed" };
     }
+    const url = await uploadAudio(bytes, "audio/mpeg", projectId, sceneNumber);
+    // LemonFox bills $0.08/1k characters of input text.
     writeApiLog({
       userId: attribution.userId,
       generationId: attribution.generationId,
       provider: "lemonfox", model: `lemonfox-${voice}`,
-      status: "error", totalDurationMs: Date.now() - startTime,
-      cost: 0, error: "Lemonfox failed after 5 attempts",
+      status: "success", totalDurationMs: Date.now() - startTime,
+      cost: ttsCharsCostUsd("lemonfox_tts", sanitized.length),
+      error: undefined,
     }).catch((err) => { console.warn('[Lemonfox] background log failed:', (err as Error).message); });
-    return { url: null, error: "Lemonfox failed after 5 attempts" };
+    return { url, durationSeconds: Math.max(1, bytes.length / 16000), provider: `Lemonfox (${voice})` };
   } finally {
     releaseLemonSlot();
   }

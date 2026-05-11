@@ -716,6 +716,33 @@ async function _runCinematicVideo(
     }
   }
 
+  // Cancellation check — Kling/Seedance video renders take 30-180s,
+  // plenty of time for the user to hit Cancel in the Inspector. The
+  // UI cancel handler flips this job row to `status='cancelled'`. By
+  // the time we get here Hypereal has already done the work and
+  // billed us (we accept that cost). What we MUST avoid is the worse
+  // footgun: writing `videoUrl` onto scenes[sceneIndex] AFTER the
+  // user gave up, overwriting whatever they're editing now.
+  {
+    const { data: jobRow } = await supabase
+      .from("video_generation_jobs")
+      .select("status")
+      .eq("id", jobId)
+      .single();
+    if (jobRow?.status === "cancelled") {
+      console.log(`[CinematicVideo] Job ${jobId.substring(0, 8)} was cancelled mid-flight — skipping scene write for scene ${sceneIndex}`);
+      await writeSystemLog({
+        jobId, projectId, userId, generationId,
+        category: "system_info",
+        eventType: "cinematic_video_cancelled",
+        message: `Scene ${sceneIndex} video render cancelled by user — provider call completed but result discarded`,
+        details: { sceneIndex, provider, hadVideo: !!finalVideoUrl },
+      });
+      await clearCheckpointKey(jobId, checkpointKey);
+      return { success: false, status: "cancelled", videoUrl: null, sceneIndex };
+    }
+  }
+
   await updateSceneField(generationId, sceneIndex, "videoUrl", finalVideoUrl);
   // Scene's videoUrl is durably committed — drop the resume checkpoint
   // so a future re-claim of this row (manual retry, requeue) starts

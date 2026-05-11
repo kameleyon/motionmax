@@ -304,6 +304,29 @@ async function _runRegenerateAudio(
     p_change_type: "audio",
   });
 
+  // Cancellation check — the user-facing Cancel button flips this
+  // row to `status='cancelled'`. If they bailed while Gemini TTS was
+  // grinding, we accept the provider cost but MUST NOT overwrite the
+  // scene's audio URL with the now-unwanted re-render.
+  {
+    const { data: jobRow } = await supabase
+      .from("video_generation_jobs")
+      .select("status")
+      .eq("id", jobId)
+      .single();
+    if (jobRow?.status === "cancelled") {
+      console.log(`[RegenerateAudio] Job ${jobId.substring(0, 8)} was cancelled mid-flight — skipping scene write for scene ${sceneIndex + 1}`);
+      await writeSystemLog({
+        jobId, projectId, userId, generationId,
+        category: "system_info",
+        eventType: "regenerate_audio_cancelled",
+        message: `Scene ${sceneIndex + 1} audio regen cancelled by user — TTS call completed but result discarded`,
+        details: { sceneIndex, audioGenerated: !!audioResult.url },
+      });
+      return { success: false, sceneIndex, audioUrl: null, duration: 0, voiceover: newVoiceover };
+    }
+  }
+
   // Patch scene in DB
   scenes[sceneIndex] = { ...scene, voiceover: newVoiceover, audioUrl: audioResult.url, duration };
   await supabase.from("generations").update({ scenes }).eq("id", generationId);

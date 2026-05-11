@@ -274,37 +274,42 @@ export function useSceneRegen(state: EditorState | null) {
     }
   }, [user, state, updateScenePrompt]);
 
-  /** Cancel an in-flight image regen for a specific scene. Finds the
-   *  most-recent pending/processing `regenerate_image` job for this
-   *  user + project + sceneIndex and flips its status to `cancelled`.
-   *  `useActiveJobs` reads rows WHERE status IN ('pending','processing')
-   *  — once the row drops out, `imageRegenActive` flips to false and
-   *  the Inspector unlocks without the user waiting for the worker to
-   *  notice. The worker's handleRegenerateImage re-reads the row's
-   *  status just before persisting the new image URL and skips the
-   *  scene write when it sees `cancelled`, so a stuck Hypereal call
-   *  that finishes after the user gave up doesn't overwrite whatever
-   *  they're editing now. */
-  const cancelImageRegen = useCallback(async (index: number) => {
+  /** Cancel every in-flight scene job for this `sceneIndex`. Covers
+   *  the regen task types we expose Cancel for in the Inspector:
+   *  image, video (full re-render + Grok edit), and per-scene audio.
+   *  Flipping the rows to `status='cancelled'` drops them from
+   *  `useActiveJobs`, so `sceneLocked` flips to false and the
+   *  Inspector + Stage overlay unlock without waiting for the worker
+   *  to notice. Worker handlers re-read their own job's status just
+   *  before persisting the scene field and skip the write when they
+   *  see `cancelled`, so a stuck Hypereal/Kling call that finishes
+   *  after the user gave up doesn't overwrite whatever they're
+   *  editing now. We deliberately do NOT cancel project-wide bulk
+   *  ops (export_video, master_audio, captions-apply, motion-apply-all)
+   *  — those use a different lock (bulkOpActive) and would need
+   *  separate cleanup. */
+  const SCENE_CANCELLABLE_TASKS = [
+    'regenerate_image',
+    'cinematic_image',
+    'cinematic_video',
+    'cinematic_video_edit',
+    'regenerate_audio',
+  ] as const;
+  const cancelSceneRegen = useCallback(async (index: number) => {
     if (!user || !state?.generation || !state?.project) return false;
     try {
-      // Scope the lookup tightly: same user, same project, same
-      // scene index in the payload, only in-flight statuses. Take the
-      // most recent in case a debounce window let two through.
       const { data: rows, error: selErr } = await supabase
         .from('video_generation_jobs')
-        .select('id')
+        .select('id, task_type')
         .eq('user_id', user.id)
         .eq('project_id', state.project.id)
-        .eq('task_type', 'regenerate_image')
+        .in('task_type', SCENE_CANCELLABLE_TASKS as unknown as string[])
         .in('status', ['pending', 'processing'])
-        .filter('payload->>sceneIndex', 'eq', String(index))
-        .order('created_at', { ascending: false })
-        .limit(1);
+        .filter('payload->>sceneIndex', 'eq', String(index));
       if (selErr) throw new Error(selErr.message);
-      const jobId = (rows && rows[0]?.id) || null;
-      if (!jobId) {
-        toast.info('No in-flight image regen to cancel for this scene.');
+      const jobIds = (rows ?? []).map((r) => r.id as string);
+      if (jobIds.length === 0) {
+        toast.info('Nothing to cancel for this scene.');
         return false;
       }
 
@@ -314,14 +319,12 @@ export function useSceneRegen(state: EditorState | null) {
           status: 'cancelled',
           error_message: 'Cancelled by user',
         } as never)
-        .eq('id', jobId);
+        .in('id', jobIds);
       if (updErr) throw new Error(updErr.message);
 
-      // Drop the row from the active-jobs query immediately so the
-      // Inspector's lock + the scene's "Generating new image…" overlay
-      // clear without waiting for the next 5–30s realtime tick.
       queryClient.invalidateQueries({ queryKey: ['active-jobs', state.project.id, user.id] });
-      toast.info(`Scene ${index + 1} image regeneration cancelled.`);
+      const kinds = Array.from(new Set((rows ?? []).map((r) => r.task_type as string)));
+      toast.info(`Scene ${index + 1} ${kinds.length > 1 ? 'jobs' : 'job'} cancelled.`);
       return true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -1038,7 +1041,7 @@ export function useSceneRegen(state: EditorState | null) {
     apply,
     regenerate,
     regenerateImage,
-    cancelImageRegen,
+    cancelSceneRegen,
     regenerateVideo,
     editVideo,
     regenerateAudio,

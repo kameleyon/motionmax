@@ -106,7 +106,7 @@ function Inspector({
 
   const scene = state.scenes[selectedSceneIndex];
   const {
-    busy, apply, regenerate, regenerateImage, cancelImageRegen, regenerateVideo, editVideo, regenerateAudio,
+    busy, apply, regenerate, regenerateImage, cancelSceneRegen, regenerateVideo, editVideo, regenerateAudio,
     undoLastRegen,
     updateSceneMeta, updateAllScenesMeta, updateProjectVoice, updateProjectLanguage, updateIntakeSettings,
     applyCaptionsAll, regenerateAllVideos,
@@ -469,21 +469,25 @@ function Inspector({
               className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-base sm:text-[12.5px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 resize-y leading-[1.45]"
             />
             <div className="grid grid-cols-2 gap-2 mt-2.5">
-              {imageRegenActive ? (
-                // While the worker is grinding (gpt-image-2 alone can
-                // take 60–180s with reference images), flip the primary
-                // action to a Cancel button. Clicking it marks the
-                // pending/processing video_generation_jobs row as
-                // `cancelled`, which (a) drops it from useActiveJobs so
-                // the Inspector unlocks instantly and (b) tells the
-                // worker handler to skip the final scene write when its
-                // Hypereal call eventually returns — no phantom image
-                // overwriting the user's next edit.
+              {sceneLocked && !projectLocked ? (
+                // Any per-scene regen in flight (image, video, or audio).
+                // Flip the primary action to a Cancel button so the user
+                // can bail out of a stuck job. gpt-image-2 alone can take
+                // 60-180s with reference images, and Kling/Seedance video
+                // renders are even slower — Cancel marks the matching
+                // pending/processing video_generation_jobs row(s) as
+                // `cancelled`, which (a) drops them from useActiveJobs so
+                // the Inspector unlocks instantly and (b) tells the worker
+                // handler to skip the final scene write when its provider
+                // call eventually returns — no phantom asset overwriting
+                // the user's next edit. We intentionally hide Cancel
+                // during project-wide bulk ops (projectLocked) because
+                // those use a different cleanup path.
                 <button
                   type="button"
-                  onClick={() => cancelImageRegen(selectedSceneIndex)}
+                  onClick={() => cancelSceneRegen(selectedSceneIndex)}
                   className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] border border-[#E4C875]/40 bg-[#E4C875]/5 text-[#E4C875] hover:bg-[#E4C875]/10 transition-colors"
-                  title="Cancel the in-flight image regeneration for this scene"
+                  title="Cancel the in-flight regeneration for this scene"
                 >
                   <X className="w-3 h-3" />
                   Cancel

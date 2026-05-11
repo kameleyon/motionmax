@@ -203,21 +203,24 @@ async function _runRegenerateImage(
 
   // Cancellation check — gpt-image-2 alone can take 60-180s with
   // reference_images, plenty of time for the user to hit Cancel in
-  // the Inspector. The cancel handler flips this job row to
-  // `status='cancelled'`, but we may have already burned the Hypereal
-  // call by the time the user clicked (we accept that cost — see
-  // imageGenerator's AbortError fast-fail comments). What we MUST
-  // avoid is the worse footgun: writing `imageUrl` onto
-  // scenes[sceneIndex] AFTER the user gave up, overwriting whatever
-  // they're editing right now. So re-read status here and short-circuit
-  // before the scene write if a cancel landed.
+  // the Inspector. The UI cancel handler flips this row to
+  // status='failed' + error_message='Cancelled by user' (the schema's
+  // CHECK constraint on status doesn't include 'cancelled', so we
+  // repurpose 'failed' and disambiguate via error_message). We may
+  // have already burned the Hypereal call by the time the user
+  // clicked (we accept that cost — see imageGenerator's AbortError
+  // fast-fail comments). What we MUST avoid is the worse footgun:
+  // writing `imageUrl` onto scenes[sceneIndex] AFTER the user gave
+  // up, overwriting whatever they're editing right now. So re-read
+  // here and short-circuit before the scene write if a cancel landed.
   {
     const { data: jobRow } = await supabase
       .from("video_generation_jobs")
-      .select("status")
+      .select("status, error_message")
       .eq("id", jobId)
       .single();
-    if (jobRow?.status === "cancelled") {
+    const wasCancelled = jobRow?.status === "failed" && jobRow?.error_message === "Cancelled by user";
+    if (wasCancelled) {
       console.log(`[RegenerateImage] Job ${jobId.substring(0, 8)} was cancelled mid-flight — skipping scene write for scene ${sceneIndex + 1}`);
       await writeSystemLog({
         jobId, projectId, userId, generationId,

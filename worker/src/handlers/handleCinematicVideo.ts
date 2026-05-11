@@ -718,18 +718,22 @@ async function _runCinematicVideo(
 
   // Cancellation check — Kling/Seedance video renders take 30-180s,
   // plenty of time for the user to hit Cancel in the Inspector. The
-  // UI cancel handler flips this job row to `status='cancelled'`. By
-  // the time we get here Hypereal has already done the work and
-  // billed us (we accept that cost). What we MUST avoid is the worse
-  // footgun: writing `videoUrl` onto scenes[sceneIndex] AFTER the
-  // user gave up, overwriting whatever they're editing now.
+  // UI flips this row to status='failed' + error_message='Cancelled
+  // by user' (the CHECK constraint on status doesn't include
+  // 'cancelled', so we repurpose 'failed' and disambiguate via
+  // error_message). By the time we get here Hypereal already did
+  // the work and billed us (we accept that cost). What we MUST
+  // avoid is the worse footgun: writing `videoUrl` onto
+  // scenes[sceneIndex] AFTER the user gave up, overwriting whatever
+  // they're editing now.
   {
     const { data: jobRow } = await supabase
       .from("video_generation_jobs")
-      .select("status")
+      .select("status, error_message")
       .eq("id", jobId)
       .single();
-    if (jobRow?.status === "cancelled") {
+    const wasCancelled = jobRow?.status === "failed" && jobRow?.error_message === "Cancelled by user";
+    if (wasCancelled) {
       console.log(`[CinematicVideo] Job ${jobId.substring(0, 8)} was cancelled mid-flight — skipping scene write for scene ${sceneIndex}`);
       await writeSystemLog({
         jobId, projectId, userId, generationId,

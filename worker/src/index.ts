@@ -374,6 +374,15 @@ async function processJob(job: Job, signal?: AbortSignal) {
     // C-7-11: scope the terminal UPDATE to (id, worker_id) so a stale
     // reaper reset + re-claim by another worker is NOT clobbered by
     // this worker's late completion. If 0 rows are affected, log it.
+    //
+    // Also scope to status='processing': the cancel feature flips
+    // user-cancelled rows to status='failed' + error_message=
+    // 'Cancelled by user' while the worker is still mid-execution.
+    // Without this filter the worker's terminal UPDATE would clobber
+    // the cancellation back to 'completed' as if nothing happened. By
+    // only matching rows still in 'processing' we let the user's
+    // cancellation be sticky — the 0-rows-affected case below is the
+    // healthy outcome on a successful cancel.
     const { error: completeError, count: completeCount } = await (supabase as any)
       .from('video_generation_jobs')
       .update({
@@ -384,20 +393,23 @@ async function processJob(job: Job, signal?: AbortSignal) {
         updated_at: new Date().toISOString()
       }, { count: 'exact' })
       .eq('id', job.id)
-      .eq('worker_id', WORKER_ID);
+      .eq('worker_id', WORKER_ID)
+      .eq('status', 'processing');
 
     if (completeError) {
       console.error(`[Worker] Failed to mark job ${job.id} as completed:`, completeError.message);
       // Retry once — this is critical, otherwise the frontend polls forever.
-      // Keep the worker_id filter on the retry; if the reaper handed off
-      // this row, refusing to clobber is correct (the new worker owns it).
+      // Keep the worker_id + status filters on the retry; if the reaper
+      // handed off this row OR the user cancelled, refusing to clobber
+      // is correct.
       await supabase
         .from('video_generation_jobs')
         .update({ status: 'completed', progress: 100, result: cleanPayload, updated_at: new Date().toISOString() })
         .eq('id', job.id)
-        .eq('worker_id', WORKER_ID);
+        .eq('worker_id', WORKER_ID)
+        .eq('status', 'processing');
     } else if (completeCount === 0) {
-      wlog.warn("Terminal 'completed' UPDATE matched 0 rows — claim handed off mid-run", {
+      wlog.warn("Terminal 'completed' UPDATE matched 0 rows — claim handed off mid-run OR user cancelled", {
         jobId: job.id, workerId: WORKER_ID, taskType: job.task_type,
       });
     }
@@ -432,6 +444,9 @@ async function processJob(job: Job, signal?: AbortSignal) {
     // CRITICAL: Mark the job as failed — if this doesn't happen, the frontend polls forever.
     // C-7-11: scope to (id, worker_id) so a stale-claim reaper reset + re-claim by another
     // worker is NOT clobbered by this worker's late failure. 0 rows-affected = log a warning.
+    // Also scope to status='processing' so we don't overwrite a
+    // user cancellation's "Cancelled by user" error_message with the
+    // worker's own error text — same reasoning as the success path.
     const { error: failError, count: failCount } = await (supabase as any)
       .from('video_generation_jobs')
       .update({
@@ -440,17 +455,20 @@ async function processJob(job: Job, signal?: AbortSignal) {
         updated_at: new Date().toISOString()
       }, { count: 'exact' })
       .eq('id', job.id)
-      .eq('worker_id', WORKER_ID);
+      .eq('worker_id', WORKER_ID)
+      .eq('status', 'processing');
 
     if (failError) {
       console.error(`[Worker] CRITICAL: Failed to mark job ${job.id} as failed:`, failError.message);
-      // Last resort retry — still scoped to worker_id; if the reaper reassigned
-      // the row, we must NOT clobber the new worker's progress.
+      // Last resort retry — still scoped to worker_id + status='processing';
+      // if the reaper reassigned the row OR the user cancelled, we must
+      // NOT clobber the new state.
       await supabase
         .from('video_generation_jobs')
         .update({ status: 'failed', error_message: errorMsg, updated_at: new Date().toISOString() })
         .eq('id', job.id)
         .eq('worker_id', WORKER_ID)
+        .eq('status', 'processing')
         .then(
           () => {},
           (retryErr: unknown) => {

@@ -305,16 +305,20 @@ async function _runRegenerateAudio(
   });
 
   // Cancellation check — the user-facing Cancel button flips this
-  // row to `status='cancelled'`. If they bailed while Gemini TTS was
-  // grinding, we accept the provider cost but MUST NOT overwrite the
-  // scene's audio URL with the now-unwanted re-render.
+  // row to status='failed' + error_message='Cancelled by user' (the
+  // CHECK constraint on status doesn't include 'cancelled', so we
+  // repurpose 'failed' and disambiguate via error_message). If they
+  // bailed while Gemini TTS was grinding, we accept the provider
+  // cost but MUST NOT overwrite the scene's audio URL with the
+  // now-unwanted re-render.
   {
     const { data: jobRow } = await supabase
       .from("video_generation_jobs")
-      .select("status")
+      .select("status, error_message")
       .eq("id", jobId)
       .single();
-    if (jobRow?.status === "cancelled") {
+    const wasCancelled = jobRow?.status === "failed" && jobRow?.error_message === "Cancelled by user";
+    if (wasCancelled) {
       console.log(`[RegenerateAudio] Job ${jobId.substring(0, 8)} was cancelled mid-flight — skipping scene write for scene ${sceneIndex + 1}`);
       await writeSystemLog({
         jobId, projectId, userId, generationId,

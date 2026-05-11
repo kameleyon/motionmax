@@ -311,9 +311,15 @@ export function useCinematicRegeneration(
     if (!jobId) return; // never got past submitJob — nothing for the worker to skip
 
     try {
+      // status='failed' + CANCELLED_BY_USER_MESSAGE matches the existing
+      // cancel_export_jobs_cas convention — the CHECK constraint on
+      // video_generation_jobs.status doesn't include 'cancelled', so
+      // we repurpose the 'failed' value and disambiguate via
+      // error_message. Worker handlers read error_message to detect
+      // user cancellation.
       const { error } = await (supabase
         .from("video_generation_jobs") as ReturnType<typeof supabase.from>)
-        .update({ status: "cancelled", error_message: CANCELLED_BY_USER_MESSAGE })
+        .update({ status: "failed", error_message: CANCELLED_BY_USER_MESSAGE })
         .eq("id", jobId)
         .in("status", ["pending", "processing"]);
       if (error) {

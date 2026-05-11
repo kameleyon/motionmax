@@ -313,10 +313,18 @@ export function useSceneRegen(state: EditorState | null) {
         return false;
       }
 
+      // Use status='failed' + a known error_message instead of a new
+      // 'cancelled' status — the chk_video_generation_jobs_status
+      // CHECK constraint only allows pending/processing/completed/
+      // failed/archived. The pre-existing cancel_export_jobs_cas RPC
+      // uses this same convention; matching it keeps the schema
+      // unchanged and lets useActiveJobs (which filters on status IN
+      // ('pending','processing')) drop the row immediately. Worker
+      // handlers detect cancellation by reading error_message.
       const { error: updErr } = await supabase
         .from('video_generation_jobs')
         .update({
-          status: 'cancelled',
+          status: 'failed',
           error_message: 'Cancelled by user',
         } as never)
         .in('id', jobIds);

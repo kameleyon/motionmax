@@ -248,13 +248,17 @@ async function pollWorkerJob(jobId: string, maxWaitMs: number = 8 * 60 * 1000, t
         }
       } else if (row.status === "failed") {
         cleanup();
-        reject(new Error(String(row.error_message || "Job failed")));
-      } else if (row.status === "cancelled") {
-        // Server-side cancellation (admin tool, or the local cancel
-        // already raced the DB write). Surface as the same cancellation
-        // path as the cancelSignal hook so the UI handles it identically.
-        cleanup();
-        reject(new Error(CANCELLED_BY_USER_MESSAGE));
+        // The CHECK constraint on status doesn't allow 'cancelled', so
+        // user-initiated cancels are stored as status='failed' +
+        // error_message=CANCELLED_BY_USER_MESSAGE. Disambiguate here
+        // so the UI shows the calm "Cancelled" toast path instead of
+        // a generic "Job failed" error.
+        const errMsg = String(row.error_message || "Job failed");
+        if (errMsg === CANCELLED_BY_USER_MESSAGE) {
+          reject(new Error(CANCELLED_BY_USER_MESSAGE));
+        } else {
+          reject(new Error(errMsg));
+        }
       }
     }
 

@@ -1,7 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { callPhase } from "@/hooks/generation/callPhase";
+import { callPhase, CANCELLED_BY_USER_MESSAGE } from "@/hooks/generation/callPhase";
 import { createScopedLogger } from "@/lib/logger";
 import type { Scene } from "@/hooks/generation/types";
 import type { Json } from "@/integrations/supabase/types";
@@ -32,6 +32,14 @@ export function useCinematicRegeneration(
     sceneIndex: null,
     type: null,
   });
+
+  // Cancel plumbing for image regen (the only stuck-in-a-loop path we
+  // expose a Cancel button for today). The ref holds the in-flight
+  // worker job's row id so cancelRegeneration can mark it cancelled in
+  // DB; the AbortController short-circuits the local pollWorkerJob so
+  // the UI unlocks instantly without waiting for the worker to notice.
+  const imageJobIdRef = useRef<string | null>(null);
+  const imageCancelRef = useRef<AbortController | null>(null);
 
   const persistScenes = useCallback(
     async (nextScenes: CinematicScene[]) => {
@@ -219,6 +227,13 @@ export function useCinematicRegeneration(
       onStopPlayback?.();
       setState({ isRegenerating: true, sceneIndex: idx, type: "image" });
 
+      // Reset cancel plumbing for this run. Any previous run's
+      // controller is left as-is — it was either already aborted or
+      // resolved cleanly; either way the refs get overwritten now.
+      const cancelController = new AbortController();
+      imageCancelRef.current = cancelController;
+      imageJobIdRef.current = null;
+
       try {
         const result = await callPhase({
           phase: "regenerate-image",
@@ -227,7 +242,10 @@ export function useCinematicRegeneration(
           sceneIndex: idx,
           imageIndex: 0,
           imageModification: "",
-        }, 3 * 60 * 1000);
+        }, 3 * 60 * 1000, undefined, {
+          onJobSubmitted: (jobId) => { imageJobIdRef.current = jobId; },
+          cancelSignal: cancelController.signal,
+        });
 
         if (!result?.success) throw new Error(result?.error || "Image regeneration failed");
 
@@ -244,14 +262,67 @@ export function useCinematicRegeneration(
         // Auto-trigger video regen for affected scenes
         await regenAffectedVideos(idx, nextScenes);
       } catch (error) {
-        log.error("Image regeneration error:", error);
-        toast.error("Image Regeneration Failed", { description: error instanceof Error ? error.message : "Failed to regenerate image" });
+        // Cancel-by-user is the user's own action — silence the
+        // "Image Regeneration Failed" toast and surface a calm one
+        // instead. Any other failure path keeps the original error UX.
+        const msg = error instanceof Error ? error.message : String(error);
+        if (msg === CANCELLED_BY_USER_MESSAGE) {
+          toast.info("Cancelled", { description: `Scene ${idx + 1} image regeneration cancelled.` });
+        } else {
+          log.error("Image regeneration error:", error);
+          toast.error("Image Regeneration Failed", { description: msg || "Failed to regenerate image" });
+        }
       } finally {
         setState({ isRegenerating: false, sceneIndex: null, type: null });
+        imageJobIdRef.current = null;
+        imageCancelRef.current = null;
       }
     },
     [generationId, projectId, scenes, onScenesUpdate, onStopPlayback, regenAffectedVideos]
   );
+
+  // ── Cancel an in-flight image regeneration ───────────────────────────────
+  //
+  // Two things happen here:
+  //   1. Local: AbortController fires → pollWorkerJob rejects with the
+  //      well-known CANCELLED_BY_USER_MESSAGE → the UI unlocks
+  //      immediately (no waiting for the worker to notice).
+  //   2. Server: we mark the matching video_generation_jobs row
+  //      `status='cancelled'`. The worker's handleRegenerateImage
+  //      re-reads this just before persisting the new image URL and
+  //      skips the scene write if it sees `cancelled` — that way a
+  //      stuck Hypereal call finishing after the user gave up doesn't
+  //      overwrite whatever they're editing now.
+  //
+  // We deliberately do NOT refund credits (per product call) — the
+  // user already triggered the work, and Hypereal still bills us
+  // regardless of whether the UI consumed the result.
+  const cancelRegeneration = useCallback(async () => {
+    const jobId = imageJobIdRef.current;
+    const controller = imageCancelRef.current;
+
+    // Short-circuit the local poll first so the UI feels instant even
+    // if the DB update lags. The catch path in regenerateImage will
+    // clear state.isRegenerating via its finally block.
+    if (controller && !controller.signal.aborted) {
+      controller.abort();
+    }
+
+    if (!jobId) return; // never got past submitJob — nothing for the worker to skip
+
+    try {
+      const { error } = await (supabase
+        .from("video_generation_jobs") as ReturnType<typeof supabase.from>)
+        .update({ status: "cancelled", error_message: CANCELLED_BY_USER_MESSAGE })
+        .eq("id", jobId)
+        .in("status", ["pending", "processing"]);
+      if (error) {
+        log.warn("Cancel: DB update failed (UI already unlocked)", { jobId, error: error.message });
+      }
+    } catch (e) {
+      log.warn("Cancel: DB update threw (UI already unlocked)", { jobId, error: e });
+    }
+  }, []);
 
   // ── Undo regeneration → worker ──────────────────────────────────────────
 
@@ -298,5 +369,6 @@ export function useCinematicRegeneration(
     applyImageEdit,
     regenerateImage,
     undoRegeneration,
+    cancelRegeneration,
   };
 }

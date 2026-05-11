@@ -1,5 +1,5 @@
 import { memo, useState, useEffect } from 'react';
-import { RotateCw, Loader2, Video, Image as ImageIcon, Wand2, Lock, UserPlus, AudioLines, Square, Undo2, History } from 'lucide-react';
+import { RotateCw, Loader2, Video, Image as ImageIcon, Wand2, Lock, UserPlus, AudioLines, Square, Undo2, History, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
@@ -106,7 +106,7 @@ function Inspector({
 
   const scene = state.scenes[selectedSceneIndex];
   const {
-    busy, apply, regenerate, regenerateImage, regenerateVideo, editVideo, regenerateAudio,
+    busy, apply, regenerate, regenerateImage, cancelImageRegen, regenerateVideo, editVideo, regenerateAudio,
     undoLastRegen,
     updateSceneMeta, updateAllScenesMeta, updateProjectVoice, updateProjectLanguage, updateIntakeSettings,
     applyCaptionsAll, regenerateAllVideos,
@@ -469,15 +469,36 @@ function Inspector({
               className="w-full bg-[#1B2228] border border-white/5 rounded-lg px-3 py-2 text-base sm:text-[12.5px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0D0F] focus:border-[#14C8CC]/50 resize-y leading-[1.45]"
             />
             <div className="grid grid-cols-2 gap-2 mt-2.5">
-              <button
-                type="button"
-                onClick={() => regenerate(selectedSceneIndex, promptDraft.trim())}
-                disabled={busy !== 'idle' || imageRegenActive || promptDraft.trim().length < 6}
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] border border-white/10 text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {(busy === 'regen' || imageRegenActive) ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCw className="w-3 h-3" />}
-                {imageRegenActive ? 'Regenerating…' : 'Regenerate'}
-              </button>
+              {imageRegenActive ? (
+                // While the worker is grinding (gpt-image-2 alone can
+                // take 60–180s with reference images), flip the primary
+                // action to a Cancel button. Clicking it marks the
+                // pending/processing video_generation_jobs row as
+                // `cancelled`, which (a) drops it from useActiveJobs so
+                // the Inspector unlocks instantly and (b) tells the
+                // worker handler to skip the final scene write when its
+                // Hypereal call eventually returns — no phantom image
+                // overwriting the user's next edit.
+                <button
+                  type="button"
+                  onClick={() => cancelImageRegen(selectedSceneIndex)}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] border border-[#E4C875]/40 bg-[#E4C875]/5 text-[#E4C875] hover:bg-[#E4C875]/10 transition-colors"
+                  title="Cancel the in-flight image regeneration for this scene"
+                >
+                  <X className="w-3 h-3" />
+                  Cancel
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => regenerate(selectedSceneIndex, promptDraft.trim())}
+                  disabled={busy !== 'idle' || promptDraft.trim().length < 6}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] border border-white/10 text-[#ECEAE4] hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {busy === 'regen' ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCw className="w-3 h-3" />}
+                  Regenerate
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => apply(selectedSceneIndex, promptDraft.trim())}

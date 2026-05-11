@@ -201,6 +201,41 @@ async function _runRegenerateImage(
     );
   }
 
+  // Cancellation check — gpt-image-2 alone can take 60-180s with
+  // reference_images, plenty of time for the user to hit Cancel in
+  // the Inspector. The cancel handler flips this job row to
+  // `status='cancelled'`, but we may have already burned the Hypereal
+  // call by the time the user clicked (we accept that cost — see
+  // imageGenerator's AbortError fast-fail comments). What we MUST
+  // avoid is the worse footgun: writing `imageUrl` onto
+  // scenes[sceneIndex] AFTER the user gave up, overwriting whatever
+  // they're editing right now. So re-read status here and short-circuit
+  // before the scene write if a cancel landed.
+  {
+    const { data: jobRow } = await supabase
+      .from("video_generation_jobs")
+      .select("status")
+      .eq("id", jobId)
+      .single();
+    if (jobRow?.status === "cancelled") {
+      console.log(`[RegenerateImage] Job ${jobId.substring(0, 8)} was cancelled mid-flight — skipping scene write for scene ${sceneIndex + 1}`);
+      await writeSystemLog({
+        jobId, projectId, userId, generationId,
+        category: "system_info",
+        eventType: "regenerate_image_cancelled",
+        message: `Scene ${sceneIndex + 1} image regen cancelled by user — Hypereal call completed but result discarded`,
+        details: { sceneIndex, imageGenerated: !!imageUrl },
+      });
+      return {
+        success: false,
+        sceneIndex,
+        imageIndex: targetImageIndex,
+        imageUrl: "",
+        imageUrls: scene.imageUrls ?? [],
+      };
+    }
+  }
+
   // Save current state as a version in scene_versions table
   await supabase.rpc("save_scene_version", {
     p_generation_id: generationId,

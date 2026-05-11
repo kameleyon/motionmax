@@ -274,6 +274,62 @@ export function useSceneRegen(state: EditorState | null) {
     }
   }, [user, state, updateScenePrompt]);
 
+  /** Cancel an in-flight image regen for a specific scene. Finds the
+   *  most-recent pending/processing `regenerate_image` job for this
+   *  user + project + sceneIndex and flips its status to `cancelled`.
+   *  `useActiveJobs` reads rows WHERE status IN ('pending','processing')
+   *  — once the row drops out, `imageRegenActive` flips to false and
+   *  the Inspector unlocks without the user waiting for the worker to
+   *  notice. The worker's handleRegenerateImage re-reads the row's
+   *  status just before persisting the new image URL and skips the
+   *  scene write when it sees `cancelled`, so a stuck Hypereal call
+   *  that finishes after the user gave up doesn't overwrite whatever
+   *  they're editing now. */
+  const cancelImageRegen = useCallback(async (index: number) => {
+    if (!user || !state?.generation || !state?.project) return false;
+    try {
+      // Scope the lookup tightly: same user, same project, same
+      // scene index in the payload, only in-flight statuses. Take the
+      // most recent in case a debounce window let two through.
+      const { data: rows, error: selErr } = await supabase
+        .from('video_generation_jobs')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('project_id', state.project.id)
+        .eq('task_type', 'regenerate_image')
+        .in('status', ['pending', 'processing'])
+        .filter('payload->>sceneIndex', 'eq', String(index))
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (selErr) throw new Error(selErr.message);
+      const jobId = (rows && rows[0]?.id) || null;
+      if (!jobId) {
+        toast.info('No in-flight image regen to cancel for this scene.');
+        return false;
+      }
+
+      const { error: updErr } = await supabase
+        .from('video_generation_jobs')
+        .update({
+          status: 'cancelled',
+          error_message: 'Cancelled by user',
+        } as never)
+        .eq('id', jobId);
+      if (updErr) throw new Error(updErr.message);
+
+      // Drop the row from the active-jobs query immediately so the
+      // Inspector's lock + the scene's "Generating new image…" overlay
+      // clear without waiting for the next 5–30s realtime tick.
+      queryClient.invalidateQueries({ queryKey: ['active-jobs', state.project.id, user.id] });
+      toast.info(`Scene ${index + 1} image regeneration cancelled.`);
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Cancel failed: ${msg}`);
+      return false;
+    }
+  }, [user, state, queryClient]);
+
   /** Image-only regen (no video re-render). Payload shape matches the
    *  legacy useCinematicRegeneration contract exactly: imageIndex: 0
    *  plus imageModification (empty string = plain regen, non-empty =
@@ -982,6 +1038,7 @@ export function useSceneRegen(state: EditorState | null) {
     apply,
     regenerate,
     regenerateImage,
+    cancelImageRegen,
     regenerateVideo,
     editVideo,
     regenerateAudio,

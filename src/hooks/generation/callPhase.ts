@@ -102,6 +102,22 @@ export async function getFreshSession(): Promise<string> {
 }
 
 /**
+ * Optional hooks for callers that need cancellation support.
+ *  - onJobSubmitted: fires once we have the worker job row id, so the
+ *    UI (or whoever owns the cancel button) can mark that row
+ *    `status='cancelled'` later.
+ *  - cancelSignal: if it aborts mid-poll, pollWorkerJob unsubscribes
+ *    from realtime + clears its fallback timer and rejects with a
+ *    well-known message so the UI can reset state quietly.
+ */
+export interface CallPhaseHooks {
+  onJobSubmitted?: (jobId: string) => void;
+  cancelSignal?: AbortSignal;
+}
+
+export const CANCELLED_BY_USER_MESSAGE = "Cancelled by user";
+
+/**
  * Submit a job to the worker queue WITHOUT waiting for completion.
  * Returns the job ID so caller can wait later or set up dependencies.
  */
@@ -148,10 +164,12 @@ export async function waitForJob(jobId: string, timeoutMs: number, taskType?: st
 async function workerCallPhase(
   body: Record<string, unknown>,
   taskType: string = "generate_video",
-  pollTimeoutMs: number = 5 * 60 * 1000
+  pollTimeoutMs: number = 5 * 60 * 1000,
+  hooks?: CallPhaseHooks,
 ): Promise<Record<string, unknown>> {
   const jobId = await submitJob(body, taskType);
-  return pollWorkerJob(jobId, pollTimeoutMs, taskType);
+  hooks?.onJobSubmitted?.(jobId);
+  return pollWorkerJob(jobId, pollTimeoutMs, taskType, hooks?.cancelSignal);
 }
 
 /** Adaptive poll intervals per job type — longer for slow jobs, shorter for fast ones */
@@ -171,7 +189,7 @@ const POLL_INTERVALS: Record<string, number> = {
  * Wait for a worker job using Supabase Realtime (instant notification)
  * with adaptive polling as fallback (in case Realtime misses an update).
  */
-async function pollWorkerJob(jobId: string, maxWaitMs: number = 8 * 60 * 1000, taskType?: string): Promise<Record<string, unknown>> {
+async function pollWorkerJob(jobId: string, maxWaitMs: number = 8 * 60 * 1000, taskType?: string, cancelSignal?: AbortSignal): Promise<Record<string, unknown>> {
   const FALLBACK_POLL = POLL_INTERVALS[taskType || ""] || 5000;
   const startTime = Date.now();
 
@@ -180,6 +198,7 @@ async function pollWorkerJob(jobId: string, maxWaitMs: number = 8 * 60 * 1000, t
     let fallbackTimer: ReturnType<typeof setInterval> | null = null;
     let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
     let channel: ReturnType<typeof supabase.channel> | null = null;
+    let abortHandler: (() => void) | null = null;
 
     function cleanup() {
       if (settled) return;
@@ -187,6 +206,24 @@ async function pollWorkerJob(jobId: string, maxWaitMs: number = 8 * 60 * 1000, t
       if (channel) supabase.removeChannel(channel);
       if (fallbackTimer) clearInterval(fallbackTimer);
       if (timeoutTimer) clearTimeout(timeoutTimer);
+      if (abortHandler && cancelSignal) cancelSignal.removeEventListener("abort", abortHandler);
+    }
+
+    // Cancel hook: if the caller fires their AbortController, drop
+    // realtime + timers immediately and surface a well-known error so
+    // the UI layer can match on CANCELLED_BY_USER_MESSAGE and toast
+    // "Cancelled" instead of "Image regeneration failed".
+    if (cancelSignal) {
+      if (cancelSignal.aborted) {
+        cleanup();
+        reject(new Error(CANCELLED_BY_USER_MESSAGE));
+        return;
+      }
+      abortHandler = () => {
+        cleanup();
+        reject(new Error(CANCELLED_BY_USER_MESSAGE));
+      };
+      cancelSignal.addEventListener("abort", abortHandler, { once: true });
     }
 
     async function handleResult(row: Record<string, unknown>) {
@@ -212,6 +249,12 @@ async function pollWorkerJob(jobId: string, maxWaitMs: number = 8 * 60 * 1000, t
       } else if (row.status === "failed") {
         cleanup();
         reject(new Error(String(row.error_message || "Job failed")));
+      } else if (row.status === "cancelled") {
+        // Server-side cancellation (admin tool, or the local cancel
+        // already raced the DB write). Surface as the same cancellation
+        // path as the cancelSignal hook so the UI handles it identically.
+        cleanup();
+        reject(new Error(CANCELLED_BY_USER_MESSAGE));
       }
     }
 
@@ -253,7 +296,8 @@ async function pollWorkerJob(jobId: string, maxWaitMs: number = 8 * 60 * 1000, t
 export async function callPhase(
   body: Record<string, unknown>,
   timeoutMs: number = 300000, // 5 minutes max wait for video to render
-  endpoint: string = DEFAULT_ENDPOINT
+  endpoint: string = DEFAULT_ENDPOINT,
+  hooks?: CallPhaseHooks,
 ): Promise<Record<string, unknown>> {
   const VALID_PHASES = ["script", "audio", "images", "video", "finalize", "regenerate-image", "regenerate-audio", "undo"] as const;
   if (!VALID_PHASES.includes(body.phase as (typeof VALID_PHASES)[number])) {
@@ -316,7 +360,7 @@ export async function callPhase(
 
   // Regeneration phases → worker queue (no edge-function timeout risk)
   if (body.phase === "regenerate-image") {
-    return workerCallPhase(body, "regenerate_image", 3 * 60 * 1000);
+    return workerCallPhase(body, "regenerate_image", 3 * 60 * 1000, hooks);
   }
 
   if (body.phase === "regenerate-audio") {

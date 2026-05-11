@@ -1,7 +1,8 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Maximize2, Minimize2 } from 'lucide-react';
+import { Maximize2, Minimize2, X } from 'lucide-react';
 import type { EditorState, EditorScene } from '@/hooks/useEditorState';
 import { useActiveJobs } from './useActiveJobs';
+import { useSceneRegen } from './useSceneRegen';
 
 /** The center stage. Three render modes driven by phase:
  *    rendering — progress ring + rotating status message, on top of
@@ -157,6 +158,12 @@ function Stage({
   const imageActive = activeTasks.has('regenerate_image') || activeTasks.has('cinematic_image');
   const videoActive = activeTasks.has('cinematic_video');
   const sceneActive = imageActive || videoActive;
+  // Cancel hook: surface the in-overlay Cancel button so the user can
+  // bail out a stuck regen without having to reach the Inspector
+  // (whose section is locked while sceneActive is true). The hook
+  // call is cheap when only cancelSceneRegen is read — its other
+  // internals (debounce, refresh timers) just sit idle.
+  const { cancelSceneRegen } = useSceneRegen(state);
   const regenLabel = imageActive && videoActive
     ? 'Rendering new image + video…'
     : imageActive
@@ -770,6 +777,31 @@ function Stage({
             <div className="font-mono text-[10.5px] text-[#8A9198] tracking-[0.14em] uppercase">
               Scene {selectedSceneIndex + 1} of {state.scenes.length}
             </div>
+            {/* Cancel — lives ON the overlay (not in the Inspector)
+                because every other UI is locked while sceneActive is
+                true. gpt-image-2 with reference images can run 60-180s
+                and Kling/Seedance video renders go even longer, so the
+                user needs an obvious escape hatch right where the
+                stuck spinner is. cancelSceneRegen flips every
+                pending/processing job for this scene to status=
+                'cancelled' in a single update; useActiveJobs drops
+                them, sceneActive flips to false, this overlay
+                unmounts. The worker handlers re-read their job's
+                status just before persisting the scene field so a
+                slow Hypereal/Kling call finishing after cancel can't
+                overwrite the user's next edit. */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                cancelSceneRegen(selectedSceneIndex);
+              }}
+              className="mt-2 inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-full text-[11px] border border-[#E4C875]/40 bg-[#E4C875]/10 text-[#E4C875] hover:bg-[#E4C875]/20 transition-colors"
+              title="Cancel this scene's regeneration"
+            >
+              <X className="w-3 h-3" />
+              Cancel
+            </button>
             {/* Inline keyframes so we don't need a tailwind config
                 change. Scoped via a <style> tag inside the overlay. */}
             <style>{`

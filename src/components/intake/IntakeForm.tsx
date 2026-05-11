@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserClones, resolveVoiceForProject } from "@/hooks/useUserClones";
+import { useBeforeUnload } from '@/hooks/useBeforeUnload';
 import { INTERVAL_TO_CRON } from './_scheduleConstants';
 import { nextFireFromCron } from '@/pages/lab/autopost/_utils';
 import type { ScheduleState } from './ScheduleBlock';
@@ -240,6 +241,17 @@ export default function IntakeForm({
   const [characterAttachments, setCharacterAttachments] = useState<SourceAttachment[]>([]);
 
   const [generating, setGenerating] = useState(false);
+
+  // G-M8 (Ghost): warn the user before they close/refresh while a
+  // project-creation insert + initial worker-job submission is in
+  // flight. The window is short (a few seconds), but a navigation
+  // mid-INSERT can land the project row on the server without the
+  // worker getting a corresponding video_generation_jobs row, which
+  // leaves an "empty" project the user sees and has to delete.
+  useBeforeUnload(
+    generating,
+    'Your project is still being created — leaving now might leave it in a half-set-up state.',
+  );
 
   // C-7-12 (Ghost G-C1+G-C2): synchronous client-side lock against
   // Enter-mash / double-submit. `setGenerating(true)` flips React

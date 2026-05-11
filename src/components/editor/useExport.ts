@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { createScopedLogger } from '@/lib/logger';
 import type { EditorState } from '@/hooks/useEditorState';
+import { useBeforeUnload } from '@/hooks/useBeforeUnload';
 
 const log = createScopedLogger('useExport');
 
@@ -38,6 +39,22 @@ export function useExport(state: EditorState | null) {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const deadlineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const jobIdRef = useRef<string | null>(null);
+  // G-M15 (Ghost): per-export AbortController so cancelPolling can
+  // abort an in-flight INSERT, not just the next poll tick. Reset on
+  // every startExport.
+  const abortRef = useRef<AbortController | null>(null);
+
+  // G-M8 (Ghost): prompt the user before they close the tab / refresh
+  // while an export is mid-flight. We arm the prompt during both the
+  // 'submitting' (INSERT in flight) and 'rendering' (worker running)
+  // phases — leaving in either window orphans the job UI even though
+  // the row keeps progressing on the server. Modern browsers won't
+  // honour the custom message string for anti-phishing reasons, but
+  // the dialog itself still fires.
+  useBeforeUnload(
+    exportState.status === 'submitting' || exportState.status === 'rendering',
+    'Your export is still rendering — leaving now will keep the job running but you\'ll have to come back to download it.',
+  );
   // C-7-12 (Ghost G-C1+G-C2): synchronous submit lock against
   // double-click / Enter-mash. The `exportState.status === 'submitting'`
   // check is async (React state) so a second click in the same tick
@@ -126,6 +143,13 @@ export function useExport(state: EditorState | null) {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
     }
+    // G-M15: signal any in-flight network call to bail. The Supabase
+    // client doesn't natively respect AbortSignal everywhere, but the
+    // body of startExport guards on `abortRef.current.signal.aborted`
+    // at every async boundary so the next checkpoint terminates the
+    // flow without consuming the response.
+    abortRef.current?.abort();
+    abortRef.current = null;
     jobIdRef.current = null;
   }, []);
 
@@ -145,6 +169,12 @@ export function useExport(state: EditorState | null) {
       return;
     }
     startLockRef.current = true;
+    // G-M15: arm a fresh abort controller. Any pending controller
+    // from a prior export run is replaced (cancelPolling on a fresh
+    // export would be odd, but safer to replace than reuse).
+    abortRef.current?.abort();
+    const exportAbort = new AbortController();
+    abortRef.current = exportAbort;
 
     // Export format must FOLLOW the project's actual aspect. The old
     // "master" preset hardcoded 'landscape' which meant portrait
@@ -177,6 +207,46 @@ export function useExport(state: EditorState | null) {
 
     setExportState({ status: 'submitting', progress: 2 });
 
+    // Single shared row-handler used by both realtime payloads AND the
+    // 30s sanity-poll backstop, so one progress / done / failed code
+    // path keeps the two in lockstep. Declared up here so we can wire
+    // the realtime channel BEFORE the insert happens (G-M4 fix).
+    type JobRow = {
+      status?: string;
+      progress?: number;
+      result?: { finalUrl?: string; url?: string } | null;
+      payload?: { finalUrl?: string; url?: string } | null;
+      error_message?: string | null;
+    };
+    const handleRow = (row: JobRow) => {
+      if (!row || !jobIdRef.current) return;
+      const rowProgress = typeof row.progress === 'number' ? row.progress : null;
+      // Worker is migrating from `payload.finalUrl` to `result.url`.
+      // Prefer `result.url` first so when the next worker iteration
+      // normalises to result-only this code keeps working.
+      const result = (row.result ?? {}) as { finalUrl?: string; url?: string };
+      const payload = (row.payload ?? {}) as { finalUrl?: string; url?: string };
+      const finalUrl = result.url ?? result.finalUrl ?? payload.finalUrl ?? payload.url;
+
+      if (row.status === 'completed' && finalUrl) {
+        cancelPolling();
+        setExportState({ status: 'done', progress: 100, url: finalUrl });
+        toast.success('Export ready. Download is in the topbar.');
+      } else if (row.status === 'failed') {
+        cancelPolling();
+        const workerError = row.error_message || 'Export failed';
+        log.error('Job failed', { error: workerError, jobId: jobIdRef.current, status: row.status });
+        setExportState({ status: 'error', progress: 0, error: workerError });
+        toast.error(`Export failed: ${workerError}`, { duration: 8000 });
+      } else {
+        setExportState((prev) => ({
+          ...prev,
+          status: 'rendering',
+          progress: Math.max(prev.progress, rowProgress ?? prev.progress),
+        }));
+      }
+    };
+
     try {
       // C-7-12: server-side dedup before insert. If the user already
       // has an in-flight export_video job for this project (pending
@@ -195,6 +265,79 @@ export function useExport(state: EditorState | null) {
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
+      // G-M15: bail early if cancelled while the dedup SELECT was in
+      // flight — don't proceed to subscribe + insert.
+      if (exportAbort.signal.aborted) return;
+
+      // G-M4 (Ghost): subscribe to the project-scoped channel BEFORE
+      // the INSERT, not after. The previous flow was:
+      //   1. INSERT export_video row
+      //   2. SELECT id back
+      //   3. supabase.channel().subscribe()   ← realtime attached
+      // If the worker picked up the job and wrote progress=5 between
+      // steps 1 and 3, that first update was silently dropped — the
+      // realtime channel only fires for events that occur AFTER
+      // .subscribe() resolves. On a hot worker the 30s sanity-poll
+      // would eventually catch up, but the user saw 0 % progress for
+      // up to 30 s for no reason.
+      //
+      // New flow:
+      //   1. Subscribe to a PROJECT-scoped channel (filter on project_id
+      //      + task_type=export_video). We don't know the job id yet,
+      //      so we filter on what we DO know.
+      //   2. INSERT (or attach to existing inFlight).
+      //   3. Set jobIdRef so handleRow starts firing.
+      // The filter narrows server-side to just this project's exports;
+      // the in-handler `jobIdRef.current === row.id` check guards
+      // against picking up a sibling export job that shares the same
+      // project filter (unlikely in practice but possible if the user
+      // had an old in-flight job we didn't dedup against).
+      const projectChannel = supabase
+        .channel(`export-project-${state.project.id}-${Date.now()}`)
+        .on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          'postgres_changes' as any,
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'video_generation_jobs',
+            filter: `project_id=eq.${state.project.id}`,
+          },
+          (payload: { new?: JobRow & { id?: string; task_type?: string } }) => {
+            const row = payload?.new;
+            if (!row) return;
+            // Multi-job filter: only handle export_video rows for the
+            // job id we're actively watching. Prevents a sibling
+            // cinematic_video update on the same project from being
+            // mis-routed into our progress tracker.
+            if (row.task_type && row.task_type !== 'export_video') return;
+            if (!jobIdRef.current || row.id !== jobIdRef.current) return;
+            handleRow(row);
+          },
+        );
+      // Subscribe and wait for the channel to be active before the
+      // INSERT — `await` on the subscribe promise so we don't race
+      // the worker. The Supabase client resolves the promise when the
+      // server ack'd the SUBSCRIBE frame.
+      await new Promise<void>((resolve) => {
+        projectChannel.subscribe((status: string) => {
+          if (status === 'SUBSCRIBED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            resolve();
+          }
+        });
+        // G-M15: also resolve on abort so we don't block startExport
+        // forever if cancelPolling fires during subscribe.
+        if (exportAbort.signal.aborted) resolve();
+        else exportAbort.signal.addEventListener('abort', () => resolve(), { once: true });
+      });
+      if (exportAbort.signal.aborted) {
+        // Tear down the channel we just subscribed to — cancelPolling
+        // already cleared abortRef but didn't see this channelRef
+        // because we hadn't assigned it yet.
+        try { supabase.removeChannel(projectChannel); } catch { /* ignore */ }
+        return;
+      }
+      channelRef.current = projectChannel;
 
       let job: { id: string } | null = inFlight ? { id: inFlight.id as string } : null;
       if (!job) {
@@ -223,74 +366,38 @@ export function useExport(state: EditorState | null) {
       } else {
         toast.info('Already exporting — attaching to the existing job.');
       }
+      // G-M15: cancellation can race the insert — bail before we
+      // commit jobIdRef so the user-cancelled state isn't reverted.
+      if (exportAbort.signal.aborted) return;
 
+      // Set jobIdRef AFTER the channel is live so handleRow's guard
+      // (`row.id !== jobIdRef.current`) doesn't drop the first update.
+      // The channel was already subscribed pre-insert, so any update
+      // the worker wrote before this point is still in the channel's
+      // buffer and will fire as soon as jobIdRef matches.
       jobIdRef.current = job.id;
       setExportState({ status: 'rendering', progress: 5 });
       toast.info(`Exporting ${presetCfg.label}…`);
 
-      // Single shared row-handler used by both realtime payloads AND the
-      // 30s sanity-poll backstop, so one progress / done / failed code
-      // path keeps the two in lockstep.
-      type JobRow = {
-        status?: string;
-        progress?: number;
-        result?: { finalUrl?: string; url?: string } | null;
-        payload?: { finalUrl?: string; url?: string } | null;
-        error_message?: string | null;
-      };
-      const handleRow = (row: JobRow) => {
-        if (!row || !jobIdRef.current) return;
-        const rowProgress = typeof row.progress === 'number' ? row.progress : null;
-        // Worker is migrating from `payload.finalUrl` to `result.url`.
-        // Prefer `result.url` first so when the next worker iteration
-        // normalises to result-only this code keeps working.
-        const result = (row.result ?? {}) as { finalUrl?: string; url?: string };
-        const payload = (row.payload ?? {}) as { finalUrl?: string; url?: string };
-        const finalUrl = result.url ?? result.finalUrl ?? payload.finalUrl ?? payload.url;
-
-        if (row.status === 'completed' && finalUrl) {
-          cancelPolling();
-          setExportState({ status: 'done', progress: 100, url: finalUrl });
-          toast.success('Export ready. Download is in the topbar.');
-        } else if (row.status === 'failed') {
-          cancelPolling();
-          const workerError = row.error_message || 'Export failed';
-          log.error('Job failed', { error: workerError, jobId: jobIdRef.current, status: row.status });
-          setExportState({ status: 'error', progress: 0, error: workerError });
-          toast.error(`Export failed: ${workerError}`, { duration: 8000 });
-        } else {
-          setExportState((prev) => ({
-            ...prev,
-            status: 'rendering',
-            progress: Math.max(prev.progress, rowProgress ?? prev.progress),
-          }));
-        }
-      };
-
-      // Realtime channel — primary signal. Replaces the previous 3s
-      // setInterval that was producing ~500 SELECTs per export job and
-      // hammering Postgres on multi-tab sessions. We listen to UPDATE
-      // events on the specific job row so the channel is naturally
-      // narrow.
-      const ch = supabase
-        .channel(`export-${job.id}`)
-        .on(
-          // Supabase realtime overload signature; the lib accepts the
-          // string literal but TS narrows poorly here.
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          'postgres_changes' as any,
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'video_generation_jobs',
-            filter: `id=eq.${job.id}`,
-          },
-          (payload: { new?: JobRow }) => {
-            if (payload?.new) handleRow(payload.new);
-          },
-        )
-        .subscribe();
-      channelRef.current = ch;
+      // G-M4 (Ghost): one-shot prime SELECT after jobIdRef is set —
+      // even with the pre-INSERT channel subscribe, there's a tiny
+      // race window where the worker could have processed and written
+      // a UPDATE while the row was being created but before the
+      // channel server-side filter knew about the new row. Reading
+      // current state once here covers that edge case without waiting
+      // 30 s for the sanity-poll backstop.
+      try {
+        const { data: primeRow } = await supabase
+          .from('video_generation_jobs')
+          .select('status, progress, payload, result, error_message')
+          .eq('id', job.id)
+          .eq('user_id', user.id)
+          .single();
+        if (primeRow) handleRow(primeRow as JobRow);
+      } catch {
+        // Prime read is best-effort — sanity-poll covers it 30 s
+        // later if it fails here.
+      }
 
       // 30s sanity-poll backstop — catches the rare case where realtime
       // misses an UPDATE (subscription not yet attached when worker

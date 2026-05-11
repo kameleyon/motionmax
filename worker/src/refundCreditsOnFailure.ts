@@ -42,6 +42,16 @@ export const REFUNDABLE_TASK_TYPES = new Set<string>([
   "generate_video",
   "generate_cinematic",
   "autopost_render", // gated further below by creditsDeducted check
+  // G-M10 (Ghost): autopost_rerender wasn't in the set, so a failed
+  // rerender after credits-were-deducted (future code path where
+  // rerender does deduct upfront — current handler doesn't, but the
+  // queue API in RunHistory.tsx is the only insert site so this is
+  // safe to add proactively) wouldn't refund. The autopost_render
+  // path's creditsDeducted-presence check below applies identically,
+  // so any rerender row without creditsDeducted in payload is still
+  // skipped (no false-positive refunds today; refunds engage as soon
+  // as a future change carries creditsDeducted forward).
+  "autopost_rerender",
 ]);
 
 export async function refundCreditsOnFailure(job: Job): Promise<void> {
@@ -61,8 +71,13 @@ export async function refundCreditsOnFailure(job: Job): Promise<void> {
     const projectType = payload.projectType || "doc2video";
     const length = payload.length || "brief";
 
-    // Autopost-specific guards.
-    if ((job.task_type as string) === "autopost_render") {
+    // Autopost-specific guards. G-M10: extended to also cover
+    // autopost_rerender — the creditsDeducted-presence check and
+    // sibling-already-completed check both apply identically.
+    if (
+      (job.task_type as string) === "autopost_render" ||
+      (job.task_type as string) === "autopost_rerender"
+    ) {
       const deducted =
         typeof payload.creditsDeducted === "number" && payload.creditsDeducted > 0
           ? payload.creditsDeducted

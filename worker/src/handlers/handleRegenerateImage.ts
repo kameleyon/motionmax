@@ -237,9 +237,47 @@ async function _runRegenerateImage(
   // clobber any concurrent scene update (cinematic_video auto-chain,
   // another regen, master_audio) that landed during Hypereal's 20–60s
   // generation window. Matches handleCinematicImage's write pattern.
-  await updateSceneFieldJson(generationId, sceneIndex, "imageUrls", nextImageUrls);
+  //
+  // G-M9 (Ghost): if any single updateSceneFieldJson call fails after
+  // the image was successfully generated (i.e. we burned a Hypereal
+  // credit but the DB write didn't land), we now flag the row with
+  // `failed_with_partial: true` so admin tooling can see the
+  // discrepancy. The handler still throws so the worker marks the job
+  // failed AND a refund is considered — without the flag, an admin
+  // looking at the credit refund row would have no way to tell that
+  // the image was actually produced but the DB sync failed (so a
+  // refund + retry would double-charge Hypereal).
+  const partialFailureFlags: string[] = [];
+  try {
+    await updateSceneFieldJson(generationId, sceneIndex, "imageUrls", nextImageUrls);
+  } catch (e) {
+    partialFailureFlags.push("imageUrls");
+    throw new Error(`Image generated but DB write failed (imageUrls): ${(e as Error).message}`);
+  }
   if (targetImageIndex === 0 || existingUrls.length === 0) {
-    await updateSceneField(generationId, sceneIndex, "imageUrl", imageUrl);
+    try {
+      await updateSceneField(generationId, sceneIndex, "imageUrl", imageUrl);
+    } catch (e) {
+      partialFailureFlags.push("imageUrl");
+      // G-M9: flag the job row so the refund handler + admin tooling
+      // can see imageUrls succeeded but imageUrl didn't — admin may
+      // need to manually reconcile rather than re-run (which would
+      // double-bill Hypereal).
+      try {
+        await supabase
+          .from("video_generation_jobs")
+          .update({
+            payload: {
+              ...payload,
+              failed_with_partial: true,
+              partial_failure_fields: partialFailureFlags,
+              partial_failure_imageUrl: imageUrl, // preserve the URL for manual reconcile
+            } as unknown as never,
+          })
+          .eq("id", jobId);
+      } catch { /* best-effort — surface via logs instead */ }
+      throw new Error(`Image generated but DB write failed (imageUrl): ${(e as Error).message}`);
+    }
   }
 
   // Opportunistic thumbnail — see handleCinematicImage for the rationale.

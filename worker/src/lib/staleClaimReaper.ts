@@ -106,6 +106,37 @@ export async function runStaleClaimReaper(): Promise<void> {
   // image gen / TTS are single API calls that retry cleanly).
   // Per-task-type windows so we never reap a job that's still
   // legitimately running its hard timeout.
+  //
+  // TODO(worker-hardening-wave) G-M5: master_audio + cinematic_video
+  // revival are NOT fully double-billing-safe.
+  //   • master_audio: each Gemini TTS call costs N tokens; on revive
+  //     we re-call without checking whether the prior attempt's
+  //     audio segment was already uploaded to storage. The current
+  //     resume-checkpoint covers happy-path resume but NOT the
+  //     case where the worker died after the API call returned but
+  //     before the row update — in that window we double-bill
+  //     Gemini AND produce two storage objects (the second
+  //     overwrites the first via key derivation, so no DB
+  //     corruption, but the API cost is real).
+  //   • cinematic_video: Kling V3 Pro charges per-render. The
+  //     videoPredictionId checkpoint in scene._meta protects against
+  //     re-submitting a successful render, but a render IN-FLIGHT at
+  //     the moment the worker died will be re-submitted on revive
+  //     (we check predictionId presence; in-flight has none yet).
+  //     2026-05-08 incident pattern was masked by the 90-min window
+  //     fix; on shorter timeouts this would resurface.
+  // Proposed fix (deferred to worker-hardening wave with proper test
+  // scaffolding):
+  //   1. Add `billed_at` timestamp to video_generation_jobs row.
+  //   2. Reaper SKIPS reviving rows where billed_at IS NOT NULL —
+  //      those have already paid and need manual review, not
+  //      automatic resubmit.
+  //   3. Or alternatively: gate revival on task_type having a
+  //      proven-idempotent resumption path (image_gen yes, TTS
+  //      with mid-call death no).
+  // This needs the worker test harness (worker/src/lib/staleClaimReaper.test.ts)
+  // to be extended with a "billed-but-not-finalised" scenario before
+  // the fix can ship safely.
   const reaperBuckets: Array<{ taskTypes: string[] | null; cutoff: string; label: string; staleMin: number }> = [
     { taskTypes: ["cinematic_video"],                   cutoff: cutoffCinematic, label: "cinematic_video",  staleMin: STALE_CINEMATIC_VIDEO_MS / 60000 },
     { taskTypes: ["export_video"],                      cutoff: cutoffExport,    label: "export_video",     staleMin: STALE_EXPORT_VIDEO_MS    / 60000 },

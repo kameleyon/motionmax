@@ -662,10 +662,46 @@ Shipped: .husky/pre-commit inline secret-scan (Stripe sk_live_/sk_test_/rk_, JWT
 - Triaged: 240 bullets across §1–§14
 - Closed via incidental Critical work: ~64 items
 - Wave A+B+C+D+E-Legal+E-CI shipped: ~88 items
-- Remaining (deferred — call-out from this doc above):
+- Wave §10 Ghost + RLS-PUBLIC-leak followups shipped: ~16 items
+- **Total: ~168 items closed**
+- Remaining (deferred for worker-hardening wave or human action):
   - i18n RUNTIME (multi-week — RTL plumbing, email i18n, multi-currency)
-  - 3 §10 ghost edge cases needing test-first
-  - 4 RLS-PUBLIC-leak followups (Task #83)
-  - 2 HUMAN tasks (DMCA Designated Agent + EU Art. 27 representative)
+  - **2 worker-hardening TODOs**: G-M5 reaper double-bill on master_audio/cinematic + G-M11 withTransientRetry idempotency (both require test scaffolding + worker-side coordinated fix)
+  - **1 audit-vs-reality mismatch**: G-M13 IntakeRail 200ms heavy effect — confirmed not present in current code
+  - **2 HUMAN tasks**: DMCA Designated Agent (#54) + EU Art. 27 representative (#55)
+  - **1 SECURITY task**: rotate the `sk_live_` Stripe key pasted in chat earlier this session
 - Bundle deltas: UserDrawer -96% (393.5 → 14 KB), 34 recharts/d3 packages removed, PWA precache 4.1 MB.
+
+---
+
+## §10 Ghost edge cases — execution (2026-05-10) — DONE
+
+| Item | Status | Location |
+|---|---|---|
+| G-M1 (S) scheduleRefresh uncancellable timeouts | FIXED | `useSceneRegen.ts:96-127` — Set-tracked timer refs + unmount cleanup |
+| G-M2 (S) Auth lockout state lost on refresh | FIXED | `Auth.tsx:30-58,140,367,374` — sessionStorage persist + TTL self-clean |
+| G-M3 (S) ScheduleBlock cross-tab DRAFT_KEY leak | FIXED | `ScheduleBlock.tsx:55-86` — per-tab UUID discriminator |
+| G-M4 (S) useExport subscribe-after-insert race | FIXED | `useExport.ts:152-225` — subscribe + await SUBSCRIBED before INSERT |
+| G-M5 (M, worker) Reaper revives master_audio = double-bill | TODO-DEFERRED | `staleClaimReaper.ts:104-128` — needs `billed_at` column + test harness |
+| G-M6 (S) Topic-gen 1.5s × 5min polling | FIXED | `ScheduleBlock.tsx:87-99,329-365` — exponential backoff 1.5s→30s |
+| G-M7 (XS) Editor logout realtime leak | VERIFIED-PRIOR + HARDENED | `useAuth.ts:409-424` + `useActiveJobs.ts:127-157` |
+| G-M8 (S) No beforeunload during in-flight | FIXED | new `useBeforeUnload.ts` hook + wired into `useExport.ts` + `IntakeForm.tsx` |
+| G-M9 (XS) regenerate_image partial fail | FIXED | `handleRegenerateImage.ts:235-281` — per-write try/catch + `failed_with_partial` stamp |
+| G-M10 (XS) autopost_rerender not in refund classifier | FIXED | `refundCreditsOnFailure.ts:41-58,65-69` — added to REFUNDABLE_TASK_TYPES |
+| G-M11 (M, worker) withTransientRetry idempotency | TODO-DEFERRED | `index.ts:199-224` — needs attempt-aware idempotency key |
+| G-M12 (S) applyCaptionsAll schema-cache silent drop | FIXED | `useSceneRegen.ts:765-820` — toast.warning on cache miss, error on real DB fail |
+| G-M13 (M) IntakeRail 200ms heavy effect | NOT-APPLICABLE | Audit description doesn't match current `IntakeRail.tsx` — no 200ms loop exists |
+| G-M14 (S) Two-tab applyCaptionsAll double export | FIXED | `useSceneRegen.ts:732-758,842-848` — per-project lease lock w/ 10min TTL |
+| G-M15 (S) cancelPolling doesn't abort insert | FIXED | `useExport.ts` + `ScheduleBlock.tsx` — AbortController plumbed through |
+
+**Tests added:** `useBeforeUnload.test.ts` (5 tests), `refundCreditsOnFailure.test.ts` (+3 G-M10 tests). 188 vitest tests pass.
+
+## Task #83 RLS-PUBLIC-leak followups — execution (2026-05-10) — DONE
+
+Migration `supabase/migrations/20260510280000_rls_public_leak_audit.sql` applied to prod (project `ayjbvcikuwknqdrpsdmj`):
+
+- `auth_events`, `generation_costs`, `api_call_logs`, `admin_logs` all: `ENABLE + FORCE ROW LEVEL SECURITY`, `REVOKE ALL FROM anon/authenticated/PUBLIC`, `GRANT ALL TO service_role`, dynamic drop of all historic policies, two new policies per table (one RESTRICTIVE + one PERMISSIVE both scoped `TO service_role`), trailing `DO $verify$` block that RAISEs if any anon/authenticated/PUBLIC grant remains.
+- **Anon curl verification (production):** all 4 return `{"code":"42501","message":"permission denied for table ..."}`.
+- **Worker/Edge Function regression check**: every read/write to these 4 tables already goes through `SUPABASE_SERVICE_ROLE_KEY` (worker via `worker/src/lib/supabase.ts`, edge functions via `Deno.env`). No anon-key access found. **No regressions.**
+- `auth_events` decision: locked to service_role only — table is a scaffold for a future session-derivation feature; no anon INSERT path exists yet.
 - **§9 Watch M1 SLO definitions, M5 cost spike alerting** — require product input on thresholds.

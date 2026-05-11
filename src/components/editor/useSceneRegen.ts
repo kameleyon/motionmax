@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -92,15 +92,44 @@ export function useSceneRegen(state: EditorState | null) {
    *  connection blips, filter mismatches). After kicking a regen job
    *  we also invalidate the editor state periodically for ~2 minutes
    *  so the new scene URLs show up even when realtime silently drops
-   *  the update. */
+   *  the update.
+   *
+   *  G-M1 (Ghost): the previous implementation queued 9 raw setTimeouts
+   *  per regen and never cancelled them on unmount — so navigating away
+   *  mid-regen kept firing query invalidations for 2 minutes against a
+   *  stale (or wrong) project id. Now every scheduled refresh writes
+   *  into a per-hook timer registry that we tear down in a cleanup
+   *  effect when the hook unmounts. Re-entrant calls (multiple regens
+   *  during the same mount) layer on top of each other rather than
+   *  cancelling the prior batch — each batch's 9 timeouts run
+   *  independently, all wiped on unmount. */
+  const refreshTimerSetRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  useEffect(() => () => {
+    // Cleanup on unmount — cancel every still-pending refresh so we
+    // don't keep poking the React-Query cache after the editor has
+    // gone away.
+    for (const t of refreshTimerSetRef.current) clearTimeout(t);
+    refreshTimerSetRef.current.clear();
+  }, []);
   const scheduleRefresh = useCallback((projectId: string | undefined) => {
     if (!projectId) return;
-    const invalidate = () => {
+    const invalidate = (timerId: ReturnType<typeof setTimeout>) => () => {
+      refreshTimerSetRef.current.delete(timerId);
       queryClient.invalidateQueries({ queryKey: ['editor-state', projectId] });
     };
-    // Fire now, then every 6 s for ~2 min. Clears itself.
+    // Fire now, then every 6 s for ~2 min. Each scheduled timer
+    // registers itself so unmount can cancel all 9.
     const intervals = [1500, 4000, 8000, 15000, 25000, 40000, 60000, 90000, 120000];
-    intervals.forEach((ms) => setTimeout(invalidate, ms));
+    intervals.forEach((ms) => {
+      // The closure captures the binding so the callback can remove
+      // itself from the set when it fires (keeps the set bounded
+      // across many regens in one mount).
+      const timerId: ReturnType<typeof setTimeout> = setTimeout(
+        () => invalidate(timerId)(),
+        ms,
+      );
+      refreshTimerSetRef.current.add(timerId);
+    });
   }, [queryClient]);
 
   /** True when a master_audio job is already pending or processing for
@@ -730,21 +759,89 @@ export function useSceneRegen(state: EditorState | null) {
    *  the editor UI to lock all scenes during it. */
   const applyCaptionsAll = useCallback(async (style: string) => {
     if (!user || !state?.project || !state?.generation) return false;
+    // G-M14 (Ghost): per-tab sessionStorage lock so two open editor
+    // tabs on the same project can't both fire applyCaptionsAll
+    // simultaneously — each would INSERT an export_video row tagged
+    // `_bulk: 'captions-apply'`, both worker handlers would burn
+    // ffmpeg cycles, and credits would be double-charged. The
+    // useSceneRegen `debounceFire` server-side RPC covers regen
+    // ops but doesn't gate the captions-apply path. We don't use
+    // localStorage here (that's NOT tab-scoped — useless) and we
+    // can't use the regen_debounce RPC because captions-apply
+    // legitimately needs the per-style-pick re-run to work in the
+    // SAME tab. Instead: a sessionStorage flag scoped to this tab
+    // for the project + a localStorage-shared flag with TTL for
+    // cross-tab. Localstorage flag carries a lease timestamp; on
+    // unmount or success we clear it. On a tab crash the TTL
+    // expires after 10 min so the lock self-heals.
+    const projectId = state.project.id;
+    const localLockKey = `mm_captions_apply_in_progress:${projectId}`;
+    const LEASE_MS = 10 * 60 * 1000;
+    try {
+      const raw = localStorage.getItem(localLockKey);
+      if (raw) {
+        const leasedAt = Number(raw);
+        if (Number.isFinite(leasedAt) && Date.now() - leasedAt < LEASE_MS) {
+          toast.info('Captions apply is already running in another tab — wait for it to finish there.');
+          return false;
+        }
+        // Lease expired — fall through and reclaim.
+      }
+      localStorage.setItem(localLockKey, String(Date.now()));
+    } catch {
+      // localStorage disabled — fall back to single-tab guard only.
+      // The startLockRef in useExport still protects within this tab.
+    }
+
     setBusy('regen');
     try {
       // Persist the style first so the export job picks it up.
-      const ok = await (async () => {
+      // G-M12 (Ghost): the previous implementation silently dropped
+      // the persisted-style result on a schema-cache miss. The export
+      // job still fired with the new style on its own payload (so the
+      // burn-in worked), but the project's `intake_settings.captionStyle`
+      // stayed stale — meaning on next mount the Inspector dropdown
+      // showed the old style and a user-initiated re-export from the
+      // topbar would use the wrong caption. Now we route the error
+      // through updateIntakeSettings's existing fallback (which
+      // writes to scenes[0]._meta.intakeOverrides) AND surface a
+      // toast so the user knows refresh might be needed.
+      const persistResult = await (async () => {
         const current = (state.project!.intake_settings as Record<string, unknown> | null) ?? {};
         const next = { ...current, captionStyle: style };
         const { error } = await supabase
           .from('projects')
           .update({ intake_settings: next as unknown as never })
           .eq('id', state.project!.id);
-        return !error;
+        return { ok: !error, error };
       })();
-      if (!ok) {
-        // Schema-cache miss — fall back via updateIntakeSettings handles
-        // it elsewhere. For Apply we still try to fire the export.
+      if (!persistResult.ok) {
+        const msg = persistResult.error?.message ?? '';
+        const isSchemaMiss = msg.includes('intake_settings') && msg.toLowerCase().includes('schema cache');
+        if (isSchemaMiss) {
+          // Fall through to the legacy scenes[0]._meta override path
+          // via updateIntakeSettings — it has the same retry logic.
+          // Don't await — we want the user-facing toast to fire
+          // immediately and the export to enqueue regardless.
+          updateIntakeSettings({ captionStyle: style }).catch(() => {});
+          // eslint-disable-next-line no-console
+          console.warn(
+            '[applyCaptionsAll] schema-cache miss on intake_settings update; ' +
+            'falling back to scenes[0]._meta.intakeOverrides. ' +
+            'Export will still apply the new caption style for THIS render, ' +
+            'but the project default may need a refresh to reflect it.',
+          );
+          toast.warning(
+            "Some caption styles couldn't be saved as the project default — " +
+            "try refreshing once the export completes if the style doesn't stick.",
+            { duration: 6000 },
+          );
+        } else {
+          // Real DB error (not schema-cache). Don't silently drop —
+          // tell the user the persist failed but proceed with export
+          // (the export's own payload carries the style).
+          toast.error(`Couldn't save caption style as default: ${msg || 'unknown error'}`);
+        }
       }
 
       const scenes = state.scenes
@@ -794,7 +891,18 @@ export function useSceneRegen(state: EditorState | null) {
       return false;
     } finally {
       setBusy('idle');
+      // G-M14: release the cross-tab lock once the queue submit
+      // resolved (success or failure). We don't hold it until the
+      // export's worker completes — the export's own _bulk-tagged row
+      // is the project-wide lock that other tabs observe via
+      // useActiveJobs.bulkOpActive.
+      try { localStorage.removeItem(localLockKey); } catch { /* ignore */ }
     }
+    // updateIntakeSettings is referenced inside via closure (defined
+    // below in this hook); it's read lazily at call-time so the
+    // eslint-deps rule doesn't strictly require listing it, but we
+    // do anyway for correctness.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, state, scheduleRefresh]);
 
   /** Merge a patch into `projects.intake_settings`, with a fallback

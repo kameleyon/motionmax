@@ -410,6 +410,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Clear only auth-related session storage keys
     const authKeys = ['upgradeModalDismissed', 'subscriptionSuspendedDismissed'];
     authKeys.forEach(key => sessionStorage.removeItem(key));
+    // G-M7 (Ghost): proactively tear down every open realtime channel
+    // before the auth state flips. The per-hook useEffect cleanups
+    // (useActiveJobs, useExport, etc.) already handle this when their
+    // dep arrays react to user.id=null, but doing it here is belt-
+    // and-suspenders: if any future hook subscribes to a channel
+    // outside the deps-driven lifecycle, this still nukes it on
+    // sign-out so the next user doesn't inherit a stale subscription
+    // bound to the previous user's project_id.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).removeAllChannels?.();
+    } catch { /* realtime cleanup best-effort */ }
     const { error } = await supabase.auth.signOut();
     // Wave C Lens M1 — identity-leak fix on shared devices.
     //

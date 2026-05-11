@@ -52,8 +52,47 @@ export interface ScheduleBlockProps {
   isAdmin: boolean;
 }
 
-const DRAFT_KEY = 'motionmax.scheduleblock.draft';
-const TOPIC_POLL_MS = 1500;
+/**
+ * G-M3 (Ghost): the OAuth-roundtrip draft key was shared across all
+ * tabs. If a user had two intake tabs open and connected a platform
+ * from tab B, tab A's hydration on next mount would pull in tab B's
+ * topic selections and platform-account IDs — silently overwriting
+ * the form state they were composing in tab A.
+ *
+ * Per-tab discriminator: sessionStorage is naturally tab-scoped, so
+ * we mint a UUID once per tab and append it to the localStorage draft
+ * key. This makes drafts strictly tab-local — the OAuth round-trip
+ * happens in the SAME tab (window.location.href replacement), so the
+ * tab id survives the redirect and the draft is restored to the right
+ * tab. Other tabs are unaffected.
+ */
+function getTabScopedDraftKey(): string {
+  try {
+    let tabId = sessionStorage.getItem('mm_tab_id');
+    if (!tabId) {
+      tabId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      sessionStorage.setItem('mm_tab_id', tabId);
+    }
+    return `motionmax.scheduleblock.draft.${tabId}`;
+  } catch {
+    // sessionStorage disabled (private mode in some browsers) — fall
+    // back to the legacy shared key. The cross-tab leak risk is back
+    // but at least the form still works.
+    return 'motionmax.scheduleblock.draft';
+  }
+}
+const DRAFT_KEY = getTabScopedDraftKey();
+// G-M6 (Ghost): switched from a flat 1500 ms poll (200 SELECTs over the
+// 5 min window) to exponential backoff. The worker's typical p50 for
+// topic gen is 6–12 s; the previous 1.5 s cadence meant every short-tail
+// completion was already hammering the DB 4–8× before the result was
+// even ready. With backoff we settle into a 15–30 s cadence after the
+// first 15 s, cutting DB load by ~10× on the long-tail and ~3× on the
+// short-tail.
+const TOPIC_POLL_START_MS = 1500;
+const TOPIC_POLL_MAX_MS = 30_000;
 // Worker callGemini timeout for search-grounded topic gen is 180s, and
 // the retryClassifier auto-retries up to 3x on AbortError. We poll for
 // 5 min — enough to cover one retry attempt without leaving the
@@ -216,6 +255,16 @@ export default function ScheduleBlock({
   }, [accountsQuery.data]);
 
   // ── Topic generation flow ──
+  // G-M15 (Ghost): keep an AbortController on the topic-gen flow so
+  // unmount mid-poll cancels both the next poll tick AND any in-flight
+  // SELECT. Without this an unmount during the 5-min poll window left
+  // queries running against (possibly) a different user's session
+  // after fast-route nav.
+  const topicAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => {
+    topicAbortRef.current?.abort();
+  }, []);
+
   // Insert a video_generation_jobs row, poll for `result.topics`.
   async function handleGenerateTopics() {
     if (!user) { toast.error('Please sign in to generate topics.'); return; }
@@ -223,16 +272,24 @@ export default function ScheduleBlock({
       toast.error('Add a content idea above first — even a sentence is enough.');
       return;
     }
+    // Cancel any previous in-flight poll (re-clicking "Generate topics"
+    // while one is already running). This also resets the abort signal.
+    topicAbortRef.current?.abort();
+    const abortCtl = new AbortController();
+    topicAbortRef.current = abortCtl;
+
     setGeneratingTopics(true);
     try {
       // Enrich the prompt with whatever the user attached (text files +
       // images already-inlined, URLs/YouTube/GitHub passed as markers
       // for the worker to fetch). If nothing was attached, this is "".
       const { processAttachments } = await import('@/lib/attachmentProcessor');
+      if (abortCtl.signal.aborted) return;
       const sources = intakeSummary.sourceAttachments && intakeSummary.sourceAttachments.length > 0
         ? await processAttachments(intakeSummary.sourceAttachments)
         : '';
 
+      if (abortCtl.signal.aborted) return;
       const { data: job, error } = await supabase
         .from('video_generation_jobs')
         .insert({
@@ -252,16 +309,43 @@ export default function ScheduleBlock({
         })
         .select('id')
         .single();
+      // G-M15: bail before consuming the response if the user
+      // navigated away. The insert may have landed server-side
+      // (idempotency relies on the worker dedup; for a one-off
+      // topic-gen this is acceptable — at worst one stale row).
+      if (abortCtl.signal.aborted) return;
       if (error || !job) throw new Error(error?.message ?? 'queue failed');
 
       const deadline = Date.now() + TOPIC_POLL_TIMEOUT_MS;
+      // G-M6: exponential backoff with cap. Sleep grows 1.5 s → 30 s
+      // over the first ~7 ticks (1500, 2250, 3375, 5062, 7593, 11390,
+      // 17085, 25627, 30000, 30000...). Sleeps are made abortable so
+      // unmount unblocks the loop immediately rather than waiting for
+      // the next tick boundary.
+      let nextDelayMs = TOPIC_POLL_START_MS;
+      const abortableSleep = (ms: number) => new Promise<void>((resolve) => {
+        const t = setTimeout(() => {
+          abortCtl.signal.removeEventListener('abort', onAbort);
+          resolve();
+        }, ms);
+        const onAbort = () => {
+          clearTimeout(t);
+          resolve();
+        };
+        if (abortCtl.signal.aborted) onAbort();
+        else abortCtl.signal.addEventListener('abort', onAbort, { once: true });
+      });
+
       while (Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, TOPIC_POLL_MS));
+        await abortableSleep(nextDelayMs);
+        if (abortCtl.signal.aborted) return;
+        nextDelayMs = Math.min(Math.ceil(nextDelayMs * 1.5), TOPIC_POLL_MAX_MS);
         const { data: row } = await supabase
           .from('video_generation_jobs')
           .select('status, result, error_message')
           .eq('id', job.id)
           .single();
+        if (abortCtl.signal.aborted) return;
         if (row?.status === 'completed') {
           const topics = (row.result as { topics?: string[] } | null)?.topics ?? [];
           if (!Array.isArray(topics) || topics.length === 0) {
@@ -279,10 +363,13 @@ export default function ScheduleBlock({
       }
       throw new Error('Timed out waiting for topics — try again.');
     } catch (err) {
+      if (abortCtl.signal.aborted) return;
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Couldn't generate topics: ${msg}`);
     } finally {
-      setGeneratingTopics(false);
+      // G-M15: if the controller was aborted we may already be in
+      // unmount or a sibling re-run; skip the setState in those cases.
+      if (!abortCtl.signal.aborted) setGeneratingTopics(false);
     }
   }
 

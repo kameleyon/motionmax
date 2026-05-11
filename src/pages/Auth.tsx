@@ -29,6 +29,35 @@ const MIN_PASSWORD_LENGTH = 8;
 const RATE_LIMIT_HINT_THRESHOLD = 3;
 const LOCKOUT_THRESHOLD = 5;
 const LOCKOUT_DURATION_MS = 30_000; // 30 seconds
+// G-M2 (Ghost): persist lockout deadline across page refreshes so a
+// user who hits the 5-failed-attempts gate can't dodge it by reloading
+// the page. We use sessionStorage (vs localStorage) so closing the tab
+// clears the lock — a determined attacker just opens a new tab, but
+// the server-side throttle in useAuth.ts still catches them. The point
+// here is to make the UI banner CONSISTENT after a refresh during a
+// legitimate lockout window, not to be the authoritative gate.
+const LOCKOUT_STORAGE_KEY = 'mm_auth_locked_until';
+function readPersistedLockout(): number {
+  try {
+    const raw = sessionStorage.getItem(LOCKOUT_STORAGE_KEY);
+    if (!raw) return 0;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n <= Date.now()) {
+      // Expired — clean up so we don't keep reading a stale value.
+      try { sessionStorage.removeItem(LOCKOUT_STORAGE_KEY); } catch { /* ignore */ }
+      return 0;
+    }
+    return n;
+  } catch {
+    return 0;
+  }
+}
+function persistLockout(until: number) {
+  try {
+    if (until <= 0) sessionStorage.removeItem(LOCKOUT_STORAGE_KEY);
+    else sessionStorage.setItem(LOCKOUT_STORAGE_KEY, String(until));
+  } catch { /* sessionStorage disabled — non-fatal, banner just won't survive refresh */ }
+}
 
 function AuthPageHeader({ onLogoClick }: { onLogoClick: () => void }) {
   return (
@@ -129,7 +158,11 @@ export default function Auth() {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [ageVerified, setAgeVerified] = useState(false);
   const failedAttemptsRef = useRef(0);
-  const [lockedUntil, setLockedUntil] = useState<number>(0);
+  // G-M2: initialise from sessionStorage so a refresh during an active
+  // lockout window restores the banner. `readPersistedLockout` returns
+  // 0 (and clears the key) if the persisted deadline is already in the
+  // past, so we don't restore stale locks.
+  const [lockedUntil, setLockedUntil] = useState<number>(() => readPersistedLockout());
   // Live ms-remaining counter for the lockout banner. Driven by the
   // setInterval below so the banner updates every second without forcing
   // a parent re-render. When `lockedUntil` is in the past, the effect
@@ -283,6 +316,9 @@ export default function Auth() {
       setLockoutMsRemaining(remaining);
       if (remaining === 0) {
         setLockedUntil(0);
+        // G-M2: clear the persisted deadline so a fresh refresh
+        // doesn't bounce on the same expired value.
+        persistLockout(0);
       }
     };
     tick();
@@ -361,14 +397,18 @@ export default function Auth() {
             // the next signIn attempt will reset the timestamp if the
             // server returns a different remaining window.
             const serverLockMs = 30 * 60 * 1000;
-            setLockedUntil(Date.now() + serverLockMs);
+            const until = Date.now() + serverLockMs;
+            setLockedUntil(until);
+            persistLockout(until); // G-M2: survive refresh
             failedAttemptsRef.current = 0;
             toast.error("Account temporarily locked", { description: error.message });
             return;
           }
           failedAttemptsRef.current += 1;
           if (failedAttemptsRef.current >= LOCKOUT_THRESHOLD) {
-            setLockedUntil(Date.now() + LOCKOUT_DURATION_MS);
+            const until = Date.now() + LOCKOUT_DURATION_MS;
+            setLockedUntil(until);
+            persistLockout(until); // G-M2: survive refresh
             failedAttemptsRef.current = 0;
             toast.error("Too many failed attempts. Locked for 30 seconds.");
             return;

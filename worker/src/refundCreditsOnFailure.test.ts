@@ -426,6 +426,84 @@ describe("refundCreditsOnFailure (real implementation) — idempotency contract"
     );
   });
 
+  // ── 6d. G-M10 (Ghost): autopost_rerender added to refundable set ──
+  //
+  // The audit flagged that `autopost_rerender` was missing from the
+  // refundable task_types set, so a failed rerender carrying
+  // creditsDeducted in its payload silently dropped the refund. The
+  // fix adds it to the set AND extends the autopost_render-specific
+  // guards (creditsDeducted-presence check + sibling-finished
+  // check) to cover rerender identically.
+  it("G-M10: skips refund for autopost_rerender rows whose payload has no creditsDeducted", async () => {
+    vi.mocked(supabase.from).mockReturnValue(
+      makeMockChain({ data: null, error: null }) as never,
+    );
+    vi.mocked(supabase.rpc).mockResolvedValue({ data: true, error: null } as never);
+
+    const job = makeJob({
+      task_type: "autopost_rerender" as unknown as Job["task_type"],
+      payload: { projectType: "doc2video", length: "brief" /* no creditsDeducted */ },
+    });
+    await refundCreditsOnFailure(job);
+
+    // Pre-deduction row — no refund, no DB read.
+    expect(supabase.from).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it("G-M10: refunds autopost_rerender when run is 'pending' and creditsDeducted is set", async () => {
+    const chainSequence = [
+      makeMockChain({ data: { status: "pending", video_job_id: null }, error: null }),
+      makeMockChain({ data: null, error: null }),
+    ];
+    let callIdx = 0;
+    vi.mocked(supabase.from).mockImplementation(() => {
+      const c = chainSequence[callIdx] ?? chainSequence[chainSequence.length - 1];
+      callIdx += 1;
+      return c as never;
+    });
+    vi.mocked(supabase.rpc).mockResolvedValue({ data: true, error: null } as never);
+
+    const job = makeJob({
+      task_type: "autopost_rerender" as unknown as Job["task_type"],
+      payload: {
+        projectType: "doc2video",
+        length: "brief",
+        creditsDeducted: 140,
+        autopost_run_id: "rerun-pending-1",
+      },
+    });
+    await refundCreditsOnFailure(job);
+
+    expect(supabase.rpc).toHaveBeenCalledOnce();
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      "refund_credits_securely",
+      expect.objectContaining({ p_amount: 140, p_user_id: "user-abc" }),
+    );
+  });
+
+  it("G-M10: skips refund for autopost_rerender when sibling run is already 'completed'", async () => {
+    const chain = makeMockChain({
+      data: { status: "completed", video_job_id: "vid-sibling-rerun" },
+      error: null,
+    });
+    vi.mocked(supabase.from).mockReturnValue(chain as never);
+    vi.mocked(supabase.rpc).mockResolvedValue({ data: true, error: null } as never);
+
+    const job = makeJob({
+      task_type: "autopost_rerender" as unknown as Job["task_type"],
+      payload: {
+        projectType: "doc2video",
+        length: "brief",
+        creditsDeducted: 140,
+        autopost_run_id: "rerun-done-1",
+      },
+    });
+    await refundCreditsOnFailure(job);
+
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
   // ── 7. Refund description includes job ID (prevents cross-job collisions) ───
   it("uses a description that uniquely identifies the job to prevent cross-job duplicates", async () => {
     const chain = makeMockChain({ data: null, error: null });

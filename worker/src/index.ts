@@ -196,6 +196,32 @@ let totalJobsFailed = 0;
 
 const MAX_JOB_RETRIES = 3;
 
+// TODO(worker-hardening-wave) G-M11 (duplicate of F-CH-10):
+//   `withTransientRetry` retries any classified-transient error, but
+//   it has no idempotency guard on duplicate-row INSERTs. Specifically:
+//     • If a handler's first attempt INSERTs a child job row, then
+//       errors on a downstream call (e.g. master_audio insert OK,
+//       cinematic_image insert classified as transient via 429),
+//       attempt 2 re-runs the entire handler — including the
+//       already-successful master_audio INSERT. The DB unique-index
+//       on (project_id, task_type, depends_on_hash) catches some of
+//       these (added in migration 20260510). But handlers that
+//       INSERT without depends_on (master_audio, plain image regen
+//       in some paths) can still produce duplicate child rows.
+//     • Symptom: 2× Gemini TTS calls billed for one user click.
+//   Proposed fix (deferred — needs test scaffolding around the
+//   handler chain to verify):
+//     1. Pass `attempt` into the handler (already done via `fn(attempt)`).
+//     2. Handlers that INSERT child rows should use an idempotency
+//        key derived from (parent jobId, child task_type, attempt-0
+//        signature) so attempt > 0 re-INSERTs are no-ops.
+//     3. Alternative: wrap the INSERT in a "find-or-create" RPC that
+//        returns the existing row on conflict.
+//   The existing tests in worker/src/handlers/*.test.ts don't cover
+//   the cross-attempt persistence path — they isolate the handler
+//   from the retry wrapper. Worker-hardening wave needs a new test
+//   harness that exercises (attempt=0 partial-fail, attempt=1 retry)
+//   end-to-end before this can ship safely.
 async function withTransientRetry<T>(
   fn: (attempt: number) => Promise<T>,
   opts: { jobId: string; maxAttempts?: number }

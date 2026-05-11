@@ -120,17 +120,28 @@ export interface StyleDirectives {
 // nuance (it knows HOW to read, not just WHAT) which fixes the "always
 // sounds like a horror narrator" drift on heavy topics.
 
-function buildDirectivePrompt(text: string, directives?: StyleDirectives): string {
+function buildDirectivePrompt(
+  text: string,
+  directives?: StyleDirectives,
+  carryOverContext?: string | null,
+): string {
   // Defaults intentionally match a "confident host over coffee" persona.
   // Every line of every section is overridable by the caller via
   // StyleDirectives; we only fall back to defaults when the caller
   // doesn't pass a value for that slot.
   const style =
     directives?.style?.trim() ||
-    "Confident, natural, conversational. Sounds like a smart friend explaining the topic over coffee, not a stage actor. Light grin in the voice without being chirpy.";
+    "Confident, natural human conversation — clear and articulate. Sounds like a smart friend explaining the topic over coffee, not a stage actor. Light grin in the voice without being chirpy.";
+  // Anchored pacing — Gemini renders independent chunks of a master script
+  // as independent generateContent calls, and its prosody baseline drifts
+  // between calls without a numeric anchor. Naming an explicit WPM target
+  // + steady-anchor reference gives the model the same calibration target
+  // every chunk, so chunk N+1 doesn't come out 15-20% faster/slower than
+  // chunk N. The "steady" + "165 WPM" framing is what keeps chunks from
+  // sounding like two different speakers stitched together.
   const pacing =
     directives?.pacing?.trim() ||
-    "Natural conversational pace. Slight rhythm variation between sentences but no theatrical pauses. Push forward through hook lines; relax slightly into reflective moments.";
+    "Maintain exactly the same pace, pitch, and energy as a steady news-anchor read at 165 words per minute. Natural human conversation rhythm — clear, articulate, no rushing, no theatrical pauses. Slight phrase-level variation is fine, but the baseline tempo and pitch range stay locked at the same target for the entire read.";
   const accent =
     directives?.accent?.trim() ||
     "Neutral standard accent appropriate to the language of the transcript.";
@@ -153,6 +164,26 @@ function buildDirectivePrompt(text: string, directives?: StyleDirectives): strin
   // wrapper. Appended at the end of Director's Notes, never replaces it.
   const extraNotes = directives?.raw?.trim();
 
+  // Carry-over context: when this chunk follows another chunk in the
+  // same master read, we paste the previous chunk's last 1-2 sentences
+  // here as a calibration anchor. The model reads it to lock onto the
+  // SAME prosody (pace, pitch, energy) the previous chunk used, then
+  // continues the read from the TRANSCRIPT marker — but does NOT speak
+  // the context block aloud. This is the same technique Google AI
+  // Studio exposes as the "Sample Context" field in the TTS playground.
+  const ctxBlock = carryOverContext?.trim();
+  const contextLines = ctxBlock
+    ? [
+        "",
+        "## PREVIOUS CONTEXT (READ ONLY FOR PROSODY CALIBRATION — DO NOT SPEAK THIS BLOCK)",
+        "The text below is what the speaker JUST FINISHED reading in the same continuous take.",
+        "Use it ONLY to anchor your pace, pitch, and energy so this section continues seamlessly",
+        "from the previous one. Skip ahead to the TRANSCRIPT marker and speak ONLY that.",
+        "",
+        ctxBlock,
+      ]
+    : [];
+
   return [
     "# AUDIO PROFILE: The Host",
     "## Confident, conversational, real human energy",
@@ -169,6 +200,7 @@ function buildDirectivePrompt(text: string, directives?: StyleDirectives): strin
     `Accent: ${accent}`,
     `Hard rules (do not violate): ${doNot}`,
     extraNotes ? `Additional context: ${extraNotes}` : "",
+    ...contextLines,
     "",
     // The explicit boundary marker per Gemini docs. Everything before
     // this line is performance direction the model reads but does NOT
@@ -200,6 +232,13 @@ export interface GeminiFlashTTSOptions {
   userId?: string | null;
   /** Caller's generation id — same rationale as userId. */
   generationId?: string | null;
+  /** Last 1-2 sentences of the PREVIOUS chunk in the same master read.
+   *  Included in the prompt as a "Sample Context" calibration block (NOT
+   *  spoken). Gives Gemini a prosody anchor so chunk N+1 matches chunk N
+   *  on pace/pitch/energy — fixes the "two different voices" seam between
+   *  chunks. Only relevant for chunked master audio; safe to omit for
+   *  single-call scenes. */
+  carryOverContext?: string | null;
 }
 
 /**
@@ -222,7 +261,7 @@ export async function generateGeminiFlashTTSPCM(
   const apiKeys = opts.apiKeys.filter(Boolean);
   if (apiKeys.length === 0) return { pcm: null, error: "Gemini Flash TTS: no GOOGLE_TTS_API_KEY configured" };
 
-  const promptText = buildDirectivePrompt(text, opts.directives);
+  const promptText = buildDirectivePrompt(text, opts.directives, opts.carryOverContext);
 
   const body = {
     contents: [{ parts: [{ text: promptText }] }],
@@ -326,20 +365,43 @@ export async function generateGeminiFlashTTSChunked(
   opts: Omit<GeminiFlashTTSOptions, "text"> & {
     /** Full master text — will be chunked internally. */
     masterText: string;
-    /** Soft cap per chunk in characters. ~1500 → ~120s of audio →
-     *  comfortably under the 32k token window even with audio output
-     *  counted in. Tunable. */
+    /** Soft cap per chunk in characters. ~2700 → ~3:00 of audio per chunk
+     *  at the 165 WPM target set in the directive. Verified ceiling:
+     *  Google AI Studio playground renders 2:40 with this model
+     *  (gemini-3.1-flash-tts-preview) in one call cleanly, and the model
+     *  card claims up to ~3 min stays in the drift-free zone. Result:
+     *  anything ≤3:00 stays as ONE chunk (no cross-chunk seams at all),
+     *  and longer masters split into evenly-balanced chunks (5min → 2
+     *  chunks ~2:30 each, 6min → 2 chunks ~3:00 each, not 1 long + 1
+     *  short). The previous-context carry-over (`carryOverContext`
+     *  per-chunk) keeps prosody consistent across the splits when
+     *  chunking IS needed. */
     targetChunkChars?: number;
     /** Max parallel chunks in flight at once. 3 is conservative for
      *  Gemini Tier 1 TPM (audio output tokens add up fast). */
     parallelism?: number;
   },
 ): Promise<{ url: string | null; durationSeconds?: number; provider?: string; error?: string }> {
-  const targetChars = opts.targetChunkChars ?? 1500;
+  const targetChars = opts.targetChunkChars ?? 2700;
   const parallelism = opts.parallelism ?? 3;
   const chunks = chunkBySentences(opts.masterText, targetChars);
 
-  console.log(`[GeminiFlashTTS] Master: chunking ${opts.masterText.length} chars into ${chunks.length} chunk(s) of ~${targetChars} chars each`);
+  // Pre-compute carry-over context per chunk: each chunk (except the
+  // first) gets the last 1-2 sentences (capped at 240 chars) of the
+  // PREVIOUS chunk's source text as a "Sample Context" calibration
+  // anchor — same technique Google AI Studio's TTS playground uses.
+  // The source text is deterministic from the master, so we can compute
+  // these up-front and keep the chunks rendering in parallel without
+  // waiting for the previous chunk's audio.
+  const carryOver: (string | null)[] = chunks.map((_, idx) => {
+    if (idx === 0) return null;
+    const prev = chunks[idx - 1];
+    const match = prev.match(/(?:[^.!?]+[.!?]+\s*){1,2}$/);
+    const tail = (match?.[0] ?? prev.slice(-240)).trim();
+    return tail.length > 240 ? tail.slice(-240).trim() : tail;
+  });
+
+  console.log(`[GeminiFlashTTS] Master: chunking ${opts.masterText.length} chars into ${chunks.length} chunk(s) of ~${targetChars} chars each (carry-over context on chunks ${carryOver.filter(Boolean).length})`);
 
   // Run with concurrency cap. Order matters — we'll concat in chunk
   // order — so we don't fire all in a Promise.all; instead, claim
@@ -360,6 +422,7 @@ export async function generateGeminiFlashTTSChunked(
         // Per-chunk sceneNumber for logging — distinct so retries are
         // attributable to a chunk, not the whole master.
         sceneNumber: -1 - idx,
+        carryOverContext: carryOver[idx],
       });
 
       if (!result.pcm) {
@@ -455,7 +518,7 @@ export async function generateGeminiFlashTTS(
   const apiKeys = opts.apiKeys.filter(Boolean);
   if (apiKeys.length === 0) return { url: null, error: "Gemini Flash TTS: no GOOGLE_TTS_API_KEY configured" };
 
-  const promptText = buildDirectivePrompt(text, opts.directives);
+  const promptText = buildDirectivePrompt(text, opts.directives, opts.carryOverContext);
 
   const body = {
     contents: [{ parts: [{ text: promptText }] }],

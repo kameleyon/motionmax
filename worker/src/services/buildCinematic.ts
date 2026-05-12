@@ -52,7 +52,14 @@ export function buildCinematicPrompt(p: CinematicParams): PromptResult {
   const targetWords = cfg.maxWords;
   const styleDesc = getStylePrompt(p.style, p.customStyle);
   const dims = getImageDimensions(p.format);
-  const maxTokens = p.length === "presentation" ? 24000 : p.length === "brief" ? 16000 : 12000;
+  // Topics with multiple named characters generate large _meta.characterBible
+  // blocks (each entry ~150 chars). A 15-scene `short` cinematic on a multi-
+  // character topic (e.g. team rosters, ensemble casts) pushes past 12k tokens
+  // and the LLM truncates mid-string — we then fail JSON parse and refund.
+  // Bumping `short` to 18k gives ~50% more headroom for these cases at zero
+  // marginal cost (the LLM only generates what it needs). `brief` and
+  // `presentation` also nudged up for the same reason at their scale.
+  const maxTokens = p.length === "presentation" ? 28000 : p.length === "brief" ? 20000 : 18000;
 
   const presenterGuidance = p.presenterFocus
     ? `\n=== PRESENTER GUIDANCE ===\n${p.presenterFocus}\n` : "";

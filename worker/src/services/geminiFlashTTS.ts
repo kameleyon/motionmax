@@ -151,13 +151,17 @@ function buildDirectivePrompt(
   // instructions than to a single buried rule. Every item we've seen
   // the model drift toward on heavy/occult topics is named.
   const doNot =
-    "NO whisper, NO ASMR, NO breathy intimate tone, NO suspenseful pacing, " +
-    "NO ominous build-up, NO mysterious hush, NO dramatic theatrical delivery, " +
-    "NO movie-trailer narration, NO documentary-narrator gravitas, " +
-    "NO performative sighs, NO pregnant pauses, NO whispered punchlines. " +
-    "Even if the transcript references heavy / dark / supernatural / occult / " +
-    "trauma topics, the DELIVERY stays light and conversational — don't match " +
-    "the topic's mood, match a normal coffee-shop conversation.";
+    "NO whisper at ANY point — not at the start, not in the middle, not at the end. " +
+    "NO trailing off, NO lowering the voice or volume at the end of sentences or phrases, " +
+    "NO murmur, NO mumble, NO under-breath delivery, NO soft conclusions, NO fade-outs. " +
+    "END every sentence at the SAME volume and energy it started with — flat consistent level. " +
+    "NO ASMR, NO breathy intimate tone, NO suspenseful pacing, NO ominous build-up, " +
+    "NO mysterious hush, NO dramatic theatrical delivery, NO movie-trailer narration, " +
+    "NO documentary-narrator gravitas, NO performative sighs, NO pregnant pauses, " +
+    "NO whispered punchlines, NO emotional swells, NO bold intonation spikes. " +
+    "Even if the transcript references heavy / dark / supernatural / occult / trauma topics, " +
+    "the DELIVERY stays light, even, and conversational — don't match the topic's mood, " +
+    "match a normal coffee-shop conversation at a STEADY level the whole way through.";
 
   // The `raw` slot lets advanced callers (script-builder character
   // briefs) inject extra constraints without losing the structural
@@ -389,7 +393,13 @@ export async function generateGeminiFlashTTSChunked(
     parallelism?: number;
   },
 ): Promise<{ url: string | null; durationSeconds?: number; provider?: string; error?: string }> {
-  const targetChars = opts.targetChunkChars ?? 2700;
+  // ~30s of audio per chunk at the 165 WPM pacing anchor. Smaller
+  // chunks (vs. the previous 2700-char / ~3-min slabs) let each
+  // independent generateContent call stay on the same prosody profile
+  // for its full duration — fewer mid-chunk drifts into theatrical
+  // delivery on heavy topics. The carry-over context block between
+  // chunks keeps prosody consistent across the joins.
+  const targetChars = opts.targetChunkChars ?? 500;
   const parallelism = opts.parallelism ?? 3;
   const chunks = chunkBySentences(opts.masterText, targetChars);
 

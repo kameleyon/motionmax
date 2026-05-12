@@ -368,8 +368,13 @@ function releaseLemonSlot(): void {
  * lossless concat because every chunk shares Lemonfox's fixed
  * 24kHz/mono/16-bit output format. Output is uploaded as audio/wav.
  */
-const LEMON_CHUNK_THRESHOLD = 3500;
-const LEMON_CHUNK_TARGET_CHARS = 3000;
+// ~30 seconds of audio per chunk at the 165 WPM pacing anchor used
+// across all our TTS paths. Smaller chunks keep each independent
+// generation locked to a steady prosody for its full duration —
+// short reads can't drift into dramatic delivery the way a 3-minute
+// slab can. The stitcher concatenates them losslessly into one master.
+const LEMON_CHUNK_THRESHOLD = 500;
+const LEMON_CHUNK_TARGET_CHARS = 500;
 const LEMON_CHUNK_PARALLELISM = 3;
 
 /** Single Lemonfox API call with retry/backoff. Used by both the
@@ -570,12 +575,138 @@ function parseFishRetryAfter(headerVal: string | null): number {
   return 0;
 }
 
+// Fish Audio chunking parity with Gemini / Lemonfox: ~30s slabs of
+// audio per call so prosody can't drift mid-take and each chunk
+// renders fast. Chunks come back as WAV (lossless) and are stitched
+// into one master via stitchWavBuffers — same path Lemonfox uses.
+const FISH_CHUNK_THRESHOLD = 500;
+const FISH_CHUNK_TARGET_CHARS = 500;
+const FISH_CHUNK_PARALLELISM = 3;
+
+/** Single Fish Audio API call with retry/backoff. Factored out so the
+ *  short-text MP3 path and the chunked WAV-stitch path share the
+ *  retry semantics. Returns raw bytes in the requested format. */
+async function fishOneShot(
+  text: string,
+  referenceId: string,
+  apiKey: string,
+  format: "mp3" | "wav",
+): Promise<{ bytes: Uint8Array | null; error?: string }> {
+  const MAX_ATTEMPTS = 5;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const res = await fetch("https://api.fish.audio/v1/tts", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", model: "s2-pro" },
+      body: JSON.stringify({
+        text,
+        reference_id: referenceId,
+        format,
+        sample_rate: 44100,
+        mp3_bitrate: 192,
+        normalize: true,
+        prosody: { speed: 1, normalize_loudness: true },
+        temperature: 0.7,
+        top_p: 0.7,
+        latency: "normal",
+      }),
+    });
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => "");
+      console.warn(`[FishAudio] Attempt ${attempt}/${MAX_ATTEMPTS} failed (${res.status}): ${errBody.substring(0, 200)}`);
+      if (res.status === 429 && attempt < MAX_ATTEMPTS) {
+        const retryAfter = parseFishRetryAfter(res.headers.get("retry-after"));
+        const base = retryAfter > 0 ? retryAfter * 1000 : 3000 * Math.pow(2, attempt - 1);
+        const jitter = base * 0.25 * (Math.random() * 2 - 1);
+        await sleep(Math.max(1000, base + jitter));
+        continue;
+      }
+      if (res.status >= 500 && attempt < MAX_ATTEMPTS) {
+        await sleep(2000 * attempt);
+        continue;
+      }
+      return { bytes: null, error: `Fish Audio ${res.status}: ${errBody.substring(0, 100)}` };
+    }
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.length < 100) return { bytes: null, error: "Empty audio" };
+    return { bytes };
+  }
+  return { bytes: null, error: "Fish Audio failed after 5 attempts" };
+}
+
 export async function generateFishAudioTTS(
   text: string, sceneNumber: number, apiKey: string, projectId: string, voiceId?: string,
   attribution: AudioProviderAttribution = { userId: null, generationId: null },
 ): Promise<{ url: string | null; durationSeconds?: number; provider?: string; error?: string }> {
   const referenceId = voiceId || FISH_AUDIO_FEMALE_VOICE;
 
+  // ─── Long-text path — chunked WAV rendering, mirror of Lemonfox ───
+  // Same 500-char (~30s) slabs, same stitch helper. Keeps cloned-voice
+  // master_audio renders from drifting prosody mid-take.
+  if (text.length > FISH_CHUNK_THRESHOLD) {
+    const startTime = Date.now();
+    const chunks = splitTextIntoChunks(text, FISH_CHUNK_TARGET_CHARS);
+    console.log(`[FishAudio] ${text.length} chars → ${chunks.length} chunk(s) (~${FISH_CHUNK_TARGET_CHARS} chars each) for voice ${referenceId.substring(0, 8)}…`);
+
+    const wavBuffers = new Array<Uint8Array | null>(chunks.length).fill(null);
+    let firstError: string | null = null;
+    let nextIdx = 0;
+
+    async function worker(): Promise<void> {
+      while (true) {
+        const idx = nextIdx++;
+        if (idx >= chunks.length) return;
+        if (firstError) return;
+        await acquireFishSlot();
+        try {
+          const { bytes, error } = await fishOneShot(chunks[idx], referenceId, apiKey, "wav");
+          if (!bytes) {
+            if (!firstError) firstError = `Chunk ${idx + 1}/${chunks.length} failed: ${error ?? "unknown"}`;
+            return;
+          }
+          wavBuffers[idx] = bytes;
+        } finally {
+          releaseFishSlot();
+        }
+      }
+    }
+
+    await Promise.all(
+      Array.from({ length: Math.min(FISH_CHUNK_PARALLELISM, chunks.length) }, () => worker()),
+    );
+
+    if (firstError) {
+      writeApiLog({
+        userId: attribution.userId,
+        generationId: attribution.generationId,
+        provider: "fish_audio", model: "s2-pro-chunked",
+        status: "error", totalDurationMs: Date.now() - startTime,
+        cost: 0, error: firstError,
+      }).catch((err) => { console.warn('[FishAudio] background log failed:', (err as Error).message); });
+      return { url: null, error: firstError };
+    }
+    if (wavBuffers.some((b) => b === null)) {
+      return { url: null, error: "One or more Fish Audio chunks returned no audio" };
+    }
+
+    const merged = stitchWavBuffers(wavBuffers as Uint8Array[]);
+    const url = await uploadAudio(merged, "audio/wav", projectId, sceneNumber);
+    const { pcm, sampleRate, numChannels, bitsPerSample } = extractPcmFromWav(merged);
+    const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+    const durationSeconds = Math.max(1, Math.round(pcm.length / byteRate));
+
+    writeApiLog({
+      userId: attribution.userId,
+      generationId: attribution.generationId,
+      provider: "fish_audio", model: "s2-pro-chunked",
+      status: "success", totalDurationMs: Date.now() - startTime,
+      cost: ttsCharsCostUsd("fish_audio_tts", text.length),
+      error: undefined,
+    }).catch((err) => { console.warn('[FishAudio] background log failed:', (err as Error).message); });
+
+    return { url, durationSeconds, provider: `Fish s2-pro (${chunks.length} chunks)` };
+  }
+
+  // ─── Short-text path — single MP3 call (unchanged) ───
   // Gate concurrency so we don't burst all scenes at once.
   await acquireFishSlot();
   const startTime = Date.now();

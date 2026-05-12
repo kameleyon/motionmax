@@ -500,7 +500,11 @@ export async function generateLemonfoxTTS(
       error: undefined,
     }).catch((err) => { console.warn('[Lemonfox] background log failed:', (err as Error).message); });
 
-    return { url, durationSeconds, provider: `Lemonfox (${voice}, ${chunks.length} chunks)` };
+    // Display-facing provider label — show only the voice name (Adam /
+    // River) without the "Lemonfox" prefix. The api_call_logs row above
+    // already records `lemonfox` in the provider column for finops, so
+    // we don't need to repeat it in the user-visible label.
+    return { url, durationSeconds, provider: `${voice.charAt(0).toUpperCase()}${voice.slice(1)}` };
   }
 
   // ─── Short-text path — single MP3 call (unchanged) ───
@@ -528,7 +532,7 @@ export async function generateLemonfoxTTS(
       cost: ttsCharsCostUsd("lemonfox_tts", sanitized.length),
       error: undefined,
     }).catch((err) => { console.warn('[Lemonfox] background log failed:', (err as Error).message); });
-    return { url, durationSeconds: Math.max(1, bytes.length / 16000), provider: `Lemonfox (${voice})` };
+    return { url, durationSeconds: Math.max(1, bytes.length / 16000), provider: `${voice.charAt(0).toUpperCase()}${voice.slice(1)}` };
   } finally {
     releaseLemonSlot();
   }
@@ -605,8 +609,8 @@ async function fishOneShot(
         mp3_bitrate: 192,
         normalize: true,
         prosody: { speed: 1, normalize_loudness: true },
-        temperature: 0.6,
-        top_p: 0.7,
+        temperature: 0.65,
+        top_p: 0.8,
         latency: "normal",
       }),
     });
@@ -731,8 +735,8 @@ export async function generateFishAudioTTS(
           mp3_bitrate: 192,
           normalize: true,
           prosody: { speed: 1, normalize_loudness: true },
-          temperature: 0.6,
-          top_p: 0.7,
+          temperature: 0.65,
+          top_p: 0.8,
           latency: "normal",
         }),
       });
@@ -798,44 +802,3 @@ export async function generateFishAudioTTS(
   }
 }
 
-// ── Replicate Chatterbox ───────────────────────────────────────────
-
-export async function generateChatterboxTTS(
-  text: string, sceneNumber: number, voiceGender: string, replicateApiKey: string, projectId: string,
-): Promise<{ url: string | null; durationSeconds?: number; provider?: string; error?: string }> {
-  const sanitized = sanitizeVoiceover(text);
-  if (!sanitized) return { url: null, error: "No text" };
-  const voice = voiceGender === "male" ? "Ethan" : "Marisol";
-  const chunks = splitTextIntoChunks(sanitized, 400);
-
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const wavsPromises = chunks.map(async (chunk, idx) => {
-        const createRes = await fetch("https://api.replicate.com/v1/models/resemble-ai/chatterbox-turbo/predictions", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${replicateApiKey}`, "Content-Type": "application/json", Prefer: "wait" },
-          body: JSON.stringify({ input: { text: chunk, voice, temperature: 0.8, top_p: 0.95, top_k: 2000, repetition_penalty: 1.8 } }),
-        });
-        if (!createRes.ok) throw new Error(`Chatterbox chunk ${idx} failed: ${createRes.status}`);
-        let pred = await createRes.json();
-        while (pred.status !== "succeeded" && pred.status !== "failed") {
-          await sleep(1000);
-          const poll = await fetch(`https://api.replicate.com/v1/predictions/${pred.id}`, { headers: { Authorization: `Bearer ${replicateApiKey}` } });
-          pred = await poll.json();
-        }
-        if (pred.status === "failed") throw new Error(`Chatterbox chunk ${idx} failed`);
-        const audioRes = await fetch(pred.output);
-        return new Uint8Array(await audioRes.arrayBuffer());
-      });
-      const wavBuffers = await Promise.all(wavsPromises);
-      const finalWav = chunks.length === 1 ? wavBuffers[0] : stitchWavBuffers(wavBuffers);
-      const parsed = extractPcmFromWav(finalWav);
-      const duration = Math.max(1, parsed.pcm.length / (parsed.sampleRate * parsed.numChannels * (parsed.bitsPerSample / 8)));
-      const url = await uploadAudio(finalWav, "audio/wav", projectId, sceneNumber);
-      return { url, durationSeconds: duration, provider: "Chatterbox" };
-    } catch (err) {
-      if (attempt < 3) await sleep(2000 * attempt);
-    }
-  }
-  return { url: null, error: "Chatterbox failed" };
-}

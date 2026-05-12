@@ -275,7 +275,7 @@ export async function generateGeminiFlashTTSPCM(
       // temperature 0.7 + topP 0.8 narrows the prosody sampling
       // distribution so the model picks more typical reads (steady,
       // documentary-ish) without going fully robotic.
-      temperature: 0.6,
+      temperature: 0.65,
       topP: 0.8,
       responseModalities: ["AUDIO"],
       speechConfig: {
@@ -545,7 +545,7 @@ export async function generateGeminiFlashTTS(
       // temperature 0.7 + topP 0.8 narrows the prosody sampling
       // distribution so the model picks more typical reads (steady,
       // documentary-ish) without going fully robotic.
-      temperature: 0.6,
+      temperature: 0.65,
       topP: 0.8,
       responseModalities: ["AUDIO"],
       speechConfig: {

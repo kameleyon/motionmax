@@ -16,15 +16,22 @@
  * `existingTopics`. We pass that into the system prompt as an
  * exclusion list so the model dedups across requests.
  *
- * Model choice: Gemini with googleSearch grounding is primary — we
- * want live web-grounded titles so dated angles (current events, news,
- * recent releases) reference real facts instead of model-trained guesses.
+ * Two-stage pipeline:
+ *   1. RESEARCH — Gemini with googleSearch grounding. Walks every
+ *      configured Google API key (`GOOGLE_TTS_API_KEY_3 → _2 → base`)
+ *      on 403, so one bad-project key doesn't sink the request.
+ *      Gemini ONLY gathers facts; it never writes titles. If every
+ *      Google key fails, we skip research and proceed empty-handed.
+ *   2. TITLE WRITING — Claude Sonnet 4.6 via OpenRouter, ALWAYS.
+ *      Receives the research brief (when available) as factual
+ *      grounding context, plus the user's prompt + sources. Even if
+ *      research came back empty, Claude still produces titles from
+ *      the prompt + sources alone — the pipeline never fails just
+ *      because Google is down.
+ *
  * Search grounding is a Gemini-only feature on the native Google API;
- * neither OpenRouter nor Hypereal expose it. When EVERY configured
- * Google key returns 403 (e.g. project access denied, search quota
- * exhausted), we fall back to OpenRouter Claude Sonnet 4.6 WITHOUT
- * search — it'll still write coherent titles from the prompt + sources,
- * just without fresh web facts.
+ * neither OpenRouter nor Hypereal expose it, which is why the research
+ * stage is locked to Gemini specifically.
  */
 
 import { writeSystemLog } from "../lib/logger.js";
@@ -166,15 +173,80 @@ export async function handleGenerateTopics(
     ? ""
     : `\n\nLANGUAGE: Write every title in ${langName}. Do NOT use English. Titles must be natural, idiomatic ${langName} — not translated word-for-word from English.`;
 
-  const systemPrompt = `You are a content strategist who generates compelling clickbait topic titles.
-Stay strictly on the requested subject and reject off-topic themes.${languageDirective}`;
+  await writeSystemLog({
+    jobId, userId,
+    category: "system_info",
+    eventType: "generate_topics_started",
+    message: `Generating ${count} topic ideas for "${seedPrompt.slice(0, 80)}…"`,
+    details: { count, existingCount: existing.length, styleId: payload.styleId ?? null, language: langCode },
+  });
 
-  const userPrompt = `Today is ${todayHuman}.
+  // ── Step 1: Research (Gemini + googleSearch) — best-effort ─────────
+  //
+  // Gemini's ONLY job here is to gather current, factual context about
+  // the topic via live web search — it does NOT write the titles. We
+  // walk every configured GOOGLE_TTS_API_KEY_* in turn so one key
+  // hitting a project-level 403 doesn't sink the request. If every
+  // key fails (or research times out), we proceed without research
+  // and let Claude write from the prompt + sources alone.
+  const researchSystem = `You are a focused research assistant. Use Google Search to gather the most current, factual information about the topic the user describes. Return a tight research brief — facts, dates, names, current events, recent developments. NO titles, NO pitches, NO bullet-point ideas — just the raw factual context a writer would need to ground their work in reality.`;
+  const researchUser = `Today is ${todayHuman}.
 
-Use Google Search to research everything related to the topic requested below — and ONLY that topic. Pull the most current, factually accurate information. Use any source URLs or material the user provides as primary references. Do not drift into adjacent or unrelated subjects.
+Research the following topic thoroughly using live web search. Pull the most current information. Use any user-provided sources as primary references.
 
 Topic:
 ${seedPrompt}${sourcesBlock}
+
+Return 2–4 short paragraphs of factual notes covering:
+- What's happening now / latest state of the topic
+- Key names, dates, numbers, recent events
+- Notable angles or sub-themes worth knowing
+- Any current-events context (rulings, releases, results, controversies) that a content creator should know
+
+Do NOT write titles. Do NOT pitch video ideas. Just the factual brief.`;
+
+  let researchBrief = "";
+  try {
+    researchBrief = (await callGeminiWithKeyRotation({
+      system: researchSystem,
+      user: researchUser,
+      enableSearch: true,
+      temperature: 0.3, // factual mode — low variation
+      maxTokens: 6_000,
+      timeoutMs: 180_000,
+    })).trim();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(
+      `[GenerateTopics] Gemini research failed (${msg.slice(0, 200)}) — Claude will write titles from prompt + sources only`,
+    );
+    await writeSystemLog({
+      jobId, userId,
+      category: "system_warning",
+      eventType: "generate_topics_research_skipped",
+      message: "Gemini research unavailable — titles generated without live web grounding",
+      details: { error: msg.slice(0, 300) },
+    });
+  }
+
+  // ── Step 2: Title writing (OpenRouter Claude Sonnet 4.6) ───────────
+  //
+  // Claude is ALWAYS the title writer. The research brief from step 1
+  // is injected as grounding context (when available) so the titles
+  // reference real current facts rather than training-data guesses.
+  // When research is empty, Claude falls back to writing from the
+  // prompt + user-provided sources.
+  const researchBlock = researchBrief.length > 0
+    ? `\n\nLATEST RESEARCH (live web context — use as factual grounding for titles):\n${researchBrief}\n`
+    : "";
+
+  const titleSystem = `You are a content strategist who generates compelling clickbait topic titles.
+Stay strictly on the requested subject and reject off-topic themes.${languageDirective}`;
+
+  const titleUser = `Today is ${todayHuman}.
+
+Topic:
+${seedPrompt}${sourcesBlock}${researchBlock}
 ${exclusionBlock}
 
 Generate exactly ${count} unique, SHORT, clickbait-worthy titles based on the inputs above.
@@ -186,64 +258,16 @@ Requirements:
 - Each title should cover a DIFFERENT angle or sub-topic
 - Titles MUST be directly relevant to the requested subject
 - Vary the format: provocative statements, questions, revelations, challenges
+${researchBrief.length > 0 ? "- Ground every title in the LATEST RESEARCH above — reference real names, dates, and events, not generic angles" : ""}
 ${langCode === "en" ? "" : `- Every title MUST be written in ${langName} (idiomatic, not translated)`}
 
 Return ONLY valid JSON in this exact shape (no prose, no code fences):
 {"topics": ["title 1", "title 2", "..."]}`;
 
-  await writeSystemLog({
-    jobId, userId,
-    category: "system_info",
-    eventType: "generate_topics_started",
-    message: `Generating ${count} topic ideas for "${seedPrompt.slice(0, 80)}…"`,
-    details: { count, existingCount: existing.length, styleId: payload.styleId ?? null, language: langCode },
-  });
-
-  // Primary: native Google Gemini API with googleSearch tool, walking
-  // every configured GOOGLE_TTS_API_KEY_* in turn. Different keys can
-  // map to different Google Cloud projects with different enablement
-  // state, so one key hitting 403 ("project denied access") doesn't
-  // mean the whole chain is dead. JSON mode is incompatible with the
-  // search tool on Google's API, so the model returns prose-with-JSON
-  // that extractJson() unwraps.
-  //
-  // Fallback: when EVERY Google key returns 403, route the same prompts
-  // through OpenRouter Claude Sonnet 4.6 — loses live web grounding
-  // (Claude can't search), but with forceJson + sources in the prompt
-  // the model still produces usable titles. Logged so we can spot when
-  // the Google chain is broken vs. transiently flaky.
-  let raw: string;
-  try {
-    raw = await callGeminiWithKeyRotation({
-      system: systemPrompt,
-      user: userPrompt,
-      enableSearch: true,
-      temperature: 0.85,
-      // Search-grounded responses include the model's reasoning over
-      // the search hits + citations + the final JSON. 4000 tokens was
-      // getting truncated mid-array; 12k leaves headroom.
-      maxTokens: 12_000,
-      // Search-grounded calls fan out to live web results before
-      // generating, routinely running 60–90s+ on a slow search day.
-      timeoutMs: 180_000,
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn(
-      `[GenerateTopics] Gemini-with-rotation failed (${msg.slice(0, 200)}) — falling back to OpenRouter Claude without search grounding`,
-    );
-    await writeSystemLog({
-      jobId, userId,
-      category: "system_warning",
-      eventType: "generate_topics_gemini_fallback",
-      message: "All Google API keys failed for topic generation — using OpenRouter Claude fallback (no live web search)",
-      details: { error: msg.slice(0, 300) },
-    });
-    raw = await callOpenRouterLLM(
-      { system: systemPrompt, user: userPrompt },
-      { maxTokens: 12_000, temperature: 0.85, forceJson: true },
-    );
-  }
+  const raw = await callOpenRouterLLM(
+    { system: titleSystem, user: titleUser },
+    { maxTokens: 12_000, temperature: 0.85, forceJson: true },
+  );
 
   let parsed: { topics?: unknown };
   try {

@@ -266,6 +266,13 @@ export async function generateGeminiFlashTTSPCM(
   const body = {
     contents: [{ parts: [{ text: promptText }] }],
     generationConfig: {
+      // Tone clamps — keep prosody from drifting into dramatic /
+      // theatrical territory even when the transcript leans heavy.
+      // temperature 0.7 + topP 0.8 narrows the prosody sampling
+      // distribution so the model picks more typical reads (steady,
+      // documentary-ish) without going fully robotic.
+      temperature: 0.7,
+      topP: 0.8,
       responseModalities: ["AUDIO"],
       speechConfig: {
         voiceConfig: {
@@ -523,6 +530,13 @@ export async function generateGeminiFlashTTS(
   const body = {
     contents: [{ parts: [{ text: promptText }] }],
     generationConfig: {
+      // Tone clamps — keep prosody from drifting into dramatic /
+      // theatrical territory even when the transcript leans heavy.
+      // temperature 0.7 + topP 0.8 narrows the prosody sampling
+      // distribution so the model picks more typical reads (steady,
+      // documentary-ish) without going fully robotic.
+      temperature: 0.7,
+      topP: 0.8,
       responseModalities: ["AUDIO"],
       speechConfig: {
         voiceConfig: {

@@ -252,7 +252,7 @@ async function _runMasterAudio(
       apiKeys: googleApiKeys,
       directives: {
         style: inferStyleInstruction(masterText),
-        pacing: "natural human conversational tone pace, varied — push forward in hook/action beats, soften into reflective moments",
+        pacing: "natural human conversational tone pace, normal like a documentary, clear, articulate, measured pace throughout, no variation, no whisper, no fast pace, no screaming, no overly dramatic, no bold etonation, no overly emotional tone.",
       },
       userId: userId ?? null,
       generationId,

@@ -141,7 +141,7 @@ function buildDirectivePrompt(
   // sounding like two different speakers stitched together.
   const pacing =
     directives?.pacing?.trim() ||
-    "Maintain exactly the same pace, pitch, and energy as a steady news-anchor read at 165 words per minute. Natural human conversation rhythm — clear, articulate, no rushing, no theatrical pauses. Slight phrase-level variation is fine, but the baseline tempo and pitch range stay locked at the same target for the entire read.";
+    "natural human conversational tone pace, normal like a documentary, clear, articulate, measured pace throughout, no variation, no whisper, no fast pace, no screaming, no overly dramatic, no bold etonation, no overly emotional tone.";
   const accent =
     directives?.accent?.trim() ||
     "Neutral standard accent appropriate to the language of the transcript.";

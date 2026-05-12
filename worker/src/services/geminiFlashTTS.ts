@@ -427,20 +427,69 @@ export async function generateGeminiFlashTTSChunked(
   let nextIdx = 0;
   let firstError: string | null = null;
 
+  // Runaway-output guard: Gemini TTS occasionally hallucinates into
+  // extended silence or looping content, producing 10-15× the audio a
+  // chunk's input text warrants. Without a sanity check the merged
+  // master ends up 20+ minutes of dead air mixed into the real read.
+  // We compute expected duration from char count at the 165 WPM
+  // anchor and reject anything >3× that.
+  const BYTES_PER_SECOND = GEMINI_PCM_SAMPLE_RATE * 2; // 24kHz × 16-bit mono = 48,000
+  const WORDS_PER_MINUTE = 165;
+  const AVG_CHARS_PER_WORD = 5;
+  const RUNAWAY_MULTIPLIER = 3; // chunk audio >3× expected → drop & retry
+  function expectedSecondsForChars(charCount: number): number {
+    return (charCount / AVG_CHARS_PER_WORD / WORDS_PER_MINUTE) * 60;
+  }
+
+  async function generateChunkWithRunawayGuard(
+    chunkIdx: number,
+    chunkText: string,
+    carryOverText: string | null,
+  ): Promise<{ pcm: Uint8Array | null; error?: string }> {
+    const expectedSec = expectedSecondsForChars(chunkText.length);
+    const maxAcceptableBytes = Math.ceil(expectedSec * RUNAWAY_MULTIPLIER * BYTES_PER_SECOND);
+    const MAX_RUNAWAY_RETRIES = 2;
+
+    for (let attempt = 0; attempt <= MAX_RUNAWAY_RETRIES; attempt++) {
+      const result = await generateGeminiFlashTTSPCM({
+        ...opts,
+        text: chunkText,
+        sceneNumber: -1 - chunkIdx,
+        carryOverContext: carryOverText,
+      });
+      if (!result.pcm) return result;
+
+      // Sanity check on output length. < ~80% expected isn't worth
+      // retrying (model may have skipped padding) — only the runaway
+      // upper bound is the real failure mode here.
+      if (result.pcm.length <= maxAcceptableBytes) {
+        if (attempt > 0) {
+          console.log(`[GeminiFlashTTS] Chunk ${chunkIdx + 1} recovered on attempt ${attempt + 1} (${result.pcm.length} bytes vs cap ${maxAcceptableBytes})`);
+        }
+        return result;
+      }
+
+      const actualSec = result.pcm.length / BYTES_PER_SECOND;
+      console.warn(
+        `[GeminiFlashTTS] Chunk ${chunkIdx + 1} runaway output: ${result.pcm.length} bytes ` +
+        `(~${actualSec.toFixed(0)}s) for ${chunkText.length}-char input ` +
+        `(expected ~${expectedSec.toFixed(0)}s; cap ~${(expectedSec * RUNAWAY_MULTIPLIER).toFixed(0)}s). ` +
+        `${attempt < MAX_RUNAWAY_RETRIES ? `Retrying (${attempt + 1}/${MAX_RUNAWAY_RETRIES})` : "Out of retries"}.`,
+      );
+    }
+    return {
+      pcm: null,
+      error: `Chunk ${chunkIdx + 1} kept producing runaway output (>${RUNAWAY_MULTIPLIER}× expected duration) across ${MAX_RUNAWAY_RETRIES + 1} attempts`,
+    };
+  }
+
   async function worker(): Promise<void> {
     while (true) {
       const idx = nextIdx++;
       if (idx >= chunks.length) return;
       if (firstError) return; // short-circuit if a sibling already failed
 
-      const result = await generateGeminiFlashTTSPCM({
-        ...opts,
-        text: chunks[idx],
-        // Per-chunk sceneNumber for logging — distinct so retries are
-        // attributable to a chunk, not the whole master.
-        sceneNumber: -1 - idx,
-        carryOverContext: carryOver[idx],
-      });
+      const result = await generateChunkWithRunawayGuard(idx, chunks[idx], carryOver[idx]);
 
       if (!result.pcm) {
         if (!firstError) firstError = `Chunk ${idx + 1}/${chunks.length} failed: ${result.error}`;

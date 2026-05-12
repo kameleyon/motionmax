@@ -360,60 +360,29 @@ export async function callHyperealLLM(
 // ── callLLM (Hypereal primary, OpenRouter fallback) ──────────────────
 
 /**
- * Call LLM with automatic fallback: Hypereal/Gemini first, OpenRouter/Claude if that fails.
+ * Call LLM through OpenRouter Claude Sonnet 4.6.
+ *
+ * Historical note: this function used to fall back to Hypereal's chat
+ * surface (model `gemini-3.1-fast`) when OpenRouter failed. As of
+ * 2026-05-12 Hypereal deprecated that model — calls now auto-route to
+ * `claude-sonnet-4-6` which only accepts Anthropic-format requests on
+ * `/v1/messages`, not the OpenAI-format `/v1/chat` endpoint our code
+ * targets. The fallback's failure error ("Hypereal API error 400:
+ * Model claude-sonnet-4-6 uses Anthropic format") was masking the
+ * real OpenRouter error and confusing debugging.
+ *
+ * Per product direction (script generation should always be Claude
+ * via OpenRouter), the Hypereal fallback is removed entirely. If
+ * OpenRouter fails, the real OpenRouter error propagates so the
+ * caller (and Sentry) sees the actual cause. callHyperealLLM is
+ * preserved for any direct caller that still needs it, but it isn't
+ * wired into the canonical script-gen path anymore.
  */
 export async function callLLMWithFallback(
   prompt: { system: string; user: string },
   options: { maxTokens: number; forceJson?: boolean; temperature?: number },
 ): Promise<string> {
-  // Try OpenRouter/Claude first (reliable JSON, correct scene counts)
-  try {
-    return await callOpenRouterLLM(prompt, options);
-  } catch (err) {
-    console.warn(`[LLM] OpenRouter failed: ${(err as Error).message} — falling back to Hypereal/Gemini`);
-  }
-
-  // Fallback to Hypereal/Gemini
-  if (process.env.HYPEREAL_API_KEY) {
-    let text = await callHyperealLLM(prompt, options);
-
-    // Strip <think> tags (Gemini reasoning output)
-    if (text.includes("<think>")) {
-      text = text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
-    }
-
-    // Repair common Hypereal JSON malformations
-    if (options.forceJson) {
-      text = text.replace(/^\s*\{\{/, "{");
-      text = text.replace(/\}\}\s*$/, "}");
-
-      text = text.split("\n").filter(line => {
-        const t = line.trim();
-        if (!t) return true;
-        if (/^[a-zA-Z_][a-zA-Z0-9_ ]*$/.test(t) && !/^(true|false|null)$/.test(t)) return false;
-        if (t.startsWith("```")) return false;
-        return true;
-      }).join("\n");
-
-      const braceIdx = text.indexOf("{");
-      const lastBrace = text.lastIndexOf("}");
-      if (braceIdx === -1 || lastBrace <= braceIdx) {
-        throw new Error("Hypereal fallback returned non-JSON");
-      }
-
-      const extracted = text.slice(braceIdx, lastBrace + 1).replace(/,\s*([\]}])/g, "$1");
-      try {
-        JSON.parse(extracted);
-      } catch {
-        throw new Error("Hypereal fallback returned malformed JSON");
-      }
-      text = extracted;
-    }
-
-    return text;
-  }
-
-  throw new Error("Both OpenRouter and Hypereal failed");
+  return callOpenRouterLLM(prompt, options);
 }
 
 // ── Backward-compatible wrapper for legacy generateVideo handler ───

@@ -16,14 +16,20 @@
  * `existingTopics`. We pass that into the system prompt as an
  * exclusion list so the model dedups across requests.
  *
- * Model choice: Claude Sonnet 4.6 via OpenRouter. More accurate on
- * dated/factual angles than Gemini Flash (which fabricated wrong
- * astronomy dates). Slightly slower + pricier but the 30s polling
- * window still has plenty of headroom.
+ * Model choice: Gemini with googleSearch grounding is primary — we
+ * want live web-grounded titles so dated angles (current events, news,
+ * recent releases) reference real facts instead of model-trained guesses.
+ * Search grounding is a Gemini-only feature on the native Google API;
+ * neither OpenRouter nor Hypereal expose it. When EVERY configured
+ * Google key returns 403 (e.g. project access denied, search quota
+ * exhausted), we fall back to OpenRouter Claude Sonnet 4.6 WITHOUT
+ * search — it'll still write coherent titles from the prompt + sources,
+ * just without fresh web facts.
  */
 
 import { writeSystemLog } from "../lib/logger.js";
-import { callGemini } from "../services/geminiNative.js";
+import { callGeminiWithKeyRotation } from "../services/geminiNative.js";
+import { callOpenRouterLLM } from "../services/openrouter.js";
 import { processContentAttachments } from "../services/processAttachments.js";
 
 interface GenerateTopicsPayload {
@@ -193,28 +199,51 @@ Return ONLY valid JSON in this exact shape (no prose, no code fences):
     details: { count, existingCount: existing.length, styleId: payload.styleId ?? null, language: langCode },
   });
 
-  // Native Google Gemini API with googleSearch tool — gives us live
-  // web-grounded responses, the only way the model can produce real
-  // current-year astrology / news / event dates instead of fabricating
-  // them from training data. JSON mode is incompatible with the
+  // Primary: native Google Gemini API with googleSearch tool, walking
+  // every configured GOOGLE_TTS_API_KEY_* in turn. Different keys can
+  // map to different Google Cloud projects with different enablement
+  // state, so one key hitting 403 ("project denied access") doesn't
+  // mean the whole chain is dead. JSON mode is incompatible with the
   // search tool on Google's API, so the model returns prose-with-JSON
   // that extractJson() unwraps.
-  const raw = await callGemini({
-    system: systemPrompt,
-    user: userPrompt,
-    enableSearch: true,
-    temperature: 0.85,
-    // Search-grounded responses include the model's reasoning over the
-    // search hits + citations + the final JSON. 4000 tokens was getting
-    // truncated mid-array ("topics": ...<cutoff>). Bumped well above
-    // worst-case to leave the JSON room to close cleanly.
-    maxTokens: 12_000,
-    // Search-grounded calls fan out to live web results before
-    // generating, routinely running 60–90s+ on a slow search day.
-    // 120s left almost no headroom and was tripping our AbortController
-    // on legitimate-but-slow responses; 180s gives ~2x median latency.
-    timeoutMs: 180_000,
-  });
+  //
+  // Fallback: when EVERY Google key returns 403, route the same prompts
+  // through OpenRouter Claude Sonnet 4.6 — loses live web grounding
+  // (Claude can't search), but with forceJson + sources in the prompt
+  // the model still produces usable titles. Logged so we can spot when
+  // the Google chain is broken vs. transiently flaky.
+  let raw: string;
+  try {
+    raw = await callGeminiWithKeyRotation({
+      system: systemPrompt,
+      user: userPrompt,
+      enableSearch: true,
+      temperature: 0.85,
+      // Search-grounded responses include the model's reasoning over
+      // the search hits + citations + the final JSON. 4000 tokens was
+      // getting truncated mid-array; 12k leaves headroom.
+      maxTokens: 12_000,
+      // Search-grounded calls fan out to live web results before
+      // generating, routinely running 60–90s+ on a slow search day.
+      timeoutMs: 180_000,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(
+      `[GenerateTopics] Gemini-with-rotation failed (${msg.slice(0, 200)}) — falling back to OpenRouter Claude without search grounding`,
+    );
+    await writeSystemLog({
+      jobId, userId,
+      category: "system_warning",
+      eventType: "generate_topics_gemini_fallback",
+      message: "All Google API keys failed for topic generation — using OpenRouter Claude fallback (no live web search)",
+      details: { error: msg.slice(0, 300) },
+    });
+    raw = await callOpenRouterLLM(
+      { system: systemPrompt, user: userPrompt },
+      { maxTokens: 12_000, temperature: 0.85, forceJson: true },
+    );
+  }
 
   let parsed: { topics?: unknown };
   try {

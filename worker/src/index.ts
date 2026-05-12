@@ -419,19 +419,34 @@ async function processJob(job: Job, signal?: AbortSignal) {
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
 
+    // Idempotence-skip detection — handleAutopostRun and similar
+    // defensive handlers throw with a recognizable prefix when they
+    // refuse to re-run a terminal pipeline (e.g. autopost_run already
+    // failed/cancelled/completed). That's the designed behavior, NOT
+    // an error worth a `system_error` row + Sentry-grade attention.
+    // Demote the log severity so the dashboard isn't full of
+    // "every fucking time" noise on duplicate orchestrator claims.
+    const isIdempotenceSkip =
+      errorMsg.includes("already in terminal status=") ||
+      errorMsg.includes("already finished (status=") ||
+      errorMsg.includes("refusing to re-run") ||
+      errorMsg.includes("refusing duplicate run");
+
     // Log the failure — wrapped in try/catch to guarantee we reach the status update
     try {
       await writeSystemLog({
         jobId: job.id,
         projectId: job.project_id ?? undefined,
         userId: job.user_id,
-        category: "system_error",
-        eventType: "job_failed",
-        message: `Worker failed processing job ${job.id}: ${errorMsg}`,
+        category: isIdempotenceSkip ? "system_info" : "system_error",
+        eventType: isIdempotenceSkip ? "job_skipped_duplicate" : "job_failed",
+        message: isIdempotenceSkip
+          ? `Worker skipped duplicate job ${job.id}: ${errorMsg}`
+          : `Worker failed processing job ${job.id}: ${errorMsg}`,
         details: { stack: error instanceof Error ? error.stack : null }
       });
     } catch (logErr) {
-      console.error(`[Worker] Failed to write failure log for ${job.id}:`, logErr);
+      console.error(`[Worker] Failed to write log for ${job.id}:`, logErr);
     }
 
     // Refund credits for failed generation

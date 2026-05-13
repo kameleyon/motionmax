@@ -147,13 +147,17 @@ async function rehostToSupabase(
   const fileName = `lipsync_${generationId}_${Date.now()}_${uuidv4().slice(0, 8)}.mp4`;
   const filePath = `${generationId}/${fileName}`;
 
+  // Bucket is "videos" (plural) — matches worker/src/handlers/export/
+  // storageHelpers.ts BUCKET_NAME so we re-host alongside the original
+  // exports. Using a different bucket would break the existing video
+  // delete cron + retention policies that scan "videos" only.
   const { error: upErr } = await supabase.storage
-    .from("video")
+    .from("videos")
     .upload(filePath, buf, { contentType: "video/mp4", upsert: true });
   if (upErr) throw new Error(`Lipsync upload failed: ${upErr.message}`);
 
   const { data: signed, error: signErr } = await supabase.storage
-    .from("video")
+    .from("videos")
     .createSignedUrl(filePath, 60 * 60 * 24 * 365); // 1 year
   if (signErr || !signed?.signedUrl) {
     throw new Error(`Lipsync signed URL failed: ${signErr?.message ?? "unknown"}`);

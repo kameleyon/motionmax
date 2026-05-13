@@ -53,9 +53,10 @@ function jsonResponse(corsHeaders: Record<string, string>, body: unknown, status
 }
 
 serve(async (req) => {
-  const corsHeaders = getCorsHeaders(req);
-  const pre = handleCorsPreflightRequest(req);
-  if (pre) return pre;
+  const corsHeaders = getCorsHeaders(req.headers.get("origin"));
+  if (req.method === "OPTIONS") {
+    return handleCorsPreflightRequest(req.headers.get("origin"));
+  }
 
   if (req.method !== "POST") {
     return jsonResponse(corsHeaders, { error: "Method not allowed" }, 405);

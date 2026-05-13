@@ -146,8 +146,24 @@ export function useLipsync(generationId: string | null | undefined) {
       const { data, error } = await supabase.functions.invoke("lipsync-enqueue", {
         body: { generationId, model },
       });
+      // supabase-js swallows the response body on non-2xx and surfaces a
+      // generic "Edge Function returned a non-2xx status code". To get the
+      // actual JSON `error` string the function returned (e.g.
+      // "Generation has no master audio"), pull it from the wrapped
+      // Response on FunctionsHttpError.
       if (error || !data?.success) {
+        let bodyError: string | null = null;
+        const ctx = (error as { context?: Response } | null)?.context;
+        if (ctx && typeof ctx.json === "function") {
+          try {
+            const parsed = (await ctx.json()) as { error?: string } | null;
+            bodyError = parsed?.error ?? null;
+          } catch {
+            // Body wasn't JSON — fall through to generic message.
+          }
+        }
         const message =
+          bodyError ??
           (data as { error?: string } | null)?.error ??
           error?.message ??
           "Failed to start lipsync";

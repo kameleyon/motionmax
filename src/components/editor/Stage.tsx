@@ -147,6 +147,24 @@ function Stage({
   const [, tick] = useState(0);
   const stageRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  // When the user has finished a lipsync run, the Stage's main player
+  // swaps to show the synced final video instead of the scene-by-scene
+  // preview. A small toggle lets them flip back to scene editing.
+  // Default-on so the user immediately sees the result of their click.
+  // Cast: lipsync_video_url + lipsync_status are new columns; Supabase
+  // generated types haven't been re-run yet so they're not typed here.
+  const lipsyncRow = (state.generation as unknown as {
+    lipsync_video_url?: string | null;
+    lipsync_status?: string | null;
+  } | null) ?? null;
+  const hasLipsync =
+    lipsyncRow?.lipsync_status === 'success' && !!lipsyncRow?.lipsync_video_url;
+  const [showLipsyncPreview, setShowLipsyncPreview] = useState<boolean>(hasLipsync);
+  // Auto-flip ON the moment a fresh lipsync lands (Realtime push updates
+  // state.generation → hasLipsync becomes true mid-session).
+  useEffect(() => {
+    if (hasLipsync) setShowLipsyncPreview(true);
+  }, [hasLipsync]);
   // Caption preview — derived from narration + audio.currentTime.
   // Chunks the voiceover into N word-windows and shows the one that
   // corresponds to the current audio time. This is CLIENT-SIDE only
@@ -658,6 +676,55 @@ function Stage({
           if (pipelineDone && state.phase === 'ready' && onAdvanceScene) onAdvanceScene();
         }}
       >
+        {/* Lipsync final preview — when the user has run lipsync and
+            the synced full video is ready, the main Stage swaps to play
+            that single continuous file (it's the FINAL output: every
+            scene concatenated + lips synced to the master audio).
+            Scene-by-scene editing is still reachable via the toggle in
+            the corner. */}
+        {hasLipsync && showLipsyncPreview && lipsyncRow?.lipsync_video_url ? (
+          <>
+            <video
+              key={lipsyncRow.lipsync_video_url}
+              src={lipsyncRow.lipsync_video_url}
+              controls
+              playsInline
+              preload="metadata"
+              className={
+                'w-full h-full bg-black ' +
+                (isFullscreen ? 'object-contain' : 'object-cover')
+              }
+            />
+            {/* Toggle pill: switch back to scene editing. Positioned
+                top-right to stay out of the way of the native video
+                controls. */}
+            <button
+              type="button"
+              onClick={() => setShowLipsyncPreview(false)}
+              className="absolute top-3 right-3 px-3 py-1.5 rounded-full bg-[#10151A]/90 border border-[#14C8CC]/40 backdrop-blur-sm font-mono text-[10.5px] tracking-wider uppercase text-[#14C8CC] hover:bg-[#14C8CC]/10"
+              title="Switch back to scene-by-scene editing preview"
+            >
+              ← Edit scenes
+            </button>
+            <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-[#10151A]/90 border border-[#E4C875]/40 backdrop-blur-sm font-mono text-[10px] tracking-wider uppercase text-[#E4C875]">
+              ✨ Lipsynced final
+            </div>
+          </>
+        ) : (
+          <>
+            {/* When lipsync exists but we're showing the scene editor,
+                surface a small pill that lets the user return to the
+                final preview. */}
+            {hasLipsync && (
+              <button
+                type="button"
+                onClick={() => setShowLipsyncPreview(true)}
+                className="absolute top-3 right-3 z-10 px-3 py-1.5 rounded-full bg-[#10151A]/90 border border-[#E4C875]/50 backdrop-blur-sm font-mono text-[10.5px] tracking-wider uppercase text-[#E4C875] hover:bg-[#E4C875]/10"
+                title="Switch to the synced final video"
+              >
+                ✨ Show lipsynced final
+              </button>
+            )}
         {/* Preview: video if ready, else latest image. Video is MUTED
             and has no native controls — we drive playback from the
             Timeline transport so video + narration stay in lockstep.
@@ -722,6 +789,8 @@ function Stage({
             <audio ref={audioRef} preload="auto" />
           </>
         ) : null}
+          </>
+        )}
 
         {/* Caption overlay — client-side live preview of the export's
             burn-in. Positioned at 1/4 from the bottom (≈y=75%) to

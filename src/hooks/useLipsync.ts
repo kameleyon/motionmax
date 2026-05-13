@@ -63,21 +63,41 @@ export function useLipsync(generationId: string | null | undefined) {
   }, []);
 
   // ── Read the latest row + apply to state ──
+  // NB: `select("lipsync_*")` is cast via `as unknown` because the
+  // Supabase generated types only learn about the lipsync_* columns
+  // after `supabase gen types` is re-run post-migration. Running
+  // tsc against the current generated types without the cast trips
+  // SelectQueryError on every field. The runtime shape matches the
+  // migration in 20260512100000_lipsync_finalize.sql.
+  type LipsyncRow = {
+    lipsync_status: LipsyncStatus | null;
+    lipsync_video_url: string | null;
+    lipsync_credits_charged: number | null;
+    lipsync_model: "lipsync-2" | "lipsync-2-pro" | null;
+    lipsync_error: string | null;
+  };
+
   const refresh = useCallback(async () => {
     if (!generationId) return;
-    const { data, error } = await supabase
-      .from("generations")
+    const res = await (supabase.from("generations") as unknown as {
+      select: (cols: string) => {
+        eq: (col: string, val: string) => {
+          maybeSingle: () => Promise<{ data: LipsyncRow | null; error: unknown }>;
+        };
+      };
+    })
       .select("lipsync_status, lipsync_video_url, lipsync_credits_charged, lipsync_model, lipsync_error")
       .eq("id", generationId)
       .maybeSingle();
-    if (error || !data) return;
-    const status = (data.lipsync_status as LipsyncStatus | null) ?? "idle";
+    if (res.error || !res.data) return;
+    const data = res.data;
+    const status: LipsyncStatus = data.lipsync_status ?? "idle";
     setState({
       status,
-      syncedUrl: (data.lipsync_video_url as string | null) ?? null,
-      creditsCharged: (data.lipsync_credits_charged as number | null) ?? null,
-      model: (data.lipsync_model as "lipsync-2" | "lipsync-2-pro" | null) ?? null,
-      error: (data.lipsync_error as string | null) ?? null,
+      syncedUrl: data.lipsync_video_url ?? null,
+      creditsCharged: data.lipsync_credits_charged ?? null,
+      model: data.lipsync_model ?? null,
+      error: data.lipsync_error ?? null,
     });
     if (status === "success" || status === "failed") {
       cleanup();

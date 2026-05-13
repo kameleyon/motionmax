@@ -40,11 +40,15 @@ interface EnqueueResponse {
   model: LipsyncModel;
 }
 
-// sync.so prices per output-second: $0.06 (lipsync-2) or $0.15 (lipsync-2-pro).
-// With 1 credit ≈ $0.01 and ~30% margin → 2 cr/s standard, 5 cr/s pro.
+// Wav2Lip on Replicate costs ~$0.000225/predict-sec, typically ~$0.02
+// for a 3-min input. We charge per OUTPUT-second (predictable for the
+// user). At 0.3 cr/s, a 169s run = 51 credits (~$1.20). Comfortable
+// margin against the ~$0.02 cost. Both model literals map to the same
+// underlying wav2lip prediction — kept as a union for compat with
+// the old sync.so service signature; pricing is identical for both.
 const CREDITS_PER_SECOND: Record<LipsyncModel, number> = {
-  "lipsync-2": 2,
-  "lipsync-2-pro": 5,
+  "lipsync-2": 0.3,
+  "lipsync-2-pro": 0.3,
 };
 
 function jsonResponse(corsHeaders: Record<string, string>, body: unknown, status = 200) {

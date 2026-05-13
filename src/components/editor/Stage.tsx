@@ -3,6 +3,7 @@ import { Maximize2, Minimize2, X } from 'lucide-react';
 import type { EditorState, EditorScene } from '@/hooks/useEditorState';
 import { useActiveJobs } from './useActiveJobs';
 import { useSceneRegen } from './useSceneRegen';
+import { useLipsync } from '@/hooks/useLipsync';
 
 /** The center stage. Three render modes driven by phase:
  *    rendering — progress ring + rotating status message, on top of
@@ -147,21 +148,14 @@ function Stage({
   const [, tick] = useState(0);
   const stageRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  // When the user has finished a lipsync run, the Stage's main player
-  // swaps to show the synced final video instead of the scene-by-scene
-  // preview. A small toggle lets them flip back to scene editing.
-  // Default-on so the user immediately sees the result of their click.
-  // Cast: lipsync_video_url + lipsync_status are new columns; Supabase
-  // generated types haven't been re-run yet so they're not typed here.
-  const lipsyncRow = (state.generation as unknown as {
-    lipsync_video_url?: string | null;
-    lipsync_status?: string | null;
-  } | null) ?? null;
-  const hasLipsync =
-    lipsyncRow?.lipsync_status === 'success' && !!lipsyncRow?.lipsync_video_url;
-  const [showLipsyncPreview, setShowLipsyncPreview] = useState<boolean>(hasLipsync);
-  // Auto-flip ON the moment a fresh lipsync lands (Realtime push updates
-  // state.generation → hasLipsync becomes true mid-session).
+  // Read lipsync state via the dedicated hook (subscribes to Realtime
+  // on the generations row directly — picks up `lipsync_video_url` the
+  // moment the worker writes it, no page refresh needed). state.
+  // generation's snapshot wouldn't update mid-session without refetch.
+  const lipsync = useLipsync(state.generation?.id ?? null);
+  const hasLipsync = lipsync.status === 'success' && !!lipsync.syncedUrl;
+  const [showLipsyncPreview, setShowLipsyncPreview] = useState<boolean>(false);
+  // Auto-flip ON the moment a fresh lipsync lands.
   useEffect(() => {
     if (hasLipsync) setShowLipsyncPreview(true);
   }, [hasLipsync]);
@@ -682,11 +676,11 @@ function Stage({
             scene concatenated + lips synced to the master audio).
             Scene-by-scene editing is still reachable via the toggle in
             the corner. */}
-        {hasLipsync && showLipsyncPreview && lipsyncRow?.lipsync_video_url ? (
+        {hasLipsync && showLipsyncPreview && lipsync.syncedUrl ? (
           <>
             <video
-              key={lipsyncRow.lipsync_video_url}
-              src={lipsyncRow.lipsync_video_url}
+              key={lipsync.syncedUrl}
+              src={lipsync.syncedUrl}
               controls
               playsInline
               preload="metadata"
@@ -695,34 +689,30 @@ function Stage({
                 (isFullscreen ? 'object-contain' : 'object-cover')
               }
             />
-            {/* Toggle pill: switch back to scene editing. Positioned
-                top-right to stay out of the way of the native video
-                controls. */}
+            {/* Single discreet toggle in the corner — no badge, no
+                "Lipsynced final" label. The user already knows what
+                they ran; the player IS the result. */}
             <button
               type="button"
               onClick={() => setShowLipsyncPreview(false)}
-              className="absolute top-3 right-3 px-3 py-1.5 rounded-full bg-[#10151A]/90 border border-[#14C8CC]/40 backdrop-blur-sm font-mono text-[10.5px] tracking-wider uppercase text-[#14C8CC] hover:bg-[#14C8CC]/10"
-              title="Switch back to scene-by-scene editing preview"
+              className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-[#10151A]/80 border border-white/10 backdrop-blur-sm font-mono text-[10px] tracking-wider uppercase text-[#9aa1a8] hover:text-[#ECEAE4] hover:border-white/20"
+              title="Switch to scene editor"
             >
-              ← Edit scenes
+              Edit scenes
             </button>
-            <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-[#10151A]/90 border border-[#E4C875]/40 backdrop-blur-sm font-mono text-[10px] tracking-wider uppercase text-[#E4C875]">
-              ✨ Lipsynced final
-            </div>
           </>
         ) : (
           <>
-            {/* When lipsync exists but we're showing the scene editor,
-                surface a small pill that lets the user return to the
-                final preview. */}
+            {/* When lipsync exists but the user is editing scenes, a
+                tiny corner pill lets them flip back to the final. */}
             {hasLipsync && (
               <button
                 type="button"
                 onClick={() => setShowLipsyncPreview(true)}
-                className="absolute top-3 right-3 z-10 px-3 py-1.5 rounded-full bg-[#10151A]/90 border border-[#E4C875]/50 backdrop-blur-sm font-mono text-[10.5px] tracking-wider uppercase text-[#E4C875] hover:bg-[#E4C875]/10"
-                title="Switch to the synced final video"
+                className="absolute top-3 right-3 z-10 px-2.5 py-1 rounded-full bg-[#10151A]/80 border border-[#14C8CC]/40 backdrop-blur-sm font-mono text-[10px] tracking-wider uppercase text-[#14C8CC] hover:bg-[#14C8CC]/10"
+                title="Show synced final"
               >
-                ✨ Show lipsynced final
+                Show synced
               </button>
             )}
         {/* Preview: video if ready, else latest image. Video is MUTED

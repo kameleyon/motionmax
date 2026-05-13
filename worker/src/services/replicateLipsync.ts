@@ -54,9 +54,27 @@ type PredictionStatus = "starting" | "processing" | "succeeded" | "failed" | "ca
 interface PredictionResponse {
   id: string;
   status: PredictionStatus;
-  output?: string | string[] | null;
+  /** Replicate's output shape varies by model generation:
+   *   - Legacy: bare URL string `"https://replicate.delivery/.../out.mp4"`
+   *   - List   : `["url1", "url2"]` (first element wins for single-output)
+   *   - File   : `{ url: "..." }` — newer File-typed outputs that the JS SDK
+   *              wraps as `output.url()`. The raw REST response carries the
+   *              same shape. We parse all three. */
+  output?: string | string[] | { url?: string } | null;
   error?: string | null;
   metrics?: { predict_time?: number };
+}
+
+/** Extract the result URL across Replicate's three known output shapes. */
+function extractOutputUrl(output: PredictionResponse["output"]): string | null {
+  if (!output) return null;
+  if (typeof output === "string") return output;
+  if (Array.isArray(output)) {
+    const first = output[0];
+    return typeof first === "string" ? first : null;
+  }
+  if (typeof output === "object" && typeof output.url === "string") return output.url;
+  return null;
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -166,10 +184,8 @@ export async function generateLipsync(
       }
 
       if (body.status === "succeeded") {
-        // sync/lipsync-2 returns a single URL string. We tolerate an array
-        // shape too — some Replicate models return [url] (defensive parse).
-        const outputUrl = Array.isArray(body.output) ? body.output[0] : body.output;
-        if (!outputUrl || typeof outputUrl !== "string") {
+        const outputUrl = extractOutputUrl(body.output);
+        if (!outputUrl) {
           return { videoUrl: null, provider, model, error: "Replicate succeeded but no output URL" };
         }
         const durationSeconds = body.metrics?.predict_time;

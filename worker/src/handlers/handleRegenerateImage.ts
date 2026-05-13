@@ -25,6 +25,13 @@ interface RegenerateImagePayload {
   sceneIndex: number;
   imageIndex?: number;
   imageModification?: string;
+  /** Optional character reference image URL(s). When present, the
+   *  regen flips into edit mode automatically (even with no explicit
+   *  imageModification text) and the character image is passed to Nano
+   *  Banana Pro as an identity reference. Used by the per-scene
+   *  "Add character" button in the Scene tab. */
+  characterImageUrl?: string;
+  characterImageUrls?: string[];
   [key: string]: unknown;
 }
 
@@ -75,7 +82,20 @@ async function _runRegenerateImage(
 ): Promise<RegenerateImageResult> {
   const { generationId, projectId, sceneIndex } = payload;
   const targetImageIndex = typeof payload.imageIndex === "number" ? payload.imageIndex : 0;
-  const imageModification = payload.imageModification || "";
+  // Character reference images — collected from either single-string or
+  // array shape so callers can pass one URL or many. The presence of a
+  // character ref auto-flips the regen into edit mode so the model
+  // preserves the scene and only adds the person; without that the
+  // caller would need to manually pass `imageModification` text too.
+  const characterRefs: string[] = [
+    ...(payload.characterImageUrl ? [payload.characterImageUrl] : []),
+    ...(Array.isArray(payload.characterImageUrls) ? payload.characterImageUrls : []),
+  ].filter((u): u is string => typeof u === "string" && u.trim().length > 0);
+  const imageModification =
+    payload.imageModification ||
+    (characterRefs.length > 0
+      ? "add the character shown in the reference image(s) naturally into this scene, preserving the original background, lighting, framing, and composition"
+      : "");
 
   const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
   const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
@@ -176,6 +196,7 @@ async function _runRegenerateImage(
       undefined,
       projectId,
       { userId: userId ?? null, generationId },
+      characterRefs,
     );
   } else {
     // Full Regeneration — include style + character bible in prompt

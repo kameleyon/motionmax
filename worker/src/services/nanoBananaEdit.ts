@@ -66,12 +66,17 @@ export async function editImageWithNanoBanana(
   /** Attribution for api_call_logs. Optional for legacy callers; pass
    *  real userId + generationId from production handlers. (C-8-5 / C-9-7) */
   attribution: { userId: string | null; generationId: string | null } = { userId: null, generationId: null },
+  /** Additional reference images for character/style consistency.
+   *  Appended to the model's `images` array — Nano Banana Pro reads
+   *  index 0 as the "image being edited" and indexes 1+ as identity /
+   *  style references. Used by the per-scene "Add character" flow. */
+  referenceImageUrls: string[] = [],
 ): Promise<string> {
   if (!imageUrl || typeof imageUrl !== "string" || imageUrl.trim().length === 0) {
     throw new Error("editImageWithNanoBanana: imageUrl is required and must be a non-empty string");
   }
 
-  const images = [imageUrl];
+  const images: string[] = [imageUrl, ...referenceImageUrls.filter((u) => typeof u === "string" && u.trim().length > 0)];
   const requestBody = {
     model: NANO_BANANA_PRO_MODEL,
     prompt,

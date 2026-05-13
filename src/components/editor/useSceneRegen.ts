@@ -344,8 +344,17 @@ export function useSceneRegen(state: EditorState | null) {
   /** Image-only regen (no video re-render). Payload shape matches the
    *  legacy useCinematicRegeneration contract exactly: imageIndex: 0
    *  plus imageModification (empty string = plain regen, non-empty =
-   *  targeted edit via nanoBananaEdit). */
-  const regenerateImage = useCallback(async (index: number, modification?: string) => {
+   *  targeted edit via nanoBananaEdit).
+   *
+   *  When `characterImageUrl` is provided, the worker auto-flips into
+   *  edit mode and passes the character image to Nano Banana Pro as an
+   *  identity reference — preserves the scene background and inserts
+   *  the person. Used by the "Add character" button in the Scene tab. */
+  const regenerateImage = useCallback(async (
+    index: number,
+    modification?: string,
+    characterImageUrl?: string,
+  ) => {
     if (!user || !state?.generation || !state?.project) return;
     if (!(await debounceFire(`image:${index}`))) return;
     setBusy('regen');
@@ -362,11 +371,13 @@ export function useSceneRegen(state: EditorState | null) {
             sceneIndex: index,
             imageIndex: 0,
             imageModification: modification ?? '',
+            ...(characterImageUrl ? { characterImageUrl } : {}),
           } as unknown as never,
           status: 'pending',
         });
       if (error) throw new Error(error.message);
-      toast.success(modification ? 'Image edit queued.' : 'Image queued for regeneration.');
+      const action = characterImageUrl ? 'Adding character to scene…' : modification ? 'Image edit queued.' : 'Image queued for regeneration.';
+      toast.success(action);
       scheduleRefresh(state.project.id);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

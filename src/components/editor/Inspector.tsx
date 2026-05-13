@@ -630,15 +630,14 @@ function Inspector({
             ) : (
               <div className="text-[11.5px] text-[#8A9198] italic">No character set for this project.</div>
             )}
-            <button
-              type="button"
-              disabled
-              className="mt-2 w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] border border-dashed border-white/10 text-[#5A6268] cursor-not-allowed"
-              title="Per-scene cast roster is coming soon"
-            >
-              <UserPlus className="w-3 h-3" />
-              Add character
-            </button>
+            <AddCharacterButton
+              sceneIndex={selectedSceneIndex}
+              projectId={state.project?.id}
+              disabled={busy !== 'idle' || imageRegenActive || !scene?.imageUrl}
+              onAddCharacter={(characterImageUrl) => {
+                regenerateImage(selectedSceneIndex, undefined, characterImageUrl);
+              }}
+            />
           </section>
 
           {/* Audio bed toggles — hidden until the music/SFX pipeline
@@ -1420,6 +1419,179 @@ function LipsyncSection({
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * "Add character" inline popover for the Scene tab.
+ *
+ * UX: button expands into a small panel inside the section with two
+ * inputs — file upload OR URL paste. On submit:
+ *   - File path → upload to Supabase `scene-images` bucket → public URL.
+ *   - URL path → use as-is (the worker re-hosts via nano-banana's own
+ *     rehostToSupabase, so we don't need to download client-side).
+ * Then calls onAddCharacter(url) which triggers regenerateImage with the
+ * character ref passed to the worker via payload.characterImageUrl.
+ */
+function AddCharacterButton({
+  sceneIndex,
+  projectId,
+  disabled,
+  onAddCharacter,
+}: {
+  sceneIndex: number;
+  projectId: string | undefined;
+  disabled: boolean;
+  onAddCharacter: (characterImageUrl: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [urlInput, setUrlInput] = useState('');
+  const [uploading, setUploading] = useState(false);
+
+  const handleFile = async (file: File) => {
+    if (!projectId) {
+      toast.error('Save the project first');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      toast.error('That file isn’t an image. Use a .png / .jpg / .webp.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Image is over 10 MB — try a smaller one.');
+      return;
+    }
+    setUploading(true);
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
+      const path = `${projectId}/character-${sceneIndex}-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from('scene-images')
+        .upload(path, file, { contentType: file.type, upsert: true });
+      if (upErr) throw new Error(upErr.message);
+      const { data } = supabase.storage.from('scene-images').getPublicUrl(path);
+      if (!data?.publicUrl) throw new Error('Storage returned no public URL');
+      onAddCharacter(data.publicUrl);
+      setOpen(false);
+      setUrlInput('');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Upload failed: ${msg}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleUrlSubmit = () => {
+    const url = urlInput.trim();
+    if (!url) return;
+    // Loose validation — let the worker's fetch fail loudly if the URL
+    // isn't reachable. We just reject obviously-non-URL input client-side
+    // so the error surfaces fast.
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+        toast.error('URL must start with http:// or https://');
+        return;
+      }
+    } catch {
+      toast.error('That doesn’t look like a valid URL.');
+      return;
+    }
+    onAddCharacter(url);
+    setOpen(false);
+    setUrlInput('');
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        disabled={disabled}
+        className={cn(
+          'mt-2 w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] border border-dashed transition-colors',
+          disabled
+            ? 'border-white/10 text-[#5A6268] cursor-not-allowed'
+            : 'border-[#14C8CC]/40 text-[#14C8CC] hover:bg-[#14C8CC]/5 hover:border-[#14C8CC]/60',
+        )}
+        title={disabled ? 'Wait for the current scene to finish rendering' : 'Add a character image to this scene'}
+      >
+        <UserPlus className="w-3 h-3" />
+        Add character
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-2 p-3 rounded-lg border border-[#14C8CC]/30 bg-[#1B2228] flex flex-col gap-2.5">
+      {/* File upload */}
+      <label className="block">
+        <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-1.5 block">
+          Upload image
+        </span>
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          disabled={uploading}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void handleFile(f);
+          }}
+          className="block w-full text-[11.5px] text-[#ECEAE4] file:mr-2 file:py-1.5 file:px-2.5 file:rounded-md file:border-0 file:text-[11.5px] file:font-medium file:bg-[#14C8CC]/10 file:text-[#14C8CC] hover:file:bg-[#14C8CC]/20 disabled:opacity-50"
+        />
+      </label>
+
+      {/* Divider */}
+      <div className="flex items-center gap-2 my-0.5">
+        <div className="flex-1 h-px bg-white/5" />
+        <span className="font-mono text-[9.5px] tracking-wider uppercase text-[#5A6268]">or</span>
+        <div className="flex-1 h-px bg-white/5" />
+      </div>
+
+      {/* URL paste */}
+      <div>
+        <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-1.5 block">
+          Paste image URL
+        </span>
+        <div className="flex gap-2">
+          <input
+            type="url"
+            value={urlInput}
+            onChange={(e) => setUrlInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleUrlSubmit(); }}
+            placeholder="https://…"
+            disabled={uploading}
+            className="flex-1 min-w-0 bg-[#0A0D0F] border border-white/10 rounded-md px-2.5 py-1.5 text-[11.5px] text-[#ECEAE4] outline-none focus-visible:ring-2 focus-visible:ring-[#14C8CC]/60 focus:border-[#14C8CC]/50 disabled:opacity-50"
+          />
+          <button
+            type="button"
+            onClick={handleUrlSubmit}
+            disabled={uploading || urlInput.trim().length === 0}
+            className="px-3 py-1.5 rounded-md text-[11.5px] font-semibold text-[#0A0D0F] bg-[#14C8CC] hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Use
+          </button>
+        </div>
+      </div>
+
+      {/* Cancel */}
+      <button
+        type="button"
+        onClick={() => { setOpen(false); setUrlInput(''); }}
+        disabled={uploading}
+        className="mt-0.5 self-start font-mono text-[10px] tracking-wider uppercase text-[#5A6268] hover:text-[#ECEAE4]"
+      >
+        Cancel
+      </button>
+
+      {uploading && (
+        <div className="inline-flex items-center gap-2 text-[11px] text-[#14C8CC]">
+          <Loader2 className="w-3 h-3 animate-spin" />
+          Uploading…
+        </div>
+      )}
+    </div>
   );
 }
 

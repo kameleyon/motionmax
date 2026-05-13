@@ -703,12 +703,12 @@ const EXPORT_JOB_TIMEOUT_MS  = parseInt(process.env.EXPORT_JOB_TIMEOUT_MS  || "5
 // depth varies). Bumped 15 → 45 min after launch-readiness check.
 const CINEMATIC_VIDEO_TIMEOUT_MS = parseInt(process.env.CINEMATIC_VIDEO_TIMEOUT_MS || "2700000", 10); // 45 min
 const LLM_JOB_TIMEOUT_MS     = parseInt(process.env.LLM_JOB_TIMEOUT_MS     || "900000",   10); // 15 min
-// Lipsync_finalize submits to Replicate (sync/lipsync-2) and polls up to
-// 25 min for completion — Replicate's queue + compute can hit 20+ min on
-// a 3-min input under load (verified 2026-05-13 against a real failure).
-// Handler hard wrap allows extra time for the post-completion rehost step
-// (download from Replicate + upload to Supabase). 30 min total.
-const LIPSYNC_JOB_TIMEOUT_MS = parseInt(process.env.LIPSYNC_JOB_TIMEOUT_MS || "1800000",  10); // 30 min
+// Lipsync_finalize submits to sync.so direct (https://api.sync.so/v2) and
+// polls up to 20 min for completion. sync.so direct is 3-5× faster than
+// Replicate-hosted (no queue middleman). Handler hard wrap = poll cap +
+// 5 min for the post-completion rehost step (download from sync.so +
+// upload to Supabase video bucket). 25 min total.
+const LIPSYNC_JOB_TIMEOUT_MS = parseInt(process.env.LIPSYNC_JOB_TIMEOUT_MS || "1500000",  10); // 25 min
 // Autopost orchestrator runs the FULL pipeline (script → audio → images →
 // [video] → finalize → export) inline by polling each child job. The
 // orchestrator already has a 3 h watchdog on its child jobs, but if the

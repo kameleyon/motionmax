@@ -1355,7 +1355,7 @@ function LipsyncSection({ generationId }: { generationId: string | null }) {
       {(status === 'idle' || status === 'failed') && (
         <button
           type="button"
-          onClick={() => (status === 'failed' ? retry() : start('lipsync-2'))}
+          onClick={() => (status === 'failed' ? retry() : start('kling-lip-sync'))}
           className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-[12.5px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed w-full"
           title="Costs ~2 credits per second of audio. Original video stays available."
         >
@@ -1386,7 +1386,7 @@ function LipsyncSection({ generationId }: { generationId: string | null }) {
           />
           <button
             type="button"
-            onClick={() => start('lipsync-2')}
+            onClick={() => start('kling-lip-sync')}
             className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11.5px] font-medium text-[#14C8CC] border border-[#14C8CC]/40 hover:bg-[#14C8CC]/10"
             title="Re-run the lipsync — costs another ~2 credits per second"
           >

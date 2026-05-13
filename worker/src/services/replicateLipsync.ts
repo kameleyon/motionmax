@@ -1,16 +1,17 @@
 /**
- * Replicate lipsync integration (sync/lipsync-2 model family).
+ * Replicate lipsync integration (kwaivgi/kling-lip-sync).
  *
- * Why Replicate instead of sync.so direct:
- *   - The worker already has REPLICATE_API_KEY for other models (Hypereal
- *     fallback, Nano Banana, Seedance). One vendor = one billing
- *     dashboard, one outage page, one set of rate-limit knobs.
- *   - Replicate's prediction API is well-trodden in this worker — same
- *     polling pattern as the existing video integrations.
+ * Why Replicate: the worker already has REPLICATE_API_KEY for other
+ * models (Hypereal fallback, Nano Banana, Seedance). Same vendor =
+ * same billing dashboard, same rate-limit knobs.
  *
- * Models:
- *   - sync/lipsync-2          (~$0.06 / output-second)
- *   - sync/lipsync-2-pro      (~$0.15 / output-second, sharper teeth + tongue)
+ * Model: kwaivgi/kling-lip-sync
+ *   Input shape:
+ *     video_url:   .mp4/.mov · <100MB · 720-1080p · 2-10 SECONDS ONLY
+ *     audio_file:  .mp3/.wav/.m4a/.aac · <5MB
+ *   The 2-10s video cap + 5MB audio cap means this model only works on
+ *   short-form clips. The enqueue edge function pre-flights this so the
+ *   user isn't charged credits for a doomed run.
  *
  * The Replicate API is async-first:
  *   1. POST /v1/models/<owner>/<name>/predictions → returns prediction + id.
@@ -31,10 +32,20 @@ const POLL_INTERVAL_MS = 3_000;
 // starts + compute enough room.
 const DEFAULT_POLL_MAX_MS = 25 * 60 * 1000; // 25 min
 
-export type LipsyncModel = "lipsync-2" | "lipsync-2-pro";
+export type LipsyncModel = "kling-lip-sync";
 
-/** Replicate model owner — both lipsync-2 + lipsync-2-pro live under sync/. */
-const MODEL_OWNER = "sync";
+/** Replicate model owner — kwaivgi maintains the Kling lip-sync model. */
+const MODEL_OWNER = "kwaivgi";
+
+/** Hard caps from the kwaivgi/kling-lip-sync model card. The enqueue
+ *  edge function checks these before deducting credits so users aren't
+ *  charged for runs that the model will immediately reject. */
+export const KLING_LIPSYNC_LIMITS = {
+  videoDurationSecondsMax: 10,
+  videoDurationSecondsMin: 2,
+  videoBytesMax: 100 * 1024 * 1024, // 100 MB
+  audioBytesMax: 5 * 1024 * 1024,   //   5 MB
+} as const;
 
 export interface ReplicateLipsyncOptions {
   videoUrl: string;            // publicly fetchable MP4 (Supabase signed URL works)
@@ -95,7 +106,7 @@ export async function generateLipsync(
 ): Promise<ReplicateLipsyncResult> {
   const apiKey = process.env.REPLICATE_API_KEY || process.env.REPLICATE_API_TOKEN;
   const base = process.env.REPLICATE_API_BASE || DEFAULT_BASE;
-  const model: LipsyncModel = opts.model ?? "lipsync-2";
+  const model: LipsyncModel = opts.model ?? "kling-lip-sync";
   const provider = "replicate";
 
   if (!apiKey) {
@@ -120,11 +131,12 @@ export async function generateLipsync(
       },
       body: JSON.stringify({
         input: {
-          // sync/lipsync-2 model accepts `video` + `audio` URLs. Both must
-          // be publicly fetchable. Supabase signed URLs (default 7-day TTL
-          // on the video bucket) work fine.
-          video: opts.videoUrl,
-          audio: opts.audioUrl,
+          // kwaivgi/kling-lip-sync field names. NOTE: this model only
+          // accepts 2-10s of video and audio < 5MB. The edge function
+          // pre-flights both — by the time we call here, validation has
+          // already passed.
+          video_url: opts.videoUrl,
+          audio_file: opts.audioUrl,
         },
       }),
       signal: opts.signal,
@@ -267,9 +279,9 @@ async function cancelPrediction(base: string, apiKey: string, id: string): Promi
   }
 }
 
-/** USD cost for a completed lipsync. Replicate bills by predict_time
- *  (compute seconds), which closely tracks output duration for sync/lipsync-2. */
-function lipsyncCostUsd(model: LipsyncModel, outputSeconds: number): number {
-  const perSec = model === "lipsync-2-pro" ? 0.15 : 0.06;
-  return Math.max(0, outputSeconds * perSec);
+/** USD cost for a completed lipsync. Replicate bills kwaivgi/kling-lip-sync
+ *  per prediction (~$0.07 fixed), not per output-second — we still log
+ *  predict_time for parity with other models, but cost is constant. */
+function lipsyncCostUsd(_model: LipsyncModel, _outputSeconds: number): number {
+  return 0.07;
 }

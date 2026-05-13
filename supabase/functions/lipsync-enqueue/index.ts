@@ -26,7 +26,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.90.1";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/cors.ts";
 import { deductCredits, refundCredits } from "../_shared/credits.ts";
 
-type LipsyncModel = "lipsync-2" | "lipsync-2-pro";
+type LipsyncModel = "kling-lip-sync";
 
 interface EnqueueRequest {
   generationId: string;
@@ -40,10 +40,18 @@ interface EnqueueResponse {
   model: LipsyncModel;
 }
 
-const CREDITS_PER_SECOND: Record<LipsyncModel, number> = {
-  "lipsync-2": 2,
-  "lipsync-2-pro": 5,
+// kwaivgi/kling-lip-sync prices $0.07 / prediction flat. With 1 credit ≈
+// $0.01 and 30% margin → 10 credits / prediction. Cheap fixed cost since
+// the model caps at 10s of video.
+const CREDITS_PER_PREDICTION: Record<LipsyncModel, number> = {
+  "kling-lip-sync": 10,
 };
+
+// Model hard caps — pre-flight here so we never deduct credits for a
+// run the model will immediately reject. Mirrors the constants in
+// worker/src/services/replicateLipsync.ts KLING_LIPSYNC_LIMITS.
+const KLING_AUDIO_DURATION_MS_MAX = 10_000; //  10 seconds (matches video cap)
+const KLING_AUDIO_DURATION_MS_MIN = 2_000;  //   2 seconds
 
 function jsonResponse(corsHeaders: Record<string, string>, body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -87,7 +95,7 @@ serve(async (req) => {
     if (!body?.generationId) {
       return jsonResponse(corsHeaders, { error: "generationId is required" }, 400);
     }
-    const model: LipsyncModel = body.model === "lipsync-2-pro" ? "lipsync-2-pro" : "lipsync-2";
+    const model: LipsyncModel = "kling-lip-sync";
 
     // 1. Ownership + audio + duration
     const { data: gen, error: genErr } = await supabase
@@ -106,6 +114,22 @@ serve(async (req) => {
     }
     if (!gen.master_audio_duration_ms || gen.master_audio_duration_ms <= 0) {
       return jsonResponse(corsHeaders, { error: "Generation has no audio duration — cannot price lipsync" }, 400);
+    }
+
+    // kwaivgi/kling-lip-sync only supports 2–10 second clips. Reject up-
+    // front so users aren't charged for a doomed run. The error message
+    // surfaces the limit so they know what to do (typically: trim down
+    // to a short-form clip first, or use a longer-form lipsync model).
+    const audioSec = gen.master_audio_duration_ms / 1000;
+    if (audioSec > KLING_AUDIO_DURATION_MS_MAX / 1000) {
+      return jsonResponse(corsHeaders, {
+        error: `Kling lip-sync only supports clips up to 10 seconds. Your audio is ${audioSec.toFixed(1)}s — too long. Trim it down first, or wait for long-form lipsync support.`,
+      }, 400);
+    }
+    if (audioSec < KLING_AUDIO_DURATION_MS_MIN / 1000) {
+      return jsonResponse(corsHeaders, {
+        error: `Kling lip-sync requires at least 2 seconds of audio. Your audio is ${audioSec.toFixed(1)}s — too short.`,
+      }, 400);
     }
 
     // 2. Already in flight?
@@ -141,9 +165,9 @@ serve(async (req) => {
       return jsonResponse(corsHeaders, { error: "No exported video found — export the project first" }, 400);
     }
 
-    // 4. Price = ceil(durationSeconds × CREDITS_PER_SECOND[model]).
-    const durationSec = gen.master_audio_duration_ms / 1000;
-    const credits = Math.ceil(durationSec * CREDITS_PER_SECOND[model]);
+    // 4. Flat-fee pricing (kwaivgi/kling-lip-sync charges per prediction
+    //    regardless of duration since duration is capped at 10s).
+    const credits = CREDITS_PER_PREDICTION[model];
     if (credits <= 0) {
       return jsonResponse(corsHeaders, { error: "Could not compute credit cost" }, 500);
     }

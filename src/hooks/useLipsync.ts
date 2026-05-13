@@ -26,11 +26,13 @@ export type LipsyncStatus =
   | "success"     // syncedUrl is set, ready to play
   | "failed";
 
+export type LipsyncModel = "kling-lip-sync";
+
 export interface LipsyncState {
   status: LipsyncStatus;
   syncedUrl: string | null;
   creditsCharged: number | null;
-  model: "lipsync-2" | "lipsync-2-pro" | null;
+  model: LipsyncModel | null;
   error: string | null;
 }
 
@@ -73,7 +75,7 @@ export function useLipsync(generationId: string | null | undefined) {
     lipsync_status: LipsyncStatus | null;
     lipsync_video_url: string | null;
     lipsync_credits_charged: number | null;
-    lipsync_model: "lipsync-2" | "lipsync-2-pro" | null;
+    lipsync_model: LipsyncModel | null;
     lipsync_error: string | null;
   };
 
@@ -137,7 +139,7 @@ export function useLipsync(generationId: string | null | undefined) {
 
   // ── Public: kick off a run ──
   const start = useCallback(
-    async (model: "lipsync-2" | "lipsync-2-pro" = "lipsync-2"): Promise<void> => {
+    async (model: LipsyncModel = "kling-lip-sync"): Promise<void> => {
       if (!generationId) {
         setState((s) => ({ ...s, error: "No generation selected" }));
         return;
@@ -175,7 +177,7 @@ export function useLipsync(generationId: string | null | undefined) {
     [generationId, startPolling],
   );
 
-  const retry = useCallback(() => start(state.model ?? "lipsync-2"), [start, state.model]);
+  const retry = useCallback(() => start(state.model ?? "kling-lip-sync"), [start, state.model]);
 
   return { ...state, start, retry };
 }

@@ -79,7 +79,7 @@ async function _runLipsyncFinalize(
 
   await supabase
     .from("generations")
-    .update({ lipsync_status: "processing", lipsync_provider: "replicate", lipsync_model: `sync/${model ?? "lipsync-2"}` })
+    .update({ lipsync_status: "processing", lipsync_provider: "replicate", lipsync_model: `kwaivgi/${model ?? "kling-lip-sync"}` })
     .eq("id", generationId);
 
   // ── 1. Call Sync Labs ────────────────────────────────────────────

@@ -24,7 +24,12 @@ import { writeApiLog } from "../lib/logger.js";
 
 const DEFAULT_BASE = "https://api.replicate.com/v1";
 const POLL_INTERVAL_MS = 3_000;
-const DEFAULT_POLL_MAX_MS = 10 * 60 * 1000; // 10 min
+// Replicate's sync/lipsync-2 queue + compute can legitimately reach 20+ min
+// on a 3-min input during peak hours (verified 2026-05-13 against prediction
+// k2ajsp60jxrmr0cy46xr6jhv94 which hit our previous 10-min cap). 25 min
+// matches the cinematic_video timeout pattern and gives queue depth + cold
+// starts + compute enough room.
+const DEFAULT_POLL_MAX_MS = 25 * 60 * 1000; // 25 min
 
 export type LipsyncModel = "lipsync-2" | "lipsync-2-pro";
 
@@ -219,6 +224,15 @@ export async function generateLipsync(
     await sleep(POLL_INTERVAL_MS);
   }
 
+  // Cancel the prediction on Replicate's side so we don't keep paying for
+  // compute on a result we'll never use. Fire-and-forget — if cancel
+  // fails for any reason, the worst case is Replicate finishes the
+  // prediction and bills us; the existing retry on the user's next click
+  // would still produce a new prediction anyway.
+  cancelPrediction(base, apiKey, predictionId).catch((e) =>
+    console.warn(`[ReplicateLipsync] cancel failed for ${predictionId}: ${(e as Error).message}`),
+  );
+
   writeApiLog({
     userId: opts.userId ?? null,
     generationId: opts.generationId ?? null,
@@ -231,8 +245,26 @@ export async function generateLipsync(
 
   return {
     videoUrl: null, provider, model,
-    error: `Replicate prediction ${predictionId} did not complete within ${Math.round(pollMaxMs / 1000)}s`,
+    error: `Replicate prediction ${predictionId} did not complete within ${Math.round(pollMaxMs / 1000)}s — try again, Replicate's queue may be deep right now`,
   };
+}
+
+/** POST /v1/predictions/<id>/cancel — best-effort abort.
+ *  Replicate stops billing for cancelled predictions as soon as the worker
+ *  acknowledges. Used when our poll budget expires so we don't keep paying
+ *  for a result we'll never read. */
+async function cancelPrediction(base: string, apiKey: string, id: string): Promise<void> {
+  const res = await fetch(`${base}/predictions/${id}/cancel`, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${apiKey}` },
+  });
+  if (!res.ok && res.status !== 404) {
+    // 404 means it already terminated — safe to ignore. Anything else is
+    // unexpected; log so we notice if Replicate changes the endpoint shape.
+    console.warn(`[ReplicateLipsync] cancel returned ${res.status} for ${id}`);
+  } else {
+    console.log(`[ReplicateLipsync] Cancelled prediction ${id}`);
+  }
 }
 
 /** USD cost for a completed lipsync. Replicate bills by predict_time

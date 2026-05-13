@@ -427,16 +427,23 @@ export async function generateGeminiFlashTTSChunked(
   let nextIdx = 0;
   let firstError: string | null = null;
 
-  // Runaway-output guard: Gemini TTS occasionally hallucinates into
-  // extended silence or looping content, producing 10-15× the audio a
-  // chunk's input text warrants. Without a sanity check the merged
-  // master ends up 20+ minutes of dead air mixed into the real read.
-  // We compute expected duration from char count at the 165 WPM
-  // anchor and reject anything >3× that.
+  // Runaway-output guard: Gemini TTS occasionally pads chunks with
+  // silence or hallucinated extensions, producing audio MUCH longer
+  // than the input text warrants. The merged master then ends up with
+  // dead air or extra speech glued in at chunk boundaries.
+  //
+  // We compute the expected chunk duration from char count at the
+  // 165 WPM pacing anchor and reject anything more than `RUNAWAY_MULTIPLIER`
+  // times that. A 500-char chunk expects ~36s of audio; 2× allows for
+  // some natural prosody slack (slow phrases, emphasis) up to ~72s
+  // while still catching the worst padding cases. We previously ran
+  // this at 3× but legitimate-looking padded chunks (~2.4× expected)
+  // still leaked through and pushed master totals 35-40% over budget;
+  // 2× is the sweet spot in observed real-world ranges.
   const BYTES_PER_SECOND = GEMINI_PCM_SAMPLE_RATE * 2; // 24kHz × 16-bit mono = 48,000
   const WORDS_PER_MINUTE = 165;
   const AVG_CHARS_PER_WORD = 5;
-  const RUNAWAY_MULTIPLIER = 3; // chunk audio >3× expected → drop & retry
+  const RUNAWAY_MULTIPLIER = 2; // chunk audio >2× expected → drop & retry
   function expectedSecondsForChars(charCount: number): number {
     return (charCount / AVG_CHARS_PER_WORD / WORDS_PER_MINUTE) * 60;
   }

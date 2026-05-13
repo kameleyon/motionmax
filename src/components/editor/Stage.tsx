@@ -152,8 +152,14 @@ function Stage({
   // on the generations row directly — picks up `lipsync_video_url` the
   // moment the worker writes it, no page refresh needed). state.
   // generation's snapshot wouldn't update mid-session without refetch.
+  // Cinematic-only: smartflow + doc2video scenes are still images, no
+  // face to sync. We still call the hook (cheap) but gate the UI.
   const lipsync = useLipsync(state.generation?.id ?? null);
-  const hasLipsync = lipsync.status === 'success' && !!lipsync.syncedUrl;
+  const projectTypeForLipsync = (state.project as { project_type?: string } | null)?.project_type;
+  const hasLipsync =
+    projectTypeForLipsync === 'cinematic' &&
+    lipsync.status === 'success' &&
+    !!lipsync.syncedUrl;
   const [showLipsyncPreview, setShowLipsyncPreview] = useState<boolean>(false);
   // Auto-flip ON the moment a fresh lipsync lands.
   useEffect(() => {

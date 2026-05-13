@@ -763,10 +763,14 @@ function Inspector({
           )}
 
           {/* ── Post-generation lipsync ─────────────────────────────
-              Available only after a full export exists (server-side
-              the enqueue edge fn 400s without it). Hidden on smartflow
-              because smartflow has no master audio track. */}
-          <LipsyncSection generationId={state.generation?.id ?? null} />
+              Cinematic-only — smartflow and doc2video/explainer scenes
+              are still images with no face to sync against. LipsyncSection
+              itself gates on projectType so this is a defense-in-depth
+              render. */}
+          <LipsyncSection
+            generationId={state.generation?.id ?? null}
+            projectType={(state.project as { project_type?: string } | null)?.project_type}
+          />
           {/* ───────────────────────────────────────────────────── */}
 
           {/* Save & Regenerate — for doc2video + cinematic this
@@ -1325,31 +1329,34 @@ function AudioBedToggle({
 /**
  * Post-generation lipsync UI for the Voice tab.
  *
- * Lives next to the per-scene audio preview because that's where users
- * who care about voice / lipsync land. The button is gated by the
- * presence of an exported video — the enqueue edge fn already 400s
- * without one, so we don't need a separate gate here.
+ * Visible ONLY for cinematic projects (the only project type whose
+ * scenes carry actual video). smartflow and doc2video/explainer scenes
+ * are still images, so lipsync has nothing to sync — wav2lip needs a
+ * moving face in the source frame.
  *
  * Brand tokens: aqua #14C8CC (primary CTA), gold #E4C875 (in-progress
  * accent). Per memory: no red/green in this UI surface.
  */
-function LipsyncSection({ generationId }: { generationId: string | null }) {
+function LipsyncSection({
+  generationId,
+  projectType,
+}: {
+  generationId: string | null;
+  projectType: string | undefined;
+}) {
   const { status, syncedUrl, creditsCharged, error, start, retry } = useLipsync(generationId);
 
   if (!generationId) return null;
+  // Hide for non-video project types — there's no moving face to sync.
+  if (projectType !== 'cinematic') return null;
 
   const busy = status === 'queued' || status === 'processing';
 
   return (
     <section>
       <h5 className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#5A6268] mb-2 font-medium">
-        Lipsync (post-generation)
+        Lipsync
       </h5>
-
-      <p className="font-mono text-[10.5px] leading-relaxed text-[#8A9198] mb-3">
-        Match the speaker&rsquo;s mouth to the narration audio.
-        Runs against your already-exported video — original is preserved.
-      </p>
 
       {/* Idle / failed → primary CTA */}
       {(status === 'idle' || status === 'failed') && (

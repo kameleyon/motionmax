@@ -65,12 +65,13 @@ function inferStyleInstruction(voiceover: string): string {
 export async function handleMasterAudio(
   jobId: string,
   payload: MasterAudioPayload,
-  userId?: string
+  userId?: string,
+  signal?: AbortSignal,
 ): Promise<{ success: boolean; masterAudioUrl: string; masterAudioDurationMs: number; provider: string }> {
   const { generationId, projectId } = payload;
 
   try {
-    return await _runMasterAudio(jobId, payload, userId);
+    return await _runMasterAudio(jobId, payload, userId, signal);
   } catch (err) {
     await auditError("voice.tts_failed", err, {
       jobId, projectId, userId, generationId,
@@ -84,6 +85,7 @@ async function _runMasterAudio(
   jobId: string,
   payload: MasterAudioPayload,
   userId?: string,
+  signal?: AbortSignal,
 ): Promise<{ success: boolean; masterAudioUrl: string; masterAudioDurationMs: number; provider: string }> {
   const { generationId, projectId } = payload;
 
@@ -256,6 +258,7 @@ async function _runMasterAudio(
       },
       userId: userId ?? null,
       generationId,
+      signal,
     });
   } else if (voiceName.startsWith("sm:") || voiceName.startsWith("sm2:")) {
     result = await generateSmallestTTS({

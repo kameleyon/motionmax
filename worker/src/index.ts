@@ -347,8 +347,11 @@ async function processJob(job: Job, signal?: AbortSignal) {
       // Per-task-type dispatch lives in worker/src/handlers/dispatch.ts.
       // Each handler returns a partial result object; we merge into
       // finalPayload so both the legacy `payload` column and the new
-      // `result` column carry the same data.
-      const patch = await dispatchJob(job);
+      // `result` column carry the same data. signal is threaded so
+      // hard-timeout-aware handlers (currently master_audio → Gemini
+      // TTS fetch) can cancel in-flight network calls cleanly instead
+      // of running to completion past the abort.
+      const patch = await dispatchJob(job, signal);
       finalPayload = { ...finalPayload, ...patch };
     }, { jobId: job.id });
 

@@ -243,6 +243,11 @@ export interface GeminiFlashTTSOptions {
    *  chunks. Only relevant for chunked master audio; safe to omit for
    *  single-call scenes. */
   carryOverContext?: string | null;
+  /** Hard-timeout AbortSignal threaded from the worker's per-job
+   *  AbortController. When the handler timeout fires, in-flight Gemini
+   *  fetch() calls reject with AbortError and the retry loop exits
+   *  immediately instead of grinding through the remaining attempts. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -294,11 +299,14 @@ export async function generateGeminiFlashTTSPCM(
     const startOffset = Math.floor(Math.random() * apiKeys.length);
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      if (opts.signal?.aborted) {
+        return { pcm: null, error: "Gemini Flash TTS aborted by hard-timeout signal" };
+      }
       const apiKey = apiKeys[(startOffset + attempt - 1) % apiKeys.length];
       try {
         const res = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`,
-          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: opts.signal },
         );
 
         if (!res.ok) {
@@ -343,6 +351,13 @@ export async function generateGeminiFlashTTSPCM(
         void startTime;
         return { pcm };
       } catch (err) {
+        // AbortError fires when the worker's per-job hard-timeout
+        // AbortController cancels mid-fetch. Don't burn the remaining
+        // attempts on backoff sleeps — exit immediately so the handler
+        // catch path can write 'failed' atomically.
+        if (err instanceof Error && err.name === "AbortError") {
+          return { pcm: null, error: "Gemini Flash TTS aborted by hard-timeout signal" };
+        }
         lastError = `Gemini Flash TTS exception: ${err instanceof Error ? err.message : String(err)}`;
         console.warn(`[GeminiFlashTTS] Scene ${opts.sceneNumber} attempt ${attempt} threw: ${lastError}`);
         if (attempt < MAX_ATTEMPTS) { await sleep(2000 * attempt); continue; }
@@ -495,6 +510,13 @@ export async function generateGeminiFlashTTSChunked(
       const idx = nextIdx++;
       if (idx >= chunks.length) return;
       if (firstError) return; // short-circuit if a sibling already failed
+      // Hard-timeout escape hatch: if the per-job AbortController fired
+      // while we were queued behind the 6-slot Gemini semaphore, exit
+      // before claiming a slot.
+      if (opts.signal?.aborted) {
+        if (!firstError) firstError = `Chunk ${idx + 1}/${chunks.length} aborted by hard-timeout signal`;
+        return;
+      }
 
       const result = await generateChunkWithRunawayGuard(idx, chunks[idx], carryOver[idx]);
 
@@ -630,6 +652,9 @@ export async function generateGeminiFlashTTS(
     const startOffset = Math.floor(Math.random() * apiKeys.length);
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      if (opts.signal?.aborted) {
+        return { url: null, error: "Gemini Flash TTS aborted by hard-timeout signal" };
+      }
       const apiKey = apiKeys[(startOffset + attempt - 1) % apiKeys.length];
       try {
         const res = await fetch(
@@ -638,6 +663,7 @@ export async function generateGeminiFlashTTS(
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
+            signal: opts.signal,
           },
         );
 
@@ -723,6 +749,12 @@ export async function generateGeminiFlashTTS(
           provider: `Gemini 3.1 Flash TTS (${voiceName})`,
         };
       } catch (err) {
+        // AbortError fires when the worker's per-job hard-timeout
+        // AbortController cancels mid-fetch. Exit immediately instead
+        // of burning the remaining backoff budget.
+        if (err instanceof Error && err.name === "AbortError") {
+          return { url: null, error: "Gemini Flash TTS aborted by hard-timeout signal" };
+        }
         lastError = (err as Error).message;
         console.warn(`[GeminiFlashTTS] Scene ${opts.sceneNumber} attempt ${attempt} threw: ${lastError}`);
         if (attempt < MAX_ATTEMPTS) await sleep(1500 * attempt);

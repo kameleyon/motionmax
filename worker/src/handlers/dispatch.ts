@@ -28,7 +28,7 @@ import { handleUndoRegeneration } from "./handleUndoRegeneration.js";
  *  there is nothing to merge. Never throws — handler errors propagate. */
 export type DispatchPatch = Record<string, unknown>;
 
-export async function dispatchJob(job: Job): Promise<DispatchPatch> {
+export async function dispatchJob(job: Job, signal?: AbortSignal): Promise<DispatchPatch> {
   if (job.task_type === 'generate_video' || (job.task_type as string) === 'generate_cinematic') {
     const scriptResult = await handleGenerateVideo(job.id, job.payload, job.user_id);
     // Merge result into finalPayload so both `payload` and `result` columns
@@ -97,7 +97,7 @@ export async function dispatchJob(job: Job): Promise<DispatchPatch> {
     // tonality jumps. Handler back-fills every scene's audioUrl
     // with the master URL so existing editor + export paths work.
     const { handleMasterAudio } = await import("./handleMasterAudio.js");
-    return await handleMasterAudio(job.id, job.payload as any, job.user_id) as unknown as DispatchPatch;
+    return await handleMasterAudio(job.id, job.payload as any, job.user_id, signal) as unknown as DispatchPatch;
   }
   if (job.task_type === 'cinematic_image' as any) {
     return await handleCinematicImage(job.id, job.payload as any, job.user_id) as unknown as DispatchPatch;

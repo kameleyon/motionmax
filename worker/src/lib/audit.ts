@@ -33,6 +33,10 @@ export type SystemEventType =
   | "gen.failed"
   | "gen.retried"
   | "gen.cancelled"
+  // post-generation lipsync
+  | "lipsync.started"
+  | "lipsync.completed"
+  | "lipsync.failed"
   // billing
   | "pay.checkout_created"
   | "pay.payment_succeeded"

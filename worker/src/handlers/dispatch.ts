@@ -99,6 +99,16 @@ export async function dispatchJob(job: Job, signal?: AbortSignal): Promise<Dispa
     const { handleMasterAudio } = await import("./handleMasterAudio.js");
     return await handleMasterAudio(job.id, job.payload as any, job.user_id, signal) as unknown as DispatchPatch;
   }
+  if (job.task_type === 'lipsync_finalize' as any) {
+    // Post-generation lipsync: takes generations.master_audio_url + the
+    // last successful export's finalUrl, sends to Sync Labs, writes the
+    // synced URL back to generations.lipsync_video_url. Credits are
+    // deducted upfront by the lipsync-enqueue edge function and stamped
+    // onto payload.creditsDeducted for refund-on-failure.
+    if (!job.user_id) throw new Error("lipsync_finalize job is missing user_id");
+    const { handleLipsyncFinalize } = await import("./handleLipsyncFinalize.js");
+    return await handleLipsyncFinalize(job.id, job.payload as any, job.user_id, signal) as unknown as DispatchPatch;
+  }
   if (job.task_type === 'cinematic_image' as any) {
     return await handleCinematicImage(job.id, job.payload as any, job.user_id) as unknown as DispatchPatch;
   }

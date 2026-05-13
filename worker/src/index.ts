@@ -703,6 +703,10 @@ const EXPORT_JOB_TIMEOUT_MS  = parseInt(process.env.EXPORT_JOB_TIMEOUT_MS  || "5
 // depth varies). Bumped 15 → 45 min after launch-readiness check.
 const CINEMATIC_VIDEO_TIMEOUT_MS = parseInt(process.env.CINEMATIC_VIDEO_TIMEOUT_MS || "2700000", 10); // 45 min
 const LLM_JOB_TIMEOUT_MS     = parseInt(process.env.LLM_JOB_TIMEOUT_MS     || "900000",   10); // 15 min
+// Lipsync_finalize submits to Sync Labs and polls up to 10 min for
+// completion. Hard wrap a bit higher to absorb network jitter + the
+// post-completion rehost step (downloading + re-uploading to Supabase).
+const LIPSYNC_JOB_TIMEOUT_MS = parseInt(process.env.LIPSYNC_JOB_TIMEOUT_MS || "900000",   10); // 15 min
 // Autopost orchestrator runs the FULL pipeline (script → audio → images →
 // [video] → finalize → export) inline by polling each child job. The
 // orchestrator already has a 3 h watchdog on its child jobs, but if the
@@ -716,6 +720,7 @@ function getJobTimeoutMs(taskType: string): number {
   if (process.env.JOB_TIMEOUT_MS) return JOB_TIMEOUT_MS; // honour explicit override
   if (taskType === "autopost_render" || taskType === "autopost_rerender") return AUTOPOST_JOB_TIMEOUT_MS;
   if (taskType === "cinematic_video") return CINEMATIC_VIDEO_TIMEOUT_MS;
+  if (taskType === "lipsync_finalize") return LIPSYNC_JOB_TIMEOUT_MS;
   return isExportTask(taskType) ? EXPORT_JOB_TIMEOUT_MS : LLM_JOB_TIMEOUT_MS;
 }
 

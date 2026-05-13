@@ -52,6 +52,12 @@ export const REFUNDABLE_TASK_TYPES = new Set<string>([
   // skipped (no false-positive refunds today; refunds engage as soon
   // as a future change carries creditsDeducted forward).
   "autopost_rerender",
+  // Post-generation lipsync. Credits are deducted at enqueue time by
+  // the lipsync-enqueue edge function and stamped onto payload.
+  // creditsDeducted, mirroring the autopost shape. Same gate (payload.
+  // creditsDeducted > 0) applies below so a misconfigured zero-cost
+  // enqueue path doesn't refund free operations.
+  "lipsync_finalize",
 ]);
 
 export async function refundCreditsOnFailure(job: Job): Promise<void> {
@@ -70,6 +76,24 @@ export async function refundCreditsOnFailure(job: Job): Promise<void> {
     const payload = job.payload || {};
     const projectType = payload.projectType || "doc2video";
     const length = payload.length || "brief";
+
+    // Lipsync-specific guard: refund ONLY when creditsDeducted is on
+    // the payload (set by lipsync-enqueue). Without this gate, the
+    // formula fallback at the bottom would refund based on
+    // projectType/length which is wrong for a downstream feature
+    // priced by output-duration, not generation length.
+    if ((job.task_type as string) === "lipsync_finalize") {
+      const deducted =
+        typeof payload.creditsDeducted === "number" && payload.creditsDeducted > 0
+          ? payload.creditsDeducted
+          : 0;
+      if (deducted === 0) {
+        console.log(
+          `[Refund] Skipping lipsync refund for job ${job.id} — no creditsDeducted on payload`
+        );
+        return;
+      }
+    }
 
     // Autopost-specific guards. G-M10: extended to also cover
     // autopost_rerender — the creditsDeducted-presence check and

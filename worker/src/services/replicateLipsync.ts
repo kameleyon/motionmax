@@ -1,0 +1,227 @@
+/**
+ * Replicate lipsync integration (sync/lipsync-2 model family).
+ *
+ * Why Replicate instead of sync.so direct:
+ *   - The worker already has REPLICATE_API_KEY for other models (Hypereal
+ *     fallback, Nano Banana, Seedance). One vendor = one billing
+ *     dashboard, one outage page, one set of rate-limit knobs.
+ *   - Replicate's prediction API is well-trodden in this worker — same
+ *     polling pattern as the existing video integrations.
+ *
+ * Models:
+ *   - sync/lipsync-2          (~$0.06 / output-second)
+ *   - sync/lipsync-2-pro      (~$0.15 / output-second, sharper teeth + tongue)
+ *
+ * The Replicate API is async-first:
+ *   1. POST /v1/models/<owner>/<name>/predictions → returns prediction + id.
+ *   2. GET /v1/predictions/<id> polled until status terminates.
+ *   3. On `succeeded`, `output` is the URL of the synced MP4.
+ *
+ * Auth: `REPLICATE_API_KEY` (Bearer token).
+ */
+
+import { writeApiLog } from "../lib/logger.js";
+
+const DEFAULT_BASE = "https://api.replicate.com/v1";
+const POLL_INTERVAL_MS = 3_000;
+const DEFAULT_POLL_MAX_MS = 10 * 60 * 1000; // 10 min
+
+export type LipsyncModel = "lipsync-2" | "lipsync-2-pro";
+
+/** Replicate model owner — both lipsync-2 + lipsync-2-pro live under sync/. */
+const MODEL_OWNER = "sync";
+
+export interface ReplicateLipsyncOptions {
+  videoUrl: string;            // publicly fetchable MP4 (Supabase signed URL works)
+  audioUrl: string;            // publicly fetchable audio (WAV or MP3)
+  model?: LipsyncModel;
+  userId?: string | null;      // for api_call_logs attribution
+  generationId?: string | null;
+  signal?: AbortSignal;        // honors worker's hard-timeout abort
+  pollMaxMs?: number;
+}
+
+export interface ReplicateLipsyncResult {
+  videoUrl: string | null;
+  durationSeconds?: number;
+  provider: string;
+  model: LipsyncModel;
+  error?: string;
+}
+
+type PredictionStatus = "starting" | "processing" | "succeeded" | "failed" | "canceled";
+
+interface PredictionResponse {
+  id: string;
+  status: PredictionStatus;
+  output?: string | string[] | null;
+  error?: string | null;
+  metrics?: { predict_time?: number };
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * Run a full lipsync via Replicate: POST → poll until terminal → return output URL.
+ *
+ * Returns { videoUrl: null, error } on failure. NEVER throws on transient
+ * network errors during polling — the caller handles refund + status row.
+ */
+export async function generateLipsync(
+  opts: ReplicateLipsyncOptions,
+): Promise<ReplicateLipsyncResult> {
+  const apiKey = process.env.REPLICATE_API_KEY || process.env.REPLICATE_API_TOKEN;
+  const base = process.env.REPLICATE_API_BASE || DEFAULT_BASE;
+  const model: LipsyncModel = opts.model ?? "lipsync-2";
+  const provider = "replicate";
+
+  if (!apiKey) {
+    return { videoUrl: null, provider, model, error: "REPLICATE_API_KEY is not configured" };
+  }
+
+  const startTime = Date.now();
+  const pollMaxMs = opts.pollMaxMs ?? DEFAULT_POLL_MAX_MS;
+
+  // ── 1. Create the prediction ─────────────────────────────────────
+  let predictionId: string;
+  try {
+    if (opts.signal?.aborted) {
+      return { videoUrl: null, provider, model, error: "Replicate lipsync aborted before submission" };
+    }
+
+    const createRes = await fetch(`${base}/models/${MODEL_OWNER}/${model}/predictions`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        input: {
+          // sync/lipsync-2 model accepts `video` + `audio` URLs. Both must
+          // be publicly fetchable. Supabase signed URLs (default 7-day TTL
+          // on the video bucket) work fine.
+          video: opts.videoUrl,
+          audio: opts.audioUrl,
+        },
+      }),
+      signal: opts.signal,
+    });
+
+    if (!createRes.ok) {
+      const errText = await createRes.text().catch(() => "");
+      const err = `Replicate submit ${createRes.status}: ${errText.substring(0, 200)}`;
+      console.warn(`[ReplicateLipsync] ${err}`);
+      return { videoUrl: null, provider, model, error: err };
+    }
+
+    const created = (await createRes.json()) as PredictionResponse;
+    if (!created?.id) {
+      return { videoUrl: null, provider, model, error: "Replicate response missing prediction id" };
+    }
+    predictionId = created.id;
+    console.log(`[ReplicateLipsync] Submitted prediction ${predictionId} (model=${MODEL_OWNER}/${model})`);
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      return { videoUrl: null, provider, model, error: "Replicate lipsync aborted by hard-timeout signal" };
+    }
+    return {
+      videoUrl: null,
+      provider,
+      model,
+      error: `Replicate submit threw: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  // ── 2. Poll until terminal or timeout ─────────────────────────────
+  const pollDeadline = Date.now() + pollMaxMs;
+  let lastStatus: PredictionStatus | "" = "";
+
+  while (Date.now() < pollDeadline) {
+    if (opts.signal?.aborted) {
+      return { videoUrl: null, provider, model, error: "Replicate poll aborted by hard-timeout signal" };
+    }
+
+    try {
+      const pollRes = await fetch(`${base}/predictions/${predictionId}`, {
+        headers: { "Authorization": `Bearer ${apiKey}` },
+        signal: opts.signal,
+      });
+      if (!pollRes.ok) {
+        // 4xx non-429 is permanent (auth, bad id). Keep polling on 5xx / 429.
+        if (pollRes.status >= 400 && pollRes.status < 500 && pollRes.status !== 429) {
+          const errText = await pollRes.text().catch(() => "");
+          return {
+            videoUrl: null, provider, model,
+            error: `Replicate poll ${pollRes.status}: ${errText.substring(0, 200)}`,
+          };
+        }
+        await sleep(POLL_INTERVAL_MS);
+        continue;
+      }
+
+      const body = (await pollRes.json()) as PredictionResponse;
+      if (body.status !== lastStatus) {
+        console.log(`[ReplicateLipsync] Prediction ${predictionId} status=${body.status}`);
+        lastStatus = body.status;
+      }
+
+      if (body.status === "succeeded") {
+        // sync/lipsync-2 returns a single URL string. We tolerate an array
+        // shape too — some Replicate models return [url] (defensive parse).
+        const outputUrl = Array.isArray(body.output) ? body.output[0] : body.output;
+        if (!outputUrl || typeof outputUrl !== "string") {
+          return { videoUrl: null, provider, model, error: "Replicate succeeded but no output URL" };
+        }
+        const durationSeconds = body.metrics?.predict_time;
+        writeApiLog({
+          userId: opts.userId ?? null,
+          generationId: opts.generationId ?? null,
+          provider, model: `${MODEL_OWNER}/${model}`,
+          status: "success",
+          totalDurationMs: Date.now() - startTime,
+          cost: lipsyncCostUsd(model, durationSeconds ?? 0),
+          error: undefined,
+        }).catch((e) => console.warn(`[ReplicateLipsync] api log failed: ${(e as Error).message}`));
+
+        return { videoUrl: outputUrl, durationSeconds, provider, model };
+      }
+
+      if (body.status === "failed" || body.status === "canceled") {
+        return {
+          videoUrl: null, provider, model,
+          error: `Replicate ${body.status}: ${body.error ?? "no reason given"}`,
+        };
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return { videoUrl: null, provider, model, error: "Replicate poll aborted by hard-timeout signal" };
+      }
+      // Network blip during poll — keep going.
+      console.warn(`[ReplicateLipsync] Poll exception (will retry): ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    await sleep(POLL_INTERVAL_MS);
+  }
+
+  writeApiLog({
+    userId: opts.userId ?? null,
+    generationId: opts.generationId ?? null,
+    provider, model: `${MODEL_OWNER}/${model}`,
+    status: "error",
+    totalDurationMs: Date.now() - startTime,
+    cost: 0,
+    error: `Replicate prediction poll timeout after ${Math.round(pollMaxMs / 1000)}s`,
+  }).catch((e) => console.warn(`[ReplicateLipsync] api log failed: ${(e as Error).message}`));
+
+  return {
+    videoUrl: null, provider, model,
+    error: `Replicate prediction ${predictionId} did not complete within ${Math.round(pollMaxMs / 1000)}s`,
+  };
+}
+
+/** USD cost for a completed lipsync. Replicate bills by predict_time
+ *  (compute seconds), which closely tracks output duration for sync/lipsync-2. */
+function lipsyncCostUsd(model: LipsyncModel, outputSeconds: number): number {
+  const perSec = model === "lipsync-2-pro" ? 0.15 : 0.06;
+  return Math.max(0, outputSeconds * perSec);
+}

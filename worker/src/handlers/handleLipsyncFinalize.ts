@@ -21,14 +21,14 @@
 import { supabase } from "../lib/supabase.js";
 import { writeSystemLog } from "../lib/logger.js";
 import { audit, auditError } from "../lib/audit.js";
-import { generateLipsync, type SyncLabsModel } from "../services/syncLabs.js";
+import { generateLipsync, type LipsyncModel } from "../services/replicateLipsync.js";
 import { v4 as uuidv4 } from "uuid";
 
 interface LipsyncFinalizePayload {
   generationId: string;
   sourceVideoUrl: string;
   audioUrl: string;
-  model?: SyncLabsModel;
+  model?: LipsyncModel;
   creditsDeducted?: number;
 }
 
@@ -79,7 +79,7 @@ async function _runLipsyncFinalize(
 
   await supabase
     .from("generations")
-    .update({ lipsync_status: "processing", lipsync_provider: "sync_labs", lipsync_model: model ?? "lipsync-2" })
+    .update({ lipsync_status: "processing", lipsync_provider: "replicate", lipsync_model: `sync/${model ?? "lipsync-2"}` })
     .eq("id", generationId);
 
   // ── 1. Call Sync Labs ────────────────────────────────────────────

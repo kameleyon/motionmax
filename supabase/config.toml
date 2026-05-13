@@ -21,6 +21,9 @@ verify_jwt = true
 [functions.generate-cinematic]
 verify_jwt = true
 
+[functions.lipsync-enqueue]
+verify_jwt = true
+
 [functions.create-checkout]
 verify_jwt = true
 

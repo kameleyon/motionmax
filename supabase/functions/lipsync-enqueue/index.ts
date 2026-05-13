@@ -113,17 +113,20 @@ serve(async (req) => {
       return jsonResponse(corsHeaders, { error: "Lipsync is already running for this generation" }, 409);
     }
 
-    // 3. Source video = latest successful export's finalUrl. We pull the
-    //    most recent export_video job for this generation that has a
-    //    finalUrl in payload OR result (handlers wrote both shapes over
-    //    time).
+    // 3. Source video = latest successful export's finalUrl. The
+    //    export_video job's payload carries `project_id`, NOT
+    //    `generationId` (that's only set internally for cost
+    //    attribution, never written back to the row). So we look up
+    //    by project_id from the generation row. handleExportVideo
+    //    writes finalUrl onto both `result` (newer schema) and
+    //    sometimes `payload` (legacy merge) — read either.
     const { data: exportJob, error: expErr } = await supabase
       .from("video_generation_jobs")
       .select("id, payload, result")
       .eq("user_id", user.id)
       .eq("task_type", "export_video")
       .eq("status", "completed")
-      .contains("payload", { generationId: body.generationId })
+      .contains("payload", { project_id: gen.project_id })
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle();

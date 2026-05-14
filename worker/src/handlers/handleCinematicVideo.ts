@@ -570,7 +570,7 @@ async function _runCinematicVideo(
         category: "system_error",
         eventType: "provider_credits_exhausted",
         message: `Hypereal credits exhausted — scene ${sceneIndex} could not render on Seedance OR Kling V3 Pro`,
-        details: { sceneIndex, provider: "seedance-2-0-i2v + kling-3-0-pro-i2v fallback", raw: errMsg.slice(0, 400) },
+        details: { sceneIndex, provider: "doubao-seedance-2-0-fast + kling-3-0-pro-i2v fallback", raw: errMsg.slice(0, 400) },
       });
       throw err;
     }
@@ -599,7 +599,7 @@ async function _runCinematicVideo(
       message: `Scene ${sceneIndex}: provider moderation rejected — using still image as held frame`,
       details: {
         sceneIndex,
-        provider: "seedance-2-0-i2v + kling-3-0-pro-i2v fallback",
+        provider: "doubao-seedance-2-0-fast + kling-3-0-pro-i2v fallback",
         reason: errMsg,
         fallback: "hold_frame",
       },
@@ -618,7 +618,7 @@ async function _runCinematicVideo(
         : {};
       meta.heldFrame = {
         reason: errMsg.slice(0, 240),
-        provider: "seedance-2-0-i2v + kling-3-0-pro-i2v fallback",
+        provider: "doubao-seedance-2-0-fast + kling-3-0-pro-i2v fallback",
         at: new Date().toISOString(),
       };
       freshScenes2[sceneIndex] = { ...freshScenes2[sceneIndex], videoUrl: null, _meta: meta };

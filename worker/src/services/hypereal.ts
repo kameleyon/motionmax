@@ -487,7 +487,7 @@ export type SeedanceResolution = "480p" | "720p";
 const SEEDANCE_MAX_PROMPT_CHARS = 2400;
 
 /**
- * Generate video via Seedance 2.0 I2V (`seedance-2-0-i2v`).
+ * Generate video via Seedance 2.0 Fast I2V (`doubao-seedance-2-0-fast`).
  *
  *  duration:      5–10s (clamped; default 10)
  *  resolution:    "480p" | "720p" (default "720p")
@@ -495,6 +495,13 @@ const SEEDANCE_MAX_PROMPT_CHARS = 2400;
  *  endImageUrl:   optional last frame for start→end interpolation
  *  generateAudio: false (voiceover is muxed by the export pipeline —
  *                 overriding to true is rarely what you want)
+ *
+ * Migrated 2026-05-13 from `seedance-2-0-i2v` ($0.20/sec) to
+ * `doubao-seedance-2-0-fast` ($0.105/sec) after a single 10s scene
+ * billed at 281 Hypereal credits — effective $0.28/sec, ~40% above the
+ * listed rate (Hypereal's I2V premium + compute floor). The fast
+ * variant is half the cost with the same Seedance 2.0 family quality;
+ * a 10s scene drops to ~140 credits.
  *
  * Returns the rendered video URL after polling the Hypereal job.
  */
@@ -513,7 +520,7 @@ export async function generateSeedance2I2V(
    *  Hypereal credits for a duplicate submission. */
   onSubmitted?: (info: { providerJobId: string; pollUrl: string | null; model: string }) => Promise<void>,
 ): Promise<string> {
-  const model = "seedance-2-0-i2v";
+  const model = "doubao-seedance-2-0-fast";
 
   // Duration: spec range 5–10s. Clamp + warn if outside.
   const clampedDuration = Math.min(10, Math.max(5, Math.round(duration)));
@@ -556,7 +563,7 @@ export async function generateSeedance2I2V(
       "Content-Type": "application/json",
     },
     body: bodyJson,
-  }, "seedance-2-0-i2v");
+  }, "doubao-seedance-2-0-fast");
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -569,7 +576,7 @@ export async function generateSeedance2I2V(
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const data = await parseHyperealJson(response, "seedance-2-0-i2v") as any;
+  const data = await parseHyperealJson(response, "doubao-seedance-2-0-fast") as any;
   const jobId = data.jobId;
   const pollUrl = data.pollUrl || null;
 

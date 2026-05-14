@@ -173,6 +173,12 @@ export function TabActivity() {
     queryKey: adminKey("activity", "feed", since, userId, eventTypesArg?.join(",") ?? "*"),
     queryFn: () => fetchFeedPage({ since, userId, eventTypes: eventTypesArg, limit: PAGE_LIMIT }),
     staleTime: 15_000,
+    // Poll every 10s when live=true so the feed stays current without
+    // depending on the system_logs Realtime publication (dropped on
+    // 2026-05-14 — see migration *_realtime_publication_shrink.sql).
+    // The Realtime sub below still appends to liveBuffer if events
+    // happen to come in (no-op once publication entry is removed).
+    refetchInterval: live ? 10_000 : false,
     refetchOnWindowFocus: false,
   });
 

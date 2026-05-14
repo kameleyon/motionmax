@@ -169,19 +169,33 @@ export function TabGenerations(): JSX.Element {
     queryFn: fetchDeadLetter,
   });
 
-  // Realtime: refresh on any video_generation_jobs change.
+  // Realtime: refresh on any video_generation_jobs change. We keep
+  // event:* here (unlike useAdminLiveCounters which narrows to active
+  // statuses) because this tab's KPIs include terminal-state counters
+  // (completed today, failed today). Debounced @ 500ms so a burst of
+  // events during a multi-scene generation triggers one refetch
+  // instead of N — added 2026-05-14 alongside the publication shrink.
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const debouncedInvalidate = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["admin", "gens"] });
+        timer = null;
+      }, 500);
+    };
     const channel = supabase
       .channel("admin-tab-gens:video_generation_jobs")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "video_generation_jobs" },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["admin", "gens"] });
-        },
+        debouncedInvalidate,
       )
       .subscribe();
-    return () => { void supabase.removeChannel(channel); };
+    return () => {
+      if (timer) clearTimeout(timer);
+      void supabase.removeChannel(channel);
+    };
   }, [queryClient]);
 
   useEffect(() => {

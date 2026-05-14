@@ -117,12 +117,20 @@ export function useAdminLiveCounters(): AdminLiveCounters {
     ...ADMIN_DEFAULT_QUERY_OPTIONS,
     queryKey: activeKey,
     queryFn: fetchActiveUsers,
+    // Poll every 30s — system_logs Realtime invalidation was dropped
+    // when we shrank the publication (2026-05-14). Active-user count
+    // is fine at 30s freshness.
+    refetchInterval: 30_000,
   });
 
   const queueQ = useQuery({
     ...ADMIN_DEFAULT_QUERY_OPTIONS,
     queryKey: queueKey,
     queryFn: fetchQueueDepth,
+    // Poll every 15s as a safety net — the Realtime sub below is
+    // narrowed to active statuses, so terminal-state changes
+    // (succeeded/failed/cancelled) won't trigger an invalidate.
+    refetchInterval: 15_000,
   });
 
   const spendQ = useQuery({
@@ -139,22 +147,28 @@ export function useAdminLiveCounters(): AdminLiveCounters {
   });
 
   useEffect(() => {
-    const sysLogsChannel = supabase
-      .channel("admin-live-counters:system_logs")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "system_logs" },
-        () => {
-          queryClient.invalidateQueries({ queryKey: activeKey });
-        },
-      )
-      .subscribe();
-
+    // system_logs was dropped from supabase_realtime publication on
+    // 2026-05-14 — activeQ now polls every 30s instead. The previous
+    // sysLogsChannel sub has been removed.
+    //
+    // For video_generation_jobs we keep a Realtime sub for snappier
+    // queue-depth updates, but narrow it to active-status transitions.
+    // INSERTs into the table arrive in `queued` status and start
+    // processing soon after; once a job hits a terminal status
+    // (succeeded/failed/cancelled) the queue depth has already shifted.
+    // Filtering to status=in.(queued,processing,running) keeps the
+    // sub firing on the transitions that actually move the counter
+    // and ignores succeeded/failed/cancelled row-level updates.
     const jobsChannel = supabase
       .channel("admin-live-counters:video_generation_jobs")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "video_generation_jobs" },
+        {
+          event: "*",
+          schema: "public",
+          table: "video_generation_jobs",
+          filter: "status=in.(queued,processing,running)",
+        },
         () => {
           queryClient.invalidateQueries({ queryKey: queueKey });
         },
@@ -162,7 +176,6 @@ export function useAdminLiveCounters(): AdminLiveCounters {
       .subscribe();
 
     return () => {
-      void supabase.removeChannel(sysLogsChannel);
       void supabase.removeChannel(jobsChannel);
     };
     // adminKey() returns a fresh array each render, so we depend on the

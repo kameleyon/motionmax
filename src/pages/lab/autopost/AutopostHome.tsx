@@ -35,6 +35,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import AppShell from "@/components/dashboard/AppShell";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { trackEvent } from "@/hooks/useAnalytics";
 import { EVENTS } from "@/lib/events";
@@ -175,6 +176,7 @@ async function fetchRadarRuns(): Promise<RadarRow[]> {
 export default function AutopostHome() {
   const queryClient = useQueryClient();
   const { isAdmin } = useAdminAuth();
+  const { user } = useAuth();
 
   // §11 Lens C3 — feature-adoption funnel anchor for Autopost Lab. Fires
   // once on first mount; subsequent navigation between RunHistory /
@@ -226,8 +228,15 @@ export default function AutopostHome() {
   });
 
   // Realtime — single debounced channel covering all relevant tables.
-  // Mirrors the AdminQueueMonitor / RunHistory pattern.
+  // Per-user filter on autopost_* tables added 2026-05-14 so each
+  // user's session only receives broadcasts for their own rows;
+  // previously this fired refetches on every other user's autopost
+  // activity (wasted client-side invalidation, not a data leak —
+  // queries are RLS-scoped). app_settings has no user_id (global
+  // kill-switches) so it stays unfiltered.
   useEffect(() => {
+    if (!user?.id) return;
+    const userFilter = `user_id=eq.${user.id}`;
     const debouncedRefetch = debounce(() => {
       queryClient.invalidateQueries({ queryKey: ["autopost", "schedules-list"] });
       queryClient.invalidateQueries({ queryKey: ["autopost", "last-runs"] });
@@ -236,9 +245,9 @@ export default function AutopostHome() {
     }, 300);
     const channel = supabase
       .channel("lab-autopost-home")
-      .on("postgres_changes", { event: "*", schema: "public", table: "autopost_schedules" }, () => debouncedRefetch())
-      .on("postgres_changes", { event: "*", schema: "public", table: "autopost_runs" }, () => debouncedRefetch())
-      .on("postgres_changes", { event: "*", schema: "public", table: "autopost_publish_jobs" }, () => debouncedRefetch())
+      .on("postgres_changes", { event: "*", schema: "public", table: "autopost_schedules", filter: userFilter }, () => debouncedRefetch())
+      .on("postgres_changes", { event: "*", schema: "public", table: "autopost_runs", filter: userFilter }, () => debouncedRefetch())
+      .on("postgres_changes", { event: "*", schema: "public", table: "autopost_publish_jobs", filter: userFilter }, () => debouncedRefetch())
       .on("postgres_changes", { event: "*", schema: "public", table: "app_settings" }, () => {
         queryClient.invalidateQueries({ queryKey: ["autopost", "kill-switches"] });
       })
@@ -246,7 +255,7 @@ export default function AutopostHome() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [queryClient]);
+  }, [queryClient, user?.id]);
 
   const [pendingDisable, setPendingDisable] = useState<KillKey | null>(null);
   const [updatingKey, setUpdatingKey] = useState<KillKey | null>(null);

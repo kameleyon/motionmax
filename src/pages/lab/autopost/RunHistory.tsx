@@ -29,6 +29,7 @@ import {
 import { Helmet } from "react-helmet-async";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -81,6 +82,7 @@ function dateLowerBound(filter: DateFilter): string | null {
 export default function RunHistory() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [scheduleFilter, setScheduleFilter] = useState<string>("all");
@@ -164,20 +166,25 @@ export default function RunHistory() {
   // With cursor pagination we snap back to page 1 on each event so new
   // rows surface at the top; the accumulator's effect-merge then
   // replaces the cached snapshot with the fresh page-1 data.
+  // Per-user filter added 2026-05-14 to stop refetching on other users'
+  // autopost activity (queries are RLS-scoped already; this only saves
+  // wasted client-side invalidations).
   useEffect(() => {
+    if (!user?.id) return;
+    const userFilter = `user_id=eq.${user.id}`;
     const debouncedRefetch = debounce(() => {
       setPage(1);
       queryClient.invalidateQueries({ queryKey: ["autopost", "runs"] });
     }, 300);
     const channel = supabase
       .channel("lab-autopost-runs")
-      .on("postgres_changes", { event: "*", schema: "public", table: "autopost_runs" }, () => debouncedRefetch())
-      .on("postgres_changes", { event: "*", schema: "public", table: "autopost_publish_jobs" }, () => debouncedRefetch())
+      .on("postgres_changes", { event: "*", schema: "public", table: "autopost_runs", filter: userFilter }, () => debouncedRefetch())
+      .on("postgres_changes", { event: "*", schema: "public", table: "autopost_publish_jobs", filter: userFilter }, () => debouncedRefetch())
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [queryClient]);
+  }, [queryClient, user?.id]);
 
   const visibleRows = useMemo(() => {
     if (platformFilter === "all") return accumulatedRuns;

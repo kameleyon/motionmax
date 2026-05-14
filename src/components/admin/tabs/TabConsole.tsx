@@ -136,30 +136,39 @@ export function TabConsole(): JSX.Element {
     return () => { cancelled = true; };
   }, []);
 
-  // Realtime subscription (toggled by `live`).
+  // Polling tail (toggled by `live`). Runs every 10s, fetches rows
+  // newer than the most-recent we've seen, prepends, dedupes by id.
+  // Replaces the previous Realtime postgres_changes sub — system_logs
+  // was dropped from the supabase_realtime publication on 2026-05-14
+  // to shed ~55% of WAL-decoder DB load. 10s feels nearly-live for an
+  // admin tab and costs ~6 SELECTs/min/admin vs broadcasting every
+  // INSERT to every subscriber. We read the latest seen `created_at`
+  // off a ref instead of putting `logs` in the dep array — otherwise
+  // every successful poll would reset the interval.
+  const logsRef = useRef<SystemLogRow[]>([]);
+  useEffect(() => { logsRef.current = logs; }, [logs]);
   useEffect(() => {
     if (!live) return;
-    const channel = supabase.channel("admin-console:system_logs").on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table: "system_logs" },
-      (payload) => {
-        const r = payload.new as Partial<SystemLogRow> & { id?: string; created_at?: string };
-        if (!r.id || !r.created_at) return;
-        const row: SystemLogRow = {
-          id: r.id, user_id: r.user_id ?? null,
-          generation_id: r.generation_id ?? null, project_id: r.project_id ?? null,
-          event_type: r.event_type ?? "", category: r.category ?? "", message: r.message ?? "",
-          details: r.details ?? null, created_at: r.created_at,
-          fingerprint: r.fingerprint ?? null, level: r.level ?? null, worker_id: r.worker_id ?? null,
-        };
-        setLogs((prev) => {
-          const next = [row, ...prev];
-          if (next.length > BUFFER_CAP) next.length = BUFFER_CAP;
-          return next;
-        });
-      },
-    ).subscribe();
-    return () => { void supabase.removeChannel(channel); };
+    let cancelled = false;
+    const tick = async () => {
+      const since = logsRef.current[0]?.created_at ?? new Date(Date.now() - 60_000).toISOString();
+      const { data, error } = await supabase
+        .from("system_logs")
+        .select("id, user_id, generation_id, project_id, event_type, category, message, details, created_at, fingerprint, level, worker_id" as "*")
+        .gt("created_at", since)
+        .order("created_at", { ascending: false })
+        .limit(BUFFER_CAP);
+      if (cancelled || error || !data || data.length === 0) return;
+      const rows = data as unknown as SystemLogRow[];
+      setLogs((prev) => {
+        const seen = new Set(prev.map((r) => r.id));
+        const merged = [...rows.filter((r) => !seen.has(r.id)), ...prev];
+        if (merged.length > BUFFER_CAP) merged.length = BUFFER_CAP;
+        return merged;
+      });
+    };
+    const id = setInterval(tick, 10_000);
+    return () => { cancelled = true; clearInterval(id); };
   }, [live]);
 
   const pausedNew = useMemo(() => {

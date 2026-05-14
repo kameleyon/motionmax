@@ -222,6 +222,10 @@ export function TabOverview(): JSX.Element {
     ...ADMIN_DEFAULT_QUERY_OPTIONS,
     queryKey: adminKey("overview", "feed", filter),
     queryFn: () => fetchFeed(filter),
+    // Poll every 10s — system_logs was dropped from the
+    // supabase_realtime publication so the postgres_changes invalidate
+    // below no longer fires. Polling keeps the feed near-live.
+    refetchInterval: 10_000,
   });
 
   useEffect(() => {

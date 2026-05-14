@@ -30,16 +30,21 @@ import {
   // generateKlingV3Video,        // V3.0 Std — skipped; Pro variant below is used instead
   // generateVeo31Video,          // Veo 3.1 — doesn't follow prompts, generates unwanted audio/lip sync
   // generateKlingV26Video,       // Kling V2.6 Pro — retired, superseded by V3.0 Pro
-  generateSeedance2I2V,           // Primary — Hypereal Seedance 2.0 Fast I2V (native last_image support).
-  generateKlingV3ProI2V,          // Fallback — Kling V3.0 Pro I2V (kling-3-0-pro-i2v, 39 cr). Used when Seedance fails / is exhausted.
+  generateSeedance2I2V,           // Fallback 1 — Hypereal Seedance 2.0 Fast I2V. Demoted from primary 2026-05-14 once Replicate Seedance was fixed.
+  generateKlingV3ProI2V,          // Fallback 2 — Kling V3.0 Pro I2V (kling-3-0-pro-i2v, 39 cr). Last resort when both Seedance paths fail.
   // generateGrokVideo,           // Grok Video I2V — status-lookup failures on Hypereal, rolled back
   pollHyperealJob,                // Resume-from-checkpoint poll for an already-submitted Hypereal job.
 } from "../services/hypereal.js";
 // Replicate-hosted Seedance import retained but not invoked — kept in
 // tree so we can re-enable quickly if Replicate adds last_image support
 // to bytedance/seedance-2.0. Currently bypassed because the model
-// silently ignores last_image, breaking scene-to-scene continuity.
-// import { generateReplicateSeedance } from "../services/replicateSeedance.js";
+// Replicate Seedance 2.0 — now PRIMARY for cinematic video (2026-05-14).
+// Earlier verdict ("silently ignores last_image") was a field-name bug
+// in our integration: Replicate's schema expects `last_frame_image`,
+// we were sending `last_image`. Fixed in replicateSeedance.ts and
+// verified visually via scripts/probe-replicate-seedance.mjs. Now
+// honors both first + last frame at 71% lower cost than Hypereal @ 480p.
+import { generateReplicateSeedance } from "../services/replicateSeedance.js";
 import { saveCheckpoint, readCheckpointKey, clearCheckpointKey, CheckpointReadError } from "../lib/checkpoint.js";
 import { isKillSwitchArmed } from "../lib/featureFlags.js";
 
@@ -487,7 +492,45 @@ async function _runCinematicVideo(
   // straight to Kling — Kling is cheaper (39 cr vs 69) and can succeed
   // on a Hypereal balance that Seedance can't.
   try {
-    // ── 1. Hypereal Seedance Fast (primary, ×2 attempts) ───────────
+    // ── 1. Replicate Seedance 2.0 @ 480p (primary) ───────────────────
+    // Honors both `image` and `last_frame_image` for true start→end
+    // morph at ~71% lower cost than Hypereal Seedance Fast @ 720p.
+    // Field-name fix landed 2026-05-14 (see replicateSeedance.ts).
+    // Returns null + error string on failure rather than throwing —
+    // we classify and fall through to Hypereal Seedance.
+    {
+      const replicateRes = await generateReplicateSeedance({
+        imageUrl,
+        prompt: `${finalPrompt}\n\n${motionGuardrails}`,
+        duration: 10,
+        endImageUrl,
+        aspectRatio: seedanceAspect,
+        resolution: "480p",
+        userId: userId ?? null,
+        generationId,
+        onSubmitted: async ({ providerJobId, pollUrl, model }) => {
+          await saveCheckpoint(jobId, checkpointKey, {
+            stage: "polling", providerJobId, pollUrl, model,
+          });
+        },
+      });
+      if (replicateRes.videoUrl) {
+        videoUrl = replicateRes.videoUrl;
+        provider = "Replicate Seedance 2.0 @ 480p";
+      } else {
+        // Moderation rejection at Replicate is permanent — bubble up so
+        // the held-frame path runs (mirrors Hypereal behavior below).
+        const msg = replicateRes.error ?? "";
+        if (/risk control|content[_ ]?violation|blocked.*content|moderation|safety|policy/i.test(msg)) {
+          throw new Error(msg);
+        }
+        console.warn(
+          `[CinematicVideo] Scene ${sceneIndex}: Replicate Seedance failed — falling back to Hypereal Seedance: ${msg.slice(0, 200)}`,
+        );
+      }
+    }
+
+    // ── 2. Hypereal Seedance Fast (fallback 1, ×2 attempts) ─────────
     const SEEDANCE_TRIES = 2;
     let lastSeedanceErr: Error | null = null;
     let seedanceCreditsExhausted = false;

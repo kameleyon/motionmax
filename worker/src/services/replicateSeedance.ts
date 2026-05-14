@@ -48,7 +48,8 @@ export interface ReplicateSeedanceOptions {
   aspectRatio?: ReplicateSeedanceAspectRatio;  // default "16:9"
   resolution?: ReplicateSeedanceResolution;    // default "480p" (75% cheaper than 720p)
   /** Last-frame for start→end transitions. Passed to Replicate as
-   *  `last_image`. Supported by the full `bytedance/seedance-2.0` model
+   *  `last_frame_image` (NOT `last_image` — unknown fields are silently
+   *  dropped). Supported by the full `bytedance/seedance-2.0` model
    *  (Fast variant did NOT — that's why we migrated up). */
   endImageUrl?: string;
   seed?: number;
@@ -132,14 +133,18 @@ export async function generateReplicateSeedance(
     resolution,
     aspect_ratio: aspectRatio,
   };
-  // Seedance 2.0 (full) accepts `last_image` for start→end frame
-  // interpolation. We pass it when provided so cinematic scene
-  // transitions land cleanly. If Replicate ever rejects this field
-  // (model schema change), the API surfaces a 400 with the exact
-  // field name and the handler falls through to Hypereal Seedance.
+  // Seedance 2.0 (full) accepts `last_frame_image` for start→end frame
+  // interpolation. Field name confirmed against a working Replicate
+  // playground payload 2026-05-14 — the schema accepts the input but
+  // silently DROPS unknown fields. Previously this code sent
+  // `last_image`, which is why every Replicate Seedance call has been
+  // first-frame-only (T2V-tail) since the integration shipped, even
+  // though we believed last_image was respected. Verified with a
+  // visual probe (scripts/probe-replicate-seedance.mjs) that swapping
+  // to `last_frame_image` produces a real start→end morph.
   if (opts.endImageUrl) {
-    input.last_image = opts.endImageUrl;
-    console.log(`[ReplicateSeedance] LAST IMAGE: ${opts.endImageUrl.substring(0, 80)}...`);
+    input.last_frame_image = opts.endImageUrl;
+    console.log(`[ReplicateSeedance] LAST FRAME IMAGE: ${opts.endImageUrl.substring(0, 80)}...`);
   }
   if (typeof opts.seed === "number" && Number.isFinite(opts.seed)) {
     input.seed = opts.seed;

@@ -283,8 +283,14 @@ async function _runCinematicVideo(
     : "";
   const videoPrompt = buildVideoPrompt(visualPrompt, voiceover, characterDescription, styleDesc + gradeDirective, language, cameraMotion);
 
-  const apiKey = (process.env.HYPEREAL_API_KEY || "").trim();
-  if (!apiKey) throw new Error("HYPEREAL_API_KEY not configured");
+  // Video generation routes to HYPEREALIMAGE_API_KEY (secondary
+  // account on the correctly-priced rate tier). All image/audio/LLM
+  // calls in this handler stay on HYPEREAL_API_KEY. Split applied
+  // 2026-05-14 after dashboard rate comparison showed account B
+  // (HYPEREALIMAGE) at a materially lower per-second Seedance rate
+  // than account A (HYPEREAL).
+  const apiKey = (process.env.HYPEREALIMAGE_API_KEY || "").trim();
+  if (!apiKey) throw new Error("HYPEREALIMAGE_API_KEY not configured");
 
   // Add scene-specific instructions based on transition type
   let sceneInstruction = "";

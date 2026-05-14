@@ -23,8 +23,9 @@ function maskKey(key: string | undefined): string {
 }
 
 const PROVIDER_KEYS: Array<[string, string, 'required' | 'optional']> = [
-  ['HYPEREAL_API_KEY',     'Hypereal (image, ASR, video, edit)', 'required'],
-  ['REPLICATE_API_KEY',    'Replicate (fallback image, audio)',   'required'],
+  ['HYPEREAL_API_KEY',      'Hypereal account A (image, ASR, music, LLM)', 'required'],
+  ['HYPEREALIMAGE_API_KEY', 'Hypereal account B (video — Seedance/Kling/Grok/Veo + image fallback)', 'required'],
+  ['REPLICATE_API_KEY',     'Replicate (fallback image, audio)',   'required'],
   ['OPENROUTER_API_KEY',   'OpenRouter (LLM script)',             'required'],
   ['ELEVENLABS_API_KEY',   'ElevenLabs TTS',                      'optional'],
   ['SMALLEST_API_KEY',     'Smallest.ai TTS',                     'optional'],

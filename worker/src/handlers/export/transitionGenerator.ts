@@ -198,10 +198,10 @@ export async function generateTransitionVideo(
   } = request;
 
   const label = `${fromSceneIndex}→${fromSceneIndex + 1}`;
-  const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
+  const hyperealApiKey = (process.env.HYPEREALIMAGE_API_KEY || "").trim();
 
   if (!hyperealApiKey) {
-    return { path: null, aiGenerated: false, durationSeconds: 0, error: "HYPEREAL_API_KEY not configured" };
+    return { path: null, aiGenerated: false, durationSeconds: 0, error: "HYPEREALIMAGE_API_KEY not configured" };
   }
 
   console.log(`[TransitionGen] ${label}: generating ${duration}s Kling transition...`);

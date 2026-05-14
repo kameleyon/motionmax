@@ -99,8 +99,11 @@ export async function handleCinematicVideoEdit(
     await supabase.from("generations").update({ scenes }).eq("id", generationId);
   }
 
-  const apiKey = (process.env.HYPEREAL_API_KEY || "").trim();
-  if (!apiKey) throw new Error("HYPEREAL_API_KEY not configured");
+  // grok-imagine-video-edit is a video call → secondary Hypereal
+  // account (HYPEREALIMAGE_API_KEY) per the video-only routing split
+  // landed 2026-05-14.
+  const apiKey = (process.env.HYPEREALIMAGE_API_KEY || "").trim();
+  if (!apiKey) throw new Error("HYPEREALIMAGE_API_KEY not configured");
 
   console.log(
     `[CinematicVideoEdit] Scene ${sceneIndex}: grok-imagine-video-edit, ` +

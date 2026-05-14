@@ -35,9 +35,12 @@ export interface VeoVideoResult {
 export async function generateVeoVideo(
   input: VeoVideoInput
 ): Promise<VeoVideoResult> {
-  const apiKey = (process.env.HYPEREAL_API_KEY || "").trim();
+  // Video-only routing: Veo 3.1 reads HYPEREALIMAGE_API_KEY (secondary
+  // Hypereal account on the correctly-priced video rate tier) per the
+  // split landed 2026-05-14.
+  const apiKey = (process.env.HYPEREALIMAGE_API_KEY || "").trim();
   if (!apiKey) {
-    return { url: null, provider: "Veo 3.1", error: "HYPEREAL_API_KEY not configured" };
+    return { url: null, provider: "Veo 3.1", error: "HYPEREALIMAGE_API_KEY not configured" };
   }
 
   const hasLastImage = !!input.lastImageUrl;

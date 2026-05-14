@@ -204,7 +204,10 @@ export async function generateSceneVideo(
  * Check whether AI video generation is available (API keys configured).
  */
 export function isAiVideoAvailable(): boolean {
-  const hyperealKey = (process.env.HYPEREAL_API_KEY || "").trim();
+  // Video routes through HYPEREALIMAGE_API_KEY (split landed 2026-05-14)
+  // — check that key, not the general HYPEREAL_API_KEY, since the latter
+  // doesn't gate video any more.
+  const hyperealKey = (process.env.HYPEREALIMAGE_API_KEY || "").trim();
   const replicateKey = (process.env.REPLICATE_API_KEY || "").trim();
   return hyperealKey.length > 0 || replicateKey.length > 0;
 }

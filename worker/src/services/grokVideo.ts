@@ -45,7 +45,9 @@ function mapFormatToAspectRatio(format: string): GrokAspectRatio {
 export async function generateGrokVideo(
   input: GrokVideoInput,
 ): Promise<GrokVideoResult> {
-  const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
+  // Video-only routing: HYPEREALIMAGE_API_KEY is the secondary account
+  // on the correctly-priced video rate tier (split landed 2026-05-14).
+  const hyperealApiKey = (process.env.HYPEREALIMAGE_API_KEY || "").trim();
   const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
   const aspectRatio = mapFormatToAspectRatio(input.format);
 

@@ -134,7 +134,10 @@ describe("handleCinematicVideo", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     isKillSwitchArmedMock.mockResolvedValue(false);
-    // Default: HYPEREAL_API_KEY set so the prompt-only failure paths run.
+    // Default: HYPEREALIMAGE_API_KEY set so the prompt-only failure paths
+    // run. Video generation reads HYPEREALIMAGE (split landed 2026-05-14);
+    // HYPEREAL_API_KEY remains the key for image/audio/LLM paths.
+    process.env.HYPEREALIMAGE_API_KEY = "hy_test_key";
     process.env.HYPEREAL_API_KEY = "hy_test_key";
   });
 
@@ -221,7 +224,7 @@ describe("handleCinematicVideo", () => {
 
   // ── 3. Provider failures bubble out (so refund path runs) ─────────
   describe("provider failure surfacing", () => {
-    it("throws when HYPEREAL_API_KEY is not configured", async () => {
+    it("throws when HYPEREALIMAGE_API_KEY is not configured", async () => {
       // Provide enough fixture data that the handler gets past scenes
       // validation and project lookup, then hits the API-key check.
       const scenes = [
@@ -245,13 +248,15 @@ describe("handleCinematicVideo", () => {
         return makeChain(null) as never;
       });
 
-      // Wipe the API key so the handler aborts before trying Hypereal.
-      delete process.env.HYPEREAL_API_KEY;
+      // Wipe the video-specific API key so the handler aborts before
+      // trying Hypereal. HYPEREAL_API_KEY stays set (image fallback would
+      // otherwise short-circuit before we hit the video key check).
+      delete process.env.HYPEREALIMAGE_API_KEY;
 
       const { handleCinematicVideo } = await import("./handleCinematicVideo.js");
       await expect(
         handleCinematicVideo("job-7", makePayload(), "user-7"),
-      ).rejects.toThrow(/HYPEREAL_API_KEY/i);
+      ).rejects.toThrow(/HYPEREALIMAGE_API_KEY/i);
     });
   });
 });

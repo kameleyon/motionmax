@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
-  AudioLines, Wand2, Link as LinkIcon, Paperclip,
+  Wand2, Link as LinkIcon, Paperclip,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -39,8 +39,7 @@ import {
   type MusicGenre, type CameraMotion, type ColorGrade, type SceneTransition,
   type IntakeSettings,
 } from './types';
-import { IntakeField, IntakeLabel, IntakeSlider } from './primitives';
-import FeatureToggle from './FeatureToggle';
+import { IntakeField, IntakeLabel } from './primitives';
 import IntakeRail from './IntakeRail';
 import { useIntakeRail } from './IntakeFrame';
 import { PLAN_LIMITS, normalizePlanName } from '@/lib/planLimits';
@@ -220,8 +219,11 @@ export default function IntakeForm({
   const [transition, setTransition] = useState<SceneTransition>('Default');
   const [grade, setGrade] = useState<ColorGrade>('Kodak 250D');
 
-  const [lipSync, setLipSync] = useState(false);
-  const [lipStrength, setLipStrength] = useState(70);
+  // Lipsync intake controls removed (post-generation only via the
+  // Voice tab in the editor). State + setters dropped — the cost calc
+  // + payload pass-through below treat lipSync as always-false.
+  const [lipSync] = useState(false);
+  const [lipStrength] = useState(70);
   // Music + SFX state — UI block is commented out while Lyria is
   // unstable. Setters dropped from the destructure (TS6133) since the
   // only writes lived inside the disabled JSX. The values are still
@@ -1232,32 +1234,11 @@ export default function IntakeForm({
         </div>
       </div>
 
-      {/* Audio & Realism — Music + SFX commented out while Lyria is
-          unstable. Lip sync section kept but hidden unless standalone
-          by dropping the `features.music` half of the gate. Uncomment
-          the original block below to restore. */}
-      {features.lipSync && (
-        <div>
-          <IntakeLabel><span className="text-[#14C8CC]">★</span> Audio & realism · NEW</IntakeLabel>
-          <div className="grid gap-3">
-            <FeatureToggle
-              icon={<AudioLines className="w-4 h-4" />}
-              title="Lip Sync"
-              subtitle="Align character mouth shapes to the narration line by line."
-              cost={ADDON_COST.lipSync}
-              on={lipSync}
-              onToggle={setLipSync}
-            >
-              <IntakeLabel>Lip sync strength</IntakeLabel>
-              <IntakeSlider
-                value={lipStrength}
-                onChange={setLipStrength}
-                fmt={(v) => v < 40 ? 'Subtle' : v < 70 ? 'Natural' : 'Exaggerated'}
-              />
-            </FeatureToggle>
-          </div>
-        </div>
-      )}
+      {/* Audio & Realism section removed — lipsync is post-generation
+          only (Voice tab in the editor → "Sync lips to audio"). Music +
+          SFX intake controls were removed when Lyria became unreliable.
+          Restore the Music FeatureToggle from git history if Lyria
+          stabilizes. */}
       {/*
       Original "Audio & realism" block with the Music + SFX toggle was
       removed when Lyria became unreliable. Restore the FeatureToggle

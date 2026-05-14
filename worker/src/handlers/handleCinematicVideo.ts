@@ -520,8 +520,15 @@ async function _runCinematicVideo(
       } else {
         // Moderation rejection at Replicate is permanent — bubble up so
         // the held-frame path runs (mirrors Hypereal behavior below).
+        // Replicate Seedance phrasing observed in prod: "The input or
+        // output was flagged as sensitive. Please try again with
+        // different inputs. (E005)". Without catching "sensitive"/E005
+        // the handler would (incorrectly) fall through to Hypereal,
+        // which then rejects the same prompt and burns credits before
+        // landing at Kling for a 3rd reject — single prompt = 3 wasted
+        // provider calls. Verified 2026-05-14 user incident.
         const msg = replicateRes.error ?? "";
-        if (/risk control|content[_ ]?violation|blocked.*content|moderation|safety|policy/i.test(msg)) {
+        if (/risk control|content[_ ]?violation|blocked.*content|moderation|safety|policy|flagged.*sensitive|input or output.*sensitive|\(E005\)|potentially sensitive/i.test(msg)) {
           throw new Error(msg);
         }
         console.warn(

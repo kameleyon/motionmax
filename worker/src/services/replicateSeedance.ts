@@ -132,6 +132,11 @@ export async function generateReplicateSeedance(
     duration: clampedDuration,
     resolution,
     aspect_ratio: aspectRatio,
+    // motionmax mux's its own voice track during export — generating
+    // model audio here would be wasted (extra cost on Replicate's side)
+    // AND would get overwritten downstream. Always false. Matches the
+    // Hypereal Seedance call site which passes generate_audio=false too.
+    generate_audio: false,
   };
   // Seedance 2.0 (full) accepts `last_frame_image` for start→end frame
   // interpolation. Field name confirmed against a working Replicate

@@ -193,7 +193,19 @@ CREATE POLICY "videos_service_role_all"
 -- ============================================================
 -- 5. Documentation comments.
 -- ============================================================
-COMMENT ON POLICY "scene_images_select_owner" ON storage.objects IS
-  'B-NEW-1 sub-issue 1: scene-images bucket is private; reads gated to objects under a project owned by the caller. Worker uses service_role + signed URLs for cross-tenant access.';
-COMMENT ON POLICY "videos_select_owner" ON storage.objects IS
-  'B-NEW-1 sub-issue 2: videos bucket is private; reads gated to objects under the caller user_id folder. Public sharing happens via worker-issued signed URLs (1h TTL, see autopost dispatcher.ts).';
+-- COMMENT ON POLICY on storage.objects requires ownership of the
+-- storage schema (supabase_storage_admin), which the CLI's migration
+-- role can't assume — so the original COMMENT statements crashed every
+-- `supabase db push` for ~4 days. Converted to SQL line comments so
+-- the migration applies cleanly via CLI; the policy intent stays
+-- documented here:
+--
+--   scene_images_select_owner — B-NEW-1 sub-issue 1: scene-images
+--     bucket is private; reads gated to objects under a project owned
+--     by the caller. Worker uses service_role + signed URLs for
+--     cross-tenant access.
+--
+--   videos_select_owner — B-NEW-1 sub-issue 2: videos bucket is
+--     private; reads gated to objects under the caller user_id folder.
+--     Public sharing happens via worker-issued signed URLs (1h TTL,
+--     see autopost dispatcher.ts).

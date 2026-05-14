@@ -30,11 +30,16 @@ import {
   // generateKlingV3Video,        // V3.0 Std — skipped; Pro variant below is used instead
   // generateVeo31Video,          // Veo 3.1 — doesn't follow prompts, generates unwanted audio/lip sync
   // generateKlingV26Video,       // Kling V2.6 Pro — retired, superseded by V3.0 Pro
-  generateSeedance2I2V,           // Primary — Seedance 2.0 I2V (seedance-2-0-i2v, from 58 cr). Reverted from Turbo 2026-05-07.
-  generateKlingV3ProI2V,          // Fallback — Kling V3.0 Pro I2V (kling-3-0-pro-i2v, 39 cr). Tried after 2 failed Seedance attempts.
+  generateSeedance2I2V,           // 1st fallback — Hypereal Seedance 2.0 Fast I2V. Used if Replicate Seedance fails.
+  generateKlingV3ProI2V,          // 2nd fallback — Kling V3.0 Pro I2V (kling-3-0-pro-i2v, 39 cr). Tried after Hypereal Seedance also fails.
   // generateGrokVideo,           // Grok Video I2V — status-lookup failures on Hypereal, rolled back
   pollHyperealJob,                // Resume-from-checkpoint poll for an already-submitted Hypereal job.
 } from "../services/hypereal.js";
+// Primary cinematic video provider — Replicate-hosted ByteDance
+// Seedance 2.0 Fast. Migrated 2026-05-13 off Hypereal-hosted Seedance
+// (which was billing ~2× the listed rate). Hypereal Seedance + Kling
+// V3 Pro remain as fallbacks below if Replicate fails.
+import { generateReplicateSeedance } from "../services/replicateSeedance.js";
 import { saveCheckpoint, readCheckpointKey, clearCheckpointKey, CheckpointReadError } from "../lib/checkpoint.js";
 import { isKillSwitchArmed } from "../lib/featureFlags.js";
 
@@ -383,7 +388,7 @@ async function _runCinematicVideo(
   // already supports it without changes. We surface the choice via
   // the return payload so handleAutopostRun can stamp error_summary
   // ("scene N held as still frame: Kling moderation").
-  provider = "Seedance 2.0 I2V";
+  provider = "Replicate Seedance 2.0 Fast I2V";
   let heldFrameReason: string | null = null;
 
   // Build a Kling-style negative prompt by extracting the AVOID list
@@ -431,30 +436,117 @@ async function _runCinematicVideo(
     throw err;
   }
   if (cp?.stage === "polling" && typeof cp.providerJobId === "string" && typeof cp.model === "string") {
-    console.log(
-      `[CinematicVideo] Scene ${sceneIndex}: resuming Hypereal poll from checkpoint ` +
-      `(model=${cp.model}, jobId=${cp.providerJobId})`,
-    );
-    try {
-      videoUrl = await pollHyperealJob(cp.providerJobId, apiKey, cp.model, cp.pollUrl ?? null);
-      provider = cp.model.includes("kling") ? "Kling V3.0 Pro I2V" : "Seedance 2.0 I2V";
-    } catch (resumeErr) {
-      // Resume failed — clear the stale checkpoint and fall through to a
-      // fresh submit so the job isn't permanently wedged on a stuck poll.
-      console.warn(
-        `[CinematicVideo] Scene ${sceneIndex}: poll resume failed (${(resumeErr as Error).message}) — ` +
-        `clearing checkpoint and re-submitting`,
+    // Replicate predictions have their own lifecycle (different host,
+    // different poll-URL shape). For now we only resume Hypereal jobs
+    // via pollHyperealJob — a Replicate prediction whose worker died
+    // mid-poll will be re-submitted on the next attempt. Acceptable
+    // because Replicate's listed price is so low ($0.70 for a 10s 480p
+    // clip) that an occasional duplicate is cheaper than building a
+    // second resume path; the much-more-expensive Hypereal Seedance
+    // remains protected by the checkpoint.
+    const isReplicateCheckpoint = cp.model === "bytedance/seedance-2.0-fast";
+    if (isReplicateCheckpoint) {
+      console.log(
+        `[CinematicVideo] Scene ${sceneIndex}: stale Replicate checkpoint (model=${cp.model}, id=${cp.providerJobId}) — clearing and re-submitting`,
       );
       await clearCheckpointKey(jobId, checkpointKey);
+    } else {
+      console.log(
+        `[CinematicVideo] Scene ${sceneIndex}: resuming Hypereal poll from checkpoint ` +
+        `(model=${cp.model}, jobId=${cp.providerJobId})`,
+      );
+      try {
+        videoUrl = await pollHyperealJob(cp.providerJobId, apiKey, cp.model, cp.pollUrl ?? null);
+        provider = cp.model.includes("kling") ? "Kling V3.0 Pro I2V" : "Seedance 2.0 I2V";
+      } catch (resumeErr) {
+        // Resume failed — clear the stale checkpoint and fall through to a
+        // fresh submit so the job isn't permanently wedged on a stuck poll.
+        console.warn(
+          `[CinematicVideo] Scene ${sceneIndex}: poll resume failed (${(resumeErr as Error).message}) — ` +
+          `clearing checkpoint and re-submitting`,
+        );
+        await clearCheckpointKey(jobId, checkpointKey);
+      }
     }
   }
 
-  // Per-scene try chain: try Seedance up to 2 times, then fall
-  // back to Kling V3 Pro. Moderation rejection is permanent (held-frame
-  // path below). Provider-credits exhaustion on Seedance jumps straight
-  // to Kling — Kling is cheaper (39 cr vs 69), so it can succeed on a
-  // balance that Seedance can't.
+  // Per-scene provider chain (migrated 2026-05-13):
+  //   1. Replicate-hosted Seedance 2.0 Fast at 480p (primary — 75%
+  //      cheaper than the same model on Hypereal because Hypereal was
+  //      billing ~2× the listed rate).
+  //   2. Hypereal Seedance 2.0 Fast at 720p (1st fallback, ×2 attempts).
+  //   3. Hypereal Kling V3.0 Pro I2V (2nd fallback).
+  // Moderation rejection at ANY layer is permanent (held-frame path
+  // below). Provider-credits exhaustion on Hypereal Seedance jumps
+  // straight to Kling — Kling is cheaper (39 cr vs 69) and can succeed
+  // on a Hypereal balance that Seedance can't.
   try {
+    // ── 1. Try Replicate Seedance 2.0 Fast (primary) ──────────────
+    const replicateAspect: "16:9" | "9:16" | "1:1" = seedanceAspect;
+    try {
+      const replicateResult = await generateReplicateSeedance({
+        imageUrl,
+        prompt: `${finalPrompt}\n\n${motionGuardrails}`,
+        duration: 10,                 // 10s per scene (clamp range 5–15)
+        aspectRatio: replicateAspect, // derived from project format
+        resolution: "480p",           // hardcoded — 75% cheaper than 720p
+        endImageUrl,                  // accepted for parity; currently ignored by the model
+        userId: userId ?? null,
+        generationId,
+        // Replicate's prediction URL goes into the same checkpoint slot
+        // as Hypereal's poll URL. The resume path above recognises the
+        // Replicate model id and clears (re-submits) rather than
+        // re-polling — Replicate's per-clip cost is low enough that an
+        // occasional duplicate is cheaper than building a 2nd poller.
+        onSubmitted: async ({ providerJobId, pollUrl, model }) => {
+          await saveCheckpoint(jobId, checkpointKey, {
+            stage: "polling", providerJobId, pollUrl, model,
+          });
+        },
+      });
+      if (replicateResult.videoUrl) {
+        videoUrl = replicateResult.videoUrl;
+        provider = "Replicate Seedance 2.0 Fast I2V";
+      } else if (replicateResult.error) {
+        // Surface moderation cleanly so the outer catch can run the
+        // held-frame path without burning a Hypereal call (Replicate
+        // and Hypereal share ByteDance moderation — if Replicate says
+        // moderated, Hypereal will too).
+        if (/risk control|content[_ ]?violation|blocked.*content|moderation|potentially sensitive|flagged.*sensitive|nsfw/i.test(replicateResult.error)) {
+          throw new Error(replicateResult.error);
+        }
+        console.warn(
+          `[CinematicVideo] Scene ${sceneIndex}: Replicate Seedance failed — falling back to Hypereal Seedance Fast. error=${replicateResult.error.slice(0, 200)}`,
+        );
+        await writeSystemLog({
+          jobId, projectId, userId, generationId,
+          category: "system_warning",
+          eventType: "cinematic_video_replicate_fallback",
+          message: `Scene ${sceneIndex}: Replicate Seedance failed — falling back to Hypereal Seedance`,
+          details: {
+            sceneIndex,
+            replicate_error: replicateResult.error.slice(0, 240),
+          },
+        });
+        // Clear the Replicate-tagged checkpoint so the Hypereal submit
+        // below can install its own without colliding.
+        await clearCheckpointKey(jobId, checkpointKey);
+      }
+    } catch (replicateThrew) {
+      // generateReplicateSeedance shouldn't normally throw (it returns
+      // {videoUrl:null,error}). The only path here is moderation, which
+      // we rethrow above to short-circuit to the held-frame outer catch.
+      const replicateMsg = replicateThrew instanceof Error ? replicateThrew.message : String(replicateThrew);
+      if (/risk control|content[_ ]?violation|blocked.*content|moderation|potentially sensitive|flagged.*sensitive|nsfw/i.test(replicateMsg)) {
+        throw replicateThrew;
+      }
+      console.warn(
+        `[CinematicVideo] Scene ${sceneIndex}: Replicate Seedance threw — falling back to Hypereal Seedance. error=${replicateMsg.slice(0, 200)}`,
+      );
+      await clearCheckpointKey(jobId, checkpointKey);
+    }
+
+    // ── 2. Fall back to Hypereal Seedance (×2 attempts) ────────────
     const SEEDANCE_TRIES = 2;
     let lastSeedanceErr: Error | null = null;
     let seedanceCreditsExhausted = false;
@@ -480,6 +572,7 @@ async function _runCinematicVideo(
             });
           },
         );
+        provider = "Hypereal Seedance 2.0 Fast I2V";
         break; // success — exit retry loop
       } catch (innerErr) {
         const innerMsg = innerErr instanceof Error ? innerErr.message : String(innerErr);
@@ -570,7 +663,7 @@ async function _runCinematicVideo(
         category: "system_error",
         eventType: "provider_credits_exhausted",
         message: `Hypereal credits exhausted — scene ${sceneIndex} could not render on Seedance OR Kling V3 Pro`,
-        details: { sceneIndex, provider: "seedance-2-0-fast-i2v + kling-3-0-pro-i2v fallback", raw: errMsg.slice(0, 400) },
+        details: { sceneIndex, provider: "replicate-seedance-2.0-fast + hypereal-seedance-2-0-fast-i2v + kling-3-0-pro-i2v fallback", raw: errMsg.slice(0, 400) },
       });
       throw err;
     }
@@ -599,7 +692,7 @@ async function _runCinematicVideo(
       message: `Scene ${sceneIndex}: provider moderation rejected — using still image as held frame`,
       details: {
         sceneIndex,
-        provider: "seedance-2-0-fast-i2v + kling-3-0-pro-i2v fallback",
+        provider: "replicate-seedance-2.0-fast + hypereal-seedance-2-0-fast-i2v + kling-3-0-pro-i2v fallback",
         reason: errMsg,
         fallback: "hold_frame",
       },
@@ -618,7 +711,7 @@ async function _runCinematicVideo(
         : {};
       meta.heldFrame = {
         reason: errMsg.slice(0, 240),
-        provider: "seedance-2-0-fast-i2v + kling-3-0-pro-i2v fallback",
+        provider: "replicate-seedance-2.0-fast + hypereal-seedance-2-0-fast-i2v + kling-3-0-pro-i2v fallback",
         at: new Date().toISOString(),
       };
       freshScenes2[sceneIndex] = { ...freshScenes2[sceneIndex], videoUrl: null, _meta: meta };

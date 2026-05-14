@@ -110,6 +110,17 @@ export const PROVIDER_RATES_USD = {
   hypereal_video_ltx: {
     per_video_5s: 0.15,
   },
+  // Replicate-hosted ByteDance Seedance 2.0 Fast — primary cinematic
+  // video provider as of 2026-05-13. Billed per output-second, no queue
+  // premium. Migrated off Hypereal-hosted Seedance after a 10s scene
+  // billed at 281 credits (~$0.28/sec, ~2× the listed rate). Replicate
+  // hosts the same ByteDance model at the public sheet price.
+  //   - 480p I2V: $0.07/sec output
+  //   - 720p I2V: $0.15/sec output
+  replicate_seedance_2_0_fast: {
+    per_second_480p: 0.07,
+    per_second_720p: 0.15,
+  },
 } as const;
 
 export type ProviderRateKey = keyof typeof PROVIDER_RATES_USD;
@@ -168,6 +179,17 @@ export function videoCostUsd(
       * Math.max(1, Math.ceil(durationSeconds / 10));
   }
   return r.per_video_5s * Math.max(1, Math.ceil(durationSeconds / 5));
+}
+
+/** Compute cost for a Replicate-hosted Seedance 2.0 Fast clip. Billed per
+ *  output-second; rate depends on resolution. */
+export function replicateSeedanceCostUsd(
+  resolution: "480p" | "720p",
+  outputSeconds: number,
+): number {
+  const r = PROVIDER_RATES_USD.replicate_seedance_2_0_fast;
+  const perSec = resolution === "720p" ? r.per_second_720p : r.per_second_480p;
+  return Math.max(0, outputSeconds * perSec);
 }
 
 /** Round a USD float to USD cents (integer-ish, but we store as NUMERIC so we keep precision). */

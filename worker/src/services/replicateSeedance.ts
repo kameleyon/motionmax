@@ -1,23 +1,23 @@
 /**
- * Replicate-hosted Seedance 2.0 Fast I2V — direct from ByteDance.
+ * Replicate-hosted Seedance 2.0 (full, not Fast) — direct from ByteDance.
  *
- * Why Replicate (not Hypereal-hosted Seedance):
- *   - Hypereal was overcharging 281 credits per 10s scene for a "Fast"
- *     variant whose listed pricing is half that. Replicate hosts the
- *     same ByteDance model at the public rate ($0.07/sec at 480p,
- *     $0.15/sec at 720p) with no premium.
- *   - We still keep the Hypereal Seedance + Kling V3 Pro paths as
- *     fallbacks in handleCinematicVideo so a Replicate outage doesn't
- *     break video generation.
+ * Why the full model (not Fast):
+ *   - Fast doesn't expose `last_image` for start→end frame transitions.
+ *     motionmax needs that for cinematic scene continuity. Migrated
+ *     2026-05-14 from `bytedance/seedance-2.0-fast` to `bytedance/seedance-2.0`
+ *     after the Fast path logged the "endImageUrl ignored" warning on
+ *     every scene.
+ *   - Slight cost bump ($0.07/sec → $0.08/sec at 480p), still ~71%
+ *     cheaper than Hypereal's 281 cr/10s billing.
  *
- * Model: bytedance/seedance-2.0-fast
- *   - I2V (image-to-video) with optional reference_images / reference_videos
+ * Model: bytedance/seedance-2.0
+ *   - I2V (image-to-video) with optional last_image (first→last frame)
  *   - Duration 5–15s (motionmax always passes 5–10s per scene)
- *   - Resolution 480p (default here — 75% cheaper) or 720p
+ *   - Resolution 480p (default — 71% cheaper than Hypereal) / 720p / 1080p
  *   - Aspect ratios: 16:9, 4:3, 1:1, 3:4, 9:16, 21:9, 9:21, adaptive
  *
  * Replicate prediction lifecycle:
- *   1. POST /v1/models/bytedance/seedance-2.0-fast/predictions →
+ *   1. POST /v1/models/bytedance/seedance-2.0/predictions →
  *      `{ id, status: "starting", urls: { get, cancel } }`
  *   2. GET urls.get (polled every 3s) until status terminates
  *   3. On `succeeded`, `output` is either a URL string or { url: "..." }
@@ -29,13 +29,13 @@
 import { writeApiLog } from "../lib/logger.js";
 
 const REPLICATE_BASE = "https://api.replicate.com/v1";
-const REPLICATE_SUBMIT_URL = `${REPLICATE_BASE}/models/bytedance/seedance-2.0-fast/predictions`;
+const REPLICATE_SUBMIT_URL = `${REPLICATE_BASE}/models/bytedance/seedance-2.0/predictions`;
 const POLL_INTERVAL_MS = 3_000;
 // 15 min is generous for the P99 tail. Replicate's queue can sit for
 // several minutes during US business hours; once running, a 10s clip
 // renders in 1–3 min.
 const DEFAULT_POLL_MAX_MS = 15 * 60 * 1000;
-const MODEL_ID = "bytedance/seedance-2.0-fast";
+const MODEL_ID = "bytedance/seedance-2.0";
 
 export type ReplicateSeedanceResolution = "480p" | "720p";
 export type ReplicateSeedanceAspectRatio =
@@ -47,10 +47,9 @@ export interface ReplicateSeedanceOptions {
   duration?: number;                           // clamped to [5, 15]; default 5
   aspectRatio?: ReplicateSeedanceAspectRatio;  // default "16:9"
   resolution?: ReplicateSeedanceResolution;    // default "480p" (75% cheaper than 720p)
-  /** Optional last-frame interpolation. Currently NOT supported by the
-   *  Replicate Seedance 2.0 Fast model card; accepted for parity with
-   *  the Hypereal signature so the handler call site is identical, but
-   *  silently ignored if provided. */
+  /** Last-frame for start→end transitions. Passed to Replicate as
+   *  `last_image`. Supported by the full `bytedance/seedance-2.0` model
+   *  (Fast variant did NOT — that's why we migrated up). */
   endImageUrl?: string;
   seed?: number;
   userId?: string | null;
@@ -69,7 +68,7 @@ export interface ReplicateSeedanceResult {
   videoUrl: string | null;
   durationSeconds?: number;
   provider: "replicate";
-  model: "bytedance/seedance-2.0-fast";
+  model: "bytedance/seedance-2.0";
   error?: string;
 }
 
@@ -107,7 +106,7 @@ export async function generateReplicateSeedance(
 ): Promise<ReplicateSeedanceResult> {
   const apiKey = process.env.REPLICATE_API_KEY || process.env.REPLICATE_API_TOKEN;
   const provider = "replicate" as const;
-  const model = MODEL_ID as "bytedance/seedance-2.0-fast";
+  const model = MODEL_ID as "bytedance/seedance-2.0";
 
   if (!apiKey) {
     return {
@@ -126,15 +125,6 @@ export async function generateReplicateSeedance(
     );
   }
 
-  if (opts.endImageUrl) {
-    // Replicate's seedance-2.0-fast schema does NOT expose a last_image /
-    // end_image field. We log a heads-up so callers (who may have passed
-    // it for parity with the Hypereal signature) can see it was ignored.
-    console.warn(
-      `[ReplicateSeedance] endImageUrl supplied but ignored — Seedance 2.0 Fast does not support last-frame interpolation on Replicate`,
-    );
-  }
-
   const input: Record<string, unknown> = {
     prompt: opts.prompt,
     image: opts.imageUrl,
@@ -142,6 +132,15 @@ export async function generateReplicateSeedance(
     resolution,
     aspect_ratio: aspectRatio,
   };
+  // Seedance 2.0 (full) accepts `last_image` for start→end frame
+  // interpolation. We pass it when provided so cinematic scene
+  // transitions land cleanly. If Replicate ever rejects this field
+  // (model schema change), the API surfaces a 400 with the exact
+  // field name and the handler falls through to Hypereal Seedance.
+  if (opts.endImageUrl) {
+    input.last_image = opts.endImageUrl;
+    console.log(`[ReplicateSeedance] LAST IMAGE: ${opts.endImageUrl.substring(0, 80)}...`);
+  }
   if (typeof opts.seed === "number" && Number.isFinite(opts.seed)) {
     input.seed = opts.seed;
   }
@@ -150,7 +149,8 @@ export async function generateReplicateSeedance(
   const pollMaxMs = opts.pollMaxMs ?? DEFAULT_POLL_MAX_MS;
 
   console.log(
-    `[ReplicateSeedance] Starting Seedance 2.0 Fast — ${clampedDuration}s, ${resolution}, ${aspectRatio}`,
+    `[ReplicateSeedance] Starting Seedance 2.0 — ${clampedDuration}s, ${resolution}, ${aspectRatio}` +
+    `${opts.endImageUrl ? " (start→end)" : ""}`,
   );
   console.log(`[ReplicateSeedance] IMAGE: ${opts.imageUrl.substring(0, 80)}...`);
 

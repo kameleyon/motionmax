@@ -444,7 +444,7 @@ async function _runCinematicVideo(
     // clip) that an occasional duplicate is cheaper than building a
     // second resume path; the much-more-expensive Hypereal Seedance
     // remains protected by the checkpoint.
-    const isReplicateCheckpoint = cp.model === "bytedance/seedance-2.0-fast";
+    const isReplicateCheckpoint = cp.model === "bytedance/seedance-2.0";
     if (isReplicateCheckpoint) {
       console.log(
         `[CinematicVideo] Scene ${sceneIndex}: stale Replicate checkpoint (model=${cp.model}, id=${cp.providerJobId}) — clearing and re-submitting`,
@@ -490,7 +490,7 @@ async function _runCinematicVideo(
         duration: 10,                 // 10s per scene (clamp range 5–15)
         aspectRatio: replicateAspect, // derived from project format
         resolution: "480p",           // hardcoded — 75% cheaper than 720p
-        endImageUrl,                  // accepted for parity; currently ignored by the model
+        endImageUrl,                  // last_image — Seedance 2.0 full supports this
         userId: userId ?? null,
         generationId,
         // Replicate's prediction URL goes into the same checkpoint slot
@@ -506,7 +506,7 @@ async function _runCinematicVideo(
       });
       if (replicateResult.videoUrl) {
         videoUrl = replicateResult.videoUrl;
-        provider = "Replicate Seedance 2.0 Fast I2V";
+        provider = "Replicate Seedance 2.0 I2V";
       } else if (replicateResult.error) {
         // Surface moderation cleanly so the outer catch can run the
         // held-frame path without burning a Hypereal call (Replicate
@@ -663,7 +663,7 @@ async function _runCinematicVideo(
         category: "system_error",
         eventType: "provider_credits_exhausted",
         message: `Hypereal credits exhausted — scene ${sceneIndex} could not render on Seedance OR Kling V3 Pro`,
-        details: { sceneIndex, provider: "replicate-seedance-2.0-fast + hypereal-seedance-2-0-fast-i2v + kling-3-0-pro-i2v fallback", raw: errMsg.slice(0, 400) },
+        details: { sceneIndex, provider: "replicate-seedance-2.0 + hypereal-seedance-2-0-fast-i2v + kling-3-0-pro-i2v fallback", raw: errMsg.slice(0, 400) },
       });
       throw err;
     }
@@ -692,7 +692,7 @@ async function _runCinematicVideo(
       message: `Scene ${sceneIndex}: provider moderation rejected — using still image as held frame`,
       details: {
         sceneIndex,
-        provider: "replicate-seedance-2.0-fast + hypereal-seedance-2-0-fast-i2v + kling-3-0-pro-i2v fallback",
+        provider: "replicate-seedance-2.0 + hypereal-seedance-2-0-fast-i2v + kling-3-0-pro-i2v fallback",
         reason: errMsg,
         fallback: "hold_frame",
       },
@@ -711,7 +711,7 @@ async function _runCinematicVideo(
         : {};
       meta.heldFrame = {
         reason: errMsg.slice(0, 240),
-        provider: "replicate-seedance-2.0-fast + hypereal-seedance-2-0-fast-i2v + kling-3-0-pro-i2v fallback",
+        provider: "replicate-seedance-2.0 + hypereal-seedance-2-0-fast-i2v + kling-3-0-pro-i2v fallback",
         at: new Date().toISOString(),
       };
       freshScenes2[sceneIndex] = { ...freshScenes2[sceneIndex], videoUrl: null, _meta: meta };

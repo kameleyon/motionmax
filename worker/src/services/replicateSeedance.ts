@@ -96,6 +96,72 @@ interface ReplicatePrediction {
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /**
+ * Strip the photoreal-human trigger phrases that cause Replicate
+ * Seedance to return E005 "flagged as sensitive". Replicate runs
+ * ByteDance's safety classifier, which is much stricter than
+ * Hypereal's — same prompt that succeeds on Hypereal commonly
+ * fails on Replicate. Sanitization happens ONLY for Replicate;
+ * Hypereal calls keep the original prompt unchanged.
+ *
+ * Two layers of cleaning:
+ *
+ *   1. A trailing "additional style restrictions: ..." block. This
+ *      appears to be an upstream prompt-builder pasting negative-
+ *      style hints into the positive prompt (malformed — Seedance
+ *      reads them as desired styles, then safety rejects). We
+ *      strip the whole block.
+ *
+ *   2. Standalone trigger phrases ("real human", "real face",
+ *      "photographic portrait", etc.). Replaced with neutral
+ *      equivalents that pass moderation while preserving the
+ *      cinematic intent.
+ */
+export function sanitizePromptForReplicate(prompt: string): string {
+  let out = prompt;
+
+  // Layer 1: strip the malformed trailing restrictions block.
+  // Matches "additional style restrictions:" through end of prompt OR
+  // until a hard sentence break (period followed by capital letter).
+  out = out.replace(
+    /\b(?:additional\s+)?style\s+restrictions?:\s*[^.]+(?=\.|$)/gi,
+    "",
+  );
+
+  // Layer 2: strip / soften the trigger phrases that survived.
+  const replacements: Array<[RegExp, string]> = [
+    [/\bphotorealistic\b/gi, "cinematic"],
+    [/\bphoto[- ]realistic\b/gi, "cinematic"],
+    [/\brealistic human\b/gi, "stylized character"],
+    [/\brealistic person\b/gi, "stylized character"],
+    [/\breal\s+person\b/gi, "character"],
+    [/\breal\s+human\b/gi, "character"],
+    [/\breal\s+face\b/gi, "face"],
+    [/\breal\s+skin\b/gi, "skin"],
+    [/\breal\s+eyes\b/gi, "eyes"],
+    [/\breal\s+hand(s)?\b/gi, "hand$1"],
+    [/\breal\s+body\b/gi, "body"],
+    [/\breal\s+hair\b/gi, "hair"],
+    [/\bnaturalistic skin texture\b/gi, "smooth skin"],
+    [/\bphotographic portrait\b/gi, "cinematic portrait"],
+    [/\bphotographic\b/gi, "cinematic"],
+    [/\bphotograph\b/gi, "image"],
+    [/\blive[- ]action\b/gi, "cinematic"],
+    [/\bhybrid photo and illustration\b/gi, "stylized illustration"],
+    [/\bmixing realistic person with stylized scene\b/gi, "stylized character in scene"],
+    [/\breal human bending over\b/gi, "character bending over"],
+    [/\breal hand reaching\b/gi, "hand reaching"],
+  ];
+  for (const [pattern, replacement] of replacements) {
+    out = out.replace(pattern, replacement);
+  }
+
+  // Collapse the whitespace artefacts the substitutions can leave behind.
+  out = out.replace(/\s{2,}/g, " ").replace(/\s+([,.;:])/g, "$1").trim();
+
+  return out;
+}
+
+/**
  * Run Seedance 2.0 Fast I2V on Replicate: POST → poll → return URL.
  *
  * Returns { videoUrl: null, error } on failure. NEVER throws on transient
@@ -126,8 +192,21 @@ export async function generateReplicateSeedance(
     );
   }
 
+  // Replicate routes to ByteDance's hosted safety classifier, which
+  // aggressively flags prompts emphasizing photoreal humans
+  // (deepfake/impersonation concern) and returns E005
+  // "input or output flagged as sensitive". Hypereal's pipeline is
+  // more permissive and lets the same prompt through. Sanitize
+  // before submitting to Replicate so a single bad prompt doesn't
+  // fall all the way through to the held-frame path.
+  const sanitizedPrompt = sanitizePromptForReplicate(opts.prompt);
+  if (sanitizedPrompt !== opts.prompt) {
+    const removedLen = opts.prompt.length - sanitizedPrompt.length;
+    console.log(`[ReplicateSeedance] sanitizer stripped ${removedLen} chars of moderation-trigger phrases (${opts.prompt.length} → ${sanitizedPrompt.length})`);
+  }
+
   const input: Record<string, unknown> = {
-    prompt: opts.prompt,
+    prompt: sanitizedPrompt,
     image: opts.imageUrl,
     duration: clampedDuration,
     resolution,

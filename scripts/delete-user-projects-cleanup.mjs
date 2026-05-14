@@ -46,7 +46,7 @@ const sb = createClient(SUPABASE_URL, SERVICE_KEY, {
 
 const TARGET_USERS = [
   { hint: "arcanadraconi (Jo)", usernameOrEmail: "arcanadraconi" },
-  { hint: "Prof David", usernameOrEmail: "davidricharleblack" },
+  { hint: "Prof David (LeBlanc)", usernameOrEmail: "davidrichardleblanc" },
 ];
 
 /** Buckets that hold per-project assets. Anything under <projectId>/* gets
@@ -102,11 +102,18 @@ async function listProjects(userId) {
 }
 
 /** List storage paths under <projectId>/* for one bucket. Returns array of
- *  full object paths (incl. project id prefix). */
+ *  full object paths (incl. project id prefix).
+ *
+ *  Resilient to transient Supabase Storage 5xx (which surface as
+ *  "Unexpected token '<'" because the proxy returns an HTML error page
+ *  instead of JSON). We retry up to 4× with backoff. If it still fails,
+ *  we log a warning and treat the bucket-for-this-project as empty so
+ *  the whole dry-run keeps going — better to surface one skipped path
+ *  in the summary than crash 60 projects in. */
 async function listStoragePaths(bucket, projectId) {
-  // Supabase storage.list is paginated, max 1000 per page. Walk until empty.
   const paths = [];
   let offset = 0;
+  let pageAttempts = 0;
   while (true) {
     const { data, error } = await sb.storage.from(bucket).list(projectId, {
       limit: 1000,
@@ -114,13 +121,23 @@ async function listStoragePaths(bucket, projectId) {
       sortBy: { column: "name", order: "asc" },
     });
     if (error) {
-      // Bucket might not exist for this project (no assets). Treat as empty.
-      if (/not found|does not exist/i.test(error.message)) return [];
-      throw new Error(`listStoragePaths(${bucket}, ${projectId}) failed: ${error.message}`);
+      const msg = String(error.message || "");
+      if (/not found|does not exist/i.test(msg)) return [];
+      // Transient proxy / 5xx — backoff and retry the same page
+      const transient = /unexpected token|gateway|timeout|fetch failed|network|503|502|504/i.test(msg);
+      if (transient && pageAttempts < 4) {
+        const wait = 500 * Math.pow(2, pageAttempts);
+        console.log(ANSI.dim(`        [retry] ${bucket}/${projectId} offset=${offset} after ${wait}ms (${msg.slice(0, 60)})`));
+        await new Promise((r) => setTimeout(r, wait));
+        pageAttempts++;
+        continue;
+      }
+      console.log(ANSI.yellow(`        [warn] listStoragePaths(${bucket}, ${projectId}) skipped: ${msg.slice(0, 100)}`));
+      return paths; // best-effort: return what we have so far
     }
+    pageAttempts = 0; // reset per successful page
     if (!data || data.length === 0) break;
     for (const item of data) {
-      // Skip directory placeholders (.emptyFolderPlaceholder, etc.)
       if (item.name === ".emptyFolderPlaceholder") continue;
       paths.push(`${projectId}/${item.name}`);
     }

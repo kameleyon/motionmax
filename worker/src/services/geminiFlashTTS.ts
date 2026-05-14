@@ -34,6 +34,57 @@ const GEMINI_PCM_SAMPLE_RATE = 24000; // Per Google docs (PCM 24kHz 16-bit mono)
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+/**
+ * Cap on how long a single Gemini fetch is allowed to hang before we
+ * abort and move to the next API key. Google's TTS responds in
+ * 5-30 s under normal load; anything past 60 s is almost certainly a
+ * stalled connection (rate-limit-without-response, edge router blip,
+ * etc.). Without this cap a single hung call can burn the whole 15-min
+ * LLM_JOB_TIMEOUT_MS, taking down master_audio. Verified 2026-05-14
+ * incident where 5 attempts × ~120 s each = job aborted at 15 min.
+ */
+const PER_FETCH_TIMEOUT_MS = 60_000;
+
+/**
+ * Compose an outer AbortSignal (from the worker's per-job hard-timeout)
+ * with a per-fetch timeout into a single signal handed to fetch.
+ *
+ * Either source triggers the combined signal — the caller distinguishes
+ * which one by checking `outer.aborted` in the catch handler. If outer
+ * is aborted, the worker's hard-timeout fired → exit entirely. If only
+ * the inner timeout fired → continue to the next retry with a fresh key.
+ *
+ * The cleanup function MUST be called in a finally block to release the
+ * setTimeout handle and the outer signal's listener; otherwise we leak
+ * a 60 s timer per attempt under high parallelism.
+ */
+function combineSignalWithTimeout(
+  outer: AbortSignal | undefined,
+  timeoutMs: number,
+): { signal: AbortSignal; cleanup: () => void } {
+  const ctrl = new AbortController();
+  const timer = setTimeout(
+    () => ctrl.abort(new Error(`Gemini fetch timeout ${timeoutMs}ms`)),
+    timeoutMs,
+  );
+  let onOuterAbort: (() => void) | undefined;
+  if (outer) {
+    if (outer.aborted) {
+      ctrl.abort(outer.reason);
+    } else {
+      onOuterAbort = () => ctrl.abort(outer.reason);
+      outer.addEventListener("abort", onOuterAbort, { once: true });
+    }
+  }
+  return {
+    signal: ctrl.signal,
+    cleanup: () => {
+      clearTimeout(timer);
+      if (outer && onOuterAbort) outer.removeEventListener("abort", onOuterAbort);
+    },
+  };
+}
+
 // ── Concurrency limiter ─────────────────────────────────────────────
 // Google's per-key QPS is generous but not infinite. 15 scene jobs firing
 // at once across multiple concurrent generations can still burst past the
@@ -303,11 +354,18 @@ export async function generateGeminiFlashTTSPCM(
         return { pcm: null, error: "Gemini Flash TTS aborted by hard-timeout signal" };
       }
       const apiKey = apiKeys[(startOffset + attempt - 1) % apiKeys.length];
+      const { signal: combinedSignal, cleanup: cleanupSignal } =
+        combineSignalWithTimeout(opts.signal, PER_FETCH_TIMEOUT_MS);
       try {
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`,
-          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: opts.signal },
-        );
+        let res: Response;
+        try {
+          res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`,
+            { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: combinedSignal },
+          );
+        } finally {
+          cleanupSignal();
+        }
 
         if (!res.ok) {
           const errText = await res.text().catch(() => "");
@@ -351,12 +409,18 @@ export async function generateGeminiFlashTTSPCM(
         void startTime;
         return { pcm };
       } catch (err) {
-        // AbortError fires when the worker's per-job hard-timeout
-        // AbortController cancels mid-fetch. Don't burn the remaining
-        // attempts on backoff sleeps — exit immediately so the handler
-        // catch path can write 'failed' atomically.
+        // AbortError can come from EITHER the worker's outer hard-timeout
+        // OR the per-fetch 60s cap above. Distinguish by checking the
+        // outer signal: if it's aborted we exit entirely; otherwise it
+        // was just a stalled call and we move to the next API key.
         if (err instanceof Error && err.name === "AbortError") {
-          return { pcm: null, error: "Gemini Flash TTS aborted by hard-timeout signal" };
+          if (opts.signal?.aborted) {
+            return { pcm: null, error: "Gemini Flash TTS aborted by hard-timeout signal" };
+          }
+          lastError = `Gemini Flash TTS attempt ${attempt} timed out after ${PER_FETCH_TIMEOUT_MS / 1000}s`;
+          console.warn(`[GeminiFlashTTS] Scene ${opts.sceneNumber}: ${lastError}`);
+          if (attempt < MAX_ATTEMPTS) { await sleep(1000); continue; }
+          break;
         }
         lastError = `Gemini Flash TTS exception: ${err instanceof Error ? err.message : String(err)}`;
         console.warn(`[GeminiFlashTTS] Scene ${opts.sceneNumber} attempt ${attempt} threw: ${lastError}`);
@@ -656,16 +720,23 @@ export async function generateGeminiFlashTTS(
         return { url: null, error: "Gemini Flash TTS aborted by hard-timeout signal" };
       }
       const apiKey = apiKeys[(startOffset + attempt - 1) % apiKeys.length];
+      const { signal: combinedSignal, cleanup: cleanupSignal } =
+        combineSignalWithTimeout(opts.signal, PER_FETCH_TIMEOUT_MS);
       try {
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-            signal: opts.signal,
-          },
-        );
+        let res: Response;
+        try {
+          res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+              signal: combinedSignal,
+            },
+          );
+        } finally {
+          cleanupSignal();
+        }
 
         if (!res.ok) {
           const errText = await res.text().catch(() => "");
@@ -749,11 +820,18 @@ export async function generateGeminiFlashTTS(
           provider: `Gemini 3.1 Flash TTS (${voiceName})`,
         };
       } catch (err) {
-        // AbortError fires when the worker's per-job hard-timeout
-        // AbortController cancels mid-fetch. Exit immediately instead
-        // of burning the remaining backoff budget.
+        // AbortError can come from EITHER the worker's outer hard-timeout
+        // OR the per-fetch 60s cap above. Distinguish by checking the
+        // outer signal: if it's aborted we exit entirely; otherwise it
+        // was just a stalled call and we move to the next API key.
         if (err instanceof Error && err.name === "AbortError") {
-          return { url: null, error: "Gemini Flash TTS aborted by hard-timeout signal" };
+          if (opts.signal?.aborted) {
+            return { url: null, error: "Gemini Flash TTS aborted by hard-timeout signal" };
+          }
+          lastError = `Gemini Flash TTS attempt ${attempt} timed out after ${PER_FETCH_TIMEOUT_MS / 1000}s`;
+          console.warn(`[GeminiFlashTTS] Scene ${opts.sceneNumber}: ${lastError}`);
+          if (attempt < MAX_ATTEMPTS) { await sleep(1000); continue; }
+          break;
         }
         lastError = (err as Error).message;
         console.warn(`[GeminiFlashTTS] Scene ${opts.sceneNumber} attempt ${attempt} threw: ${lastError}`);

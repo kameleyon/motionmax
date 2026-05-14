@@ -38,12 +38,16 @@ import {
 // Replicate-hosted Seedance import retained but not invoked — kept in
 // tree so we can re-enable quickly if Replicate adds last_image support
 // to bytedance/seedance-2.0. Currently bypassed because the model
-// Replicate Seedance 2.0 — now PRIMARY for cinematic video (2026-05-14).
-// Earlier verdict ("silently ignores last_image") was a field-name bug
-// in our integration: Replicate's schema expects `last_frame_image`,
-// we were sending `last_image`. Fixed in replicateSeedance.ts and
-// verified visually via scripts/probe-replicate-seedance.mjs. Now
-// honors both first + last frame at 71% lower cost than Hypereal @ 480p.
+// AtlasCloud Seedance 2.0 — PRIMARY for cinematic video as of 2026-05-14.
+// Same ByteDance Seedance model as Replicate / Hypereal but routed via
+// AtlasCloud's gateway: ~2x faster than Replicate (~1m40s vs ~3m35s)
+// and honors both `image` + `last_image` for true start→end frame I2V.
+// Verified visually via scripts/probe-atlascloud-seedance.mjs.
+import { generateAtlasCloudSeedance } from "../services/atlasCloudSeedance.js";
+// Replicate Seedance 2.0 — first FALLBACK if AtlasCloud fails/times out.
+// Slower (3m35s) and Replicate-side moderation is stricter (E005 on
+// "real human/face/skin" prompts — sanitized in replicateSeedance.ts)
+// but still cheaper than Hypereal at 480p.
 import { generateReplicateSeedance } from "../services/replicateSeedance.js";
 import { saveCheckpoint, readCheckpointKey, clearCheckpointKey, CheckpointReadError } from "../lib/checkpoint.js";
 import { isKillSwitchArmed } from "../lib/featureFlags.js";
@@ -492,13 +496,50 @@ async function _runCinematicVideo(
   // straight to Kling — Kling is cheaper (39 cr vs 69) and can succeed
   // on a Hypereal balance that Seedance can't.
   try {
-    // ── 1. Replicate Seedance 2.0 @ 480p (primary) ───────────────────
+    // ── 1. AtlasCloud Seedance 2.0 (primary) ─────────────────────────
+    // ~2× faster than Replicate, same ByteDance Seedance under the
+    // hood, honors `image` + `last_image`. Returns null+error on
+    // failure rather than throwing — we classify and fall through to
+    // Replicate, then Hypereal Seedance, then Kling.
+    {
+      const atlasRes = await generateAtlasCloudSeedance({
+        imageUrl,
+        prompt: `${finalPrompt}\n\n${motionGuardrails}`,
+        duration: 10,
+        endImageUrl,
+        aspectRatio: seedanceAspect,
+        resolution: "480p",
+        userId: userId ?? null,
+        generationId,
+        onSubmitted: async ({ providerJobId, pollUrl, model }) => {
+          await saveCheckpoint(jobId, checkpointKey, {
+            stage: "polling", providerJobId, pollUrl, model,
+          });
+        },
+      });
+      if (atlasRes.videoUrl) {
+        videoUrl = atlasRes.videoUrl;
+        provider = "AtlasCloud Seedance 2.0 @ 480p";
+      } else {
+        // Moderation rejection (NSFW post-flag or other safety) is
+        // permanent — bubble up so held-frame runs instead of cascading.
+        const msg = atlasRes.error ?? "";
+        if (/risk control|content[_ ]?violation|blocked.*content|moderation|safety|policy|flagged.*sensitive|input or output.*sensitive|\(E005\)|potentially sensitive|nsfw/i.test(msg)) {
+          throw new Error(msg);
+        }
+        console.warn(
+          `[CinematicVideo] Scene ${sceneIndex}: AtlasCloud Seedance failed — falling back to Replicate: ${msg.slice(0, 200)}`,
+        );
+      }
+    }
+
+    // ── 2. Replicate Seedance 2.0 @ 480p (fallback 1) ────────────────
     // Honors both `image` and `last_frame_image` for true start→end
     // morph at ~71% lower cost than Hypereal Seedance Fast @ 720p.
     // Field-name fix landed 2026-05-14 (see replicateSeedance.ts).
     // Returns null + error string on failure rather than throwing —
     // we classify and fall through to Hypereal Seedance.
-    {
+    if (!videoUrl) {
       const replicateRes = await generateReplicateSeedance({
         imageUrl,
         prompt: `${finalPrompt}\n\n${motionGuardrails}`,

@@ -36,14 +36,16 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /**
  * Cap on how long a single Gemini fetch is allowed to hang before we
- * abort and move to the next API key. Google's TTS responds in
- * 5-30 s under normal load; anything past 60 s is almost certainly a
- * stalled connection (rate-limit-without-response, edge router blip,
- * etc.). Without this cap a single hung call can burn the whole 15-min
- * LLM_JOB_TIMEOUT_MS, taking down master_audio. Verified 2026-05-14
- * incident where 5 attempts × ~120 s each = job aborted at 15 min.
+ * abort and move to the next API key. Bumped 60 → 120 s on 2026-05-15
+ * after a key rotation surfaced cases where Google legitimately takes
+ * 60-90 s to synthesize longer chunks (verified: same prompt that
+ * returned in Google AI Studio Playground was being aborted by our
+ * 60 s cap before completion). The original 60 s was conservative
+ * based on "5-30 s normal" P50, but P95 on longer text is closer to
+ * 90 s. 120 s × 5 attempts = 10 min — still leaves 5 min in the
+ * 15 min LLM_JOB_TIMEOUT_MS budget for downstream upload + DB writes.
  */
-const PER_FETCH_TIMEOUT_MS = 60_000;
+const PER_FETCH_TIMEOUT_MS = 120_000;
 
 /**
  * Compose an outer AbortSignal (from the worker's per-job hard-timeout)

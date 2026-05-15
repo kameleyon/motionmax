@@ -371,6 +371,15 @@ export async function generateGeminiFlashTTSPCM(
           const errText = await res.text().catch(() => "");
           lastError = `Gemini Flash TTS ${res.status}: ${errText.substring(0, 200)}`;
           console.warn(`[GeminiFlashTTS] Scene ${opts.sceneNumber} attempt ${attempt}/${MAX_ATTEMPTS} ${lastError}`);
+          // Non-retriable client errors — bad key (401), banned project
+          // (403 PERMISSION_DENIED) or malformed request (400). Retrying
+          // burns the per-job budget for nothing; surface immediately so
+          // the caller can attribute the failure correctly. Mirrors the
+          // URL-returning path's behavior (search "Non-retriable client
+          // errors" below).
+          if (res.status === 400 || res.status === 401 || res.status === 403) {
+            return { pcm: null, error: lastError };
+          }
           if (attempt < MAX_ATTEMPTS) {
             const base = res.status === 429 ? 8000 * attempt : 1500 * attempt;
             await sleep(base + Math.random() * 1000);

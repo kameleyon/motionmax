@@ -49,9 +49,21 @@ const TARGET_USERS = [
   { hint: "Prof David (LeBlanc)", usernameOrEmail: "davidrichardleblanc" },
 ];
 
-/** Buckets that hold per-project assets. Anything under <projectId>/* gets
- *  deleted. If a bucket isn't listed here, we leave it alone. */
-const BUCKETS = ["videos", "scene-images", "audio"];
+/** Buckets that hold per-project assets. Listed with their layout so
+ *  the recursive walker can find files at the right depth.
+ *  - `scene-images` + `audio` use flat `<projectId>/<file>`.
+ *  - `scene-videos` uses nested `<projectId>/<generationId>/<file>`.
+ *  - `videos` is keyed by `<generationId>` NOT projectId; we walk it
+ *    via `videosPathsForGenerations()` below.
+ *
+ *  Pre-2026-05-15 this list had 'videos' here too, but the listing
+ *  was non-recursive AND used projectId as prefix — so videos/ and
+ *  the inner generationId folders of scene-videos/ were silently
+ *  never deleted. The bulk-delete that day left 37 GB of orphans
+ *  behind because of that bug. Fixed by listStoragePaths now
+ *  recursing AND by handling videos/ via generation_id lookup. */
+const PROJECT_PREFIXED_BUCKETS = ["scene-images", "audio", "scene-videos"];
+const VIDEOS_BUCKET = "videos";
 
 const ANSI = {
   red: (s) => `\x1b[31m${s}\x1b[0m`,
@@ -101,50 +113,82 @@ async function listProjects(userId) {
   return data ?? [];
 }
 
-/** List storage paths under <projectId>/* for one bucket. Returns array of
- *  full object paths (incl. project id prefix).
+/** Recursively list every file under a prefix in a bucket. Returns array
+ *  of full object paths.
  *
- *  Resilient to transient Supabase Storage 5xx (which surface as
- *  "Unexpected token '<'" because the proxy returns an HTML error page
- *  instead of JSON). We retry up to 4× with backoff. If it still fails,
- *  we log a warning and treat the bucket-for-this-project as empty so
- *  the whole dry-run keeps going — better to surface one skipped path
- *  in the summary than crash 60 projects in. */
-async function listStoragePaths(bucket, projectId) {
+ *  Critical: this MUST recurse into sub-folders. `scene-videos` uses
+ *  the nested layout `<projectId>/<generationId>/<file>.mp4` — without
+ *  recursion the listing returns only the inner-folder placeholders
+ *  (entries with id=null + metadata=null) and `remove()` silently
+ *  does nothing. That bug left 37 GB of scene-videos orphaned in
+ *  the 2026-05-15 bulk-delete.
+ *
+ *  Resilient to transient Supabase Storage 5xx (HTML error pages
+ *  surface as "Unexpected token '<'" JSON parse errors). Retries up
+ *  to 4× per page with exponential backoff. */
+async function listStoragePaths(bucket, prefix) {
   const paths = [];
-  let offset = 0;
-  let pageAttempts = 0;
-  while (true) {
-    const { data, error } = await sb.storage.from(bucket).list(projectId, {
-      limit: 1000,
-      offset,
-      sortBy: { column: "name", order: "asc" },
-    });
-    if (error) {
-      const msg = String(error.message || "");
-      if (/not found|does not exist/i.test(msg)) return [];
-      // Transient proxy / 5xx — backoff and retry the same page
-      const transient = /unexpected token|gateway|timeout|fetch failed|network|503|502|504/i.test(msg);
-      if (transient && pageAttempts < 4) {
-        const wait = 500 * Math.pow(2, pageAttempts);
-        console.log(ANSI.dim(`        [retry] ${bucket}/${projectId} offset=${offset} after ${wait}ms (${msg.slice(0, 60)})`));
-        await new Promise((r) => setTimeout(r, wait));
-        pageAttempts++;
-        continue;
+  async function walk(p) {
+    let offset = 0;
+    let pageAttempts = 0;
+    while (true) {
+      const { data, error } = await sb.storage.from(bucket).list(p, {
+        limit: 1000, offset, sortBy: { column: "name", order: "asc" },
+      });
+      if (error) {
+        const msg = String(error.message || "");
+        if (/not found|does not exist/i.test(msg)) return;
+        const transient = /unexpected token|gateway|timeout|fetch failed|network|503|502|504/i.test(msg);
+        if (transient && pageAttempts < 4) {
+          const wait = 500 * Math.pow(2, pageAttempts);
+          console.log(ANSI.dim(`        [retry] ${bucket}/${p} offset=${offset} after ${wait}ms (${msg.slice(0, 60)})`));
+          await new Promise((r) => setTimeout(r, wait));
+          pageAttempts++;
+          continue;
+        }
+        console.log(ANSI.yellow(`        [warn] listStoragePaths(${bucket}, ${p}) skipped: ${msg.slice(0, 100)}`));
+        return;
       }
-      console.log(ANSI.yellow(`        [warn] listStoragePaths(${bucket}, ${projectId}) skipped: ${msg.slice(0, 100)}`));
-      return paths; // best-effort: return what we have so far
+      pageAttempts = 0;
+      if (!data || data.length === 0) break;
+      for (const item of data) {
+        if (item.name === ".emptyFolderPlaceholder") continue;
+        const child = `${p}/${item.name}`;
+        // Sub-folder marker: id=null + metadata=null. Recurse.
+        if (item.id === null && (item.metadata === null || item.metadata === undefined)) {
+          await walk(child);
+        } else {
+          paths.push(child);
+        }
+      }
+      if (data.length < 1000) break;
+      offset += 1000;
     }
-    pageAttempts = 0; // reset per successful page
-    if (!data || data.length === 0) break;
-    for (const item of data) {
-      if (item.name === ".emptyFolderPlaceholder") continue;
-      paths.push(`${projectId}/${item.name}`);
-    }
-    if (data.length < 1000) break;
-    offset += 1000;
+  }
+  await walk(prefix);
+  return paths;
+}
+
+/** List videos/ bucket files for a list of generation_ids. The videos/
+ *  bucket is keyed by <generationId>/<lipsync_…>.mp4 — NOT by projectId
+ *  — so we can't reuse the project-prefixed walker. */
+async function listVideoPathsForGenerations(generationIds) {
+  const paths = [];
+  for (const genId of generationIds) {
+    const subPaths = await listStoragePaths(VIDEOS_BUCKET, genId);
+    paths.push(...subPaths);
   }
   return paths;
+}
+
+/** Get every generation_id for a project — needed to walk videos/ files. */
+async function listGenerationsForProject(projectId) {
+  const { data, error } = await sb
+    .from("generations")
+    .select("id")
+    .eq("project_id", projectId);
+  if (error) throw new Error(`listGenerationsForProject(${projectId}): ${error.message}`);
+  return (data ?? []).map((r) => r.id);
 }
 
 /** Delete a batch of storage paths from a bucket. */
@@ -173,7 +217,7 @@ async function deleteProjectRow(projectId) {
 console.log(ANSI.bold("\n=== motionmax: bulk user-project cleanup ===\n"));
 console.log(`Mode:     ${EXECUTE ? ANSI.red("EXECUTE (irreversible)") : ANSI.yellow("DRY-RUN (no mutations)")}`);
 console.log(`Cutoff:   delete projects created BEFORE ${CUTOFF_ISO}`);
-console.log(`Buckets:  ${BUCKETS.join(", ")}\n`);
+console.log(`Buckets:  ${PROJECT_PREFIXED_BUCKETS.join(", ")}, ${VIDEOS_BUCKET} (via generation_id)\n`);
 
 const users = [];
 for (const target of TARGET_USERS) {
@@ -205,13 +249,27 @@ for (const u of users) {
   for (const p of projects) {
     const storageByBucket = [];
     let pStorageCount = 0;
-    for (const bucket of BUCKETS) {
+
+    // Project-prefixed buckets: walk under <projectId>/ recursively.
+    for (const bucket of PROJECT_PREFIXED_BUCKETS) {
       const paths = await listStoragePaths(bucket, p.id);
       if (paths.length > 0) {
         storageByBucket.push({ bucket, paths });
         pStorageCount += paths.length;
       }
     }
+
+    // videos/ bucket: keyed by generationId, not projectId — look up
+    // every generation belonging to this project and walk each one.
+    const genIds = await listGenerationsForProject(p.id);
+    if (genIds.length > 0) {
+      const videoPaths = await listVideoPathsForGenerations(genIds);
+      if (videoPaths.length > 0) {
+        storageByBucket.push({ bucket: VIDEOS_BUCKET, paths: videoPaths });
+        pStorageCount += videoPaths.length;
+      }
+    }
+
     console.log(
       `    ${ANSI.dim(p.id)}  ${p.created_at.slice(0, 10)}  ` +
       `[${p.project_type}]  ${(p.title ?? "(untitled)").slice(0, 60)}  ` +
@@ -220,7 +278,7 @@ for (const u of users) {
     for (const sb of storageByBucket) {
       console.log(ANSI.dim(`        ${sb.bucket}: ${sb.paths.length} file(s)`));
     }
-    allDeletions.push({ user: u, project: p, storage: storageByBucket });
+    allDeletions.push({ user: u, project: p, storage: storageByBucket, genIds });
     totalProjects++;
     totalStorageFiles += pStorageCount;
   }

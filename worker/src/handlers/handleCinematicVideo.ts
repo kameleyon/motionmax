@@ -30,25 +30,15 @@ import {
   // generateKlingV3Video,        // V3.0 Std — skipped; Pro variant below is used instead
   // generateVeo31Video,          // Veo 3.1 — doesn't follow prompts, generates unwanted audio/lip sync
   // generateKlingV26Video,       // Kling V2.6 Pro — retired, superseded by V3.0 Pro
-  generateSeedance2I2V,           // Fallback 1 — Hypereal Seedance 2.0 Fast I2V. Demoted from primary 2026-05-14 once Replicate Seedance was fixed.
-  generateKlingV3ProI2V,          // Fallback 2 — Kling V3.0 Pro I2V (kling-3-0-pro-i2v, 39 cr). Last resort when both Seedance paths fail.
+  // generateSeedance2I2V,        // Hypereal Seedance Fast — removed 2026-05-15 (141 cr/scene, E005-prone)
+  generateKlingV3ProI2V,          // Only fallback — Kling V3.0 Pro I2V on Hypereal (99 cr/scene)
   // generateGrokVideo,           // Grok Video I2V — status-lookup failures on Hypereal, rolled back
   pollHyperealJob,                // Resume-from-checkpoint poll for an already-submitted Hypereal job.
 } from "../services/hypereal.js";
-// Replicate-hosted Seedance import retained but not invoked — kept in
-// tree so we can re-enable quickly if Replicate adds last_image support
-// to bytedance/seedance-2.0. Currently bypassed because the model
-// AtlasCloud Seedance 2.0 — PRIMARY for cinematic video as of 2026-05-14.
-// Same ByteDance Seedance model as Replicate / Hypereal but routed via
-// AtlasCloud's gateway: ~2x faster than Replicate (~1m40s vs ~3m35s)
-// and honors both `image` + `last_image` for true start→end frame I2V.
-// Verified visually via scripts/probe-atlascloud-seedance.mjs.
+// AtlasCloud Seedance 2.0 — PRIMARY for cinematic video. Cheap when it
+// works, 15-min poll cap covers tail latencies. Single fallback below
+// is Hypereal Kling V3 Pro for any failure (moderation, timeout, etc.).
 import { generateAtlasCloudSeedance } from "../services/atlasCloudSeedance.js";
-// Replicate Seedance 2.0 — first FALLBACK if AtlasCloud fails/times out.
-// Slower (3m35s) and Replicate-side moderation is stricter (E005 on
-// "real human/face/skin" prompts — sanitized in replicateSeedance.ts)
-// but still cheaper than Hypereal at 480p.
-import { generateReplicateSeedance } from "../services/replicateSeedance.js";
 import { saveCheckpoint, readCheckpointKey, clearCheckpointKey, CheckpointReadError } from "../lib/checkpoint.js";
 import { isKillSwitchArmed } from "../lib/featureFlags.js";
 
@@ -292,14 +282,14 @@ async function _runCinematicVideo(
     : "";
   const videoPrompt = buildVideoPrompt(visualPrompt, voiceover, characterDescription, styleDesc + gradeDirective, language, cameraMotion);
 
-  // Video generation routes to HYPEREALIMAGE_API_KEY (secondary
-  // account on the correctly-priced rate tier). All image/audio/LLM
-  // calls in this handler stay on HYPEREAL_API_KEY. Split applied
-  // 2026-05-14 after dashboard rate comparison showed account B
-  // (HYPEREALIMAGE) at a materially lower per-second Seedance rate
-  // than account A (HYPEREAL).
-  const apiKey = (process.env.HYPEREALIMAGE_API_KEY || "").trim();
-  if (!apiKey) throw new Error("HYPEREALIMAGE_API_KEY not configured");
+  // Video generation routes to HYPEREAL_API_KEY (account A — the one
+  // with billing balance). Reverted from HYPEREALIMAGE_API_KEY on
+  // 2026-05-15 after the Seedance-Fast-on-account-B chain produced
+  // 141-cr-per-attempt charges with high failure rate. Single account
+  // now covers the only remaining Hypereal call site: Kling V3.0 Pro
+  // as the AtlasCloud fallback.
+  const apiKey = (process.env.HYPEREAL_API_KEY || "").trim();
+  if (!apiKey) throw new Error("HYPEREAL_API_KEY not configured");
 
   // Add scene-specific instructions based on transition type
   let sceneInstruction = "";
@@ -492,26 +482,26 @@ async function _runCinematicVideo(
     }
   }
 
-  // Per-scene provider chain (reverted 2026-05-14):
-  //   1. Hypereal Seedance 2.0 Fast at 720p (primary, ×2 attempts).
-  //      Native `last_image` support — critical for scene continuity.
-  //   2. Hypereal Kling V3.0 Pro I2V (fallback).
-  // Replicate-hosted Seedance was briefly the primary (2026-05-13) but
-  // doesn't expose `last_image` on either the Fast or Full variant —
-  // start→end frame transitions were silently dropped. Reverted to
-  // Hypereal where transitions actually work. The `replicateSeedance.ts`
-  // service is kept in-tree for future use if Replicate adds the field.
+  // Per-scene provider chain (simplified 2026-05-15):
+  //   1. AtlasCloud Seedance 2.0 (primary, cheap, 15-min poll cap).
+  //   2. Hypereal Kling V3.0 Pro I2V (only fallback — 99 cr/scene).
   //
-  // Moderation rejection at ANY layer is permanent (held-frame path
-  // below). Provider-credits exhaustion on Hypereal Seedance jumps
-  // straight to Kling — Kling is cheaper (39 cr vs 69) and can succeed
-  // on a Hypereal balance that Seedance can't.
+  // Removed from chain on 2026-05-15:
+  //   - Replicate Seedance: failed in ~6s on E005 every time named-person
+  //     content appeared, wasting a 6-second slot in the chain for no
+  //     value. The image-side classifier was the real blocker (sanitizing
+  //     prompts didn't help because the source images had the trigger
+  //     baked in from earlier image-gen).
+  //   - Hypereal Seedance Fast: 141 cr/scene at current Hypereal pricing
+  //     (~5× what the original code comment assumed), same E005 wall as
+  //     Replicate/AtlasCloud since they all run ByteDance Seedance.
+  //     Kling V3 Pro is more permissive AND cheaper per successful render.
+  //
+  // Moderation rejection at AtlasCloud still bubbles up to held-frame.
+  // Kling V3 Pro almost always accepts where Seedance refuses, so the
+  // hold-frame path mostly fires when BOTH providers fail in series.
   try {
     // ── 1. AtlasCloud Seedance 2.0 (primary) ─────────────────────────
-    // ~2× faster than Replicate, same ByteDance Seedance under the
-    // hood, honors `image` + `last_image`. Returns null+error on
-    // failure rather than throwing — we classify and fall through to
-    // Replicate, then Hypereal Seedance, then Kling.
     {
       const atlasRes = await generateAtlasCloudSeedance({
         imageUrl,
@@ -532,165 +522,42 @@ async function _runCinematicVideo(
         videoUrl = atlasRes.videoUrl;
         provider = "AtlasCloud Seedance 2.0 @ 480p";
       } else {
-        // Moderation rejection (NSFW post-flag or other safety) is
-        // permanent — bubble up so held-frame runs instead of cascading.
+        // AtlasCloud moderation rejection (NSFW post-flag) is permanent
+        // for the same prompt — Kling V3 Pro is more permissive AND
+        // uses a different classifier, so we still try it. Only hard-
+        // bubble if BOTH fail (handled in the catch below).
         const msg = atlasRes.error ?? "";
-        if (/risk control|content[_ ]?violation|blocked.*content|moderation|safety|policy|flagged.*sensitive|input or output.*sensitive|\(E005\)|potentially sensitive|nsfw/i.test(msg)) {
-          throw new Error(msg);
-        }
         console.warn(
-          `[CinematicVideo] Scene ${sceneIndex}: AtlasCloud Seedance failed — falling back to Replicate: ${msg.slice(0, 200)}`,
+          `[CinematicVideo] Scene ${sceneIndex}: AtlasCloud Seedance failed — falling back to Hypereal Kling V3.0 Pro: ${msg.slice(0, 200)}`,
         );
       }
     }
 
-    // ── 2. Replicate Seedance 2.0 @ 480p (fallback 1) ────────────────
-    // Honors both `image` and `last_frame_image` for true start→end
-    // morph at ~71% lower cost than Hypereal Seedance Fast @ 720p.
-    // Field-name fix landed 2026-05-14 (see replicateSeedance.ts).
-    // Returns null + error string on failure rather than throwing —
-    // we classify and fall through to Hypereal Seedance.
+    // ── 2. Hypereal Kling V3.0 Pro (only fallback) ──────────────────
     if (!videoUrl) {
-      const replicateRes = await generateReplicateSeedance({
-        imageUrl,
-        prompt: `${finalPrompt}\n\n${motionGuardrails}`,
-        duration: 10,
-        endImageUrl,
-        aspectRatio: seedanceAspect,
-        resolution: "480p",
-        userId: userId ?? null,
-        generationId,
-        onSubmitted: async ({ providerJobId, pollUrl, model }) => {
-          await saveCheckpoint(jobId, checkpointKey, {
-            stage: "polling", providerJobId, pollUrl, model,
-          });
-        },
-      });
-      if (replicateRes.videoUrl) {
-        videoUrl = replicateRes.videoUrl;
-        provider = "Replicate Seedance 2.0 @ 480p";
-      } else {
-        // Moderation rejection at Replicate is permanent — bubble up so
-        // the held-frame path runs (mirrors Hypereal behavior below).
-        // Replicate Seedance phrasing observed in prod: "The input or
-        // output was flagged as sensitive. Please try again with
-        // different inputs. (E005)". Without catching "sensitive"/E005
-        // the handler would (incorrectly) fall through to Hypereal,
-        // which then rejects the same prompt and burns credits before
-        // landing at Kling for a 3rd reject — single prompt = 3 wasted
-        // provider calls. Verified 2026-05-14 user incident.
-        const msg = replicateRes.error ?? "";
-        if (/risk control|content[_ ]?violation|blocked.*content|moderation|safety|policy|flagged.*sensitive|input or output.*sensitive|\(E005\)|potentially sensitive/i.test(msg)) {
-          throw new Error(msg);
-        }
-        console.warn(
-          `[CinematicVideo] Scene ${sceneIndex}: Replicate Seedance failed — falling back to Hypereal Seedance: ${msg.slice(0, 200)}`,
-        );
-      }
-    }
-
-    // ── 2. Hypereal Seedance Fast (fallback 1, ×2 attempts) ─────────
-    const SEEDANCE_TRIES = 2;
-    let lastSeedanceErr: Error | null = null;
-    let seedanceCreditsExhausted = false;
-
-    for (let attempt = 1; videoUrl === null && attempt <= SEEDANCE_TRIES; attempt++) {
-      try {
-        videoUrl = await generateSeedance2I2V(
-          imageUrl,
-          `${finalPrompt}\n\n${motionGuardrails}`,
-          apiKey,
-          10,             // duration: 10 seconds per scene
-          endImageUrl,
-          seedanceAspect, // aspect_ratio: derived from project format
-          "720p",         // resolution
-          false,          // enable_web_search: never for pre-scripted prompts
-          // onSubmitted: persist provider jobId + pollUrl as a resume
-          // checkpoint immediately after Hypereal returns. If the worker
-          // dies during polling, the next worker reads this and skips
-          // the re-submit.
-          async ({ providerJobId, pollUrl, model }) => {
-            await saveCheckpoint(jobId, checkpointKey, {
-              stage: "polling", providerJobId, pollUrl, model,
-            });
-          },
-        );
-        provider = "Hypereal Seedance 2.0 Fast I2V";
-        break; // success — exit retry loop
-      } catch (innerErr) {
-        const innerMsg = innerErr instanceof Error ? innerErr.message : String(innerErr);
-
-        // Moderation rejection is permanent for that exact prompt — bubble
-        // up to the outer catch so the held-frame path runs. Retrying just
-        // resubmits the same prompt and burns another 61 credits (verified
-        // 2026-05-08 incident: Sun-Sextile-Jupiter run lost ~14 jobs ×
-        // 61 credits to this exact retry loop). The "potentially sensitive"
-        // phrasing comes from Hypereal's Seedance 2.0 backend; the original
-        // patterns ("risk control", "content violation", etc.) cover Kling
-        // and earlier Seedance versions.
-        if (/risk control|content[_ ]?violation|blocked.*content|moderation|potentially sensitive|flagged.*sensitive/i.test(innerMsg)) {
-          throw innerErr;
-        }
-
-        lastSeedanceErr = innerErr instanceof Error ? innerErr : new Error(innerMsg);
-
-        // Credits exhausted on Seedance? Don't waste the 2nd attempt —
-        // jump straight to Kling (cheaper).
-        if (innerMsg.startsWith("[PROVIDER_CREDITS_EXHAUSTED]")) {
-          seedanceCreditsExhausted = true;
-          console.warn(
-            `[CinematicVideo] Scene ${sceneIndex}: Seedance credits exhausted on attempt ${attempt} — falling back to Kling V3.0 Pro`,
-          );
-          break;
-        }
-
-        console.warn(
-          `[CinematicVideo] Scene ${sceneIndex}: Seedance attempt ${attempt}/${SEEDANCE_TRIES} failed: ${innerMsg.slice(0, 200)}`,
-        );
-      }
-    }
-
-    // Fallback to Kling V3 Pro if Seedance never produced a videoUrl.
-    if (!videoUrl) {
-      console.log(
-        `[CinematicVideo] Scene ${sceneIndex}: falling back to Kling V3.0 Pro after Seedance failures` +
-        `${seedanceCreditsExhausted ? " (credits exhausted on Seedance)" : ""}`,
-      );
       await writeSystemLog({
         jobId, projectId, userId, generationId,
         category: "system_warning",
         eventType: "cinematic_video_kling_fallback",
-        message: `Scene ${sceneIndex}: Seedance failed — falling back to Kling V3.0 Pro`,
-        details: {
-          sceneIndex,
-          seedance_tries: SEEDANCE_TRIES,
-          seedance_credits_exhausted: seedanceCreditsExhausted,
-          last_seedance_error: (lastSeedanceErr?.message ?? "").slice(0, 240),
-        },
+        message: `Scene ${sceneIndex}: AtlasCloud failed — falling back to Kling V3.0 Pro`,
+        details: { sceneIndex },
       });
 
-      try {
-        videoUrl = await generateKlingV3ProI2V(
-          imageUrl,
-          finalPrompt,
-          apiKey,
-          10,                  // duration: 10s (Kling supports 3/5/10/15)
-          endImageUrl,
-          klingNegativePrompt,
-          0.5,                 // cfg_scale
-          async ({ providerJobId, pollUrl, model }) => {
-            await saveCheckpoint(jobId, checkpointKey, {
-              stage: "polling", providerJobId, pollUrl, model,
-            });
-          },
-        );
-        provider = "Kling V3.0 Pro I2V";
-      } catch (klingErr) {
-        // If Kling ALSO fails — surface the Kling error (more recent,
-        // most actionable signal). The outer catch below classifies
-        // PROVIDER_CREDITS_EXHAUSTED / moderation as before.
-        throw klingErr;
-      }
+      videoUrl = await generateKlingV3ProI2V(
+        imageUrl,
+        finalPrompt,
+        apiKey,
+        10,                  // duration: 10s
+        endImageUrl,
+        klingNegativePrompt,
+        0.5,                 // cfg_scale
+        async ({ providerJobId, pollUrl, model }) => {
+          await saveCheckpoint(jobId, checkpointKey, {
+            stage: "polling", providerJobId, pollUrl, model,
+          });
+        },
+      );
+      provider = "Kling V3.0 Pro I2V";
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);

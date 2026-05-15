@@ -26,13 +26,15 @@
  */
 
 import { writeApiLog } from "../lib/logger.js";
-import { sanitizePromptForReplicate } from "./replicateSeedance.js";
 
 const ATLAS_BASE = "https://api.atlascloud.ai";
 const ATLAS_SUBMIT_URL = `${ATLAS_BASE}/api/v1/model/generateVideo`;
 const POLL_INTERVAL_MS = 5_000;
-// 10 min is generous — observed P50 ~1m 40s, P99 expected under 5 min.
-const DEFAULT_POLL_MAX_MS = 10 * 60 * 1000;
+// 15 min cap (bumped from 10 on 2026-05-15). AtlasCloud P50 is ~1m40s
+// but tail latencies on harder prompts can push past 10 min; the extra
+// 5 min gives slow-but-successful generations room to finish before we
+// abandon and fall through to Kling V3 Pro (which costs 99 cr/scene).
+const DEFAULT_POLL_MAX_MS = 15 * 60 * 1000;
 const MODEL_ID = "bytedance/seedance-2.0/image-to-video";
 
 export type AtlasCloudSeedanceResolution = "480p" | "720p" | "1080p";
@@ -118,18 +120,9 @@ export async function generateAtlasCloudSeedance(
     );
   }
 
-  // Same Seedance safety classifier as Replicate — sanitize for the
-  // same E005 triggers (real names + biometric descriptors). See
-  // sanitizePromptForReplicate's layer-3/4 patterns.
-  const sanitizedPrompt = sanitizePromptForReplicate(opts.prompt);
-  if (sanitizedPrompt !== opts.prompt) {
-    const removed = opts.prompt.length - sanitizedPrompt.length;
-    console.log(`[AtlasCloudSeedance] sanitizer stripped ${removed} chars of moderation-trigger phrases`);
-  }
-
   const input: Record<string, unknown> = {
     model,
-    prompt: sanitizedPrompt,
+    prompt: opts.prompt,
     image: opts.imageUrl,
     duration: clampedDuration,
     resolution,

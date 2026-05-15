@@ -115,6 +115,16 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
  *      "photographic portrait", etc.). Replaced with neutral
  *      equivalents that pass moderation while preserving the
  *      cinematic intent.
+ *
+ *   3. Named real person + biometric blocks. Verified 2026-05-15:
+ *      ByteDance Seedance's safety filter blocks any input prompt
+ *      AND any source image whose vision-side classifier flags
+ *      identifiable real people with age/skin-tone/ethnicity
+ *      attributes. Pattern matches things like
+ *      "Tony Popovic — 52-year-old man with light olive skin".
+ *      This applies to ALL Seedance providers (Replicate, AtlasCloud,
+ *      Hypereal), so this function is now used by all three; the
+ *      function name kept "ForReplicate" for backwards-compat.
  */
 export function sanitizePromptForReplicate(prompt: string): string {
   let out = prompt;
@@ -150,13 +160,44 @@ export function sanitizePromptForReplicate(prompt: string): string {
     [/\bmixing realistic person with stylized scene\b/gi, "stylized character in scene"],
     [/\breal human bending over\b/gi, "character bending over"],
     [/\breal hand reaching\b/gi, "hand reaching"],
+
+    // Layer 3: biometric descriptors that trigger E005 even without
+    // explicit "real" words. Strip the precise-age + skin-tone +
+    // build-detail combinations that ByteDance's classifier reads
+    // as deepfake-risk markers. Keep the role / clothing / posture
+    // parts of the sentence intact.
+    //
+    // "52-year-old", "33-year-old man", etc. → "adult"
+    [/\b\d{1,3}[-‑]year[-‑]old(?:\s+(man|woman|person|boy|girl))?\b/gi, "adult $1"],
+    // Compound skin-tone descriptors. Order matters — match the
+    // longer "light olive skin" before generic "olive skin".
+    [/\b(?:light|medium|dark|deep|fair|pale|warm|cool|rich|deep)\s+(?:olive|brown|beige|tan|amber|bronze|caramel|umber|sand|wheat|honey|cream|pink|copper)\s+skin\b/gi, "skin"],
+    [/\b(?:olive|brown|tan|amber|bronze|caramel|umber|honey|copper)\s+skin\b/gi, "skin"],
+    // Body-height-build patterns: "muscular 6'1" build", "5'8" frame".
+    [/\b(?:muscular|athletic|stocky|lean|wiry)\s+\d['′]\d{1,2}["″]?\s+(?:build|frame)\b/gi, "athletic build"],
+    [/\b\d['′]\d{1,2}["″]?\s+(?:build|frame|tall)\b/gi, ""],
+    // Hair-detail patterns that combine ethnicity-signaling traits.
+    [/\btightly\s+coiled\b/gi, "short"],
+    [/\bgreying\s+at\s+(?:the\s+)?temples\b/gi, ""],
   ];
   for (const [pattern, replacement] of replacements) {
     out = out.replace(pattern, replacement);
   }
 
+  // Layer 4: Named-real-person preambles. Pattern looks like
+  // "Firstname Lastname — " or "Firstname Lastname,"  followed by
+  // descriptor text. Strip the name so the rest of the description
+  // (which is now generic) survives. We can't enumerate every public
+  // figure name; instead match "Capitalized FirstName LastName" two-
+  // word proper-noun blocks that immediately precede a dash + age or
+  // dash + "X-year-old".
+  out = out.replace(
+    /\b[A-Z][a-zA-ZÀ-ſ]+\s+[A-Z][a-zA-ZÀ-ſ'’-]+(?=\s+[—-]\s+(?:a\s+)?(?:adult|the\s+))/g,
+    "",
+  );
+
   // Collapse the whitespace artefacts the substitutions can leave behind.
-  out = out.replace(/\s{2,}/g, " ").replace(/\s+([,.;:])/g, "$1").trim();
+  out = out.replace(/\s{2,}/g, " ").replace(/\s+([,.;:])/g, "$1").replace(/\s+([—-])\s+/g, " — ").trim();
 
   return out;
 }

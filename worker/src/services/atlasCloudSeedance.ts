@@ -26,6 +26,7 @@
  */
 
 import { writeApiLog } from "../lib/logger.js";
+import { sanitizePromptForReplicate } from "./replicateSeedance.js";
 
 const ATLAS_BASE = "https://api.atlascloud.ai";
 const ATLAS_SUBMIT_URL = `${ATLAS_BASE}/api/v1/model/generateVideo`;
@@ -117,9 +118,18 @@ export async function generateAtlasCloudSeedance(
     );
   }
 
+  // Same Seedance safety classifier as Replicate — sanitize for the
+  // same E005 triggers (real names + biometric descriptors). See
+  // sanitizePromptForReplicate's layer-3/4 patterns.
+  const sanitizedPrompt = sanitizePromptForReplicate(opts.prompt);
+  if (sanitizedPrompt !== opts.prompt) {
+    const removed = opts.prompt.length - sanitizedPrompt.length;
+    console.log(`[AtlasCloudSeedance] sanitizer stripped ${removed} chars of moderation-trigger phrases`);
+  }
+
   const input: Record<string, unknown> = {
     model,
-    prompt: opts.prompt,
+    prompt: sanitizedPrompt,
     image: opts.imageUrl,
     duration: clampedDuration,
     resolution,

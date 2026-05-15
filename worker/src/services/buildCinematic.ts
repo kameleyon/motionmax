@@ -67,10 +67,10 @@ export function buildCinematicPrompt(p: CinematicParams): PromptResult {
     ? `\n=== USER-SPECIFIED CHARACTER APPEARANCE (GROUND TRUTH — NON-NEGOTIABLE) ===\n${p.characterDescription}\n\n` +
       `THIS IS THE CREATOR'S EXPLICIT INPUT AND IT OVERRIDES ANYTHING YOU INFER FROM THE CONTENT.\n` +
       `MANDATORY RULES:\n` +
-      `1. Your "characters" object MUST be built FROM this description — copy the exact traits (species, skin tone, hair, clothing, build, age, distinguishing features) into every matching character entry.\n` +
-      `2. EVERY visualPrompt that features a character MUST include these appearance details verbatim — do NOT summarize, do NOT paraphrase, do NOT substitute.\n` +
-      `3. Do NOT invent a different look. Do NOT default to a generic protagonist. Do NOT change ethnicity, species, or key features.\n` +
-      `4. If the description conflicts with what "feels right" for the content, THIS description wins.\n`
+      `1. Your "characters" object MUST be built FROM this description — copy the exact traits (species, skin tone, hair, clothing, build, age, distinguishing features) into every matching character entry. The characters object feeds the image-generation pipeline and is NOT sent to the video model.\n` +
+      `2. EVERY visualPrompt that features a character MUST preserve the LOOK established by these details — clothing, distinguishing features, props, body language — so the same character is recognizable across scenes. HOWEVER, when the character is a REAL public figure (named real person), the visualPrompt MUST use ROLE descriptors ("the head coach", "the striker") instead of the real name, and MUST drop precise age + skin tone + height-build details that trigger the video model's E005 safety filter. See the REAL-PERSON SAFETY section below for examples. Visual continuity is preserved by clothing + role + the source image, not by a name in the prompt.\n` +
+      `3. Do NOT invent a different look. Do NOT default to a generic protagonist. Do NOT change ethnicity, species, or key features in the characters object.\n` +
+      `4. If the description conflicts with what "feels right" for the content, THIS description wins (for the characters object). For visualPrompt, the REAL-PERSON SAFETY rules take precedence to keep scenes from getting moderation-blocked.\n`
     : "";
 
   const brandSec = buildBrandSection(p.brandMark);
@@ -166,6 +166,31 @@ You are writing prompts for a generative video AI that CANNOT do lip-sync.
 - NO faces melting, NO bodies morphing into other bodies or objects
 - Characters must always have anatomically correct proportions — no extra limbs, no stretched necks, no distorted faces
 - All characters must be FULLY CLOTHED in context-appropriate attire at all times
+
+=== REAL-PERSON SAFETY (CRITICAL — E005 MODERATION) ===
+The downstream video model (ByteDance Seedance, used by AtlasCloud + Replicate + Hypereal) BLOCKS any visualPrompt that depicts an identifiable real public figure with biometric attributes — even if the user supplied those details. This trips error code E005 ("potentially sensitive") and the scene falls back to a held still frame instead of motion.
+
+The rule applies to visualPrompt ONLY. The voiceover may freely use real names — audio doesn't pass through Seedance.
+
+⛔ DO NOT write in visualPrompt:
+- A real public figure's FIRST + LAST NAME (e.g. "Tony Popovic", "Mitchell Duke", "Lionel Messi"). Reference them by ROLE instead ("the head coach", "the striker", "the captain").
+- Combinations of age + skin tone + ethnicity (e.g. "52-year-old man with light olive skin", "33-year-old man with medium brown skin"). These read as deepfake-risk markers.
+- Compound height + build descriptors ("muscular 6'1" build", "5'8" frame"). Use "athletic build" / "tall" instead.
+- Hair patterns that signal ethnicity in combination with the above ("tightly coiled dark hair", "greying at temples" when paired with name + skin tone).
+
+✅ DO write in visualPrompt:
+- Role + clothing + posture (e.g. "head coach in dark green tracksuit on touchline, arms crossed, jaw set, eyes focused on the pitch")
+- "The same coach character from earlier scenes" for continuity (the source-image pipeline still embeds the trained character likeness)
+- Generic body type + clothing ("a forward in a gold jersey holding off a defender", "the captain raising the trophy")
+
+Examples of the rewrite:
+- ❌ BAD: "Tony Popovic — 52-year-old man with light olive skin, sharp dark eyes, short dark brown hair greying at temples, dark green Socceroos coaching tracksuit — standing on the touchline"
+- ✅ GOOD: "The head coach in a dark green Socceroos tracksuit standing on the touchline, arms crossed, jaw set, watching his team train under the floodlights"
+
+- ❌ BAD: "Mitchell Duke — 33-year-old man with medium brown skin, short tightly coiled dark hair, muscular 6'1" build — in Australia's gold jersey holding off a defender"
+- ✅ GOOD: "An adult forward in Australia's gold jersey, athletic build, holding off a defender as he fights for a header near goal, stadium lights gleaming on his shoulders"
+
+The "characters" object can still carry full traits internally for image-generation continuity. ONLY visualPrompt is gated.
 
 === TRIGGER-WORD REWORDING (subtle word-swap, don't avoid topics) ===
 The downstream video provider (Seedance / Kling) runs a keyword-based

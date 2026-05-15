@@ -914,6 +914,19 @@ export async function pollHyperealJob(
       continue;
     }
 
+    if (response.status === 404) {
+      // Hypereal/Kling does not have this prediction. Either it was
+      // never theirs (e.g. an AtlasCloud or Replicate ID mis-routed
+      // here via a stale resume) or the provider purged it. Either
+      // way, continuing burns the per-job budget for nothing — surface
+      // as terminal so the caller falls through to the next provider
+      // in the chain instead of looping until LLM_JOB_TIMEOUT_MS.
+      const notFoundErr = new Error(`Hypereal ${model} poll ${jobId} returned 404 (prediction not found)`);
+      console.warn(`[Hypereal] ${notFoundErr.message}`);
+      writeApiLog({ userId: null, generationId: null, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: notFoundErr.message }).catch((e) => { console.warn('[Hypereal] background log failed:', (e as Error).message); });
+      throw notFoundErr;
+    }
+
     if (!response.ok) {
       console.warn(`[Hypereal] ${model} poll ${jobId} — HTTP ${response.status}`);
       consecutive429 = 0;

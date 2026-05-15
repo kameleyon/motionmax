@@ -451,14 +451,25 @@ async function _runCinematicVideo(
     throw err;
   }
   if (cp?.stage === "polling" && typeof cp.providerJobId === "string" && typeof cp.model === "string") {
-    // Replicate predictions have their own lifecycle (different host,
-    // Both Hypereal Seedance + Kling V3 Pro write the same poll-URL
-    // shape, so a single pollHyperealJob path covers both. Stale
-    // Replicate-tagged checkpoints from earlier code paths get cleared
-    // and re-submitted via Hypereal Seedance below.
-    if (cp.model === "bytedance/seedance-2.0" || cp.model === "bytedance/seedance-2.0-fast") {
+    // Hypereal Seedance + Kling V3 Pro share a poll-URL shape, so a
+    // single pollHyperealJob path covers both. Stale checkpoints from
+    // OTHER providers — Replicate (`bytedance/seedance-2.0`,
+    // `bytedance/seedance-2.0-fast`) or AtlasCloud
+    // (`bytedance/seedance-2.0/image-to-video`) — must NOT be polled
+    // via Hypereal: the prediction IDs live on a different host,
+    // returning 404 forever. Discard those checkpoints and re-submit
+    // via the full provider chain below. Re-submit costs one extra
+    // Seedance run (cheap) and is far better than wedging the job for
+    // 45 min on a stuck poll. Verified 2026-05-15 when an AtlasCloud
+    // checkpoint mis-routed to Hypereal produced 35 min of 404 spam
+    // before manual intervention killed job 35ee8681.
+    if (
+      cp.model === "bytedance/seedance-2.0" ||
+      cp.model === "bytedance/seedance-2.0-fast" ||
+      cp.model === "bytedance/seedance-2.0/image-to-video"
+    ) {
       console.log(
-        `[CinematicVideo] Scene ${sceneIndex}: stale Replicate checkpoint (model=${cp.model}) — clearing and re-submitting via Hypereal`,
+        `[CinematicVideo] Scene ${sceneIndex}: cross-provider checkpoint (model=${cp.model}, pollUrl=${cp.pollUrl ?? "?"}) — clearing and re-submitting via primary chain`,
       );
       await clearCheckpointKey(jobId, checkpointKey);
     } else {

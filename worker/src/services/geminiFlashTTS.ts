@@ -35,6 +35,21 @@ const GEMINI_PCM_SAMPLE_RATE = 24000; // Per Google docs (PCM 24kHz 16-bit mono)
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /**
+ * Strip ASCII control characters (0x00–0x08, 0x0B, 0x0C, 0x0E–0x1F, 0x7F)
+ * from text before sending to Gemini. Keeps \t (0x09), \n (0x0A), \r (0x0D)
+ * because Google accepts those in prompts. Verified 2026-05-15 incident
+ * where chunk 4 of a 5-chunk master read returned HTTP 400 INVALID_ARGUMENT
+ * because the chunker boundary left an embedded \x0B (vertical tab) in the
+ * carryover-context calibration block. Google's API rejects the whole
+ * request on a single bad byte. Cheap defense-in-depth; never alters
+ * audible output (control chars don't get spoken anyway).
+ */
+function stripBadControlChars(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+}
+
+/**
  * Cap on how long a single Gemini fetch is allowed to hang before we
  * abort and move to the next API key. Bumped 60 → 120 s on 2026-05-15
  * after a key rotation surfaced cases where Google legitimately takes
@@ -317,13 +332,17 @@ export async function generateGeminiFlashTTSPCM(
   const voiceName = rawVoice.trim();
   if (!voiceName) return { pcm: null, error: "Gemini Flash TTS: empty voiceName" };
 
-  const text = (opts.text || "").trim();
+  const text = stripBadControlChars((opts.text || "").trim());
   if (text.length < 2) return { pcm: null, error: "Gemini Flash TTS: empty text" };
 
   const apiKeys = opts.apiKeys.filter(Boolean);
   if (apiKeys.length === 0) return { pcm: null, error: "Gemini Flash TTS: no GOOGLE_TTS_API_KEY configured" };
 
-  const promptText = buildDirectivePrompt(text, opts.directives, opts.carryOverContext);
+  const promptText = buildDirectivePrompt(
+    text,
+    opts.directives,
+    opts.carryOverContext ? stripBadControlChars(opts.carryOverContext) : opts.carryOverContext,
+  );
 
   const body = {
     contents: [{ parts: [{ text: promptText }] }],
@@ -371,8 +390,24 @@ export async function generateGeminiFlashTTSPCM(
 
         if (!res.ok) {
           const errText = await res.text().catch(() => "");
-          lastError = `Gemini Flash TTS ${res.status}: ${errText.substring(0, 200)}`;
+          // Bumped 200 → 800 char preview so Google's nested error details
+          // (`details: [{ "@type": "...BadRequest", ...}]`) survive — these
+          // are what tell us the *actual* reason for INVALID_ARGUMENT.
+          lastError = `Gemini Flash TTS ${res.status}: ${errText.substring(0, 800)}`;
           console.warn(`[GeminiFlashTTS] Scene ${opts.sceneNumber} attempt ${attempt}/${MAX_ATTEMPTS} ${lastError}`);
+          // On 400, also dump diagnostic info about the chunk so we can
+          // identify what content triggered the malformed-request error
+          // (control chars, length boundary, odd unicode, etc.).
+          if (res.status === 400) {
+            const t = text;
+            const ctl = (t.match(/[ --]/g) ?? []).length;
+            const preview = (s: string) => s.replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t").slice(0, 100);
+            console.warn(
+              `[GeminiFlashTTS] 400 diag: text.length=${t.length}, control_chars=${ctl}, ` +
+              `prompt.length=${promptText.length}, voice=${voiceName}, ` +
+              `head="${preview(t.slice(0, 100))}", tail="${preview(t.slice(-100))}"`,
+            );
+          }
           // Non-retriable client errors — bad key (401), banned project
           // (403 PERMISSION_DENIED) or malformed request (400). Retrying
           // burns the per-job budget for nothing; surface immediately so
@@ -682,13 +717,17 @@ export async function generateGeminiFlashTTS(
   const voiceName = rawVoice.trim();
   if (!voiceName) return { url: null, error: "Gemini Flash TTS: empty voiceName" };
 
-  const text = (opts.text || "").trim();
+  const text = stripBadControlChars((opts.text || "").trim());
   if (text.length < 2) return { url: null, error: "Gemini Flash TTS: empty text" };
 
   const apiKeys = opts.apiKeys.filter(Boolean);
   if (apiKeys.length === 0) return { url: null, error: "Gemini Flash TTS: no GOOGLE_TTS_API_KEY configured" };
 
-  const promptText = buildDirectivePrompt(text, opts.directives, opts.carryOverContext);
+  const promptText = buildDirectivePrompt(
+    text,
+    opts.directives,
+    opts.carryOverContext ? stripBadControlChars(opts.carryOverContext) : opts.carryOverContext,
+  );
 
   const body = {
     contents: [{ parts: [{ text: promptText }] }],

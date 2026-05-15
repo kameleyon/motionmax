@@ -474,18 +474,65 @@ async function _runRegenerateImage(
 
       if (inserts.length > 0) {
         try {
-          const { error: chainErr } = await supabase
-            .from("video_generation_jobs")
-            .insert(inserts);
-          if (chainErr) {
-            console.warn(`[RegenerateImage] Auto-chain batch insert failed (non-fatal): ${chainErr.message}`);
+          // Pre-filter to avoid uq_video_jobs_project_task_scene_active
+          // violations. PostgreSQL aborts the WHOLE batch on a single
+          // duplicate-key — that's how scene 5's needed re-render gets
+          // dropped because scene 4 (queued by an adjacent image regen)
+          // also happens to be in this batch. Query for existing active
+          // jobs first and skip those rows individually.
+          //
+          // The constraint fires on (project_id, task_type, sceneIndex)
+          // when status IN ('pending', 'processing') and task_type IN
+          // (cinematic_video, regenerate_image, ...) — see migration
+          // 20260426010000_dedupe_active_jobs.sql. cinematic_video_edit
+          // is NOT in the constraint so those rows skip the check.
+          const constrainedTaskTypes = new Set([
+            "cinematic_video",
+            "regenerate_image",
+            "regenerate_audio",
+            "cinematic_image",
+            "cinematic_audio",
+          ]);
+          const rowsToCheck = inserts.filter((r) => constrainedTaskTypes.has(r.task_type));
+          const skipSet = new Set<string>(); // keys: `${task_type}:${sceneIndex}`
+          if (rowsToCheck.length > 0) {
+            const { data: existing } = await supabase
+              .from("video_generation_jobs")
+              .select("task_type, payload")
+              .eq("project_id", projectId)
+              .in("status", ["pending", "processing"])
+              .in("task_type", Array.from(constrainedTaskTypes));
+            for (const row of existing ?? []) {
+              const sIdx = (row.payload as { sceneIndex?: number })?.sceneIndex;
+              if (typeof sIdx === "number") {
+                skipSet.add(`${row.task_type}:${sIdx}`);
+              }
+            }
+          }
+          const filteredInserts = inserts.filter((r) => {
+            const sIdx = (r.payload as { sceneIndex?: number }).sceneIndex;
+            return !skipSet.has(`${r.task_type}:${sIdx}`);
+          });
+          const skippedCount = inserts.length - filteredInserts.length;
+          if (skippedCount > 0) {
+            console.log(`[RegenerateImage] Auto-chain skipped ${skippedCount} row(s) already active; queuing ${filteredInserts.length}`);
+          }
+          if (filteredInserts.length === 0) {
+            console.log(`[RegenerateImage] Auto-chain: nothing to enqueue (all targets already active)`);
           } else {
-            const editCount = inserts.filter(r => r.task_type === "cinematic_video_edit").length;
-            const regenCount = inserts.length - editCount;
-            console.log(
-              `[RegenerateImage] Auto-queued ${inserts.length} jobs in parallel: ` +
-              `${editCount} edit, ${regenCount} regen, scenes [${affected.map(r => r.idx + 1).join(", ")}]`,
-            );
+            const { error: chainErr } = await supabase
+              .from("video_generation_jobs")
+              .insert(filteredInserts);
+            if (chainErr) {
+              console.warn(`[RegenerateImage] Auto-chain batch insert failed (non-fatal): ${chainErr.message}`);
+            } else {
+              const editCount = filteredInserts.filter(r => r.task_type === "cinematic_video_edit").length;
+              const regenCount = filteredInserts.length - editCount;
+              console.log(
+                `[RegenerateImage] Auto-queued ${filteredInserts.length} jobs in parallel: ` +
+                `${editCount} edit, ${regenCount} regen, scenes [${affected.map(r => r.idx + 1).join(", ")}]`,
+              );
+            }
           }
         } catch (queueErr) {
           const qm = queueErr instanceof Error ? queueErr.message : String(queueErr);

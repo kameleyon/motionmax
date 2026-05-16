@@ -626,12 +626,11 @@ export async function generateKlingV3ProI2V(
   /** See generateSeedance2I2V — same resume-checkpoint hook. */
   onSubmitted?: (info: { providerJobId: string; pollUrl: string | null; model: string }) => Promise<void>,
 ): Promise<string> {
-  // Slug matches the Kling V2.6 ordering: digits-(i2v)-(tier).
-  // The earlier `kling-3-0-pro-i2v` variant was silently ignoring
-  // the `end_image` field at Hypereal's edge — start→end transitions
-  // never rendered. Verified 2026-05-15: switching to the i2v-pro
-  // ordering restored end-frame transitions.
-  const model = "kling-3-0-i2v-pro";
+  // Slug confirmed by Hypereal as `kling-3-0-pro-i2v` (the
+  // i2v-pro ordering 400s with "Unsupported video model"). The
+  // end_image-not-honored issue is a separate question — see
+  // function comments + the Kling V2.6 path which uses end_image.
+  const model = "kling-3-0-pro-i2v";
   const validDurations = [3, 5, 10, 15];
   const clampedDuration = validDurations.reduce((prev, curr) =>
     Math.abs(curr - duration) < Math.abs(prev - duration) ? curr : prev,
@@ -672,7 +671,7 @@ export async function generateKlingV3ProI2V(
       "Content-Type": "application/json",
     },
     body: bodyJson,
-  }, "kling-3-0-i2v-pro");
+  }, "kling-3-0-pro-i2v");
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -685,7 +684,7 @@ export async function generateKlingV3ProI2V(
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const data = await parseHyperealJson(response, "kling-3-0-i2v-pro") as any;
+  const data = await parseHyperealJson(response, "kling-3-0-pro-i2v") as any;
   const jobId = data.jobId;
   const pollUrl = data.pollUrl || null;
 

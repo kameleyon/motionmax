@@ -170,4 +170,153 @@ describe("generateOpenRouterVideo", () => {
     expect(res.videoUrl).toBeNull();
     expect(res.error).toContain("OPENROUTER_API_KEY");
   });
+
+  it("fires onSubmitted callback after successful POST", async () => {
+    const submitJson = { id: "or-job-5", polling_url: "https://or.test/poll/or-job-5" };
+    const pollJson   = {
+      id: "or-job-5",
+      status: "completed",
+      output: { video: { url: "https://or.test/out/or-job-5.mp4" } },
+      cost: 0.13,
+    };
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => submitJson, text: async () => "" })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => pollJson,   text: async () => "" }) as never;
+
+    const onSubmitted = vi.fn().mockResolvedValue(undefined);
+
+    const { generateOpenRouterVideo } = await import("./openrouterVideo.js");
+    await generateOpenRouterVideo({
+      model: "bytedance/seedance-1-5-pro",
+      imageUrl: "https://cdn.test/a.jpg",
+      prompt: "x",
+      pollMaxMs: 30_000,
+      onSubmitted,
+    });
+
+    expect(onSubmitted).toHaveBeenCalledTimes(1);
+    expect(onSubmitted).toHaveBeenCalledWith({
+      providerJobId: "or-job-5",
+      pollUrl: "https://or.test/poll/or-job-5",
+      model: "bytedance/seedance-1-5-pro",
+    });
+  }, 15_000);
+
+  it("does NOT throw when onSubmitted callback rejects", async () => {
+    const submitJson = { id: "or-job-6", polling_url: "https://or.test/poll/or-job-6" };
+    const pollJson   = {
+      id: "or-job-6",
+      status: "completed",
+      output: { video: { url: "https://or.test/out/or-job-6.mp4" } },
+    };
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => submitJson, text: async () => "" })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => pollJson,   text: async () => "" }) as never;
+
+    const onSubmitted = vi.fn().mockRejectedValue(new Error("DB outage"));
+
+    const { generateOpenRouterVideo } = await import("./openrouterVideo.js");
+    const res = await generateOpenRouterVideo({
+      model: "bytedance/seedance-1-5-pro",
+      imageUrl: "https://cdn.test/a.jpg",
+      prompt: "x",
+      pollMaxMs: 30_000,
+      onSubmitted,
+    });
+
+    // Generation still completes; checkpoint failure is non-fatal.
+    expect(res.videoUrl).toBe("https://or.test/out/or-job-6.mp4");
+  }, 15_000);
+
+  it("writes api_call_logs row on success with response.cost when present", async () => {
+    const submitJson = { id: "or-job-7", polling_url: "https://or.test/poll/or-job-7" };
+    const pollJson   = {
+      id: "or-job-7",
+      status: "completed",
+      output: { video: { url: "https://or.test/out/or-job-7.mp4" } },
+      cost: 0.13,
+    };
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => submitJson, text: async () => "" })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => pollJson,   text: async () => "" }) as never;
+
+    const { writeApiLog } = await import("../lib/logger.js");
+    const { generateOpenRouterVideo } = await import("./openrouterVideo.js");
+    await generateOpenRouterVideo({
+      model: "bytedance/seedance-1-5-pro",
+      imageUrl: "https://cdn.test/a.jpg",
+      prompt: "x",
+      pollMaxMs: 30_000,
+      userId: "user-99",
+      generationId: "gen-99",
+    });
+
+    expect(writeApiLog).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "openrouter",
+      model: "bytedance/seedance-1-5-pro",
+      status: "success",
+      cost: 0.13,
+      userId: "user-99",
+      generationId: "gen-99",
+    }));
+  }, 15_000);
+
+  it("falls back to rate-card cost when response.cost is missing", async () => {
+    const submitJson = { id: "or-job-8", polling_url: "https://or.test/poll/or-job-8" };
+    const pollJson   = {
+      id: "or-job-8",
+      status: "completed",
+      output: { video: { url: "https://or.test/out/or-job-8.mp4" } },
+      // cost intentionally omitted
+    };
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => submitJson, text: async () => "" })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => pollJson,   text: async () => "" }) as never;
+
+    const { writeApiLog } = await import("../lib/logger.js");
+    const { generateOpenRouterVideo } = await import("./openrouterVideo.js");
+    await generateOpenRouterVideo({
+      model: "bytedance/seedance-1-5-pro",
+      imageUrl: "https://cdn.test/a.jpg",
+      prompt: "x",
+      duration: 10,
+      resolution: "480p",
+      pollMaxMs: 30_000,
+    });
+
+    // Rate-card fallback: 10s * $0.013/sec = $0.13
+    expect(writeApiLog).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "openrouter",
+      model: "bytedance/seedance-1-5-pro",
+      status: "success",
+      cost: expect.closeTo(0.13, 2),
+    }));
+  }, 15_000);
+
+  it("writes api_call_logs row on error path", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: false, status: 500,
+      json: async () => ({}),
+      text: async () => "boom",
+    }) as never;
+
+    const { writeApiLog } = await import("../lib/logger.js");
+    const { generateOpenRouterVideo } = await import("./openrouterVideo.js");
+    await generateOpenRouterVideo({
+      model: "bytedance/seedance-1-5-pro",
+      imageUrl: "https://cdn.test/a.jpg",
+      prompt: "x",
+      pollMaxMs: 30_000,
+    });
+
+    expect(writeApiLog).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "openrouter",
+      model: "bytedance/seedance-1-5-pro",
+      status: "error",
+    }));
+  });
 });

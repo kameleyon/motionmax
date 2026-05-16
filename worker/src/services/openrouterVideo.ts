@@ -19,6 +19,7 @@
  */
 
 import { writeApiLog } from "../lib/logger.js";
+import { openRouterVideoCostUsd } from "../lib/providerRates.js";
 import { acquireOpenRouter, releaseOpenRouter } from "./openrouter.js";
 
 const OR_BASE = "https://openrouter.ai/api/v1";
@@ -139,6 +140,13 @@ export async function generateOpenRouterVideo(
       if (!submitRes.ok) {
         const err = `OpenRouter video submit ${submitRes.status}: ${(submitTextOrNull ?? "").slice(0, 200)}`;
         console.warn(`[OpenRouterVideo:${model}] ${err}`);
+        writeApiLog({
+          userId: opts.userId ?? null, generationId: opts.generationId ?? null,
+          provider, model, status: "error",
+          totalDurationMs: Date.now() - startTime,
+          cost: 0,
+          error: err.slice(0, 500),
+        }).catch((e) => console.warn(`[OpenRouterVideo:${model}] api log failed: ${(e as Error).message}`));
         return { videoUrl: null, provider, model, error: err };
       }
 
@@ -156,6 +164,16 @@ export async function generateOpenRouterVideo(
     const pollUrl = created.polling_url ?? `${OR_BASE}/videos/${providerJobId}`;
     console.log(`[OpenRouterVideo:${model}] Submitted ${providerJobId}`);
 
+    if (opts.onSubmitted) {
+      try {
+        await opts.onSubmitted({ providerJobId, pollUrl, model });
+      } catch (err) {
+        console.warn(
+          `[OpenRouterVideo:${model}] onSubmitted callback failed (non-fatal): ${(err as Error).message}`,
+        );
+      }
+    }
+
     // ── 2. Poll ───────────────────────────────────────────────────────
     let cost: number | undefined;
     while (Date.now() - startTime < pollMaxMs) {
@@ -172,18 +190,42 @@ export async function generateOpenRouterVideo(
         if (status === "completed" || status === "succeeded") {
           const videoUrl = extractVideoUrl(pj);
           if (!videoUrl) {
-            return { videoUrl: null, provider, model, cost,
-              error: `OpenRouter completed but URL not found in response` };
+            const err = `OpenRouter completed but URL not found in response`;
+            writeApiLog({
+              userId: opts.userId ?? null, generationId: opts.generationId ?? null,
+              provider, model, status: "error",
+              totalDurationMs: Date.now() - startTime,
+              cost: 0,
+              error: err.slice(0, 500),
+            }).catch((e) => console.warn(`[OpenRouterVideo:${model}] api log failed: ${(e as Error).message}`));
+            return { videoUrl: null, provider, model, cost, error: err };
           }
-          console.log(`[OpenRouterVideo:${model}] Completed in ${Math.round((Date.now() - startTime) / 1000)}s`);
-          return { videoUrl, durationSeconds: duration, provider, model, cost };
+          const elapsed = Date.now() - startTime;
+          console.log(`[OpenRouterVideo:${model}] Completed in ${Math.round(elapsed / 1000)}s`);
+          const finalCost = typeof cost === "number"
+            ? cost
+            : openRouterVideoCostUsd(model, resolution, duration);
+          writeApiLog({
+            userId: opts.userId ?? null, generationId: opts.generationId ?? null,
+            provider, model, status: "success",
+            totalDurationMs: elapsed,
+            cost: finalCost,
+          }).catch((e) => console.warn(`[OpenRouterVideo:${model}] api log failed: ${(e as Error).message}`));
+          return { videoUrl, durationSeconds: duration, provider, model, cost: finalCost };
         }
         if (status === "failed" || status === "error" || (pj as { error?: unknown }).error) {
           const errMsg = (pj as { error?: { message?: string } }).error?.message
             ?? (pj as { failure_reason?: string }).failure_reason
             ?? `OpenRouter status=${status}`;
-          return { videoUrl: null, provider, model, cost,
-            error: `OpenRouter video ${model} failed: ${errMsg}` };
+          const fullErr = `OpenRouter video ${model} failed: ${errMsg}`;
+          writeApiLog({
+            userId: opts.userId ?? null, generationId: opts.generationId ?? null,
+            provider, model, status: "error",
+            totalDurationMs: Date.now() - startTime,
+            cost: cost ?? 0,
+            error: fullErr.slice(0, 500),
+          }).catch((e) => console.warn(`[OpenRouterVideo:${model}] api log failed: ${(e as Error).message}`));
+          return { videoUrl: null, provider, model, cost, error: fullErr };
         }
         // still pending — keep polling
       } catch (_err) {
@@ -191,8 +233,15 @@ export async function generateOpenRouterVideo(
       }
     }
 
-    return { videoUrl: null, provider, model, cost,
-      error: `OpenRouter video poll timeout after ${Math.round(pollMaxMs / 1000)}s` };
+    const timeoutErr = `OpenRouter video poll timeout after ${Math.round(pollMaxMs / 1000)}s`;
+    writeApiLog({
+      userId: opts.userId ?? null, generationId: opts.generationId ?? null,
+      provider, model, status: "error",
+      totalDurationMs: Date.now() - startTime,
+      cost: cost ?? 0,
+      error: timeoutErr,
+    }).catch((e) => console.warn(`[OpenRouterVideo:${model}] api log failed: ${(e as Error).message}`));
+    return { videoUrl: null, provider, model, cost, error: timeoutErr };
   } finally {
     releaseOpenRouter();
   }

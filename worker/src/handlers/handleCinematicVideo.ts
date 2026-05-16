@@ -31,7 +31,8 @@ import {
   // generateVeo31Video,          // Veo 3.1 — doesn't follow prompts, generates unwanted audio/lip sync
   // generateKlingV26Video,       // Kling V2.6 Pro — retired, superseded by V3.0 Pro
   // generateSeedance2I2V,        // Hypereal Seedance Fast — removed 2026-05-15 (141 cr/scene, E005-prone)
-  generateKlingV3ProI2V,          // Only fallback — Kling V3.0 Pro I2V on Hypereal (99 cr/scene)
+  // generateKlingV3ProI2V,        // Newer variant — silently drops end_image. Replaced by V3ProVideo (older, simpler, end_image confirmed working at commit 38aeb4d).
+  generateKlingV3ProVideo,        // Only fallback — Kling V3.0 Pro on Hypereal. Single `end_image` field, durations [5, 10] only.
   // generateGrokVideo,           // Grok Video I2V — status-lookup failures on Hypereal, rolled back
   pollHyperealJob,                // Resume-from-checkpoint poll for an already-submitted Hypereal job.
 } from "../services/hypereal.js";
@@ -544,21 +545,24 @@ async function _runCinematicVideo(
         details: { sceneIndex },
       });
 
-      videoUrl = await generateKlingV3ProI2V(
+      // Using the older `generateKlingV3ProVideo` (simpler signature,
+      // single `end_image` field, no onSubmitted checkpoint hook) —
+      // restored from commit 38aeb4d after the newer V3ProI2V variant
+      // was silently dropping end_image at Hypereal. Trade-off: a
+      // worker restart mid-poll re-submits to Hypereal (extra credits)
+      // because there's no checkpoint resume path here. Acceptable
+      // because Kling V3 Pro polls finish in 2-3 min, well under our
+      // 15-min hard timeout.
+      videoUrl = await generateKlingV3ProVideo(
         imageUrl,
         finalPrompt,
         apiKey,
-        10,                  // duration: 10s
+        10,                  // duration: must be 5 or 10 (clamped)
         endImageUrl,
         klingNegativePrompt,
         0.5,                 // cfg_scale
-        async ({ providerJobId, pollUrl, model }) => {
-          await saveCheckpoint(jobId, checkpointKey, {
-            stage: "polling", providerJobId, pollUrl, model,
-          });
-        },
       );
-      provider = "Kling V3.0 Pro I2V";
+      provider = "Kling V3.0 Pro Video";
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);

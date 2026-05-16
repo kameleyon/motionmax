@@ -121,21 +121,34 @@ export async function generateOpenRouterVideo(
   await acquireOpenRouter();
   try {
     // ── 1. Submit ─────────────────────────────────────────────────────
-    const submitRes = await fetch(OR_SUBMIT_URL, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal: opts.signal,
-    });
-
-    const submitTextOrNull = submitRes.ok ? null : await submitRes.text().catch(() => "");
-    if (!submitRes.ok) {
-      const err = `OpenRouter video submit ${submitRes.status}: ${(submitTextOrNull ?? "").slice(0, 200)}`;
-      console.warn(`[OpenRouterVideo:${model}] ${err}`);
-      return { videoUrl: null, provider, model, error: err };
+    if (opts.signal?.aborted) {
+      return { videoUrl: null, provider, model, error: "OpenRouter video aborted before submission" };
     }
 
-    const created = (await submitRes.json()) as { id?: string; polling_url?: string };
+    let submitRes: Response;
+    let createdRaw: unknown;
+    try {
+      submitRes = await fetch(OR_SUBMIT_URL, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: opts.signal,
+      });
+
+      const submitTextOrNull = submitRes.ok ? null : await submitRes.text().catch(() => "");
+      if (!submitRes.ok) {
+        const err = `OpenRouter video submit ${submitRes.status}: ${(submitTextOrNull ?? "").slice(0, 200)}`;
+        console.warn(`[OpenRouterVideo:${model}] ${err}`);
+        return { videoUrl: null, provider, model, error: err };
+      }
+
+      createdRaw = await submitRes.json();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { videoUrl: null, provider, model, error: `OpenRouter video submit failed: ${msg}` };
+    }
+
+    const created = createdRaw as { id?: string; polling_url?: string };
     if (!created?.id) {
       return { videoUrl: null, provider, model, error: "OpenRouter response missing id" };
     }

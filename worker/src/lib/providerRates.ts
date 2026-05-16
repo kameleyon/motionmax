@@ -126,6 +126,25 @@ export const PROVIDER_RATES_USD = {
     per_second_720p: 0.18,
     per_second_1080p: 0.45,
   },
+  // OpenRouter-hosted ByteDance Seedance 1.5 Pro — primary cinematic
+  // rung as of 2026-05-16. Token-billed without audio at half the
+  // with-audio rate ($0.0000012/token vs $0.0000024/token). Empirical
+  // tokens-per-second at 720p ≈ 21,400 from the 2026-05-16 probe
+  // (scripts/probe-openrouter-pricing.mjs). 480p scales down by the
+  // pixel-area ratio (~44%). Rates rounded up so degraded-path fallback
+  // biases over-estimate. OpenRouter's `cost` field is authoritative
+  // when present and overrides this table.
+  openrouter_seedance_1_5_pro: {
+    per_second_480p: 0.013,   // ~$0.13 / 10s
+    per_second_720p: 0.026,   // ~$0.26 / 10s
+    per_second_1080p: 0.058,  // ~$0.58 / 10s
+  },
+  // OpenRouter-hosted Kling Video O1 — third rung. Flat per-second
+  // pricing regardless of resolution (catalog: single duration_seconds
+  // field). Supports only durations 5 and 10.
+  openrouter_kling_video_o1: {
+    per_second: 0.112,        // $1.12 / 10s
+  },
 } as const;
 
 export type ProviderRateKey = keyof typeof PROVIDER_RATES_USD;
@@ -196,6 +215,24 @@ export function replicateSeedanceCostUsd(
   const perSec =
     resolution === "1080p" ? r.per_second_1080p :
     resolution === "720p" ? r.per_second_720p :
+    r.per_second_480p;
+  return Math.max(0, outputSeconds * perSec);
+}
+
+/** Compute cost for an OpenRouter-hosted video clip. Seedance 1.5 Pro
+ *  is token-billed per resolution; Kling Video O1 is flat per-second. */
+export function openRouterVideoCostUsd(
+  model: "bytedance/seedance-1-5-pro" | "kwaivgi/kling-video-o1",
+  resolution: "480p" | "720p" | "1080p",
+  outputSeconds: number,
+): number {
+  if (model === "kwaivgi/kling-video-o1") {
+    return Math.max(0, outputSeconds * PROVIDER_RATES_USD.openrouter_kling_video_o1.per_second);
+  }
+  const r = PROVIDER_RATES_USD.openrouter_seedance_1_5_pro;
+  const perSec =
+    resolution === "1080p" ? r.per_second_1080p :
+    resolution === "720p"  ? r.per_second_720p  :
     r.per_second_480p;
   return Math.max(0, outputSeconds * perSec);
 }

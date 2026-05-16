@@ -61,7 +61,7 @@ const OPENROUTER_MAX_CONCURRENT = 2;
 let _openrouterActive = 0;
 const _openrouterQueue: Array<() => void> = [];
 
-function acquireOpenRouter(): Promise<void> {
+export function acquireOpenRouter(): Promise<void> {
   if (_openrouterActive < OPENROUTER_MAX_CONCURRENT) {
     _openrouterActive++;
     return Promise.resolve();
@@ -71,7 +71,7 @@ function acquireOpenRouter(): Promise<void> {
   });
 }
 
-function releaseOpenRouter(): void {
+export function releaseOpenRouter(): void {
   _openrouterActive--;
   const next = _openrouterQueue.shift();
   if (next) next();

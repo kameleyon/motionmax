@@ -487,6 +487,12 @@ async function _runCinematicVideo(
     }
   }
 
+  // OpenRouter rungs accept only 16:9 or 9:16. MotionMax's `seedanceAspect`
+  // can be 1:1 for "square" projects, which the OpenRouter service's type
+  // union rejects — collapse 1:1 → 16:9 for OR rungs only. AtlasCloud keeps
+  // the full `seedanceAspect` value because it natively handles 1:1.
+  const openRouterAspectRatio: "16:9" | "9:16" = seedanceAspect === "1:1" ? "16:9" : seedanceAspect;
+
   // Per-scene provider chain (4-rung as of 2026-05-16):
   //   1. OpenRouter Seedance 1.5 Pro @ 480p — cheapest 10s I2V on
   //      OpenRouter ($0.13/10s). New primary.
@@ -511,7 +517,7 @@ async function _runCinematicVideo(
         endImageUrl,
         prompt: `${finalPrompt}\n\n${motionGuardrails}`,
         duration: 10,
-        aspectRatio: seedanceAspect === "1:1" ? "16:9" : seedanceAspect,
+        aspectRatio: openRouterAspectRatio,
         resolution: "480p",
         userId: userId ?? null,
         generationId,
@@ -560,12 +566,43 @@ async function _runCinematicVideo(
       } else {
         const msg = atlasRes.error ?? "(no error)";
         console.warn(
-          `[CinematicVideo] Scene ${sceneIndex}: AtlasCloud Seedance failed — falling back to Kling V3.0 Pro: ${msg.slice(0, 200)}`,
+          `[CinematicVideo] Scene ${sceneIndex}: AtlasCloud Seedance failed — falling back to OpenRouter Kling O1: ${msg.slice(0, 200)}`,
         );
       }
     }
 
-    // ── 2. Hypereal Kling V3.0 Pro (FALLBACK) ────────────────────────
+    // ── 3. OpenRouter Kling Video O1 @ 480p (FALLBACK 2) ─────────────
+    // Resolution-free pricing ($1.12 / 10s). Different content
+    // classifier from Seedance, so may accept prompts rungs 1/2 refused.
+    if (!videoUrl) {
+      const orKlingRes = await generateOpenRouterVideo({
+        model: "kwaivgi/kling-video-o1",
+        imageUrl,
+        endImageUrl,
+        prompt: `${finalPrompt}\n\n${motionGuardrails}`,
+        duration: 10,
+        aspectRatio: openRouterAspectRatio,
+        resolution: "480p",
+        userId: userId ?? null,
+        generationId,
+        pollMaxMs: 4 * 60 * 1000,
+        onSubmitted: async ({ providerJobId, pollUrl, model }) => {
+          await saveCheckpoint(jobId, checkpointKey, {
+            stage: "polling", providerJobId, pollUrl, model,
+          });
+        },
+      });
+      if (orKlingRes.videoUrl) {
+        videoUrl = orKlingRes.videoUrl;
+        provider = "OpenRouter Kling Video O1 @ 480p";
+      } else {
+        console.warn(
+          `[CinematicVideo] Scene ${sceneIndex}: OpenRouter Kling O1 failed — falling back to Hypereal Kling V3 Pro: ${(orKlingRes.error ?? "").slice(0, 200)}`,
+        );
+      }
+    }
+
+    // ── 4. Hypereal Kling V3.0 Pro (FALLBACK 2 / TERMINAL) ─────────
     // Catches whatever AtlasCloud rejected — including E005/moderation
     // refusals (Kling uses a different classifier) and provider hangs.
     // Final layer before held-frame; moderation rejection HERE is

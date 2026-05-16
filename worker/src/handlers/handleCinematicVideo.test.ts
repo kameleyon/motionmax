@@ -78,6 +78,7 @@ vi.mock("../lib/featureFlags.js", () => ({
 vi.mock("../services/hypereal.js", () => ({
   generateSeedance2I2V: vi.fn().mockResolvedValue({ jobId: "hy-seedance-1" }),
   generateKlingV3ProI2V: vi.fn().mockResolvedValue({ jobId: "hy-kling-1" }),
+  generateKlingV3ProVideo: vi.fn().mockResolvedValue("https://hypereal.test/clip.mp4"),
   pollHyperealJob: vi.fn().mockResolvedValue({
     status: "completed",
     videoUrl: "https://hypereal.test/clip.mp4",
@@ -387,6 +388,61 @@ describe("handleCinematicVideo", () => {
 
       expect(generateOpenRouterVideo).toHaveBeenCalled();
       expect(generateAtlasCloudSeedance).toHaveBeenCalled();
+    });
+  });
+
+  describe("provider chain — rung 3 (OpenRouter Kling Video O1)", () => {
+    it("cascades through rung 1 -> 2 -> 3 when both upstream rungs fail", async () => {
+      const { supabase } = await import("../lib/supabase.js");
+      vi.mocked(supabase.from).mockImplementation((table: string) => {
+        if (table === "generations") {
+          return makeChain({ scenes: [{ imageUrl: "https://cdn.test/img.jpg", visualPrompt: "x" }] }) as never;
+        }
+        if (table === "projects") {
+          return makeChain({ format: "landscape", style: "realistic" }) as never;
+        }
+        if (table === "video_generation_jobs") {
+          return makeChain({ status: "processing", error_message: null }) as never;
+        }
+        return makeChain({}) as never;
+      });
+
+      const { generateOpenRouterVideo } = await import("../services/openrouterVideo.js");
+      // First call (rung 1) fails; second call (rung 3) succeeds.
+      vi.mocked(generateOpenRouterVideo)
+        .mockResolvedValueOnce({
+          videoUrl: null, provider: "openrouter", model: "bytedance/seedance-1-5-pro",
+          error: "rung 1 submit 502",
+        })
+        .mockResolvedValueOnce({
+          videoUrl: "https://or.test/kling-o1.mp4",
+          provider: "openrouter", model: "kwaivgi/kling-video-o1",
+          durationSeconds: 10, cost: 1.12,
+        });
+
+      const { generateAtlasCloudSeedance } = await import("../services/atlasCloudSeedance.js");
+      vi.mocked(generateAtlasCloudSeedance).mockResolvedValueOnce({
+        videoUrl: null, provider: "atlascloud", model: "bytedance/seedance-2.0/image-to-video",
+        error: "atlas timed out",
+      });
+
+      const { generateKlingV3ProVideo } = await import("../services/hypereal.js");
+
+      const { handleCinematicVideo } = await import("./handleCinematicVideo.js");
+      await handleCinematicVideo("job-rung3", makePayload({ sceneIndex: 0 }), "user-1").catch(() => {});
+
+      // Rung 1 + rung 3 both called on OpenRouter; AtlasCloud called once; Hypereal Kling NOT called.
+      expect(vi.mocked(generateOpenRouterVideo).mock.calls).toHaveLength(2);
+      expect(vi.mocked(generateOpenRouterVideo).mock.calls[1][0]).toEqual(
+        expect.objectContaining({
+          model: "kwaivgi/kling-video-o1",
+          resolution: "480p",
+          duration: 10,
+          pollMaxMs: 4 * 60 * 1000,
+        }),
+      );
+      expect(generateAtlasCloudSeedance).toHaveBeenCalledTimes(1);
+      expect(generateKlingV3ProVideo).not.toHaveBeenCalled();
     });
   });
 });

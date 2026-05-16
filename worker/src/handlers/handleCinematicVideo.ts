@@ -554,6 +554,7 @@ async function _runCinematicVideo(
         resolution: "480p",
         userId: userId ?? null,
         generationId,
+        pollMaxMs: 4 * 60 * 1000,
         onSubmitted: async ({ providerJobId, pollUrl, model }) => {
           await saveCheckpoint(jobId, checkpointKey, {
             stage: "polling", providerJobId, pollUrl, model,
@@ -602,7 +603,7 @@ async function _runCinematicVideo(
       }
     }
 
-    // ── 4. Hypereal Kling V3.0 Pro (FALLBACK 2 / TERMINAL) ─────────
+    // ── 4. Hypereal Kling V3.0 Pro (FALLBACK 3 / TERMINAL) ─────────
     // Catches whatever AtlasCloud rejected — including E005/moderation
     // refusals (Kling uses a different classifier) and provider hangs.
     // Final layer before held-frame; moderation rejection HERE is
@@ -648,8 +649,8 @@ async function _runCinematicVideo(
         jobId, projectId, userId, generationId,
         category: "system_error",
         eventType: "provider_credits_exhausted",
-        message: `Hypereal credits exhausted — scene ${sceneIndex} could not render on Seedance OR Kling V3 Pro`,
-        details: { sceneIndex, provider: "hypereal-seedance-2-0-fast-i2v + kling-3-0-pro-i2v fallback", raw: errMsg.slice(0, 400) },
+        message: `Provider chain exhausted — scene ${sceneIndex} could not render on OpenRouter Seedance, AtlasCloud, OpenRouter Kling O1, OR Hypereal Kling V3 Pro`,
+        details: { sceneIndex, provider: "openrouter-seedance-1-5-pro + atlascloud + openrouter-kling-o1 + hypereal-kling-v3-pro chain", raw: errMsg.slice(0, 400) },
       });
       throw err;
     }
@@ -678,7 +679,7 @@ async function _runCinematicVideo(
       message: `Scene ${sceneIndex}: provider moderation rejected — using still image as held frame`,
       details: {
         sceneIndex,
-        provider: "hypereal-seedance-2-0-fast-i2v + kling-3-0-pro-i2v fallback",
+        provider: "openrouter-seedance-1-5-pro + atlascloud + openrouter-kling-o1 + hypereal-kling-v3-pro chain",
         reason: errMsg,
         fallback: "hold_frame",
       },
@@ -697,7 +698,7 @@ async function _runCinematicVideo(
         : {};
       meta.heldFrame = {
         reason: errMsg.slice(0, 240),
-        provider: "hypereal-seedance-2-0-fast-i2v + kling-3-0-pro-i2v fallback",
+        provider: "openrouter-seedance-1-5-pro + atlascloud + openrouter-kling-o1 + hypereal-kling-v3-pro chain",
         at: new Date().toISOString(),
       };
       freshScenes2[sceneIndex] = { ...freshScenes2[sceneIndex], videoUrl: null, _meta: meta };

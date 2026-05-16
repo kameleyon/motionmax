@@ -497,53 +497,13 @@ async function _runCinematicVideo(
   //   - Replicate Seedance: 6s E005 rejections, no value in chain.
   //   - Hypereal Seedance Fast: 141 cr/scene + same E005 wall.
   try {
-    // ── 1. Hypereal Kling V3.0 Pro (PRIMARY) — TEMPORARILY DISABLED 2026-05-15 ─
-    // Commented out so all traffic goes straight to AtlasCloud while we
-    // diagnose Kling V3 Pro's silent end_image drop. Re-enable by
-    // uncommenting the try/catch block below — leave the AtlasCloud
-    // section as-is (the `if (!videoUrl)` guard will then engage as a
-    // proper fallback again).
-    /*
-    try {
-      videoUrl = await generateKlingV3ProI2V(
-        imageUrl,
-        finalPrompt,
-        apiKey,
-        10,                  // duration: 10s
-        endImageUrl,
-        klingNegativePrompt,
-        0.5,                 // cfg_scale
-        async ({ providerJobId, pollUrl, model }) => {
-          await saveCheckpoint(jobId, checkpointKey, {
-            stage: "polling", providerJobId, pollUrl, model,
-          });
-        },
-      );
-      provider = "Kling V3.0 Pro I2V";
-    } catch (klingErr) {
-      const klingMsg = klingErr instanceof Error ? klingErr.message : String(klingErr);
-      // Moderation rejection at Kling is permanent for the same prompt
-      // — bubble up so held-frame runs (don't waste AtlasCloud credits
-      // on the same blocked prompt).
-      if (/risk control|content[_ ]?violation|blocked.*content|moderation|potentially sensitive|flagged.*sensitive/i.test(klingMsg)) {
-        throw klingErr;
-      }
-      // Provider credits exhausted on Hypereal? Same — bubble up so
-      // ops sees it. AtlasCloud uses a different account so this would
-      // technically still be tryable, but PROVIDER_CREDITS_EXHAUSTED is
-      // a cost-side ops issue and silently double-spending on AtlasCloud
-      // hides it from the alert path.
-      if (klingMsg.startsWith("[PROVIDER_CREDITS_EXHAUSTED]")) {
-        throw klingErr;
-      }
-      console.warn(
-        `[CinematicVideo] Scene ${sceneIndex}: Kling V3.0 Pro failed — falling back to AtlasCloud Seedance: ${klingMsg.slice(0, 200)}`,
-      );
-    }
-    */
-
-    // ── 2. AtlasCloud Seedance 2.0 (currently the ONLY provider) ────
-    if (!videoUrl) {
+    // ── 1. AtlasCloud Seedance 2.0 (PRIMARY) ─────────────────────────
+    // Cheap when it works. ANY failure (including E005 moderation /
+    // sanitation rejection) falls through to Kling V3 Pro below —
+    // Kling has different content policy + sometimes accepts what
+    // Seedance refuses. We do NOT bubble moderation here; let Kling
+    // try.
+    {
       const atlasRes = await generateAtlasCloudSeedance({
         imageUrl,
         prompt: `${finalPrompt}\n\n${motionGuardrails}`,
@@ -563,12 +523,42 @@ async function _runCinematicVideo(
         videoUrl = atlasRes.videoUrl;
         provider = "AtlasCloud Seedance 2.0 @ 480p";
       } else {
-        // Both providers failed. AtlasCloud's error message bubbles
-        // up via the throw — outer catch classifies moderation vs
-        // genuine failure and either runs held-frame or re-throws.
-        const msg = atlasRes.error ?? "AtlasCloud Seedance fallback returned no video";
-        throw new Error(msg);
+        const msg = atlasRes.error ?? "(no error)";
+        console.warn(
+          `[CinematicVideo] Scene ${sceneIndex}: AtlasCloud Seedance failed — falling back to Kling V3.0 Pro: ${msg.slice(0, 200)}`,
+        );
       }
+    }
+
+    // ── 2. Hypereal Kling V3.0 Pro (FALLBACK) ────────────────────────
+    // Catches whatever AtlasCloud rejected — including E005/moderation
+    // refusals (Kling uses a different classifier) and provider hangs.
+    // Final layer before held-frame; moderation rejection HERE is
+    // permanent and bubbles to the outer catch.
+    if (!videoUrl) {
+      await writeSystemLog({
+        jobId, projectId, userId, generationId,
+        category: "system_warning",
+        eventType: "cinematic_video_kling_fallback",
+        message: `Scene ${sceneIndex}: AtlasCloud failed — falling back to Kling V3.0 Pro`,
+        details: { sceneIndex },
+      });
+
+      videoUrl = await generateKlingV3ProI2V(
+        imageUrl,
+        finalPrompt,
+        apiKey,
+        10,                  // duration: 10s
+        endImageUrl,
+        klingNegativePrompt,
+        0.5,                 // cfg_scale
+        async ({ providerJobId, pollUrl, model }) => {
+          await saveCheckpoint(jobId, checkpointKey, {
+            stage: "polling", providerJobId, pollUrl, model,
+          });
+        },
+      );
+      provider = "Kling V3.0 Pro I2V";
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);

@@ -17,7 +17,7 @@ import type { Job } from "./types/job.js";
 export const LENGTH_SECONDS: Record<string, number> = {
   short: 150,
   brief: 280,
-  presentation: 360,
+  presentation: 280,
 };
 export const PRODUCT_MULT: Record<string, number> = {
   doc2video: 1,

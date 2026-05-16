@@ -36,7 +36,7 @@ export function buildDoc2VideoPrompt(p: Doc2VideoParams): PromptResult {
   const lengthCfg: Record<string, { count: number; targetDuration: number; avgSceneDuration: number; maxWords: number }> = {
     short: { count: 15, targetDuration: 165, avgSceneDuration: 11, maxWords: 28 },
     brief: { count: 28, targetDuration: 308, avgSceneDuration: 11, maxWords: 28 },
-    presentation: { count: 36, targetDuration: 396, avgSceneDuration: 11, maxWords: 28 },
+    presentation: { count: 28, targetDuration: 308, avgSceneDuration: 11, maxWords: 28 },
   };
   const cfg = lengthCfg[p.length] || lengthCfg.brief;
   const targetWords = cfg.maxWords;

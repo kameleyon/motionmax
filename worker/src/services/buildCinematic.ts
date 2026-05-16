@@ -46,7 +46,7 @@ export function buildCinematicPrompt(p: CinematicParams): PromptResult {
   const lengthCfg: Record<string, { min: number; max: number; target: number; maxPerScene: number; maxWords: number }> = {
     short:        { min: 15, max: 15, target: 165, maxPerScene: 11, maxWords: 28 },
     brief:        { min: 28, max: 28, target: 308, maxPerScene: 11, maxWords: 28 },
-    presentation: { min: 36, max: 36, target: 396, maxPerScene: 11, maxWords: 28 },
+    presentation: { min: 28, max: 28, target: 308, maxPerScene: 11, maxWords: 28 },
   };
   const cfg = lengthCfg[p.length] || lengthCfg.brief;
   const targetWords = cfg.maxWords;

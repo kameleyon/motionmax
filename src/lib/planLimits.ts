@@ -97,7 +97,7 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> & { starter: PlanLimits; 
 const LENGTH_SECONDS: Record<string, number> = {
   short: 150,         // ~2.5 min (15 scenes x 10s)
   brief: 280,         // ~4.7 min (28 scenes x 10s)
-  presentation: 360,  // ~6 min (36 scenes x 10s)
+  presentation: 280,  // ~4.7 min (28 scenes x 10s)
 };
 
 /** Compute multiplier per product type */

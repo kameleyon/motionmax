@@ -884,7 +884,7 @@ export async function handler(req: Request): Promise<Response> {
 
     // =============== PHASE 1: SCRIPT (offloaded to worker) ===============
     // Script generation calls a large LLM that can take 4-6 minutes for a full
-    // 28-36 scene cinematic. Running inline would timeout the edge function.
+    // 28-scene cinematic. Running inline would timeout the edge function.
     // Instead we deduct credits upfront, enqueue a generate_video worker job,
     // and return the jobId so the caller can poll video_generation_jobs.
     if (phase === "script") {

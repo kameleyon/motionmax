@@ -179,10 +179,10 @@ describe("refundCreditsOnFailure (real implementation) — idempotency contract"
     });
     await refundCreditsOnFailure(job);
 
-    // cinematic presentation: ceil(360 * 5) = 1800 credits
+    // cinematic presentation: ceil(280 * 5) = 1400 credits
     expect(supabase.rpc).toHaveBeenCalledWith(
       "refund_credits_securely",
-      expect.objectContaining({ p_amount: 1800 })
+      expect.objectContaining({ p_amount: 1400 })
     );
   });
 

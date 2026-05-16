@@ -53,7 +53,7 @@ function buildPrompt(projectType: string, p: Record<string, any>): PromptResult 
   switch (projectType) {
     case "cinematic":
       // Cinematic now uses the explainer/doc2video script builder
-      // verbatim — same scene counts (15/28/36), same per-scene word
+      // verbatim — same scene counts (15/28/28), same per-scene word
       // budget, same character / presenter / language sections. The
       // earlier cinematic-specific prompt produced more
       // theatrical/abstract scripts that drifted from the user's
@@ -391,7 +391,7 @@ ${researchBrief}
         console.log(`[GenerateVideo] Transform: 1 scene, voiceover=${voiceover.length} chars, visual=${visualPrompt.length} chars`);
       } else {
         // Split narration into scene-sized chunks by sentences
-        const expectedCounts: Record<string, number> = { short: 10, brief: 28, presentation: 36 };
+        const expectedCounts: Record<string, number> = { short: 10, brief: 28, presentation: 28 };
         const targetSceneCount = expectedCounts[payload.length || "brief"] || 10;
         const allNarration = sortedNarration.join(" ").trim();
         const allVisual = uniqueVisual.join(" ").trim();

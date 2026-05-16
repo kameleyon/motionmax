@@ -1964,7 +1964,7 @@ async function handleScriptPhase(
   const lengthConfig: Record<string, { count: number; targetDuration: number; avgSceneDuration: number }> = {
     short: { count: 12, targetDuration: 180, avgSceneDuration: 15 },
     brief: { count: 28, targetDuration: 420, avgSceneDuration: 15 },
-    presentation: { count: 36, targetDuration: 540, avgSceneDuration: 15 },
+    presentation: { count: 28, targetDuration: 420, avgSceneDuration: 15 },
   };
   const config = lengthConfig[length] || lengthConfig.brief;
   const sceneCount = config.count;

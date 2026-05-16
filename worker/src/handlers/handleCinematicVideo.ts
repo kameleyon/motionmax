@@ -497,7 +497,13 @@ async function _runCinematicVideo(
   //   - Replicate Seedance: 6s E005 rejections, no value in chain.
   //   - Hypereal Seedance Fast: 141 cr/scene + same E005 wall.
   try {
-    // ── 1. Hypereal Kling V3.0 Pro (PRIMARY) ─────────────────────────
+    // ── 1. Hypereal Kling V3.0 Pro (PRIMARY) — TEMPORARILY DISABLED 2026-05-15 ─
+    // Commented out so all traffic goes straight to AtlasCloud while we
+    // diagnose Kling V3 Pro's silent end_image drop. Re-enable by
+    // uncommenting the try/catch block below — leave the AtlasCloud
+    // section as-is (the `if (!videoUrl)` guard will then engage as a
+    // proper fallback again).
+    /*
     try {
       videoUrl = await generateKlingV3ProI2V(
         imageUrl,
@@ -534,17 +540,10 @@ async function _runCinematicVideo(
         `[CinematicVideo] Scene ${sceneIndex}: Kling V3.0 Pro failed — falling back to AtlasCloud Seedance: ${klingMsg.slice(0, 200)}`,
       );
     }
+    */
 
-    // ── 2. AtlasCloud Seedance 2.0 (fallback) ────────────────────────
+    // ── 2. AtlasCloud Seedance 2.0 (currently the ONLY provider) ────
     if (!videoUrl) {
-      await writeSystemLog({
-        jobId, projectId, userId, generationId,
-        category: "system_warning",
-        eventType: "cinematic_video_atlas_fallback",
-        message: `Scene ${sceneIndex}: Kling V3.0 Pro failed — falling back to AtlasCloud Seedance`,
-        details: { sceneIndex },
-      });
-
       const atlasRes = await generateAtlasCloudSeedance({
         imageUrl,
         prompt: `${finalPrompt}\n\n${motionGuardrails}`,

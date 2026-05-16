@@ -656,13 +656,27 @@ export async function generateKlingV3ProI2V(
     negative_prompt: negativePrompt,
     sound: false,
   };
+  // Spray-pattern: Hypereal V3 Pro silently ignores `end_image` (the
+  // field name V2.6 uses). We send four known I2V last-frame field
+  // variants in the same request body so whichever one Hypereal's V3
+  // Pro backend honors, the transition lands. Extra fields are
+  // ignored by the API. Verified field names across providers:
+  //   - Kling V2.6 (Hypereal):      end_image
+  //   - AtlasCloud Seedance:        last_image
+  //   - Replicate Seedance 2.0:     last_frame_image
+  //   - Some other I2V variants:    tail_image
   if (endImageUrl) {
     inputPayload.end_image = endImageUrl;
+    inputPayload.last_image = endImageUrl;
+    inputPayload.last_frame_image = endImageUrl;
+    inputPayload.tail_image = endImageUrl;
   }
 
   const requestBody = { model, input: inputPayload };
   const bodyJson = JSON.stringify(requestBody);
-  console.log(`[Hypereal] Kling V3 Pro body (${bodyJson.length} chars): ${truncate(bodyJson)}`);
+  // Full body log (not truncated) for end_image diagnostic — strip if
+  // the request volume gets noisy in production.
+  console.log(`[Hypereal] Kling V3 Pro FULL body (${bodyJson.length} chars): ${bodyJson}`);
 
   const response = await hyperealPostWithRateLimit(HYPEREAL_VIDEO_URL, {
     method: "POST",

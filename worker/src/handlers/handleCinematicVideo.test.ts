@@ -84,6 +84,24 @@ vi.mock("../services/hypereal.js", () => ({
   }),
 }));
 
+vi.mock("../services/openrouterVideo.js", () => ({
+  generateOpenRouterVideo: vi.fn().mockResolvedValue({
+    videoUrl: "https://or.test/out.mp4",
+    provider: "openrouter",
+    model: "bytedance/seedance-1-5-pro",
+    durationSeconds: 10,
+    cost: 0.13,
+  }),
+}));
+
+vi.mock("../services/atlasCloudSeedance.js", () => ({
+  generateAtlasCloudSeedance: vi.fn().mockResolvedValue({
+    videoUrl: "https://atlas.test/out.mp4",
+    provider: "atlascloud",
+    model: "bytedance/seedance-2.0/image-to-video",
+  }),
+}));
+
 vi.mock("../services/imageGenerator.js", () => ({
   generateImage: vi.fn().mockResolvedValue("https://cdn.test/image.jpg"),
 }));
@@ -305,6 +323,70 @@ describe("handleCinematicVideo", () => {
 
       expect(pollHyperealJob).not.toHaveBeenCalled();
       expect(clearCheckpointKey).toHaveBeenCalledWith("job-scrub-2", expect.stringContaining("scene_"));
+    });
+  });
+
+  describe("provider chain — rung 1 (OpenRouter Seedance 1.5 Pro)", () => {
+    it("uses rung 1 result when OpenRouter Seedance succeeds; does NOT call AtlasCloud", async () => {
+      const { supabase } = await import("../lib/supabase.js");
+      vi.mocked(supabase.from).mockImplementation((table: string) => {
+        if (table === "generations") {
+          return makeChain({ scenes: [{ imageUrl: "https://cdn.test/img.jpg", visualPrompt: "x" }] }) as never;
+        }
+        if (table === "projects") {
+          return makeChain({ format: "landscape", style: "realistic", custom_style: "", character_description: "", voice_inclination: "en", character_images: [] }) as never;
+        }
+        if (table === "video_generation_jobs") {
+          return makeChain({ status: "processing", error_message: null }) as never;
+        }
+        return makeChain({}) as never;
+      });
+
+      const { generateOpenRouterVideo } = await import("../services/openrouterVideo.js");
+      const { generateAtlasCloudSeedance } = await import("../services/atlasCloudSeedance.js");
+
+      const { handleCinematicVideo } = await import("./handleCinematicVideo.js");
+      await handleCinematicVideo("job-rung1-success", makePayload({ sceneIndex: 0 }), "user-1").catch(() => {});
+
+      expect(generateOpenRouterVideo).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: "bytedance/seedance-1-5-pro",
+          resolution: "480p",
+          duration: 10,
+          pollMaxMs: 4 * 60 * 1000,
+        }),
+      );
+      expect(generateAtlasCloudSeedance).not.toHaveBeenCalled();
+    });
+
+    it("cascades to AtlasCloud when OpenRouter Seedance returns null videoUrl", async () => {
+      const { supabase } = await import("../lib/supabase.js");
+      vi.mocked(supabase.from).mockImplementation((table: string) => {
+        if (table === "generations") {
+          return makeChain({ scenes: [{ imageUrl: "https://cdn.test/img.jpg", visualPrompt: "x" }] }) as never;
+        }
+        if (table === "projects") {
+          return makeChain({ format: "landscape", style: "realistic" }) as never;
+        }
+        if (table === "video_generation_jobs") {
+          return makeChain({ status: "processing", error_message: null }) as never;
+        }
+        return makeChain({}) as never;
+      });
+
+      const { generateOpenRouterVideo } = await import("../services/openrouterVideo.js");
+      vi.mocked(generateOpenRouterVideo).mockResolvedValueOnce({
+        videoUrl: null, provider: "openrouter", model: "bytedance/seedance-1-5-pro",
+        error: "submit 502",
+      });
+
+      const { generateAtlasCloudSeedance } = await import("../services/atlasCloudSeedance.js");
+
+      const { handleCinematicVideo } = await import("./handleCinematicVideo.js");
+      await handleCinematicVideo("job-rung1-fail", makePayload({ sceneIndex: 0 }), "user-1").catch(() => {});
+
+      expect(generateOpenRouterVideo).toHaveBeenCalled();
+      expect(generateAtlasCloudSeedance).toHaveBeenCalled();
     });
   });
 });

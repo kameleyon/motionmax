@@ -202,8 +202,8 @@ export async function generateOpenRouterVideo(
           }
           const elapsed = Date.now() - startTime;
           console.log(`[OpenRouterVideo:${model}] Completed in ${Math.round(elapsed / 1000)}s`);
-          const finalCost = typeof cost === "number"
-            ? cost
+          const finalCost = Number.isFinite(cost) && (cost as number) >= 0
+            ? (cost as number)
             : openRouterVideoCostUsd(model, resolution, duration);
           writeApiLog({
             userId: opts.userId ?? null, generationId: opts.generationId ?? null,
@@ -222,7 +222,9 @@ export async function generateOpenRouterVideo(
             userId: opts.userId ?? null, generationId: opts.generationId ?? null,
             provider, model, status: "error",
             totalDurationMs: Date.now() - startTime,
-            cost: cost ?? 0,
+            // OpenRouter only bills on successful generation; a cost captured
+            // from an interim "processing" poll frame is misleading on failure.
+            cost: 0,
             error: fullErr.slice(0, 500),
           }).catch((e) => console.warn(`[OpenRouterVideo:${model}] api log failed: ${(e as Error).message}`));
           return { videoUrl: null, provider, model, cost, error: fullErr };
@@ -238,7 +240,7 @@ export async function generateOpenRouterVideo(
       userId: opts.userId ?? null, generationId: opts.generationId ?? null,
       provider, model, status: "error",
       totalDurationMs: Date.now() - startTime,
-      cost: cost ?? 0,
+      cost: 0,
       error: timeoutErr,
     }).catch((e) => console.warn(`[OpenRouterVideo:${model}] api log failed: ${(e as Error).message}`));
     return { videoUrl: null, provider, model, cost, error: timeoutErr };

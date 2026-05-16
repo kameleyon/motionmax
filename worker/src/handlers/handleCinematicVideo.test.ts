@@ -259,4 +259,52 @@ describe("handleCinematicVideo", () => {
       ).rejects.toThrow(/HYPEREALIMAGE_API_KEY/i);
     });
   });
+
+  describe("cross-provider checkpoint scrub", () => {
+    it("scrubs stale OpenRouter Seedance checkpoint instead of resuming via Hypereal", async () => {
+      const { supabase } = await import("../lib/supabase.js");
+      vi.mocked(supabase.from).mockReturnValue(
+        makeChain({ scenes: [{ imageUrl: "https://cdn.test/img.jpg", visualPrompt: "x" }] }) as never,
+      );
+
+      const { readCheckpointKey, clearCheckpointKey } = await import("../lib/checkpoint.js");
+      vi.mocked(readCheckpointKey).mockResolvedValue({
+        stage: "polling",
+        providerJobId: "or-stale-1",
+        pollUrl: "https://openrouter.ai/api/v1/videos/or-stale-1",
+        model: "bytedance/seedance-1-5-pro",
+      });
+
+      const { pollHyperealJob } = await import("../services/hypereal.js");
+
+      const { handleCinematicVideo } = await import("./handleCinematicVideo.js");
+      await handleCinematicVideo("job-scrub-1", makePayload({ sceneIndex: 0 }), "user-1").catch(() => {});
+
+      expect(pollHyperealJob).not.toHaveBeenCalled();
+      expect(clearCheckpointKey).toHaveBeenCalledWith("job-scrub-1", expect.stringContaining("scene_"));
+    });
+
+    it("scrubs stale OpenRouter Kling O1 checkpoint instead of resuming via Hypereal", async () => {
+      const { supabase } = await import("../lib/supabase.js");
+      vi.mocked(supabase.from).mockReturnValue(
+        makeChain({ scenes: [{ imageUrl: "https://cdn.test/img.jpg", visualPrompt: "x" }] }) as never,
+      );
+
+      const { readCheckpointKey, clearCheckpointKey } = await import("../lib/checkpoint.js");
+      vi.mocked(readCheckpointKey).mockResolvedValue({
+        stage: "polling",
+        providerJobId: "or-stale-2",
+        pollUrl: "https://openrouter.ai/api/v1/videos/or-stale-2",
+        model: "kwaivgi/kling-video-o1",
+      });
+
+      const { pollHyperealJob } = await import("../services/hypereal.js");
+
+      const { handleCinematicVideo } = await import("./handleCinematicVideo.js");
+      await handleCinematicVideo("job-scrub-2", makePayload({ sceneIndex: 0 }), "user-1").catch(() => {});
+
+      expect(pollHyperealJob).not.toHaveBeenCalled();
+      expect(clearCheckpointKey).toHaveBeenCalledWith("job-scrub-2", expect.stringContaining("scene_"));
+    });
+  });
 });

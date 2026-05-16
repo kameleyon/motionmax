@@ -457,7 +457,9 @@ async function _runCinematicVideo(
     if (
       cp.model === "bytedance/seedance-2.0" ||
       cp.model === "bytedance/seedance-2.0-fast" ||
-      cp.model === "bytedance/seedance-2.0/image-to-video"
+      cp.model === "bytedance/seedance-2.0/image-to-video" ||
+      cp.model === "bytedance/seedance-1-5-pro" ||      // OpenRouter rung 1
+      cp.model === "kwaivgi/kling-video-o1"             // OpenRouter rung 3
     ) {
       console.log(
         `[CinematicVideo] Scene ${sceneIndex}: cross-provider checkpoint (model=${cp.model}, pollUrl=${cp.pollUrl ?? "?"}) — clearing and re-submitting via primary chain`,

@@ -141,10 +141,23 @@ async function _runMasterAudio(
     details: { phase: "master_audio" },
   });
 
-  const { data: generation, error: genError } = await retryDbRead(() =>
+  // Narrow SELECT — only the columns this handler reads. Multi-MB
+  // scenes jsonb on heavy projects + concurrent atomic scene writes
+  // were statement-timing out under prod load (2026-05-17). The cast
+  // unwraps Supabase's array-vs-singleton TS inference quirk.
+  type ProjectMeta = {
+    voice_type?: string | null;
+    voice_id?: string | null;
+    voice_name?: string | null;
+    presenter_focus?: string | null;
+    voice_inclination?: string | null;
+  };
+  type GenerationRow = { scenes: unknown; projects: ProjectMeta | null };
+
+  const { data: rawGeneration, error: genError } = await retryDbRead(() =>
     supabase
       .from("generations")
-      .select("*, projects(voice_type, voice_id, voice_name, presenter_focus, voice_inclination)")
+      .select("scenes, projects(voice_type, voice_id, voice_name, presenter_focus, voice_inclination)")
       .eq("id", generationId)
       .maybeSingle()
   );
@@ -152,9 +165,10 @@ async function _runMasterAudio(
   if (genError) {
     throw new Error(`Generation fetch failed (${generationId}): ${genError.message}`);
   }
-  if (!generation) {
+  if (!rawGeneration) {
     throw new Error(`Generation not found: ${generationId}`);
   }
+  const generation = rawGeneration as unknown as GenerationRow;
 
   const scenes = (generation.scenes as any[]) || [];
   if (scenes.length === 0) throw new Error(`No scenes to concatenate for master audio`);

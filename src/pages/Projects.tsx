@@ -319,19 +319,16 @@ export default function Projects() {
         .select('id', { count: 'exact', head: true })
         .eq('user_id', userId);
 
-      // 2) minutes generated — sum master_audio_duration_ms (a stored
-      // numeric column populated by handleMasterAudio) across the user's
-      // completed generations. We used to walk every scene's _meta.audio
-      // DurationMs which required pulling the full scenes jsonb (multi-MB
-      // per row × 100 rows ≈ multi-hundred-MB payload that statement-
-      // timed out under prod load). The aggregate column gives the same
-      // total at ~1000× less wire traffic.
-      // NOTE: legacy generations created before the master_audio refactor
-      // have NULL master_audio_duration_ms — they're undercounted in the
-      // strip rather than blocking the dashboard from loading.
+      // 2) minutes generated — sum total_duration_ms (stamped by
+      // handleFinalize on every completed generation; backfilled from
+      // master_audio_duration_ms via migration 20260517000100). Falls
+      // back to master_audio_duration_ms for any unmigrated rows. We
+      // used to walk every scene's _meta.audioDurationMs which required
+      // pulling the full scenes jsonb (multi-MB per row × 100 rows =
+      // statement-timeout under load).
       const { data: gens } = await supabase
         .from('generations')
-        .select('master_audio_duration_ms')
+        .select('total_duration_ms, master_audio_duration_ms')
         .eq('user_id', userId)
         .eq('status', 'complete')
         .order('created_at', { ascending: false })
@@ -339,7 +336,8 @@ export default function Projects() {
 
       let totalMs = 0;
       for (const g of gens ?? []) {
-        const ms = (g as { master_audio_duration_ms?: number | null }).master_audio_duration_ms;
+        const row = g as { total_duration_ms?: number | null; master_audio_duration_ms?: number | null };
+        const ms = row.total_duration_ms ?? row.master_audio_duration_ms;
         if (typeof ms === 'number') totalMs += ms;
       }
 

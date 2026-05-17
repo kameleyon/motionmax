@@ -144,10 +144,24 @@ async function _runCinematicAudio(
 ) {
   const { generationId, projectId, sceneIndex } = payload;
 
-  const { data: generation, error: genError } = await retryDbRead(() =>
+  // Narrow SELECT — only the columns this handler reads. Multi-MB
+  // scenes jsonb on heavy projects + concurrent atomic scene writes
+  // were statement-timing out under prod load (2026-05-17). The cast
+  // unwraps Supabase's array-vs-singleton TS inference quirk —
+  // PostgREST returns the embedded parent as a singleton at runtime.
+  type ProjectMeta = {
+    voice_type?: string | null;
+    voice_id?: string | null;
+    voice_name?: string | null;
+    presenter_focus?: string | null;
+    voice_inclination?: string | null;
+  };
+  type GenerationRow = { scenes: unknown; user_id: string | null; projects: ProjectMeta | null };
+
+  const { data: rawGeneration, error: genError } = await retryDbRead(() =>
     supabase
       .from("generations")
-      .select("*, projects(voice_type, voice_id, voice_name, presenter_focus, voice_inclination)")
+      .select("scenes, user_id, projects(voice_type, voice_id, voice_name, presenter_focus, voice_inclination)")
       .eq("id", generationId)
       .maybeSingle()
   );
@@ -155,9 +169,10 @@ async function _runCinematicAudio(
   if (genError) {
     throw new Error(`Generation fetch failed (${generationId}): ${genError.message}`);
   }
-  if (!generation) {
+  if (!rawGeneration) {
     throw new Error(`Generation not found: ${generationId}`);
   }
+  const generation = rawGeneration as unknown as GenerationRow;
 
   const scenes = generation.scenes as any[];
   const scene = scenes[sceneIndex];
@@ -497,7 +512,9 @@ async function _runCinematicAudio(
         // (older write paths before resolveVoiceForProject's throw guard).
         // Look up the user's voice library by name and re-route through
         // the clone path instead of failing the generation.
-        const userId = generation.projects?.user_id ?? generation.user_id;
+        // (The original `generation.projects?.user_id` read was dead code —
+        // projects.user_id was never selected, so it was always undefined.)
+        const userId = generation.user_id;
         if (userId) {
           const { data: cloneRow } = await supabase
             .from("user_voices")

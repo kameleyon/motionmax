@@ -374,6 +374,22 @@ async function _runFinalize(
     },
   }));
 
+  // Compute total video duration (NOT wall-clock generation time) for
+  // the dashboard stats strip. Prefer the master-audio probe (set by
+  // handleMasterAudio for doc2video/cinematic). For legacy or single-
+  // scene paths without a master track, sum each scene's _meta.audio
+  // DurationMs (set by master-audio slicing or per-scene TTS). Skip
+  // stamping if both are zero so the column stays NULL rather than
+  // recording a misleading 0.
+  const masterDurationMs = (generation as { master_audio_duration_ms?: number | null }).master_audio_duration_ms;
+  const scenesDurationMs = scenes.reduce(
+    (sum: number, s: any) => sum + ((s?._meta?.audioDurationMs as number) || 0),
+    0,
+  );
+  const totalDurationMs = (typeof masterDurationMs === "number" && masterDurationMs > 0)
+    ? masterDurationMs
+    : (scenesDurationMs > 0 ? scenesDurationMs : null);
+
   // Mark generation complete
   await supabase
     .from("generations")
@@ -382,6 +398,7 @@ async function _runFinalize(
       progress: 100,
       completed_at: new Date().toISOString(),
       scenes: finalScenesWithMeta,
+      ...(totalDurationMs !== null ? { total_duration_ms: totalDurationMs } : {}),
     })
     .eq("id", generationId);
 

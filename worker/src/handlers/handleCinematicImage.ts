@@ -69,10 +69,27 @@ async function _runCinematicImage(
     message: `Cinematic image started for scene ${sceneIndex}`,
   });
 
-  const { data: generation, error: genError } = await retryDbRead(() =>
+  // Narrow SELECT — only the columns this handler reads.
+  // SELECT * pulls the entire `scenes` jsonb (multi-MB on heavy projects)
+  // which contended with concurrent atomic scene writes from sibling
+  // handlers and statement-timed out under prod load (2026-05-17).
+  // The cast unwraps Supabase's array-vs-singleton TS inference quirk —
+  // PostgREST returns the embedded parent as a singleton object at runtime
+  // regardless of how the auto-generated types model the relationship.
+  type ProjectMeta = {
+    format?: string | null;
+    style?: string | null;
+    character_description?: string | null;
+    character_consistency_enabled?: boolean | null;
+    project_type?: string | null;
+    character_images?: string[] | null;
+  };
+  type GenerationRow = { scenes: unknown; projects: ProjectMeta | null };
+
+  const { data: rawGeneration, error: genError } = await retryDbRead(() =>
     supabase
       .from("generations")
-      .select("*, projects(format, style, character_description, character_consistency_enabled, project_type, character_images)")
+      .select("scenes, projects(format, style, character_description, character_consistency_enabled, project_type, character_images)")
       .eq("id", generationId)
       .maybeSingle()
   );
@@ -84,9 +101,10 @@ async function _runCinematicImage(
   if (genError) {
     throw new Error(`Generation fetch failed (${generationId}): ${genError.message}`);
   }
-  if (!generation) {
+  if (!rawGeneration) {
     throw new Error(`Generation not found: ${generationId}`);
   }
+  const generation = rawGeneration as unknown as GenerationRow;
 
   const scenes = generation.scenes as any[];
   const scene = scenes[sceneIndex];
@@ -97,7 +115,7 @@ async function _runCinematicImage(
 
   const format = generation.projects?.format || "landscape";
   const style = generation.projects?.style || "realistic";
-  const characterImages: string[] = (generation.projects as any)?.character_images || [];
+  const characterImages: string[] = generation.projects?.character_images || [];
   const hyperealApiKey = (process.env.HYPEREAL_API_KEY || "").trim();
   const replicateApiKey = (process.env.REPLICATE_API_KEY || "").trim();
 

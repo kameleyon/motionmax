@@ -30,6 +30,12 @@ const LEGACY_SPEAKER_MAP: Record<string, { gender: string; language: string }> =
   "River":    { gender: "female", language: "en" },
   "Pierre":   { gender: "male",   language: "ht" },
   "Marie":    { gender: "female", language: "ht" },
+  // Named built-in Fish s2-pro voices — router picks them up via
+  // AudioConfig.speakerName (see NAMED_FISH_VOICES in audioRouter.ts).
+  "Zuri":     { gender: "female", language: "en" },
+  "Morpheus": { gender: "male",   language: "en" },
+  "Jacynthe": { gender: "female", language: "en" },
+  "Phoebe":   { gender: "female", language: "en" },
 };
 
 export async function handleVoicePreview(
@@ -177,6 +183,7 @@ async function _runVoicePreview(
       fishAudioApiKey: process.env.FISH_AUDIO_API_KEY,
       replicateApiKey: process.env.REPLICATE_API_KEY || "",
       voiceGender: legacyMapping.gender,
+      speakerName: speaker,
       language: legacyMapping.language,
       forceHaitianCreole: legacyMapping.language === "ht",
       userId: userId ?? null,

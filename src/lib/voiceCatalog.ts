@@ -87,6 +87,9 @@ function providerForId(id: string): CatalogVoice["provider"] {
   // here too so the Voice Lab UI doesn't claim Fish/ElevenLabs paths
   // that no longer run.
   if (id === "Adam") return "lemonfox";
+  // Named built-in Fish s2-pro voices (see NAMED_FISH_VOICES in
+  // worker/src/services/audioRouter.ts — keep in sync).
+  if (id === "Zuri" || id === "Morpheus" || id === "Jacynthe" || id === "Phoebe") return "fish";
   return "gemini";
 }
 

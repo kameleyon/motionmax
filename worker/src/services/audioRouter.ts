@@ -1,10 +1,11 @@
 /**
  * TTS provider router — STRICT, simplified.
  *
- * Three paths only:
+ * Four paths:
  *   1. ANY clone (any language) → Fish Audio s2-pro (multilingual)
- *   2. English + Male standard  → LemonFox (Adam)
- *   3. ANYTHING ELSE            → Google Gemini Flash TTS
+ *   2. Named built-in Fish voice (speakerName ∈ NAMED_FISH_VOICES) → Fish Audio s2-pro
+ *   3. English + Male standard  → LemonFox (Adam)
+ *   4. ANYTHING ELSE            → Google Gemini Flash TTS
  *
  * The 11 supported languages (en, fr, es, ht, de, it, nl, ru, zh, ja, ko)
  * all go through Gemini Flash 2.5 TTS — it speaks every one of them
@@ -71,6 +72,18 @@ export interface AudioResult {
 const GEMINI_MALE_VOICE = "Enceladus";
 const GEMINI_FEMALE_VOICE = "Aoede";
 
+// ── Named built-in Fish Audio voices ───────────────────────────────
+// These are NOT clones — they're catalog speakers in SpeakerSelector
+// that happen to render through Fish s2-pro using a fixed reference_id.
+// Handlers thread the picked speaker name into AudioConfig.speakerName
+// so we can recognize the choice here without conflating gender.
+const NAMED_FISH_VOICES: Record<string, string> = {
+  Zuri:     "1127a2a0c8574b75a20d1f8dae12c1b9", // English Female — warm, natural
+  Morpheus: "06a8fa125ea54698b0c84feac214abad", // Male — sport chronicle
+  Jacynthe: "cd178af6aaef4e7d864a5c8cc5f81a63", // Female — clear, articulate
+  Phoebe:   "ea674933d2f7400ca7cd5cb952601b96", // Female — young, social-media
+};
+
 // ── Router ─────────────────────────────────────────────────────────
 
 export async function generateSceneAudio(
@@ -88,6 +101,7 @@ export async function generateSceneAudio(
     lemonfoxApiKey,
     fishAudioApiKey,
     voiceGender = "female",
+    speakerName,
     customVoiceId,
     language,
     userId = null,
@@ -118,7 +132,28 @@ export async function generateSceneAudio(
     return { url: null, error: `Fish clone TTS failed: ${result.error}` };
   }
 
-  // ========== CASE 2: English Male standard → LemonFox (Adam) ==========
+  // ========== CASE 2: Named built-in Fish voice → Fish Audio ==========
+  // SpeakerSelector entries that route through Fish s2-pro with a fixed
+  // reference_id (Zuri, Morpheus, Jacynthe, Phoebe, …). Distinct from
+  // CASE 1 because there's no user_voices row — the id lives in the
+  // NAMED_FISH_VOICES table above.
+  if (speakerName && NAMED_FISH_VOICES[speakerName]) {
+    if (!fishAudioApiKey) {
+      return { url: null, error: `${speakerName} requires FISH_AUDIO_API_KEY` };
+    }
+    const referenceId = NAMED_FISH_VOICES[speakerName];
+    console.log(`[TTS] Scene ${scene.number}: ${speakerName} → Fish s2-pro (${referenceId.slice(0, 8)}…)`);
+    const result = await generateFishAudioTTS(
+      voiceoverText, scene.number, fishAudioApiKey, projectId, referenceId, attribution,
+    );
+    if (result.url) {
+      console.log(`✅ Scene ${scene.number}: Fish s2-pro (${speakerName})`);
+      return { ...result, provider: `Fish s2-pro (${speakerName})` };
+    }
+    return { url: null, error: `${speakerName} Fish Audio failed: ${result.error}` };
+  }
+
+  // ========== CASE 3: English Male standard → LemonFox (Adam) ==========
   if (isEnglish && isMale) {
     if (!lemonfoxApiKey) {
       return { url: null, error: "English male (Adam) requires LEMONFOX_API_KEY" };
@@ -134,7 +169,7 @@ export async function generateSceneAudio(
     return { url: null, error: `English male (Adam) via LemonFox failed: ${result.error}` };
   }
 
-  // ========== CASE 3: Everything else → Google Gemini TTS ==========
+  // ========== CASE 4: Everything else → Google Gemini TTS ==========
   // Single voice per gender works across all 11 supported languages —
   // Gemini Flash 2.5 is multilingual natively, no per-language voice
   // selection required.

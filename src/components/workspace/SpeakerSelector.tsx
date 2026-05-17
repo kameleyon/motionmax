@@ -20,7 +20,7 @@ export type SpeakerVoice =
   // Spanish (Fish Audio)
   | "Carlos" | "Isabella"
   // English (LemonFox / Fish Audio)
-  | "Adam" | "River"
+  | "Adam" | "River" | "Zuri" | "Morpheus" | "Jacynthe" | "Phoebe"
   // Legacy Qwen3 types kept in the union so previously-saved projects that
   // reference them still typecheck when loaded. The worker routes them
   // through the standard audio chain (see handleCinematicAudio.ts).
@@ -205,7 +205,13 @@ const englishSpeakers: SpeakerOption[] = [
   // Gemini 3.1 Flash voices first — full 30-voice roster.
   ...geminiFlashSpeakers,
   // Adam stays — routes through LemonFox (English Male only).
-  { id: "Adam",  label: "Adam",  description: "Male · Versatile, confident · general-purpose narration (LemonFox)" },
+  { id: "Adam",     label: "Adam",     description: "Male · Versatile, confident · general-purpose narration" },
+  // Fish Audio s2-pro built-in voices. Routed via NAMED_FISH_VOICES in
+  // audioRouter; not clones — no row in user_voices needed.
+  { id: "Zuri",     label: "Zuri",     description: "Female · Warm, natural · English narration" },
+  { id: "Morpheus", label: "Morpheus", description: "Male · Bold, dynamic · sport chronicle" },
+  { id: "Jacynthe", label: "Jacynthe", description: "Female · Clear, articulate · educational narration" },
+  { id: "Phoebe",   label: "Phoebe",   description: "Female · Young, energetic · social-media" },
 ];
 
 // Languages where Gemini Flash is the SOLE non-HC provider. Gemini

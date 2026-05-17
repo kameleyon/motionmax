@@ -56,17 +56,32 @@ export interface OpenRouterVideoResult {
   provider: "openrouter";
   model: OpenRouterVideoModel;
   cost?: number;
+  /** OpenRouter video URLs are "unsigned" — they require an
+   *  Authorization: Bearer <OPENROUTER_API_KEY> header to download.
+   *  The handler passes this through to uploadVideoToStorage so the
+   *  initial download from OpenRouter succeeds. Supabase Storage hosts
+   *  the re-uploaded copy with no auth needed. */
+  downloadAuthHeader?: string;
   error?: string;
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** Extract the final video URL from one of several observed response
- *  shapes. OpenRouter proxies multiple upstream providers and each
- *  nests the URL differently. */
+ *  shapes. OpenRouter's actual completed-prediction response (verified
+ *  2026-05-17 against a real prediction) is:
+ *    { id, status: "completed", unsigned_urls: ["https://openrouter.ai/.../content?index=0"], usage: { cost } }
+ *  The unsigned_urls[0] path is checked FIRST; the other candidates are
+ *  kept as defensive fallbacks in case the upstream proxy shape varies
+ *  by model. The "unsigned" URL requires Bearer auth to download (see
+ *  downloadAuthHeader on the Result). */
 function extractVideoUrl(data: unknown): string | null {
   const d = data as Record<string, unknown> | null;
   if (!d) return null;
+  const unsignedUrls = (d as { unsigned_urls?: unknown }).unsigned_urls;
+  if (Array.isArray(unsignedUrls) && typeof unsignedUrls[0] === "string" && unsignedUrls[0].startsWith("http")) {
+    return unsignedUrls[0];
+  }
   const candidates: unknown[] = [
     (d as { output?: { video?: { url?: unknown } } }).output?.video?.url,
     (d as { video_url?: unknown }).video_url,
@@ -186,7 +201,12 @@ export async function generateOpenRouterVideo(
         if (!pr.ok) continue;
         const pj = await pr.json() as Record<string, unknown>;
         const status = (pj?.status ?? (pj?.data as { status?: string } | undefined)?.status) as string | undefined;
-        if (typeof pj?.cost === "number") cost = pj.cost as number;
+        // Cost lives at `usage.cost` per OpenRouter's actual response
+        // (verified 2026-05-17). Older `cost` at the top level is kept
+        // as a defensive fallback in case the shape changes.
+        const usageCost = (pj?.usage as { cost?: unknown } | undefined)?.cost;
+        if (typeof usageCost === "number") cost = usageCost;
+        else if (typeof pj?.cost === "number") cost = pj.cost as number;
         if (status === "completed" || status === "succeeded") {
           const videoUrl = extractVideoUrl(pj);
           if (!videoUrl) {
@@ -211,12 +231,29 @@ export async function generateOpenRouterVideo(
             totalDurationMs: elapsed,
             cost: finalCost,
           }).catch((e) => console.warn(`[OpenRouterVideo:${model}] api log failed: ${(e as Error).message}`));
-          return { videoUrl, durationSeconds: duration, provider, model, cost: finalCost };
+          return {
+            videoUrl, durationSeconds: duration, provider, model, cost: finalCost,
+            downloadAuthHeader: `Bearer ${apiKey}`,
+          };
         }
         if (status === "failed" || status === "error" || (pj as { error?: unknown }).error) {
-          const errMsg = (pj as { error?: { message?: string } }).error?.message
-            ?? (pj as { failure_reason?: string }).failure_reason
-            ?? `OpenRouter status=${status}`;
+          // Pull the upstream reason from every shape we've observed:
+          //   { error: { message: "..." } }              ← OpenAI-style
+          //   { error: "string"          }               ← simple
+          //   { failure_reason: "..." }                  ← provider-passthrough
+          //   { error: { code, type, ... } }             ← structured
+          // If none match, fall through to a JSON dump of the whole `error`
+          // field so we can see WHY a provider rejected — otherwise the
+          // log just says "OpenRouter status=failed" and debugging is blind.
+          const errField = (pj as { error?: unknown }).error;
+          const errMsg =
+            (errField && typeof errField === "object" && typeof (errField as { message?: unknown }).message === "string"
+              ? (errField as { message: string }).message
+              : null)
+            ?? (typeof errField === "string" ? errField : null)
+            ?? (pj as { failure_reason?: unknown }).failure_reason as string | undefined
+            ?? (errField ? `error=${JSON.stringify(errField).slice(0, 300)}` : null)
+            ?? `status=${status}`;
           const fullErr = `OpenRouter video ${model} failed: ${errMsg}`;
           writeApiLog({
             userId: opts.userId ?? null, generationId: opts.generationId ?? null,

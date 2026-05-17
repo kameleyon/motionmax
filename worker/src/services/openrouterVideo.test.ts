@@ -23,13 +23,14 @@ describe("generateOpenRouterVideo", () => {
   });
 
   it("returns videoUrl when submit succeeds and poll reports completed", async () => {
-    // Submit response, then poll response with terminal status.
+    // Real OpenRouter response shape (verified 2026-05-17 against live API):
+    //   { id, status: "completed", unsigned_urls: [...], usage: { cost } }
     const submitJson = { id: "or-job-1", polling_url: "https://or.test/poll/or-job-1" };
     const pollJson  = {
       id: "or-job-1",
       status: "completed",
-      output: { video: { url: "https://or.test/out/or-job-1.mp4" } },
-      cost: 0.13,
+      unsigned_urls: ["https://or.test/out/or-job-1.mp4"],
+      usage: { cost: 0.13 },
     };
 
     globalThis.fetch = vi.fn()
@@ -52,6 +53,8 @@ describe("generateOpenRouterVideo", () => {
     expect(res.cost).toBe(0.13);
     expect(res.provider).toBe("openrouter");
     expect(res.model).toBe("bytedance/seedance-1-5-pro");
+    // OpenRouter URLs need Bearer auth to download — service must surface this.
+    expect(res.downloadAuthHeader).toBe("Bearer or_test_key");
   }, 15_000);
 
   it("returns error on HTTP 4xx submit", async () => {
@@ -176,8 +179,8 @@ describe("generateOpenRouterVideo", () => {
     const pollJson   = {
       id: "or-job-5",
       status: "completed",
-      output: { video: { url: "https://or.test/out/or-job-5.mp4" } },
-      cost: 0.13,
+      unsigned_urls: ["https://or.test/out/or-job-5.mp4"],
+      usage: { cost: 0.13 },
     };
 
     globalThis.fetch = vi.fn()
@@ -208,7 +211,7 @@ describe("generateOpenRouterVideo", () => {
     const pollJson   = {
       id: "or-job-6",
       status: "completed",
-      output: { video: { url: "https://or.test/out/or-job-6.mp4" } },
+      unsigned_urls: ["https://or.test/out/or-job-6.mp4"],
     };
 
     globalThis.fetch = vi.fn()
@@ -235,8 +238,8 @@ describe("generateOpenRouterVideo", () => {
     const pollJson   = {
       id: "or-job-7",
       status: "completed",
-      output: { video: { url: "https://or.test/out/or-job-7.mp4" } },
-      cost: 0.13,
+      unsigned_urls: ["https://or.test/out/or-job-7.mp4"],
+      usage: { cost: 0.13 },
     };
 
     globalThis.fetch = vi.fn()
@@ -269,8 +272,8 @@ describe("generateOpenRouterVideo", () => {
     const pollJson   = {
       id: "or-job-8",
       status: "completed",
-      output: { video: { url: "https://or.test/out/or-job-8.mp4" } },
-      // cost intentionally omitted
+      unsigned_urls: ["https://or.test/out/or-job-8.mp4"],
+      // usage.cost intentionally omitted — verifies rate-card fallback
     };
 
     globalThis.fetch = vi.fn()
@@ -319,4 +322,33 @@ describe("generateOpenRouterVideo", () => {
       status: "error",
     }));
   });
+
+  it("dumps the full error object when no .message or .failure_reason is present", async () => {
+    // Real provider-rejection responses can have shapes like
+    // { status: "failed", error: { code: "moderation_violation", type: "ContentFilter" } }
+    // — without a top-level "message" field. The service must still
+    // surface SOMETHING useful, not just "OpenRouter status=failed".
+    const submitJson = { id: "or-job-9", polling_url: "https://or.test/poll/or-job-9" };
+    const pollJson   = {
+      id: "or-job-9",
+      status: "failed",
+      error: { code: "moderation_violation", type: "ContentFilter" },
+    };
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => submitJson, text: async () => "" })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => pollJson,   text: async () => "" }) as never;
+
+    const { generateOpenRouterVideo } = await import("./openrouterVideo.js");
+    const res = await generateOpenRouterVideo({
+      model: "bytedance/seedance-1-5-pro",
+      imageUrl: "https://cdn.test/a.jpg",
+      prompt: "x",
+      pollMaxMs: 30_000,
+    });
+
+    expect(res.videoUrl).toBeNull();
+    // Must contain the JSON-dumped error so on-call can see the actual reason.
+    expect(res.error).toMatch(/moderation_violation/);
+  }, 15_000);
 });

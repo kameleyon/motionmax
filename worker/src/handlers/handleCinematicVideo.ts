@@ -320,7 +320,7 @@ async function _runCinematicVideo(
 
   const cameraName = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("\u2014")[0].trim();
   console.log(
-    `[CinematicVideo] Scene ${sceneIndex}: Seedance 2.0 I2V${regenerate ? " (regen)" : ""}, ` +
+    `[CinematicVideo] Scene ${sceneIndex}: starting 4-rung chain${regenerate ? " (regen)" : ""}, ` +
     `camera=${cameraName}, prompt=${finalPrompt.length} chars`
   );
 
@@ -338,6 +338,11 @@ async function _runCinematicVideo(
   // possibly-uninitialized access.
   let videoUrl: string | null = null;
   let provider: string;
+  // OpenRouter rungs return URLs that require a Bearer token to download.
+  // We capture the header from the winning rung and pass it through to
+  // uploadVideoToStorage. AtlasCloud / Hypereal URLs are publicly fetchable
+  // — leave undefined for those rungs.
+  let videoUrlAuthHeader: string | undefined;
   // Seedance has no negative_prompt slot, so fold the prohibitions
   // directly into the positive prompt as a hard "AVOID" trailer.
   // Kept the original Kling negative list and added the user-flagged
@@ -530,6 +535,7 @@ async function _runCinematicVideo(
       });
       if (orRes.videoUrl) {
         videoUrl = orRes.videoUrl;
+        videoUrlAuthHeader = orRes.downloadAuthHeader;
         provider = "OpenRouter Seedance 1.5 Pro @ 480p";
       } else {
         console.warn(
@@ -595,6 +601,7 @@ async function _runCinematicVideo(
       });
       if (orKlingRes.videoUrl) {
         videoUrl = orKlingRes.videoUrl;
+        videoUrlAuthHeader = orKlingRes.downloadAuthHeader;
         provider = "OpenRouter Kling Video O1 @ 480p";
       } else {
         console.warn(
@@ -612,8 +619,11 @@ async function _runCinematicVideo(
       await writeSystemLog({
         jobId, projectId, userId, generationId,
         category: "system_warning",
+        // eventType kept stable for log-search continuity even though
+        // the chain now has 4 rungs; renaming would break Loki/Sentry
+        // queries that watch for "cinematic_video_kling_fallback".
         eventType: "cinematic_video_kling_fallback",
-        message: `Scene ${sceneIndex}: AtlasCloud failed — falling back to Kling V3.0 Pro`,
+        message: `Scene ${sceneIndex}: rungs 1-3 failed — falling back to Hypereal Kling V3 Pro (terminal rung)`,
         details: { sceneIndex },
       });
 
@@ -752,7 +762,7 @@ async function _runCinematicVideo(
   }
 
   // Upload to Supabase storage
-  let finalVideoUrl = await uploadVideoToStorage(videoUrl, projectId, generationId, sceneIndex);
+  let finalVideoUrl = await uploadVideoToStorage(videoUrl, projectId, generationId, sceneIndex, videoUrlAuthHeader);
 
   // ── Optional lip-sync pass ────────────────────────────────────────
   // If the user enabled Lip Sync in the new IntakeForm, run the scene
@@ -925,8 +935,16 @@ async function uploadVideoToStorage(
   projectId: string,
   generationId: string,
   sceneIndex: number,
+  downloadAuthHeader?: string,
 ): Promise<string> {
-  const res = await fetch(videoUrl);
+  // OpenRouter video URLs (`unsigned_urls[0]`) require a Bearer token to
+  // download — the calling rung passes its API key auth via
+  // downloadAuthHeader. AtlasCloud / Hypereal URLs are publicly fetchable
+  // and pass nothing here.
+  const fetchOpts: RequestInit | undefined = downloadAuthHeader
+    ? { headers: { Authorization: downloadAuthHeader } }
+    : undefined;
+  const res = await fetch(videoUrl, fetchOpts);
   if (!res.ok) throw new Error(`Failed to download video: ${res.status}`);
   const buffer = await res.arrayBuffer();
   const fileName = `${projectId}/${generationId}/scene_${sceneIndex}_${Date.now()}.mp4`;

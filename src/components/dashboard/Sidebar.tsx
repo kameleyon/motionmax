@@ -166,28 +166,32 @@ export default function Sidebar() {
       const fromScenes: Record<string, string | null> = {};
 
       if (missing.length > 0) {
+        // PostgREST JSON path projection: pulls only `scenes[0]` per row
+        // instead of the entire jsonb array. Also bounded to
+        // `missing.length * 2` rows so a project with many regens
+        // doesn't unbound the response. Statement-timed out under prod
+        // load when this pulled full scenes.
         const { data: gens } = await supabase
           .from('generations')
-          .select('project_id, scenes')
+          .select('project_id, first_scene:scenes->0')
           .in('project_id', missing)
           .eq('status', 'complete')
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(missing.length * 2);
 
         if (gens) {
-          for (const gen of gens) {
+          for (const gen of gens as Array<{ project_id: string; first_scene: { imageUrl?: string; image_url?: string; imageUrls?: string[] } | null }>) {
             if (fromScenes[gen.project_id] !== undefined) continue;
-            const scenes = gen.scenes as Array<{ imageUrl?: string; image_url?: string; imageUrls?: string[] }>;
-            if (!Array.isArray(scenes) || scenes.length === 0) continue;
-            for (const scene of scenes) {
-              const url = scene?.imageUrl
-                || scene?.image_url
-                || (Array.isArray(scene?.imageUrls) && scene.imageUrls[0]);
-              if (url) {
-                fromScenes[gen.project_id] = url;
-                break;
-              }
+            const scene = gen.first_scene;
+            if (!scene) continue;
+            const url = scene.imageUrl
+              || scene.image_url
+              || (Array.isArray(scene.imageUrls) && scene.imageUrls[0]);
+            if (url) {
+              fromScenes[gen.project_id] = url;
+            } else {
+              fromScenes[gen.project_id] = null;
             }
-            if (fromScenes[gen.project_id] === undefined) fromScenes[gen.project_id] = null;
           }
         }
       }

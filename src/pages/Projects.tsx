@@ -210,33 +210,30 @@ export default function Projects() {
       const thumbnailMap: Record<string, string | null> = {};
 
       if (missingIds.length > 0) {
+        // PostgREST JSON path projection: pulls only `scenes[0]` per row
+        // instead of the entire jsonb array. A heavy user with many
+        // generations × many scenes per gen used to push this query past
+        // the statement timeout. Also bounded to `missingIds.length * 2`
+        // rows so a project with many regens doesn't unbound the response.
         const { data: generations } = await supabase
           .from("generations")
-          .select("project_id, scenes")
+          .select("project_id, first_scene:scenes->0")
           .in("project_id", missingIds)
-          .order("created_at", { ascending: false });
+          .order("created_at", { ascending: false })
+          .limit(missingIds.length * 2);
 
         if (generations) {
-          for (const gen of generations) {
+          for (const gen of generations as Array<{ project_id: string; first_scene: { imageUrl?: string; image_url?: string; imageUrls?: string[] } | null }>) {
             if (thumbnailMap[gen.project_id] !== undefined) continue;
-            const scenes = gen.scenes as Array<{
-              imageUrl?: string;
-              image_url?: string;
-              imageUrls?: string[];
-            }> | null;
-            if (!Array.isArray(scenes) || scenes.length === 0) continue;
-
-            for (const scene of scenes) {
-              const url =
-                scene?.imageUrl ||
-                scene?.image_url ||
-                (Array.isArray(scene?.imageUrls) && scene.imageUrls.length > 0 ? scene.imageUrls[0] : null);
-              if (url) {
-                thumbnailMap[gen.project_id] = url;
-                break;
-              }
-            }
-            if (thumbnailMap[gen.project_id] === undefined) {
+            const scene = gen.first_scene;
+            if (!scene) continue;
+            const url =
+              scene.imageUrl ||
+              scene.image_url ||
+              (Array.isArray(scene.imageUrls) && scene.imageUrls.length > 0 ? scene.imageUrls[0] : null);
+            if (url) {
+              thumbnailMap[gen.project_id] = url;
+            } else {
               thumbnailMap[gen.project_id] = null;
             }
           }
@@ -322,12 +319,19 @@ export default function Projects() {
         .select('id', { count: 'exact', head: true })
         .eq('user_id', userId);
 
-      // 2) minutes generated — sum audioDurationMs across every scene
-      // in the user's completed generations. Bounded to 100 most-recent
-      // completed generations so we don't pull the entire history.
+      // 2) minutes generated — sum master_audio_duration_ms (a stored
+      // numeric column populated by handleMasterAudio) across the user's
+      // completed generations. We used to walk every scene's _meta.audio
+      // DurationMs which required pulling the full scenes jsonb (multi-MB
+      // per row × 100 rows ≈ multi-hundred-MB payload that statement-
+      // timed out under prod load). The aggregate column gives the same
+      // total at ~1000× less wire traffic.
+      // NOTE: legacy generations created before the master_audio refactor
+      // have NULL master_audio_duration_ms — they're undercounted in the
+      // strip rather than blocking the dashboard from loading.
       const { data: gens } = await supabase
         .from('generations')
-        .select('scenes')
+        .select('master_audio_duration_ms')
         .eq('user_id', userId)
         .eq('status', 'complete')
         .order('created_at', { ascending: false })
@@ -335,14 +339,8 @@ export default function Projects() {
 
       let totalMs = 0;
       for (const g of gens ?? []) {
-        const scenes = (g.scenes as Array<Record<string, unknown>> | null) ?? [];
-        for (const s of scenes) {
-          const meta = (s._meta as Record<string, unknown> | undefined) ?? {};
-          const ms = typeof meta.audioDurationMs === 'number'
-            ? meta.audioDurationMs
-            : typeof meta.estDurationMs === 'number' ? meta.estDurationMs : 10_000;
-          totalMs += ms;
-        }
+        const ms = (g as { master_audio_duration_ms?: number | null }).master_audio_duration_ms;
+        if (typeof ms === 'number') totalMs += ms;
       }
 
       // 3) credits used last 30d (transaction_type='usage', amount<0)

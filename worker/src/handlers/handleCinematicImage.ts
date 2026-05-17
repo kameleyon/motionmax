@@ -77,8 +77,15 @@ async function _runCinematicImage(
       .maybeSingle()
   );
 
-  if (genError || !generation) {
-    throw new Error(`Generation not found: ${genError?.message}`);
+  // Distinguish "fetch failed" (transient — retried by withTransientRetry)
+  // from "row truly missing" (terminal). Conflating them as
+  // "Generation not found: <pg-error>" made statement timeouts look like
+  // missing rows in the logs.
+  if (genError) {
+    throw new Error(`Generation fetch failed (${generationId}): ${genError.message}`);
+  }
+  if (!generation) {
+    throw new Error(`Generation not found: ${generationId}`);
   }
 
   const scenes = generation.scenes as any[];

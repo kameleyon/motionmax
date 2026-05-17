@@ -149,7 +149,12 @@ async function _runMasterAudio(
       .maybeSingle()
   );
 
-  if (genError || !generation) throw new Error(`Generation not found: ${genError?.message}`);
+  if (genError) {
+    throw new Error(`Generation fetch failed (${generationId}): ${genError.message}`);
+  }
+  if (!generation) {
+    throw new Error(`Generation not found: ${generationId}`);
+  }
 
   const scenes = (generation.scenes as any[]) || [];
   if (scenes.length === 0) throw new Error(`No scenes to concatenate for master audio`);

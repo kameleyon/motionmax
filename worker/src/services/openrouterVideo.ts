@@ -29,6 +29,7 @@ const DEFAULT_POLL_MAX_MS = 4 * 60 * 1000;
 
 export type OpenRouterVideoModel =
   | "bytedance/seedance-1-5-pro"
+  | "bytedance/seedance-2.0-fast"
   | "kwaivgi/kling-video-o1";
 
 export interface OpenRouterVideoOptions {

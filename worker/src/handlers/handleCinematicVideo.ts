@@ -30,7 +30,7 @@ import {
   // generateKlingV3Video,        // V3.0 Std — skipped; Pro variant below is used instead
   // generateVeo31Video,          // Veo 3.1 — doesn't follow prompts, generates unwanted audio/lip sync
   // generateKlingV26Video,       // Kling V2.6 Pro — retired, superseded by V3.0 Pro
-  // generateSeedance2I2V,        // Hypereal Seedance Fast — removed 2026-05-15 (141 cr/scene, E005-prone)
+  generateSeedance2I2V,           // Hypereal Seedance 2.0 Fast — re-added 2026-05-18 as rung 4. Probe-verified (scripts/probe-hypereal-seedance-policy.mjs, 2026-05-18) to accept named soccer-player / World-Cup prompts that OpenRouter Seedance rejects with InputTextSensitiveContentDetected.PolicyViolation. ~141 cr/10s scene; cost-justified vs Kling because output style matches the rest of the Seedance chain.
   // generateKlingV3ProI2V,        // Newer variant — silently drops end_image. Replaced by V3ProVideo (older, simpler, end_image confirmed working at commit 38aeb4d).
   generateKlingV3ProVideo,        // Only fallback — Kling V3.0 Pro on Hypereal. Single `end_image` field, durations [5, 10] only.
   // generateGrokVideo,           // Grok Video I2V — status-lookup failures on Hypereal, rolled back
@@ -513,8 +513,24 @@ async function _runCinematicVideo(
   // rejection only terminates the chain at rung 4 (held-frame).
   // [PROVIDER_CREDITS_EXHAUSTED] bubbles immediately at any rung.
   try {
+    // The chain is ordered cheapest-first within each "policy family":
+    //   • OpenRouter Seedance 1.5 Pro  ($0.26/10s)   — ByteDance copyright filter rejects named-IP prompts
+    //   • OpenRouter Seedance 2.0 Fast ($1.20/10s)   — same upstream, SAME copyright filter (skip if rung 1 = copyright reject)
+    //   • AtlasCloud Seedance 2.0      (~$0.30/10s)  — different account-level moderation, accepts named soccer / World Cup
+    //   • Hypereal Seedance 2.0 Fast   (~$1.40/10s)  — probe-verified permissive on the same prompts (2026-05-18)
+    //   • OpenRouter Kling Video O1    ($1.12/10s)   — different model family, different classifier
+    //   • Hypereal Kling V3 Pro        (terminal)    — see rung 6 below
+    //
+    // Copyright fast-path: if rung 1 fails with InputTextSensitiveContent
+    // Detected.PolicyViolation (or any string containing "copyright"),
+    // skipping rung 2 saves one wasted submit because OpenRouter routes
+    // both Seedance versions through the same ByteDance moderation
+    // pipeline. Any other rung-1 error still tries rung 2 — the prompt
+    // might be fine and the failure transient.
+    let rung1CopyrightReject = false;
+
     // ── 1. OpenRouter Seedance 1.5 Pro @ 480p (PRIMARY) ──────────────
-    // Cheapest rung (~$0.13 / 10s). Any failure cascades to AtlasCloud.
+    // Cheapest rung. Any failure cascades down.
     {
       const orRes = await generateOpenRouterVideo({
         model: "bytedance/seedance-1-5-pro",
@@ -538,18 +554,53 @@ async function _runCinematicVideo(
         videoUrlAuthHeader = orRes.downloadAuthHeader;
         provider = "OpenRouter Seedance 1.5 Pro @ 480p";
       } else {
+        const err = orRes.error ?? "";
+        rung1CopyrightReject = /InputTextSensitiveContentDetected|copyright/i.test(err);
         console.warn(
-          `[CinematicVideo] Scene ${sceneIndex}: OpenRouter Seedance failed — falling back to AtlasCloud: ${(orRes.error ?? "").slice(0, 200)}`,
+          `[CinematicVideo] Scene ${sceneIndex}: OpenRouter Seedance 1.5 Pro failed${rung1CopyrightReject ? " (copyright — skipping OR 2.0 Fast)" : ""}: ${err.slice(0, 200)}`,
         );
       }
     }
 
-    // ── 2. AtlasCloud Seedance 2.0 (FALLBACK 1) ──────────────────────
-    // Cheap when it works. ANY failure (including E005 moderation /
-    // sanitation rejection) falls through to Kling V3 Pro below —
-    // Kling has different content policy + sometimes accepts what
-    // Seedance refuses. We do NOT bubble moderation here; let Kling
-    // try.
+    // ── 2. OpenRouter Seedance 2.0 Fast @ 480p (FALLBACK 1) ──────────
+    // Skipped when rung 1 rejected for copyright (same ByteDance filter
+    // upstream). Otherwise tried because rung 1 may have hit a transient
+    // OpenRouter / ByteDance error that 2.0 Fast won't.
+    if (!videoUrl && !rung1CopyrightReject) {
+      const orRes2 = await generateOpenRouterVideo({
+        model: "bytedance/seedance-2.0-fast",
+        imageUrl,
+        endImageUrl,
+        prompt: `${finalPrompt}\n\n${motionGuardrails}`,
+        duration: 10,
+        aspectRatio: openRouterAspectRatio,
+        resolution: "480p",
+        userId: userId ?? null,
+        generationId,
+        pollMaxMs: 4 * 60 * 1000,
+        onSubmitted: async ({ providerJobId, pollUrl, model }) => {
+          await saveCheckpoint(jobId, checkpointKey, {
+            stage: "polling", providerJobId, pollUrl, model,
+          });
+        },
+      });
+      if (orRes2.videoUrl) {
+        videoUrl = orRes2.videoUrl;
+        videoUrlAuthHeader = orRes2.downloadAuthHeader;
+        provider = "OpenRouter Seedance 2.0 Fast @ 480p";
+      } else {
+        console.warn(
+          `[CinematicVideo] Scene ${sceneIndex}: OpenRouter Seedance 2.0 Fast failed — falling back to AtlasCloud: ${(orRes2.error ?? "").slice(0, 200)}`,
+        );
+      }
+    }
+
+    // ── 3. AtlasCloud Seedance 2.0 (FALLBACK 2) ──────────────────────
+    // Cheap when funded. Different account-level moderation than
+    // OpenRouter — accepts named soccer player / World Cup prompts that
+    // ByteDance rejects via OpenRouter. Returns 402 when out of credits;
+    // we cascade through to Hypereal in that case (the upstream balance
+    // is an ops concern, not a worker-level decision).
     if (!videoUrl) {
       const atlasRes = await generateAtlasCloudSeedance({
         imageUrl,
@@ -573,14 +624,50 @@ async function _runCinematicVideo(
       } else {
         const msg = atlasRes.error ?? "(no error)";
         console.warn(
-          `[CinematicVideo] Scene ${sceneIndex}: AtlasCloud Seedance failed — falling back to OpenRouter Kling O1: ${msg.slice(0, 200)}`,
+          `[CinematicVideo] Scene ${sceneIndex}: AtlasCloud Seedance failed — falling back to Hypereal Seedance: ${msg.slice(0, 200)}`,
         );
       }
     }
 
-    // ── 3. OpenRouter Kling Video O1 @ 480p (FALLBACK 2) ─────────────
+    // ── 4. Hypereal Seedance 2.0 Fast @ 480p (FALLBACK 3) ────────────
+    // Re-added 2026-05-18 as the soccer/World-Cup-friendly catcher.
+    // generateSeedance2I2V throws on failure (different contract than
+    // the *Res-returning helpers above); wrap in try/catch so we can
+    // (a) bubble [PROVIDER_CREDITS_EXHAUSTED] to the outer handler the
+    // same way every other rung does, and (b) keep going to Kling on
+    // any other error.
+    if (!videoUrl) {
+      try {
+        const hyperealUrl = await generateSeedance2I2V(
+          imageUrl,
+          `${finalPrompt}\n\n${motionGuardrails}`,
+          apiKey,
+          10,
+          endImageUrl,
+          seedanceAspect,
+          "480p",
+          false,
+          async ({ providerJobId, pollUrl, model }) => {
+            await saveCheckpoint(jobId, checkpointKey, {
+              stage: "polling", providerJobId, pollUrl, model,
+            });
+          },
+        );
+        videoUrl = hyperealUrl;
+        provider = "Hypereal Seedance 2.0 Fast @ 480p";
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.startsWith("[PROVIDER_CREDITS_EXHAUSTED]")) throw err;
+        console.warn(
+          `[CinematicVideo] Scene ${sceneIndex}: Hypereal Seedance failed — falling back to OpenRouter Kling O1: ${msg.slice(0, 200)}`,
+        );
+      }
+    }
+
+    // ── 5. OpenRouter Kling Video O1 @ 480p (FALLBACK 4) ─────────────
     // Resolution-free pricing ($1.12 / 10s). Different content
-    // classifier from Seedance, so may accept prompts rungs 1/2 refused.
+    // classifier from Seedance, so may accept prompts the Seedance
+    // rungs all refused.
     if (!videoUrl) {
       const orKlingRes = await generateOpenRouterVideo({
         model: "kwaivgi/kling-video-o1",
@@ -610,20 +697,21 @@ async function _runCinematicVideo(
       }
     }
 
-    // ── 4. Hypereal Kling V3.0 Pro (FALLBACK 3 / TERMINAL) ─────────
-    // Catches whatever AtlasCloud rejected — including E005/moderation
-    // refusals (Kling uses a different classifier) and provider hangs.
-    // Final layer before held-frame; moderation rejection HERE is
-    // permanent and bubbles to the outer catch.
+    // ── 6. Hypereal Kling V3.0 Pro (FALLBACK 5 / TERMINAL) ─────────
+    // Catches whatever the Seedance rungs + OR Kling all rejected —
+    // including E005/moderation refusals (Kling V3 Pro uses a different
+    // classifier from O1) and provider hangs. Final layer before
+    // held-frame; moderation rejection HERE is permanent and bubbles to
+    // the outer catch.
     if (!videoUrl) {
       await writeSystemLog({
         jobId, projectId, userId, generationId,
         category: "system_warning",
         // eventType kept stable for log-search continuity even though
-        // the chain now has 4 rungs; renaming would break Loki/Sentry
-        // queries that watch for "cinematic_video_kling_fallback".
+        // the chain has grown to 6 rungs; renaming would break Loki/
+        // Sentry queries that watch for "cinematic_video_kling_fallback".
         eventType: "cinematic_video_kling_fallback",
-        message: `Scene ${sceneIndex}: rungs 1-3 failed — falling back to Hypereal Kling V3 Pro (terminal rung)`,
+        message: `Scene ${sceneIndex}: rungs 1-5 failed — falling back to Hypereal Kling V3 Pro (terminal rung)`,
         details: { sceneIndex },
       });
 
@@ -659,8 +747,8 @@ async function _runCinematicVideo(
         jobId, projectId, userId, generationId,
         category: "system_error",
         eventType: "provider_credits_exhausted",
-        message: `Provider chain exhausted — scene ${sceneIndex} could not render on OpenRouter Seedance, AtlasCloud, OpenRouter Kling O1, OR Hypereal Kling V3 Pro`,
-        details: { sceneIndex, provider: "openrouter-seedance-1-5-pro + atlascloud + openrouter-kling-o1 + hypereal-kling-v3-pro chain", raw: errMsg.slice(0, 400) },
+        message: `Provider chain exhausted — scene ${sceneIndex} could not render on OR Seedance 1.5 Pro, OR Seedance 2.0 Fast, AtlasCloud, Hypereal Seedance, OR Kling O1, OR Hypereal Kling V3 Pro`,
+        details: { sceneIndex, provider: "or-seedance-1-5-pro + or-seedance-2-0-fast + atlascloud + hypereal-seedance + or-kling-o1 + hypereal-kling-v3-pro chain", raw: errMsg.slice(0, 400) },
       });
       throw err;
     }
@@ -689,7 +777,7 @@ async function _runCinematicVideo(
       message: `Scene ${sceneIndex}: provider moderation rejected — using still image as held frame`,
       details: {
         sceneIndex,
-        provider: "openrouter-seedance-1-5-pro + atlascloud + openrouter-kling-o1 + hypereal-kling-v3-pro chain",
+        provider: "or-seedance-1-5-pro + or-seedance-2-0-fast + atlascloud + hypereal-seedance + or-kling-o1 + hypereal-kling-v3-pro chain",
         reason: errMsg,
         fallback: "hold_frame",
       },
@@ -708,7 +796,7 @@ async function _runCinematicVideo(
         : {};
       meta.heldFrame = {
         reason: errMsg.slice(0, 240),
-        provider: "openrouter-seedance-1-5-pro + atlascloud + openrouter-kling-o1 + hypereal-kling-v3-pro chain",
+        provider: "or-seedance-1-5-pro + or-seedance-2-0-fast + atlascloud + hypereal-seedance + or-kling-o1 + hypereal-kling-v3-pro chain",
         at: new Date().toISOString(),
       };
       freshScenes2[sceneIndex] = { ...freshScenes2[sceneIndex], videoUrl: null, _meta: meta };

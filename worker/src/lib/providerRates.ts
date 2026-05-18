@@ -139,7 +139,18 @@ export const PROVIDER_RATES_USD = {
     per_second_720p: 0.026,   // ~$0.26 / 10s
     per_second_1080p: 0.058,  // ~$0.58 / 10s
   },
-  // OpenRouter-hosted Kling Video O1 — third rung. Flat per-second
+  // OpenRouter-hosted Seedance 2.0 Fast — rung 2. Token-priced like 1.5
+  // Pro; per-second figures here use the empirical 720p baseline from
+  // the catalog (`video_tokens_without_audio` 0.0000056 × 21,400 tok/s
+  // ≈ $0.12/s) and scale by the same 480p/720p/1080p ratios observed
+  // on 1.5 Pro. OpenRouter's `usage.cost` overrides this fallback when
+  // present.
+  openrouter_seedance_2_0_fast: {
+    per_second_480p: 0.060,   // ~$0.60 / 10s
+    per_second_720p: 0.120,   // ~$1.20 / 10s (matches catalog probe 2026-05-18)
+    per_second_1080p: 0.268,  // ~$2.68 / 10s
+  },
+  // OpenRouter-hosted Kling Video O1 — Kling rung. Flat per-second
   // pricing regardless of resolution (catalog: single duration_seconds
   // field). Supports only durations 5 and 10.
   openrouter_kling_video_o1: {
@@ -219,17 +230,19 @@ export function replicateSeedanceCostUsd(
   return Math.max(0, outputSeconds * perSec);
 }
 
-/** Compute cost for an OpenRouter-hosted video clip. Seedance 1.5 Pro
- *  is token-billed per resolution; Kling Video O1 is flat per-second. */
+/** Compute cost for an OpenRouter-hosted video clip. Seedance models
+ *  are token-billed per resolution; Kling Video O1 is flat per-second. */
 export function openRouterVideoCostUsd(
-  model: "bytedance/seedance-1-5-pro" | "kwaivgi/kling-video-o1",
+  model: "bytedance/seedance-1-5-pro" | "bytedance/seedance-2.0-fast" | "kwaivgi/kling-video-o1",
   resolution: "480p" | "720p" | "1080p",
   outputSeconds: number,
 ): number {
   if (model === "kwaivgi/kling-video-o1") {
     return Math.max(0, outputSeconds * PROVIDER_RATES_USD.openrouter_kling_video_o1.per_second);
   }
-  const r = PROVIDER_RATES_USD.openrouter_seedance_1_5_pro;
+  const r = model === "bytedance/seedance-2.0-fast"
+    ? PROVIDER_RATES_USD.openrouter_seedance_2_0_fast
+    : PROVIDER_RATES_USD.openrouter_seedance_1_5_pro;
   const perSec =
     resolution === "1080p" ? r.per_second_1080p :
     resolution === "720p"  ? r.per_second_720p  :

@@ -38,6 +38,7 @@ import { writeSystemLog } from "../lib/logger.js";
 import { callGeminiWithKeyRotation } from "../services/geminiNative.js";
 import { callOpenRouterLLM } from "../services/openrouter.js";
 import { processContentAttachments } from "../services/processAttachments.js";
+import { isTransientError } from "../lib/retryClassifier.js";
 
 interface GenerateTopicsPayload {
   prompt: string;
@@ -205,28 +206,53 @@ Return 2–4 short paragraphs of factual notes covering:
 
 Do NOT write titles. Do NOT pitch video ideas. Just the factual brief.`;
 
+  // Gemini search-grounded calls go through a 2-attempt loop. Google's
+  // googleSearch tool latency varies — when the model issues many
+  // queries a single attempt routinely runs past 3 minutes. We bumped
+  // the per-attempt cap to 240s and give one extra try with a 20s
+  // backoff on transient failures (timeouts, network blips, 5xx). Hard
+  // errors (403 across all keys, prompt blocked, JSON parse) skip
+  // straight to the fallback so we don't burn time retrying something
+  // that won't change. After both attempts the pipeline falls back to
+  // Claude writing from prompt + sources alone — the same graceful
+  // degradation we've always had on Gemini failure.
   let researchBrief = "";
-  try {
-    researchBrief = (await callGeminiWithKeyRotation({
-      system: researchSystem,
-      user: researchUser,
-      enableSearch: true,
-      temperature: 0.3, // factual mode — low variation
-      maxTokens: 6_000,
-      timeoutMs: 180_000,
-    })).trim();
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn(
-      `[GenerateTopics] Gemini research failed (${msg.slice(0, 200)}) — Claude will write titles from prompt + sources only`,
-    );
-    await writeSystemLog({
-      jobId, userId,
-      category: "system_warning",
-      eventType: "generate_topics_research_skipped",
-      message: "Gemini research unavailable — titles generated without live web grounding",
-      details: { error: msg.slice(0, 300) },
-    });
+  const RESEARCH_TIMEOUT_MS = 240_000;
+  const RESEARCH_MAX_ATTEMPTS = 2;
+  const RESEARCH_RETRY_DELAY_MS = 20_000;
+  for (let attempt = 1; attempt <= RESEARCH_MAX_ATTEMPTS; attempt++) {
+    try {
+      researchBrief = (await callGeminiWithKeyRotation({
+        system: researchSystem,
+        user: researchUser,
+        enableSearch: true,
+        temperature: 0.3, // factual mode — low variation
+        maxTokens: 6_000,
+        timeoutMs: RESEARCH_TIMEOUT_MS,
+      })).trim();
+      break; // success — exit the retry loop
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const canRetry = attempt < RESEARCH_MAX_ATTEMPTS && isTransientError(err);
+      if (canRetry) {
+        console.warn(
+          `[GenerateTopics] Gemini research attempt ${attempt}/${RESEARCH_MAX_ATTEMPTS} failed (${msg.slice(0, 150)}) — retrying in ${RESEARCH_RETRY_DELAY_MS / 1000}s`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, RESEARCH_RETRY_DELAY_MS));
+        continue;
+      }
+      console.warn(
+        `[GenerateTopics] Gemini research failed (${msg.slice(0, 200)}) — Claude will write titles from prompt + sources only`,
+      );
+      await writeSystemLog({
+        jobId, userId,
+        category: "system_warning",
+        eventType: "generate_topics_research_skipped",
+        message: "Gemini research unavailable — titles generated without live web grounding",
+        details: { error: msg.slice(0, 300), attempts: attempt },
+      });
+      break;
+    }
   }
 
   // ── Step 2: Title writing (OpenRouter Claude Sonnet 4.6) ───────────

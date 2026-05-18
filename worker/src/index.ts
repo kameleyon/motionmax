@@ -401,16 +401,37 @@ async function processJob(job: Job, signal?: AbortSignal) {
 
     if (completeError) {
       console.error(`[Worker] Failed to mark job ${job.id} as completed:`, completeError.message);
+      Sentry.captureException(completeError, { tags: { jobId: job.id, phase: "mark-completed" } });
       // Retry once — this is critical, otherwise the frontend polls forever.
       // Keep the worker_id + status filters on the retry; if the reaper
       // handed off this row OR the user cancelled, refusing to clobber
-      // is correct.
-      await supabase
+      // is correct. Mirrors the mark-failed last-resort pattern below:
+      // both the result.error path (e.g. statement_timeout) and the
+      // promise-rejection path (transport failure) must be observed,
+      // otherwise the job is stranded silently and the frontend polls
+      // forever.
+      const retryRes = await (supabase as any)
         .from('video_generation_jobs')
         .update({ status: 'completed', progress: 100, result: cleanPayload, updated_at: new Date().toISOString() })
         .eq('id', job.id)
         .eq('worker_id', WORKER_ID)
-        .eq('status', 'processing');
+        .eq('status', 'processing')
+        .then(
+          (r: { error: unknown }) => r,
+          (rejectErr: unknown) => ({ error: rejectErr }),
+        );
+      if (retryRes?.error) {
+        const retryErr = retryRes.error;
+        const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+        wlog.error("CRITICAL: Mark-completed retry ALSO failed — job stranded until stale-claim reaper resets it", {
+          jobId: job.id,
+          workerId: WORKER_ID,
+          taskType: job.task_type,
+          firstError: completeError.message,
+          retryError: retryMsg,
+        });
+        Sentry.captureException(retryErr, { tags: { jobId: job.id, phase: "mark-completed-retry" } });
+      }
     } else if (completeCount === 0) {
       wlog.warn("Terminal 'completed' UPDATE matched 0 rows — claim handed off mid-run OR user cancelled", {
         jobId: job.id, workerId: WORKER_ID, taskType: job.task_type,

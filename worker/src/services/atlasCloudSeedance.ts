@@ -53,6 +53,7 @@ export interface AtlasCloudSeedanceOptions {
   seed?: number;
   userId?: string | null;
   generationId?: string | null;
+  jobId?: string | null;
   signal?: AbortSignal;
   pollMaxMs?: number;
   /** Mirrors the other Seedance providers' callback — persist a
@@ -171,7 +172,7 @@ export async function generateAtlasCloudSeedance(
       const err = `AtlasCloud Seedance submit ${submitRes.status}: ${errText.substring(0, 200)}`;
       console.warn(`[AtlasCloudSeedance] ${err}`);
       writeApiLog({
-        userId: opts.userId ?? null, generationId: opts.generationId ?? null,
+        userId: opts.userId ?? null, generationId: opts.generationId ?? null, jobId: opts.jobId ?? null,
         provider, model,
         status: "error",
         totalDurationMs: Date.now() - startTime,
@@ -223,7 +224,7 @@ export async function generateAtlasCloudSeedance(
       if (status === "failed" || status === "error" || pj?.data?.error) {
         const errMsg = pj?.data?.error || `AtlasCloud Seedance prediction failed: status=${status}`;
         writeApiLog({
-          userId: opts.userId ?? null, generationId: opts.generationId ?? null,
+          userId: opts.userId ?? null, generationId: opts.generationId ?? null, jobId: opts.jobId ?? null,
           provider, model,
           status: "error",
           totalDurationMs: Date.now() - startTime,
@@ -267,7 +268,7 @@ export async function generateAtlasCloudSeedance(
   console.log(`[AtlasCloudSeedance] ✓ ${MODEL_ID} ${predictionId} succeeded in ${Math.round(totalDurationMs / 1000)}s`);
 
   writeApiLog({
-    userId: opts.userId ?? null, generationId: opts.generationId ?? null,
+    userId: opts.userId ?? null, generationId: opts.generationId ?? null, jobId: opts.jobId ?? null,
     provider, model,
     status: "success",
     totalDurationMs,

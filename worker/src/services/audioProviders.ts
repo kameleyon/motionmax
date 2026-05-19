@@ -26,6 +26,7 @@ import { ttsCharsCostUsd, ttsSecondsCostUsd } from "../lib/providerRates.js";
 export interface AudioProviderAttribution {
   userId: string | null;
   generationId: string | null;
+  jobId: string | null;
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -169,7 +170,7 @@ export async function generateGeminiTTS(
    *  female narration; the same voice works across all 11 supported
    *  languages because Gemini Flash TTS is multilingual natively. */
   voiceName: string = "Enceladus",
-  attribution: AudioProviderAttribution = { userId: null, generationId: null },
+  attribution: AudioProviderAttribution = { userId: null, generationId: null, jobId: null },
 ): Promise<{ url: string | null; durationSeconds?: number; provider?: string; error?: string; pcmBytes?: Uint8Array }> {
   const startTime = Date.now();
   for (let round = 0; round < KEY_ROTATION_ROUNDS; round++) {
@@ -233,6 +234,7 @@ export async function generateGeminiTTS(
           writeApiLog({
             userId: attribution.userId,
             generationId: attribution.generationId,
+            jobId: attribution.jobId,
             provider: "google_tts", model: model.name,
             status: "success", totalDurationMs: Date.now() - startTime,
             cost: ttsSecondsCostUsd("gemini_flash_tts", durationSeconds),
@@ -248,6 +250,7 @@ export async function generateGeminiTTS(
   writeApiLog({
     userId: attribution.userId,
     generationId: attribution.generationId,
+    jobId: attribution.jobId,
     provider: "google_tts", model: "gemini-tts-rotation",
     status: "error", totalDurationMs: Date.now() - startTime,
     cost: 0, error: "All Gemini keys exhausted",
@@ -259,7 +262,7 @@ export async function generateGeminiTTS(
 
 export async function generateElevenLabsTTS(
   text: string, sceneNumber: number, voiceId: string, apiKey: string, projectId: string,
-  attribution: AudioProviderAttribution = { userId: null, generationId: null },
+  attribution: AudioProviderAttribution = { userId: null, generationId: null, jobId: null },
 ): Promise<{ url: string | null; durationSeconds?: number; provider?: string; error?: string }> {
   const sanitized = sanitizeVoiceover(text);
   if (!sanitized || sanitized.length < 2) return { url: null, error: "No text" };
@@ -276,6 +279,7 @@ export async function generateElevenLabsTTS(
     writeApiLog({
       userId: attribution.userId,
       generationId: attribution.generationId,
+      jobId: attribution.jobId,
       provider: "elevenlabs", model: "eleven_multilingual_v2",
       status: "error", totalDurationMs: Date.now() - startTime,
       cost: 0, error: `ElevenLabs TTS ${res.status}`,
@@ -289,6 +293,7 @@ export async function generateElevenLabsTTS(
   writeApiLog({
     userId: attribution.userId,
     generationId: attribution.generationId,
+    jobId: attribution.jobId,
     provider: "elevenlabs", model: "eleven_multilingual_v2",
     status: "success", totalDurationMs: Date.now() - startTime,
     cost: ttsCharsCostUsd("elevenlabs_tts", sanitized.length),
@@ -418,7 +423,7 @@ async function lemonfoxOneShot(
 
 export async function generateLemonfoxTTS(
   text: string, sceneNumber: number, voiceGender: string, apiKey: string, projectId: string,
-  attribution: AudioProviderAttribution = { userId: null, generationId: null },
+  attribution: AudioProviderAttribution = { userId: null, generationId: null, jobId: null },
 ): Promise<{ url: string | null; durationSeconds?: number; provider?: string; error?: string }> {
   const sanitized = sanitizeVoiceover(text);
   if (!sanitized) return { url: null, error: "No text" };
@@ -469,6 +474,7 @@ export async function generateLemonfoxTTS(
       writeApiLog({
         userId: attribution.userId,
         generationId: attribution.generationId,
+        jobId: attribution.jobId,
         provider: "lemonfox", model: `lemonfox-${voice}-chunked`,
         status: "error", totalDurationMs: Date.now() - startTime,
         cost: 0, error: firstError,
@@ -494,6 +500,7 @@ export async function generateLemonfoxTTS(
     writeApiLog({
       userId: attribution.userId,
       generationId: attribution.generationId,
+      jobId: attribution.jobId,
       provider: "lemonfox", model: `lemonfox-${voice}-chunked`,
       status: "success", totalDurationMs: Date.now() - startTime,
       cost: ttsCharsCostUsd("lemonfox_tts", sanitized.length),
@@ -516,6 +523,7 @@ export async function generateLemonfoxTTS(
       writeApiLog({
         userId: attribution.userId,
         generationId: attribution.generationId,
+        jobId: attribution.jobId,
         provider: "lemonfox", model: `lemonfox-${voice}`,
         status: "error", totalDurationMs: Date.now() - startTime,
         cost: 0, error: error ?? "Lemonfox failed",
@@ -527,6 +535,7 @@ export async function generateLemonfoxTTS(
     writeApiLog({
       userId: attribution.userId,
       generationId: attribution.generationId,
+      jobId: attribution.jobId,
       provider: "lemonfox", model: `lemonfox-${voice}`,
       status: "success", totalDurationMs: Date.now() - startTime,
       cost: ttsCharsCostUsd("lemonfox_tts", sanitized.length),
@@ -639,7 +648,7 @@ async function fishOneShot(
 
 export async function generateFishAudioTTS(
   text: string, sceneNumber: number, apiKey: string, projectId: string, voiceId?: string,
-  attribution: AudioProviderAttribution = { userId: null, generationId: null },
+  attribution: AudioProviderAttribution = { userId: null, generationId: null, jobId: null },
 ): Promise<{ url: string | null; durationSeconds?: number; provider?: string; error?: string }> {
   const referenceId = voiceId || FISH_AUDIO_FEMALE_VOICE;
 
@@ -682,6 +691,7 @@ export async function generateFishAudioTTS(
       writeApiLog({
         userId: attribution.userId,
         generationId: attribution.generationId,
+        jobId: attribution.jobId,
         provider: "fish_audio", model: "s2-pro-chunked",
         status: "error", totalDurationMs: Date.now() - startTime,
         cost: 0, error: firstError,
@@ -701,6 +711,7 @@ export async function generateFishAudioTTS(
     writeApiLog({
       userId: attribution.userId,
       generationId: attribution.generationId,
+      jobId: attribution.jobId,
       provider: "fish_audio", model: "s2-pro-chunked",
       status: "success", totalDurationMs: Date.now() - startTime,
       cost: ttsCharsCostUsd("fish_audio_tts", text.length),
@@ -760,6 +771,7 @@ export async function generateFishAudioTTS(
         writeApiLog({
           userId: attribution.userId,
           generationId: attribution.generationId,
+          jobId: attribution.jobId,
           provider: "fish_audio", model: "s2-pro",
           status: "error", totalDurationMs: Date.now() - startTime,
           cost: 0, error: `Fish Audio ${res.status}`,
@@ -771,6 +783,7 @@ export async function generateFishAudioTTS(
         writeApiLog({
           userId: attribution.userId,
           generationId: attribution.generationId,
+          jobId: attribution.jobId,
           provider: "fish_audio", model: "s2-pro",
           status: "error", totalDurationMs: Date.now() - startTime,
           cost: 0, error: "Empty audio",
@@ -782,6 +795,7 @@ export async function generateFishAudioTTS(
       writeApiLog({
         userId: attribution.userId,
         generationId: attribution.generationId,
+        jobId: attribution.jobId,
         provider: "fish_audio", model: "s2-pro",
         status: "success", totalDurationMs: Date.now() - startTime,
         cost: ttsCharsCostUsd("fish_audio_tts", text.length),
@@ -792,6 +806,7 @@ export async function generateFishAudioTTS(
     writeApiLog({
       userId: attribution.userId,
       generationId: attribution.generationId,
+      jobId: attribution.jobId,
       provider: "fish_audio", model: "s2-pro",
       status: "error", totalDurationMs: Date.now() - startTime,
       cost: 0, error: "Fish Audio failed after 5 attempts",

@@ -35,6 +35,7 @@ export interface LipsyncOptions {
   model?: LipsyncModel;
   userId?: string | null;      // for api_call_logs attribution
   generationId?: string | null;
+  jobId?: string | null;
   signal?: AbortSignal;        // honors worker's hard-timeout abort
   pollMaxMs?: number;
 }
@@ -166,6 +167,7 @@ export async function generateLipsync(opts: LipsyncOptions): Promise<LipsyncResu
         writeApiLog({
           userId: opts.userId ?? null,
           generationId: opts.generationId ?? null,
+          jobId: opts.jobId ?? null,
           provider, model,
           status: "success",
           totalDurationMs: Date.now() - startTime,
@@ -200,6 +202,7 @@ export async function generateLipsync(opts: LipsyncOptions): Promise<LipsyncResu
   writeApiLog({
     userId: opts.userId ?? null,
     generationId: opts.generationId ?? null,
+    jobId: opts.jobId ?? null,
     provider, model,
     status: "error",
     totalDurationMs: Date.now() - startTime,

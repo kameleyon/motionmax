@@ -668,6 +668,7 @@ async function _runExport(
         const asrAttribution = {
           userId: userId ?? null,
           generationId: exportConfig.generationId ?? null,
+          jobId: jobId ?? null,
         };
         asrPromise = transcribeAllScenes(scenesWithAudio, hyperealApiKey, "en", signUrl, asrAttribution).catch(err => {
           log.warn("ASR failed, will use estimation", { error: (err as Error).message });

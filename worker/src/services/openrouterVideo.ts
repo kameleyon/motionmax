@@ -42,6 +42,7 @@ export interface OpenRouterVideoOptions {
   resolution?: "480p" | "720p" | "1080p"; // default "480p"
   userId?: string | null;
   generationId?: string | null;
+  jobId?: string | null;
   signal?: AbortSignal;
   pollMaxMs?: number;                     // default 4 min
   onSubmitted?: (info: {
@@ -157,7 +158,7 @@ export async function generateOpenRouterVideo(
         const err = `OpenRouter video submit ${submitRes.status}: ${(submitTextOrNull ?? "").slice(0, 200)}`;
         console.warn(`[OpenRouterVideo:${model}] ${err}`);
         writeApiLog({
-          userId: opts.userId ?? null, generationId: opts.generationId ?? null,
+          userId: opts.userId ?? null, generationId: opts.generationId ?? null, jobId: opts.jobId ?? null,
           provider, model, status: "error",
           totalDurationMs: Date.now() - startTime,
           cost: 0,
@@ -213,7 +214,7 @@ export async function generateOpenRouterVideo(
           if (!videoUrl) {
             const err = `OpenRouter completed but URL not found in response`;
             writeApiLog({
-              userId: opts.userId ?? null, generationId: opts.generationId ?? null,
+              userId: opts.userId ?? null, generationId: opts.generationId ?? null, jobId: opts.jobId ?? null,
               provider, model, status: "error",
               totalDurationMs: Date.now() - startTime,
               cost: 0,
@@ -227,7 +228,7 @@ export async function generateOpenRouterVideo(
             ? (cost as number)
             : openRouterVideoCostUsd(model, resolution, duration);
           writeApiLog({
-            userId: opts.userId ?? null, generationId: opts.generationId ?? null,
+            userId: opts.userId ?? null, generationId: opts.generationId ?? null, jobId: opts.jobId ?? null,
             provider, model, status: "success",
             totalDurationMs: elapsed,
             cost: finalCost,
@@ -257,7 +258,7 @@ export async function generateOpenRouterVideo(
             ?? `status=${status}`;
           const fullErr = `OpenRouter video ${model} failed: ${errMsg}`;
           writeApiLog({
-            userId: opts.userId ?? null, generationId: opts.generationId ?? null,
+            userId: opts.userId ?? null, generationId: opts.generationId ?? null, jobId: opts.jobId ?? null,
             provider, model, status: "error",
             totalDurationMs: Date.now() - startTime,
             // OpenRouter only bills on successful generation; a cost captured
@@ -275,7 +276,7 @@ export async function generateOpenRouterVideo(
 
     const timeoutErr = `OpenRouter video poll timeout after ${Math.round(pollMaxMs / 1000)}s`;
     writeApiLog({
-      userId: opts.userId ?? null, generationId: opts.generationId ?? null,
+      userId: opts.userId ?? null, generationId: opts.generationId ?? null, jobId: opts.jobId ?? null,
       provider, model, status: "error",
       totalDurationMs: Date.now() - startTime,
       cost: 0,

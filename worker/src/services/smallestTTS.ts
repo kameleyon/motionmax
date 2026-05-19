@@ -148,6 +148,8 @@ export interface SmallestTTSOptions {
   userId?: string | null;
   /** Caller's generation id — same rationale as userId. */
   generationId?: string | null;
+  /** Caller's worker job id — same rationale. */
+  jobId?: string | null;
 }
 
 /**
@@ -258,6 +260,7 @@ export async function generateSmallestTTS(
         writeApiLog({
           userId: opts.userId ?? null,
           generationId: opts.generationId ?? null,
+          jobId: opts.jobId ?? null,
           provider: "smallest", model,
           status: "success", totalDurationMs: Date.now() - startTime,
           cost: ttsCharsCostUsd("smallest_ai_tts", text.length),
@@ -278,6 +281,7 @@ export async function generateSmallestTTS(
     writeApiLog({
       userId: opts.userId ?? null,
       generationId: opts.generationId ?? null,
+      jobId: opts.jobId ?? null,
       provider: "smallest", model,
       status: "error", totalDurationMs: Date.now() - startTime,
       cost: 0, error: `Smallest TTS failed after ${MAX_ATTEMPTS} attempts`,

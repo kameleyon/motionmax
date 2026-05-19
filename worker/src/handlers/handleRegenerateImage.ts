@@ -195,7 +195,7 @@ async function _runRegenerateImage(
       aspectRatio,
       undefined,
       projectId,
-      { userId: userId ?? null, generationId },
+      { userId: userId ?? null, generationId, jobId: jobId ?? null },
       characterRefs,
     );
   } else {
@@ -218,7 +218,7 @@ async function _runRegenerateImage(
     const fullPrompt = promptParts.filter(Boolean).join("\n\n");
     imageUrl = await generateImage(
       fullPrompt, hyperealApiKey, replicateApiKey, format, projectId, undefined,
-      { userId: userId ?? null, generationId },
+      { userId: userId ?? null, generationId, jobId: jobId ?? null },
     );
   }
 

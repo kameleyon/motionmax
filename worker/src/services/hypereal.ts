@@ -926,7 +926,7 @@ export async function pollHyperealJob(
       if (consecutive429 >= max429Streak) {
         console.warn(`[Hypereal] ${model} ${jobId} — ${max429Streak} consecutive 429s, bailing`);
         const rlErr = new Error(`Hypereal rate-limited: ${max429Streak} consecutive 429 responses`);
-        writeApiLog({ userId: null, generationId: null, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: rlErr.message }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
+        writeApiLog({ userId: null, generationId: null, jobId: null, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: rlErr.message }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
         throw rlErr;
       }
       continue;
@@ -941,7 +941,7 @@ export async function pollHyperealJob(
       // in the chain instead of looping until LLM_JOB_TIMEOUT_MS.
       const notFoundErr = new Error(`Hypereal ${model} poll ${jobId} returned 404 (prediction not found)`);
       console.warn(`[Hypereal] ${notFoundErr.message}`);
-      writeApiLog({ userId: null, generationId: null, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: notFoundErr.message }).catch((e) => { console.warn('[Hypereal] background log failed:', (e as Error).message); });
+      writeApiLog({ userId: null, generationId: null, jobId: null, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: notFoundErr.message }).catch((e) => { console.warn('[Hypereal] background log failed:', (e as Error).message); });
       throw notFoundErr;
     }
 
@@ -976,10 +976,10 @@ export async function pollHyperealJob(
       if (!videoUrl) {
         console.log(`[Hypereal] Full response: ${JSON.stringify(data)}`);
         const err = new Error(`${model} job ${data.status} but no URL found in response`);
-        writeApiLog({ userId: null, generationId: null, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: err.message }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
+        writeApiLog({ userId: null, generationId: null, jobId: null, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: err.message }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
         throw err;
       }
-      writeApiLog({ userId: null, generationId: null, provider: "hypereal", model, status: "success", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: undefined }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
+      writeApiLog({ userId: null, generationId: null, jobId: null, provider: "hypereal", model, status: "success", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: undefined }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
       completedJobs.set(jobId, videoUrl);
       return videoUrl;
     }
@@ -1012,7 +1012,7 @@ export async function pollHyperealJob(
       }
 
       const err = new Error(`${model} job failed: ${errText || JSON.stringify(data)}`);
-      writeApiLog({ userId: null, generationId: null, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: err.message }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
+      writeApiLog({ userId: null, generationId: null, jobId: null, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: err.message }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
       throw err;
     }
 
@@ -1022,7 +1022,7 @@ export async function pollHyperealJob(
   }
 
   const timeoutErr = new Error(`${model} timed out after ${maxAttempts} polls (~${Math.round(maxAttempts * 30_000 / 60_000)} min).`);
-  writeApiLog({ userId: null, generationId: null, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: timeoutErr.message }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
+  writeApiLog({ userId: null, generationId: null, jobId: null, provider: "hypereal", model, status: "error", totalDurationMs: Date.now() - pollStartTime, cost: 0, error: timeoutErr.message }).catch((err) => { console.warn('[Hypereal] background log failed:', (err as Error).message); });
   throw timeoutErr;
 }
 

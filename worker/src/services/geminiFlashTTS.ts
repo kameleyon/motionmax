@@ -304,6 +304,8 @@ export interface GeminiFlashTTSOptions {
   userId?: string | null;
   /** Caller's generation id — same rationale as userId. */
   generationId?: string | null;
+  /** Caller's worker job id — same rationale as userId. */
+  jobId?: string | null;
   /** Last 1-2 sentences of the PREVIOUS chunk in the same master read.
    *  Included in the prompt as a "Sample Context" calibration block (NOT
    *  spoken). Gives Gemini a prosody anchor so chunk N+1 matches chunk N
@@ -858,6 +860,7 @@ export async function generateGeminiFlashTTS(
         writeApiLog({
           userId: opts.userId ?? null,
           generationId: opts.generationId ?? null,
+          jobId: opts.jobId ?? null,
           provider: "google_tts", model: MODEL,
           status: "success", totalDurationMs: Date.now() - startTime,
           cost: ttsSecondsCostUsd("gemini_flash_tts", durationSeconds),
@@ -895,6 +898,7 @@ export async function generateGeminiFlashTTS(
     writeApiLog({
       userId: opts.userId ?? null,
       generationId: opts.generationId ?? null,
+      jobId: opts.jobId ?? null,
       provider: "google_tts", model: MODEL,
       status: "error", totalDurationMs: Date.now() - startTime,
       cost: 0, error: lastError,

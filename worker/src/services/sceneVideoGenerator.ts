@@ -43,6 +43,8 @@ export interface SceneVideoRequest {
   userId?: string | null;
   /** Generation ID (for api_call_logs attribution). */
   generationId?: string | null;
+  /** Worker job ID (for api_call_logs attribution). */
+  jobId?: string | null;
 }
 
 export interface SceneVideoResult {
@@ -95,6 +97,7 @@ export async function generateSceneVideo(
     projectId,
     userId,
     generationId,
+    jobId,
   } = request;
 
   const startTime = Date.now();
@@ -139,6 +142,7 @@ export async function generateSceneVideo(
       writeApiLog({
         userId: userId ?? null,
         generationId: generationId ?? null,
+        jobId: jobId ?? null,
         provider: "hypereal",
         model: "grok-video-i2v",
         status: "success",
@@ -179,6 +183,7 @@ export async function generateSceneVideo(
     writeApiLog({
       userId: userId ?? null,
       generationId: generationId ?? null,
+      jobId: jobId ?? null,
       provider: "hypereal",
       model: "grok-video-i2v",
       status: "error",

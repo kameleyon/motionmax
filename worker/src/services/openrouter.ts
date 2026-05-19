@@ -237,7 +237,7 @@ async function _callOpenRouterLLMInner(
     // forensics in Sentry breadcrumbs.
     const tag = res.status === 429 ? "OpenRouter rate-limited (429) after retries" : `OpenRouter API error ${res.status}`;
     const err = new Error(`${tag}: ${body}`);
-    writeApiLog({ userId: null, generationId: null, provider: "openrouter", model, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
+    writeApiLog({ userId: null, generationId: null, jobId: null, provider: "openrouter", model, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
     throw err;
   }
 
@@ -245,12 +245,12 @@ async function _callOpenRouterLLMInner(
   const text = data.choices?.[0]?.message?.content;
   if (!text) {
     const err = new Error("OpenRouter returned empty content");
-    writeApiLog({ userId: null, generationId: null, provider: "openrouter", model, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
+    writeApiLog({ userId: null, generationId: null, jobId: null, provider: "openrouter", model, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
     throw err;
   }
 
   console.log(`[OpenRouter] Response received (${text.length} chars)`);
-  writeApiLog({ userId: null, generationId: null, provider: "openrouter", model, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
+  writeApiLog({ userId: null, generationId: null, jobId: null, provider: "openrouter", model, status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
   return text;
 }
 
@@ -326,7 +326,7 @@ export async function callHyperealLLM(
   if (!res.ok) {
     const body = await res.text();
     const err = new Error(`Hypereal API error ${res.status}: ${body.substring(0, 300)}`);
-    writeApiLog({ userId: null, generationId: null, provider: "hypereal", model: "gemini-3.1-fast", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
+    writeApiLog({ userId: null, generationId: null, jobId: null, provider: "hypereal", model: "gemini-3.1-fast", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
     throw err;
   }
 
@@ -334,7 +334,7 @@ export async function callHyperealLLM(
   let text = data.choices?.[0]?.message?.content;
   if (!text) {
     const err = new Error("Hypereal returned empty content");
-    writeApiLog({ userId: null, generationId: null, provider: "hypereal", model: "gemini-3.1-fast", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
+    writeApiLog({ userId: null, generationId: null, jobId: null, provider: "hypereal", model: "gemini-3.1-fast", status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
     throw err;
   }
 
@@ -353,7 +353,7 @@ export async function callHyperealLLM(
   }
 
   console.log(`[Hypereal] Response received (${text.length} chars, credits: ${data.creditsUsed ?? "?"})`);
-  writeApiLog({ userId: null, generationId: null, provider: "hypereal", model: "gemini-3.1-fast", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
+  writeApiLog({ userId: null, generationId: null, jobId: null, provider: "hypereal", model: "gemini-3.1-fast", status: "success", totalDurationMs: Date.now() - startTime, cost: 0, error: undefined }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
   return text;
 }
 

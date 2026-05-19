@@ -20,6 +20,7 @@ import { asrMinutesCostUsd } from "../lib/providerRates.js";
 export interface AsrAttribution {
   userId: string | null;
   generationId: string | null;
+  jobId: string | null;
 }
 
 // /api/v1/ returns 404; /v1/ is the working base (matches image/video services)
@@ -70,7 +71,7 @@ export async function transcribeAudio(
   apiKey: string,
   language = "en",
   signUrl?: (bucket: string, path: string) => Promise<string | null>,
-  attribution: AsrAttribution = { userId: null, generationId: null },
+  attribution: AsrAttribution = { userId: null, generationId: null, jobId: null },
 ): Promise<ASRResult | null> {
   if (!apiKey || !audioUrl) return null;
 
@@ -148,6 +149,7 @@ export async function transcribeAudio(
       writeApiLog({
         userId: attribution.userId,
         generationId: attribution.generationId,
+        jobId: attribution.jobId,
         provider: "hypereal", model: "audio-asr",
         status: result ? "success" : "error",
         totalDurationMs: Date.now() - startTime,
@@ -162,6 +164,7 @@ export async function transcribeAudio(
     writeApiLog({
       userId: attribution.userId,
       generationId: attribution.generationId,
+      jobId: attribution.jobId,
       provider: "hypereal", model: "audio-asr",
       status: "error", totalDurationMs: Date.now() - startTime,
       cost: 0, error: `ASR failed ${res.status}`,
@@ -172,6 +175,7 @@ export async function transcribeAudio(
     writeApiLog({
       userId: attribution.userId,
       generationId: attribution.generationId,
+      jobId: attribution.jobId,
       provider: "hypereal", model: "audio-asr",
       status: "error", totalDurationMs: Date.now() - startTime,
       cost: 0, error: (err as Error).message,
@@ -301,7 +305,7 @@ export async function transcribeAllScenes(
   apiKey: string,
   language = "en",
   signUrl?: (bucket: string, path: string) => Promise<string | null>,
-  attribution: AsrAttribution = { userId: null, generationId: null },
+  attribution: AsrAttribution = { userId: null, generationId: null, jobId: null },
 ): Promise<(ASRResult | null)[]> {
   if (!apiKey) return scenes.map(() => null);
 

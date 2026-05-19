@@ -85,7 +85,7 @@ Return your research as a structured brief in plain text (NOT JSON). Use section
  */
 export async function researchTopic(
   content: string,
-  attribution: { userId: string | null; generationId: string | null } = { userId: null, generationId: null },
+  attribution: { userId: string | null; generationId: string | null; jobId: string | null } = { userId: null, generationId: null, jobId: null },
 ): Promise<string> {
   if (!process.env.GOOGLE_TTS_API_KEY && !process.env.GOOGLE_TTS_API_KEY_2 && !process.env.GOOGLE_TTS_API_KEY_3) {
     console.warn("[Research] No GOOGLE_TTS_API_KEY (or _2/_3) set — skipping web-grounded research");
@@ -133,6 +133,7 @@ export async function researchTopic(
     writeApiLog({
       userId: attribution.userId,
       generationId: attribution.generationId,
+      jobId: attribution.jobId,
       provider: "google", model: "gemini-3.1-pro-preview",
       status: "success", totalDurationMs: elapsed,
       cost: llmCostUsd("google_gemini_pro_preview", approxInputTokens, approxOutputTokens),
@@ -144,6 +145,7 @@ export async function researchTopic(
     writeApiLog({
       userId: attribution.userId,
       generationId: attribution.generationId,
+      jobId: attribution.jobId,
       provider: "google", model: "gemini-3.1-pro-preview",
       status: "error", totalDurationMs: Date.now() - startTime,
       cost: 0, error: (err as Error).message,

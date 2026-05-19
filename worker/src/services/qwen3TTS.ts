@@ -75,6 +75,8 @@ export interface Qwen3TTSOptions {
   userId?: string | null;
   /** Caller's generation id for api_call_logs attribution. */
   generationId?: string | null;
+  /** Caller's worker job id for api_call_logs attribution. */
+  jobId?: string | null;
 }
 
 /**
@@ -192,6 +194,7 @@ export async function generateQwen3TTS(
       writeApiLog({
         userId: opts.userId ?? null,
         generationId: opts.generationId ?? null,
+        jobId: opts.jobId ?? null,
         provider: "qwen3", model: "qwen3-tts",
         status: "success", totalDurationMs: Date.now() - startTime,
         cost: ttsSecondsCostUsd("qwen3_tts", durationSeconds),
@@ -208,6 +211,7 @@ export async function generateQwen3TTS(
   writeApiLog({
     userId: opts.userId ?? null,
     generationId: opts.generationId ?? null,
+    jobId: opts.jobId ?? null,
     provider: "qwen3", model: "qwen3-tts",
     status: "error", totalDurationMs: Date.now() - startTime,
     cost: 0, error: "Qwen3 TTS failed after 3 attempts",

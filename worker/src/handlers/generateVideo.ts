@@ -226,13 +226,15 @@ async function _runGenerateVideo(
   {
     await updateJobProgress(jobId, 7);
     // Pass attribution so the Gemini call lands in api_call_logs with
-    // real userId. generationId is null here because the generations row
-    // hasn't been inserted yet (that happens after the script LLM
-    // returns scenes). User-level attribution is the most important
-    // finops signal anyway. (C-8-5 / C-9-7)
+    // real userId + jobId. generationId is null here because the
+    // generations row hasn't been inserted yet (that happens after
+    // the script LLM returns scenes). jobId fills the gap so finops
+    // can still trace this spend to a real job. (C-8-5 / C-9-7,
+    // extended 2026-05-19 with job_id column)
     const researchBrief = await researchTopic(payload.content || "", {
       userId: userId ?? null,
       generationId: null,
+      jobId: jobId,
     });
     if (researchBrief) {
       promptResult.system += `

@@ -55,6 +55,8 @@ export interface AudioConfig {
   userId?: string | null;
   /** Caller's generation id for api_call_logs attribution. */
   generationId?: string | null;
+  /** Caller's worker job id for api_call_logs attribution. */
+  jobId?: string | null;
 }
 
 export interface AudioResult {
@@ -106,9 +108,10 @@ export async function generateSceneAudio(
     language,
     userId = null,
     generationId = null,
+    jobId = null,
   } = config;
 
-  const attribution = { userId, generationId };
+  const attribution = { userId, generationId, jobId };
   const isEnglish = (language ?? "en") === "en";
   const isMale = voiceGender === "male";
 

@@ -55,6 +55,7 @@ export interface ReplicateSeedanceOptions {
   seed?: number;
   userId?: string | null;
   generationId?: string | null;
+  jobId?: string | null;
   signal?: AbortSignal;
   pollMaxMs?: number;
   /** Mirrors the Hypereal callback: invoked synchronously between
@@ -310,6 +311,7 @@ export async function generateReplicateSeedance(
       writeApiLog({
         userId: opts.userId ?? null,
         generationId: opts.generationId ?? null,
+        jobId: opts.jobId ?? null,
         provider, model,
         status: "error",
         totalDurationMs: Date.now() - startTime,
@@ -335,6 +337,7 @@ export async function generateReplicateSeedance(
     writeApiLog({
       userId: opts.userId ?? null,
       generationId: opts.generationId ?? null,
+      jobId: opts.jobId ?? null,
       provider, model,
       status: "error",
       totalDurationMs: Date.now() - startTime,
@@ -378,7 +381,7 @@ export async function generateReplicateSeedance(
           const errText = await pollRes.text().catch(() => "");
           const err = `Replicate Seedance poll ${pollRes.status}: ${errText.substring(0, 200)}`;
           writeApiLog({
-            userId: opts.userId ?? null,
+            userId: opts.userId ?? null, jobId: opts.jobId ?? null,
             generationId: opts.generationId ?? null,
             provider, model,
             status: "error",
@@ -408,7 +411,7 @@ export async function generateReplicateSeedance(
         }
         const cost = replicateSeedanceCostUsd(resolution, clampedDuration);
         writeApiLog({
-          userId: opts.userId ?? null,
+          userId: opts.userId ?? null, jobId: opts.jobId ?? null,
           generationId: opts.generationId ?? null,
           provider, model,
           status: "success",
@@ -423,7 +426,7 @@ export async function generateReplicateSeedance(
       if (body.status === "failed" || body.status === "canceled") {
         const err = `Replicate Seedance ${body.status}: ${body.error ?? "no reason given"}`;
         writeApiLog({
-          userId: opts.userId ?? null,
+          userId: opts.userId ?? null, jobId: opts.jobId ?? null,
           generationId: opts.generationId ?? null,
           provider, model,
           status: "error",
@@ -453,7 +456,7 @@ export async function generateReplicateSeedance(
   }
 
   writeApiLog({
-    userId: opts.userId ?? null,
+    userId: opts.userId ?? null, jobId: opts.jobId ?? null,
     generationId: opts.generationId ?? null,
     provider, model,
     status: "error",

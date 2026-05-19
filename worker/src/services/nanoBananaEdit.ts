@@ -65,7 +65,7 @@ export async function editImageWithNanoBanana(
   projectId?: string,
   /** Attribution for api_call_logs. Optional for legacy callers; pass
    *  real userId + generationId from production handlers. (C-8-5 / C-9-7) */
-  attribution: { userId: string | null; generationId: string | null } = { userId: null, generationId: null },
+  attribution: { userId: string | null; generationId: string | null; jobId: string | null } = { userId: null, generationId: null, jobId: null },
   /** Additional reference images for character/style consistency.
    *  Appended to the model's `images` array — Nano Banana Pro reads
    *  index 0 as the "image being edited" and indexes 1+ as identity /
@@ -106,6 +106,7 @@ export async function editImageWithNanoBanana(
     writeApiLog({
       userId: attribution.userId,
       generationId: attribution.generationId,
+      jobId: attribution.jobId,
       provider: "hypereal", model: NANO_BANANA_PRO_MODEL,
       status: "error", totalDurationMs: Date.now() - startTime,
       cost: 0, error: err.message,
@@ -128,6 +129,7 @@ export async function editImageWithNanoBanana(
       writeApiLog({
         userId: attribution.userId,
         generationId: attribution.generationId,
+        jobId: attribution.jobId,
         provider: "hypereal", model: NANO_BANANA_PRO_MODEL,
         status: "success", totalDurationMs: Date.now() - startTime,
         cost: imageCostUsd("hypereal_nano_banana_pro"),
@@ -139,6 +141,7 @@ export async function editImageWithNanoBanana(
     writeApiLog({
       userId: attribution.userId,
       generationId: attribution.generationId,
+      jobId: attribution.jobId,
       provider: "hypereal", model: NANO_BANANA_PRO_MODEL,
       status: "error", totalDurationMs: Date.now() - startTime,
       cost: 0, error: err.message,
@@ -152,6 +155,7 @@ export async function editImageWithNanoBanana(
   writeApiLog({
     userId: attribution.userId,
     generationId: attribution.generationId,
+    jobId: attribution.jobId,
     provider: "hypereal", model: NANO_BANANA_PRO_MODEL,
     status: "success", totalDurationMs: Date.now() - startTime,
     cost: imageCostUsd("hypereal_nano_banana_pro"),

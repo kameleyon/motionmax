@@ -641,7 +641,7 @@ export async function generateImage(
    *  to preserve back-compat with old callers; pass `null` only when
    *  there is genuinely no user context (e.g. system warmup pings).
    *  (C-8-5 / C-9-7) */
-  attribution: { userId: string | null; generationId: string | null } = { userId: null, generationId: null },
+  attribution: { userId: string | null; generationId: string | null; jobId: string | null } = { userId: null, generationId: null, jobId: null },
 ): Promise<string> {
   const key = _cacheKey(prompt, format);
 
@@ -678,7 +678,7 @@ async function _generateImageUncached(
   format: string,
   projectId: string,
   referenceImages?: string[],
-  attribution: { userId: string | null; generationId: string | null } = { userId: null, generationId: null },
+  attribution: { userId: string | null; generationId: string | null; jobId: string | null } = { userId: null, generationId: null, jobId: null },
 ): Promise<string> {
   const startTime = Date.now();
 
@@ -708,6 +708,7 @@ async function _generateImageUncached(
       writeApiLog({
         userId: attribution.userId,
         generationId: attribution.generationId,
+        jobId: attribution.jobId,
         provider: "hypereal", model: HYPEREAL_GPT_IMAGE2_MODEL,
         status: "success", totalDurationMs: Date.now() - startTime,
         cost: imageCostUsd("hypereal_gpt_image2"),
@@ -733,6 +734,7 @@ async function _generateImageUncached(
       writeApiLog({
         userId: attribution.userId,
         generationId: attribution.generationId,
+        jobId: attribution.jobId,
         provider: "hypereal", model: `${HYPEREAL_GPT_IMAGE2_MODEL}-fallback-key`,
         status: "success", totalDurationMs: Date.now() - startTime,
         cost: imageCostUsd("hypereal_gpt_image2"),
@@ -761,6 +763,7 @@ async function _generateImageUncached(
       writeApiLog({
         userId: attribution.userId,
         generationId: attribution.generationId,
+        jobId: attribution.jobId,
         provider: "openrouter", model: OPENROUTER_MODEL,
         status: "success", totalDurationMs: Date.now() - startTime,
         cost: 0.22,
@@ -786,6 +789,7 @@ async function _generateImageUncached(
       writeApiLog({
         userId: attribution.userId,
         generationId: attribution.generationId,
+        jobId: attribution.jobId,
         provider: "hypereal", model: HYPEREAL_MODEL,
         status: "success", totalDurationMs: Date.now() - startTime,
         cost: imageCostUsd("hypereal_image"),
@@ -811,6 +815,7 @@ async function _generateImageUncached(
   writeApiLog({
     userId: attribution.userId,
     generationId: attribution.generationId,
+    jobId: attribution.jobId,
     provider: "hypereal", model: HYPEREAL_GPT_IMAGE2_MODEL,
     status: "error", totalDurationMs: Date.now() - startTime,
     cost: 0, error: err.message,

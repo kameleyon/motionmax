@@ -68,6 +68,31 @@ function PageLoader() {
 
 const log = createScopedLogger("QueryClient");
 
+/**
+ * React Query throws `AbortError` by design whenever the library
+ * cancels an in-flight request — most commonly when:
+ *   1. A component unmounts before its query resolves.
+ *   2. A `queryKey` changes and supersedes the prior request.
+ *   3. The user navigates away mid-fetch.
+ *
+ * supabase-js surfaces those cancellations as
+ *   "AbortError: signal is aborted without reason"
+ *
+ * Logging these at `error` level floods Sentry / Loki with non-bugs.
+ * Detect both Error-instance form (`error.name === "AbortError"`) and
+ * supabase-js's plain-object form (`{ message: "AbortError: …" }`),
+ * downgrade to debug, and let only real failures reach the error
+ * channel.
+ */
+function isAbortError(error: unknown): boolean {
+  if (error instanceof Error && error.name === "AbortError") return true;
+  const msg =
+    typeof error === "object" && error !== null && "message" in error
+      ? String((error as { message: unknown }).message ?? "")
+      : String(error ?? "");
+  return /AbortError|signal is aborted/i.test(msg);
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -77,10 +102,24 @@ const queryClient = new QueryClient({
     },
   },
   queryCache: new QueryCache({
-    onError: (error) => log.error('[Query]', error),
+    onError: (error, query) => {
+      if (isAbortError(error)) {
+        log.debug('[Query] aborted (expected, not a failure)', {
+          queryKey: query.queryKey,
+        });
+        return;
+      }
+      log.error('[Query]', error);
+    },
   }),
   mutationCache: new MutationCache({
-    onError: (error) => log.error('[Mutation]', error),
+    onError: (error) => {
+      if (isAbortError(error)) {
+        log.debug('[Mutation] aborted (expected, not a failure)');
+        return;
+      }
+      log.error('[Mutation]', error);
+    },
   }),
 });
 

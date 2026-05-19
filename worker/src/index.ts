@@ -386,6 +386,39 @@ async function processJob(job: Job, signal?: AbortSignal) {
     // only matching rows still in 'processing' we let the user's
     // cancellation be sticky — the 0-rows-affected case below is the
     // healthy outcome on a successful cancel.
+    // Outbox: durably stash the result BEFORE the terminal UPDATE,
+    // so a DB-pressure timeout on the UPDATE doesn't lose the
+    // in-memory video URL. apply_outbox_results() (pg_cron, every
+    // minute) sweeps any unapplied row >30s old using the same
+    // (id, worker_id, status='processing') filter we use below —
+    // so cancellations / reaper handoffs are never clobbered.
+    // UPSERT on job_id so a reaper-revived re-run replaces any
+    // stale prior attempt instead of failing on the PK constraint.
+    // Wrapped in try/catch because an outbox failure must NOT
+    // abort the regular UPDATE path — outbox is the SAFETY NET,
+    // not the primary write. If both fail, the stale-claim reaper
+    // is still the ultimate backstop.
+    try {
+      const { error: outboxErr } = await (supabase as any)
+        .from('job_results')
+        .upsert({
+          job_id: job.id,
+          result: cleanPayload,
+          worker_id: WORKER_ID,
+          applied_at: null,
+        }, { onConflict: 'job_id' });
+      if (outboxErr) {
+        wlog.warn("Outbox write failed — relying on UPDATE path only", {
+          jobId: job.id, workerId: WORKER_ID, error: outboxErr.message,
+        });
+      }
+    } catch (outboxThrow) {
+      wlog.warn("Outbox write threw — relying on UPDATE path only", {
+        jobId: job.id, workerId: WORKER_ID,
+        error: outboxThrow instanceof Error ? outboxThrow.message : String(outboxThrow),
+      });
+    }
+
     const { error: completeError, count: completeCount } = await (supabase as any)
       .from('video_generation_jobs')
       .update({
@@ -442,11 +475,31 @@ async function processJob(job: Job, signal?: AbortSignal) {
           retryError: retryMsg,
         });
         Sentry.captureException(retryErr, { tags: { jobId: job.id, phase: "mark-completed-retry" } });
+      } else {
+        // Retry succeeded — mark the outbox row applied so the
+        // sweeper doesn't redundantly re-apply it.
+        void (supabase as any)
+          .from('job_results')
+          .update({ applied_at: new Date().toISOString() })
+          .eq('job_id', job.id)
+          .then(() => {}, () => {}); // best-effort, sweeper will catch any miss
       }
     } else if (completeCount === 0) {
       wlog.warn("Terminal 'completed' UPDATE matched 0 rows — claim handed off mid-run OR user cancelled", {
         jobId: job.id, workerId: WORKER_ID, taskType: job.task_type,
       });
+    } else {
+      // Happy path: primary UPDATE succeeded. Mark the outbox row
+      // applied so the every-minute sweeper doesn't re-scan it.
+      // The sweeper would otherwise see this row as 'unapplied'
+      // for 30s and burn one idempotent UPDATE per job. Best-effort
+      // — if this fails, the sweeper still does the right thing
+      // (finds the job already 'completed' and marks the outbox).
+      void (supabase as any)
+        .from('job_results')
+        .update({ applied_at: new Date().toISOString() })
+        .eq('job_id', job.id)
+        .then(() => {}, () => {});
     }
 
     totalJobsProcessed++;

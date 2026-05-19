@@ -422,7 +422,18 @@ async function processJob(job: Job, signal?: AbortSignal) {
         );
       if (retryRes?.error) {
         const retryErr = retryRes.error;
-        const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+        // Supabase REST errors are plain {message,code,details,hint}
+        // objects, not Error instances — String(obj) on them yields
+        // "[object Object]". Pluck the useful fields explicitly so the
+        // log line tells us what actually went wrong (statement_timeout,
+        // RLS, etc.) instead of a useless toString.
+        const e = retryErr as { message?: string; code?: string; details?: string; hint?: string } | null;
+        const retryMsg =
+          retryErr instanceof Error
+            ? retryErr.message
+            : e && typeof e === "object"
+            ? `${e.code ?? "?"}: ${e.message ?? "(no message)"}${e.details ? ` — ${e.details}` : ""}`
+            : String(retryErr);
         wlog.error("CRITICAL: Mark-completed retry ALSO failed — job stranded until stale-claim reaper resets it", {
           jobId: job.id,
           workerId: WORKER_ID,

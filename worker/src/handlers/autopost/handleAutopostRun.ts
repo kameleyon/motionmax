@@ -539,9 +539,34 @@ async function runPipeline(
   // incident where every fresh autopost_render rejected on first
   // claim. The progress_pct > 0 check below handles the real
   // duplicate case (stale-revive of a partially-completed row).
+  // Hoisted: the same in-process transient-retry signal guards BOTH
+  // the status='failed'/'cancelled' gate immediately below AND the
+  // progress_pct > 0 gate further down.
+  const isTransientRetry = (payload._transientRetryAttempt ?? 0) > 0;
+
+  // C-7-9 status-gate extension: a transient error on attempt 0 leaves
+  // autopost_runs.status='failed' via this handler's outer catch
+  // (markRunFailed fires unconditionally on throw). Without this
+  // bypass, withTransientRetry's attempt 1 reads the failed row here,
+  // trips the gate, and surfaces as "already in terminal status=failed;
+  // refusing to re-run" on every transient blip. Mirrors the
+  // progress_pct bypass logic below.
   if (run.status === "failed" || run.status === "cancelled") {
-    throw new Error(`autopost_render: run ${runId} already in terminal status=${run.status}; refusing to re-run`);
+    if (!isTransientRetry) {
+      throw new Error(`autopost_render: run ${runId} already in terminal status=${run.status}; refusing to re-run`);
+    }
+    console.warn(
+      `[autopost_render] transient-retry bypass: run ${runId} was marked ${run.status} on a prior in-process attempt — resetting to 'generating' and proceeding`,
+    );
+    const { error: resetErr } = await supabase
+      .from("autopost_runs")
+      .update({ status: "generating", error_summary: null, progress_pct: 0 })
+      .eq("id", runId);
+    if (resetErr) {
+      throw new Error(`autopost_render: transient retry could not reset run ${runId}: ${resetErr.message}`);
+    }
   }
+
   // progress_pct > 0 means a prior attempt advanced past the initial
   // setup. Even at 5 % it has already incremented credit-burning
   // counters via setRunProgress; >= 25 % means a script was generated;
@@ -557,7 +582,6 @@ async function runPipeline(
   // Without this bypass the retry is a single-shot no-op: the first
   // attempt sets pct=5 then dies on a transient PG blip, retry attempt
   // hits this gate and terminal-fails the run.
-  const isTransientRetry = (payload._transientRetryAttempt ?? 0) > 0;
   if ((run.progress_pct ?? 0) > 0 && !isTransientRetry) {
     const msg = `Orphaned autopost render — prior attempt reached progress_pct=${run.progress_pct}; refusing to restart from scratch (would double-spend Hypereal/LLM credits)`;
     console.warn(`[autopost_render] ${msg}`);

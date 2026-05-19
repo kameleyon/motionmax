@@ -152,6 +152,14 @@ async function chunkedSinglePassCrossfade(
   durations: number[],
   finalOutput: string,
   opts: CrossfadeOptions,
+  // Recursion depth. Bakes into the intermediate filename so successive
+  // rounds NEVER collide — round 0 writes `xfade_chunk_d0_*.mp4`, round
+  // 1 writes `xfade_chunk_d1_*.mp4`, etc. Without this disambiguator,
+  // a project with > MAX_SINGLE_PASS_CLIPS² (=25 at MAX=5) clips hit
+  // `ffmpeg: Output … same as Input #0 — exiting` because round 2's
+  // chunk-0 output collided with round 1's chunk-0 input in the same
+  // tmpDir. (Discovered 2026-05-19 from a real export failure log.)
+  depth: number = 0,
 ): Promise<void> {
   if (clipPaths.length <= MAX_SINGLE_PASS_CLIPS) {
     return singlePassCrossfade(clipPaths, durations, finalOutput, opts);
@@ -172,7 +180,7 @@ async function chunkedSinglePassCrossfade(
       continue;
     }
 
-    const chunkOut = path.join(tmpDir, `xfade_chunk_${start}.mp4`);
+    const chunkOut = path.join(tmpDir, `xfade_chunk_d${depth}_${start}.mp4`);
     await singlePassCrossfade(chunkClips, chunkDurations, chunkOut, opts);
 
     // Output duration of a single-pass chunk = sum(input durations) -
@@ -194,6 +202,7 @@ async function chunkedSinglePassCrossfade(
       intermediates.map((i) => i.duration),
       finalOutput,
       opts,
+      depth + 1,
     );
   } finally {
     // Best-effort cleanup. A leaked tmp file is recoverable by the

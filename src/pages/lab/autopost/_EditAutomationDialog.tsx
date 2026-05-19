@@ -142,6 +142,7 @@ function buildDraft(s: AutomationSchedule): DraftState {
     language?: string;
     voice_name?: string;
     style?: string;
+    format?: string;
     intake_settings?: { captionStyle?: string; visualStyle?: string };
   };
   const language = snap.language ?? "en";
@@ -151,10 +152,15 @@ function buildDraft(s: AutomationSchedule): DraftState {
   // IntakeForm writes today) → intake_settings.visualStyle (legacy
   // shape) → 'realistic' as the safest default.
   const style = snap.style ?? snap.intake_settings?.visualStyle ?? "realistic";
+  // When the row has a format hint but no explicit resolution, seed the
+  // picker from format so a legacy landscape schedule doesn't get
+  // silently flipped to portrait on the next save (the picker default
+  // would otherwise be 1080x1920 → format='portrait').
+  const defaultResolution = snap.format === "landscape" ? "1920x1080" : "1080x1920";
   return {
     name: s.name,
     prompt_template: s.prompt_template ?? snap.prompt ?? "",
-    resolution: s.resolution ?? snap.resolution ?? "1080x1920",
+    resolution: s.resolution ?? snap.resolution ?? defaultResolution,
     language,
     voice,
     caption_style: captionStyle,
@@ -251,10 +257,20 @@ export function EditAutomationDialog({
         intake_settings?: Record<string, unknown>;
       };
       const prevIntake = (prevSnap.intake_settings ?? {}) as Record<string, unknown>;
+      // Derive `format` from the picked resolution so the worker's
+      // image prompt builder + aspect-ratio prompt text match the
+      // user's selected orientation. Pre-fix the editor wrote only
+      // resolution; config_snapshot.format stayed at whatever the
+      // row was created with, so flipping "1080x1920 (vertical)" →
+      // "1920x1080 (horizontal)" in the UI still produced portrait
+      // 9:16 images at render time.
+      const derivedFormat: "portrait" | "landscape" =
+        draft.resolution === "1920x1080" ? "landscape" : "portrait";
       const nextSnap = {
         ...prevSnap,
         prompt: draft.prompt_template,
         resolution: draft.resolution,
+        format: derivedFormat,
         language: draft.language,
         voice_name: draft.voice,
         // Persist the visual style at both the canonical snapshot key
@@ -269,6 +285,7 @@ export function EditAutomationDialog({
           ...prevIntake,
           captionStyle: draft.caption_style,
           visualStyle: draft.style,
+          format: derivedFormat,
         },
       };
 

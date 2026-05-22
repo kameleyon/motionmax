@@ -33,10 +33,14 @@ export interface Doc2VideoParams {
 export interface PromptResult { system: string; user: string; maxTokens: number; }
 
 export function buildDoc2VideoPrompt(p: Doc2VideoParams): PromptResult {
+  // `presentation` is a deprecated alias of `brief` — kept only so
+  // legacy project rows that still carry length='presentation' render
+  // at the intended 28 scenes instead of 36. The intake never writes
+  // it anymore (over-3-min maps to `brief`).
   const lengthCfg: Record<string, { count: number; targetDuration: number; avgSceneDuration: number; maxWords: number }> = {
     short: { count: 15, targetDuration: 165, avgSceneDuration: 11, maxWords: 28 },
     brief: { count: 28, targetDuration: 308, avgSceneDuration: 11, maxWords: 28 },
-    presentation: { count: 36, targetDuration: 396, avgSceneDuration: 11, maxWords: 28 },
+    presentation: { count: 28, targetDuration: 308, avgSceneDuration: 11, maxWords: 28 },
   };
   const cfg = lengthCfg[p.length] || lengthCfg.brief;
   const targetWords = cfg.maxWords;

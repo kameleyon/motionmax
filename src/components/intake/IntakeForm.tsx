@@ -600,7 +600,10 @@ export default function IntakeForm({
       };
 
       const title = prompt.trim().slice(0, 80);
-      const length = features.duration && duration === '>3min' ? 'presentation' : 'short';
+      // "Over 3 min" maps to the `brief` tier (28 scenes / ~5 min), NOT
+      // `presentation` (36 scenes). The intake only offers under/over
+      // 3 min — there is no 36-scene option.
+      const length = features.duration && duration === '>3min' ? 'brief' : 'short';
 
       // Read + concat attached sources BEFORE the project row is
       // inserted — processAttachments inlines text files, uploads

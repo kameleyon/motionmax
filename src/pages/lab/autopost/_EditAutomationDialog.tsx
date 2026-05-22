@@ -13,8 +13,8 @@
  * blob without thinking about chip pickers.
  */
 
-import { useEffect, useMemo, useState } from "react";
-import { Loader2, Send, Mail, FolderHeart, X as XIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Loader2, Send, Mail, FolderHeart, X as XIcon, ImagePlus, Check } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -31,6 +31,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getSpeakersForLanguage, getDefaultSpeaker, type SpeakerVoice } from "@/components/workspace/SpeakerSelector";
 import type { SourceAttachment } from "@/components/workspace/SourceInput";
 import { processAttachmentsForPersistence } from "@/lib/attachmentProcessor";
+import { uploadCharacterReference } from "@/lib/uploadCharacterReference";
 import type { AutomationSchedule, IntakeSettings, PersistedSourceAttachment } from "./_automationTypes";
 import { SourcesField } from "./_SourcesField";
 
@@ -114,6 +115,10 @@ interface DraftState {
   name: string;
   prompt_template: string;
   resolution: string;
+  /** Duration tier — 'short' (≤3 min, ~15 scenes) or 'brief' (>3 min,
+   *  ~28 scenes). Persisted to config_snapshot.length and read by the
+   *  worker's lengthCfg lookup. */
+  length: 'short' | 'brief';
   language: string;
   voice: SpeakerVoice;
   caption_style: string;
@@ -132,6 +137,18 @@ interface DraftState {
    * through processAttachmentsForPersistence().
    */
   source_attachments: SourceAttachment[];
+  /** Free-text character appearance spec — persisted to
+   *  config_snapshot.character_description, which the worker copies onto
+   *  projects.character_description (the image prompt builder's
+   *  highest-priority character source). */
+  character_description: string;
+  /** Whether the worker should enforce character consistency across
+   *  scenes — config_snapshot.character_consistency_enabled. */
+  character_consistency_enabled: boolean;
+  /** Character reference image URLs — config_snapshot.character_images.
+   *  Existing entries are public storage URLs; freshly-picked ones are
+   *  temporary blob: URLs until save uploads them (see charFileMapRef). */
+  character_images: string[];
 }
 
 function buildDraft(s: AutomationSchedule): DraftState {
@@ -143,6 +160,10 @@ function buildDraft(s: AutomationSchedule): DraftState {
     voice_name?: string;
     style?: string;
     format?: string;
+    length?: string;
+    character_description?: string | null;
+    character_consistency_enabled?: boolean;
+    character_images?: string[] | null;
     intake_settings?: { captionStyle?: string; visualStyle?: string };
   };
   const language = snap.language ?? "en";
@@ -161,6 +182,10 @@ function buildDraft(s: AutomationSchedule): DraftState {
     name: s.name,
     prompt_template: s.prompt_template ?? snap.prompt ?? "",
     resolution: s.resolution ?? snap.resolution ?? defaultResolution,
+    // Legacy `presentation` (deprecated 36-scene tier) collapses to
+    // `brief` — matches the worker's lengthCfg alias so existing rows
+    // saved as presentation render at 28 scenes consistently.
+    length: (snap.length === 'brief' || snap.length === 'presentation') ? 'brief' : 'short',
     language,
     voice,
     caption_style: captionStyle,
@@ -178,8 +203,16 @@ function buildDraft(s: AutomationSchedule): DraftState {
           value: a.value,
         }))
       : [],
+    character_description: snap.character_description ?? "",
+    character_consistency_enabled: snap.character_consistency_enabled ?? false,
+    character_images: Array.isArray(snap.character_images)
+      ? snap.character_images.filter((u): u is string => typeof u === "string" && u.trim().length > 0)
+      : [],
   };
 }
+
+/** Cap on character reference images — matches IntakeForm's MAX_CHAR_IMAGES. */
+const MAX_CHAR_IMAGES = 3;
 
 export function EditAutomationDialog({
   open, onOpenChange, schedule,
@@ -188,12 +221,23 @@ export function EditAutomationDialog({
   const [draft, setDraft] = useState<DraftState>(() => buildDraft(schedule));
   const [emailDraft, setEmailDraft] = useState("");
 
+  // Newly-picked character images are held as blob: URLs in
+  // draft.character_images for instant preview; this map keeps the
+  // backing File so saveMutation can upload it to Storage.
+  const charFileMapRef = useRef<Map<string, File>>(new Map());
+  const charFileInputRef = useRef<HTMLInputElement | null>(null);
+
   // Re-seed when the source schedule changes or the dialog reopens, so
   // we don't show stale local edits after a realtime update.
   useEffect(() => {
     if (open) {
       setDraft(buildDraft(schedule));
       setEmailDraft("");
+      // buildDraft reset character_images to the persisted URL list, so
+      // any blob: URLs from a prior session are now orphaned — revoke
+      // them and drop their File handles.
+      for (const url of charFileMapRef.current.keys()) URL.revokeObjectURL(url);
+      charFileMapRef.current.clear();
     }
   }, [open, schedule]);
 
@@ -240,6 +284,33 @@ export function EditAutomationDialog({
     if (emailDraft.trim() && tryAddEmail(emailDraft)) setEmailDraft("");
   }
 
+  function handleCharImagePick(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    const remaining = MAX_CHAR_IMAGES - draft.character_images.length;
+    if (remaining <= 0) {
+      toast.error(`Max ${MAX_CHAR_IMAGES} character reference images.`);
+      return;
+    }
+    const added: string[] = [];
+    for (const file of Array.from(files).slice(0, remaining)) {
+      if (!file.type.startsWith("image/")) continue;
+      const blobUrl = URL.createObjectURL(file);
+      charFileMapRef.current.set(blobUrl, file);
+      added.push(blobUrl);
+    }
+    if (added.length > 0) {
+      setDraft((d) => ({ ...d, character_images: [...d.character_images, ...added] }));
+    }
+  }
+
+  function removeCharImage(url: string) {
+    if (url.startsWith("blob:")) {
+      URL.revokeObjectURL(url);
+      charFileMapRef.current.delete(url);
+    }
+    setDraft((d) => ({ ...d, character_images: d.character_images.filter((u) => u !== url) }));
+  }
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!draft.name.trim()) throw new Error("Name required");
@@ -257,6 +328,22 @@ export function EditAutomationDialog({
         intake_settings?: Record<string, unknown>;
       };
       const prevIntake = (prevSnap.intake_settings ?? {}) as Record<string, unknown>;
+
+      // Upload any freshly-picked character images (blob: URLs) to
+      // Storage; existing public URLs pass through unchanged. Autopost
+      // runs server-side, so character_images MUST be public URLs — a
+      // base64 data URI would break the worker's image models.
+      const finalCharacterImages: string[] = [];
+      for (const url of draft.character_images) {
+        if (url.startsWith("blob:")) {
+          const file = charFileMapRef.current.get(url);
+          if (!file) continue;
+          finalCharacterImages.push(await uploadCharacterReference(file));
+        } else {
+          finalCharacterImages.push(url);
+        }
+      }
+
       // Derive `format` from the picked resolution so the worker's
       // image prompt builder + aspect-ratio prompt text match the
       // user's selected orientation. Pre-fix the editor wrote only
@@ -271,6 +358,7 @@ export function EditAutomationDialog({
         prompt: draft.prompt_template,
         resolution: draft.resolution,
         format: derivedFormat,
+        length: draft.length,
         language: draft.language,
         voice_name: draft.voice,
         // Persist the visual style at both the canonical snapshot key
@@ -281,6 +369,12 @@ export function EditAutomationDialog({
         // is sourced from this snapshot, so writing both keys keeps
         // the runtime behavior identical to a fresh intake save.
         style: draft.style,
+        // Character controls — worker handleAutopostRun reads these
+        // top-level config_snapshot keys and copies them onto the
+        // project row it inserts for each run.
+        character_description: draft.character_description.trim() || null,
+        character_consistency_enabled: draft.character_consistency_enabled,
+        character_images: finalCharacterImages.length > 0 ? finalCharacterImages : null,
         intake_settings: {
           ...prevIntake,
           captionStyle: draft.caption_style,
@@ -536,6 +630,25 @@ export function EditAutomationDialog({
                 </Select>
               </div>
 
+              {/* Length — under/over 3 min, mirrors the intake binary.
+                  'short' → 15 scenes, 'brief' → 28 scenes (worker's
+                  lengthCfg). No 36-scene presentation option here. */}
+              <div className="space-y-1.5">
+                <Label className={fieldLabel}>Length</Label>
+                <Select
+                  value={draft.length}
+                  onValueChange={(v) => setDraft(d => ({ ...d, length: v as 'short' | 'brief' }))}
+                >
+                  <SelectTrigger className={fieldShell}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className={popoverShell}>
+                    <SelectItem value="short">Under 3 min (~15 scenes)</SelectItem>
+                    <SelectItem value="brief">Over 3 min (~28 scenes)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="space-y-1.5">
                 <Label className={fieldLabel}>Language</Label>
                 <Select
@@ -620,6 +733,103 @@ export function EditAutomationDialog({
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+          </section>
+
+          {/* ── Section: Character ──────────────────────────────────
+              Persists character_description / character_consistency_enabled
+              / character_images onto config_snapshot. handleAutopostRun
+              copies all three onto the project row it inserts per run. */}
+          <section className="space-y-3.5">
+            <h3 className={sectionLabel}>Character</h3>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="auto-edit-char-desc" className={fieldLabel}>
+                Description
+              </Label>
+              <Textarea
+                id="auto-edit-char-desc"
+                value={draft.character_description}
+                onChange={e => setDraft(d => ({ ...d, character_description: e.target.value }))}
+                rows={3}
+                className="bg-[#0A0D0F] border-white/[0.08] text-[#ECEAE4] resize-none hover:border-white/15 focus-visible:border-[#14C8CC]/50 focus-visible:ring-0 transition-colors leading-[1.5]"
+                placeholder="e.g. A tall woman, warm dark brown skin, close-cropped coiled black hair, athletic build, mid-30s"
+              />
+              <p className="text-[11px] text-[#5A6268] leading-[1.5]">
+                Appearance, traits, wardrobe — the image generator treats this as the highest-priority character spec.
+              </p>
+            </div>
+
+            <label
+              htmlFor="auto-edit-char-consistency"
+              className="group flex items-center gap-3 px-3 py-2.5 rounded-lg border border-white/[0.08] bg-[#0A0D0F] hover:border-white/15 cursor-pointer transition-colors"
+            >
+              <input
+                id="auto-edit-char-consistency"
+                type="checkbox"
+                checked={draft.character_consistency_enabled}
+                onChange={(e) => setDraft(d => ({ ...d, character_consistency_enabled: e.target.checked }))}
+                className="sr-only"
+              />
+              <span
+                aria-hidden
+                className={`w-4 h-4 rounded border shrink-0 grid place-items-center transition-colors ${
+                  draft.character_consistency_enabled
+                    ? 'border-[#14C8CC] bg-[#14C8CC]'
+                    : 'border-white/25 group-hover:border-white/40'
+                }`}
+              >
+                {draft.character_consistency_enabled && (
+                  <Check className="w-3 h-3 text-[#0A0D0F]" />
+                )}
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-[12.5px] text-[#ECEAE4]">Keep this character consistent</span>
+                <span className="block text-[10.5px] text-[#5A6268]">Same face, build, and wardrobe across every scene</span>
+              </span>
+            </label>
+
+            <div className="space-y-1.5">
+              <div className="flex items-baseline justify-between gap-2">
+                <Label className={fieldLabel}>Reference images</Label>
+                <span className="text-[10.5px] text-[#8A9198]">{draft.character_images.length}/{MAX_CHAR_IMAGES}</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {draft.character_images.map((url) => (
+                  <div key={url} className="relative w-16 h-16 rounded-md overflow-hidden border border-white/[0.08] group">
+                    <img src={url} alt="Character reference" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removeCharImage(url)}
+                      aria-label="Remove character image"
+                      className="absolute top-0.5 right-0.5 rounded bg-[#0A0D0F]/80 p-0.5 text-[#8A9198] opacity-0 group-hover:opacity-100 hover:text-[#E4C875] transition-opacity"
+                    >
+                      <XIcon className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                {draft.character_images.length < MAX_CHAR_IMAGES && (
+                  <button
+                    type="button"
+                    onClick={() => charFileInputRef.current?.click()}
+                    aria-label="Add character reference image"
+                    className="w-16 h-16 rounded-md border border-dashed border-white/15 grid place-items-center text-[#5A6268] hover:border-[#14C8CC]/40 hover:text-[#14C8CC] transition-colors"
+                  >
+                    <ImagePlus className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              <input
+                ref={charFileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                multiple
+                className="hidden"
+                onChange={(e) => { handleCharImagePick(e.target.files); e.target.value = ""; }}
+              />
+              <p className="text-[11px] text-[#5A6268] leading-[1.5]">
+                Up to {MAX_CHAR_IMAGES} images used as an identity reference. Uploaded to storage on save.
+              </p>
             </div>
           </section>
         </div>

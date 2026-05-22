@@ -126,7 +126,7 @@ export async function handleGenerateTopics(
   // scheme the existing topics established (e.g. "3 of Clubs: Stop X"
   // → drops the card prefix and just writes generic self-help).
   const exclusionBlock = existing.length > 0
-    ? `\n\nEXISTING TOPICS (do NOT repeat these or any close variant — but DO match their format exactly):\n${existing.map((t) => `- ${t}`).join("\n")}\n\nFORMAT CONSISTENCY — CRITICAL:\nStudy the existing topics above. Match their EXACT structural format in every new topic:\n- Same prefix pattern (if they all start with a card name, place name, date, etc., yours must too — using a NEW value of the same kind)\n- Same casing rules (Title Case vs Sentence case)\n- Same punctuation style (colons, em-dashes, etc.)\n- Same approximate length and rhythm\n- Same tone\nThe new topics should feel like they belong in the same series. Only the subject changes — never the format.`
+    ? `\n\nEXISTING TOPICS (do NOT repeat these, any close variant, OR the same underlying subject — e.g. the same card / sign / person / item — but DO match their format exactly):\n${existing.map((t) => `- ${t}`).join("\n")}\n\nFORMAT CONSISTENCY — CRITICAL:\nStudy the existing topics above. Match their EXACT structural format in every new topic:\n- Same prefix pattern (if they all start with a card name, place name, date, etc., yours must too — using a NEW value of the same kind, never one already used above)\n- Same casing rules (Title Case vs Sentence case)\n- Same punctuation style (colons, em-dashes, etc.)\n- Same approximate length and rhythm\n- Same tone\nThe new topics should feel like they belong in the same series. Only the subject changes — never the format — and every subject must be one NOT already present above.`
     : "";
 
   // Wave E-Legal Part J — Tongue i18n hygiene.
@@ -281,7 +281,7 @@ Requirements:
 - Each title MUST be UNDER 10 WORDS — short, punchy, irresistible
 - Use curiosity gaps, power words, unexpected angles
 - Create titles that make people NEED to click
-- Each title should cover a DIFFERENT angle or sub-topic
+- Each title MUST cover a DISTINCT subject. If the topic describes a SET or collection (a card from a 52-card deck, zodiac signs, countries, historical figures, months, etc.), every title MUST feature a DIFFERENT member of that set — never reuse the same card / sign / person / item across two titles. Spread the ${count} titles across ${count} different members of the set.
 - Titles MUST be directly relevant to the requested subject
 - Vary the format: provocative statements, questions, revelations, challenges
 ${researchBrief.length > 0 ? "- Ground every title in the LATEST RESEARCH above — reference real names, dates, and events, not generic angles" : ""}

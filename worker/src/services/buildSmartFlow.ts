@@ -8,7 +8,7 @@ import {
   getImageDimensions,
   CONTENT_COMPLIANCE_INSTRUCTION,
 } from "./prompts.js";
-import { buildLanguageSection } from "./promptSections.js";
+import { buildLanguageSection, SEO_SECTION } from "./promptSections.js";
 import type { PromptResult } from "./buildDoc2Video.js";
 
 export interface SmartFlowParams {
@@ -100,6 +100,8 @@ You MUST include a "coverTitle" field with a short, catchy, social media-style t
 - **STYLE-MATCHED TYPOGRAPHY:** The title text in the visualPrompt MUST be rendered in the SAME art style as the rest of the image (style: ${styleDesc}). The title lettering must look like it belongs in that world (e.g., Lego → blocky 3D brick letters, Anime → manga text, Watercolor → painted brush-stroke lettering). NEVER use generic plain text or a mismatched style.
 - Examples: "The $10B Secret", "Top 3 Revealed", "The Hidden Formula", "Game Changing Insights"
 
+${SEO_SECTION}
+
 === OUTPUT FORMAT (STRICT JSON) ===
 Return ONLY valid JSON:
 {
@@ -110,7 +112,13 @@ Return ONLY valid JSON:
     "visualPrompt": "You are an expert marketing and content creator, you know your targeted population and know how to catch their attention. So, Be extremely creative and using your expert marketing skills to create a catchy, detailed, elegant yet captivating editorial infographic illustration using elements, images and typography that suit best the topic presented. LAYOUT: [Magazine/Panel layout]. MAIN TITLE: Bold text '[YOUR TITLE]' at top center. CENTRAL VISUAL: [Describe the anchor image - a character, object, or symbol]. SECTION 1: Title text '[TITLE 1]' with subtitle '[SUBTITLE]' and description paragraph text '[Full 15-25 word explanation]'. Accompanied by [icon description]. SECTION 2: Title text '[TITLE 2]' with description paragraph text '[explanation]'. [Continue for all sections]. FLOATING ICONS: [List thematic icons around edges]. COLOR PALETTE: [Specify colors matching content theme].",
     "coverTitle": "Catchy Cover Title",
     "duration": 60
-  }]
+  }],
+  "seo": {
+    "title": "≤70-char headline with primary keyword + hook",
+    "subtitle": "40–80-char complementary hook line (different angle from title)",
+    "description": "150–300 word body: hook (keyword in first sentence) → value (3–5 sentences) → CTA",
+    "hashtags": ["#broad", "#midvolume", "#midvolume", "#niche", "#niche"]
+  }
 }
 
 IMPORTANT: Do NOT include any style description in visualPrompt - the system will append the full art style specification automatically.

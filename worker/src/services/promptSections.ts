@@ -95,6 +95,52 @@ For Scene 1 ONLY, you MUST include a "coverTitle" field with a short, catchy, so
 - Examples: ${examples}`;
 }
 
+// ── SEO Caption Section ────────────────────────────────────────────
+// Cross-platform short-form video SEO copy (YouTube, Instagram Reels,
+// TikTok). One set per video; the user copy-pastes from the editor's
+// captions tab. The instruction is platform-agnostic — short-form video
+// SEO on all three platforms overlaps more than it differs at the copy
+// level (title + first-line hook + description + 3-5 hashtags).
+//
+// Guidance distilled from Signal (SEO: keyword placement, AI-Overview
+// citation, no shadow-banned tags) and Herald (PAS / curiosity-gap
+// hooks, banned superlative-without-substantiation, real specificity).
+
+export const SEO_SECTION = `=== SEO CAPTION OUTPUT (REQUIRED) ===
+Alongside the "scenes" array, you MUST also produce a top-level "seo" object the user will paste into YouTube, Instagram Reels, and TikTok. ONE set, platform-agnostic (works for all three short-form surfaces).
+
+Write the SEO copy in the SAME language as the voiceovers — do not switch to English unless the voiceovers are in English.
+
+REQUIREMENTS:
+
+- "title" — string, ≤70 characters. Lead with the primary subject + a benefit, curiosity gap, contrast, or specific number. Click-worthy without clickbait language. NEVER use empty intensifiers ("amazing", "incredible", "you won't believe", "shocking", "this changed everything", "mind-blowing"). Good examples: "Why the Queen of Clubs Never Begs Anyone", "The 3-Minute Stoic Habit That Killed My Anxiety", "What 10,000 Failed Startups All Got Wrong".
+
+- "subtitle" — string, 40–80 characters. A complementary hook line that PAIRS with the title rather than restating it. Often a question, a contrast ("but here's what nobody says"), or the next-layer reveal. Different angle from the title.
+
+- "description" — string, 150–300 words. Three-part structure:
+    (1) HOOK — 1–2 sentences with the primary keyword in the FIRST line for AI Overview / search-snippet citation. Lead with the wedge, not "In this video…".
+    (2) VALUE — 3–5 sentences expanding what the video covers (the specific insight, fact, or transformation).
+    (3) CTA — 1 sentence: "Follow for…", "Watch to the end for…", "Comment your…", "Save this for later if…".
+  Write in the same register and voice as the voiceovers. No filler. No "as an AI" disclaimers.
+
+- "hashtags" — array of EXACTLY 5 strings, each beginning with "#", lowercase, no spaces, no special characters except numbers and underscores. Mix:
+    1 broad-volume tag (the wide niche — e.g. #cardology, #stoicism, #productivity),
+    2 mid-volume tags (more specific within the niche — e.g. #birthcards, #ancientwisdom, #deepwork),
+    1–2 long-tail / niche tags (a specific community or sub-topic — e.g. #queenofclubs, #marcusaurelius, #monktyperetreat).
+  NEVER include shadow-banned or over-saturated tags: #viral, #fyp, #foryou, #foryoupage, #explorepage, #trending, #explore, #love, #instagood. NEVER include political, medical, legal, or financial-advice claim tags. NEVER include #ad / #sponsored / #paid unless the video is actually sponsored.
+
+KEYWORD PLACEMENT:
+- Identify the 1–2 primary keywords from the topic. Use the strongest in the title's first 5 words AND in the description's first sentence.
+- Natural placement only — no keyword stuffing.
+
+BANNED DESCRIPTION OPENERS (they tank engagement on YouTube + IG + TikTok):
+- "In this video…"
+- "Today I'm going to…"
+- "Welcome back…"
+- "Hey guys/everyone/friends…"
+- "Have you ever wondered…"
+Lead with the hook directly.`;
+
 // ── Brand Attribution Section Builder ──────────────────────────────
 
 export function buildBrandSection(brandMark?: string): string {
@@ -135,6 +181,12 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
       "coverTitle": "Catchy Cover Title",
       "duration": 15${textOverlayFields}
     }
-  ]
+  ],
+  "seo": {
+    "title": "≤70-char headline with primary keyword + hook",
+    "subtitle": "40–80-char complementary hook line (different angle from title)",
+    "description": "150–300 word body: hook (keyword in first sentence) → value (3–5 sentences) → CTA",
+    "hashtags": ["#broad", "#midvolume", "#midvolume", "#niche", "#niche"]
+  }
 }`;
 }

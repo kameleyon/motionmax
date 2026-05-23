@@ -18,6 +18,7 @@ import {
 import {
   buildLanguageSection,
   PROMPT_ENGINEERING_SECTION,
+  SEO_SECTION,
   buildCoverTitleSection,
   buildBrandSection,
 } from "./promptSections.js";
@@ -423,6 +424,8 @@ Same skin tone. Same hair color and style. Same clothing. Same build. Every scen
 
 ${buildCoverTitleSection('"The Untold Story", "When Everything Changed", "Against All Odds", "Rise to Power"', styleDesc)}
 
+${SEO_SECTION}
+
 === HISTORICAL, CULTURAL & VISUAL ACCURACY (CRITICAL — ZERO TOLERANCE) ===
 ⛔ THIS IS THE #1 PRIORITY. Getting appearances wrong is WORSE than a bad script.
 - Historical accuracy: ALL visual elements must match the era — no anachronisms
@@ -452,6 +455,12 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
       "coverTitle": "Catchy Cover Title",
       "duration": 11
     }
-  ]
+  ],
+  "seo": {
+    "title": "≤70-char headline with primary keyword + hook",
+    "subtitle": "40–80-char complementary hook line (different angle from title)",
+    "description": "150–300 word body: hook (keyword in first sentence) → value (3–5 sentences) → CTA",
+    "hashtags": ["#broad", "#midvolume", "#midvolume", "#niche", "#niche"]
+  }
 }`;
 }

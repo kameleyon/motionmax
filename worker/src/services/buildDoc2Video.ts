@@ -13,6 +13,7 @@ import {
   buildLanguageSection,
   SUB_VISUALS_SECTION,
   PROMPT_ENGINEERING_SECTION,
+  SEO_SECTION,
   buildCoverTitleSection,
   buildOutputFormat,
   buildBrandSection,
@@ -155,6 +156,8 @@ Example:
 ${PROMPT_ENGINEERING_SECTION}
 
 ${buildCoverTitleSection('"The $10B Secret", "Why They ALL Failed", "Nobody Expected This", "The Hidden Truth"', styleDesc)}
+
+${SEO_SECTION}
 
 ${buildOutputFormat({
     charExamples: '"Protagonist_child": "A 7-year-old boy with dark hair, brown eyes...",\n    "Protagonist_adult": "A 35-year-old man with the SAME dark hair and brown eyes..."',

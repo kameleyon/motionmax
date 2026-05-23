@@ -541,6 +541,20 @@ ${researchBrief}
     },
   }));
 
+  // Extract the SEO copy block produced by the script-gen LLM alongside
+  // the scenes. Stored verbatim on generations.seo so the editor's
+  // captions tab can render it for copy-paste to YouTube / IG / TikTok.
+  // We trust the model's shape here (title/subtitle/description/
+  // hashtags) and let the frontend handle missing fields gracefully —
+  // a strict schema enforced server-side would just turn an LLM hiccup
+  // into a generation failure, which is worse than rendering an empty
+  // SEO card with a "regenerate" affordance.
+  const rawSeo = (parsed as { seo?: unknown }).seo;
+  const seo = (rawSeo && typeof rawSeo === "object") ? rawSeo : null;
+  if (!seo) {
+    console.warn("[GenerateVideo] Script LLM omitted the seo block — captions tab will render empty until regenerated");
+  }
+
   const { data: generation, error: genError } = await supabase
     .from("generations")
     .insert({
@@ -550,6 +564,7 @@ ${researchBrief}
       progress: 10,
       script: rawText,
       scenes: scenesWithMeta,
+      seo,
       // Use the phaseStart captured at the VERY TOP of handleGenerateVideo —
       // that's the moment the worker picked up the job. By the time we
       // reach this insert we've already spent 30-180s on research + LLM,

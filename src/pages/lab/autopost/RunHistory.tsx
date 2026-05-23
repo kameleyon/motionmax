@@ -244,7 +244,10 @@ export default function RunHistory() {
     }
     setRegeneratingId(run.id);
     try {
-      // 1. Source job → exact project id + the original payload.
+      // 1. Source orchestrator job → payload + (often) NULL project_id.
+      //    autopost_tick inserts autopost_render with project_id=NULL —
+      //    handleAutopostRun creates the project mid-flight, so the
+      //    orchestrator row never carries the project reference itself.
       const { data: srcJob, error: srcErr } = await supabase
         .from("video_generation_jobs")
         .select("project_id, payload")
@@ -252,27 +255,46 @@ export default function RunHistory() {
         .maybeSingle();
       if (srcErr || !srcJob) throw new Error(srcErr?.message ?? "Source job not found");
       const srcPayload = (srcJob as { payload?: Record<string, unknown> | null }).payload ?? null;
-      const projectId =
+      let projectId: string | undefined =
         (srcJob as { project_id?: string | null }).project_id ??
         (srcPayload?.projectId as string | undefined);
-      if (!projectId) throw new Error("Source job is missing a project_id");
 
-      // 2. Does a generation row exist for this project?
-      const { data: gen } = await supabase
-        .from("generations")
-        .select("id")
-        .eq("project_id", projectId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // 2. Fallback: derive project_id from any CHILD job tied to this
+      //    autopost_run (generate_video / images / audio etc.). Children
+      //    carry the project_id even when the orchestrator doesn't. If
+      //    no child made it that far (early script-stage failure),
+      //    projectId stays undefined and we route to the fresh path below.
+      if (!projectId) {
+        const { data: childJob } = await supabase
+          .from("video_generation_jobs")
+          .select("project_id")
+          .filter("payload->>autopost_run_id", "eq", run.id)
+          .not("project_id", "is", null)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        projectId = (childJob as { project_id?: string | null } | null)?.project_id ?? undefined;
+      }
+
+      // 3. Existing generation for the project? (Decides rerender vs full re-render.)
+      let generationId: string | null = null;
+      if (projectId) {
+        const { data: gen } = await supabase
+          .from("generations")
+          .select("id")
+          .eq("project_id", projectId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        generationId = (gen as { id: string } | null)?.id ?? null;
+      }
 
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData.user?.id;
       if (!userId) throw new Error("Not signed in");
 
-      if (gen) {
-        // ── Re-render path: keep the script, redo the visuals ──
-        const generationId = (gen as { id: string }).id;
+      if (projectId && generationId) {
+        // ── Re-render path: script + scenes exist, just redo the visuals.
         const { error: insertErr } = await supabase
           .from("video_generation_jobs")
           .insert({
@@ -285,12 +307,13 @@ export default function RunHistory() {
         if (insertErr) throw insertErr;
         toast.success("Regeneration queued — same script, fresh visuals");
       } else {
-        // ── Fresh-render path: original run died before the
-        // generations row was inserted (e.g. script-LLM JSON parse
-        // failure). Reset the autopost_runs row so the handler's
-        // status-gate will claim it, then re-fire autopost_render
-        // with the EXACT original payload — same topic, same prompt,
-        // no topic_pool re-roll. ──
+        // ── Fresh-render path: original run died before children created
+        // the project (early script-LLM failure, etc.). Reset the
+        // autopost_runs row so handleAutopostRun's status-gate accepts
+        // it, then re-fire autopost_render with the ORIGINAL payload
+        // (same topic, same prompt, no topic_pool re-roll). The new
+        // orchestrator job has project_id=NULL just like the original —
+        // handleAutopostRun creates a fresh project. ──
         const { error: resetErr } = await supabase
           .from("autopost_runs")
           .update({
@@ -302,14 +325,20 @@ export default function RunHistory() {
           .eq("id", run.id);
         if (resetErr) throw new Error(`Could not reset run: ${resetErr.message}`);
 
+        // Make sure the payload carries autopost_run_id (defensive — it
+        // should already be there from autopost_tick).
+        const payloadForRender: Record<string, unknown> = {
+          ...(srcPayload ?? {}),
+          autopost_run_id: (srcPayload?.autopost_run_id as string | undefined) ?? run.id,
+        };
+
         const { data: inserted, error: insertErr } = await supabase
           .from("video_generation_jobs")
           .insert({
             user_id: userId,
-            project_id: projectId,
             task_type: "autopost_render",
             status: "pending",
-            payload: (srcPayload ?? { autopost_run_id: run.id, projectId }) as never,
+            payload: payloadForRender as never,
           } as never)
           .select("id")
           .single();

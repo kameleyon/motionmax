@@ -42,6 +42,11 @@ interface RegenerateAudioResult {
 const LEGACY_SPEAKER_MAP: Record<string, { gender: string; language: string }> = {
   "Jacques":  { gender: "male",   language: "fr" },
   "Camille":  { gender: "female", language: "fr" },
+  "Eddy":     { gender: "male",   language: "fr" },
+  "Mario":    { gender: "male",   language: "fr" },
+  "Misko":    { gender: "male",   language: "fr" },
+  "Robert":   { gender: "male",   language: "fr" },
+  "Miriam":   { gender: "female", language: "fr" },
   "Carlos":   { gender: "male",   language: "es" },
   "Isabella": { gender: "female", language: "es" },
   "Adam":     { gender: "male",   language: "en" },

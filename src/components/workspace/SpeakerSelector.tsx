@@ -16,7 +16,7 @@ export type SpeakerVoice =
   // Haitian Creole (Gemini TTS)
   | "Pierre" | "Marie"
   // French (Fish Audio)
-  | "Jacques" | "Camille"
+  | "Jacques" | "Camille" | "Eddy" | "Mario" | "Misko" | "Robert" | "Miriam"
   // Spanish (Fish Audio)
   | "Carlos" | "Isabella"
   // English (LemonFox / Fish Audio)
@@ -197,7 +197,14 @@ const creoleSpeakers: SpeakerOption[] = geminiFlashSpeakers;
 // All 11 supported languages get the same 30-voice Gemini roster; the
 // model picks the accent from the narration text. Adam (English Male
 // only — LemonFox) is the single non-Gemini exception in the picker.
-const frenchSpeakers: SpeakerOption[] = [...geminiFlashSpeakers];
+const frenchSpeakers: SpeakerOption[] = [
+  { id: "Eddy",   label: "Eddy",   description: "Male · French native · Fish Audio s2-pro" },
+  { id: "Mario",  label: "Mario",  description: "Male · French native · Fish Audio s2-pro" },
+  { id: "Misko",  label: "Misko",  description: "Male · French native · Fish Audio s2-pro" },
+  { id: "Robert", label: "Robert", description: "Male · French native · Fish Audio s2-pro" },
+  { id: "Miriam", label: "Miriam", description: "Female · French native · Fish Audio s2-pro" },
+  ...geminiFlashSpeakers,
+];
 
 const spanishSpeakers: SpeakerOption[] = [...geminiFlashSpeakers];
 

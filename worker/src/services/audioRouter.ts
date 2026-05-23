@@ -84,6 +84,11 @@ const NAMED_FISH_VOICES: Record<string, string> = {
   Morpheus: "06a8fa125ea54698b0c84feac214abad", // Male — sport chronicle
   Jacynthe: "cd178af6aaef4e7d864a5c8cc5f81a63", // Female — clear, articulate
   Phoebe:   "ea674933d2f7400ca7cd5cb952601b96", // Female — young, social-media
+  Eddy:     "f4dfad7feb87423ebb516d43bf49ddb3", // French Male — Fish Audio s2-pro
+  Mario:    "d12dae2d272e4b94b0b8e41c96e88c8f", // French Male — Fish Audio s2-pro
+  Misko:    "2f549813a2634578b5db3401e61a532d", // French Male — Fish Audio s2-pro
+  Robert:   "a5d7dcbb81b4472ea0e240af3edaae7d", // French Male — Fish Audio s2-pro
+  Miriam:   "5c0170e52ad745f490b4c997d891b175", // French Female — Fish Audio s2-pro
 };
 
 // ── Router ─────────────────────────────────────────────────────────

@@ -89,7 +89,7 @@ function providerForId(id: string): CatalogVoice["provider"] {
   if (id === "Adam") return "lemonfox";
   // Named built-in Fish s2-pro voices (see NAMED_FISH_VOICES in
   // worker/src/services/audioRouter.ts — keep in sync).
-  if (id === "Zuri" || id === "Morpheus" || id === "Jacynthe" || id === "Phoebe") return "fish";
+  if (id === "Zuri" || id === "Morpheus" || id === "Jacynthe" || id === "Phoebe" || id === "Eddy" || id === "Mario" || id === "Misko" || id === "Robert" || id === "Miriam") return "fish";
   return "gemini";
 }
 

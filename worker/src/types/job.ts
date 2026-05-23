@@ -11,6 +11,8 @@ export interface Job {
     | 'export_video'         // video export (FFmpeg)
     | 'generate_cinematic'   // reserved alias — maps to generate_video handler
     | 'generate_topics'      // autopost intake — produces 15 topic ideas
+    | 'autopost_render'      // autopost orchestrator — fresh render from a scheduled fire
+    | 'autopost_rerender'    // autopost re-render — reuses scenes, redoes audio/images/video/export
     | 'autopost_email_delivery'; // autopost delivery — email rendered video via Resend
   progress?: number;
   payload: any;

@@ -353,7 +353,23 @@ async function processJob(job: Job, signal?: AbortSignal) {
       // of running to completion past the abort.
       const patch = await dispatchJob(job, signal);
       finalPayload = { ...finalPayload, ...patch };
-    }, { jobId: job.id });
+    }, {
+      jobId: job.id,
+      // Autopost orchestrators (autopost_render / autopost_rerender)
+      // re-submit the script-gen LLM call + downstream child jobs on
+      // every pipeline attempt — three transient retries can quietly
+      // 2-3× the Hypereal/OpenRouter spend on a single user-facing run.
+      // Now that failed runs surface a manual Regen button in the UI
+      // (RunHistory.tsx performRegenerate), silent in-process retries
+      // are net-negative: more risk than recovery. Cap autopost paths
+      // at 1 attempt (no auto-retry); idempotent jobs keep the default
+      // MAX_JOB_RETRIES so genuinely-transient blips on cheap work
+      // still self-heal.
+      maxAttempts:
+        job.task_type === 'autopost_render' || job.task_type === 'autopost_rerender'
+          ? 1
+          : MAX_JOB_RETRIES,
+    });
 
     // C-7-7: if the hard-timeout fired while the handler was still
     // running (i.e. the handler resolved AFTER the abort), route to

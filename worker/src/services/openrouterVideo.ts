@@ -25,7 +25,14 @@ import { acquireOpenRouter, releaseOpenRouter } from "./openrouter.js";
 const OR_BASE = "https://openrouter.ai/api/v1";
 const OR_SUBMIT_URL = `${OR_BASE}/videos`;
 const POLL_INTERVAL_MS = 5_000;
-const DEFAULT_POLL_MAX_MS = 4 * 60 * 1000;
+// 4 min wasn't enough under OpenRouter queue depth (Seedance 1.5 Pro
+// scenes were timing out before the model even started generating).
+// 8 min absorbs the queue without blowing past CINEMATIC_VIDEO_TIMEOUT_MS
+// (45 min) — even if all 6 fallback rungs walked their full poll cap,
+// the worst-case is ~48 min vs the 45-min job timeout, and in practice
+// the chain short-circuits on the first rung that returns a real
+// success or a hard failure (only timeouts walk the cap).
+const DEFAULT_POLL_MAX_MS = 8 * 60 * 1000;
 
 export type OpenRouterVideoModel =
   | "bytedance/seedance-1-5-pro"

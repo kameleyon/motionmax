@@ -37,6 +37,10 @@ const STYLES: Array<{ id: string; label: string; preview: string; previewPng: st
   { id: 'lego',       label: 'LEGO',        preview: new URL('../../../assets/styles/lego-preview.webp',       import.meta.url).href, previewPng: new URL('../../../assets/styles/lego-preview.png',       import.meta.url).href },
   { id: 'cardboard',  label: 'Cardboard',   preview: new URL('../../../assets/styles/cardboard-preview.webp',  import.meta.url).href, previewPng: new URL('../../../assets/styles/cardboard-preview.png',  import.meta.url).href },
   { id: 'barbie',      label: 'Barbie',       preview: new URL('../../../assets/styles/barbie-preview.webp',     import.meta.url).href, previewPng: new URL('../../../assets/styles/barbie-preview.png',     import.meta.url).href },
+  // miniworld + collage ship PNG-only for now; webp variants can be added later
+  // and these `preview` URLs swapped to `.webp` without touching anything else.
+  { id: 'miniworld', label: 'Mini-world', preview: new URL('../../../assets/styles/miniworld-preview.png', import.meta.url).href, previewPng: new URL('../../../assets/styles/miniworld-preview.png', import.meta.url).href },
+  { id: 'collage',   label: 'Collage',    preview: new URL('../../../assets/styles/collage-preview.png',   import.meta.url).href, previewPng: new URL('../../../assets/styles/collage-preview.png',   import.meta.url).href },
   { id: 'custom',     label: 'Custom',      preview: new URL('../../../assets/styles/custom-preview.webp',     import.meta.url).href, previewPng: new URL('../../../assets/styles/custom-preview.png',     import.meta.url).href },
 ];
 

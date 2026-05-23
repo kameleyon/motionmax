@@ -21,6 +21,8 @@ export const STYLE_LABELS: Record<string, string> = {
   'lego':       'LEGO',
   'cardboard':  'Cardboard',
   'barbie':      'Barbie',
+  'miniworld':  'Mini-world',
+  'collage':    'Collage',
   'custom':     'Custom',
 };
 

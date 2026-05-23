@@ -1,5 +1,5 @@
 ﻿import { createScopedLogger } from "@/lib/logger";
-import { Wand2, Pencil, Users, Camera, Palette, Laugh, PenTool, Baby, ChevronLeft, ChevronRight, Upload, X, GraduationCap, Loader2, Cherry, Box, Hand, CloudMoon, Blocks, Package, Crown } from "lucide-react";
+import { Wand2, Pencil, Users, Camera, Palette, Laugh, PenTool, Baby, ChevronLeft, ChevronRight, Upload, X, GraduationCap, Loader2, Cherry, Box, Hand, CloudMoon, Blocks, Package, Crown, Microscope, Scissors } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,8 @@ import chalkboardPreview from "@/assets/styles/chalkboard-preview.webp";
 import legoPreview from "@/assets/styles/lego-preview.webp";
 import cardboardPreview from "@/assets/styles/cardboard-preview.webp";
 import barbiePreview from "@/assets/styles/barbie-preview.webp";
+import miniworldPreview from "@/assets/styles/miniworld-preview.png";
+import collagePreview from "@/assets/styles/collage-preview.png";
 import customPreview from "@/assets/styles/custom-preview.webp";
 
 /**
@@ -34,7 +36,7 @@ import customPreview from "@/assets/styles/custom-preview.webp";
  */
 const log = createScopedLogger("SmartFlowStyleSelector");
 
-export type SmartFlowStyle = "minimalist" | "doodle" | "stick" | "anime" | "realistic" | "3d" | "claymation" | "storybook" | "caricature" | "moody" | "sketch" | "crayon" | "chalkboard" | "lego" | "cardboard" | "barbie" | "custom";
+export type SmartFlowStyle = "minimalist" | "doodle" | "stick" | "anime" | "realistic" | "3d" | "claymation" | "storybook" | "caricature" | "moody" | "sketch" | "crayon" | "chalkboard" | "lego" | "cardboard" | "barbie" | "miniworld" | "collage" | "custom";
 
 interface SmartFlowStyleSelectorProps {
   selected: SmartFlowStyle;
@@ -62,6 +64,8 @@ const styles: { id: SmartFlowStyle; label: string; icon: React.ElementType; prev
   { id: "claymation", label: "Claymation", icon: Hand, preview: claymationPreview },
   { id: "crayon", label: "Crayon", icon: Baby, preview: crayonPreview },
   { id: "chalkboard", label: "Chalkboard", icon: GraduationCap, preview: chalkboardPreview },
+  { id: "miniworld", label: "Mini-world", icon: Microscope, preview: miniworldPreview },
+  { id: "collage", label: "Collage", icon: Scissors, preview: collagePreview },
   { id: "custom", label: "Custom", icon: Wand2, preview: customPreview },
 ];
 

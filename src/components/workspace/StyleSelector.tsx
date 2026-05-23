@@ -1,5 +1,5 @@
 ﻿import { createScopedLogger } from "@/lib/logger";
-import { Wand2, Pencil, Users, Cherry, Camera, Box, Hand, PenTool, Laugh, ChevronLeft, ChevronRight, Palette, Baby, CloudMoon, GraduationCap, Upload, X, Loader2, Blocks, Package, Crown } from "lucide-react";
+import { Wand2, Pencil, Users, Cherry, Camera, Box, Hand, PenTool, Laugh, ChevronLeft, ChevronRight, Palette, Baby, CloudMoon, GraduationCap, Upload, X, Loader2, Blocks, Package, Crown, Microscope, Scissors } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,8 @@ import chalkboardPreview from "@/assets/styles/chalkboard-preview.webp";
 import legoPreview from "@/assets/styles/lego-preview.webp";
 import cardboardPreview from "@/assets/styles/cardboard-preview.webp";
 import barbiePreview from "@/assets/styles/barbie-preview.webp";
+import miniworldPreview from "@/assets/styles/miniworld-preview.png";
+import collagePreview from "@/assets/styles/collage-preview.png";
 
 /**
  * Main StyleSelector used by Doc2Video, and Cinematic workspaces.
@@ -39,7 +41,7 @@ import barbiePreview from "@/assets/styles/barbie-preview.webp";
  * Note: SmartFlowStyleSelector has a different set (10 styles, includes chalkboard,
  * excludes anime/moody/3d/claymation) — see SmartFlowStyleSelector.tsx.
  */
-export type VisualStyle = "minimalist" | "doodle" | "stick" | "anime" | "realistic" | "3d" | "claymation" | "sketch" | "caricature" | "storybook" | "crayon" | "moody" | "chalkboard" | "lego" | "cardboard" | "barbie" | "custom";
+export type VisualStyle = "minimalist" | "doodle" | "stick" | "anime" | "realistic" | "3d" | "claymation" | "sketch" | "caricature" | "storybook" | "crayon" | "moody" | "chalkboard" | "lego" | "cardboard" | "barbie" | "miniworld" | "collage" | "custom";
 
 const log = createScopedLogger("StyleSelector");
 
@@ -69,6 +71,8 @@ const styles: { id: VisualStyle; label: string; icon: React.ElementType; preview
   { id: "claymation", label: "Claymation", icon: Hand, preview: claymationPreview },
   { id: "crayon", label: "Crayon", icon: Baby, preview: crayonPreview },
   { id: "chalkboard", label: "Chalkboard", icon: GraduationCap, preview: chalkboardPreview },
+  { id: "miniworld", label: "Mini-world", icon: Microscope, preview: miniworldPreview },
+  { id: "collage", label: "Collage", icon: Scissors, preview: collagePreview },
   { id: "custom", label: "Custom", icon: Wand2, preview: customPreview },
 ];
 

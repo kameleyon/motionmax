@@ -72,6 +72,8 @@ const VISUAL_STYLES: Array<{ id: string; label: string }> = [
   { id: 'lego',       label: 'LEGO' },
   { id: 'cardboard',  label: 'Cardboard' },
   { id: 'barbie',      label: 'Barbie' },
+  { id: 'miniworld',  label: 'Mini-world' },
+  { id: 'collage',    label: 'Collage' },
   { id: 'custom',     label: 'Custom' },
 ];
 

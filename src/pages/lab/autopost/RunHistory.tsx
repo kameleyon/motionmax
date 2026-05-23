@@ -223,11 +223,20 @@ export default function RunHistory() {
     queryClient.invalidateQueries({ queryKey: ["autopost", "runs"] });
   }
 
-  /** Re-render an existing autopost project keeping the same script.
-   *  Resolves projectId + generationId via the run's source video job,
-   *  then queues an `autopost_rerender` task. The worker handler will
-   *  fan out audio/image/video/finalize/export jobs against the
-   *  existing scenes (no script regeneration). */
+  /** Regenerate THIS run (works for both completed and failed runs).
+   *  Targeting is exact: resolves projectId + payload via run.video_job_id,
+   *  never via the topic_pool / queue index (so reordering the queue
+   *  can't redirect this to a different topic).
+   *
+   *  Two-path:
+   *    • Generation row exists → autopost_rerender (cheap, keeps the
+   *      script + scenes; worker fans out fresh audio/images/videos/
+   *      finalize/export).
+   *    • No generation row (early script-stage failure) → reset the
+   *      autopost_runs row + fresh autopost_render with the ORIGINAL
+   *      payload (same topic, same prompt, same resolution). The reset
+   *      is mandatory: handleAutopostRun's status-gate refuses to claim
+   *      a run that's failed/cancelled. */
   async function performRegenerate(run: RunRow) {
     if (!run.video_job_id) {
       toast.error("This run has no source job to regenerate from");
@@ -235,43 +244,84 @@ export default function RunHistory() {
     }
     setRegeneratingId(run.id);
     try {
+      // 1. Source job → exact project id + the original payload.
       const { data: srcJob, error: srcErr } = await supabase
         .from("video_generation_jobs")
         .select("project_id, payload")
         .eq("id", run.video_job_id)
         .maybeSingle();
       if (srcErr || !srcJob) throw new Error(srcErr?.message ?? "Source job not found");
+      const srcPayload = (srcJob as { payload?: Record<string, unknown> | null }).payload ?? null;
       const projectId =
         (srcJob as { project_id?: string | null }).project_id ??
-        ((srcJob as { payload?: Record<string, unknown> | null }).payload?.projectId as string | undefined);
+        (srcPayload?.projectId as string | undefined);
       if (!projectId) throw new Error("Source job is missing a project_id");
 
-      const { data: gen, error: genErr } = await supabase
+      // 2. Does a generation row exist for this project?
+      const { data: gen } = await supabase
         .from("generations")
         .select("id")
         .eq("project_id", projectId)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (genErr || !gen) throw new Error("Source generation not found for project");
-      const generationId = (gen as { id: string }).id;
 
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData.user?.id;
       if (!userId) throw new Error("Not signed in");
 
-      const { error: insertErr } = await supabase
-        .from("video_generation_jobs")
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .insert({
-          user_id: userId,
-          project_id: projectId,
-          task_type: "autopost_rerender",
-          status: "pending",
-          payload: { projectId, generationId } as never,
-        } as never);
-      if (insertErr) throw insertErr;
-      toast.success("Regeneration queued — same script, fresh visuals");
+      if (gen) {
+        // ── Re-render path: keep the script, redo the visuals ──
+        const generationId = (gen as { id: string }).id;
+        const { error: insertErr } = await supabase
+          .from("video_generation_jobs")
+          .insert({
+            user_id: userId,
+            project_id: projectId,
+            task_type: "autopost_rerender",
+            status: "pending",
+            payload: { projectId, generationId } as never,
+          } as never);
+        if (insertErr) throw insertErr;
+        toast.success("Regeneration queued — same script, fresh visuals");
+      } else {
+        // ── Fresh-render path: original run died before the
+        // generations row was inserted (e.g. script-LLM JSON parse
+        // failure). Reset the autopost_runs row so the handler's
+        // status-gate will claim it, then re-fire autopost_render
+        // with the EXACT original payload — same topic, same prompt,
+        // no topic_pool re-roll. ──
+        const { error: resetErr } = await supabase
+          .from("autopost_runs")
+          .update({
+            status: "queued",
+            progress_pct: null,
+            error_summary: null,
+            video_job_id: null,
+          } as never)
+          .eq("id", run.id);
+        if (resetErr) throw new Error(`Could not reset run: ${resetErr.message}`);
+
+        const { data: inserted, error: insertErr } = await supabase
+          .from("video_generation_jobs")
+          .insert({
+            user_id: userId,
+            project_id: projectId,
+            task_type: "autopost_render",
+            status: "pending",
+            payload: (srcPayload ?? { autopost_run_id: run.id, projectId }) as never,
+          } as never)
+          .select("id")
+          .single();
+        if (insertErr || !inserted) throw new Error(insertErr?.message ?? "Could not queue render");
+
+        await supabase
+          .from("autopost_runs")
+          .update({ video_job_id: (inserted as { id: string }).id } as never)
+          .eq("id", run.id);
+
+        toast.success("Regeneration queued — same topic, fresh script + visuals");
+      }
       queryClient.invalidateQueries({ queryKey: ["autopost", "runs"] });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not queue regeneration");
@@ -579,13 +629,15 @@ function RunListItem({
             DETAILS
           </button>
         )}
-        {isCompleted && run.video_job_id && (
+        {(isCompleted || isFailed) && run.video_job_id && (
           <button
             type="button"
             onClick={() => onRegenerate(run)}
             disabled={regenerating}
-            aria-label="Regenerate run with same script"
-            title="Regenerate (keep script, fresh audio + images + videos + export)"
+            aria-label={isFailed ? "Regenerate failed run" : "Regenerate run with same script"}
+            title={isFailed
+              ? "Regenerate this exact run — same topic, no queue re-roll"
+              : "Regenerate (keep script, fresh audio + images + videos + export)"}
           >
             <RotateCw width={13} height={13} className={regenerating ? "autopost-spin" : undefined} />
           </button>

@@ -307,47 +307,27 @@ export default function RunHistory() {
         if (insertErr) throw insertErr;
         toast.success("Regeneration queued — same script, fresh visuals");
       } else {
-        // ── Fresh-render path: original run died before children created
-        // the project (early script-LLM failure, etc.). Reset the
-        // autopost_runs row so handleAutopostRun's status-gate accepts
-        // it, then re-fire autopost_render with the ORIGINAL payload
-        // (same topic, same prompt, no topic_pool re-roll). The new
-        // orchestrator job has project_id=NULL just like the original —
-        // handleAutopostRun creates a fresh project. ──
-        const { error: resetErr } = await supabase
-          .from("autopost_runs")
-          .update({
-            status: "queued",
-            progress_pct: null,
-            error_summary: null,
-            video_job_id: null,
-          } as never)
-          .eq("id", run.id);
-        if (resetErr) throw new Error(`Could not reset run: ${resetErr.message}`);
-
-        // Make sure the payload carries autopost_run_id (defensive — it
-        // should already be there from autopost_tick).
+        // ── Fresh-render path via SECURITY DEFINER RPC.
+        // autopost_runs has SELECT/INSERT/DELETE policies for end users
+        // but NO UPDATE policy (writes are service_role-only by design).
+        // We can't do the reset directly — Supabase RLS silently denies
+        // it (returns success with 0 rows affected), the new orchestrator
+        // job runs against a still-failed run row, and handleAutopostRun's
+        // status-gate refuses to claim it. The autopost_fresh_render RPC
+        // is SECURITY DEFINER and does reset + insert + attach atomically.
         const payloadForRender: Record<string, unknown> = {
           ...(srcPayload ?? {}),
           autopost_run_id: (srcPayload?.autopost_run_id as string | undefined) ?? run.id,
         };
 
-        const { data: inserted, error: insertErr } = await supabase
-          .from("video_generation_jobs")
-          .insert({
-            user_id: userId,
-            task_type: "autopost_render",
-            status: "pending",
-            payload: payloadForRender as never,
-          } as never)
-          .select("id")
-          .single();
-        if (insertErr || !inserted) throw new Error(insertErr?.message ?? "Could not queue render");
-
-        await supabase
-          .from("autopost_runs")
-          .update({ video_job_id: (inserted as { id: string }).id } as never)
-          .eq("id", run.id);
+        const { error: rpcErr } = await (supabase.rpc as unknown as (
+          fn: string,
+          args: Record<string, unknown>,
+        ) => Promise<{ data: unknown; error: { message: string } | null }>)(
+          "autopost_fresh_render",
+          { p_run_id: run.id, p_payload: payloadForRender },
+        );
+        if (rpcErr) throw new Error(`Could not queue render: ${rpcErr.message}`);
 
         toast.success("Regeneration queued — same topic, fresh script + visuals");
       }

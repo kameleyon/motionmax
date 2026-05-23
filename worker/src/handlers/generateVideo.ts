@@ -266,10 +266,41 @@ ${researchBrief}
 
   // ── Step 3: Parse LLM response ───────────────────────────────────
   await updateJobProgress(jobId, 20);
-  let parsed = extractJsonFromLLMResponse(
-    rawText,
-    `${projectType} script`,
-  ) as ParsedScript;
+  let parsed: ParsedScript;
+  try {
+    parsed = extractJsonFromLLMResponse(
+      rawText,
+      `${projectType} script`,
+    ) as ParsedScript;
+  } catch (parseErr) {
+    // Forensics for the chronic "invalid JSON from LLM" failures
+    // (first occurrence 2026-05-12, ~9 occurrences as of 2026-05-23).
+    // The 4-stage repair in prompts.ts only logs the raw content to
+    // console — which evaporates with the dyno — leaving every prior
+    // occurrence undebuggable. Persist head + tail of the raw output
+    // to system_logs so future failures are tractable. Head/tail
+    // truncation mirrors the console.error in prompts.ts so we still
+    // see both the structural opening and any truncated-tail pattern.
+    void writeSystemLog({
+      jobId,
+      userId,
+      category: "system_error",
+      eventType: "script_json_parse_failed",
+      message: `Script JSON parse failed (${projectType}, ${payload.language ?? "en"}, ${payload.length ?? "brief"}) — raw LLM output preserved for forensics`,
+      details: {
+        projectType,
+        language: payload.language ?? null,
+        length: payload.length ?? null,
+        rawLength: rawText.length,
+        rawHead: rawText.substring(0, 1000),
+        rawTail: rawText.length > 1300 ? rawText.substring(Math.max(0, rawText.length - 300)) : null,
+        error: parseErr instanceof Error ? parseErr.message : String(parseErr),
+      },
+    }).catch((logErr) => {
+      console.warn(`[GenerateVideo] Could not persist script-parse-failure log: ${(logErr as Error).message}`);
+    });
+    throw parseErr;
+  }
 
   // ── UNIFIED TRANSFORM: works for ALL project types ──────────────
   // Gemini sometimes returns valid JSON in wrong structure (no scenes array,

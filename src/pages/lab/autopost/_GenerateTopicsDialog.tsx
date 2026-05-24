@@ -157,10 +157,25 @@ export function GenerateTopicsDialog({
       const snap = (schedule.config_snapshot ?? {}) as Record<string, unknown>;
       const language = typeof snap.language === "string" ? snap.language : "en";
 
+      // Worker-side semantic dedup needs the FULL history the user has
+      // already seen — both the pending-generation queue and the
+      // previously-skipped topics tracked in config_snapshot. Passing
+      // only the queue let "Queen of Clubs" come back after the user
+      // had already dismissed five Queen-of-Clubs phrasings. Newest
+      // entries win on collision (the queue is canonical; skipped is
+      // historical context).
+      const existingFromQueue = queue;
+      const existingFromSkipped = Array.isArray(snap.skipped_topics)
+        ? (snap.skipped_topics as string[])
+        : [];
+      const existingTopics = Array.from(
+        new Set([...existingFromQueue, ...existingFromSkipped]),
+      );
+
       const insertPayload = {
         prompt: schedule.prompt_template,
         count: TARGET_COUNT,
-        existingTopics: queue,
+        existingTopics,
         scheduleId: schedule.id,
         sources,
         language,

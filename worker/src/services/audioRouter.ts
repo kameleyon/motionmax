@@ -94,6 +94,10 @@ const NAMED_FISH_VOICES: Record<string, string> = {
   Melanie:  "31a629e0bd824f11998a9a318a6e486a", // English Female — Fish Audio s2-pro
   Tatiana:  "dd353eae87fa4b76af5e2b32659d4d42", // English Female — Fish Audio s2-pro
   Micha:    "d41e905be71f46e18715420400b6f5a5", // English Female — Fish Audio s2-pro
+  Ludovic:  "9553c35d2b514d3d901e09b8321ed921", // French Male — Fish Audio s2-pro
+  Richard:  "34e6b5d085064b7fac6195e29e894553", // French Male — Fish Audio s2-pro
+  William:  "f60e4c63306d4cef997a2a1707541dce", // French Male — Fish Audio s2-pro
+  Claudel:  "8143ff09113b48d0a75dd3fa025821e4", // French Male — Fish Audio s2-pro
 };
 
 // ── Router ─────────────────────────────────────────────────────────

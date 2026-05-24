@@ -17,6 +17,7 @@ export type SpeakerVoice =
   | "Pierre" | "Marie"
   // French (Fish Audio)
   | "Jacques" | "Camille" | "Eddy" | "Mario" | "Misko" | "Robert" | "Miriam"
+  | "Ludovic" | "Richard" | "William" | "Claudel"
   // Spanish (Fish Audio)
   | "Carlos" | "Isabella"
   // English (LemonFox / Fish Audio)
@@ -199,11 +200,15 @@ const creoleSpeakers: SpeakerOption[] = geminiFlashSpeakers;
 // model picks the accent from the narration text. Adam (English Male
 // only — LemonFox) is the single non-Gemini exception in the picker.
 const frenchSpeakers: SpeakerOption[] = [
-  { id: "Eddy",   label: "Eddy",   description: "Male · French native · Fish Audio s2-pro" },
-  { id: "Mario",  label: "Mario",  description: "Male · French native · Fish Audio s2-pro" },
-  { id: "Misko",  label: "Misko",  description: "Male · French native · Fish Audio s2-pro" },
-  { id: "Robert", label: "Robert", description: "Male · French native · Fish Audio s2-pro" },
-  { id: "Miriam", label: "Miriam", description: "Female · French native · Fish Audio s2-pro" },
+  { id: "Eddy",    label: "Eddy",    description: "Male · Youthful, bright" },
+  { id: "Mario",   label: "Mario",   description: "Male · Warm, animated" },
+  { id: "Misko",   label: "Misko",   description: "Male · Cool, modern" },
+  { id: "Robert",  label: "Robert",  description: "Male · Classic, mature" },
+  { id: "Miriam",  label: "Miriam",  description: "Female · Graceful, conversational" },
+  { id: "Ludovic", label: "Ludovic", description: "Male · Charismatic, expressive" },
+  { id: "Richard", label: "Richard", description: "Male · Authoritative, measured" },
+  { id: "William", label: "William", description: "Male · Refined, polished" },
+  { id: "Claudel", label: "Claudel", description: "Male · Dramatic, theatrical" },
   ...geminiFlashSpeakers,
 ];
 

@@ -542,7 +542,12 @@ async function _runCinematicVideo(
         resolution: "480p",
         userId: userId ?? null,
         generationId,
-        pollMaxMs: 4 * 60 * 1000,
+        // 8 min — was 4 min, but OpenRouter queue depth on Seedance 1.5
+        // Pro was timing out scenes before the model even started
+        // generating. The 8-min cap matches openrouterVideo.ts's
+        // DEFAULT_POLL_MAX_MS and still leaves headroom against the
+        // 45-min outer cinematic-video timeout (see index.ts).
+        pollMaxMs: 8 * 60 * 1000,
         onSubmitted: async ({ providerJobId, pollUrl, model }) => {
           await saveCheckpoint(jobId, checkpointKey, {
             stage: "polling", providerJobId, pollUrl, model,
@@ -577,7 +582,8 @@ async function _runCinematicVideo(
         resolution: "480p",
         userId: userId ?? null,
         generationId,
-        pollMaxMs: 4 * 60 * 1000,
+        // 8 min — see note on rung 1 above.
+        pollMaxMs: 8 * 60 * 1000,
         onSubmitted: async ({ providerJobId, pollUrl, model }) => {
           await saveCheckpoint(jobId, checkpointKey, {
             stage: "polling", providerJobId, pollUrl, model,
@@ -679,7 +685,10 @@ async function _runCinematicVideo(
         resolution: "480p",
         userId: userId ?? null,
         generationId,
-        pollMaxMs: 4 * 60 * 1000,
+        // 8 min — see note on rung 1 above. Kling O1 has historically
+        // run slower than Seedance, so this is the rung most likely to
+        // benefit from the extra headroom.
+        pollMaxMs: 8 * 60 * 1000,
         onSubmitted: async ({ providerJobId, pollUrl, model }) => {
           await saveCheckpoint(jobId, checkpointKey, {
             stage: "polling", providerJobId, pollUrl, model,

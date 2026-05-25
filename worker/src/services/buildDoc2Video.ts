@@ -18,6 +18,10 @@ import {
   buildOutputFormat,
   buildBrandSection,
 } from "./promptSections.js";
+import {
+  buildSourceGroundingDirective,
+  contentHasAttachedSources,
+} from "./sourceGroundingDirective.js";
 
 export interface Doc2VideoParams {
   content: string; format: string; length: string; style: string;
@@ -168,8 +172,21 @@ ${buildOutputFormat({
   })}`;
 
   const brandSec = buildBrandSection(p.brandMark);
-  const truncatedContent = p.content.length > 15000 ? p.content.substring(0, 15000) + "\n\n[Content truncated — focus on the key themes above]" : p.content;
-  const finalSystem = characterGuidance ? `${system}\n${characterGuidance}` : system;
+  // Raise truncation when sources are attached so the model can
+  // actually read them (otherwise the grounding directive injected
+  // below contradicts the cap). Non-source content keeps the 15K cap.
+  const hasSources = contentHasAttachedSources(p.content);
+  const contentCharCap = hasSources ? 50000 : 15000;
+  const truncatedContent = p.content.length > contentCharCap
+    ? p.content.substring(0, contentCharCap) + "\n\n[Content truncated — focus on the key themes above]"
+    : p.content;
+  let finalSystem = characterGuidance ? `${system}\n${characterGuidance}` : system;
+  // Append the source-grounding directive to the system prompt when
+  // sources are attached, so the model treats source-block facts as
+  // ground truth instead of "additional context."
+  if (hasSources) {
+    finalSystem += `\n${buildSourceGroundingDirective()}`;
+  }
 
   // Autopost: topic + previousTopics as structured fields (Autonomux
   // pattern). When present, force the LLM to treat the topic as the

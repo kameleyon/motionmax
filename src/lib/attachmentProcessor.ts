@@ -169,11 +169,32 @@ export async function processAttachmentsForPersistence(
       continue;
     }
 
-    if (a.type === "file" && /\.pdf$/i.test(a.name)) {
-      const url = await uploadPdfAttachment(a, projectId);
-      if (url) out.push({ ...a, value: url });
-      else log.warn("Dropping PDF source — upload failed", { name: a.name });
-      continue;
+    if (a.type === "file") {
+      // PDF detection: trust filename extension first (cheap, common
+      // case), then sniff browser MIME, then check %PDF- magic bytes.
+      // We do this fallback so a user who uploads a PDF without ".pdf"
+      // in the filename (rare but real — Mac downloads occasionally
+      // strip extensions, content-disposition without filename, etc.)
+      // still gets extraction instead of being silently dropped.
+      let attachmentToUpload = a;
+      let isPdf = /\.pdf$/i.test(a.name);
+      if (!isPdf) {
+        const blob = await attachmentValueToBlob(a.value);
+        if (blob && (blob.type === "application/pdf" || await blobLooksLikePdf(blob))) {
+          isPdf = true;
+          // Append `.pdf` to the stored name so uploadPdfAttachment
+          // builds a URL ending in `.pdf` — both the file path and
+          // the saved attachment name then carry the extension, which
+          // is what the worker's runtime PDF detection looks for.
+          attachmentToUpload = { ...a, name: `${a.name}.pdf` };
+        }
+      }
+      if (isPdf) {
+        const url = await uploadPdfAttachment(attachmentToUpload, projectId);
+        if (url) out.push({ ...attachmentToUpload, value: url });
+        else log.warn("Dropping PDF source — upload failed", { name: a.name });
+        continue;
+      }
     }
 
     // Binary file we can't handle (doc/docx/etc.) or text-file blob —
@@ -220,6 +241,29 @@ async function attachmentValueToBlob(value: string): Promise<Blob | null> {
     return new Blob([decodeURIComponent(payload)], { type: mime });
   }
   return null;
+}
+
+/**
+ * Sniff the first 5 bytes for the PDF magic signature (`%PDF-`,
+ * 0x25 0x50 0x44 0x46 0x2D — same check pdf-parse and every PDF
+ * reader uses). Called as a fallback when neither the filename
+ * extension nor the browser-provided MIME type identifies a file
+ * as a PDF, but we still want to catch the (rare) case of a PDF
+ * uploaded with the wrong name and no browser type.
+ *
+ * Async because Blob.arrayBuffer() is async; cheap because the
+ * blob is already in memory (resolved from a blob: or data: URL).
+ */
+async function blobLooksLikePdf(blob: Blob): Promise<boolean> {
+  if (blob.size < 5) return false;
+  const head = new Uint8Array(await blob.slice(0, 5).arrayBuffer());
+  return (
+    head[0] === 0x25 && // %
+    head[1] === 0x50 && // P
+    head[2] === 0x44 && // D
+    head[3] === 0x46 && // F
+    head[4] === 0x2D    // -
+  );
 }
 
 /**

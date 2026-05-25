@@ -19,6 +19,10 @@
 import { writeApiLog } from "../lib/logger.js";
 import { llmCostUsd } from "../lib/providerRates.js";
 import { callSearchGroundedLLM } from "./searchGroundedLLM.js";
+import {
+  buildSourceGroundingDirective,
+  contentHasAttachedSources,
+} from "./sourceGroundingDirective.js";
 
 // Built at request time with current date injected — see buildResearchPrompt()
 function buildResearchPrompt(): string {
@@ -105,17 +109,44 @@ export async function researchTopic(
     imageUrls.push(match[1]);
   }
 
-  // Truncate at 50K chars to stay well under request size limits
-  // (Gemini Pro context is 1M+ tokens but the API rejects large bodies)
-  const userText = `Research this topic for an AI-generated cinematic video. Use Google Search to pull current, factually accurate information — appearances, dates, events, rosters, releases. Cite where it matters.\n\n${content.substring(0, 50000)}`;
+  // When the user attached sources (PDFs, fetched web pages, YouTube
+  // metadata, GitHub READMEs, images), they almost certainly contain
+  // ground-truth facts the model would otherwise hallucinate around.
+  // Raise the truncation cap from 50K → 200K so a typical attached PDF
+  // survives intact (gemini-3.5-flash via OpenRouter has a 1M-token
+  // context — 200K chars fits comfortably under that). Non-source
+  // content keeps the old 50K limit to avoid bloating typical research
+  // requests for nothing.
+  const hasSources = contentHasAttachedSources(content);
+  const contentCharCap = hasSources ? 200_000 : 50_000;
+  const truncatedContent = content.substring(0, contentCharCap);
+
+  // The user-message prefix gets the directive front-loaded so the
+  // model sees "READ THE SOURCES FIRST" before it sees anything else
+  // in the turn. The same directive is appended to the system prompt
+  // below for authority; recency bias in the user slot pairs with
+  // primacy in the system slot to maximize compliance.
+  const directivePrefix = hasSources ? buildSourceGroundingDirective() + "\n\n" : "";
+  const userText = `${directivePrefix}Research this topic for an AI-generated cinematic video. Use Google Search to pull current, factually accurate information — appearances, dates, events, rosters, releases. Cite where it matters.\n\n${truncatedContent}`;
+
+  // System prompt gets the directive appended (not prepended) — the
+  // existing buildResearchPrompt opens with the date / mission framing
+  // which we don't want to bury. The directive lands at the end so
+  // recency bias inside the system slot favors it.
+  const systemPrompt = hasSources
+    ? `${buildResearchPrompt()}\n${buildSourceGroundingDirective()}`
+    : buildResearchPrompt();
 
   if (imageUrls.length > 0) {
     console.log(`[Research] Including ${imageUrls.length} attached image URL(s) for multimodal grounding`);
   }
+  if (hasSources) {
+    console.log(`[Research] Detected attached sources — grounding directive applied, content cap raised to ${contentCharCap.toLocaleString()} chars`);
+  }
 
   try {
     const result = await callSearchGroundedLLM({
-      system: buildResearchPrompt(),
+      system: systemPrompt,
       user: userText,
       imageUrls,
       temperature: 0.3,

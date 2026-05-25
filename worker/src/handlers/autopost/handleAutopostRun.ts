@@ -141,10 +141,23 @@ function buildAutopostSourcesBlock(attachments: PersistedSourceAttachment[]): st
         // PDF or text-extracted file. value is either inline text (for
         // small text files) or a Supabase public URL pointing at the
         // PDF — distinguished by whether it starts with http(s).
-        if (/^https?:\/\//i.test(a.value) && /\.pdf($|\?)/i.test(a.value)) {
-          sections.push(`[PDF_URL] ${a.value}`);
-        } else if (/^https?:\/\//i.test(a.value)) {
-          sections.push(`[FETCH_URL] ${a.value}`);
+        //
+        // PDF detection uses URL-ends-in-`.pdf` first (typical case
+        // after processAttachmentsForPersistence builds the safeName
+        // path component), with a fallback to filename-ends-in-`.pdf`
+        // for any older row or oddly-routed URL where the path lost
+        // the extension but the saved name still has it. The fallback
+        // matters because if a PDF gets routed through [FETCH_URL]
+        // instead, the worker will try to HTML-parse PDF bytes and
+        // silently return garbage (no text extraction).
+        if (/^https?:\/\//i.test(a.value)) {
+          const looksLikePdf =
+            /\.pdf($|\?)/i.test(a.value) || /\.pdf$/i.test(a.name);
+          sections.push(
+            looksLikePdf
+              ? `[PDF_URL] ${a.value}`
+              : `[FETCH_URL] ${a.value}`,
+          );
         } else {
           sections.push(`[SOURCE FILE: ${a.name}]\n${a.value}`);
         }

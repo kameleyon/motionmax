@@ -127,6 +127,84 @@ function releaseGeminiFlashSlot(): void {
   if (next) next();
 }
 
+// ── OpenRouter primary path ─────────────────────────────────────────
+//
+// Single-shot synthesize via OpenRouter's `/v1/audio/speech` endpoint
+// against `google/gemini-3.1-flash-tts-preview`. We request PCM so the
+// returned bytes are drop-in compatible with the existing
+// `pcmToWav` / chunk-concat pipeline — no decode step needed.
+//
+// Returns raw 24kHz/mono/16-bit PCM bytes on success, or an error
+// string on failure. Callers fall back to the native key-rotation
+// retry loop on any error here.
+async function _openRouterTTSSynthesize(
+  voiceoverText: string,
+  voiceName: string,
+  signal: AbortSignal | undefined,
+): Promise<{ pcm: Uint8Array | null; error?: string }> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return { pcm: null, error: "OPENROUTER_API_KEY not configured" };
+
+  const { signal: combinedSignal, cleanup } = combineSignalWithTimeout(
+    signal, PER_FETCH_TIMEOUT_MS,
+  );
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/audio/speech", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://motionmax.io",
+        "X-OpenRouter-Title": "MotionMax",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        // Full directive-prompted text. Gemini's TTS family parses the
+        // bracketed AUDIO PROFILE / DIRECTOR'S NOTES block as
+        // performance direction and only speaks what's after the
+        // `## TRANSCRIPT` marker. Whether OpenRouter's proxy preserves
+        // this Gemini-specific behavior is empirical — verify by ear
+        // on first deploy. If directives leak into the audio, switch
+        // to sending raw transcript text only.
+        input: voiceoverText,
+        voice: voiceName,
+        // CRITICAL: default is "pcm" per docs but we set it explicitly
+        // so a future docs-default change doesn't silently break the
+        // PCM concat pipeline downstream.
+        response_format: "pcm",
+      }),
+      signal: combinedSignal,
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      return {
+        pcm: null,
+        error: `OpenRouter TTS ${res.status}: ${errText.substring(0, 200)}`,
+      };
+    }
+
+    const audioBytes = new Uint8Array(await res.arrayBuffer());
+    if (audioBytes.length < 2000) {
+      return {
+        pcm: null,
+        error: `OpenRouter TTS returned short PCM (${audioBytes.length} bytes)`,
+      };
+    }
+    return { pcm: audioBytes };
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      return { pcm: null, error: "OpenRouter TTS aborted" };
+    }
+    return {
+      pcm: null,
+      error: `OpenRouter TTS network error: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  } finally {
+    cleanup();
+  }
+}
+
 // ── Storage ────────────────────────────────────────────────────────
 async function uploadAudio(
   bytes: Uint8Array,
@@ -368,6 +446,21 @@ export async function generateGeminiFlashTTSPCM(
   await acquireGeminiFlashSlot();
   const startTime = Date.now();
   try {
+    // ── OpenRouter primary path ──────────────────────────────────
+    // Single-shot through OpenRouter before touching the native
+    // key-rotation loop. Avoids the per-Google-Cloud-project access
+    // denials that took the native path offline on 2026-05-25.
+    const orResult = await _openRouterTTSSynthesize(promptText, voiceName, opts.signal);
+    if (orResult.pcm) {
+      console.log(
+        `[GeminiFlashTTS] Chunk for scene-id ${opts.sceneNumber} ✅ via OpenRouter (${orResult.pcm.length} PCM bytes)`,
+      );
+      return { pcm: orResult.pcm };
+    }
+    console.warn(
+      `[GeminiFlashTTS] Scene ${opts.sceneNumber} OpenRouter primary failed (${orResult.error}) — falling back to native key rotation`,
+    );
+
     const MAX_ATTEMPTS = 5;
     let lastError = "";
     const startOffset = Math.floor(Math.random() * apiKeys.length);
@@ -753,6 +846,38 @@ export async function generateGeminiFlashTTS(
   await acquireGeminiFlashSlot();
   const startTime = Date.now();
   try {
+    // ── OpenRouter primary path ──────────────────────────────────
+    // Single-shot through OpenRouter before touching the native
+    // key-rotation loop. Avoids the per-Google-Cloud-project access
+    // denials that took the native path offline on 2026-05-25.
+    // On success: same WAV wrap + upload + log flow as the native
+    // path, just attributed to "openrouter" in api_call_logs.
+    const orResult = await _openRouterTTSSynthesize(promptText, voiceName, opts.signal);
+    if (orResult.pcm) {
+      const wav = pcmToWav(orResult.pcm, GEMINI_PCM_SAMPLE_RATE, 1, 16);
+      const url = await uploadAudio(wav, "audio/wav", opts.projectId, opts.sceneNumber);
+      const durationSeconds = Math.max(1, orResult.pcm.length / (GEMINI_PCM_SAMPLE_RATE * 2));
+      console.log(
+        `[GeminiFlashTTS] Scene ${opts.sceneNumber} ✅ via OpenRouter voice=${voiceName} (${orResult.pcm.length} PCM bytes, ~${durationSeconds.toFixed(1)}s)`,
+      );
+      writeApiLog({
+        userId: opts.userId ?? null,
+        generationId: opts.generationId ?? null,
+        jobId: opts.jobId ?? null,
+        provider: "openrouter", model: `openrouter:${MODEL}`,
+        status: "success", totalDurationMs: Date.now() - startTime,
+        cost: ttsSecondsCostUsd("gemini_flash_tts", durationSeconds),
+        error: undefined,
+      }).catch((err) => { console.warn('[GeminiFlashTTS] background log failed:', (err as Error).message); });
+      return {
+        url, durationSeconds,
+        provider: `OpenRouter Gemini 3.1 Flash TTS (${voiceName})`,
+      };
+    }
+    console.warn(
+      `[GeminiFlashTTS] Scene ${opts.sceneNumber} OpenRouter primary failed (${orResult.error}) — falling back to native key rotation`,
+    );
+
     // Up to 5 total attempts: round-robin the available keys, with
     // backoff on 429 / 5xx per Google's docs ("Occasional text token
     // returns may trigger 500 errors — implement retry logic").

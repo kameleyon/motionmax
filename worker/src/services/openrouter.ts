@@ -100,9 +100,23 @@ export type { CinematicParams } from "./buildCinematic.js";
  * There is intentionally NO AbortController / timeout here — the worker
  * runs on Render with no execution-time cap, unlike Supabase Edge Functions.
  */
+export interface OpenRouterLLMOptions {
+  maxTokens: number;
+  model?: string;
+  forceJson?: boolean;
+  temperature?: number;
+  /** Enable OpenRouter's web search plugin (Exa-backed). Adds
+   *  `plugins: [{ id: "web" }]` to the request — works on any model. */
+  enableWebSearch?: boolean;
+  /** Optional public image URLs to fold into the user message as
+   *  OpenAI-style multimodal `image_url` parts. When omitted, the user
+   *  message is sent as a plain string (existing behavior). */
+  imageUrls?: string[];
+}
+
 export async function callOpenRouterLLM(
   prompt: { system: string; user: string },
-  options: { maxTokens: number; model?: string; forceJson?: boolean; temperature?: number },
+  options: OpenRouterLLMOptions,
 ): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
@@ -127,13 +141,27 @@ export async function callOpenRouterLLM(
 
 async function _callOpenRouterLLMInner(
   prompt: { system: string; user: string },
-  options: { maxTokens: number; model?: string; forceJson?: boolean; temperature?: number },
+  options: OpenRouterLLMOptions,
   apiKey: string,
 ): Promise<string> {
   const model = options.model || "anthropic/claude-sonnet-4.6";
   const temperature = options.temperature ?? 0.7;
   const startTime = Date.now();
-  console.log(`[OpenRouter] Calling ${model} (maxTokens=${options.maxTokens}, temp=${temperature}, forceJson=${!!options.forceJson})`);
+  const hasImages = (options.imageUrls?.length ?? 0) > 0;
+  console.log(`[OpenRouter] Calling ${model} (maxTokens=${options.maxTokens}, temp=${temperature}, forceJson=${!!options.forceJson}, webSearch=${!!options.enableWebSearch}, images=${options.imageUrls?.length ?? 0})`);
+
+  // When imageUrls are present, the user message becomes a multimodal
+  // content array (OpenAI-style). Otherwise we keep the plain-string
+  // form so existing callers' behavior is unchanged.
+  const userContent: unknown = hasImages
+    ? [
+        { type: "text", text: prompt.user },
+        ...options.imageUrls!.slice(0, 8).map((url) => ({
+          type: "image_url",
+          image_url: { url },
+        })),
+      ]
+    : prompt.user;
 
   const requestBody: Record<string, unknown> = {
     model,
@@ -141,13 +169,21 @@ async function _callOpenRouterLLMInner(
     temperature,
     messages: [
       { role: "system", content: prompt.system },
-      { role: "user", content: prompt.user },
+      { role: "user", content: userContent },
     ],
   };
 
   // Force JSON output at the API level to prevent malformed responses
   if (options.forceJson) {
     requestBody.response_format = { type: "json_object" };
+  }
+
+  // OpenRouter's `web` plugin grounds the call on Exa-powered web
+  // search. Works on any model — they prepend retrieved snippets to the
+  // conversation as system context. Use this when you'd otherwise reach
+  // for Gemini's native `googleSearch` tool.
+  if (options.enableWebSearch) {
+    requestBody.plugins = [{ id: "web" }];
   }
 
   // Scale timeout with token count: 5 min base + 1 min per 2000 tokens above 4000

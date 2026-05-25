@@ -1,8 +1,10 @@
 /**
- * AI-powered topic research using Google's native Gemini API
- * (gemini-3.1-pro-preview by default) with the `googleSearch` tool
- * enabled — so the brief is grounded on live web results rather than
- * stale training data.
+ * AI-powered topic research grounded on live web search.
+ *
+ * Primary backend: OpenRouter `google/gemini-3.5-flash` with the
+ * OpenRouter `web` plugin (Exa-powered). Falls back to native Gemini
+ * 2.5 Pro with `googleSearch` if OpenRouter errors — both arranged
+ * behind `callSearchGroundedLLM`.
  *
  * Generates a factual research brief about a topic before script
  * generation. Covers key facts, character descriptions (race, gender,
@@ -16,7 +18,7 @@
 
 import { writeApiLog } from "../lib/logger.js";
 import { llmCostUsd } from "../lib/providerRates.js";
-import { callGemini } from "./geminiNative.js";
+import { callSearchGroundedLLM } from "./searchGroundedLLM.js";
 
 // Built at request time with current date injected — see buildResearchPrompt()
 function buildResearchPrompt(): string {
@@ -112,29 +114,32 @@ export async function researchTopic(
   }
 
   try {
-    const brief = await callGemini({
+    const result = await callSearchGroundedLLM({
       system: buildResearchPrompt(),
       user: userText,
       imageUrls,
-      enableSearch: true,
       temperature: 0.3,
       maxTokens: 4000,
       timeoutMs: 90_000,
     });
+    const brief = result.text;
     const elapsed = Date.now() - startTime;
-    console.log(`[Research] Complete (${brief.length} chars, ${(elapsed / 1000).toFixed(1)}s)`);
+    console.log(`[Research] Complete via ${result.provider}/${result.model} (${brief.length} chars, ${(elapsed / 1000).toFixed(1)}s)`);
     // Approximate cost = (input chars / 4) tokens in + (output chars / 4)
-    // tokens out, priced via providerRates. callGemini doesn't surface
-    // the model's exact usage counters back to us yet — TODO: thread
-    // them through so we use the real billed token count. For now this
-    // gets us within ~10% which is what every other LLM caller does.
+    // tokens out, priced via providerRates. Neither backend surfaces the
+    // model's exact usage counters back to us yet — TODO: thread them
+    // through so we use the real billed token count. The cost key still
+    // points at the Gemini Pro rate sheet (close-enough for both the
+    // OpenRouter gemini-3.5-flash path and the native Gemini fallback;
+    // exact rates diverge but research calls are a small slice of
+    // overall spend).
     const approxInputTokens = Math.ceil((userText.length + buildResearchPrompt().length) / 4);
     const approxOutputTokens = Math.ceil(brief.length / 4);
     writeApiLog({
       userId: attribution.userId,
       generationId: attribution.generationId,
       jobId: attribution.jobId,
-      provider: "google", model: "gemini-3.1-pro-preview",
+      provider: result.provider, model: result.model,
       status: "success", totalDurationMs: elapsed,
       cost: llmCostUsd("google_gemini_pro_preview", approxInputTokens, approxOutputTokens),
       error: undefined,
@@ -146,7 +151,10 @@ export async function researchTopic(
       userId: attribution.userId,
       generationId: attribution.generationId,
       jobId: attribution.jobId,
-      provider: "google", model: "gemini-3.1-pro-preview",
+      // Both backends failed (OpenRouter primary + Gemini fallback).
+      // Log under the primary so the error attributes to where we
+      // started; the fallback's own message will appear in `error`.
+      provider: "openrouter", model: "google/gemini-3.5-flash",
       status: "error", totalDurationMs: Date.now() - startTime,
       cost: 0, error: (err as Error).message,
     }).catch((err) => { console.warn('[Research] background log failed:', (err as Error).message); });

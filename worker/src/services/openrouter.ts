@@ -100,9 +100,23 @@ export type { CinematicParams } from "./buildCinematic.js";
  * There is intentionally NO AbortController / timeout here — the worker
  * runs on Render with no execution-time cap, unlike Supabase Edge Functions.
  */
+export interface OpenRouterLLMOptions {
+  maxTokens: number;
+  model?: string;
+  forceJson?: boolean;
+  temperature?: number;
+  /** Enable OpenRouter's web search plugin (Exa-backed). Adds
+   *  `plugins: [{ id: "web" }]` to the request — works on any model. */
+  enableWebSearch?: boolean;
+  /** Optional public image URLs to fold into the user message as
+   *  OpenAI-style multimodal `image_url` parts. When omitted, the user
+   *  message is sent as a plain string (existing behavior). */
+  imageUrls?: string[];
+}
+
 export async function callOpenRouterLLM(
   prompt: { system: string; user: string },
-  options: { maxTokens: number; model?: string; forceJson?: boolean; temperature?: number },
+  options: OpenRouterLLMOptions,
 ): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
@@ -127,13 +141,27 @@ export async function callOpenRouterLLM(
 
 async function _callOpenRouterLLMInner(
   prompt: { system: string; user: string },
-  options: { maxTokens: number; model?: string; forceJson?: boolean; temperature?: number },
+  options: OpenRouterLLMOptions,
   apiKey: string,
 ): Promise<string> {
   const model = options.model || "anthropic/claude-sonnet-4.6";
   const temperature = options.temperature ?? 0.7;
   const startTime = Date.now();
-  console.log(`[OpenRouter] Calling ${model} (maxTokens=${options.maxTokens}, temp=${temperature}, forceJson=${!!options.forceJson})`);
+  const hasImages = (options.imageUrls?.length ?? 0) > 0;
+  console.log(`[OpenRouter] Calling ${model} (maxTokens=${options.maxTokens}, temp=${temperature}, forceJson=${!!options.forceJson}, webSearch=${!!options.enableWebSearch}, images=${options.imageUrls?.length ?? 0})`);
+
+  // When imageUrls are present, the user message becomes a multimodal
+  // content array (OpenAI-style). Otherwise we keep the plain-string
+  // form so existing callers' behavior is unchanged.
+  const userContent: unknown = hasImages
+    ? [
+        { type: "text", text: prompt.user },
+        ...options.imageUrls!.slice(0, 8).map((url) => ({
+          type: "image_url",
+          image_url: { url },
+        })),
+      ]
+    : prompt.user;
 
   const requestBody: Record<string, unknown> = {
     model,
@@ -141,13 +169,21 @@ async function _callOpenRouterLLMInner(
     temperature,
     messages: [
       { role: "system", content: prompt.system },
-      { role: "user", content: prompt.user },
+      { role: "user", content: userContent },
     ],
   };
 
   // Force JSON output at the API level to prevent malformed responses
   if (options.forceJson) {
     requestBody.response_format = { type: "json_object" };
+  }
+
+  // OpenRouter's `web` plugin grounds the call on Exa-powered web
+  // search. Works on any model — they prepend retrieved snippets to the
+  // conversation as system context. Use this when you'd otherwise reach
+  // for Gemini's native `googleSearch` tool.
+  if (options.enableWebSearch) {
+    requestBody.plugins = [{ id: "web" }];
   }
 
   // Scale timeout with token count: 5 min base + 1 min per 2000 tokens above 4000
@@ -174,11 +210,29 @@ async function _callOpenRouterLLMInner(
   // classifier already maps "OpenRouter API error 429" → transient
   // (TRANSIENT_PATTERNS in retryClassifier.ts).
   const MAX_429_RETRIES = 3;
+  // 2026-05-26: OpenRouter's edge sometimes returns 200 OK with an
+  // empty (or chunk-truncated) body when the upstream model times
+  // out AFTER the edge has already flushed headers. Stack trace
+  // reads as `SyntaxError: Unexpected end of JSON input` from
+  // `res.json()` — opaque, untagged, and the dispatcher's classifier
+  // doesn't match it as transient. So we now read the body as TEXT
+  // inside the loop and retry up to MAX_EMPTY_BODY_RETRIES times on
+  // empty / non-JSON 200s before falling through to a tagged error.
+  // Worst case adds 1.5-4.5s latency to a job that would otherwise
+  // have hard-failed with a credits refund.
+  const MAX_EMPTY_BODY_RETRIES = 2;
   const RETRY_AFTER_CAP_MS = 60_000;
   let res: Response | undefined;
+  let bodyText = "";
+  // Stashed when the in-loop peek-parse succeeds, so the post-loop
+  // success branch doesn't re-parse the same body. null = either no
+  // parse attempted yet (still in retry loop, not on success path)
+  // or the parse failed (post-loop tags NonJsonBody).
+  let parsedData: any = null;
   let consecutive429 = 0;
+  let consecutiveEmptyBody = 0;
   fetchLoop:
-  for (let attempt = 1; attempt <= 2 + MAX_429_RETRIES; attempt++) {
+  for (let attempt = 1; attempt <= 2 + MAX_429_RETRIES + MAX_EMPTY_BODY_RETRIES; attempt++) {
     try {
       res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
@@ -210,13 +264,72 @@ async function _callOpenRouterLLMInner(
         await new Promise((r) => setTimeout(r, waitMs));
         continue fetchLoop;
       }
-      break; // success or non-429 error to be handled below
+
+      // Read the body ONCE — needed for both the success path (parse)
+      // and the error path (status + body in the thrown message). The
+      // .catch swallows mid-read network errors and falls through to
+      // the empty-body retry below.
+      bodyText = await res.text().catch(() => "");
+
+      // Three flavors of "200 OK but useless response" all share the
+      // same upstream cause (edge flushed headers before the model
+      // produced output): empty body, non-JSON body, and JSON-with-
+      // empty-content. We retry the first and third in-call; the
+      // second (non-JSON body, usually an HTML error page) doesn't
+      // tend to recover on a quick retry so we tag-and-throw below.
+      if (res.ok && consecutiveEmptyBody < MAX_EMPTY_BODY_RETRIES) {
+        let retryReason: string | null = null;
+        if (!bodyText.trim()) {
+          retryReason = "empty body";
+        } else {
+          // Peek-parse to detect empty content without burning an
+          // extra parse later. We stash the result on `parsedData`
+          // so the post-loop success path can skip re-parsing.
+          try {
+            const peek = JSON.parse(bodyText);
+            const peekContent = peek?.choices?.[0]?.message?.content;
+            if (!peekContent || typeof peekContent !== "string" || !peekContent.trim()) {
+              retryReason = "empty content (200 OK + valid JSON, but message.content was blank)";
+              parsedData = peek; // still stash so post-loop knows parse succeeded
+            } else {
+              parsedData = peek; // happy path — non-empty content
+            }
+          } catch {
+            // Non-JSON body — DON'T retry (HTML error pages don't
+            // recover on quick retry). Fall through to post-loop
+            // NonJsonBody tagging. parsedData stays null.
+          }
+        }
+        if (retryReason) {
+          consecutiveEmptyBody++;
+          const waitMs = 1500 * consecutiveEmptyBody;
+          console.warn(
+            `[OpenRouter] 200 OK with ${retryReason} (streak=${consecutiveEmptyBody}/${MAX_EMPTY_BODY_RETRIES}, model=${model}) — ` +
+            `likely upstream timeout after headers flushed; retrying in ${Math.round(waitMs / 1000)}s`,
+          );
+          // Clear the parsed-data stash so a retry that produces a
+          // successful response doesn't accidentally short-circuit
+          // post-loop on the previous attempt's blank-content data.
+          parsedData = null;
+          await new Promise((r) => setTimeout(r, waitMs));
+          continue fetchLoop;
+        }
+      } else if (res.ok && bodyText.trim()) {
+        // Out of retries OR not on the retry path — parse once for
+        // the success branch. Failure here is handled post-loop.
+        try {
+          parsedData = JSON.parse(bodyText);
+        } catch {
+          // parsedData stays null; post-loop NonJsonBody tag fires.
+        }
+      }
+      break; // success (with non-empty body) or non-429 error to be handled below
     } catch (err: any) {
       if (err.name === "AbortError") {
         clearTimeout(timeoutId);
         throw new Error(`OpenRouter request timed out after ${Math.round(totalTimeoutMs / 1000)}s (model: ${model}, maxTokens: ${options.maxTokens})`);
       }
-      if (attempt < 2 + MAX_429_RETRIES) {
+      if (attempt < 2 + MAX_429_RETRIES + MAX_EMPTY_BODY_RETRIES) {
         console.warn(`[OpenRouter] Fetch failed (attempt ${attempt}), retrying in 3s...`);
         await new Promise(r => setTimeout(r, 3000));
         continue;
@@ -229,22 +342,50 @@ async function _callOpenRouterLLMInner(
   if (!res) throw new Error("OpenRouter fetch failed after retries");
 
   if (!res.ok) {
-    const body = await res.text();
+    // bodyText was read inside the loop above.
     // Surface 429 with explicit prefix so withTransientRetry / the
     // isTransientError classifier picks it up unambiguously even
     // through wrapped error chains. The classifier already matches
     // /\b429\b/ but a stable string prefix simplifies the operator
     // forensics in Sentry breadcrumbs.
     const tag = res.status === 429 ? "OpenRouter rate-limited (429) after retries" : `OpenRouter API error ${res.status}`;
-    const err = new Error(`${tag}: ${body}`);
+    const err = new Error(`${tag}: ${bodyText}`);
     writeApiLog({ userId: null, generationId: null, jobId: null, provider: "openrouter", model, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
     throw err;
   }
 
-  const data = (await res.json()) as any;
-  const text = data.choices?.[0]?.message?.content;
-  if (!text) {
-    const err = new Error("OpenRouter returned empty content");
+  // Body validation path — bodyText was read and (on the happy path)
+  // already parsed inside the loop, with the result stashed on
+  // `parsedData`. Three distinct failure modes are now caught and
+  // tagged so the dispatcher's classifier (retryClassifier.ts) treats
+  // them as transient even if our in-call retries exhausted.
+  if (!bodyText.trim()) {
+    const err = new Error(
+      `OpenRouterEmptyBody: 200 OK but body was empty after ${1 + MAX_EMPTY_BODY_RETRIES} attempt(s) (model=${model}) — upstream edge timeout`,
+    );
+    writeApiLog({ userId: null, generationId: null, jobId: null, provider: "openrouter", model, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
+    throw err;
+  }
+  if (parsedData === null) {
+    // Body had bytes but wasn't valid JSON. Most likely an edge HTML
+    // error page (CDN 502 page, captcha) that arrived with a 200
+    // because the edge upgraded the response. The head preview helps
+    // operators identify what came back.
+    const headPreview = bodyText.slice(0, 200).replace(/\s+/g, " ").trim();
+    const err = new Error(
+      `OpenRouterNonJsonBody: 200 OK but body was not valid JSON (${bodyText.length} chars, model=${model}, head="${headPreview}")`,
+    );
+    writeApiLog({ userId: null, generationId: null, jobId: null, provider: "openrouter", model, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
+    throw err;
+  }
+  const text = parsedData.choices?.[0]?.message?.content;
+  if (!text || typeof text !== "string" || !text.trim()) {
+    // Same root cause as the empty-body case but the upstream got far
+    // enough to emit the JSON wrapper before bailing on the actual
+    // generation. Tag with EmptyContent so the classifier retries.
+    const err = new Error(
+      `OpenRouterEmptyContent: 200 OK + valid JSON but message.content was blank after ${1 + MAX_EMPTY_BODY_RETRIES} attempt(s) (model=${model}) — upstream produced no tokens`,
+    );
     writeApiLog({ userId: null, generationId: null, jobId: null, provider: "openrouter", model, status: "error", totalDurationMs: Date.now() - startTime, cost: 0, error: err.message }).catch((err) => { console.warn('[OpenRouter] background log failed:', (err as Error).message); });
     throw err;
   }

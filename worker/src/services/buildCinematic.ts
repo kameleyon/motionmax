@@ -23,6 +23,10 @@ import {
   buildBrandSection,
 } from "./promptSections.js";
 import type { PromptResult } from "./buildDoc2Video.js";
+import {
+  buildSourceGroundingDirective,
+  contentHasAttachedSources,
+} from "./sourceGroundingDirective.js";
 
 export interface CinematicParams {
   content: string;
@@ -82,8 +86,23 @@ export function buildCinematicPrompt(p: CinematicParams): PromptResult {
   if (characterGuidance) {
     system += `\n${characterGuidance}`;
   }
-  // Truncate content to 10,000 chars to prevent API timeouts on massive inputs
-  const truncatedContent = p.content.length > 10000 ? p.content.substring(0, 10000) + "\n\n[Content truncated — focus on the key themes above]" : p.content;
+  // When the user attached sources (PDFs, fetched URLs, etc.), raise
+  // the cap from 10K → 50K so the model actually sees enough of them
+  // to ground on — otherwise the "READ THE SOURCES" directive injected
+  // below contradicts the truncation. Non-source content keeps the
+  // existing 10K cap to avoid bloating typical cinematic prompts.
+  const hasSources = contentHasAttachedSources(p.content);
+  const contentCharCap = hasSources ? 50000 : 10000;
+  const truncatedContent = p.content.length > contentCharCap
+    ? p.content.substring(0, contentCharCap) + "\n\n[Content truncated — focus on the key themes above]"
+    : p.content;
+
+  // When sources are attached, append the grounding directive to the
+  // system prompt so the model treats source-block facts as ground
+  // truth instead of "additional context."
+  if (hasSources) {
+    system += `\n${buildSourceGroundingDirective()}`;
+  }
 
   // Autopost: same Autonomux-style topic + previousTopics injection
   // as the smartflow / doc2video builders.

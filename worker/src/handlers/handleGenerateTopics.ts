@@ -35,7 +35,7 @@
  */
 
 import { writeSystemLog } from "../lib/logger.js";
-import { callGeminiWithKeyRotation } from "../services/geminiNative.js";
+import { callSearchGroundedLLM } from "../services/searchGroundedLLM.js";
 import { callOpenRouterLLM } from "../services/openrouter.js";
 import { processContentAttachments } from "../services/processAttachments.js";
 import { isTransientError } from "../lib/retryClassifier.js";
@@ -371,14 +371,13 @@ Do NOT write titles. Do NOT pitch video ideas. Just the factual brief.`;
   const RESEARCH_RETRY_DELAY_MS = 20_000;
   for (let attempt = 1; attempt <= RESEARCH_MAX_ATTEMPTS; attempt++) {
     try {
-      researchBrief = (await callGeminiWithKeyRotation({
+      researchBrief = (await callSearchGroundedLLM({
         system: researchSystem,
         user: researchUser,
-        enableSearch: true,
         temperature: 0.3, // factual mode — low variation
         maxTokens: 6_000,
         timeoutMs: RESEARCH_TIMEOUT_MS,
-      })).trim();
+      })).text.trim();
       break; // success — exit the retry loop
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

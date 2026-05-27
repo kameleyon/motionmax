@@ -10,10 +10,6 @@ import {
 } from "./prompts.js";
 import { buildLanguageSection, SEO_SECTION } from "./promptSections.js";
 import type { PromptResult } from "./buildDoc2Video.js";
-import {
-  buildSourceGroundingDirective,
-  contentHasAttachedSources,
-} from "./sourceGroundingDirective.js";
 
 export interface SmartFlowParams {
   content: string; format: string; style: string;
@@ -44,7 +40,7 @@ export function buildSmartFlowPrompt(p: SmartFlowParams): PromptResult {
 
   const languageSection = buildLanguageSection(p.language);
 
-  let system = `You are a Top tier Elite Editorial Infographic Designer and Content Creator. You excell in making content that caugth the attention regardless of the topic discussed. You have an in deepth knowledge about visual content and how to reach the target population for the topic discussed. You are highly creative, with a touch of boldness, elegant and wow-factor. Your style is dynamic, detailed with catchy, smart choices of illustration and presentation. You are modern and a lavantgarde when it comes to content presentation. You set the tone, turn head, and keep the eyes on your art generated.
+  const system = `You are a Top tier Elite Editorial Infographic Designer and Content Creator. You excell in making content that caugth the attention regardless of the topic discussed. You have an in deepth knowledge about visual content and how to reach the target population for the topic discussed. You are highly creative, with a touch of boldness, elegant and wow-factor. Your style is dynamic, detailed with catchy, smart choices of illustration and presentation. You are modern and a lavantgarde when it comes to content presentation. You set the tone, turn head, and keep the eyes on your art generated.
 ${CONTENT_COMPLIANCE_INSTRUCTION}
 Your goal is to create a modern, detailed SINGLE, MAGAZINE-QUALITY INFOGRAPHIC with rich, self-explanatory text that works as a standalone meaning WITHOUT audio narration.
 
@@ -136,21 +132,7 @@ IMPORTANT: Do NOT include any style description in visualPrompt - the system wil
 - Create magazine-editorial quality that looks professional
 - Focus on CONTENT and LAYOUT only - do NOT write style descriptions`;
 
-  // Raise truncation when user attached source materials so the model
-  // can actually read them (otherwise the grounding directive injected
-  // below contradicts the cap). Non-source content keeps the 15K cap.
-  const hasSources = contentHasAttachedSources(p.content);
-  const contentCharCap = hasSources ? 50000 : 15000;
-  const truncatedContent = p.content.length > contentCharCap
-    ? p.content.substring(0, contentCharCap) + "\n\n[Content truncated]"
-    : p.content;
-
-  // Append the source-grounding directive to the system prompt when
-  // sources are attached, so the model treats source-block facts as
-  // ground truth instead of "additional context."
-  if (hasSources) {
-    system += `\n${buildSourceGroundingDirective()}`;
-  }
+  const truncatedContent = p.content.length > 15000 ? p.content.substring(0, 15000) + "\n\n[Content truncated]" : p.content;
 
   // Autopost path: topic + previousTopics are structured fields, not
   // baked into content. Demoting `content` to "additional context"

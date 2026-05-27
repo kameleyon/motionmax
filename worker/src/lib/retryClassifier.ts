@@ -81,25 +81,6 @@ const TRANSIENT_PATTERNS: RegExp[] = [
   // isn't otherwise classified; HyperealNonJsonError thrown by the
   // hypereal service makes this a recognized transient infra issue.
   /HyperealNonJsonError/i,
-
-  // OpenRouter equivalent of HyperealNonJsonError. Same root cause —
-  // edge returned 200 + headers, then upstream model timed out or
-  // edge returned an HTML error page that arrived with a 200.
-  // Three failure-mode tags emitted by services/openrouter.ts:
-  //   • OpenRouterEmptyBody    — 200 OK with truly empty body
-  //                              (raw stack: `Unexpected end of JSON input`).
-  //   • OpenRouterNonJsonBody  — 200 OK with non-JSON bytes
-  //                              (HTML error page from the edge).
-  //   • OpenRouterEmptyContent — 200 OK + valid JSON but
-  //                              `message.content` was blank
-  //                              (upstream model produced no tokens
-  //                              before timing out).
-  // All three are tagged after the in-call retry loop exhausts;
-  // classifier-level retry here is the second line of defense for
-  // transient edge weirdness.
-  /OpenRouterEmptyBody/i,
-  /OpenRouterNonJsonBody/i,
-  /OpenRouterEmptyContent/i,
 ];
 
 /**

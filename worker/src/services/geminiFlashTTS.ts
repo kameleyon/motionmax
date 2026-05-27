@@ -127,84 +127,6 @@ function releaseGeminiFlashSlot(): void {
   if (next) next();
 }
 
-// ── OpenRouter primary path ─────────────────────────────────────────
-//
-// Single-shot synthesize via OpenRouter's `/v1/audio/speech` endpoint
-// against `google/gemini-3.1-flash-tts-preview`. We request PCM so the
-// returned bytes are drop-in compatible with the existing
-// `pcmToWav` / chunk-concat pipeline — no decode step needed.
-//
-// Returns raw 24kHz/mono/16-bit PCM bytes on success, or an error
-// string on failure. Callers fall back to the native key-rotation
-// retry loop on any error here.
-async function _openRouterTTSSynthesize(
-  voiceoverText: string,
-  voiceName: string,
-  signal: AbortSignal | undefined,
-): Promise<{ pcm: Uint8Array | null; error?: string }> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) return { pcm: null, error: "OPENROUTER_API_KEY not configured" };
-
-  const { signal: combinedSignal, cleanup } = combineSignalWithTimeout(
-    signal, PER_FETCH_TIMEOUT_MS,
-  );
-  try {
-    const res = await fetch("https://openrouter.ai/api/v1/audio/speech", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://motionmax.io",
-        "X-OpenRouter-Title": "MotionMax",
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        // Full directive-prompted text. Gemini's TTS family parses the
-        // bracketed AUDIO PROFILE / DIRECTOR'S NOTES block as
-        // performance direction and only speaks what's after the
-        // `## TRANSCRIPT` marker. Whether OpenRouter's proxy preserves
-        // this Gemini-specific behavior is empirical — verify by ear
-        // on first deploy. If directives leak into the audio, switch
-        // to sending raw transcript text only.
-        input: voiceoverText,
-        voice: voiceName,
-        // CRITICAL: default is "pcm" per docs but we set it explicitly
-        // so a future docs-default change doesn't silently break the
-        // PCM concat pipeline downstream.
-        response_format: "pcm",
-      }),
-      signal: combinedSignal,
-    });
-
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      return {
-        pcm: null,
-        error: `OpenRouter TTS ${res.status}: ${errText.substring(0, 200)}`,
-      };
-    }
-
-    const audioBytes = new Uint8Array(await res.arrayBuffer());
-    if (audioBytes.length < 2000) {
-      return {
-        pcm: null,
-        error: `OpenRouter TTS returned short PCM (${audioBytes.length} bytes)`,
-      };
-    }
-    return { pcm: audioBytes };
-  } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") {
-      return { pcm: null, error: "OpenRouter TTS aborted" };
-    }
-    return {
-      pcm: null,
-      error: `OpenRouter TTS network error: ${err instanceof Error ? err.message : String(err)}`,
-    };
-  } finally {
-    cleanup();
-  }
-}
-
 // ── Storage ────────────────────────────────────────────────────────
 async function uploadAudio(
   bytes: Uint8Array,
@@ -446,21 +368,6 @@ export async function generateGeminiFlashTTSPCM(
   await acquireGeminiFlashSlot();
   const startTime = Date.now();
   try {
-    // ── OpenRouter primary path ──────────────────────────────────
-    // Single-shot through OpenRouter before touching the native
-    // key-rotation loop. Avoids the per-Google-Cloud-project access
-    // denials that took the native path offline on 2026-05-25.
-    const orResult = await _openRouterTTSSynthesize(promptText, voiceName, opts.signal);
-    if (orResult.pcm) {
-      console.log(
-        `[GeminiFlashTTS] Chunk for scene-id ${opts.sceneNumber} ✅ via OpenRouter (${orResult.pcm.length} PCM bytes)`,
-      );
-      return { pcm: orResult.pcm };
-    }
-    console.warn(
-      `[GeminiFlashTTS] Scene ${opts.sceneNumber} OpenRouter primary failed (${orResult.error}) — falling back to native key rotation`,
-    );
-
     const MAX_ATTEMPTS = 5;
     let lastError = "";
     const startOffset = Math.floor(Math.random() * apiKeys.length);
@@ -647,36 +554,23 @@ export async function generateGeminiFlashTTSChunked(
   let nextIdx = 0;
   let firstError: string | null = null;
 
-  // Output-bounds guard: a chunk's audio length must fall within a
-  // sane band around the expected duration computed from char count
-  // at the 165 WPM pacing anchor. A 500-char chunk expects ~36s of
-  // audio.
+  // Runaway-output guard: Gemini TTS occasionally pads chunks with
+  // silence or hallucinated extensions, producing audio MUCH longer
+  // than the input text warrants. The merged master then ends up with
+  // dead air or extra speech glued in at chunk boundaries.
   //
-  // UPPER bound (RUNAWAY_MULTIPLIER × expected): native Gemini
-  // occasionally pads chunks with silence or hallucinated extensions,
-  // bloating the merged master with dead air or extra speech glued in
-  // at boundaries. 2× allows natural prosody slack while still
-  // catching the worst padding cases. (Previously 3× — legitimate-
-  // looking pads at ~2.4× still leaked through and pushed master
-  // totals 35-40% over budget.)
-  //
-  // LOWER bound (MIN_OUTPUT_RATIO × expected): the OpenRouter TTS
-  // endpoint (primary backend as of 2026-05-25) has a distinct
-  // failure mode where the edge returns 200 OK + partial audio bytes
-  // when the upstream model times out mid-generation. Symptom for
-  // the user: master audio plays with sentences/words missing because
-  // chunk N got cut mid-sentence and chunk N+1 picks up at completely
-  // different content. Treat any chunk that came back significantly
-  // shorter than expected as a transient truncation and retry on the
-  // same prompt — this is the audio-bytes analog of the
-  // OpenRouterEmptyContent / EmptyBody fixes in services/openrouter.ts
-  // for chat completions. 50% floor catches the bad cases without
-  // false-positiving on legitimately fast reads.
+  // We compute the expected chunk duration from char count at the
+  // 165 WPM pacing anchor and reject anything more than `RUNAWAY_MULTIPLIER`
+  // times that. A 500-char chunk expects ~36s of audio; 2× allows for
+  // some natural prosody slack (slow phrases, emphasis) up to ~72s
+  // while still catching the worst padding cases. We previously ran
+  // this at 3× but legitimate-looking padded chunks (~2.4× expected)
+  // still leaked through and pushed master totals 35-40% over budget;
+  // 2× is the sweet spot in observed real-world ranges.
   const BYTES_PER_SECOND = GEMINI_PCM_SAMPLE_RATE * 2; // 24kHz × 16-bit mono = 48,000
   const WORDS_PER_MINUTE = 165;
   const AVG_CHARS_PER_WORD = 5;
-  const RUNAWAY_MULTIPLIER = 2;     // chunk audio > 2× expected → drop & retry
-  const MIN_OUTPUT_RATIO = 0.5;     // chunk audio < 0.5× expected → drop & retry
+  const RUNAWAY_MULTIPLIER = 2; // chunk audio >2× expected → drop & retry
   function expectedSecondsForChars(charCount: number): number {
     return (charCount / AVG_CHARS_PER_WORD / WORDS_PER_MINUTE) * 60;
   }
@@ -688,9 +582,7 @@ export async function generateGeminiFlashTTSChunked(
   ): Promise<{ pcm: Uint8Array | null; error?: string }> {
     const expectedSec = expectedSecondsForChars(chunkText.length);
     const maxAcceptableBytes = Math.ceil(expectedSec * RUNAWAY_MULTIPLIER * BYTES_PER_SECOND);
-    const minAcceptableBytes = Math.floor(expectedSec * MIN_OUTPUT_RATIO * BYTES_PER_SECOND);
     const MAX_RUNAWAY_RETRIES = 2;
-    let lastFailure: "runaway" | "truncated" | null = null;
 
     for (let attempt = 0; attempt <= MAX_RUNAWAY_RETRIES; attempt++) {
       const result = await generateGeminiFlashTTSPCM({
@@ -701,51 +593,27 @@ export async function generateGeminiFlashTTSChunked(
       });
       if (!result.pcm) return result;
 
+      // Sanity check on output length. < ~80% expected isn't worth
+      // retrying (model may have skipped padding) — only the runaway
+      // upper bound is the real failure mode here.
+      if (result.pcm.length <= maxAcceptableBytes) {
+        if (attempt > 0) {
+          console.log(`[GeminiFlashTTS] Chunk ${chunkIdx + 1} recovered on attempt ${attempt + 1} (${result.pcm.length} bytes vs cap ${maxAcceptableBytes})`);
+        }
+        return result;
+      }
+
       const actualSec = result.pcm.length / BYTES_PER_SECOND;
-
-      // Truncated output — most often OpenRouter-edge upstream timeout
-      // returning a partial PCM stream. The user hears the chunk cut
-      // off and the next chunk starts at unrelated content, producing
-      // the "missing words / sentences" symptom on master audio.
-      if (result.pcm.length < minAcceptableBytes) {
-        lastFailure = "truncated";
-        console.warn(
-          `[GeminiFlashTTS] Chunk ${chunkIdx + 1} truncated output: ${result.pcm.length} bytes ` +
-          `(~${actualSec.toFixed(1)}s) for ${chunkText.length}-char input ` +
-          `(expected ~${expectedSec.toFixed(0)}s; floor ~${(expectedSec * MIN_OUTPUT_RATIO).toFixed(0)}s). ` +
-          `${attempt < MAX_RUNAWAY_RETRIES ? `Retrying (${attempt + 1}/${MAX_RUNAWAY_RETRIES})` : "Out of retries"}.`,
-        );
-        continue;
-      }
-
-      // Runaway padding — native Gemini occasionally generates audio
-      // far longer than the text warrants.
-      if (result.pcm.length > maxAcceptableBytes) {
-        lastFailure = "runaway";
-        console.warn(
-          `[GeminiFlashTTS] Chunk ${chunkIdx + 1} runaway output: ${result.pcm.length} bytes ` +
-          `(~${actualSec.toFixed(0)}s) for ${chunkText.length}-char input ` +
-          `(expected ~${expectedSec.toFixed(0)}s; cap ~${(expectedSec * RUNAWAY_MULTIPLIER).toFixed(0)}s). ` +
-          `${attempt < MAX_RUNAWAY_RETRIES ? `Retrying (${attempt + 1}/${MAX_RUNAWAY_RETRIES})` : "Out of retries"}.`,
-        );
-        continue;
-      }
-
-      // In-band output.
-      if (attempt > 0) {
-        console.log(
-          `[GeminiFlashTTS] Chunk ${chunkIdx + 1} recovered on attempt ${attempt + 1} ` +
-          `(${result.pcm.length} bytes vs band [${minAcceptableBytes}, ${maxAcceptableBytes}])`,
-        );
-      }
-      return result;
+      console.warn(
+        `[GeminiFlashTTS] Chunk ${chunkIdx + 1} runaway output: ${result.pcm.length} bytes ` +
+        `(~${actualSec.toFixed(0)}s) for ${chunkText.length}-char input ` +
+        `(expected ~${expectedSec.toFixed(0)}s; cap ~${(expectedSec * RUNAWAY_MULTIPLIER).toFixed(0)}s). ` +
+        `${attempt < MAX_RUNAWAY_RETRIES ? `Retrying (${attempt + 1}/${MAX_RUNAWAY_RETRIES})` : "Out of retries"}.`,
+      );
     }
-    const reasonText = lastFailure === "truncated"
-      ? `kept producing truncated output (<${(MIN_OUTPUT_RATIO * 100).toFixed(0)}% expected duration — likely OpenRouter upstream truncation)`
-      : `kept producing runaway output (>${RUNAWAY_MULTIPLIER}× expected duration)`;
     return {
       pcm: null,
-      error: `Chunk ${chunkIdx + 1} ${reasonText} across ${MAX_RUNAWAY_RETRIES + 1} attempts`,
+      error: `Chunk ${chunkIdx + 1} kept producing runaway output (>${RUNAWAY_MULTIPLIER}× expected duration) across ${MAX_RUNAWAY_RETRIES + 1} attempts`,
     };
   }
 
@@ -885,62 +753,6 @@ export async function generateGeminiFlashTTS(
   await acquireGeminiFlashSlot();
   const startTime = Date.now();
   try {
-    // ── OpenRouter primary path ──────────────────────────────────
-    // Single-shot through OpenRouter before touching the native
-    // key-rotation loop. Avoids the per-Google-Cloud-project access
-    // denials that took the native path offline on 2026-05-25.
-    // On success: same WAV wrap + upload + log flow as the native
-    // path, just attributed to "openrouter" in api_call_logs.
-    //
-    // Truncation floor: OpenRouter's edge sometimes returns 200 OK
-    // with a partial PCM stream when the upstream model times out
-    // mid-generation. For per-scene audio that produces a scene
-    // narration that stops mid-sentence. We compute the expected
-    // duration from TRANSCRIPT length (not promptText — that includes
-    // the directive block which Gemini reads but doesn't speak) and
-    // reject anything under 50% of expected, falling through to the
-    // native key-rotation loop below as if OpenRouter had errored.
-    // 50% is the same floor used by the chunked master-audio path.
-    const orResult = await _openRouterTTSSynthesize(promptText, voiceName, opts.signal);
-    if (orResult.pcm) {
-      const expectedSec = (text.length / 5 / 165) * 60; // 165 WPM × 5 chars/word
-      const minBytes = Math.floor(expectedSec * 0.5 * GEMINI_PCM_SAMPLE_RATE * 2);
-      if (orResult.pcm.length < minBytes) {
-        const actualSec = orResult.pcm.length / (GEMINI_PCM_SAMPLE_RATE * 2);
-        console.warn(
-          `[GeminiFlashTTS] Scene ${opts.sceneNumber} OpenRouter returned truncated audio: ` +
-          `${orResult.pcm.length} bytes (~${actualSec.toFixed(1)}s) for ${text.length}-char transcript ` +
-          `(expected ~${expectedSec.toFixed(0)}s; floor ~${(expectedSec * 0.5).toFixed(0)}s) — ` +
-          `falling back to native key rotation to avoid publishing cut audio`,
-        );
-        // Fall through to native — DO NOT return the truncated PCM.
-      } else {
-        const wav = pcmToWav(orResult.pcm, GEMINI_PCM_SAMPLE_RATE, 1, 16);
-        const url = await uploadAudio(wav, "audio/wav", opts.projectId, opts.sceneNumber);
-        const durationSeconds = Math.max(1, orResult.pcm.length / (GEMINI_PCM_SAMPLE_RATE * 2));
-        console.log(
-          `[GeminiFlashTTS] Scene ${opts.sceneNumber} ✅ via OpenRouter voice=${voiceName} (${orResult.pcm.length} PCM bytes, ~${durationSeconds.toFixed(1)}s)`,
-        );
-        writeApiLog({
-          userId: opts.userId ?? null,
-          generationId: opts.generationId ?? null,
-          jobId: opts.jobId ?? null,
-          provider: "openrouter", model: `openrouter:${MODEL}`,
-          status: "success", totalDurationMs: Date.now() - startTime,
-          cost: ttsSecondsCostUsd("gemini_flash_tts", durationSeconds),
-          error: undefined,
-        }).catch((err) => { console.warn('[GeminiFlashTTS] background log failed:', (err as Error).message); });
-        return {
-          url, durationSeconds,
-          provider: `OpenRouter Gemini 3.1 Flash TTS (${voiceName})`,
-        };
-      }
-    } else {
-      console.warn(
-        `[GeminiFlashTTS] Scene ${opts.sceneNumber} OpenRouter primary failed (${orResult.error}) — falling back to native key rotation`,
-      );
-    }
-
     // Up to 5 total attempts: round-robin the available keys, with
     // backoff on 429 / 5xx per Google's docs ("Occasional text token
     // returns may trigger 500 errors — implement retry logic").

@@ -76,6 +76,7 @@ vi.mock("../lib/featureFlags.js", () => ({
 // Default: all return success. Individual tests override these to
 // simulate failure modes.
 vi.mock("../services/hypereal.js", () => ({
+  generateSeedance2I2V: vi.fn().mockResolvedValue({ jobId: "hy-seedance-1" }),
   generateKlingV3ProI2V: vi.fn().mockResolvedValue({ jobId: "hy-kling-1" }),
   generateKlingV3ProVideo: vi.fn().mockResolvedValue("https://hypereal.test/clip.mp4"),
   pollHyperealJob: vi.fn().mockResolvedValue({
@@ -173,13 +174,14 @@ describe("handleCinematicVideo", () => {
     it("does NOT submit to Hypereal when kill-switch trips", async () => {
       isKillSwitchArmedMock.mockResolvedValue(true);
 
-      const { generateKlingV3ProI2V } = await import("../services/hypereal.js");
+      const { generateSeedance2I2V, generateKlingV3ProI2V } = await import("../services/hypereal.js");
       const { handleCinematicVideo } = await import("./handleCinematicVideo.js");
 
       await expect(
         handleCinematicVideo("job-2", makePayload(), "user-2"),
       ).rejects.toThrow();
 
+      expect(generateSeedance2I2V).not.toHaveBeenCalled();
       expect(generateKlingV3ProI2V).not.toHaveBeenCalled();
     });
   });

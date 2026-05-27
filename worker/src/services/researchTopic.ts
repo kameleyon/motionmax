@@ -1,10 +1,8 @@
 /**
- * AI-powered topic research grounded on live web search.
- *
- * Primary backend: OpenRouter `google/gemini-3.5-flash` with the
- * OpenRouter `web` plugin (Exa-powered). Falls back to native Gemini
- * 2.5 Pro with `googleSearch` if OpenRouter errors — both arranged
- * behind `callSearchGroundedLLM`.
+ * AI-powered topic research using Google's native Gemini API
+ * (gemini-3.1-pro-preview by default) with the `googleSearch` tool
+ * enabled — so the brief is grounded on live web results rather than
+ * stale training data.
  *
  * Generates a factual research brief about a topic before script
  * generation. Covers key facts, character descriptions (race, gender,
@@ -18,11 +16,7 @@
 
 import { writeApiLog } from "../lib/logger.js";
 import { llmCostUsd } from "../lib/providerRates.js";
-import { callSearchGroundedLLM } from "./searchGroundedLLM.js";
-import {
-  buildSourceGroundingDirective,
-  contentHasAttachedSources,
-} from "./sourceGroundingDirective.js";
+import { callGemini } from "./geminiNative.js";
 
 // Built at request time with current date injected — see buildResearchPrompt()
 function buildResearchPrompt(): string {
@@ -109,68 +103,38 @@ export async function researchTopic(
     imageUrls.push(match[1]);
   }
 
-  // When the user attached sources (PDFs, fetched web pages, YouTube
-  // metadata, GitHub READMEs, images), they almost certainly contain
-  // ground-truth facts the model would otherwise hallucinate around.
-  // Raise the truncation cap from 50K → 200K so a typical attached PDF
-  // survives intact (gemini-3.5-flash via OpenRouter has a 1M-token
-  // context — 200K chars fits comfortably under that). Non-source
-  // content keeps the old 50K limit to avoid bloating typical research
-  // requests for nothing.
-  const hasSources = contentHasAttachedSources(content);
-  const contentCharCap = hasSources ? 200_000 : 50_000;
-  const truncatedContent = content.substring(0, contentCharCap);
-
-  // The user-message prefix gets the directive front-loaded so the
-  // model sees "READ THE SOURCES FIRST" before it sees anything else
-  // in the turn. The same directive is appended to the system prompt
-  // below for authority; recency bias in the user slot pairs with
-  // primacy in the system slot to maximize compliance.
-  const directivePrefix = hasSources ? buildSourceGroundingDirective() + "\n\n" : "";
-  const userText = `${directivePrefix}Research this topic for an AI-generated cinematic video. Use Google Search to pull current, factually accurate information — appearances, dates, events, rosters, releases. Cite where it matters.\n\n${truncatedContent}`;
-
-  // System prompt gets the directive appended (not prepended) — the
-  // existing buildResearchPrompt opens with the date / mission framing
-  // which we don't want to bury. The directive lands at the end so
-  // recency bias inside the system slot favors it.
-  const systemPrompt = hasSources
-    ? `${buildResearchPrompt()}\n${buildSourceGroundingDirective()}`
-    : buildResearchPrompt();
+  // Truncate at 50K chars to stay well under request size limits
+  // (Gemini Pro context is 1M+ tokens but the API rejects large bodies)
+  const userText = `Research this topic for an AI-generated cinematic video. Use Google Search to pull current, factually accurate information — appearances, dates, events, rosters, releases. Cite where it matters.\n\n${content.substring(0, 50000)}`;
 
   if (imageUrls.length > 0) {
     console.log(`[Research] Including ${imageUrls.length} attached image URL(s) for multimodal grounding`);
   }
-  if (hasSources) {
-    console.log(`[Research] Detected attached sources — grounding directive applied, content cap raised to ${contentCharCap.toLocaleString()} chars`);
-  }
 
   try {
-    const result = await callSearchGroundedLLM({
-      system: systemPrompt,
+    const brief = await callGemini({
+      system: buildResearchPrompt(),
       user: userText,
       imageUrls,
+      enableSearch: true,
       temperature: 0.3,
       maxTokens: 4000,
       timeoutMs: 90_000,
     });
-    const brief = result.text;
     const elapsed = Date.now() - startTime;
-    console.log(`[Research] Complete via ${result.provider}/${result.model} (${brief.length} chars, ${(elapsed / 1000).toFixed(1)}s)`);
+    console.log(`[Research] Complete (${brief.length} chars, ${(elapsed / 1000).toFixed(1)}s)`);
     // Approximate cost = (input chars / 4) tokens in + (output chars / 4)
-    // tokens out, priced via providerRates. Neither backend surfaces the
-    // model's exact usage counters back to us yet — TODO: thread them
-    // through so we use the real billed token count. The cost key still
-    // points at the Gemini Pro rate sheet (close-enough for both the
-    // OpenRouter gemini-3.5-flash path and the native Gemini fallback;
-    // exact rates diverge but research calls are a small slice of
-    // overall spend).
+    // tokens out, priced via providerRates. callGemini doesn't surface
+    // the model's exact usage counters back to us yet — TODO: thread
+    // them through so we use the real billed token count. For now this
+    // gets us within ~10% which is what every other LLM caller does.
     const approxInputTokens = Math.ceil((userText.length + buildResearchPrompt().length) / 4);
     const approxOutputTokens = Math.ceil(brief.length / 4);
     writeApiLog({
       userId: attribution.userId,
       generationId: attribution.generationId,
       jobId: attribution.jobId,
-      provider: result.provider, model: result.model,
+      provider: "google", model: "gemini-3.1-pro-preview",
       status: "success", totalDurationMs: elapsed,
       cost: llmCostUsd("google_gemini_pro_preview", approxInputTokens, approxOutputTokens),
       error: undefined,
@@ -182,10 +146,7 @@ export async function researchTopic(
       userId: attribution.userId,
       generationId: attribution.generationId,
       jobId: attribution.jobId,
-      // Both backends failed (OpenRouter primary + Gemini fallback).
-      // Log under the primary so the error attributes to where we
-      // started; the fallback's own message will appear in `error`.
-      provider: "openrouter", model: "google/gemini-3.5-flash",
+      provider: "google", model: "gemini-3.1-pro-preview",
       status: "error", totalDurationMs: Date.now() - startTime,
       cost: 0, error: (err as Error).message,
     }).catch((err) => { console.warn('[Research] background log failed:', (err as Error).message); });

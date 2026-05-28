@@ -663,11 +663,17 @@ async function _runCinematicVideo(
         provider = "OpenRouter Kling Video O1 @ 480p";
       } else {
         // OR Kling O1 is the terminal rung after the 2026-05-28 removal
-        // of the Hypereal Kling V3 Pro rung. With no further fallback,
-        // the empty videoUrl propagates to the outer catch which routes
-        // the scene to held-frame.
+        // of the Hypereal Kling V3 Pro rung. A non-thrown null videoUrl
+        // here means "all 4 rungs are out" — emit the kept-stable
+        // fallback log so Loki/Sentry queries still see it, then THROW
+        // with the [TERMINAL_RUNG_FAILED] tag. The outer catch
+        // recognises the tag and routes the scene to held-frame (same
+        // outcome moderation rejection already takes), so we don't
+        // need to duplicate the held-frame block here. Throwing keeps
+        // the "fell off the end with null videoUrl" defensive guard
+        // (line ~794) honest — it never has to trigger from this rung.
         console.warn(
-          `[CinematicVideo] Scene ${sceneIndex}: OpenRouter Kling O1 failed (terminal rung) — scene will fall back to held-frame: ${(orKlingRes.error ?? "").slice(0, 200)}`,
+          `[CinematicVideo] Scene ${sceneIndex}: OpenRouter Kling O1 failed (terminal rung) — routing to held-frame: ${(orKlingRes.error ?? "").slice(0, 200)}`,
         );
         await writeSystemLog({
           jobId, projectId, userId, generationId,
@@ -679,6 +685,9 @@ async function _runCinematicVideo(
           message: `Scene ${sceneIndex}: all 4 rungs failed — falling back to held-frame`,
           details: { sceneIndex },
         });
+        throw new Error(
+          `[TERMINAL_RUNG_FAILED] OpenRouter Kling O1: ${orKlingRes.error ?? "no error message"}`,
+        );
       }
     }
   } catch (err) {
@@ -711,22 +720,37 @@ async function _runCinematicVideo(
     // wording but the outer catch (this regex) didn't recognise it
     // — it must match the same patterns the inner catch uses
     // (commit 2e377bb).
+    //
+    // [TERMINAL_RUNG_FAILED] (added 2026-05-28) is thrown by the
+    // rung 4 (OR Kling O1) failure branch when ALL chain rungs are
+    // out. Treated identically to a moderation reject — held-frame
+    // is the right outcome regardless of WHY the terminal rung
+    // refused, because there is no further fallback to try. Without
+    // this, non-moderation errors at the terminal rung (e.g. prompt
+    // size 400, transient 5xx after retries) would bubble out and
+    // fail the entire scene/job instead of degrading to a still.
     const isModerationReject = /risk control|content[_ ]?violation|blocked.*content|moderation|potentially sensitive|flagged.*sensitive/i.test(errMsg);
-    if (!isModerationReject) {
+    const isTerminalRungFailed = errMsg.startsWith("[TERMINAL_RUNG_FAILED]");
+    if (!isModerationReject && !isTerminalRungFailed) {
       throw err;
     }
-    heldFrameReason = `Provider moderation rejected scene ${sceneIndex}; held still image as frame`;
+    heldFrameReason = isTerminalRungFailed
+      ? `All 4 provider rungs failed for scene ${sceneIndex}; held still image as frame`
+      : `Provider moderation rejected scene ${sceneIndex}; held still image as frame`;
     console.warn(`[CinematicVideo] Scene ${sceneIndex}: ${heldFrameReason} — ${errMsg}`);
+    const heldFrameProviderChain = "or-seedance-1-5-pro + or-seedance-2-0-fast + atlascloud + or-kling-o1 chain";
+    const heldFrameCause = isTerminalRungFailed ? "all rungs failed" : "provider moderation rejected";
     await writeSystemLog({
       jobId, projectId, userId, generationId,
       category: "system_warning",
       eventType: "cinematic_video_held_frame_fallback",
-      message: `Scene ${sceneIndex}: provider moderation rejected — using still image as held frame`,
+      message: `Scene ${sceneIndex}: ${heldFrameCause} — using still image as held frame`,
       details: {
         sceneIndex,
-        provider: "or-seedance-1-5-pro + or-seedance-2-0-fast + atlascloud + hypereal-seedance + or-kling-o1 + hypereal-kling-v3-pro chain",
+        provider: heldFrameProviderChain,
         reason: errMsg,
         fallback: "hold_frame",
+        cause: isTerminalRungFailed ? "terminal_rung_failed" : "moderation_reject",
       },
     });
 
@@ -743,7 +767,8 @@ async function _runCinematicVideo(
         : {};
       meta.heldFrame = {
         reason: errMsg.slice(0, 240),
-        provider: "or-seedance-1-5-pro + or-seedance-2-0-fast + atlascloud + hypereal-seedance + or-kling-o1 + hypereal-kling-v3-pro chain",
+        provider: heldFrameProviderChain,
+        cause: isTerminalRungFailed ? "terminal_rung_failed" : "moderation_reject",
         at: new Date().toISOString(),
       };
       freshScenes2[sceneIndex] = { ...freshScenes2[sceneIndex], videoUrl: null, _meta: meta };
@@ -754,7 +779,7 @@ async function _runCinematicVideo(
       jobId, projectId, userId, generationId,
       category: "system_warning",
       eventType: "cinematic_video_completed",
-      message: `Cinematic video for scene ${sceneIndex} held as still frame (Kling moderation)`,
+      message: `Cinematic video for scene ${sceneIndex} held as still frame (${heldFrameCause})`,
       details: { provider, hasTransition: !!endImageUrl, cost: 0, fallback: "hold_frame", reason: errMsg },
     });
 

@@ -31,13 +31,14 @@ import {
   // generateVeo31Video,          // Veo 3.1 — doesn't follow prompts, generates unwanted audio/lip sync
   // generateKlingV26Video,       // Kling V2.6 Pro — retired, superseded by V3.0 Pro
   // generateKlingV3ProI2V,        // Newer variant — silently drops end_image. Replaced by V3ProVideo (older, simpler, end_image confirmed working at commit 38aeb4d).
-  generateKlingV3ProVideo,        // Only fallback — Kling V3.0 Pro on Hypereal. Single `end_image` field, durations [5, 10] only.
+  // generateKlingV3ProVideo,     // Removed 2026-05-28 — Hypereal Kling V3 Pro dropped from the cinematic fallback chain.
   // generateGrokVideo,           // Grok Video I2V — status-lookup failures on Hypereal, rolled back
   pollHyperealJob,                // Resume-from-checkpoint poll for an already-submitted Hypereal job.
 } from "../services/hypereal.js";
 // AtlasCloud Seedance 2.0 — PRIMARY for cinematic video. Cheap when it
-// works, 15-min poll cap covers tail latencies. Single fallback below
-// is Hypereal Kling V3 Pro for any failure (moderation, timeout, etc.).
+// works, 15-min poll cap covers tail latencies. Terminal fallback is
+// now OpenRouter Kling Video O1 (Hypereal Kling V3 Pro was removed
+// from this chain on 2026-05-28).
 import { generateAtlasCloudSeedance } from "../services/atlasCloudSeedance.js";
 import { generateOpenRouterVideo } from "../services/openrouterVideo.js";
 import { saveCheckpoint, readCheckpointKey, clearCheckpointKey, CheckpointReadError } from "../lib/checkpoint.js";
@@ -319,7 +320,7 @@ async function _runCinematicVideo(
 
   const cameraName = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("\u2014")[0].trim();
   console.log(
-    `[CinematicVideo] Scene ${sceneIndex}: starting 5-rung chain${regenerate ? " (regen)" : ""}, ` +
+    `[CinematicVideo] Scene ${sceneIndex}: starting 4-rung chain${regenerate ? " (regen)" : ""}, ` +
     `camera=${cameraName}, prompt=${finalPrompt.length} chars`
   );
 
@@ -402,20 +403,11 @@ async function _runCinematicVideo(
   provider = "Replicate Seedance 2.0 Fast I2V";
   let heldFrameReason: string | null = null;
 
-  // Build a Kling-style negative prompt by extracting the AVOID list
-  // from the motion guardrails. Kling V3 Pro supports negative_prompt
-  // natively (Seedance does not, which is why guardrails are folded into
-  // the positive prompt above).
-  const klingNegativePrompt =
-    "blurry, low quality, watermark, text, UI elements, slow motion, sluggish, " +
-    "3D render, CGI, photorealistic conversion, glossy plastic, volumetric lighting, " +
-    "art style change mid-clip, style morphing between frames, rendering-engine switch, " +
-    "upgrading 2D illustration to 3D, paper-cutout becoming photoreal, sketch becoming CGI, " +
-    "nudity, naked, exposed body parts, extra limbs, body contortion, distorted anatomy, " +
-    "lip sync, talking, mouth movement, speaking, " +
-    "characters changing clothes mid-shot, characters clipping through furniture or props, " +
-    "faces rotated opposite to torso, limbs bending in unnatural directions" +
-    (styleNegative ? `, ${styleNegative}` : "");
+  // (klingNegativePrompt removed 2026-05-28 — was only consumed by the
+  //  Hypereal Kling V3 Pro rung, which has been dropped from the chain.
+  //  Seedance and OR Kling O1 do not accept a negative_prompt field;
+  //  guardrails for those rungs are folded into `motionGuardrails` above
+  //  and concatenated into the positive prompt at each submit site.)
 
   // ── Resume from checkpoint ─────────────────────────────────────────
   // If a previous worker died after submitting a Hypereal job but before
@@ -497,33 +489,34 @@ async function _runCinematicVideo(
   // the full `seedanceAspect` value because it natively handles 1:1.
   const openRouterAspectRatio: "16:9" | "9:16" = seedanceAspect === "1:1" ? "16:9" : seedanceAspect;
 
-  // Per-scene provider chain (5-rung as of 2026-05-25):
+  // Per-scene provider chain (4-rung as of 2026-05-28):
   //   1. OpenRouter Seedance 1.5 Pro @ 480p  — primary, cheapest 10s I2V.
   //   2. OpenRouter Seedance 2.0 Fast @ 480p — same upstream classifier
   //      as rung 1; skipped when rung 1 fails for copyright/named-IP.
   //   3. AtlasCloud Seedance 2.0 @ 480p      — different account-level
   //      moderation; catches named soccer / World Cup prompts that
   //      OpenRouter Seedance refuses.
-  //   4. OpenRouter Kling Video O1 @ 480p    — different model family
-  //      and classifier from Seedance.
-  //   5. Hypereal Kling V3.0 Pro             — terminal rung before
-  //      held-frame. Different content classifier; sometimes accepts
-  //      what Seedance/Kling-O1 refuse.
+  //   4. OpenRouter Kling Video O1 @ 480p    — terminal rung. Different
+  //      model family and classifier from Seedance; if it refuses too,
+  //      the scene fails over to held-frame in the outer catch.
   //
-  // (Hypereal Seedance 2.0 Fast was removed from this chain on
-  // 2026-05-25 per ops decision — Kling O1 now picks up the
-  // soccer/World-Cup catcher role at lower cost.)
+  // History:
+  //   • Hypereal Seedance 2.0 Fast removed 2026-05-25 (OR Kling O1
+  //     picks up the soccer/World-Cup catcher role at lower cost).
+  //   • Hypereal Kling V3 Pro removed 2026-05-28 (OR Kling O1 is now
+  //     the terminal rung; moderation refusals there go straight to
+  //     held-frame via the outer catch).
   //
   // Any non-moderation, non-credits-exhausted error cascades. Moderation
-  // rejection only terminates the chain at rung 5 (held-frame).
-  // [PROVIDER_CREDITS_EXHAUSTED] bubbles immediately at any rung.
+  // rejection at the terminal rung bubbles to the outer catch and the
+  // scene falls back to held-frame. [PROVIDER_CREDITS_EXHAUSTED] bubbles
+  // immediately at any rung.
   try {
     // The chain is ordered cheapest-first within each "policy family":
     //   • OpenRouter Seedance 1.5 Pro  ($0.26/10s)   — ByteDance copyright filter rejects named-IP prompts
     //   • OpenRouter Seedance 2.0 Fast ($1.20/10s)   — same upstream, SAME copyright filter (skip if rung 1 = copyright reject)
     //   • AtlasCloud Seedance 2.0      (~$0.30/10s)  — different account-level moderation, accepts named soccer / World Cup
-    //   • OpenRouter Kling Video O1    ($1.12/10s)   — different model family, different classifier
-    //   • Hypereal Kling V3 Pro        (terminal)    — see rung 5 below
+    //   • OpenRouter Kling Video O1    ($1.12/10s)   — terminal; different model family, different classifier
     //
     // Copyright fast-path: if rung 1 fails with InputTextSensitiveContent
     // Detected.PolicyViolation (or any string containing "copyright"),
@@ -669,48 +662,24 @@ async function _runCinematicVideo(
         videoUrlAuthHeader = orKlingRes.downloadAuthHeader;
         provider = "OpenRouter Kling Video O1 @ 480p";
       } else {
+        // OR Kling O1 is the terminal rung after the 2026-05-28 removal
+        // of the Hypereal Kling V3 Pro rung. With no further fallback,
+        // the empty videoUrl propagates to the outer catch which routes
+        // the scene to held-frame.
         console.warn(
-          `[CinematicVideo] Scene ${sceneIndex}: OpenRouter Kling O1 failed — falling back to Hypereal Kling V3 Pro: ${(orKlingRes.error ?? "").slice(0, 200)}`,
+          `[CinematicVideo] Scene ${sceneIndex}: OpenRouter Kling O1 failed (terminal rung) — scene will fall back to held-frame: ${(orKlingRes.error ?? "").slice(0, 200)}`,
         );
+        await writeSystemLog({
+          jobId, projectId, userId, generationId,
+          category: "system_warning",
+          // eventType kept stable for log-search continuity (Loki/Sentry
+          // queries watch for "cinematic_video_kling_fallback") even
+          // though the message body has been updated for the 4-rung chain.
+          eventType: "cinematic_video_kling_fallback",
+          message: `Scene ${sceneIndex}: all 4 rungs failed — falling back to held-frame`,
+          details: { sceneIndex },
+        });
       }
-    }
-
-    // ── 5. Hypereal Kling V3.0 Pro (FALLBACK 4 / TERMINAL) ─────────
-    // Catches whatever the Seedance rungs + OR Kling all rejected —
-    // including E005/moderation refusals (Kling V3 Pro uses a different
-    // classifier from O1) and provider hangs. Final layer before
-    // held-frame; moderation rejection HERE is permanent and bubbles to
-    // the outer catch.
-    if (!videoUrl) {
-      await writeSystemLog({
-        jobId, projectId, userId, generationId,
-        category: "system_warning",
-        // eventType kept stable for log-search continuity even though
-        // the chain has been resized to 5 rungs; renaming would break
-        // Loki/Sentry queries that watch for "cinematic_video_kling_fallback".
-        eventType: "cinematic_video_kling_fallback",
-        message: `Scene ${sceneIndex}: rungs 1-4 failed — falling back to Hypereal Kling V3 Pro (terminal rung)`,
-        details: { sceneIndex },
-      });
-
-      // Using the older `generateKlingV3ProVideo` (simpler signature,
-      // single `end_image` field, no onSubmitted checkpoint hook) —
-      // restored from commit 38aeb4d after the newer V3ProI2V variant
-      // was silently dropping end_image at Hypereal. Trade-off: a
-      // worker restart mid-poll re-submits to Hypereal (extra credits)
-      // because there's no checkpoint resume path here. Acceptable
-      // because Kling V3 Pro polls finish in 2-3 min, well under our
-      // 15-min hard timeout.
-      videoUrl = await generateKlingV3ProVideo(
-        imageUrl,
-        finalPrompt,
-        apiKey,
-        10,                  // duration: must be 5 or 10 (clamped)
-        endImageUrl,
-        klingNegativePrompt,
-        0.5,                 // cfg_scale
-      );
-      provider = "Kling V3.0 Pro Video";
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
@@ -725,8 +694,8 @@ async function _runCinematicVideo(
         jobId, projectId, userId, generationId,
         category: "system_error",
         eventType: "provider_credits_exhausted",
-        message: `Provider chain exhausted — scene ${sceneIndex} could not render on OR Seedance 1.5 Pro, OR Seedance 2.0 Fast, AtlasCloud, OR Kling O1, OR Hypereal Kling V3 Pro`,
-        details: { sceneIndex, provider: "or-seedance-1-5-pro + or-seedance-2-0-fast + atlascloud + hypereal-seedance + or-kling-o1 + hypereal-kling-v3-pro chain", raw: errMsg.slice(0, 400) },
+        message: `Provider chain exhausted — scene ${sceneIndex} could not render on OR Seedance 1.5 Pro, OR Seedance 2.0 Fast, AtlasCloud, OR Kling O1`,
+        details: { sceneIndex, provider: "or-seedance-1-5-pro + or-seedance-2-0-fast + atlascloud + or-kling-o1 chain", raw: errMsg.slice(0, 400) },
       });
       throw err;
     }

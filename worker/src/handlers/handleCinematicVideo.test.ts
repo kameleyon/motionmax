@@ -77,7 +77,6 @@ vi.mock("../lib/featureFlags.js", () => ({
 // simulate failure modes.
 vi.mock("../services/hypereal.js", () => ({
   generateKlingV3ProI2V: vi.fn().mockResolvedValue({ jobId: "hy-kling-1" }),
-  generateKlingV3ProVideo: vi.fn().mockResolvedValue("https://hypereal.test/clip.mp4"),
   pollHyperealJob: vi.fn().mockResolvedValue({
     status: "completed",
     videoUrl: "https://hypereal.test/clip.mp4",
@@ -424,12 +423,11 @@ describe("handleCinematicVideo", () => {
         error: "atlas timed out",
       });
 
-      const { generateKlingV3ProVideo } = await import("../services/hypereal.js");
-
       const { handleCinematicVideo } = await import("./handleCinematicVideo.js");
       await handleCinematicVideo("job-rung3", makePayload({ sceneIndex: 0 }), "user-1").catch(() => {});
 
-      // Rung 1 + rung 3 both called on OpenRouter; AtlasCloud called once; Hypereal Kling NOT called.
+      // Rung 1 + rung 4 (OR Kling O1) both called on OpenRouter; AtlasCloud called once.
+      // (Hypereal Kling V3 Pro removed from the chain on 2026-05-28; assertion dropped.)
       expect(vi.mocked(generateOpenRouterVideo).mock.calls).toHaveLength(2);
       expect(vi.mocked(generateOpenRouterVideo).mock.calls[1][0]).toEqual(
         expect.objectContaining({
@@ -440,7 +438,6 @@ describe("handleCinematicVideo", () => {
         }),
       );
       expect(generateAtlasCloudSeedance).toHaveBeenCalledTimes(1);
-      expect(generateKlingV3ProVideo).not.toHaveBeenCalled();
     });
   });
 });

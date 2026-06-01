@@ -226,16 +226,19 @@ async function tryHyperealGptImage2(
 
   for (let attempt = 1; attempt <= HYPEREAL_GPT_IMAGE2_RETRIES; attempt++) {
     try {
-      // Per-attempt 180s client-side timeout. gpt-image-2 with a
-      // `reference_images` payload (our character-consistency path)
-      // routinely takes 60-120s server-side; the prior 90s budget was
-      // tripping on slower jobs, aborting the fetch AFTER Hypereal had
-      // already started generating — so we got billed for an image we
-      // never received and retried (re-billing each time). 180s covers
-      // the long tail without indefinitely hanging the worker slot if
-      // an E1002 "Request timed out" upstream is actually stuck.
+      // Per-attempt 300s client-side timeout. gpt-image-2 was 60-120s
+      // server-side under normal Hypereal load (90s → 180s → 300s
+      // bumps tracked the upstream getting slower). Bumped 180s → 300s
+      // on 2026-06-01 after billing screenshots confirmed the 180s
+      // cap was aborting connections AFTER Hypereal had already
+      // generated AND billed — orphan charges + forced fallback to
+      // Nano Banana 2 at ~2.3× per-scene cost. The gen IS completing
+      // in the 180-220s range during degraded mode, so waiting a bit
+      // longer turns "$0.03 wasted + $0.04 fallback" into "$0.03,
+      // received". Still bails fast enough that a truly stuck upstream
+      // (E1002 / E9999) doesn't pin the worker slot indefinitely.
       const ac = new AbortController();
-      const timer = setTimeout(() => ac.abort(), 180_000);
+      const timer = setTimeout(() => ac.abort(), 300_000);
       let res: Response;
       try {
         res = await fetch(HYPEREAL_API_URL, {
@@ -313,7 +316,7 @@ async function tryHyperealGptImage2(
       console.log(`[ImageGen] gpt-image-2 ✅ attempt ${attempt} — ${bytes.length} bytes`);
       return bytes;
     } catch (err) {
-      // AbortError = our own 180s client timer fired. The upstream
+      // AbortError = our own 300s client timer fired. The upstream
       // request is already in flight at Hypereal and will keep running
       // (and billing us) regardless of whether we retry — retrying just
       // re-bills for a second image we won't receive any faster.
@@ -324,7 +327,7 @@ async function tryHyperealGptImage2(
         (err as Error)?.message?.toLowerCase().includes("aborted");
       if (isAbort) {
         console.warn(
-          `[ImageGen] gpt-image-2 attempt ${attempt} aborted at 180s — server-side gen likely still completed (billed); short-circuiting to next provider`,
+          `[ImageGen] gpt-image-2 attempt ${attempt} aborted at 300s — server-side gen likely still completed (billed); short-circuiting to next provider`,
         );
         return null;
       }

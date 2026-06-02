@@ -216,9 +216,18 @@ async function _runRegenerateImage(
     ];
 
     const fullPrompt = promptParts.filter(Boolean).join("\n\n");
+    // CRITICAL (2026-06-02): bypass the prompt cache. generateImage has
+    // an in-memory cache keyed by (prompt, format) that would return
+    // the previously-generated URL for an unchanged prompt — silently
+    // making "Regenerate" a no-op while still triggering the auto-chain
+    // video re-renders below. Money lost on video credits, no new image
+    // produced. skipCache: true forces a real provider call; the cache
+    // is updated on success so subsequent initial-gen requests pick up
+    // the fresh URL.
     imageUrl = await generateImage(
       fullPrompt, hyperealApiKey, replicateApiKey, format, projectId, undefined,
       { userId: userId ?? null, generationId, jobId: jobId ?? null },
+      { skipCache: true },
     );
   }
 

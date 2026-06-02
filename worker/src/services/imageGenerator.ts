@@ -631,6 +631,21 @@ async function pollReplicate(
  * Always re-uploads to Supabase Storage and returns a public Supabase URL.
  * Results are cached in-memory by (prompt, format) to skip redundant API
  * calls for identical prompts within the same worker process lifetime.
+ *
+ * `options.skipCache` (default false) bypasses the cache READ but still
+ * updates it on success. This is what an explicit user-driven regenerate
+ * needs: the cache would otherwise return the previously-generated URL
+ * for the same prompt, defeating the whole point of "regenerate". Pass
+ * `true` from regenerate_image; leave it default-false for first-pass
+ * scene generation where dedupe-by-prompt prevents legitimate double-
+ * billing on retries.
+ *
+ * 2026-06-02 incident: a user clicked Regenerate on a scene with an
+ * unchanged prompt. The cache HIT returned the old URL, no Hypereal
+ * call was made, but `handleRegenerateImage` still queued the auto-
+ * chain `cinematic_video` jobs — burning video credits on an image
+ * that hadn't actually changed. Plumbing `skipCache: true` from the
+ * regen path closes that loophole.
  */
 export async function generateImage(
   prompt: string,
@@ -645,19 +660,29 @@ export async function generateImage(
    *  there is genuinely no user context (e.g. system warmup pings).
    *  (C-8-5 / C-9-7) */
   attribution: { userId: string | null; generationId: string | null; jobId: string | null } = { userId: null, generationId: null, jobId: null },
+  options: { skipCache?: boolean } = {},
 ): Promise<string> {
   const key = _cacheKey(prompt, format);
 
-  // Cache hit — return immediately without any API call
-  const cached = _cacheGet(key);
-  if (cached) {
-    console.log(`[ImageGen] Cache hit for prompt (${prompt.length} chars, format=${format})`);
-    return cached;
+  // Cache hit — return immediately without any API call.
+  // Skipped for user-driven regenerate so the new image is actually
+  // produced instead of silently returning the old cached URL.
+  if (!options.skipCache) {
+    const cached = _cacheGet(key);
+    if (cached) {
+      console.log(`[ImageGen] Cache hit for prompt (${prompt.length} chars, format=${format})`);
+      return cached;
+    }
+  } else {
+    console.log(`[ImageGen] Cache bypass requested (regenerate) — forcing fresh provider call`);
   }
 
-  // In-flight deduplication — coalesce concurrent requests for the same key
+  // In-flight deduplication — coalesce concurrent requests for the same
+  // key. Kept even on skipCache: if two regenerate clicks land in the
+  // same tick, both should still resolve to one provider call to avoid
+  // double-billing. The result will be written back to the cache below.
   const existing = _inFlight.get(key);
-  if (existing) {
+  if (existing && !options.skipCache) {
     console.log(`[ImageGen] Coalescing in-flight request for same prompt (${prompt.length} chars)`);
     return existing;
   }
@@ -667,6 +692,10 @@ export async function generateImage(
 
   try {
     const url = await work;
+    // Always update the cache on success — even for skipCache calls.
+    // The freshly-generated URL overwrites any stale cached value so
+    // subsequent initial-gen requests for the same prompt get the
+    // newest image, not the obsolete one.
     _cacheSet(key, url);
     return url;
   } finally {

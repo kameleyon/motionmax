@@ -799,23 +799,10 @@ async function _generateImageUncached(
   const geminiEnabled = await isEnabled("image_provider_gemini", true);
   const openRouterEnabled = await isEnabled("image_provider_openrouter", true);
 
-  // ── TEMP 2026-06-02: force OpenRouter as primary for testing ───
-  // Hypereal gpt-image-2 has been degraded (sustained E9999 / 180s
-  // timeouts) and burns money on orphan-billed renders. Pinning
-  // this flag to `true` disables BOTH Hypereal gpt-image-2 rungs
-  // below so the chain lands on OpenRouter gpt-5.4-image-2 first,
-  // then falls through to Hypereal Gemini Nano Banana 2 as the
-  // safety net. To restore the original 4-rung chain, set this
-  // back to `false`. Kept as a code-level flag (not a DB feature
-  // flag) so the toggle is visible in the PR diff and obvious to
-  // restore — DB flag changes have already drifted out of sync
-  // with code expectations on this codebase. */
-  const TEMP_SKIP_HYPEREAL_GPT_IMAGE2 = true;
-
   // ── 1. Hypereal gpt-image-2 (primary) ─────────────────────────────
   // gpt-image-2 supports the optional `reference_images` array, so
   // character-consistency renders go through this path too.
-  if (!TEMP_SKIP_HYPEREAL_GPT_IMAGE2 && hyperealApiKey && hyperealEnabled && gptImage2Enabled) {
+  if (hyperealApiKey && hyperealEnabled && gptImage2Enabled) {
     await acquireHypereal();
     const bytes = await tryHyperealGptImage2(prompt, hyperealApiKey, format, referenceImages).finally(releaseHypereal);
     if (bytes) {
@@ -842,7 +829,7 @@ async function _generateImageUncached(
   // unless HYPEREALIMAGE_API_KEY is set in the worker env. Helps when
   // the primary account is throttled or running into per-key rate
   // limits — fires before the pricier OpenRouter path.
-  if (!TEMP_SKIP_HYPEREAL_GPT_IMAGE2 && HYPEREAL_IMAGE_FALLBACK_KEY && hyperealEnabled && gptImage2Enabled) {
+  if (HYPEREAL_IMAGE_FALLBACK_KEY && hyperealEnabled && gptImage2Enabled) {
     await acquireHypereal();
     const bytes = await tryHyperealGptImage2(prompt, HYPEREAL_IMAGE_FALLBACK_KEY, format, referenceImages).finally(releaseHypereal);
     if (bytes) {

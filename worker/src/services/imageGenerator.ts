@@ -467,11 +467,22 @@ async function tryOpenRouterGptImage2(
           headers: {
             Authorization: `Bearer ${OPENROUTER_API_KEY}`,
             "Content-Type": "application/json",
+            // Optional-but-recommended per OpenRouter docs. Matches
+            // the chat/completions caller in services/openrouter.ts so
+            // both code paths show up on OpenRouter's app rankings.
+            "HTTP-Referer": "https://motionmax.io",
+            "X-Title": "MotionMax",
           },
           body: JSON.stringify({
             model: OPENROUTER_MODEL,
             messages: [{ role: "user", content: userContent }],
             modalities: ["image", "text"],
+            // Explicit stream:false — some image-output models default
+            // to streaming when omitted, and a streamed response would
+            // require an SSE parser this path doesn't have. Documented
+            // as optional in the API reference but stating it removes
+            // ambiguity if OpenRouter ever changes the default.
+            stream: false,
           }),
           signal: ac.signal,
         });
@@ -496,12 +507,72 @@ async function tryOpenRouterGptImage2(
       }
 
       const data = await res.json() as any;
-      // Response shape:
-      //   choices[0].message.images[0].image_url.url
-      // → "data:image/png;base64,iVBORw0KGgo..."
-      const dataUrl = data?.choices?.[0]?.message?.images?.[0]?.image_url?.url as string | undefined;
+      // OpenRouter image-output response shapes vary across the
+      // models reachable through the chat-completions surface. Try
+      // every documented + observed shape before giving up, then
+      // dump the response-shape diagnostic if all parsers miss so
+      // we can update the matcher without guessing.
+      //
+      // Shapes observed in the wild as of 2026-06-02:
+      //   A. choices[0].message.images[0].image_url.url          (original — some image-mode models)
+      //   B. choices[0].message.content (string, starts data:image/)
+      //   C. choices[0].message.content[] with {type:"image_url", image_url:{url}}
+      //   D. choices[0].message.content[] with {type:"output_image", image_url:{url}}
+      //   E. choices[0].message.images[0].url                     (flat url, no image_url wrap)
+      //   F. choices[0].message.attachments[] with url
+      //   G. (gpt-5.4-image-2 specific) base64-data-URL embedded in content as markdown
+      //      `![alt](data:image/png;base64,...)`
+      const msg = data?.choices?.[0]?.message;
+      let dataUrl: string | undefined;
+
+      // A. Explicit images array, image_url wrap
+      if (!dataUrl && msg?.images?.[0]?.image_url?.url) {
+        dataUrl = msg.images[0].image_url.url;
+      }
+      // E. Explicit images array, flat url
+      if (!dataUrl && typeof msg?.images?.[0]?.url === "string") {
+        dataUrl = msg.images[0].url;
+      }
+      // B. content is a string that IS the data URL
+      if (!dataUrl && typeof msg?.content === "string" && msg.content.startsWith("data:image/")) {
+        dataUrl = msg.content;
+      }
+      // G. content is a string with a markdown-embedded data URL
+      if (!dataUrl && typeof msg?.content === "string") {
+        const m = /(data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+)/.exec(msg.content);
+        if (m) dataUrl = m[1];
+      }
+      // C / D. content is an array of multimodal parts
+      if (!dataUrl && Array.isArray(msg?.content)) {
+        for (const part of msg.content) {
+          const url = part?.image_url?.url ?? part?.url;
+          if (typeof url === "string" && url.startsWith("data:image/")) {
+            dataUrl = url;
+            break;
+          }
+        }
+      }
+      // F. attachments array (rare; some providers use this)
+      if (!dataUrl && Array.isArray(msg?.attachments)) {
+        for (const att of msg.attachments) {
+          const url = att?.url ?? att?.image_url?.url;
+          if (typeof url === "string" && url.startsWith("data:image/")) {
+            dataUrl = url;
+            break;
+          }
+        }
+      }
+
       if (!dataUrl || !dataUrl.startsWith("data:image/")) {
-        console.warn(`[ImageGen] OpenRouter attempt ${attempt}: no image data URL in response`);
+        // Dump the shape so the next iteration of this code knows
+        // which path to add. Keep the dump small (8KB) so a giant
+        // response doesn't flood logs.
+        const shapePreview = JSON.stringify(data, null, 2).slice(0, 2000);
+        console.warn(
+          `[ImageGen] OpenRouter attempt ${attempt}: no image data URL in any known shape. ` +
+          `Response keys: choices[0].message=${Object.keys(msg ?? {}).join(",") || "<empty>"}. ` +
+          `First 2KB of response: ${shapePreview}`,
+        );
         if (attempt < OPENROUTER_RETRIES) await sleep(1500 * attempt);
         continue;
       }

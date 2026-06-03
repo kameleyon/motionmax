@@ -23,6 +23,7 @@ export type SpeakerVoice =
   // English (LemonFox / Fish Audio)
   | "Adam" | "River" | "Zuri" | "Morpheus" | "Jacynthe" | "Phoebe"
   | "Roselie" | "Emily" | "Melanie" | "Tatiana" | "Micha"
+  | "Mikhal" | "Derrick" | "Eloise" | "Gabby" | "Sankofa"
   // Legacy Qwen3 types kept in the union so previously-saved projects that
   // reference them still typecheck when loaded. The worker routes them
   // through the standard audio chain (see handleCinematicAudio.ts).
@@ -225,11 +226,16 @@ const englishSpeakers: SpeakerOption[] = [
   { id: "Morpheus", label: "Morpheus", description: "Male · Bold, dynamic · sport chronicle" },
   { id: "Jacynthe", label: "Jacynthe", description: "Female · Clear, articulate · educational narration" },
   { id: "Phoebe",   label: "Phoebe",   description: "Female · Young, energetic · social-media" },
-  { id: "Roselie",  label: "Roselie",  description: "Female · English native · Fish Audio s2-pro" },
-  { id: "Emily",    label: "Emily",    description: "Female · English native · Fish Audio s2-pro" },
-  { id: "Melanie",  label: "Melanie",  description: "Female · English native · Fish Audio s2-pro" },
-  { id: "Tatiana",  label: "Tatiana",  description: "Female · English native · Fish Audio s2-pro" },
-  { id: "Micha",    label: "Micha",    description: "Female · English native · Fish Audio s2-pro" },
+  { id: "Roselie",  label: "Roselie",  description: "Female · English native" },
+  { id: "Emily",    label: "Emily",    description: "Female · English native" },
+  { id: "Melanie",  label: "Melanie",  description: "Female · English native" },
+  { id: "Tatiana",  label: "Tatiana",  description: "Female · English native" },
+  { id: "Micha",    label: "Micha",    description: "Female · English native" },
+  { id: "Mikhal",   label: "Mikhal",   description: "Male · Calm · podcast · Fish Audio s2-pro" },
+  { id: "Derrick",  label: "Derrick",  description: "Male · Social-media · podcast · Fish Audio s2-pro" },
+  { id: "Eloise",   label: "Eloise",   description: "Female · Conversational · social-media · Fish Audio s2-pro" },
+  { id: "Gabby",    label: "Gabby",    description: "Female · Confident narrator · Fish Audio s2-pro" },
+  { id: "Sankofa",  label: "Sankofa",  description: "Female · Conversational · Fish Audio s2-pro" },
 ];
 
 // Languages where Gemini Flash is the SOLE non-HC provider. Gemini

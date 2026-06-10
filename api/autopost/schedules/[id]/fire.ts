@@ -35,10 +35,20 @@ function extractScheduleIdFromUrl(req: Request): string | null {
   }
 }
 
+// FIFO head-pop. Mirrors the DB-level `autopost_resolve_topic`
+// function (used by the cron tick path) — both must agree or the
+// user's drag-to-reorder in _GenerateTopicsDialog won't take effect
+// on Run Now / Fire Now clicks. Prior to 2026-06-10 this was a
+// random picker, which (a) made drag-reorder a visual lie for the
+// fire-now path and (b) prevented the AFTER INSERT trigger
+// `autopost_pop_topic_after_run` from popping the dequeued topic,
+// because that trigger only pops when v_pool[1] === NEW.topic.
+// Net effect of the old random picker: 1/N chance per click that
+// the user's pinned topic actually fires, and the pool size never
+// drops because the head stays unconsumed.
 function pickTopic(pool: string[] | null): string | null {
   if (!pool || pool.length === 0) return null;
-  const idx = Math.floor(Math.random() * pool.length);
-  return pool[idx] ?? null;
+  return pool[0] ?? null;
 }
 
 function resolvePrompt(template: string, topic: string | null): string {

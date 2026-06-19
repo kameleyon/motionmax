@@ -89,9 +89,10 @@ export function buildCoverTitleSection(examples: string, styleDesc?: string): st
     ? `\n- **STYLE-MATCHED TYPOGRAPHY:** The title text in the visualPrompt for Scene 1 MUST be rendered in the SAME art style as the rest of the image. If the style is "${styleDesc}", the title lettering must look like it belongs in that world (e.g., Lego style → blocky 3D brick letters, Anime → manga-style text, Watercolor → painted brush-stroke lettering, etc.). NEVER use generic plain text or a mismatched style for the title.`
     : "";
   return `=== COVER IMAGE TITLE (CRITICAL FOR SCENE 1) ===
-For Scene 1 ONLY, you MUST include a "coverTitle" field with a short, catchy, social media-style title (3-6 words max).
+For Scene 1 ONLY, you MUST ALWAYS include a non-empty "coverTitle" field with a short, catchy, social media-style title (3-6 words max). This field is REQUIRED — never leave it blank.
 - This is the THUMBNAIL/COVER title that will be rendered prominently on the first image
-- Make it punchy, intriguing, and scroll-stopping (like a viral TikTok or YouTube thumbnail)${styleMatch}
+- Make it punchy, intriguing, and scroll-stopping (like a viral TikTok or YouTube thumbnail)
+- The title MUST physically appear written on the Scene 1 image, and it MUST FIT THE SCREEN: for a 9:16 vertical (portrait) video keep every word inside the central safe area with margins from all edges, wrapping onto 2-3 lines if needed so NO word is cut off or runs past the sides — fully readable on a phone screen.${styleMatch}
 - Examples: ${examples}`;
 }
 

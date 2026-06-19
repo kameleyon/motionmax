@@ -111,6 +111,71 @@ export function getExactAudioDuration(filePath: string): Promise<number> {
   });
 }
 
+export interface SilenceInterval {
+  /** Silence start, seconds from file start. */
+  start: number;
+  /** Silence end, seconds from file start. */
+  end: number;
+}
+
+/**
+ * Detect silent intervals in an audio file via ffmpeg's `silencedetect`
+ * filter. Used to find natural pauses (between sentences / scenes) so a
+ * master TTS track can be sliced at speech boundaries instead of
+ * mid-word. Returns silence intervals in chronological order; an empty
+ * array means no silence met the threshold (caller should fall back to
+ * a duration estimate).
+ *
+ * `silencedetect` writes `silence_start` / `silence_end` lines at the
+ * `info` log level, so this runner does NOT use runFfmpeg (which forces
+ * `-loglevel warning` and would suppress them). Exit code is ignored —
+ * `-f null -` can return non-zero on minor container quirks while still
+ * having emitted the silence lines, mirroring getExactAudioDuration.
+ *
+ * @param noiseDb   Threshold below which audio counts as silence (default -30 dB).
+ * @param minDurSec Minimum silence length to report (default 0.3 s).
+ */
+export function detectSilences(
+  filePath: string,
+  noiseDb = -30,
+  minDurSec = 0.3,
+): Promise<SilenceInterval[]> {
+  return new Promise((resolve) => {
+    execFile(
+      FFMPEG_BIN,
+      [
+        "-i", filePath,
+        "-af", `silencedetect=noise=${noiseDb}dB:d=${minDurSec}`,
+        "-f", "null", "-",
+      ],
+      { timeout: 120_000, maxBuffer: 10 * 1024 * 1024 },
+      (_error, _stdout, stderr) => {
+        const out = stderr ?? "";
+        const starts: number[] = [];
+        const ends: number[] = [];
+        const startRe = /silence_start:\s*(-?\d+(?:\.\d+)?)/g;
+        const endRe = /silence_end:\s*(-?\d+(?:\.\d+)?)/g;
+        let m: RegExpExecArray | null;
+        while ((m = startRe.exec(out)) !== null) starts.push(parseFloat(m[1]));
+        while ((m = endRe.exec(out)) !== null) ends.push(parseFloat(m[1]));
+        // Pair by index — silencedetect emits start then end in order.
+        // A trailing unmatched start (file ends in silence) is dropped
+        // via Math.min; it's past the last scene boundary anyway.
+        const intervals: SilenceInterval[] = [];
+        const n = Math.min(starts.length, ends.length);
+        for (let i = 0; i < n; i++) {
+          const s = starts[i];
+          const e = ends[i];
+          if (Number.isFinite(s) && Number.isFinite(e) && e > s) {
+            intervals.push({ start: Math.max(0, s), end: e });
+          }
+        }
+        resolve(intervals);
+      },
+    );
+  });
+}
+
 /** Memory-safe x264 flags — keeps libx264 under ~40 MB */
 export const X264_MEM_FLAGS = [
   "-threads", "2",

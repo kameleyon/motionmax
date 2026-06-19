@@ -27,7 +27,7 @@ import { generateGeminiFlashTTS, generateGeminiFlashTTSChunked } from "../servic
 import { generateSmallestTTS } from "../services/smallestTTS.js";
 import { generateSceneAudio, type AudioConfig } from "../services/audioRouter.js";
 import { isHaitianCreole } from "../services/audioWavUtils.js";
-import { probeDuration, runFfmpeg } from "./export/ffmpegCmd.js";
+import { probeDuration, runFfmpeg, detectSilences, type SilenceInterval } from "./export/ffmpegCmd.js";
 
 interface MasterAudioPayload {
   generationId: string;
@@ -64,6 +64,108 @@ const LEGACY_SPEAKER_MAP: Record<string, { gender: string; language: string }> =
   "Jacynthe": { gender: "female", language: "en" },
   "Phoebe":   { gender: "female", language: "en" },
 };
+
+interface SceneSlice {
+  startMs: number;
+  sliceMs: number;
+  words: number;
+}
+
+/**
+ * Compute per-scene audio slices from the master track.
+ *
+ * Each scene's slice determines (a) the per-scene audioUrl used by the
+ * editor + captions and (b) the per-scene clip DURATION used to size
+ * visuals during export. Getting these durations right is what keeps
+ * the video frame in sync with the narration.
+ *
+ * Two-stage approach:
+ *   1. Word-count proportion gives an initial ESTIMATE of where each
+ *      scene's narration ends in the master.
+ *   2. Each internal boundary is then snapped to the nearest detected
+ *      SILENCE (natural pause) within ±SNAP_WINDOW_MS. This means slices
+ *      land in pauses rather than mid-word, and per-scene durations
+ *      track the real narration pace instead of a uniform words-per-
+ *      second guess.
+ *
+ * The LAST boundary is always pinned to the true master duration so the
+ * final scene covers all remaining audio — this eliminates the
+ * "last frame freezes while the narrator keeps talking" tail that the
+ * old word-count-only slicing produced (its rounded slices summed
+ * short of the master length).
+ *
+ * Pass `silences = []` to get the pure word-count behavior (still with
+ * the last boundary pinned) — used as the graceful fallback when
+ * silence detection is unavailable.
+ */
+function buildSceneSlices(
+  scenes: Array<{ voiceover?: unknown }>,
+  durationMs: number,
+  silences: SilenceInterval[],
+): SceneSlice[] {
+  const n = scenes.length;
+  const wordsPerScene = scenes.map((s) =>
+    typeof s.voiceover === "string"
+      ? s.voiceover.trim().split(/\s+/).filter(Boolean).length
+      : 0,
+  );
+  const totalWords = wordsPerScene.reduce((a, b) => a + b, 0) || 1;
+
+  if (n <= 1) {
+    return [{ startMs: 0, sliceMs: Math.max(500, Math.round(durationMs)), words: wordsPerScene[0] ?? 0 }];
+  }
+
+  // Stage 1 — estimated cumulative END (ms) of each scene by word share.
+  const estBoundary: number[] = [];
+  let acc = 0;
+  for (let i = 0; i < n; i++) {
+    acc += (wordsPerScene[i] / totalWords) * durationMs;
+    estBoundary.push(acc);
+  }
+
+  // Silence midpoints (ms) are the candidate cut points.
+  const cutPoints = silences
+    .map((s) => ((s.start + s.end) / 2) * 1000)
+    .filter((ms) => ms > 0 && ms < durationMs)
+    .sort((a, b) => a - b);
+
+  const SNAP_WINDOW_MS = 2000; // snap a boundary to a pause within ±2s
+  const MIN_SLICE_MS = 300;    // keep every slice non-trivial + monotonic
+
+  // Stage 2 — snap each INTERNAL boundary (0..n-2) to nearest pause,
+  // keeping boundaries strictly increasing. Last boundary = master end.
+  const boundary: number[] = new Array(n);
+  let prev = 0;
+  for (let i = 0; i < n - 1; i++) {
+    const target = estBoundary[i];
+    let best = target;
+    let bestDist = SNAP_WINDOW_MS + 1;
+    for (const cp of cutPoints) {
+      if (cp <= prev + MIN_SLICE_MS) continue;       // would make scene i too short
+      if (cp >= durationMs - MIN_SLICE_MS) break;    // leave room for last scene
+      const d = Math.abs(cp - target);
+      if (d < bestDist) { bestDist = d; best = cp; }
+    }
+    const snapped = bestDist <= SNAP_WINDOW_MS ? best : target;
+    boundary[i] = Math.max(prev + MIN_SLICE_MS, Math.min(snapped, durationMs - MIN_SLICE_MS));
+    prev = boundary[i];
+  }
+  boundary[n - 1] = durationMs; // last scene → all remaining audio
+
+  // Boundaries → slices.
+  const slices: SceneSlice[] = [];
+  let startMs = 0;
+  for (let i = 0; i < n; i++) {
+    const endMs = boundary[i];
+    slices.push({
+      startMs: Math.round(startMs),
+      sliceMs: Math.max(500, Math.round(endMs - startMs)),
+      words: wordsPerScene[i],
+    });
+    startMs = endMs;
+  }
+  return slices;
+}
 
 function inferStyleInstruction(voiceover: string): string {
   const lower = voiceover.toLowerCase();
@@ -380,20 +482,12 @@ async function _runMasterAudio(
     }
   }
 
-  // Compute each scene's slice based on its voiceover word count
-  // proportional to total words. This is what determines how long
-  // each scene's visual will be in the final export.
-  const totalWords = masterText.split(/\s+/).length || 1;
-  const sceneSlices: Array<{ startMs: number; sliceMs: number; words: number }> = [];
-  let cursorMs = 0;
-  for (const s of scenes) {
-    const words = typeof s.voiceover === "string"
-      ? s.voiceover.trim().split(/\s+/).filter(Boolean).length
-      : 0;
-    const sliceMs = Math.max(500, Math.round((words / totalWords) * durationMs));
-    sceneSlices.push({ startMs: cursorMs, sliceMs, words });
-    cursorMs += sliceMs;
-  }
+  // Per-scene slices size both the editor's per-scene audio and the
+  // per-scene visual clip in the export. Start with the word-count
+  // estimate (last boundary pinned to the true master end); this is
+  // refined to silence-aligned boundaries below once the master mp3 is
+  // on disk. Declared `let` so the silence-aligned pass can replace it.
+  let sceneSlices: SceneSlice[] = buildSceneSlices(scenes, durationMs, []);
 
   // Slice the master audio into per-scene segments via ffmpeg + upload
   // each so the existing scene encoder (which uses scene.audioUrl to
@@ -415,6 +509,24 @@ async function _runMasterAudio(
     const resp = await fetch(result.url);
     if (!resp.ok) throw new Error(`Master audio download failed: ${resp.status}`);
     fs.writeFileSync(masterLocal, Buffer.from(await resp.arrayBuffer()));
+
+    // Refine the word-count slices to silence-aligned boundaries so
+    // slices land in natural pauses (no mid-word cuts) and per-scene
+    // durations match the real narration pace (no visual drift / tail
+    // freeze). Non-fatal: on failure we keep the word-count slices.
+    try {
+      const silences = await detectSilences(masterLocal);
+      sceneSlices = buildSceneSlices(scenes, durationMs, silences);
+      const snapped = sceneSlices.length;
+      console.log(
+        `[MasterAudio] Silence-aligned slicing: ${silences.length} pause(s) detected; ` +
+        `${snapped} scene boundaries over ${(durationMs / 1000).toFixed(1)}s master`,
+      );
+    } catch (err) {
+      console.warn(
+        `[MasterAudio] Silence detection failed — using word-count slices: ${(err as Error).message}`,
+      );
+    }
 
     for (let i = 0; i < scenes.length; i++) {
       const { startMs, sliceMs } = sceneSlices[i];

@@ -89,7 +89,7 @@ async function _runCinematicImage(
   const { data: rawGeneration, error: genError } = await retryDbRead(() =>
     supabase
       .from("generations")
-      .select("scenes, projects(format, style, character_description, character_consistency_enabled, project_type, character_images)")
+      .select("scenes, projects(format, style, character_description, character_consistency_enabled, project_type, character_images, title)")
       .eq("id", generationId)
       .maybeSingle()
   );
@@ -140,6 +140,9 @@ async function _runCinematicImage(
       characterBible,
       characterDescription,
       isSmartFlow: generation.projects?.project_type === "smartflow",
+      // Last-resort fallback for the Scene 1 cover headline so the first
+      // image always gets a title even if the LLM omitted coverTitle.
+      videoTitle: (generation.projects as { title?: string } | null)?.title ?? undefined,
     },
   );
 

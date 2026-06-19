@@ -38,6 +38,11 @@ export interface BuildPromptOptions {
   characterBible: Record<string, string>;
   characterDescription: string;
   isSmartFlow: boolean;
+  /** The video's title — used as the last-resort fallback for the
+   *  Scene 1 cover headline when the LLM didn't emit a coverTitle and
+   *  the scene has no title of its own. Ensures the first image ALWAYS
+   *  gets a headline for cinematic + explainer videos. */
+  videoTitle?: string;
 }
 
 // ── Format descriptions ────────────────────────────────────────────
@@ -90,14 +95,41 @@ function buildCharacterInstructions(
 
 // ── Cover / text overlay instructions ─────────────────────────────
 
+/** Aspect-ratio-specific safe-area guidance so the cover title fits the
+ *  frame without any word being cropped at the edges. Portrait (9:16)
+ *  gets the strictest treatment because that's the social-media default
+ *  and a tall canvas is the easiest to overrun horizontally. */
+function titleFitGuidance(format: string): string {
+  if (format === "portrait") {
+    return `This is a VERTICAL 9:16 phone screen. The title MUST fit a tall 9:16 frame: keep every letter well inside the central safe area with generous left/right margins and clear of the extreme top and bottom. Stack the title on 2-3 lines if needed rather than letting any word run off the sides. NOTHING in the title may be cropped or touch the frame edges.`;
+  }
+  if (format === "square") {
+    return `This is a SQUARE 1:1 frame. Center the title with even margins on all four sides; no letter may touch or be cropped at any edge.`;
+  }
+  return `This is a WIDESCREEN 16:9 frame. Keep the title within the central safe area with clear margins on all sides; no letter may be cropped at any edge.`;
+}
+
+/** Mandatory cover-headline block for the first image. */
+function buildCoverTitleInstruction(title: string, format: string): string {
+  return `\nCOVER IMAGE TITLE (MANDATORY — THIS IS THE FIRST/COVER IMAGE):\n- Render "${title}" as a BOLD, PROMINENT headline on this image\n- ${titleFitGuidance(format)}\n- Make the title large and instantly readable, but it MUST fit the frame COMPLETELY — scale the text down or wrap onto multiple lines so every single word is fully visible\n- Title typography MUST match the art style of the illustration\n- Use contrasting colors or effects (shadow, outline, glow) for maximum legibility\n- This is the COVER IMAGE — it must grab attention immediately`;
+}
+
 function buildTextInstructions(
   scene: Scene,
   subIndex: number,
   sceneIndex: number,
   style: string,
+  format: string,
+  videoTitle?: string,
 ): string {
-  if (sceneIndex === 0 && subIndex === 0 && scene.coverTitle) {
-    return `\nCOVER IMAGE TITLE (MANDATORY):\n- Render "${scene.coverTitle}" as a BOLD, PROMINENT headline title on this cover image\n- The title should be large enough to be instantly readable and eye-catching\n- Text style must match the visual style of the illustration\n- Position the title prominently (top, center, or overlaid on focal area)\n- Use contrasting colors or effects (shadow, outline, glow) to ensure maximum legibility\n- This is the COVER IMAGE - it must grab attention immediately`;
+  // Scene 1, primary image → ALWAYS render a cover headline (cinematic +
+  // explainer). Fall back coverTitle → scene.title → videoTitle so a
+  // missing LLM coverTitle never leaves the cover untitled.
+  if (sceneIndex === 0 && subIndex === 0) {
+    const title = (scene.coverTitle || scene.title || videoTitle || "").trim();
+    if (title) {
+      return buildCoverTitleInstruction(title, format);
+    }
   }
   const includeTextOverlay = TEXT_OVERLAY_STYLES.includes(style.toLowerCase());
   if (includeTextOverlay && scene.title && subIndex === 0) {
@@ -115,10 +147,10 @@ export function buildImagePrompt(
   sceneIndex: number,
   opts: BuildPromptOptions,
 ): string {
-  const { format, style, characterBible, characterDescription } = opts;
+  const { format, style, characterBible, characterDescription, videoTitle } = opts;
   const styleDescription = getStylePrompt(style);
   const fmtDesc = formatDescription(format);
-  const textInstructions = buildTextInstructions(scene, subIndex, sceneIndex, style);
+  const textInstructions = buildTextInstructions(scene, subIndex, sceneIndex, style, format, videoTitle);
   const characterInstructions = buildCharacterInstructions(characterBible, characterDescription);
 
   // Character requirements go FIRST (after the create directive) so image models

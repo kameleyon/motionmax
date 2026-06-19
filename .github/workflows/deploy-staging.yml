@@ -55,7 +55,7 @@ jobs:
       url: https://staging.motionmax.io
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-      - uses: supabase/setup-cli@b60b5899c73b63a2d2d651b1e90db8d4c9392f51  # v1
+      - uses: supabase/setup-cli@df56b21da46c98abb12a9804e4fb1f657773e333  # v1
         with:
           # Pinned to a known-good release (Wave E-CI). See
           # ci.yml's "Install Supabase CLI" comment for rationale.

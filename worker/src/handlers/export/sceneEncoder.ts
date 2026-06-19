@@ -64,6 +64,14 @@ export interface ExportConfig {
   userId?: string;
   /** Generation ID for api_call_logs attribution. (C-8-5 / C-9-7) */
   generationId?: string;
+  /** Optional silence-aligned per-scene target durations (seconds),
+   *  indexed by scene. Set by exportVideo for master-audio projects so
+   *  each scene clip is sized to its CORRECTED narration length instead
+   *  of the stored per-scene audio slice. This re-derives accurate
+   *  audio/visual sync at export time — a re-export self-corrects even
+   *  for old rows, without regenerating the audio. When absent, the
+   *  per-scene audio duration is authoritative (unchanged behavior). */
+  correctedDurationsSec?: number[];
 }
 
 /** Default export config for landscape format */
@@ -297,37 +305,49 @@ async function imageAudioToClip(
   sceneIndex: number,
   config: ExportConfig,
   gradeFilter: string | null,
+  /** Silence-aligned target duration (s). When provided, the clip is
+   *  sized to this instead of the per-scene audio slice — the audio is
+   *  padded with silence to match and is replaced by the continuous
+   *  master in the final mux. */
+  forcedDurationSec?: number,
 ): Promise<number> {
   const audioDur = await getExactAudioDuration(audioPath);
-  console.log(`[SceneEncoder] Scene ${sceneIndex} imageAudio: ${audioDur.toFixed(2)}s`);
+  const clipDur = (forcedDurationSec && forcedDurationSec > 0) ? forcedDurationSec : audioDur;
+  console.log(
+    `[SceneEncoder] Scene ${sceneIndex} imageAudio: audio=${audioDur.toFixed(2)}s` +
+    (forcedDurationSec ? ` → clip=${clipDur.toFixed(2)}s (corrected)` : ""),
+  );
 
   // Try AI video first (returns { path, sourceUrl } or null)
   const aiVid = await tryAiVideo(imageUrl, prompt, sceneIndex, tempDir, config);
 
   if (aiVid) {
-    // AI video succeeded — mux with audio (stretch to match audio duration).
+    // AI video succeeded — mux with audio (stretch to match clip duration).
     // Pass the AI video's source URL so muxVideoAudio can re-fetch on
     // probe failure. The audio path here is local-derived from
     // scene.audioUrl upstream; we don't re-thread it because
     // imageAudioToClip's audioPath was already validated by streamToFile.
     await muxVideoAudio(aiVid.path, audioPath, outputPath, tempDir, sceneIndex, config, gradeFilter, {
       video: aiVid.sourceUrl,
-    });
+    }, forcedDurationSec);
     removeFiles(aiVid.path);
-    return audioDur;
+    return clipDur;
   }
 
   // Fallback: Ken Burns on still image
   const silentVidPath = path.join(tempDir, `scene_${sceneIndex}_imgvid.mp4`);
-  await imageToSilentClip(imagePath, silentVidPath, audioDur, sceneIndex, config, gradeFilter);
+  await imageToSilentClip(imagePath, silentVidPath, clipDur, sceneIndex, config, gradeFilter);
 
   // Merge video + audio (stream-copy video, re-encode audio)
-  // -t caps output at audioDur to prevent filter-graph reinit when one
-  // input outlasts the other (WAV files from TTS often have unknown RIFF
-  // data size, causing probeDuration to return 10 as fallback).
+  // -t caps output at clipDur. When a corrected duration is forced and
+  // it's longer than the audio, apad pads the audio with silence so the
+  // clip's audio stream length matches the video (kept consistent for
+  // concat; the audio is replaced by the master at the end anyway).
+  const useApad = clipDur > audioDur + 0.05;
   await runFfmpeg([
     "-i", silentVidPath,
     "-i", audioPath,
+    ...(useApad ? ["-af", "apad"] : []),
     "-map", "0:v:0",
     "-map", "1:a:0",
     "-c:v", "copy",
@@ -335,13 +355,13 @@ async function imageAudioToClip(
     "-b:a", "128k",
     "-ar", "44100",
     "-ac", "2",
-    "-t", String(audioDur),
+    "-t", String(clipDur),
     "-movflags", "+faststart",
     outputPath,
   ]);
 
   removeFiles(silentVidPath);
-  return audioDur;
+  return clipDur;
 }
 
 /** Probe video + audio durations with a single retry on failure.
@@ -454,6 +474,12 @@ async function muxVideoAudio(
    *  if a freshly-signed URL also produces an unprobable file, the
    *  source media is genuinely broken and the user should know. */
   sourceUrls?: { video?: string; audio?: string },
+  /** Silence-aligned target duration (s) for master-audio export
+   *  self-correction. When provided, the clip is sized to this and the
+   *  video is time-stretched to fill it (instead of matching the
+   *  per-scene audio slice). The audio is padded with silence to match
+   *  and is replaced by the continuous master in the final mux. */
+  forcedDurationSec?: number,
 ): Promise<void> {
   const [videoDur, audioDur] = await probeWithRetry(
     videoPath,
@@ -462,23 +488,34 @@ async function muxVideoAudio(
     sourceUrls,
   );
 
-  // AUDIO IS KING — video duration must EXACTLY match audio duration.
-  const clipDuration = audioDur;
-  const speedRatio = videoDur / audioDur;
-  const setptsFactor = (audioDur / videoDur).toFixed(6);
+  // Clip length: normally AUDIO IS KING (video stretched to the scene's
+  // voice slice). When exportVideo supplies a silence-aligned corrected
+  // duration, that becomes king instead — it's the scene's true
+  // narration length, so the visual lands in sync with the continuous
+  // master that replaces this clip's audio downstream.
+  const forced = forcedDurationSec && forcedDurationSec > 0 ? forcedDurationSec : null;
+  const clipDuration = forced ?? audioDur;
+  const speedRatio = videoDur / clipDuration;
+  const setptsFactor = (clipDuration / videoDur).toFixed(6);
 
   console.log(
     `[SceneEncoder] Scene ${sceneIndex} mux: video=${videoDur.toFixed(1)}s audio=${audioDur.toFixed(1)}s ` +
-    `speed=${speedRatio.toFixed(2)}x setpts=${setptsFactor}`
+    `clip=${clipDuration.toFixed(1)}s${forced ? " (corrected)" : ""} speed=${speedRatio.toFixed(2)}x setpts=${setptsFactor}`
   );
 
   const baseVf = `setpts=${setptsFactor}*PTS,${scaleAndPad(config.width, config.height)}`;
   const vf = joinVf(baseVf, gradeFilter);
 
+  // Pad the audio with silence when the forced clip is longer than the
+  // slice, so the muxed clip's audio length matches the video (keeps the
+  // concat inputs consistent; the audio is replaced by the master later).
+  const useApad = clipDuration > audioDur + 0.05;
+
   await runFfmpeg([
     "-i", videoPath,
     "-i", audioPath,
     "-vf", vf,
+    ...(useApad ? ["-af", "apad"] : []),
     "-map", "0:v:0",
     "-map", "1:a:0",
     "-c:v", "libx264",
@@ -565,6 +602,10 @@ export async function processScene(
   // case joinVf passes the base filter chain through unchanged.
   const gradeFilter = pickGradeFilter(scene, config);
 
+  // Silence-aligned corrected duration for this scene (master-audio
+  // self-correction). undefined → per-scene audio length stays king.
+  const correctedDurSec = config.correctedDurationsSec?.[i];
+
   try {
     // ── Video + Audio scene (cinematic / AI video) ──
     if (scene.videoUrl && scene.audioUrl) {
@@ -582,7 +623,7 @@ export async function processScene(
       await muxVideoAudio(vidPath, audPath, localPath, tempDir, i, config, gradeFilter, {
         video: scene.videoUrl,
         audio: scene.audioUrl,
-      });
+      }, correctedDurSec);
       removeFiles(vidPath, audPath);
       return { index: i, path: localPath };
     }
@@ -640,7 +681,7 @@ export async function processScene(
         streamToFile(scene.imageUrl, imgPath, "image"),
         streamToFile(scene.audioUrl, audPath, "audio"),
       ]);
-      const dur = await imageAudioToClip(imgPath, scene.imageUrl, scenePrompt, audPath, localPath, tempDir, i, config, gradeFilter);
+      const dur = await imageAudioToClip(imgPath, scene.imageUrl, scenePrompt, audPath, localPath, tempDir, i, config, gradeFilter, correctedDurSec);
       console.log(`[SceneEncoder] Scene ${i}: done (${dur.toFixed(1)}s)`);
       removeFiles(imgPath, audPath);
       return { index: i, path: localPath };

@@ -38,7 +38,8 @@ import {
   flushSceneProgress,
   clearSceneProgress,
 } from "../lib/sceneProgress.js";
-import { runFfmpeg } from "./export/ffmpegCmd.js";
+import { runFfmpeg, detectSilences, probeDuration } from "./export/ffmpegCmd.js";
+import { buildSceneSlices } from "../lib/sceneSlicing.js";
 
 // ── Export concurrency guard ─────────────────────────────────────────
 // Each ffmpeg export job can consume ~200 MB. On a 2 GB container that
@@ -675,6 +676,53 @@ async function _runExport(
           return scenes.map(() => null);
         });
         log.info("ASR transcription started in background", { sceneCount: scenes.length });
+      }
+    }
+
+    // ── 0.6. Master-audio sync self-correction ─────────────────────
+    // For master-audio projects, re-derive silence-aligned per-scene
+    // durations from the continuous master so each scene's VISUAL is
+    // sized to its TRUE narration length. This makes a re-export
+    // self-correct audio/video sync for ANY project — old rows
+    // included — without regenerating the audio. The continuous master
+    // is swapped in at step 2a (replaceMasterAudio); sizing each clip
+    // to its silence-aligned slice keeps the frame in step with it.
+    // Non-fatal: on any failure correctedDurationsSec stays unset and
+    // the per-scene audio length remains authoritative (old behavior).
+    if (exportConfig.generationId) {
+      try {
+        const { data: genRow } = await supabase
+          .from("generations")
+          .select("master_audio_url, master_audio_duration_ms")
+          .eq("id", exportConfig.generationId)
+          .maybeSingle();
+        const mUrl = (genRow as { master_audio_url?: string | null } | null)?.master_audio_url ?? null;
+        let mDurMs = Number((genRow as { master_audio_duration_ms?: number } | null)?.master_audio_duration_ms) || 0;
+        if (mUrl) {
+          const masterLocal = path.join(tempDir, "master_sync.mp3");
+          const resp = await fetch(mUrl);
+          if (resp.ok) {
+            fs.writeFileSync(masterLocal, Buffer.from(await resp.arrayBuffer()));
+            if (!mDurMs) {
+              mDurMs = Math.round((await probeDuration(masterLocal)) * 1000);
+            }
+            const silences = await detectSilences(masterLocal);
+            const slices = buildSceneSlices(
+              scenes as Array<{ voiceover?: unknown }>,
+              mDurMs,
+              silences,
+            );
+            exportConfig.correctedDurationsSec = slices.map((s) => s.sliceMs / 1000);
+            try { fs.unlinkSync(masterLocal); } catch { /* ignore */ }
+            log.info("Master-audio sync self-correction applied", {
+              scenes: slices.length,
+              masterSec: Number((mDurMs / 1000).toFixed(1)),
+              silences: silences.length,
+            });
+          }
+        }
+      } catch (err) {
+        log.warn("Master-audio sync self-correction skipped", { error: (err as Error).message });
       }
     }
 

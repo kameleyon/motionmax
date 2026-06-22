@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@sentry/node": "^8.0.0",
-    "@supabase/supabase-js": "^2.45.6",
+    "@supabase/supabase-js": "^2.105.4",
     "dotenv": "^16.4.7",
     "openai": "^4.77.0",
     "pdf-parse": "^2.4.5",

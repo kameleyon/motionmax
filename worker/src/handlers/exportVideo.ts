@@ -689,12 +689,20 @@ async function _runExport(
     // to its silence-aligned slice keeps the frame in step with it.
     // Non-fatal: on any failure correctedDurationsSec stays unset and
     // the per-scene audio length remains authoritative (old behavior).
-    if (exportConfig.generationId) {
+    //
+    // IMPORTANT: this MUST query the same way the master-audio SWAP does
+    // (step 2a: by project_id, latest generation) — not by
+    // exportConfig.generationId. If the two diverge, the master could be
+    // swapped in over UNCORRECTED clips, re-introducing the exact drift
+    // this block exists to remove. Same lookup → both fire together.
+    {
       try {
         const { data: genRow } = await supabase
           .from("generations")
           .select("master_audio_url, master_audio_duration_ms")
-          .eq("id", exportConfig.generationId)
+          .eq("project_id", project_id)
+          .order("created_at", { ascending: false })
+          .limit(1)
           .maybeSingle();
         const mUrl = (genRow as { master_audio_url?: string | null } | null)?.master_audio_url ?? null;
         let mDurMs = Number((genRow as { master_audio_duration_ms?: number } | null)?.master_audio_duration_ms) || 0;
@@ -712,12 +720,39 @@ async function _runExport(
               mDurMs,
               silences,
             );
-            exportConfig.correctedDurationsSec = slices.map((s) => s.sliceMs / 1000);
+            const corrected = slices.map((s) => s.sliceMs / 1000);
+
+            // Crossfade length compensation. concatWithCrossfade overlaps
+            // each adjacent pair by `crossfadeDuration`, shrinking the
+            // concatenated video by crossfadeDuration*(N-1) (transitions.ts
+            // totalReduction). Left uncompensated, that shortfall pulls
+            // every scene progressively earlier than its narration in the
+            // continuous master (cumulative drift) and freezes the last
+            // frame while the voice continues.
+            //
+            // Fix: extend every non-last clip by exactly X = crossfadeDuration.
+            //   d_i = c_i + X (i < N-1),  d_last = c_last
+            //   sum(d) - X*(N-1) = sum(c) = master length  → no tail freeze
+            //   scene i output start = Σ_{j<i}(d_j - X) = Σ_{j<i} c_j
+            //     = scene i's true start in the master       → no drift
+            // The crossfade blend then straddles the real narration
+            // boundary instead of dragging everything early. When
+            // crossfade is off (duration 0) this is a no-op and the
+            // clips already tile the master exactly.
+            const xfadeSec = exportConfig.crossfadeDuration > 0 ? exportConfig.crossfadeDuration : 0;
+            if (xfadeSec > 0 && corrected.length > 1) {
+              for (let k = 0; k < corrected.length - 1; k++) {
+                corrected[k] += xfadeSec;
+              }
+            }
+
+            exportConfig.correctedDurationsSec = corrected;
             try { fs.unlinkSync(masterLocal); } catch { /* ignore */ }
             log.info("Master-audio sync self-correction applied", {
               scenes: slices.length,
               masterSec: Number((mDurMs / 1000).toFixed(1)),
               silences: silences.length,
+              crossfadeCompensationSec: xfadeSec,
             });
           }
         }

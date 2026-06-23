@@ -17,7 +17,7 @@ import { handlePreflight } from "../../_shared/cors";
 import { logError } from "../../_shared/platformConfig";
 import { isResponse } from "../../_shared/auth";
 import { requireApiKey } from "../../_shared/apiKeyAuth";
-import { moderateOrThrow } from "../_shared/moderation";
+import { moderateOrThrow, checkWebhookUrl } from "../_shared/moderation";
 import { priceRequest } from "../_shared/pricing";
 import { SANDBOX_PAYLOAD_FLAG } from "../_shared/sandbox";
 import {
@@ -184,18 +184,16 @@ function validateCreateBody(raw: unknown): ValidationResult {
     return { ok: false, message: "`idempotency_key` must be a string." };
   }
 
-  // callback_url — optional, string URL.
+  // callback_url — optional webhook target. Hardened against SSRF: https-only,
+  // no credentials/literal-IPs/localhost/metadata/private ranges (the worker
+  // dispatcher must additionally re-validate post-DNS with redirect:'manual').
   if (body.callback_url !== undefined) {
     if (typeof body.callback_url !== "string") {
       return { ok: false, message: "`callback_url` must be a string URL." };
     }
-    try {
-      const u = new URL(body.callback_url);
-      if (u.protocol !== "https:" && u.protocol !== "http:") {
-        return { ok: false, message: "`callback_url` must be an http(s) URL." };
-      }
-    } catch {
-      return { ok: false, message: "`callback_url` must be a valid URL." };
+    const verdict = checkWebhookUrl(body.callback_url);
+    if (!verdict.ok) {
+      return { ok: false, message: `\`callback_url\` rejected: ${verdict.reason}.` };
     }
   }
 

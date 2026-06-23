@@ -1,0 +1,374 @@
+/**
+ * /api/v1 content moderation — FAIL-CLOSED.
+ *
+ * Unlike the legacy edge-function moderator
+ * (supabase/functions/generate-video/lib/validation.ts moderateContent), which
+ * FAILS OPEN (a missing key or provider error lets content through), the public
+ * gateway MUST fail CLOSED: if we cannot positively confirm a prompt is safe,
+ * we reject it. This is the CSAM/abuse-liability mitigation called out in the
+ * roadmap (§Phase 2 "moderation blocks (not fails-open) when the provider is
+ * down"; risk #6 "Moderation fails open").
+ *
+ * This module also performs an SSRF allowlist check on attachment URLs: any URL
+ * that is not http(s), resolves to (or literally is) a private / loopback /
+ * link-local / cloud-metadata address, or whose host is not on the allowlist is
+ * rejected before the worker ever fetches it.
+ *
+ * Public surface:
+ *   - moderateOrThrow(input, origin) — throws an apiError Response on rejection.
+ *   - classifyModerationText(prompt, geminiResult) — pure, unit-testable verdict
+ *     helper (no network).
+ *   - checkAttachmentUrl(url) — pure, unit-testable SSRF verdict for one URL.
+ *
+ * Runtime: Node.js (Vercel Fluid Compute) — uses process.env, not Deno.env.
+ */
+
+import { apiError } from "./contract";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Config
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Max characters of prompt text sent to the moderation model. */
+const MODERATION_PROMPT_LIMIT = 5000;
+
+/** Abort the moderation provider call after this long and REJECT (fail-closed). */
+const MODERATION_TIMEOUT_MS = 8000;
+
+/**
+ * Hosts allowed as attachment sources. Customer-supplied attachment URLs must
+ * live under one of these (exact host or a subdomain). Keep this tight — it is
+ * the SSRF allowlist. Extendable via ATTACHMENT_HOST_ALLOWLIST (comma-sep).
+ */
+const STATIC_ATTACHMENT_HOSTS: ReadonlySet<string> = new Set([
+  "motionmax.io",
+  "app.motionmax.io",
+]);
+
+function attachmentHostAllowlist(): Set<string> {
+  const hosts = new Set<string>(STATIC_ATTACHMENT_HOSTS);
+  const extra = process.env.ATTACHMENT_HOST_ALLOWLIST;
+  if (extra) {
+    for (const h of extra.split(",")) {
+      const t = h.trim().toLowerCase();
+      if (t) hosts.add(t);
+    }
+  }
+  // Supabase storage bucket host, if configured, is an implicit attachment
+  // source (signed asset URLs originate there).
+  const supaUrl = process.env.SUPABASE_URL;
+  if (supaUrl) {
+    try {
+      hosts.add(new URL(supaUrl).hostname.toLowerCase());
+    } catch {
+      /* ignore malformed SUPABASE_URL */
+    }
+  }
+  return hosts;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SSRF allowlist (pure, unit-testable)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface AttachmentVerdict {
+  ok: boolean;
+  /** Set when ok === false. */
+  reason?: string;
+}
+
+function isPrivateIPv4(host: string): boolean {
+  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!m) return false;
+  const oct = m.slice(1).map((n) => Number(n));
+  if (oct.some((n) => n > 255)) return true; // malformed → treat as unsafe
+  const [a, b] = oct;
+  if (a === 10) return true; // 10.0.0.0/8
+  if (a === 127) return true; // loopback 127.0.0.0/8
+  if (a === 0) return true; // 0.0.0.0/8
+  if (a === 169 && b === 254) return true; // link-local + 169.254.169.254 metadata
+  if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+  if (a === 192 && b === 168) return true; // 192.168.0.0/16
+  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT 100.64.0.0/10
+  if (a >= 224) return true; // multicast / reserved
+  return false;
+}
+
+function isPrivateIPv6(host: string): boolean {
+  // Host may arrive bracketed: [::1]
+  let h = host.toLowerCase();
+  if (h.startsWith("[") && h.endsWith("]")) h = h.slice(1, -1);
+  if (h === "::1" || h === "::") return true; // loopback / unspecified
+  if (h.startsWith("fe80")) return true; // link-local
+  if (h.startsWith("fc") || h.startsWith("fd")) return true; // unique-local fc00::/7
+  // IPv4-mapped (::ffff:169.254.169.254 etc.)
+  const mapped = h.match(/::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  if (mapped) return isPrivateIPv4(mapped[1]);
+  return false;
+}
+
+function isLiteralIp(host: string): boolean {
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(":");
+}
+
+function hostInAllowlist(host: string, allow: Set<string>): boolean {
+  const h = host.toLowerCase();
+  if (allow.has(h)) return true;
+  // Subdomain match: foo.bar.motionmax.io matches motionmax.io.
+  for (const allowed of allow) {
+    if (h === allowed || h.endsWith(`.${allowed}`)) return true;
+  }
+  return false;
+}
+
+/**
+ * Pure SSRF verdict for a single attachment URL string. No DNS resolution
+ * (that happens in the worker fetch path); this blocks the obvious and the
+ * literal-IP exfil vectors and enforces the host allowlist.
+ */
+export function checkAttachmentUrl(
+  raw: string,
+  allowlist: Set<string> = attachmentHostAllowlist(),
+): AttachmentVerdict {
+  if (typeof raw !== "string" || raw.trim() === "") {
+    return { ok: false, reason: "empty attachment URL" };
+  }
+  let u: URL;
+  try {
+    u = new URL(raw.trim());
+  } catch {
+    return { ok: false, reason: "malformed attachment URL" };
+  }
+
+  if (u.protocol !== "http:" && u.protocol !== "https:") {
+    return { ok: false, reason: `unsupported scheme "${u.protocol}"` };
+  }
+
+  // Reject embedded credentials (http://user:pass@host) — common SSRF/phishing.
+  if (u.username || u.password) {
+    return { ok: false, reason: "credentials in attachment URL" };
+  }
+
+  const host = u.hostname.toLowerCase();
+  if (!host) return { ok: false, reason: "missing host" };
+
+  // Block obvious local hostnames regardless of allowlist.
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) {
+    return { ok: false, reason: "loopback host" };
+  }
+  if (host === "metadata.google.internal") {
+    return { ok: false, reason: "metadata host" };
+  }
+
+  if (isLiteralIp(host)) {
+    if (isPrivateIPv4(host) || isPrivateIPv6(host)) {
+      return { ok: false, reason: "private/loopback/metadata IP" };
+    }
+    // A public literal IP still bypasses the host allowlist → reject.
+    return { ok: false, reason: "literal IP not allowed" };
+  }
+
+  if (!hostInAllowlist(host, allowlist)) {
+    return { ok: false, reason: `host "${host}" not on attachment allowlist` };
+  }
+
+  return { ok: true };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Text moderation verdict (pure, unit-testable)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface GeminiVerdict {
+  /** Did the provider call complete and return a parseable verdict? */
+  available: boolean;
+  /** When available: the model's pass/fail. */
+  passed?: boolean;
+  reason?: string;
+}
+
+export interface ModerationDecision {
+  passed: boolean;
+  code: "ok" | "content_rejected" | "moderation_unavailable";
+  reason?: string;
+}
+
+/**
+ * Pure verdict combiner. FAIL-CLOSED: if the provider was unavailable, the
+ * prompt is empty, or the model flagged it, the content does NOT pass.
+ */
+export function classifyModerationText(
+  prompt: string,
+  gemini: GeminiVerdict,
+): ModerationDecision {
+  if (typeof prompt !== "string" || prompt.trim() === "") {
+    return { passed: false, code: "content_rejected", reason: "empty prompt" };
+  }
+  if (!gemini.available) {
+    return {
+      passed: false,
+      code: "moderation_unavailable",
+      reason: gemini.reason ?? "moderation provider unavailable",
+    };
+  }
+  if (gemini.passed === false) {
+    return {
+      passed: false,
+      code: "content_rejected",
+      reason: gemini.reason && gemini.reason.length > 0 ? gemini.reason : "policy violation",
+    };
+  }
+  if (gemini.passed === true) {
+    return { passed: true, code: "ok" };
+  }
+  // No definitive pass signal → fail closed.
+  return {
+    passed: false,
+    code: "moderation_unavailable",
+    reason: "moderation returned no verdict",
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Gemini provider call (network)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Call Gemini gemini-2.0-flash to screen a prompt. Returns a GeminiVerdict:
+ * available=false on missing key, network/HTTP error, timeout, or unparseable
+ * response — the caller then fails closed.
+ */
+async function callGeminiModeration(prompt: string): Promise<GeminiVerdict> {
+  const geminiKey = process.env.GOOGLE_TTS_API_KEY;
+  if (!geminiKey) {
+    return { available: false, reason: "GOOGLE_TTS_API_KEY not configured" };
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
+  const payload = {
+    contents: [
+      {
+        parts: [
+          {
+            text:
+              `You are an AI safety moderator for a video generation app. Analyze the following user prompt.\n` +
+              `Strictly flag if the prompt contains: explicitly sexual content, graphic non-fictional gore, hate speech, or promotes illegal acts. Flag ALL sexual content involving minors.\n` +
+              `Allow: fictional drama, action movie concepts, mystery, and standard storytelling.\n` +
+              `Reply ONLY with a valid JSON object in this exact format: {"passed": boolean, "reason": "short explanation if failed, otherwise empty string"}\n\n` +
+              `User Prompt: "${prompt.substring(0, MODERATION_PROMPT_LIMIT)}"`,
+          },
+        ],
+      },
+    ],
+    generationConfig: {
+      temperature: 0.1,
+      responseMimeType: "application/json",
+    },
+  };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MODERATION_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      return { available: false, reason: `gemini http ${response.status}` };
+    }
+
+    const data = (await response.json()) as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    };
+    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!responseText) {
+      return { available: false, reason: "gemini empty response" };
+    }
+
+    let parsed: { passed?: unknown; reason?: unknown };
+    try {
+      parsed = JSON.parse(responseText);
+    } catch {
+      return { available: false, reason: "gemini unparseable verdict" };
+    }
+
+    if (typeof parsed.passed !== "boolean") {
+      return { available: false, reason: "gemini malformed verdict" };
+    }
+
+    return {
+      available: true,
+      passed: parsed.passed,
+      reason: typeof parsed.reason === "string" ? parsed.reason : undefined,
+    };
+  } catch (err) {
+    // Network failure, abort/timeout, JSON read error — all fail closed.
+    const reason = (err as { name?: string })?.name === "AbortError" ? "gemini timeout" : "gemini network error";
+    return { available: false, reason };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Public entrypoint
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ModerationInput {
+  prompt: string;
+  attachments?: string[];
+}
+
+/**
+ * Moderate a public /v1 request. Throws an apiError(422, ...) Response when the
+ * content is rejected, moderation is unavailable, or an attachment URL fails the
+ * SSRF allowlist. Resolves silently when the request is safe.
+ *
+ * Convention matches requireAdmin/requireApiKey: this THROWS a Response, which
+ * the handler catches via isResponse(e).
+ */
+export async function moderateOrThrow(
+  input: ModerationInput,
+  origin: string | null,
+): Promise<void> {
+  // 1) Attachment SSRF allowlist — cheap, do it before the network call.
+  if (input.attachments && input.attachments.length > 0) {
+    const allow = attachmentHostAllowlist();
+    for (const att of input.attachments) {
+      const verdict = checkAttachmentUrl(att, allow);
+      if (!verdict.ok) {
+        throw apiError(
+          422,
+          "attachment_rejected",
+          `Attachment rejected: ${verdict.reason}.`,
+          origin,
+        );
+      }
+    }
+  }
+
+  // 2) Prompt text moderation — FAIL CLOSED.
+  const gemini = await callGeminiModeration(input.prompt);
+  const decision = classifyModerationText(input.prompt, gemini);
+
+  if (decision.passed) return;
+
+  if (decision.code === "moderation_unavailable") {
+    throw apiError(
+      422,
+      "moderation_unavailable",
+      "Content moderation is temporarily unavailable; the request was rejected as a safety precaution. Please retry shortly.",
+      origin,
+    );
+  }
+
+  throw apiError(
+    422,
+    "content_rejected",
+    `Content violates our safety policy (${decision.reason ?? "policy violation"}). Please revise your input.`,
+    origin,
+  );
+}

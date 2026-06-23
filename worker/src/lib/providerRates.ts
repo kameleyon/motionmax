@@ -254,3 +254,57 @@ export function openRouterVideoCostUsd(
 export function toUsdCents(usd: number): number {
   return Math.round(usd * 100);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Worst-rung video cost (APPEND-ONLY — roadmap §4(a) recommendation 1).
+//
+// The public /api/v1 gateway must quote a STABLE price pinned to the most
+// expensive rung in each mode's provider cascade, so margin stays positive
+// even when a job falls through to a premium fallback. This helper exposes
+// the single worst-case USD figure per mode (for a 10-second clip baseline,
+// the largest billable unit in the cascade) without leaking the internal
+// per-second rate table outside the worker.
+//
+// Cascade worst rungs (from PROVIDER_RATES_USD above):
+//   cinematic → OpenRouter Seedance 2.0 Fast 1080p ($0.268/s) is the
+//               most expensive token-billed rung; over a 10s clip ≈ $2.68.
+//   doc2video → Hypereal Kling V2.6 Pro 10s ($0.40) is the worst per-clip
+//               video rung used on the doc2video/explainer cascade.
+//   smartflow → same Kling rung as doc2video (shares the explainer video
+//               cascade) but typically half the clip count; kept identical
+//               at the per-clip worst rung to never under-quote.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Baseline clip length (seconds) used to convert per-second rungs to a
+ *  per-clip worst-case figure. 10s is the largest single billable clip the
+ *  cascade emits. */
+const WORST_RUNG_CLIP_SECONDS = 10;
+
+/**
+ * Most-expensive USD rung for a given generation mode's provider cascade.
+ * Used by the public API pricing layer (api/v1/_shared/pricing.ts) to pin
+ * the quoted credit price to the worst case (roadmap §4(a)). Returns a USD
+ * float for a single worst-case clip; the pricing layer scales it by the
+ * expected clip count for the requested length.
+ *
+ * `format` is accepted for forward-compatibility (aspect-ratio-specific
+ * rungs) but does not currently change the worst rung — all formats share
+ * the same upstream models.
+ */
+export function worstRungVideoCostUsd(mode: string, _format?: string): number {
+  switch (mode) {
+    case "cinematic":
+      // OpenRouter Seedance 2.0 Fast 1080p — the priciest cinematic rung.
+      return PROVIDER_RATES_USD.openrouter_seedance_2_0_fast.per_second_1080p
+        * WORST_RUNG_CLIP_SECONDS;
+    case "doc2video":
+    case "smartflow":
+      // Hypereal Kling V2.6 Pro 10s — worst per-clip explainer video rung.
+      return PROVIDER_RATES_USD.hypereal_video_kling.per_video_10s;
+    default:
+      // Unknown mode: fall back to the cinematic worst case so we never
+      // under-quote an unexpected request shape.
+      return PROVIDER_RATES_USD.openrouter_seedance_2_0_fast.per_second_1080p
+        * WORST_RUNG_CLIP_SECONDS;
+  }
+}

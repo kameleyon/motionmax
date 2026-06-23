@@ -51,6 +51,7 @@ import { startHeartbeatWriter } from "./lib/heartbeat.js";
 import { logProviderKeysBanner } from "./lib/providerKeysBanner.js";
 import { makeGracefulShutdown, registerProcessSignalHandlers } from "./lib/lifecycle.js";
 import { emitQueueDepthAlert } from "./lib/queueDepthAlert.js";
+import { reconcileJobMargin } from "./lib/marginReconcile.js";
 
 /* ---- Per-task-type worker pools ----
  * FFmpeg exports (export_video) are CPU+memory-bound and compete with AI API calls
@@ -249,6 +250,9 @@ async function withTransientRetry<T>(
 // REAL implementation without booting all of index.ts (which starts the
 // health server, autopost dispatcher, etc.). See worker/src/refundCreditsOnFailure.test.ts.
 import { refundCreditsOnFailure } from "./refundCreditsOnFailure.js";
+// /api/v1 gateway jobs refund cost-aware (charged − provider spend), NOT the
+// full refund refundCreditsOnFailure issues (which also skips API task_types).
+import { isApiJob, costAwareRefundApiJob } from "./lib/apiJobRefund.js";
 // Re-export so any other module importing these from "./index.js" keeps working.
 export {
   refundCreditsOnFailure,
@@ -520,6 +524,29 @@ async function processJob(job: Job, signal?: AbortSignal) {
 
     totalJobsProcessed++;
 
+    // ── Margin reconciliation (Builder H, roadmap §1.3 G-M) ──────────
+    // Best-effort, non-throwing. Only billed root jobs carry a positive
+    // creditsDeducted in payload (gateway worst-rung quote or the browser
+    // path's getCreditCost); downstream child jobs (finalize/export/etc.)
+    // have no charge of their own, so reconcileJobMargin no-ops on them
+    // (creditsCharged <= 0 → null). Sums api_call_logs.cost for this job,
+    // values the charged credits at CREDIT_USD_RATE, emits the
+    // api_job_margin_usd gauge and warns when the job lost money. Fired
+    // after the terminal write so a reconciliation hiccup can never
+    // affect the job's completed status.
+    const creditsCharged =
+      typeof (cleanPayload as { creditsDeducted?: unknown }).creditsDeducted === "number"
+        ? (cleanPayload as { creditsDeducted: number }).creditsDeducted
+        : 0;
+    if (creditsCharged > 0) {
+      await reconcileJobMargin(job.id, creditsCharged).catch((reconErr) => {
+        wlog.warn("Margin reconciliation call failed (ignored)", {
+          jobId: job.id,
+          error: reconErr instanceof Error ? reconErr.message : String(reconErr),
+        });
+      });
+    }
+
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
 
@@ -553,9 +580,14 @@ async function processJob(job: Job, signal?: AbortSignal) {
       console.error(`[Worker] Failed to write log for ${job.id}:`, logErr);
     }
 
-    // Refund credits for failed generation
+    // Refund credits for failed generation. API jobs use the cost-aware path
+    // (refund only the unspent portion); the browser path keeps its full refund.
     try {
-      await refundCreditsOnFailure(job);
+      if (isApiJob(job)) {
+        await costAwareRefundApiJob(job);
+      } else {
+        await refundCreditsOnFailure(job);
+      }
     } catch (refundErr) {
       console.error(`[Worker] Refund failed for ${job.id}:`, refundErr);
     }

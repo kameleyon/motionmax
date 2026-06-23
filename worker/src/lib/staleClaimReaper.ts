@@ -107,6 +107,20 @@ export async function runStaleClaimReaper(): Promise<void> {
   // Per-task-type windows so we never reap a job that's still
   // legitimately running its hard timeout.
   //
+  // ── G-M5 / G-M11 double-bill gate (2026-06, Builder H) ─────────
+  // The public /api/v1 gateway stamps `billed_at` on a job once its
+  // credits have been committed (migration 20260524000100). The two
+  // task types called out in the TODO below — master_audio and
+  // cinematic_video — are NOT mid-call-death idempotent: reviving a
+  // row whose provider call already fired (but whose row update hadn't
+  // landed) re-spends Gemini TTS / Kling render budget. We now apply
+  // the TODO's proposed fix #2: for those two task types the reaper
+  // ONLY auto-revives rows where billed_at IS NULL. A row that already
+  // has billed_at set is left in 'processing' for the stale-claim
+  // backstop / manual triage rather than auto-resubmitted, so we never
+  // double-charge a paid (gateway) job on a worker restart. Unbilled
+  // (browser-path) rows keep the prior auto-revive behavior unchanged.
+  //
   // TODO(worker-hardening-wave) G-M5: master_audio + cinematic_video
   // revival are NOT fully double-billing-safe.
   //   • master_audio: each Gemini TTS call costs N tokens; on revive
@@ -137,8 +151,12 @@ export async function runStaleClaimReaper(): Promise<void> {
   // This needs the worker test harness (worker/src/lib/staleClaimReaper.test.ts)
   // to be extended with a "billed-but-not-finalised" scenario before
   // the fix can ship safely.
-  const reaperBuckets: Array<{ taskTypes: string[] | null; cutoff: string; label: string; staleMin: number }> = [
-    { taskTypes: ["cinematic_video"],                   cutoff: cutoffCinematic, label: "cinematic_video",  staleMin: STALE_CINEMATIC_VIDEO_MS / 60000 },
+  // `billedGate` buckets add an `billed_at IS NULL` filter so a paid
+  // (gateway-stamped) job is never auto-resubmitted into a second
+  // provider spend — see the G-M5/G-M11 note above.
+  const reaperBuckets: Array<{ taskTypes: string[] | null; cutoff: string; label: string; staleMin: number; billedGate?: boolean }> = [
+    { taskTypes: ["cinematic_video"],                   cutoff: cutoffCinematic, label: "cinematic_video",  staleMin: STALE_CINEMATIC_VIDEO_MS / 60000, billedGate: true },
+    { taskTypes: ["master_audio"],                      cutoff: cutoffDefault,   label: "master_audio",     staleMin: STALE_DEFAULT_MS         / 60000, billedGate: true },
     { taskTypes: ["export_video"],                      cutoff: cutoffExport,    label: "export_video",     staleMin: STALE_EXPORT_VIDEO_MS    / 60000 },
     { taskTypes: null /* everything else, exclusive */, cutoff: cutoffDefault,   label: "default",          staleMin: STALE_DEFAULT_MS         / 60000 },
   ];
@@ -149,12 +167,19 @@ export async function runStaleClaimReaper(): Promise<void> {
       .update({ status: "pending", worker_id: null })
       .eq("status", "processing")
       .lt("updated_at", bucket.cutoff);
+    if (bucket.billedGate) {
+      // Only auto-revive rows that have NOT been billed by the gateway.
+      // Billed rows are held for the stale-claim backstop / manual triage
+      // so a worker restart can't double-spend a paid provider call.
+      q = q.is("billed_at", null);
+    }
     if (bucket.taskTypes && bucket.taskTypes.length > 0) {
       q = q.in("task_type", bucket.taskTypes);
     } else {
       // "default" bucket: anything that isn't an orchestrator and
-      // isn't covered by a more-specific bucket above.
-      q = q.not("task_type", "in", "(autopost_render,autopost_rerender,cinematic_video,export_video)");
+      // isn't covered by a more-specific bucket above (cinematic_video,
+      // master_audio and export_video each have their own bucket).
+      q = q.not("task_type", "in", "(autopost_render,autopost_rerender,cinematic_video,master_audio,export_video)");
     }
     const { data: reclaimed, error: reapErr } = await q.select("id, task_type");
     if (reapErr) {

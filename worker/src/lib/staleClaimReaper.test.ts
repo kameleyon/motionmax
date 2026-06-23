@@ -51,6 +51,7 @@ interface ChainRecord {
   ltCalls: Array<[string, unknown]>;
   inCalls: Array<[string, unknown[]]>;
   notCalls: Array<[string, string, string]>;
+  isCalls: Array<[string, unknown]>;
 }
 
 function makeRouter(
@@ -68,6 +69,7 @@ function makeRouter(
       ltCalls: [],
       inCalls: [],
       notCalls: [],
+      isCalls: [],
     };
     const chain: Record<string, unknown> = {};
     chain.update = (data: unknown) => {
@@ -84,6 +86,10 @@ function makeRouter(
     };
     chain.in = (col: string, vals: unknown[]) => {
       rec.inCalls.push([col, vals]);
+      return chain;
+    };
+    chain.is = (col: string, val: unknown) => {
+      rec.isCalls.push([col, val]);
       return chain;
     };
     chain.not = (col: string, op: string, vals: string) => {
@@ -316,6 +322,54 @@ describe("runStaleClaimReaper", () => {
     expect(vals).toContain("autopost_render");
     expect(vals).toContain("autopost_rerender");
     expect(vals).toContain("cinematic_video");
+    expect(vals).toContain("master_audio");
     expect(vals).toContain("export_video");
+  });
+
+  // ── 7. Billed-job double-bill gate (G-M5/G-M11) ─────────────────────
+  //     cinematic_video + master_audio buckets must add an
+  //     is('billed_at', null) filter so a paid (gateway-stamped) job is
+  //     never auto-revived into a second provider spend on worker restart.
+  it("gates cinematic_video + master_audio revival on billed_at IS NULL", async () => {
+    const captured: ChainRecord[] = [];
+    const { supabase } = await import("./supabase.js");
+
+    vi.mocked(supabase.from).mockImplementation(
+      makeRouter(
+        [
+          { data: [], error: null }, // orchestrator
+          { data: [], error: null }, // cinematic_video
+          { data: [], error: null }, // master_audio
+          { data: [], error: null }, // export_video
+          { data: [], error: null }, // default
+        ],
+        (rec) => captured.push(rec),
+      ) as never,
+    );
+
+    const { runStaleClaimReaper } = await import("./staleClaimReaper.js");
+    await runStaleClaimReaper();
+
+    const cinBucket = captured.find((c) =>
+      c.inCalls.some(([col, vals]) => col === "task_type" && (vals as string[]).includes("cinematic_video")),
+    );
+    const masterBucket = captured.find((c) =>
+      c.inCalls.some(([col, vals]) => col === "task_type" && (vals as string[]).includes("master_audio")),
+    );
+    expect(cinBucket).toBeDefined();
+    expect(masterBucket).toBeDefined();
+
+    // Both billing-sensitive buckets gate on billed_at IS NULL.
+    expect(cinBucket!.isCalls).toContainEqual(["billed_at", null]);
+    expect(masterBucket!.isCalls).toContainEqual(["billed_at", null]);
+
+    // The export_video bucket is provider-idempotent (ffmpeg re-encode is
+    // free to redo) so it must NOT carry the billed_at gate — otherwise a
+    // paid export that legitimately stalled would never auto-recover.
+    const exportBucket = captured.find((c) =>
+      c.inCalls.some(([col, vals]) => col === "task_type" && (vals as string[]).includes("export_video")),
+    );
+    expect(exportBucket).toBeDefined();
+    expect(exportBucket!.isCalls).toHaveLength(0);
   });
 });

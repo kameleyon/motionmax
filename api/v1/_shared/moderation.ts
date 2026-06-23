@@ -173,7 +173,10 @@ export function checkAttachmentUrl(
     return { ok: false, reason: "credentials in attachment URL" };
   }
 
-  const host = u.hostname.toLowerCase();
+  // Strip trailing dot(s): "localhost." / "metadata.google.internal." are valid
+  // FQDNs that resolve identically but would slip past the equality/suffix
+  // checks below. Normalize before any comparison.
+  const host = u.hostname.toLowerCase().replace(/\.+$/, "");
   if (!host) return { ok: false, reason: "missing host" };
 
   // Block obvious local hostnames regardless of allowlist.
@@ -228,7 +231,10 @@ export function checkWebhookUrl(raw: string): AttachmentVerdict {
     return { ok: false, reason: "credentials in webhook URL" };
   }
 
-  const host = u.hostname.toLowerCase();
+  // Strip trailing dot(s): "localhost." / "metadata.google.internal." are valid
+  // FQDNs that resolve identically but would slip past the equality/suffix
+  // checks below. Normalize before any comparison.
+  const host = u.hostname.toLowerCase().replace(/\.+$/, "");
   if (!host) return { ok: false, reason: "missing host" };
 
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) {

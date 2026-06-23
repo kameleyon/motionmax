@@ -52,6 +52,14 @@ import { logProviderKeysBanner } from "./lib/providerKeysBanner.js";
 import { makeGracefulShutdown, registerProcessSignalHandlers } from "./lib/lifecycle.js";
 import { emitQueueDepthAlert } from "./lib/queueDepthAlert.js";
 import { reconcileJobMargin } from "./lib/marginReconcile.js";
+// ── /api/v1 Phase 2 — sandbox short-circuit + webhook delivery ──────────────
+// Sandbox detection + deterministic stub live in the worker (api/ tree is not
+// importable here). Webhook delivery is owned by Builder A — we only import.
+import { isSandboxPayload, buildSandboxJobResult } from "./lib/sandboxJob.js";
+import { enqueueWebhook, deliverPendingWebhooks } from "./lib/webhookDelivery.js";
+// Webhook `data`/`error` MUST mirror the api/v1 GET handler's contract mapping
+// (the worker can't import api/) so a customer's webhook == their GET /videos/{id}.
+import { normalizeSuccessResult, normalizeFailureError } from "./lib/apiResultNormalize.js";
 
 /* ---- Per-task-type worker pools ----
  * FFmpeg exports (export_video) are CPU+memory-bound and compete with AI API calls
@@ -192,6 +200,16 @@ let realtimeStatus: string = 'unknown';
 let totalJobsProcessed = 0;
 let totalJobsFailed = 0;
 
+/* ---- /api/v1 webhook delivery sweep state (roadmap §Phase 2) ---- */
+// deliverPendingWebhooks (Builder A) drains the webhook outbox: signs +
+// POSTs pending deliveries, applies exponential backoff on failure. We run
+// it on a ~15s interval alongside the other worker loops, guarded against
+// overlap so a slow sweep (many retries) never stacks concurrent runs.
+const WEBHOOK_SWEEP_INTERVAL_MS = 15_000;
+let webhookSweepInFlight = false;
+let webhookSweepTimer: ReturnType<typeof setInterval> | null = null;
+let webhookSweepRuns = 0; // process-lifetime count of sweep invocations (metrics)
+
 /* ---- Transient-error retry helpers ---- */
 // isTransientError and retryDelayMs imported from ./lib/retryClassifier.js
 
@@ -327,6 +345,109 @@ async function processJob(job: Job, signal?: AbortSignal) {
         .from('video_generation_jobs')
         .update({ status: 'processing', updated_at: new Date().toISOString() })
         .eq('id', job.id);
+    }
+
+    // ── /api/v1 SANDBOX SHORT-CIRCUIT (roadmap §Phase 2 — Sandbox) ──────────
+    // mm_test_ keys exercise the full request path (auth/validate/moderate) but
+    // MUST NOT spend on real providers. The gateway tags such jobs with
+    // payload.sandbox === true and inserts them pending; we detect that here —
+    // as early as possible after the claim, BEFORE any handler dispatch — and
+    // write a deterministic terminal-success WITHOUT calling any provider.
+    // We still go through the outbox + (id, worker_id, status='processing')
+    // terminal UPDATE so job_results is marked applied exactly like the happy
+    // path, and fire the success webhook. Then return.
+    if (isSandboxPayload(job.payload)) {
+      throwIfAborted();
+      const sandboxResult = buildSandboxJobResult(job.payload);
+      const sandboxPayload = {
+        ...finalPayload,
+        ...sandboxResult,
+        sandbox: true,
+      };
+      const { _restartCount: _rcSb, ...cleanSandboxPayload } = sandboxPayload as Record<string, unknown>;
+
+      await writeSystemLog({
+        jobId: job.id,
+        projectId: job.project_id ?? undefined,
+        userId: job.user_id,
+        category: "system_info",
+        eventType: "job_completed",
+        message: `Worker short-circuited sandbox job ${job.id} (no provider spend)`,
+      });
+
+      // Outbox first (safety net), then terminal UPDATE — same ordering and
+      // (id, worker_id, status='processing') guards as the real success path.
+      try {
+        const { error: sbOutboxErr } = await (supabase as any)
+          .from('job_results')
+          .upsert({
+            job_id: job.id,
+            result: cleanSandboxPayload,
+            worker_id: WORKER_ID,
+            applied_at: null,
+          }, { onConflict: 'job_id' });
+        if (sbOutboxErr) {
+          wlog.warn("Sandbox outbox write failed — relying on UPDATE path only", {
+            jobId: job.id, workerId: WORKER_ID, error: sbOutboxErr.message,
+          });
+        }
+      } catch (sbOutboxThrow) {
+        wlog.warn("Sandbox outbox write threw — relying on UPDATE path only", {
+          jobId: job.id, workerId: WORKER_ID,
+          error: sbOutboxThrow instanceof Error ? sbOutboxThrow.message : String(sbOutboxThrow),
+        });
+      }
+
+      const { error: sbCompleteError, count: sbCompleteCount } = await (supabase as any)
+        .from('video_generation_jobs')
+        .update({
+          status: 'completed',
+          progress: 100,
+          payload: cleanSandboxPayload,
+          result: cleanSandboxPayload,
+          updated_at: new Date().toISOString(),
+        }, { count: 'exact' })
+        .eq('id', job.id)
+        .eq('worker_id', WORKER_ID)
+        .eq('status', 'processing');
+
+      if (sbCompleteError) {
+        console.error(`[Worker] Failed to mark sandbox job ${job.id} as completed:`, sbCompleteError.message);
+        Sentry.captureException(sbCompleteError, { tags: { jobId: job.id, phase: "mark-completed-sandbox" } });
+      } else if (sbCompleteCount === 0) {
+        wlog.warn("Sandbox terminal 'completed' UPDATE matched 0 rows — claim handed off OR cancelled", {
+          jobId: job.id, workerId: WORKER_ID, taskType: job.task_type,
+        });
+      } else {
+        void (supabase as any)
+          .from('job_results')
+          .update({ applied_at: new Date().toISOString() })
+          .eq('job_id', job.id)
+          .then(() => {}, () => {});
+      }
+
+      // Best-effort success webhook for the sandbox job. Never affects status.
+      const sbCallbackUrl = (job as { callback_url?: string | null }).callback_url ?? null;
+      const sbAccountId = (job as { account_id?: string | null }).account_id ?? null;
+      if (sbCallbackUrl && sbAccountId) {
+        try {
+          await enqueueWebhook(supabase, {
+            accountId: sbAccountId,
+            jobId: job.id,
+            callbackUrl: sbCallbackUrl,
+            event: 'video.succeeded',
+            result: cleanSandboxPayload,
+          });
+        } catch (whErr) {
+          wlog.warn("Sandbox success webhook enqueue failed (ignored)", {
+            jobId: job.id,
+            error: whErr instanceof Error ? whErr.message : String(whErr),
+          });
+        }
+      }
+
+      totalJobsProcessed++;
+      return;
     }
 
     await withTransientRetry(async (attempt) => {
@@ -547,6 +668,33 @@ async function processJob(job: Job, signal?: AbortSignal) {
       });
     }
 
+    // ── /api/v1 WEBHOOK on terminal SUCCESS (roadmap §Phase 2 — Webhooks) ───
+    // API jobs carry a callback_url + account_id (gateway-stamped). On a
+    // terminal success we enqueue a 'video.succeeded' delivery (Builder A's
+    // webhookDelivery owns signing/retry/backoff). Best-effort: a webhook
+    // enqueue failure must NEVER affect the job's completed status — fired
+    // after the terminal write, wrapped in try/catch.
+    const successCallbackUrl = (job as { callback_url?: string | null }).callback_url ?? null;
+    const successAccountId = (job as { account_id?: string | null }).account_id ?? null;
+    if (successCallbackUrl && successAccountId) {
+      try {
+        await enqueueWebhook(supabase, {
+          accountId: successAccountId,
+          jobId: job.id,
+          callbackUrl: successCallbackUrl,
+          event: 'video.succeeded',
+          // Normalize cleanPayload → VideoResult-shaped fields (same fallbacks
+          // the GET handler uses) so the webhook isn't all-null on real success.
+          result: normalizeSuccessResult(cleanPayload as Record<string, unknown>),
+        });
+      } catch (whErr) {
+        wlog.warn("Success webhook enqueue failed (ignored)", {
+          jobId: job.id,
+          error: whErr instanceof Error ? whErr.message : String(whErr),
+        });
+      }
+    }
+
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
 
@@ -652,6 +800,34 @@ async function processJob(job: Job, signal?: AbortSignal) {
       });
 
     totalJobsFailed++;
+
+    // ── /api/v1 WEBHOOK on terminal FAILURE (roadmap §Phase 2 — Webhooks) ───
+    // Mirror of the success path: enqueue a 'video.failed' delivery for API
+    // jobs (callback_url + account_id present). Best-effort — must never
+    // re-throw out of the catch block and mask the original error.
+    try {
+      const failCallbackUrl = (job as { callback_url?: string | null }).callback_url ?? null;
+      const failAccountId = (job as { account_id?: string | null }).account_id ?? null;
+      if (failCallbackUrl && failAccountId) {
+        await enqueueWebhook(supabase, {
+          accountId: failAccountId,
+          jobId: job.id,
+          callbackUrl: failCallbackUrl,
+          event: 'video.failed',
+          // Normalize the error the SAME way GET does: content-policy rejections
+          // (E005 etc.) collapse to a stable code + generic message — never leak
+          // the raw provider token via the webhook channel.
+          result: {
+            error: normalizeFailureError(errorMsg),
+          },
+        });
+      }
+    } catch (whErr) {
+      wlog.warn("Failure webhook enqueue failed (ignored)", {
+        jobId: job.id,
+        error: whErr instanceof Error ? whErr.message : String(whErr),
+      });
+    }
   } finally {
     pool.delete(job.id);
   }
@@ -896,6 +1072,28 @@ function subscribeToQueue() {
     });
 }
 
+/**
+ * /api/v1 webhook delivery sweep. Drains pending webhook deliveries via
+ * Builder A's deliverPendingWebhooks. Overlap-guarded (webhookSweepInFlight)
+ * so a long-running sweep never stacks; skips while shutting down. Always
+ * best-effort — never throws into the interval.
+ */
+async function runWebhookSweep(): Promise<void> {
+  if (isShuttingDown) return;
+  if (webhookSweepInFlight) return; // previous sweep still running — skip
+  webhookSweepInFlight = true;
+  webhookSweepRuns++;
+  try {
+    await deliverPendingWebhooks(supabase);
+  } catch (err) {
+    wlog.warn("Webhook delivery sweep failed (ignored)", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  } finally {
+    webhookSweepInFlight = false;
+  }
+}
+
 /* ---- Graceful shutdown + signal/crash handlers ----
  * gracefulShutdown / SIGTERM / SIGINT / uncaughtException / unhandledRejection
  * live in worker/src/lib/lifecycle.ts. We pass closures over the entrypoint's
@@ -933,6 +1131,7 @@ startHealthServer(() => ({
   pollStaleThresholdMs: FALLBACK_POLL_INTERVAL_MS * 3,
   totalJobsProcessed,
   totalJobsFailed,
+  webhookSweepRuns,
 }));
 
 console.log(
@@ -964,6 +1163,15 @@ startHeartbeatWriter({
   isShuttingDown: () => isShuttingDown,
   onRestartRequested: () => { void gracefulShutdown("ADMIN_RESTART"); },
 });
+
+// ── /api/v1 webhook delivery sweep loop (roadmap §Phase 2 — Webhooks) ───────
+// Independent of the video_generation_jobs poll loop. Runs every ~15s, drains
+// the webhook outbox (Builder A's deliverPendingWebhooks), overlap-guarded.
+// Kicked off immediately so terminal webhooks enqueued during startup are
+// delivered promptly rather than waiting a full interval.
+void runWebhookSweep();
+webhookSweepTimer = setInterval(() => { void runWebhookSweep(); }, WEBHOOK_SWEEP_INTERVAL_MS);
+if (typeof webhookSweepTimer.unref === "function") webhookSweepTimer.unref();
 
 runStartupDiagnostic(WORKER_ID).then((hadOrphans) => {
   const startPolling = () => {

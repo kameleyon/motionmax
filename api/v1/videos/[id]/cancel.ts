@@ -18,6 +18,7 @@ import { webHandler } from "../../../_shared/webHandler";
 import { handlePreflight } from "../../../_shared/cors";
 import { logError } from "../../../_shared/platformConfig";
 import { requireApiKey } from "../../../_shared/apiKeyAuth";
+import { checkApiRateLimit, type RateLimitResult } from "../../../_shared/rateLimit";
 import { costAwareRefund } from "../../_shared/refund";
 import {
   apiError,
@@ -28,6 +29,49 @@ import {
   type ApiJobView,
   type VideoMode,
 } from "../../_shared/contract";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rate-limit header plumbing (mirrors api/v1/videos/index.ts). Cancel is cheap
+// but still metered so a tight cancel loop can't be used to bypass the limiter.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function rateLimitHeaders(rl: RateLimitResult): Record<string, string> {
+  const headers: Record<string, string> = {
+    "X-RateLimit-Limit": String(rl.limit),
+    "X-RateLimit-Remaining": String(Math.max(0, rl.remaining)),
+    "X-RateLimit-Reset": String(rl.reset),
+  };
+  if (!rl.allowed) {
+    headers["Retry-After"] = String(rl.retryAfterSec);
+    headers["X-RateLimit-Retry-After"] = String(rl.retryAfterSec);
+  }
+  return headers;
+}
+
+function withHeaders(res: Response, extra: Record<string, string>): Response {
+  const headers = new Headers(res.headers);
+  for (const [k, v] of Object.entries(extra)) headers.set(k, v);
+  return new Response(res.body, {
+    status: res.status,
+    statusText: res.statusText,
+    headers,
+  });
+}
+
+function rateLimitedResponse(
+  rl: RateLimitResult,
+  origin: string | null,
+  requestId: string,
+): Response {
+  const base = apiError(
+    429,
+    "rate_limited",
+    `Rate limit exceeded; retry after ${rl.retryAfterSec}s.`,
+    origin,
+    requestId,
+  );
+  return withHeaders(base, rateLimitHeaders(rl));
+}
 
 /**
  * Minimal shape of the internal job row this handler reads/mutates via the
@@ -81,9 +125,26 @@ export default webHandler(async (req: Request): Promise<Response> => {
   try {
     const { account, apiKey, supabase } = await requireApiKey(req);
 
+    // Rate limit (auth → rate-limit → work). Fail OPEN on limiter error so a
+    // limiter outage can't strand an in-flight job the caller wants stopped.
+    let rl: RateLimitResult;
+    try {
+      rl = await checkApiRateLimit(supabase, apiKey.id, account.tier);
+    } catch (e) {
+      logError("api.v1.videos.cancel.ratelimit", e, { requestId });
+      rl = { allowed: true, limit: 0, remaining: 0, reset: 0, retryAfterSec: 0 };
+    }
+    if (!rl.allowed) {
+      return rateLimitedResponse(rl, origin, requestId);
+    }
+    const rlHeaders = rateLimitHeaders(rl);
+
     const id = extractId(req);
     if (!id) {
-      return apiError(404, "not_found", "Video not found.", origin, requestId);
+      return withHeaders(
+        apiError(404, "not_found", "Video not found.", origin, requestId),
+        rlHeaders,
+      );
     }
 
     const { data, error } = await supabase
@@ -96,14 +157,20 @@ export default webHandler(async (req: Request): Promise<Response> => {
 
     if (error) {
       logError("api.v1.videos.cancel.query_failed", error, { requestId, id });
-      return apiError(500, "internal_error", "Failed to load video.", origin, requestId);
+      return withHeaders(
+        apiError(500, "internal_error", "Failed to load video.", origin, requestId),
+        rlHeaders,
+      );
     }
 
     let row = data as JobRow | null;
 
     // Owner check by account_id. Missing OR foreign-account rows → 404.
     if (!row || row.account_id !== account.id) {
-      return apiError(404, "not_found", "Video not found.", origin, requestId);
+      return withHeaders(
+        apiError(404, "not_found", "Video not found.", origin, requestId),
+        rlHeaders,
+      );
     }
 
     const mode =
@@ -121,7 +188,7 @@ export default webHandler(async (req: Request): Promise<Response> => {
         created_at: row.created_at ?? new Date().toISOString(),
         result: null,
       };
-      return apiJson(200, view, origin);
+      return withHeaders(apiJson(200, view, origin), rlHeaders);
     }
 
     // Live transition: flip pending/processing → cancelled. The status guard on
@@ -144,7 +211,10 @@ export default webHandler(async (req: Request): Promise<Response> => {
 
       if (updateErr) {
         logError("api.v1.videos.cancel.update_failed", updateErr, { requestId, id: row.id });
-        return apiError(500, "internal_error", "Failed to cancel video.", origin, requestId);
+        return withHeaders(
+          apiError(500, "internal_error", "Failed to cancel video.", origin, requestId),
+          rlHeaders,
+        );
       }
 
       if (updated) {
@@ -199,8 +269,10 @@ export default webHandler(async (req: Request): Promise<Response> => {
       result: null,
     };
 
-    return apiJson(200, view, origin);
+    return withHeaders(apiJson(200, view, origin), rlHeaders);
   } catch (e) {
+    // Auth (requireApiKey) throws a Response BEFORE the rate-limit gate runs, so
+    // those carry no X-RateLimit-* headers (correct — the key wasn't metered).
     if (e instanceof Response) return e;
     logError("api.v1.videos.cancel.unhandled", e, { requestId });
     return apiError(500, "internal_error", "Unexpected error.", origin, requestId);

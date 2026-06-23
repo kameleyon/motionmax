@@ -17,6 +17,7 @@ import { handlePreflight } from "../../_shared/cors";
 import { logError } from "../../_shared/platformConfig";
 import { isResponse } from "../../_shared/auth";
 import { requireApiKey } from "../../_shared/apiKeyAuth";
+import { checkApiRateLimit, type RateLimitResult } from "../../_shared/rateLimit";
 import { moderateOrThrow, checkWebhookUrl } from "../_shared/moderation";
 import { priceRequest } from "../_shared/pricing";
 import { SANDBOX_PAYLOAD_FLAG } from "../_shared/sandbox";
@@ -107,6 +108,64 @@ function modeFromRow(row: JobRow): VideoMode | string {
     if (taskType === row.task_type) return mode;
   }
   return row.task_type ?? "doc2video";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rate-limit header plumbing (roadmap §Phase 2 "429 Retry-After + X-RateLimit-*").
+//
+// checkApiRateLimit (api/_shared/rateLimit.ts, Builder B) is Postgres-backed —
+// serverless api/ functions are stateless so the sliding window lives in
+// public.rate_limits via an RPC. It returns a RateLimitResult carrying the
+// window's limit/remaining/reset plus, when blocked, retryAfterSec. We surface
+// those on EVERY metered Response (allowed and blocked) so well-behaved clients
+// can self-throttle from the headers instead of waiting for a 429.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Standard X-RateLimit-* headers derived from a RateLimitResult. */
+function rateLimitHeaders(rl: RateLimitResult): Record<string, string> {
+  const headers: Record<string, string> = {
+    "X-RateLimit-Limit": String(rl.limit),
+    "X-RateLimit-Remaining": String(Math.max(0, rl.remaining)),
+    "X-RateLimit-Reset": String(rl.reset),
+  };
+  if (!rl.allowed) {
+    // Retry-After is the HTTP-standard signal; mirror it as X-RateLimit-* for
+    // SDKs that read the namespaced form.
+    headers["Retry-After"] = String(rl.retryAfterSec);
+    headers["X-RateLimit-Retry-After"] = String(rl.retryAfterSec);
+  }
+  return headers;
+}
+
+/**
+ * Return a NEW Response with the same status/body but the given extra headers
+ * merged in. apiError/apiJson bake CORS + content-type already; this layers the
+ * rate-limit headers on top without rebuilding the frozen envelope by hand.
+ */
+function withHeaders(res: Response, extra: Record<string, string>): Response {
+  const headers = new Headers(res.headers);
+  for (const [k, v] of Object.entries(extra)) headers.set(k, v);
+  return new Response(res.body, {
+    status: res.status,
+    statusText: res.statusText,
+    headers,
+  });
+}
+
+/** Build the 429 over-quota Response with the frozen envelope + limit headers. */
+function rateLimitedResponse(
+  rl: RateLimitResult,
+  origin: string | null,
+  requestId: string,
+): Response {
+  const base = apiError(
+    429,
+    "rate_limited",
+    `Rate limit exceeded; retry after ${rl.retryAfterSec}s.`,
+    origin,
+    requestId,
+  );
+  return withHeaders(base, rateLimitHeaders(rl));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -479,15 +538,40 @@ export default webHandler(async (req: Request): Promise<Response> => {
     return apiError(500, "internal_error", "Authentication failed.", origin, requestId);
   }
 
+  // Rate limit — Postgres-backed sliding window, keyed by the API key + tier.
+  // Order is auth → rate-limit → validate → moderate → price → deduct → enqueue:
+  // we admit/deny BEFORE doing any expensive validation/moderation/billing work.
+  // A limiter outage must not 500 the gateway, so we fail OPEN on error (the
+  // RPC is best-effort) — checkApiRateLimit owns that decision internally and
+  // returns allowed=true on infra failure.
+  let rl: RateLimitResult;
   try {
-    if (method === "POST") {
-      return await handleCreate(req, auth, origin, requestId);
-    }
-    return await handleList(req, auth, origin, requestId);
+    rl = await checkApiRateLimit(auth.supabase, auth.apiKey.id, auth.account.tier);
   } catch (e) {
-    // moderateOrThrow (and any other guard) throws a Response — return verbatim.
-    if (isResponse(e)) return e;
+    // Defensive: even if the limiter helper itself throws, do not block traffic.
+    logError("api.v1.videos.ratelimit", e, { requestId });
+    rl = { allowed: true, limit: 0, remaining: 0, reset: 0, retryAfterSec: 0 };
+  }
+  if (!rl.allowed) {
+    return rateLimitedResponse(rl, origin, requestId);
+  }
+  const rlHeaders = rateLimitHeaders(rl);
+
+  try {
+    const res =
+      method === "POST"
+        ? await handleCreate(req, auth, origin, requestId)
+        : await handleList(req, auth, origin, requestId);
+    // Attach X-RateLimit-* to the success/error Response from the handler.
+    return withHeaders(res, rlHeaders);
+  } catch (e) {
+    // moderateOrThrow (and any other guard) throws a Response — return verbatim
+    // but still annotated with the rate-limit headers for client back-off.
+    if (isResponse(e)) return withHeaders(e, rlHeaders);
     logError("api.v1.videos.handler", e, { requestId });
-    return apiError(500, "internal_error", "An unexpected error occurred.", origin, requestId);
+    return withHeaders(
+      apiError(500, "internal_error", "An unexpected error occurred.", origin, requestId),
+      rlHeaders,
+    );
   }
 });

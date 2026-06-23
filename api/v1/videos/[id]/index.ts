@@ -17,6 +17,7 @@ import { webHandler } from "../../../_shared/webHandler";
 import { handlePreflight } from "../../../_shared/cors";
 import { logError } from "../../../_shared/platformConfig";
 import { requireApiKey } from "../../../_shared/apiKeyAuth";
+import { isSandboxJob, buildSandboxResult } from "../../_shared/sandbox";
 import {
   apiError,
   apiJson,
@@ -73,6 +74,34 @@ function extractId(req: Request): string | null {
 function asString(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
 }
+
+/**
+ * Provider policy-rejection signatures. When a render fails because the upstream
+ * provider refused the CONTENT (not a transient/infra fault), we must NOT leak
+ * the raw provider error code to the caller. Instead we normalise it to a
+ * stable, documented 422-class code `content_policy` (roadmap §Phase 2
+ * "normalize E005 → 422"). E005 is the Hypereal policy-rejection sentinel; the
+ * other tokens cover the common cross-provider phrasings.
+ */
+const POLICY_SIGNATURES: readonly RegExp[] = [
+  /\bE005\b/i,
+  /content[_\s-]?polic/i, // content_policy / content policy
+  /\bpolicy[_\s-]?violation\b/i,
+  /\bsafety[_\s-]?(?:reject|block|filter)/i,
+  /\bmoderation[_\s-]?(?:reject|block|fail)/i,
+  /\bprohibited[_\s-]?content\b/i,
+  /\bflagged[_\s-]?(?:as[_\s-]?)?unsafe\b/i,
+];
+
+/** Does this failure error_message indicate a provider CONTENT-POLICY rejection? */
+function isProviderPolicyRejection(errorMessage: string | null | undefined): boolean {
+  if (!errorMessage) return false;
+  return POLICY_SIGNATURES.some((re) => re.test(errorMessage));
+}
+
+/** Public, generic message shown for a normalised content-policy failure. */
+const CONTENT_POLICY_MESSAGE =
+  "This request was rejected by the content-safety policy.";
 
 function asNumber(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
@@ -157,19 +186,26 @@ async function buildResult(
   }
 
   if (publicState === "failed" || publicState === "cancelled") {
+    let errorObj: { code: string; message: string } | null = null;
+    if (publicState === "failed") {
+      // Normalise upstream content-policy rejections (E005 et al.) to a stable
+      // public code + generic message — never leak the raw provider token.
+      if (isProviderPolicyRejection(row.error_message)) {
+        errorObj = { code: "content_policy", message: CONTENT_POLICY_MESSAGE };
+      } else {
+        errorObj = {
+          code: "generation_failed",
+          message: asString(row.error_message) ?? "Video generation failed.",
+        };
+      }
+    }
     return {
       status: publicState,
       video_url: null,
       duration_s: null,
       thumbnail_url: null,
       format: null,
-      error:
-        publicState === "failed"
-          ? {
-              code: "generation_failed",
-              message: asString(row.error_message) ?? "Video generation failed.",
-            }
-          : null,
+      error: errorObj,
     };
   }
 
@@ -215,13 +251,40 @@ export default webHandler(async (req: Request): Promise<Response> => {
     }
 
     const publicState = mapInternalToPublicState(row.status, row.error_message);
+    const mode =
+      (asString((row.payload ?? {}).mode) as VideoMode | null) ?? row.task_type ?? "unknown";
+
+    // Sandbox (mm_test_) jobs never touch a provider. The worker short-circuits
+    // them to a deterministic terminal-success, but a status read can land while
+    // the row is still 'pending'/'processing' (pre-stub). To keep the sandbox a
+    // faithful dress-rehearsal of the real polling flow we mirror the row's own
+    // public state: terminal-success → the deterministic stub VideoResult;
+    // still-in-flight → the same null result a live caller would see and poll on.
+    if (isSandboxJob(row.payload)) {
+      const format =
+        asString((row.payload ?? {}).format) ?? undefined;
+      const sandboxResult =
+        publicState === "succeeded" || publicState === "expired"
+          ? buildSandboxResult(mode, format)
+          : null;
+      const sandboxView: ApiJobView = {
+        id: row.id,
+        object: "video",
+        status: publicState,
+        mode,
+        created_at: row.created_at ?? new Date().toISOString(),
+        result: sandboxResult,
+      };
+      return apiJson(200, sandboxView, origin);
+    }
+
     const result = await buildResult(row, publicState, supabase);
 
     const view: ApiJobView = {
       id: row.id,
       object: "video",
       status: publicState,
-      mode: (asString((row.payload ?? {}).mode) as VideoMode | null) ?? row.task_type ?? "unknown",
+      mode,
       created_at: row.created_at ?? new Date().toISOString(),
       result,
     };

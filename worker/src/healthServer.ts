@@ -104,6 +104,11 @@ export interface WorkerVitals {
   totalJobsProcessed: number;
   /** Total jobs that failed since startup */
   totalJobsFailed: number;
+  /**
+   * /api/v1 webhook delivery sweep invocations since startup (Phase 2).
+   * Optional so callers that don't track it stay backwards-compatible.
+   */
+  webhookSweepRuns?: number;
 }
 
 type VitalsProvider = () => WorkerVitals;
@@ -216,6 +221,7 @@ function buildMetricsJson(vitals: WorkerVitals) {
       totalFailed: vitals.totalJobsFailed,
       accepting: vitals.accepting,
       lastPollAt: vitals.lastPollAt,
+      webhookSweepRuns: vitals.webhookSweepRuns ?? 0,
     },
     memory: {
       rssBytes: mem.rss,
@@ -255,6 +261,7 @@ function buildMetricsPrometheus(vitals: WorkerVitals): string {
   gauge("motionmax_worker_accepting", "Whether the worker is accepting jobs (1=yes, 0=no)", vitals.accepting ? 1 : 0);
   counter("motionmax_worker_jobs_processed_total", "Total jobs processed since startup", vitals.totalJobsProcessed);
   counter("motionmax_worker_jobs_failed_total", "Total jobs failed since startup", vitals.totalJobsFailed);
+  counter("motionmax_worker_webhook_sweep_runs_total", "/api/v1 webhook delivery sweep invocations since startup", vitals.webhookSweepRuns ?? 0);
   gauge("motionmax_worker_memory_rss_bytes", "Resident set size in bytes", mem.rss);
   gauge("motionmax_worker_memory_heap_used_bytes", "V8 heap used in bytes", mem.heapUsed);
   gauge("motionmax_worker_memory_heap_total_bytes", "V8 heap total in bytes", mem.heapTotal);

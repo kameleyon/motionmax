@@ -50,7 +50,7 @@ function currentWorkerId(): string {
  * the bucket is fully drained. Caller decides whether to wait and
  * retry (acquireSlot below) or fall through to its own backoff.
  */
-async function tryClaimSlot(): Promise<number | null> {
+async function tryClaimSlot(accountId?: string | null): Promise<number | null> {
   const workerId = currentWorkerId();
   // CTE pattern: pick the lowest free id, UPDATE it, return the id.
   // We use rpc-less raw SQL via the Supabase REST builder — picking the
@@ -85,9 +85,12 @@ async function tryClaimSlot(): Promise<number | null> {
   if (!candidates || candidates.length === 0) return null;
 
   const candidateId = (candidates[0] as { id: number }).id;
+  // account_id is ATTRIBUTION only (who holds the slot) — never a second hard
+  // cap. Threaded through so a HyperealSlotExhausted is attributable to the
+  // tenant(s) monopolising the bucket. Nullable: legacy call sites omit it.
   const { data: claimed, error: updErr } = await supabase
     .from("hypereal_concurrency_slots")
-    .update({ worker_id: workerId, acquired_at: new Date().toISOString() })
+    .update({ worker_id: workerId, acquired_at: new Date().toISOString(), account_id: accountId ?? null })
     .eq("id", candidateId)
     .is("worker_id", null) // CAS guard: only claim if still free
     .select("id");
@@ -115,9 +118,9 @@ function logTableMissingOnce(detail: string): void {
  * Total wait ceiling: ~7.7s across 5 retries — past that the caller
  * better have transient-retry plumbing (every Hypereal call site does).
  */
-export async function acquireHyperealSlot(): Promise<number> {
+export async function acquireHyperealSlot(accountId?: string | null): Promise<number> {
   for (let attempt = 0; attempt <= ACQUIRE_BACKOFF_MS.length; attempt++) {
-    const id = await tryClaimSlot();
+    const id = await tryClaimSlot(accountId);
     if (id !== null) return id; // -1 (unavailable) or a real slot id
     if (attempt < ACQUIRE_BACKOFF_MS.length) {
       await new Promise((r) => setTimeout(r, ACQUIRE_BACKOFF_MS[attempt]));
@@ -125,8 +128,12 @@ export async function acquireHyperealSlot(): Promise<number> {
   }
   // Bucket fully drained for ~8s. Surface as a transient error so
   // withTransientRetry picks it up — never silently proceed (that's
-  // exactly the C-8-1 incident).
-  throw new Error("Hypereal concurrency bucket exhausted (HyperealSlotExhausted) — all fleet-wide slots held");
+  // exactly the C-8-1 incident). accountId is attached for attribution: it
+  // tells operators WHICH tenant's submission hit the empty bucket.
+  throw new Error(
+    `Hypereal concurrency bucket exhausted (HyperealSlotExhausted) — all fleet-wide slots held` +
+      (accountId ? ` (account=${accountId})` : ``),
+  );
 }
 
 /**
@@ -141,7 +148,7 @@ export async function releaseHyperealSlot(slotId: number): Promise<void> {
   try {
     const { error } = await supabase
       .from("hypereal_concurrency_slots")
-      .update({ worker_id: null, acquired_at: null })
+      .update({ worker_id: null, acquired_at: null, account_id: null })
       .eq("id", slotId);
     if (error) {
       console.warn(`[HyperealSlots] release slot=${slotId} failed: ${error.message} — will be reaped after ${SLOT_HOLD_REAPER_MS / 60000} min`);
@@ -164,7 +171,7 @@ export async function runHyperealSlotReaper(): Promise<void> {
   try {
     const { data: freed, error } = await supabase
       .from("hypereal_concurrency_slots")
-      .update({ worker_id: null, acquired_at: null })
+      .update({ worker_id: null, acquired_at: null, account_id: null })
       .lt("acquired_at", cutoff)
       .not("worker_id", "is", null)
       .select("id, worker_id");
@@ -194,10 +201,13 @@ export async function runHyperealSlotReaper(): Promise<void> {
  * Usage:
  *   const result = await withHyperealSlot(async () => {
  *     return await fetch(url, opts);
- *   });
+ *   }, accountId);
+ *
+ * accountId is optional ATTRIBUTION (who holds the slot); omit it for legacy /
+ * non-tenant submissions. It is NOT a second hard cap.
  */
-export async function withHyperealSlot<T>(fn: () => Promise<T>): Promise<T> {
-  const slotId = await acquireHyperealSlot();
+export async function withHyperealSlot<T>(fn: () => Promise<T>, accountId?: string | null): Promise<T> {
+  const slotId = await acquireHyperealSlot(accountId);
   try {
     return await fn();
   } finally {

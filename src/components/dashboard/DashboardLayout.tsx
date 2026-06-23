@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import AppShell from './AppShell';
 import Hero from './Hero';
+import AutoPostPromo from './AutoPostPromo';
 import ProjectsGallery from './ProjectsGallery';
 
 // C-5-6 (Prism PERF-010): RightRail owns 5 useQuery calls (subscription
@@ -58,6 +59,7 @@ export default function DashboardLayout() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 sm:gap-5 lg:gap-6 px-3 sm:px-4 md:px-6 lg:px-8 py-5 sm:py-7 max-w-[1480px] mx-auto">
         <div className="col-main flex flex-col gap-6 sm:gap-8 min-w-0">
           <Hero />
+          <AutoPostPromo />
           <ProjectsGallery />
         </div>
         <div className="hidden lg:block">

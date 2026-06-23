@@ -233,6 +233,22 @@
     scrollbar-color: hsl(var(--primary) / 0.45) transparent;
   }
 
+  /* Hide the main content scroll area's scrollbar app-wide. #main-content
+     is the app shell's primary scroll column (AppShell). Scrolling stays
+     fully functional via wheel / trackpad / keyboard — only the visual
+     bar is removed for a clean right edge. Sidebars, modals, dropdowns
+     keep their own thin scrollbars (they're separate scroll containers).
+     The #id selector outspecifies the global *::-webkit-scrollbar rule. */
+  #main-content {
+    scrollbar-width: none;       /* Firefox */
+    -ms-overflow-style: none;    /* legacy Edge */
+  }
+  #main-content::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;               /* Chrome / Safari */
+  }
+
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";

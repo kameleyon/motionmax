@@ -356,14 +356,6 @@ export default function AutopostHome() {
 
           <AutopostNav />
 
-          {/* Action bar */}
-          <div className="act-bar">
-            <Link to="/app/create/new?mode=cinematic" className="btn-cyan">
-              <Plus width={14} height={14} />
-              New automation
-            </Link>
-          </div>
-
           {/* Kill switches — admin only */}
           {isAdmin && (
             <div className="kill-row">

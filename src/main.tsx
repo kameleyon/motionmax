@@ -26,18 +26,38 @@ startWebVitalsReporting();
 // OLD index.html still references the old hashes, so the next route's
 // dynamic import() 404s with "Failed to fetch dynamically imported
 // module" and the user lands on the error boundary. Vite fires
-// `vite:preloadError` for exactly this — we reload ONCE to pull the
-// fresh index.html + current hashes. A sessionStorage timestamp guards
+// `vite:preloadError` for exactly this.
+//
+// A plain location.reload() is NOT enough here: the PWA service worker
+// uses navigateFallback: "app-shell.html" (see vite.config.ts), so a
+// navigation can be served the PRECACHED old index — which references
+// the same purged chunk — and we'd loop on the stale shell. So before
+// reloading we tear down the SW + caches, forcing the reload to fetch a
+// fresh index.html from the network. A sessionStorage timestamp guards
 // against reload loops if the chunk is genuinely missing (broken
-// deploy): after one reload inside the window, we let the error surface
-// instead of looping.
+// deploy): after one recovery inside the window, we let the error
+// surface instead of looping.
 window.addEventListener("vite:preloadError", (event) => {
   const KEY = "mm_chunk_reload_at";
   const last = Number(sessionStorage.getItem(KEY) || 0);
-  if (Date.now() - last < 10_000) return; // already reloaded recently — surface the error
+  if (Date.now() - last < 15_000) return; // already recovered recently — surface the error
   sessionStorage.setItem(KEY, String(Date.now()));
   event.preventDefault();
-  window.location.reload();
+  void (async () => {
+    try {
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+      if (typeof caches !== "undefined") {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch {
+      /* best-effort — reload anyway */
+    }
+    window.location.reload();
+  })();
 });
 
 createRoot(document.getElementById("root")!).render(

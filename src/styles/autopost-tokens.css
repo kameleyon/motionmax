@@ -418,3 +418,20 @@
 @media (max-width: 780px) {
   .autopost-shell .fil-grid select { padding: 9px 8px; font-size: 12.5px; }
 }
+
+/* ── Hide the shared #main-content scrollbar on Autopost pages only ──
+   The app shell's main scroll column (#main-content) carries the
+   global thin teal scrollbar. On Autopost we want a clean edge with no
+   visible scrollbar. The :has() scope means this ONLY applies while the
+   .autopost-shell is mounted — every other page keeps its scrollbar.
+   Scrolling stays fully functional (wheel / trackpad / keyboard); only
+   the visual bar is hidden. */
+#main-content:has(.autopost-shell) {
+  scrollbar-width: none;       /* Firefox */
+  -ms-overflow-style: none;    /* legacy Edge */
+}
+#main-content:has(.autopost-shell)::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;               /* Chrome / Safari */
+}

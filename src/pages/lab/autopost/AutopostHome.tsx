@@ -23,7 +23,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Plus, History, ShieldCheck, ListChecks, FlaskConical, ChevronRight,
+  Plus, ShieldCheck, FlaskConical,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -361,15 +361,6 @@ export default function AutopostHome() {
             <Link to="/app/create/new?mode=cinematic" className="btn-cyan">
               <Plus width={14} height={14} />
               New automation
-            </Link>
-            <Link to="/lab/autopost/runs" className="btn-ghost">
-              <History width={13} height={13} />
-              Run history
-              <ChevronRight width={13} height={13} />
-            </Link>
-            <Link to="/lab" className="btn-ghost">
-              <ListChecks width={13} height={13} />
-              All lab tools
             </Link>
           </div>
 

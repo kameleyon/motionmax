@@ -21,6 +21,25 @@ void registerServiceWorkerWithUpdates();
 // synthetic snapshot; this gives us the real-user distribution.
 startWebVitalsReporting();
 
+// Auto-recover from stale-chunk errors after a deploy. When a new
+// version ships, Vite re-hashes the lazy chunks; a tab that loaded the
+// OLD index.html still references the old hashes, so the next route's
+// dynamic import() 404s with "Failed to fetch dynamically imported
+// module" and the user lands on the error boundary. Vite fires
+// `vite:preloadError` for exactly this — we reload ONCE to pull the
+// fresh index.html + current hashes. A sessionStorage timestamp guards
+// against reload loops if the chunk is genuinely missing (broken
+// deploy): after one reload inside the window, we let the error surface
+// instead of looping.
+window.addEventListener("vite:preloadError", (event) => {
+  const KEY = "mm_chunk_reload_at";
+  const last = Number(sessionStorage.getItem(KEY) || 0);
+  if (Date.now() - last < 10_000) return; // already reloaded recently — surface the error
+  sessionStorage.setItem(KEY, String(Date.now()));
+  event.preventDefault();
+  window.location.reload();
+});
+
 createRoot(document.getElementById("root")!).render(
   <HelmetProvider>
     <App />

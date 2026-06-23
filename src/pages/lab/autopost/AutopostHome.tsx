@@ -23,7 +23,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Plus, History, ShieldCheck, Calendar, ListChecks, FlaskConical, ChevronRight,
+  Plus, History, ShieldCheck, ListChecks, FlaskConical, ChevronRight,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -48,7 +48,6 @@ import { loadAdminFonts } from "@/lib/loadCaptionFonts";
 loadAdminFonts();
 import { AutomationCard } from "./_AutomationCard";
 import { platformLabel } from "./_autopostUi";
-import { formatRelativeTime } from "./_utils";
 import type { AutomationSchedule } from "./_automationTypes";
 
 interface KillSwitchState {
@@ -66,13 +65,6 @@ const KILL_KEYS = {
 } as const;
 
 type KillKey = keyof typeof KILL_KEYS;
-
-interface PlatformHealth {
-  pct: number;
-  recentCount: number;
-  lastPushAt: string | null;
-  warn: boolean;
-}
 
 interface RadarEvent {
   /** Hours from now (negative = past, positive = future). */
@@ -112,44 +104,6 @@ async function fetchLastRuns(): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   for (const row of (data ?? []) as Array<{ schedule_id: string; fired_at: string }>) {
     if (!out[row.schedule_id]) out[row.schedule_id] = row.fired_at;
-  }
-  return out;
-}
-
-interface PublishJobLite {
-  platform: string;
-  status: string;
-  created_at: string;
-}
-
-async function fetchPlatformHealth(): Promise<Record<string, PlatformHealth>> {
-  const sinceIso = new Date(Date.now() - 30 * 86_400_000).toISOString();
-  const { data, error } = await supabase
-    .from("autopost_publish_jobs")
-    .select("platform, status, created_at")
-    .gte("created_at", sinceIso)
-    .order("created_at", { ascending: false })
-    .limit(2000);
-  if (error) return {};
-  const rows = (data ?? []) as PublishJobLite[];
-  const groups = new Map<string, PublishJobLite[]>();
-  for (const r of rows) {
-    const list = groups.get(r.platform) ?? [];
-    list.push(r);
-    groups.set(r.platform, list);
-  }
-  const out: Record<string, PlatformHealth> = {};
-  for (const [platform, list] of groups) {
-    const finals = list.filter(r => r.status === "published" || r.status === "failed" || r.status === "rejected");
-    const ok = list.filter(r => r.status === "published").length;
-    const pct = finals.length === 0 ? 100 : Math.round((ok / finals.length) * 100);
-    const pending = list.filter(r => r.status === "uploading" || r.status === "processing" || r.status === "pending").length;
-    out[platform] = {
-      pct,
-      recentCount: list.length,
-      lastPushAt: list[0]?.created_at ?? null,
-      warn: pct < 90 || pending > 2,
-    };
   }
   return out;
 }
@@ -195,12 +149,6 @@ export default function AutopostHome() {
     queryFn: fetchLastRuns,
   });
 
-  const platformHealthQuery = useQuery({
-    queryKey: ["autopost", "platform-health"],
-    queryFn: fetchPlatformHealth,
-    staleTime: 30_000,
-  });
-
   const radarQuery = useQuery({
     queryKey: ["autopost", "radar"],
     queryFn: fetchRadarRuns,
@@ -240,7 +188,6 @@ export default function AutopostHome() {
     const debouncedRefetch = debounce(() => {
       queryClient.invalidateQueries({ queryKey: ["autopost", "schedules-list"] });
       queryClient.invalidateQueries({ queryKey: ["autopost", "last-runs"] });
-      queryClient.invalidateQueries({ queryKey: ["autopost", "platform-health"] });
       queryClient.invalidateQueries({ queryKey: ["autopost", "radar"] });
     }, 300);
     const channel = supabase
@@ -353,35 +300,6 @@ export default function AutopostHome() {
     return out;
   }, [radarQuery.data, automations]);
 
-  // YouTube / IG / TikTok / X tile data.
-  // `comingSoon` policy: a platform is shown as "Coming soon" if it either
-  // has no real-publisher implementation (X/Twitter) OR has zero recorded
-  // publish jobs to date (autopost_publish_jobs is empty for that key).
-  // The 100% / "live" treatment only applies once real publish data lands.
-  const tiles = useMemo(() => {
-    const h = platformHealthQuery.data ?? {};
-    const t = (key: string, label: string, glyph: string, ic: string, suffix: string, hardComingSoon = false) => {
-      const data = h[key];
-      const count = data?.recentCount ?? 0;
-      const comingSoon = hardComingSoon || count === 0;
-      const pct = comingSoon ? 0 : (data?.pct ?? 100);
-      const last = data?.lastPushAt ? formatRelativeTime(data.lastPushAt) : "—";
-      const warn = comingSoon ? false : (data?.warn ?? false);
-      return {
-        key, label, glyph, ic, pct, count, last, warn, comingSoon,
-        sub: comingSoon ? "Publishing coming soon" : `Last push ${last} · ${count} ${suffix} / 30d`,
-      };
-    };
-    return [
-      t("youtube", "YouTube", "YT", "plic-yt", "videos"),
-      t("instagram", "Instagram", "IG", "plic-ig", "reels"),
-      t("tiktok", "TikTok", "TT", "plic-tt", "posts"),
-      // X/Twitter has no publisher in worker/src/handlers/autopost/publishers.ts —
-      // hard-flag as Coming soon regardless of data.
-      t("x", "X / Twitter", "X", "plic-x", "posts", true),
-    ];
-  }, [platformHealthQuery.data]);
-
   return (
     <AppShell breadcrumb="Lab · Autopost">
       <Helmet>
@@ -409,31 +327,6 @@ export default function AutopostHome() {
                 on the schedule you set.
               </p>
             </div>
-          </div>
-
-          {/* Platform health strip */}
-          <div className="health-strip">
-            {tiles.map(t => (
-              <div
-                key={t.key}
-                className={`hs-cell${t.warn ? " warn" : ""}${t.comingSoon ? " soon" : ""}`}
-              >
-                <div className="hsh">
-                  <div className={`pl-ic ${t.ic}`}>{t.glyph}</div>
-                  <div className="nm">{t.label}</div>
-                  <div className="dt">
-                    {t.comingSoon ? "soon" : t.warn ? "retrying" : "live"}
-                  </div>
-                </div>
-                {t.comingSoon ? (
-                  <div className="num soon-num">—</div>
-                ) : (
-                  <div className="num">{t.pct}<span className="u">%</span></div>
-                )}
-                <div className="sub">{t.sub}</div>
-                {!t.comingSoon && <div className="bar"><i style={{ width: `${t.pct}%` }} /></div>}
-              </div>
-            ))}
           </div>
 
           {/* 24h radar — hidden per user direction. Re-enable by removing
@@ -473,10 +366,6 @@ export default function AutopostHome() {
               <History width={13} height={13} />
               Run history
               <ChevronRight width={13} height={13} />
-            </Link>
-            <Link to="/dashboard?tab=calendar" className="btn-ghost">
-              <Calendar width={13} height={13} />
-              Calendar view
             </Link>
             <Link to="/lab" className="btn-ghost">
               <ListChecks width={13} height={13} />

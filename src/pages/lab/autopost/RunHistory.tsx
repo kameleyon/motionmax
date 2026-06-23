@@ -25,6 +25,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Image as ImageIcon, Inbox, Plus, RefreshCw, RotateCw, Trash2, FlaskConical,
+  SlidersHorizontal,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { toast } from "sonner";
@@ -89,6 +90,16 @@ export default function RunHistory() {
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>("all");
   const [dateFilter, setDateFilter] = useState<DateFilter>("7d");
   const [page, setPage] = useState(1);
+  // Filters are hidden by default and revealed on demand via the
+  // Filters toggle in the action row. activeFilterCount counts the
+  // filters that differ from their defaults so the collapsed toggle
+  // can show how many are currently applied.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const activeFilterCount =
+    (statusFilter !== "all" ? 1 : 0) +
+    (scheduleFilter !== "all" ? 1 : 0) +
+    (platformFilter !== "all" ? 1 : 0) +
+    (dateFilter !== "7d" ? 1 : 0);
 
   // Reset page when any filter changes — paginating into a different
   // result set would feel broken otherwise.
@@ -370,6 +381,28 @@ export default function RunHistory() {
             <button
               type="button"
               className="btn-ghost"
+              onClick={() => setFiltersOpen(o => !o)}
+              aria-expanded={filtersOpen}
+              aria-controls="rh-filter-card"
+            >
+              <SlidersHorizontal width={13} height={13} />
+              Filters
+              {activeFilterCount > 0 && (
+                <span
+                  style={{
+                    minWidth: 16, height: 16, padding: "0 4px", borderRadius: 8,
+                    background: "var(--cyan)", color: "#0A0D0F",
+                    fontSize: 10, fontWeight: 700, lineHeight: "16px",
+                    display: "inline-grid", placeItems: "center", marginLeft: 2,
+                  }}
+                >
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              className="btn-ghost"
               onClick={() => queryClient.invalidateQueries({ queryKey: ["autopost", "runs"] })}
               disabled={runsQuery.isFetching}
             >
@@ -380,8 +413,9 @@ export default function RunHistory() {
 
           <AutopostNav />
 
-          {/* Filter bar */}
-          <div className="fil-card">
+          {/* Filter bar — hidden by default, revealed via the Filters toggle */}
+          {filtersOpen && (
+          <div className="fil-card" id="rh-filter-card">
             <div className="fil-grid">
               <div className="fld">
                 <label htmlFor="rh-status">Status</label>
@@ -441,6 +475,7 @@ export default function RunHistory() {
               </div>
             </div>
           </div>
+          )}
 
           {/* Body */}
           {runsQuery.isLoading ? (

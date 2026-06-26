@@ -41,29 +41,57 @@ const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 hour
 const RESULT_BUCKET = "generated-videos";
 
 /**
- * Published result-retention window (days). A succeeded job whose
- * created_at is older than this is reported as 'expired' (video_url null)
- * because the underlying object has been (or will shortly be) purged from
- * the RESULT_BUCKET. MUST stay in lockstep with the daily pg_cron purge in
- * supabase/migrations/20260525000200_result_retention.sql — the cron deletes
- * the storage object; this constant decides when the read path stops
- * advertising it. Roadmap §Phase 3 (result retention).
+ * Default published result-retention window (days), applied when the owning
+ * account has NO per-account override (accounts.retention_days IS NULL). A
+ * succeeded job whose created_at is older than the EFFECTIVE window is
+ * reported as 'expired' (video_url null) because the underlying object has
+ * been (or will shortly be) purged from the RESULT_BUCKET. MUST stay in
+ * lockstep with the daily pg_cron purges:
+ *   - global 'generated-videos-retention'  (20260525000200) → NULL accounts
+ *   - per-account 'per-account-retention'   (20260526000100) → override set
+ * The cron deletes the storage object; this constant + the per-account
+ * window decide when the read path stops advertising it. Roadmap §Phase 3
+ * (result retention) + §Phase 4 (per-tenant retention).
  */
 const RETENTION_DAYS = 30;
 
-const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000;
+/**
+ * Resolve a per-account retention override into an effective window (days).
+ *   undefined / null → the global default (RETENTION_DAYS).
+ *   0                → zero-retention (handled specially in isResultExpired:
+ *                      a completed job is ALWAYS expired, no age math).
+ *   N > 0            → N days.
+ * Mirrors accounts.retention_days semantics in
+ * supabase/migrations/20260526000100_per_account_retention.sql.
+ */
+function effectiveRetentionDays(override: number | null | undefined): number {
+  if (override === null || override === undefined) return RETENTION_DAYS;
+  if (!Number.isFinite(override) || override < 0) return RETENTION_DAYS;
+  return override;
+}
 
 /**
- * Has a succeeded job aged past the published retention window? Returns false
+ * Has a succeeded job aged past its account's retention window? Returns false
  * for any non-terminal/failed state and whenever created_at is missing or
  * unparseable (fail-open: keep advertising the URL rather than wrongly hiding
  * a still-live asset).
+ *
+ * `retentionDays` is the EFFECTIVE per-account window (see
+ * effectiveRetentionDays). A value of 0 is zero-retention: a completed job is
+ * ALWAYS expired regardless of age — we short-circuit BEFORE the > MS math so
+ * a job created "now" still reads as expired.
  */
-function isResultExpired(createdAt: string | null | undefined): boolean {
+function isResultExpired(
+  createdAt: string | null | undefined,
+  retentionDays: number,
+): boolean {
+  // Zero-retention: always expired once completed. Never advertise a URL.
+  if (retentionDays <= 0) return true;
   if (!createdAt) return false;
   const created = Date.parse(createdAt);
   if (!Number.isFinite(created)) return false;
-  return Date.now() - created > RETENTION_MS;
+  const retentionMs = retentionDays * 24 * 60 * 60 * 1000;
+  return Date.now() - created > retentionMs;
 }
 
 /**
@@ -276,11 +304,38 @@ export default webHandler(async (req: Request): Promise<Response> => {
       return apiError(404, "not_found", "Video not found.", origin, requestId);
     }
 
-    // A completed job whose result asset has aged past the retention window is
-    // surfaced as 'expired' (video_url null). mapInternalToPublicState only
-    // applies resultExpired to the 'completed' case, so passing it
-    // unconditionally is safe for queued/processing/failed/cancelled rows.
-    const resultExpired = isResultExpired(row.created_at);
+    // Resolve the owning account's per-account retention override (Phase 4).
+    // requireApiKey already vetted ownership of `account`; this is a cheap
+    // single-column read of accounts.retention_days keyed by that same id.
+    // On any error we fall open to the global default (NULL → 30d) rather
+    // than wrongly hiding a still-live asset. retention_days === 0 means
+    // zero-retention and is honored by isResultExpired (always expired).
+    let accountRetentionDays: number | null = null;
+    {
+      const { data: acctData, error: acctErr } = await supabase
+        .from("accounts")
+        .select("retention_days")
+        .eq("id", account.id)
+        .maybeSingle();
+      if (acctErr) {
+        logError("api.v1.videos.get.retention_lookup_failed", acctErr, {
+          requestId,
+          accountId: account.id,
+        });
+        // fall open to global default below.
+      } else {
+        accountRetentionDays =
+          (acctData as { retention_days?: number | null } | null)?.retention_days ?? null;
+      }
+    }
+    const retentionDays = effectiveRetentionDays(accountRetentionDays);
+
+    // A completed job whose result asset has aged past the (per-account)
+    // retention window is surfaced as 'expired' (video_url null).
+    // mapInternalToPublicState only applies resultExpired to the 'completed'
+    // case, so passing it unconditionally is safe for
+    // queued/processing/failed/cancelled rows.
+    const resultExpired = isResultExpired(row.created_at, retentionDays);
     const publicState = mapInternalToPublicState(
       row.status,
       row.error_message,

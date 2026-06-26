@@ -48,7 +48,7 @@ export function corsHeaders(origin: string | null | undefined): Record<string, s
     headers['Access-Control-Allow-Credentials'] = 'true';
     headers['Access-Control-Allow-Methods'] = 'GET, POST, DELETE, PATCH, OPTIONS';
     headers['Access-Control-Allow-Headers'] =
-      'authorization, x-client-info, apikey, content-type';
+      'authorization, x-client-info, apikey, content-type, x-account-id, idempotency-key';
     headers['Access-Control-Max-Age'] = '86400';
   }
   return headers;

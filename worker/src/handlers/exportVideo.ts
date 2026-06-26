@@ -29,6 +29,7 @@ import { compressIfNeeded } from "./export/compressVideo.js";
 import { mixBackgroundMusic } from "./export/mixMusic.js";
 import { replaceMasterAudio } from "./export/replaceMasterAudio.js";
 import { uploadToSupabase, removeFiles } from "./export/storageHelpers.js";
+import { signC2PA } from "./export/c2paSign.js";
 import { generateAssSubtitles, writeAssFile, normalizeCaptionStyle, type ASRSceneResult } from "../services/captionBuilder.js";
 import { transcribeAllScenes } from "../services/audioASR.js";
 import { getTargetResolution } from "./export/kenBurns.js";
@@ -1143,6 +1144,29 @@ async function _runExport(
       eventType: "provenance_embedded",
       message: "XMP AI-disclosure metadata embedded (EU AI Act Art. 50)",
     });
+
+    // ── 2c-ii. C2PA Content Credentials (additive, FLAGGED needs-cert) ──
+    // Best-effort cryptographic provenance manifest. NO-OP until a signing
+    // cert (C2PA_CERT_PATH / C2PA_PRIVATE_KEY) is provisioned. Never throws —
+    // even for API jobs — because the XMP metadata above is the mandatory
+    // machine-readable disclosure; C2PA only strengthens it.
+    try {
+      const c2pa = await signC2PA(finalOutputPath, { isApiJob });
+      if (c2pa.signed) {
+        await writeSystemLog({
+          jobId, projectId: project_id, userId,
+          category: "system_info",
+          eventType: "c2pa_signed",
+          message: "C2PA Content Credentials manifest embedded",
+        });
+      }
+    } catch (err) {
+      // Defensive: signC2PA already swallows its own errors, but never let a
+      // provenance-strengthening step take down a valid export.
+      wlog.warn("C2PA signing step failed (non-fatal)", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
 
     sceneProgress.overallMessage = "Scenes stitched. Compressing...";
     await flushSceneProgress(jobId);

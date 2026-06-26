@@ -23,9 +23,19 @@ import { createAdminClient } from "./supabaseAdmin";
 import { corsHeaders } from "./cors";
 import type { AccountRecord } from "../v1/_shared/contract";
 
+export type AccountMemberRole = "owner" | "admin" | "member";
+
+/**
+ * Account resolved for the caller, plus the caller's role on it. `role` is a
+ * SIBLING field (AccountRecord itself has no role) so existing owner callers
+ * that only read `account.{id,owner_user_id,tier,status}` are unchanged.
+ * For the legacy owner path role is always 'owner'.
+ */
+export type ResolvedAccount = AccountRecord & { role: AccountMemberRole };
+
 export interface UserAuthOk {
   user: User;
-  account: AccountRecord;
+  account: ResolvedAccount;
   /** Service-role client (RLS-bypassing). */
   supabase: SupabaseClient;
   /** JWT-scoped client — auth.uid() = user.id; use for owner-checked RPCs. */
@@ -55,6 +65,10 @@ function normalizeTier(tier: string | null | undefined): AccountRecord["tier"] {
   return tier === "creator" ? "creator" : tier === "studio" ? "studio" : "free";
 }
 
+function normalizeRole(role: string | null | undefined): AccountMemberRole {
+  return role === "owner" ? "owner" : role === "admin" ? "admin" : "member";
+}
+
 /**
  * Authenticate a customer by their Supabase session JWT and resolve their
  * account. Throws a Response on: missing token (401), invalid token (401),
@@ -75,19 +89,78 @@ export async function requireUser(req: Request): Promise<UserAuthOk> {
   }
   const user = userData.user;
 
-  const { data: acctRow, error: acctErr } = await supabase
+  // Account resolution, two-tier and backward-compatible:
+  //   1. OWNER path (legacy): the single account whose owner_user_id = user.id.
+  //      Existing single-user callers always land here, role = 'owner'.
+  //   2. MEMBERSHIP path: if the user owns no account, resolve via
+  //      account_members. If they belong to several, honor the optional
+  //      'X-Account-Id' request header; otherwise pick the first by created_at.
+  let acct: { id: string; owner_user_id: string; tier: string | null; status: string | null } | null = null;
+  let role: AccountMemberRole = "owner";
+
+  const { data: ownerRow, error: ownerErr } = await supabase
     .from("accounts")
     .select("id, owner_user_id, tier, status")
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
-  if (acctErr) {
-    throw jsonError(500, { error: "account_lookup_failed", message: acctErr.message }, origin);
+  if (ownerErr) {
+    throw jsonError(500, { error: "account_lookup_failed", message: ownerErr.message }, origin);
   }
-  if (!acctRow) {
-    throw jsonError(403, { error: "no_account", message: "No account is provisioned for this user." }, origin);
+
+  if (ownerRow) {
+    acct = ownerRow as { id: string; owner_user_id: string; tier: string | null; status: string | null };
+    role = "owner";
+  } else {
+    // No owned account — try membership.
+    const { data: memberRows, error: memberErr } = await supabase
+      .from("account_members")
+      .select("account_id, role, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true });
+
+    if (memberErr) {
+      throw jsonError(500, { error: "account_lookup_failed", message: memberErr.message }, origin);
+    }
+
+    const memberships = (memberRows ?? []) as Array<{
+      account_id: string;
+      role: string | null;
+      created_at: string;
+    }>;
+
+    if (memberships.length === 0) {
+      throw jsonError(403, { error: "no_account", message: "No account is provisioned for this user." }, origin);
+    }
+
+    // Optional account selection when the user belongs to multiple accounts.
+    const requestedAccountId = req.headers.get("x-account-id");
+    let chosen = memberships[0];
+    if (requestedAccountId) {
+      const match = memberships.find((m) => m.account_id === requestedAccountId);
+      if (!match) {
+        throw jsonError(403, { error: "not_a_member", message: "You are not a member of the requested account." }, origin);
+      }
+      chosen = match;
+    }
+
+    role = normalizeRole(chosen.role);
+
+    const { data: acctRow, error: acctErr } = await supabase
+      .from("accounts")
+      .select("id, owner_user_id, tier, status")
+      .eq("id", chosen.account_id)
+      .maybeSingle();
+
+    if (acctErr) {
+      throw jsonError(500, { error: "account_lookup_failed", message: acctErr.message }, origin);
+    }
+    if (!acctRow) {
+      throw jsonError(403, { error: "no_account", message: "The member's account no longer exists." }, origin);
+    }
+    acct = acctRow as { id: string; owner_user_id: string; tier: string | null; status: string | null };
   }
-  const acct = acctRow as { id: string; owner_user_id: string; tier: string | null; status: string | null };
+
   if (acct.status === "suspended") {
     throw jsonError(403, { error: "account_suspended", message: "This account is suspended." }, origin);
   }
@@ -101,11 +174,12 @@ export async function requireUser(req: Request): Promise<UserAuthOk> {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
   });
 
-  const account: AccountRecord = {
+  const account: ResolvedAccount = {
     id: acct.id,
     owner_user_id: acct.owner_user_id,
     tier: normalizeTier(acct.tier),
     status: "active",
+    role,
   };
 
   return { user, account, supabase, userClient, jwt };

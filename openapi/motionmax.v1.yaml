@@ -44,6 +44,8 @@ tags:
     description: Account credit balance and per-period spend.
   - name: Keys
     description: Self-serve API-key management (session-JWT authed).
+  - name: Members
+    description: Team/account membership management (session-JWT authed, owner/admin).
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Default security: API key. /keys overrides this per-operation to the JWT scheme.
@@ -325,6 +327,106 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /members:
+    get:
+      tags: [Members]
+      operationId: listMembers
+      summary: List account members
+      description: |
+        Lists the members of the caller's account. **Authenticated by session
+        JWT.** When the caller belongs to multiple accounts, pass `X-Account-Id`
+        to select which one.
+      security:
+        - sessionJwt: []
+      parameters:
+        - $ref: '#/components/parameters/AccountIdHeader'
+      responses:
+        '200':
+          description: The account roster.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Member' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [Members]
+      operationId: addMember
+      summary: Add (or re-role) an account member
+      description: |
+        Adds a user (by email) to the account, or updates their role. Granting
+        or removing the `owner` role is **owner-only**; `admin`/`member` changes
+        are owner-or-admin. **Authenticated by session JWT.**
+      security:
+        - sessionJwt: []
+      parameters:
+        - $ref: '#/components/parameters/AccountIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+                role:
+                  type: string
+                  enum: [owner, admin, member]
+                  default: member
+      responses:
+        '201':
+          description: The created/updated membership.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Member' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /members/{id}:
+    delete:
+      tags: [Members]
+      operationId: removeMember
+      summary: Remove an account member
+      description: |
+        Removes a member by their user id. Cannot remove the last `owner`.
+        **Authenticated by session JWT.**
+      security:
+        - sessionJwt: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The member's user id.
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/AccountIdHeader'
+      responses:
+        '200':
+          description: Removal confirmation.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [account_id, user_id, removed]
+                properties:
+                  account_id: { type: string, format: uuid }
+                  user_id: { type: string, format: uuid }
+                  removed: { type: boolean, enum: [true] }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Webhooks (OpenAPI 3.1 top-level webhooks object). Delivered to the per-job
 # callback_url on terminal transitions, signed with HMAC-SHA256.
@@ -410,6 +512,15 @@ components:
       in: path
       required: true
       description: The API key id.
+      schema: { type: string, format: uuid }
+    AccountIdHeader:
+      name: X-Account-Id
+      in: header
+      required: false
+      description: |
+        Selects which account to operate on when the caller (session JWT) belongs
+        to more than one. Ignored for single-account users. Must be an account the
+        caller is a member of, else `403`.
       schema: { type: string, format: uuid }
     IdempotencyKeyHeader:
       name: Idempotency-Key
@@ -658,6 +769,21 @@ components:
         status:
           type: string
           enum: [revoked]
+
+    Member:
+      type: object
+      description: An account membership.
+      required: [account_id, user_id, role]
+      properties:
+        id: { type: string, format: uuid }
+        account_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        role:
+          type: string
+          enum: [owner, admin, member]
+        created_at:
+          type: string
+          format: date-time
 
     ApiKeyPublic:
       type: object

@@ -1,0 +1,796 @@
+openapi: 3.1.0
+info:
+  title: MotionMax API
+  version: "1.0.0"
+  summary: Async video-generation API for MotionMax.
+  description: |
+    The MotionMax API turns prompts (and optional attachments) into rendered
+    videos. Generation is **asynchronous**: `POST /videos` returns `202 Accepted`
+    with a job id, and the result is retrieved by polling `GET /videos/{id}` or by
+    receiving an HMAC-signed webhook on the terminal transition.
+
+    ## Authentication
+    Two credential types are used on this surface:
+
+    - **API key (`mm_live_…` / `mm_test_…`)** — `Authorization: Bearer <key>`.
+      Used for all generation + usage endpoints (`/videos`, `/usage`). `mm_test_`
+      keys run the **sandbox**: full validation/moderation, deterministic stub
+      assets, **no provider spend and no credit deduction**.
+    - **Session JWT** — `Authorization: Bearer <supabase-jwt>`. Used **only** for
+      key management (`/keys`), because a customer cannot present an API key while
+      minting their first one.
+
+    ## Errors
+    Every error uses the frozen envelope:
+    `{ "error": { "code": string, "message": string, "request_id": string } }`.
+
+    ## Idempotency
+    Live (`mm_live_`) create requests **require** an idempotency key — supplied
+    either in the body (`idempotency_key`) or the `Idempotency-Key` header — so a
+    retried POST is billed and enqueued exactly once.
+  contact:
+    name: MotionMax Developer Support
+    url: https://app.motionmax.io
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: https://app.motionmax.io/api/v1
+    description: Production
+tags:
+  - name: Videos
+    description: Create, poll, list, and cancel video-generation jobs.
+  - name: Usage
+    description: Account credit balance and per-period spend.
+  - name: Keys
+    description: Self-serve API-key management (session-JWT authed).
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Default security: API key. /keys overrides this per-operation to the JWT scheme.
+# ─────────────────────────────────────────────────────────────────────────────
+security:
+  - apiKey: []
+
+paths:
+  /videos:
+    post:
+      tags: [Videos]
+      operationId: createVideo
+      summary: Create a video-generation job
+      description: |
+        Authenticates the API key, validates + moderates (fail-closed) the
+        request, prices to the worst provider rung, deducts credits idempotently
+        (live keys only), and enqueues the job. Returns `202` immediately.
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVideoRequest'
+            examples:
+              doc2video:
+                summary: A short doc2video render
+                value:
+                  prompt: "A 60-second explainer on how photosynthesis works."
+                  mode: doc2video
+                  length: short
+                  format: "16:9"
+                  idempotency_key: "req-2026-06-26-abc123"
+      responses:
+        '202':
+          description: |
+            Job accepted (or idempotent replay of an earlier identical request).
+          headers:
+            X-RateLimit-Limit: { $ref: '#/components/headers/X-RateLimit-Limit' }
+            X-RateLimit-Remaining: { $ref: '#/components/headers/X-RateLimit-Remaining' }
+            X-RateLimit-Reset: { $ref: '#/components/headers/X-RateLimit-Reset' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiJobView' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '402': { $ref: '#/components/responses/InsufficientCredits' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ContentRejected' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    get:
+      tags: [Videos]
+      operationId: listVideos
+      summary: List this account's jobs
+      description: Cursor-paginated, newest first, scoped to the authenticated account.
+      security:
+        - apiKey: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Page size (1–100, default 20).
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque pagination token (the `created_at` of the last row from the prior page).
+          schema: { type: string }
+      responses:
+        '200':
+          description: A page of jobs.
+          headers:
+            X-RateLimit-Limit: { $ref: '#/components/headers/X-RateLimit-Limit' }
+            X-RateLimit-Remaining: { $ref: '#/components/headers/X-RateLimit-Remaining' }
+            X-RateLimit-Reset: { $ref: '#/components/headers/X-RateLimit-Reset' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VideoList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /videos/{id}:
+    get:
+      tags: [Videos]
+      operationId: getVideo
+      summary: Get a single video job (status + result)
+      description: |
+        Returns the public state and (for terminal jobs) the frozen result
+        schema. `video_url` is re-signed on demand. A missing or foreign-account
+        job both resolve to `404` so the existence of another tenant's job is
+        never leaked.
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/VideoId'
+      responses:
+        '200':
+          description: The job's current public view.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiJobView' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /videos/{id}/cancel:
+    post:
+      tags: [Videos]
+      operationId: cancelVideo
+      summary: Cancel an in-flight video job
+      description: |
+        Flips a `queued`/`processing` job to `cancelled` and (for billed live
+        jobs) issues a cost-aware refund. Already-terminal jobs are idempotent —
+        their current state is returned unchanged.
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/VideoId'
+      responses:
+        '200':
+          description: The job's state after the cancel attempt.
+          headers:
+            X-RateLimit-Limit: { $ref: '#/components/headers/X-RateLimit-Limit' }
+            X-RateLimit-Remaining: { $ref: '#/components/headers/X-RateLimit-Remaining' }
+            X-RateLimit-Reset: { $ref: '#/components/headers/X-RateLimit-Reset' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiJobView' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /usage:
+    get:
+      tags: [Usage]
+      operationId: getUsage
+      summary: Account credit balance and spend
+      description: |
+        Returns the account's current credit balance and aggregate API spend.
+        Authenticated by API key. (See `note` — this surface is finalized in the
+        DX phase; field names are stable.)
+      security:
+        - apiKey: []
+      parameters:
+        - name: since
+          in: query
+          required: false
+          description: |
+            Start of the aggregation window (ISO-8601 / RFC 3339 timestamp).
+            Defaults to 30 days ago.
+          schema:
+            type: string
+            format: date-time
+        - name: group_by
+          in: query
+          required: false
+          description: |
+            When present, the response includes a `breakdown` array grouped by
+            this dimension.
+          schema:
+            type: string
+            enum: [provider, model, day]
+      responses:
+        '200':
+          description: Usage snapshot.
+          headers:
+            X-RateLimit-Limit: { $ref: '#/components/headers/X-RateLimit-Limit' }
+            X-RateLimit-Remaining: { $ref: '#/components/headers/X-RateLimit-Remaining' }
+            X-RateLimit-Reset: { $ref: '#/components/headers/X-RateLimit-Reset' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UsageView' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /keys:
+    post:
+      tags: [Keys]
+      operationId: createKey
+      summary: Mint a new API key
+      description: |
+        Mints a new API key on the caller's account. **Authenticated by session
+        JWT** (not an API key). The plaintext token is returned **exactly once** —
+        store it securely; only its prefix/last4 are retrievable afterward.
+      security:
+        - sessionJwt: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateKeyRequest' }
+      responses:
+        '201':
+          description: The new key (token shown once).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreatedKey' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    get:
+      tags: [Keys]
+      operationId: listKeys
+      summary: List the account's API keys (metadata only)
+      description: |
+        Lists key metadata (never the token or its hash). **Authenticated by
+        session JWT.**
+      security:
+        - sessionJwt: []
+      responses:
+        '200':
+          description: The account's keys.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ApiKeyPublic' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /keys/{id}:
+    post:
+      tags: [Keys]
+      operationId: rotateKey
+      summary: Rotate an API key
+      description: |
+        Marks the existing key `rotated` and issues a fresh active key with the
+        same env + scopes. The new plaintext token is returned **once**.
+        **Authenticated by session JWT.**
+      security:
+        - sessionJwt: []
+      parameters:
+        - $ref: '#/components/parameters/KeyId'
+      responses:
+        '200':
+          description: The rotated + newly issued key.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RotatedKey' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    delete:
+      tags: [Keys]
+      operationId: revokeKey
+      summary: Revoke an API key
+      description: Permanently disables a key. **Authenticated by session JWT.**
+      security:
+        - sessionJwt: []
+      parameters:
+        - $ref: '#/components/parameters/KeyId'
+      responses:
+        '200':
+          description: The revoked key id + status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RevokedKey' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Webhooks (OpenAPI 3.1 top-level webhooks object). Delivered to the per-job
+# callback_url on terminal transitions, signed with HMAC-SHA256.
+# ─────────────────────────────────────────────────────────────────────────────
+webhooks:
+  videoEvent:
+    post:
+      operationId: videoEventWebhook
+      summary: video.succeeded / video.failed
+      description: |
+        MotionMax POSTs this event to a job's `callback_url` when the job reaches
+        a terminal state. Verify the `X-MotionMax-Signature` header
+        (`sha256=<hex>`) as an HMAC-SHA256 of the **raw request body** keyed by
+        your account webhook secret.
+      parameters:
+        - in: header
+          name: X-MotionMax-Signature
+          required: true
+          description: '`sha256=<hex>` HMAC-SHA256 of the raw body, keyed by the account webhook secret.'
+          schema: { type: string }
+        - in: header
+          name: X-MotionMax-Event
+          required: true
+          description: The event type (mirrors `body.type`).
+          schema:
+            type: string
+            enum: [video.succeeded, video.failed]
+        - in: header
+          name: X-MotionMax-Delivery
+          required: true
+          description: Unique delivery id (stable across retries of the same delivery).
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookEvent' }
+            examples:
+              succeeded:
+                value:
+                  id: "5f3a…"
+                  type: video.succeeded
+                  created: 1782900000
+                  data:
+                    status: succeeded
+                    video_url: "https://app.motionmax.io/storage/v1/object/sign/generated-videos/…"
+                    duration_s: 30
+                    thumbnail_url: "https://…/thumb.jpg"
+                    format: "16:9"
+                    error: null
+      responses:
+        '2XX':
+          description: Acknowledged. Any non-2xx (or no response) triggers retry with backoff.
+
+components:
+  # ───────────────────────────────────────────────────────────────────────────
+  securitySchemes:
+    apiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: mm_live_… / mm_test_…
+      description: |
+        MotionMax-issued API key. `Authorization: Bearer mm_live_…` (or
+        `mm_test_…` for the sandbox). Used for `/videos` and `/usage`.
+    sessionJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Supabase session JWT. Used **only** for `/keys` management endpoints,
+        since a customer cannot present an API key to mint their first one.
+
+  # ───────────────────────────────────────────────────────────────────────────
+  parameters:
+    VideoId:
+      name: id
+      in: path
+      required: true
+      description: The job id returned by `createVideo`.
+      schema: { type: string, format: uuid }
+    KeyId:
+      name: id
+      in: path
+      required: true
+      description: The API key id.
+      schema: { type: string, format: uuid }
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |
+        Idempotency key for `createVideo`. **Required for live keys** (may also be
+        supplied in the body as `idempotency_key`; the body value wins). A retried
+        request with the same key returns the original job without re-billing.
+      schema: { type: string }
+
+  # ───────────────────────────────────────────────────────────────────────────
+  headers:
+    X-RateLimit-Limit:
+      description: Requests permitted in the current minute window.
+      schema: { type: integer }
+    X-RateLimit-Remaining:
+      description: Requests remaining in the current minute window.
+      schema: { type: integer }
+    X-RateLimit-Reset:
+      description: Unix epoch (seconds) when the minute window next has room.
+      schema: { type: integer }
+    Retry-After:
+      description: Seconds to wait before retrying (present on 429).
+      schema: { type: integer }
+
+  # ───────────────────────────────────────────────────────────────────────────
+  schemas:
+    PublicJobState:
+      type: string
+      description: |
+        Frozen public job state, mapped over the internal job status. `expired`
+        is surfaced when a succeeded job's result asset is past the retention
+        window.
+      enum: [queued, processing, succeeded, failed, cancelled, expired]
+
+    VideoMode:
+      type: string
+      enum: [doc2video, smartflow, cinematic]
+
+    VideoLength:
+      type: string
+      enum: [short, brief, presentation]
+
+    CreateVideoRequest:
+      type: object
+      required: [prompt, mode]
+      additionalProperties: false
+      properties:
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 20000
+          description: The generation prompt.
+        mode:
+          $ref: '#/components/schemas/VideoMode'
+        length:
+          $ref: '#/components/schemas/VideoLength'
+        format:
+          type: string
+          description: Aspect ratio, e.g. "16:9", "9:16", "1:1". Defaults to "16:9".
+          default: "16:9"
+        voice:
+          type: string
+          description: Voice id/name for narration.
+        language:
+          type: string
+          description: BCP-47-ish language hint.
+        attachments:
+          type: array
+          maxItems: 25
+          description: URLs of source assets. Each must pass the SSRF allowlist.
+          items: { type: string, format: uri }
+        idempotency_key:
+          type: string
+          description: |
+            Idempotency key (alternative to the `Idempotency-Key` header).
+            Required for live keys.
+        callback_url:
+          type: string
+          format: uri
+          description: |
+            HTTPS webhook target for terminal transitions. Must pass SSRF checks
+            (https-only, no credentials/IP-literals/private hosts).
+
+    VideoResult:
+      type: object
+      description: Frozen result schema. Null for jobs that have not reached a terminal state.
+      required: [status, video_url, duration_s, thumbnail_url, format, error]
+      properties:
+        status:
+          $ref: '#/components/schemas/PublicJobState'
+        video_url:
+          type: [string, 'null']
+          description: Signed, expiring URL to the rendered video. Null when not available/expired.
+        duration_s:
+          type: [number, 'null']
+        thumbnail_url:
+          type: [string, 'null']
+        format:
+          type: [string, 'null']
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ResultError'
+
+    ResultError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: e.g. "generation_failed", "content_policy".
+        message:
+          type: string
+
+    ApiJobView:
+      type: object
+      description: The public view of a job returned by create / get / list / cancel.
+      required: [id, object, status, mode, created_at, result]
+      properties:
+        id: { type: string }
+        object:
+          type: string
+          enum: [video]
+        status:
+          $ref: '#/components/schemas/PublicJobState'
+        mode:
+          type: string
+          description: The public mode (or task type for legacy rows).
+        created_at:
+          type: string
+          format: date-time
+        result:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/VideoResult'
+
+    VideoList:
+      type: object
+      required: [data, next_cursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/ApiJobView' }
+        next_cursor:
+          type: [string, 'null']
+          description: Pass as `cursor` to fetch the next page; null when there are no more.
+
+    UsageView:
+      type: object
+      description: |
+        Account usage snapshot. `total_cost_usd` is the provider cost (USD)
+        attributed to this account's API jobs over the window — not billed
+        credits. `breakdown` is present only when `group_by` was supplied.
+      required: [object, account_id, calls, jobs, total_cost_usd, credits_balance]
+      properties:
+        object:
+          type: string
+          enum: [usage]
+        account_id:
+          type: string
+          format: uuid
+        since:
+          type: string
+          format: date-time
+          description: Start of the aggregation window the figures cover.
+        calls:
+          type: integer
+          description: Number of provider calls in the window.
+        jobs:
+          type: integer
+          description: Number of distinct jobs in the window.
+        total_cost_usd:
+          type: number
+          description: Provider cost (USD) attributed to this account in the window.
+        credits_balance:
+          type: integer
+          description: Current credit balance for the account.
+        breakdown:
+          type: array
+          description: Present only when `group_by` is supplied.
+          items:
+            type: object
+            required: [label, calls, spend, avg_ms]
+            properties:
+              label:
+                type: string
+              calls:
+                type: integer
+              spend:
+                type: number
+              avg_ms:
+                type: number
+
+    # Key management ───────────────────────────────────────────────────────────
+    CreateKeyRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        env:
+          type: string
+          enum: [live, test]
+          default: live
+        scopes:
+          type: array
+          items: { type: string }
+          default: []
+
+    CreatedKey:
+      type: object
+      description: Returned once on mint. `token` is never shown again.
+      required: [id, token, prefix, last4, env]
+      properties:
+        id: { type: string, format: uuid }
+        token:
+          type: string
+          description: The full plaintext API key — store securely; shown only once.
+        prefix: { type: string }
+        last4: { type: string }
+        env:
+          type: string
+          enum: [live, test]
+
+    RotatedKey:
+      type: object
+      required: [rotated_id, id, token, prefix, last4, env]
+      properties:
+        rotated_id:
+          type: string
+          format: uuid
+          description: The id of the now-rotated (disabled) key.
+        id: { type: string, format: uuid }
+        token: { type: string }
+        prefix: { type: string }
+        last4: { type: string }
+        env:
+          type: string
+          enum: [live, test]
+
+    RevokedKey:
+      type: object
+      required: [id, status]
+      properties:
+        id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [revoked]
+
+    ApiKeyPublic:
+      type: object
+      description: Key metadata (never the token or its hash).
+      required: [id, account_id, env, prefix, last4, scopes, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        account_id: { type: string, format: uuid }
+        env:
+          type: string
+          enum: [live, test]
+        prefix: { type: string }
+        last4: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+        status:
+          type: string
+          enum: [active, rotated, revoked]
+        last_used_at:
+          type: [string, 'null']
+          format: date-time
+        calls_count:
+          type: integer
+        expires_at:
+          type: [string, 'null']
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    # Webhook ───────────────────────────────────────────────────────────────────
+    WebhookEvent:
+      type: object
+      required: [id, type, created, data]
+      properties:
+        id:
+          type: string
+          description: The job id this event is about.
+        type:
+          type: string
+          enum: [video.succeeded, video.failed]
+        created:
+          type: integer
+          description: Unix seconds when the event was generated.
+        data:
+          $ref: '#/components/schemas/WebhookData'
+
+    WebhookData:
+      type: object
+      description: Mirrors the VideoResult fields the customer would GET on /videos/{id}.
+      required: [status, video_url, duration_s, thumbnail_url, format, error]
+      properties:
+        status:
+          type: [string, 'null']
+          enum: [succeeded, failed, null]
+        video_url:
+          type: [string, 'null']
+        duration_s:
+          type: [number, 'null']
+        thumbnail_url:
+          type: [string, 'null']
+        format:
+          type: [string, 'null']
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ResultError'
+
+    # Error envelope ────────────────────────────────────────────────────────────
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable error code.
+            message:
+              type: string
+            request_id:
+              type: string
+              description: Correlation id (e.g. "req_…"). Quote it in support requests.
+
+  # ───────────────────────────────────────────────────────────────────────────
+  responses:
+    BadRequest:
+      description: Malformed or invalid request (e.g. invalid_request, idempotency_key_required).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Missing/invalid/expired API key or JWT (missing_api_key, invalid_api_key, expired_api_key).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: The account is suspended (account_suspended).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: No such job/key for this account (not_found).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    InsufficientCredits:
+      description: The account balance is insufficient for this request (insufficient_credits).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ContentRejected:
+      description: |
+        Content/attachment rejected, or moderation unavailable (content_rejected,
+        attachment_rejected, moderation_unavailable, content_policy).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: Rate limit exceeded (rate_limited).
+      headers:
+        Retry-After: { $ref: '#/components/headers/Retry-After' }
+        X-RateLimit-Limit: { $ref: '#/components/headers/X-RateLimit-Limit' }
+        X-RateLimit-Remaining: { $ref: '#/components/headers/X-RateLimit-Remaining' }
+        X-RateLimit-Reset: { $ref: '#/components/headers/X-RateLimit-Reset' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    InternalError:
+      description: An unexpected server error (internal_error).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

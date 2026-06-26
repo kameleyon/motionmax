@@ -41,6 +41,32 @@ const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 hour
 const RESULT_BUCKET = "generated-videos";
 
 /**
+ * Published result-retention window (days). A succeeded job whose
+ * created_at is older than this is reported as 'expired' (video_url null)
+ * because the underlying object has been (or will shortly be) purged from
+ * the RESULT_BUCKET. MUST stay in lockstep with the daily pg_cron purge in
+ * supabase/migrations/20260525000200_result_retention.sql — the cron deletes
+ * the storage object; this constant decides when the read path stops
+ * advertising it. Roadmap §Phase 3 (result retention).
+ */
+const RETENTION_DAYS = 30;
+
+const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+/**
+ * Has a succeeded job aged past the published retention window? Returns false
+ * for any non-terminal/failed state and whenever created_at is missing or
+ * unparseable (fail-open: keep advertising the URL rather than wrongly hiding
+ * a still-live asset).
+ */
+function isResultExpired(createdAt: string | null | undefined): boolean {
+  if (!createdAt) return false;
+  const created = Date.parse(createdAt);
+  if (!Number.isFinite(created)) return false;
+  return Date.now() - created > RETENTION_MS;
+}
+
+/**
  * Minimal shape of the internal job row we read via the service-role client.
  * Only the columns this handler projects are listed; the table has many more.
  */
@@ -250,7 +276,16 @@ export default webHandler(async (req: Request): Promise<Response> => {
       return apiError(404, "not_found", "Video not found.", origin, requestId);
     }
 
-    const publicState = mapInternalToPublicState(row.status, row.error_message);
+    // A completed job whose result asset has aged past the retention window is
+    // surfaced as 'expired' (video_url null). mapInternalToPublicState only
+    // applies resultExpired to the 'completed' case, so passing it
+    // unconditionally is safe for queued/processing/failed/cancelled rows.
+    const resultExpired = isResultExpired(row.created_at);
+    const publicState = mapInternalToPublicState(
+      row.status,
+      row.error_message,
+      resultExpired,
+    );
     const mode =
       (asString((row.payload ?? {}).mode) as VideoMode | null) ?? row.task_type ?? "unknown";
 

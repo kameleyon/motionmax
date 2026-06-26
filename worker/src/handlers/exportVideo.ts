@@ -309,7 +309,7 @@ async function applyWatermarkOverlay(
  * of video length. Verify post-export with:
  *   ffprobe -v error -show_format <file.mp4> | grep -i ai
  */
-async function embedXmpProvenance(filePath: string, tempDir: string): Promise<void> {
+async function embedXmpProvenance(filePath: string, tempDir: string, isApiJob = false): Promise<void> {
   const tmpOut = path.join(tempDir, `xmp_${Date.now()}.mp4`);
   try {
     await runFfmpeg([
@@ -334,11 +334,20 @@ async function embedXmpProvenance(filePath: string, tempDir: string): Promise<vo
     ]);
     fs.renameSync(tmpOut, filePath);
   } catch (err) {
-    // Non-fatal: prefer to ship the export without provenance metadata
-    // rather than fail the whole job. The visible watermark and the
-    // PublicShare-page disclosure still satisfy the user-facing
-    // disclosure obligation.
     try { if (fs.existsSync(tmpOut)) fs.unlinkSync(tmpOut); } catch { /* ignore */ }
+    // API jobs (/api/v1) MUST NOT ship without machine-readable provenance:
+    // there is no PublicShare disclosure surface for an API-delivered asset,
+    // so the XMP metadata is the sole machine-readable disclosure. Re-throw so
+    // the job fails rather than emit a non-compliant output.
+    if (isApiJob) {
+      wlog.error("XMP provenance embed failed on API job \u2014 failing job (provenance mandatory)", {
+        error: (err as Error).message,
+      });
+      throw err;
+    }
+    // Browser/non-API: non-fatal. Prefer to ship the export without provenance
+    // metadata rather than fail the whole job. The visible watermark and the
+    // PublicShare-page disclosure still satisfy the user-facing obligation.
     wlog.warn("XMP provenance embed failed \u2014 continuing without metadata", {
       error: (err as Error).message,
     });
@@ -1120,9 +1129,14 @@ async function _runExport(
 
     // ── 2c. Embed XMP-style provenance metadata (EU AI Act Art. 50) ──
     // Stream-copy step that writes machine-readable AI-disclosure tags into
-    // the MP4 metadata atom. Adds ~1–2s. Non-fatal on failure — the visible
-    // watermark and the PublicShare disclosure still satisfy the obligation.
-    await embedXmpProvenance(finalOutputPath, tempDir);
+    // the MP4 metadata atom. Adds ~1–2s. For browser jobs failure is non-fatal
+    // (visible watermark + PublicShare disclosure cover the obligation); for
+    // API jobs (/api/v1) it is MANDATORY — embedXmpProvenance re-throws so the
+    // job fails rather than ship an asset with no machine-readable disclosure.
+    const isApiJob =
+      payload?.source === "api_v1" ||
+      (payload?.account_id != null && payload?.account_id !== "");
+    await embedXmpProvenance(finalOutputPath, tempDir, isApiJob);
     await writeSystemLog({
       jobId, projectId: project_id, userId,
       category: "system_info",

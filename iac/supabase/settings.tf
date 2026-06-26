@@ -32,7 +32,11 @@ resource "supabase_settings" "project" {
   })
 
   storage = jsonencode({
-    fileSizeLimit = 52428800 # 50 MB — matches dashboard default for prod buckets
+    # 1 GB — video exports (esp. long/4K) regularly exceed the old 50 MB cap and
+    # 413'd on both REST and TUS upload (TUS does NOT bypass the bucket/global
+    # size limit). Raised so exports upload via the TUS chunked path. The `videos`
+    # bucket's own file_size_limit must also be >= this for exports/ objects.
+    fileSizeLimit = 1073741824 # 1 GB (was 52428800 / 50 MB)
     features = {
       imageTransformation = { enabled = true }
       s3Protocol          = { enabled = false }

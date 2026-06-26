@@ -351,6 +351,44 @@ async function handleCreate(
 
   const billedAt = new Date().toISOString();
 
+  // 6b) Spend cap (LIVE keys only). The account may carry a monthly API spend
+  // cap (NULL = unlimited). When set, refuse the submit if this request would
+  // push the calendar-month API spend over the cap — BEFORE any deduction, so
+  // a capped account is never charged for a request it isn't allowed to make.
+  if (!isSandbox) {
+    const { data: capRow, error: capErr } = await supabase
+      .from("accounts")
+      .select("monthly_spend_cap_credits")
+      .eq("id", account.id)
+      .maybeSingle();
+
+    if (capErr) {
+      logError("api.v1.videos.create.spend_cap_lookup", capErr, { requestId });
+      return apiError(500, "internal_error", "Failed to check the spend cap.", origin, requestId);
+    }
+
+    const cap = (capRow?.monthly_spend_cap_credits ?? null) as number | null;
+    if (cap !== null) {
+      const { data: spentMtd, error: spendErr } = await supabase.rpc("api_account_spend_mtd", {
+        p_account_id: account.id,
+      });
+      if (spendErr) {
+        logError("api.v1.videos.create.spend_cap_mtd", spendErr, { requestId });
+        return apiError(500, "internal_error", "Failed to compute month-to-date spend.", origin, requestId);
+      }
+      const spent = typeof spentMtd === "number" ? spentMtd : 0;
+      if (spent + credits > cap) {
+        return apiError(
+          402,
+          "spend_cap_exceeded",
+          "Monthly spend cap reached.",
+          origin,
+          requestId,
+        );
+      }
+    }
+  }
+
   // 7) Deduct credits — live keys only. Sandbox skips billing + provider spend.
   if (!isSandbox) {
     const { data: deducted, error: deductErr } = await supabase.rpc("deduct_credits_securely", {

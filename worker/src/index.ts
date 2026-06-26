@@ -783,21 +783,34 @@ async function processJob(job: Job, signal?: AbortSignal) {
 
     // Move to dead-letter queue so permanently-failed jobs can be triaged
     // separately without clogging the active job table.
-    supabase
-      .from("dead_letter_jobs")
-      .insert({
-        source_job_id: job.id,
-        task_type: job.task_type,
-        payload: job.payload,
-        error_message: errorMsg,
-        attempts: (job.payload?._restartCount ?? 0) + 1,
-        user_id: job.user_id ?? null,
-        project_id: job.project_id ?? null,
-        worker_id: WORKER_ID,
-      })
-      .then(() => {}, (dlqErr: unknown) => {
-        wlog.warn("Dead-letter insert failed", { jobId: job.id, error: dlqErr instanceof Error ? dlqErr.message : String(dlqErr) });
-      });
+    // AWAITED (no longer fire-and-forget): if the worker process exits right
+    // after marking the job failed, an un-awaited insert could be dropped and
+    // the failure would never reach the DLQ for triage/requeue. We await it,
+    // and on error log a warning + continue (the job is already marked failed,
+    // so a DLQ miss must not block the rest of the failure path).
+    // account_id is carried through (nullable) so API-originated failures are
+    // attributable to a tenant account and can be requeued via
+    // api_requeue_dead_letter().
+    try {
+      const { error: dlqInsertErr } = await supabase
+        .from("dead_letter_jobs")
+        .insert({
+          source_job_id: job.id,
+          task_type: job.task_type,
+          payload: job.payload,
+          error_message: errorMsg,
+          attempts: (job.payload?._restartCount ?? 0) + 1,
+          user_id: job.user_id ?? null,
+          account_id: (job as any).account_id ?? null,
+          project_id: job.project_id ?? null,
+          worker_id: WORKER_ID,
+        });
+      if (dlqInsertErr) {
+        wlog.warn("Dead-letter insert failed", { jobId: job.id, error: dlqInsertErr.message });
+      }
+    } catch (dlqErr: unknown) {
+      wlog.warn("Dead-letter insert failed", { jobId: job.id, error: dlqErr instanceof Error ? dlqErr.message : String(dlqErr) });
+    }
 
     totalJobsFailed++;
 

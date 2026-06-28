@@ -43,6 +43,11 @@ export interface BuildPromptOptions {
    *  the scene has no title of its own. Ensures the first image ALWAYS
    *  gets a headline for cinematic + explainer videos. */
   videoTitle?: string;
+  /** Cinematic mode. In cinematic ONLY the Scene 1 cover carries a title;
+   *  every other scene gets an explicit no-title instruction and must depict
+   *  its OWN per-scene description (never echo the first scene). Explainer /
+   *  smartflow keep their per-scene text overlays. */
+  isCinematic?: boolean;
 }
 
 // ── Format descriptions ────────────────────────────────────────────
@@ -121,6 +126,7 @@ function buildTextInstructions(
   style: string,
   format: string,
   videoTitle?: string,
+  isCinematic?: boolean,
 ): string {
   // Scene 1, primary image → ALWAYS render a cover headline (cinematic +
   // explainer). Fall back coverTitle → scene.title → videoTitle so a
@@ -131,6 +137,18 @@ function buildTextInstructions(
       return buildCoverTitleInstruction(title, format);
     }
   }
+
+  // CINEMATIC: only the cover (Scene 1 primary, handled above) carries a title.
+  // Every other image must render NO title text AND depict its own per-scene
+  // description — this stops the title from bleeding onto every scene and stops
+  // the images echoing the first scene instead of following their own prompt.
+  // (Must come BEFORE the TEXT_OVERLAY_STYLES branch, which would otherwise
+  // stamp scene.title on every cinematic scene when the chosen style happens to
+  // be a text-overlay style like minimalist/doodle/stick.)
+  if (isCinematic) {
+    return `\nNO TITLE / NO TEXT: This is NOT the cover image. Do NOT render any title, headline, caption, subtitle, label, watermark, or any overlaid words on this image. Depict ONLY the SCENE DESCRIPTION above for THIS specific scene — do not reuse, repeat, or echo the first/cover scene's composition, subject, or text.`;
+  }
+
   const includeTextOverlay = TEXT_OVERLAY_STYLES.includes(style.toLowerCase());
   if (includeTextOverlay && scene.title && subIndex === 0) {
     return `\nTEXT OVERLAY: Render "${scene.title}" as headline, "${scene.subtitle || ""}" as subtitle.\nText must be LEGIBLE, correctly spelled, and integrated into the composition.`;
@@ -147,10 +165,10 @@ export function buildImagePrompt(
   sceneIndex: number,
   opts: BuildPromptOptions,
 ): string {
-  const { format, style, characterBible, characterDescription, videoTitle } = opts;
+  const { format, style, characterBible, characterDescription, videoTitle, isCinematic } = opts;
   const styleDescription = getStylePrompt(style);
   const fmtDesc = formatDescription(format);
-  const textInstructions = buildTextInstructions(scene, subIndex, sceneIndex, style, format, videoTitle);
+  const textInstructions = buildTextInstructions(scene, subIndex, sceneIndex, style, format, videoTitle, isCinematic);
   const characterInstructions = buildCharacterInstructions(characterBible, characterDescription);
 
   // Character requirements go FIRST (after the create directive) so image models

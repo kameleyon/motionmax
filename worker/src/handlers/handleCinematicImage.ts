@@ -143,6 +143,9 @@ async function _runCinematicImage(
       // Last-resort fallback for the Scene 1 cover headline so the first
       // image always gets a title even if the LLM omitted coverTitle.
       videoTitle: (generation.projects as { title?: string } | null)?.title ?? undefined,
+      // Cinematic: title ONLY on the Scene 1 cover; every other scene gets a
+      // no-title instruction and must follow its own per-scene description.
+      isCinematic: true,
     },
   );
 

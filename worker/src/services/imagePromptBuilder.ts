@@ -174,10 +174,16 @@ export function buildImagePrompt(
   // Character requirements go FIRST (after the create directive) so image models
   // weight them heavily. Style description comes AFTER character so style can't
   // override appearance (e.g. 3D style defaulting to generic 3D character looks).
+  // The title/no-title block (textInstructions) sits HIGH — right after the
+  // scene description — NOT at the end: gpt-image-2 truncates prompts to ~3900
+  // chars by keeping the HEAD, so a title instruction placed at the tail of a
+  // long cinematic prompt would be silently dropped (the Scene-1 cover title
+  // would vanish, and the per-scene no-title instruction would never apply).
   return `CREATE A HIGHLY DETAILED, PRECISE, AND ACCURATE ILLUSTRATION:
 ${characterInstructions}
 
 SCENE DESCRIPTION: ${visualPrompt}
+${textInstructions}
 
 FORMAT REQUIREMENT: ${fmtDesc}. The image MUST be composed for this exact aspect ratio.
 
@@ -203,7 +209,6 @@ SUBJECT IDENTIFICATION:
 - Identify the main TOPIC and PRIMARY SUBJECT of this scene
 - Ensure all IMPORTANT ELEMENTS mentioned in the description are clearly visible
 - Maintain visual HIERARCHY - the main subject should be the focal point
-${textInstructions}
 
 REMINDER: Re-read the CHARACTER REQUIREMENTS section at the top of this prompt before generating. Every character MUST match those traits exactly — this takes priority over style defaults.
 

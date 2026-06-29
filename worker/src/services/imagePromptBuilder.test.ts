@@ -42,6 +42,24 @@ describe("buildImagePrompt — cinematic title scoping", () => {
     expect(out).toContain("A close-up of the hero at the docks");
   });
 
+  it("keeps the title block within the first 3900 chars so gpt-image-2 truncation can't drop it", () => {
+    // A realistically long per-scene description (cinematic temporal-consistency
+    // rules routinely push the full prompt past 4000 chars; gpt-image-2
+    // head-truncates to 3900, dropping the tail).
+    const longVisual = "A sweeping battle scene. ".repeat(80); // ~2000 chars
+    const out = buildImagePrompt(
+      longVisual,
+      scene({ coverTitle: "THE THRONE" }),
+      0,
+      0,
+      { ...baseOpts, isCinematic: true },
+    );
+    // Title sits in the kept HEAD — before the ~2KB of boilerplate that the
+    // truncation drops — so it survives.
+    expect(out.indexOf("COVER IMAGE TITLE")).toBeLessThan(out.indexOf("GENERATION REQUIREMENTS"));
+    expect(out.indexOf("THE THRONE")).toBeLessThan(3900);
+  });
+
   it("leaves explainer/non-cinematic per-scene text overlays untouched", () => {
     const out = buildImagePrompt(
       "An infographic of the quarterly numbers",

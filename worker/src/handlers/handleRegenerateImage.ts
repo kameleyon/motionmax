@@ -15,7 +15,7 @@ import { updateSceneField, updateSceneFieldJson } from "../lib/sceneUpdate.js";
 import { generateImage } from "../services/imageGenerator.js";
 import { editImageWithNanoBanana } from "../services/nanoBananaEdit.js";
 import { retryDbRead } from "../lib/retryClassifier.js";
-import { getStylePrompt } from "../services/prompts.js";
+import { buildImagePrompt, type Scene as ImageScene } from "../services/imagePromptBuilder.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -130,7 +130,7 @@ async function _runRegenerateImage(
   const { data: generation, error: genError } = await retryDbRead(() =>
     supabase
       .from("generations")
-      .select("scenes, projects(format, style)")
+      .select("scenes, projects(format, style, project_type, title)")
       .eq("id", generationId)
       .maybeSingle()
   );
@@ -141,29 +141,22 @@ async function _runRegenerateImage(
   if (sceneIndex < 0 || sceneIndex >= scenes.length) throw new Error("Invalid scene index");
 
   const scene = scenes[sceneIndex];
-  const format: string = (generation.projects as any)?.format || "landscape";
-  const style: string = (generation.projects as any)?.style || "realistic";
-  const styleDesc = getStylePrompt(style);
+  const projects = generation.projects as any;
+  const format: string = projects?.format || "landscape";
+  const style: string = projects?.style || "realistic";
+  const projectType: string = projects?.project_type || "";
+  const projectTitle: string | undefined = projects?.title || undefined;
 
-  // Extract character bible from scene _meta (set during script generation)
+  // Character bible from scene _meta (set during script generation) and the
+  // user's project-level character description — both fed to the SHARED
+  // buildImagePrompt so a regenerated image matches the originals exactly.
   const characterBible: Record<string, string> = scene._meta?.characterBible || {};
-  const bibleSummary = Object.entries(characterBible)
-    .map(([name, desc]) => `${name}: ${desc}`)
-    .join("\n");
-
-  // Also get user's character description from project
   const { data: projectData } = await supabase
     .from("projects")
     .select("character_description")
     .eq("id", projectId)
     .single();
   const userCharDesc = projectData?.character_description || "";
-
-  // Combined character consistency block
-  const characterBlock = [
-    userCharDesc,
-    bibleSummary ? `CHARACTER BIBLE (MUST FOLLOW EXACTLY):\n${bibleSummary}` : "",
-  ].filter(Boolean).join("\n\n");
 
   let imageUrl: string;
 
@@ -199,23 +192,38 @@ async function _runRegenerateImage(
       characterRefs,
     );
   } else {
-    // Full Regeneration — include style + character bible in prompt
-    let basePrompt: string = scene.visualPrompt || "";
+    // Full Regeneration — use the SAME prompt builder as the original image
+    // generation (handleCinematicImage → buildImagePrompt). Previously this
+    // built a stripped-down ad-hoc prompt that omitted the detailed quality
+    // directives, so regenerated images came back noticeably LESS DEFINED than
+    // the originals. Going through buildImagePrompt gives a regen full parity:
+    // same quality block, same style, same character requirements, AND the same
+    // title scoping (cinematic → title only on the Scene-1 cover; every other
+    // scene gets the explicit no-title / depict-this-scene instruction).
+    let baseVisual: string = scene.visualPrompt || "";
     if (targetImageIndex > 0) {
       const subIdx = targetImageIndex - 1;
       const hasSubVisual = Array.isArray(scene.subVisuals) && scene.subVisuals[subIdx];
-      basePrompt = hasSubVisual
+      baseVisual = hasSubVisual
         ? scene.subVisuals[subIdx]
         : (subIdx === 0 ? "close-up detail shot, " : "wide establishing shot, ") + scene.visualPrompt;
     }
 
-    const promptParts = [
-      basePrompt,
-      `STYLE: ${styleDesc}. Maintain this exact visual style throughout.`,
-      characterBlock ? `CHARACTER CONSISTENCY (MANDATORY):\n${characterBlock.substring(0, 500)}\nCharacters MUST match this description EXACTLY — same hair, same clothes, same skin tone.` : "",
-    ];
-
-    const fullPrompt = promptParts.filter(Boolean).join("\n\n");
+    const fullPrompt = buildImagePrompt(
+      baseVisual,
+      scene as ImageScene,
+      targetImageIndex, // subIndex
+      sceneIndex,
+      {
+        format,
+        style,
+        characterBible,
+        characterDescription: userCharDesc,
+        isSmartFlow: projectType === "smartflow",
+        videoTitle: projectTitle,
+        isCinematic: projectType === "cinematic",
+      },
+    );
     // CRITICAL (2026-06-02): bypass the prompt cache. generateImage has
     // an in-memory cache keyed by (prompt, format) that would return
     // the previously-generated URL for an unchanged prompt — silently

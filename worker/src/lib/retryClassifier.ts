@@ -68,6 +68,20 @@ const TRANSIENT_PATTERNS: RegExp[] = [
   /\b57014\b/, // Postgres SQLSTATE for query_canceled
   /could not serialize access/i, // SQLSTATE 40001 — serialization failure
 
+  // Supabase Storage → Postgres connection blips. The storage API persists
+  // object metadata in Postgres, so under pooler saturation / capacity pressure
+  // an upload (or signed-URL) call surfaces "Upload failed: The connection to
+  // the database timed out" and kin. These are transient — a short wait + retry
+  // clears them. Without these patterns the worker mis-classifies the blip as
+  // PERMANENT and fails the whole job (and any dependents, e.g. a
+  // finalize_generation gated on a cinematic_video) on a momentary outage.
+  /connection to the database/i,
+  /connection timed out/i,
+  /timeout exceeded when trying to connect/i,
+  /too many connections/i, // pooler exhaustion
+  /remaining connection slots/i,
+  /max client connections reached/i,
+
   // Checkpoint reader fail-loud (C-7-6) — the readCheckpoint helper
   // throws CheckpointReadError on any Supabase/PG error so callers do
   // NOT misinterpret "DB transiently down" as "no checkpoint, start

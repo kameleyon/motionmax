@@ -12,6 +12,7 @@
 import { supabase } from "../lib/supabase.js";
 import { writeApiLog } from "../lib/logger.js";
 import { ttsSecondsCostUsd } from "../lib/providerRates.js";
+import { retryDbRead } from "../lib/retryClassifier.js";
 
 const REPLICATE_API_URL = "https://api.replicate.com/v1/models/qwen/qwen3-tts/predictions";
 
@@ -52,9 +53,10 @@ async function uploadAudio(
 ): Promise<string> {
   const ext = contentType.includes("wav") ? "wav" : "mp3";
   const filePath = `${projectId}/scene_${sceneNumber}_qwen3_${Date.now()}.${ext}`;
-  const { error } = await supabase.storage
-    .from("audio")
-    .upload(filePath, bytes, { contentType, upsert: true });
+  // upsert:true → idempotent, so a transient DB/pooler blip retries.
+  const { error } = await retryDbRead(() =>
+    supabase.storage.from("audio").upload(filePath, bytes, { contentType, upsert: true }),
+  );
   if (error) throw new Error(`Upload failed: ${error.message}`);
 
   const { data: signedData, error: signError } = await supabase.storage

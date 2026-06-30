@@ -18,6 +18,7 @@ import {
 import { validateMediaBytes, MediaValidationError } from "../handlers/export/mediaValidator.js";
 import { writeApiLog } from "../lib/logger.js";
 import { ttsCharsCostUsd, ttsSecondsCostUsd } from "../lib/providerRates.js";
+import { retryDbRead } from "../lib/retryClassifier.js";
 
 /**
  * Shared attribution payload threaded from the handler so each
@@ -69,9 +70,10 @@ export async function uploadAudio(
   // Use the same "audio" bucket + path pattern as the edge function
   const filePath = `${projectId}/${name}`;
 
-  const { error } = await supabase.storage
-    .from("audio")
-    .upload(filePath, bytes, { contentType, upsert: true });
+  // upsert:true → idempotent, so a transient DB/pooler blip retries.
+  const { error } = await retryDbRead(() =>
+    supabase.storage.from("audio").upload(filePath, bytes, { contentType, upsert: true }),
+  );
 
   if (error) throw new Error(`Audio upload failed: ${error.message}`);
 

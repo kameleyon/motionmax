@@ -1009,9 +1009,14 @@ async function uploadVideoToStorage(
   const buffer = await res.arrayBuffer();
   const fileName = `${projectId}/${generationId}/scene_${sceneIndex}_${Date.now()}.mp4`;
 
-  const { error } = await supabase.storage
-    .from("scene-videos")
-    .upload(fileName, buffer, { contentType: "video/mp4", upsert: true });
+  // upsert:true makes this idempotent, so a transient DB/pooler blip
+  // ("connection to the database timed out") retries instead of failing the
+  // whole cinematic_video job and aborting its dependents (finalize_generation).
+  const { error } = await retryDbRead(() =>
+    supabase.storage
+      .from("scene-videos")
+      .upload(fileName, buffer, { contentType: "video/mp4", upsert: true }),
+  );
   if (error) throw new Error(`Upload failed: ${error.message}`);
 
   const { data } = supabase.storage.from("scene-videos").getPublicUrl(fileName);

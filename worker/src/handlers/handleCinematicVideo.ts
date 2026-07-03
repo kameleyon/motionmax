@@ -41,6 +41,11 @@ import {
 // from this chain on 2026-05-28).
 import { generateAtlasCloudSeedance } from "../services/atlasCloudSeedance.js";
 import { generateOpenRouterVideo } from "../services/openrouterVideo.js";
+// Full ByteDance Seedance 2.0 via Replicate — re-added as the PRIMARY
+// cinematic rung on 2026-07-03. Highest-fidelity Seedance (the 480p
+// "Fast" variants and the account-gated AtlasCloud path sit below it as
+// fallbacks). Auth: REPLICATE_API_KEY (already configured for Qwen3 TTS).
+import { generateReplicateSeedance } from "../services/replicateSeedance.js";
 import { saveCheckpoint, readCheckpointKey, clearCheckpointKey, CheckpointReadError } from "../lib/checkpoint.js";
 import { isKillSwitchArmed } from "../lib/featureFlags.js";
 
@@ -320,7 +325,7 @@ async function _runCinematicVideo(
 
   const cameraName = CAMERA_MOTIONS[sceneIndex % CAMERA_MOTIONS.length].split("\u2014")[0].trim();
   console.log(
-    `[CinematicVideo] Scene ${sceneIndex}: starting 4-rung chain${regenerate ? " (regen)" : ""}, ` +
+    `[CinematicVideo] Scene ${sceneIndex}: starting 5-rung chain${regenerate ? " (regen)" : ""}, ` +
     `camera=${cameraName}, prompt=${finalPrompt.length} chars`
   );
 
@@ -489,14 +494,16 @@ async function _runCinematicVideo(
   // the full `seedanceAspect` value because it natively handles 1:1.
   const openRouterAspectRatio: "16:9" | "9:16" = seedanceAspect === "1:1" ? "16:9" : seedanceAspect;
 
-  // Per-scene provider chain (4-rung as of 2026-05-28):
-  //   1. OpenRouter Seedance 1.5 Pro @ 480p  — primary, cheapest 10s I2V.
-  //   2. OpenRouter Seedance 2.0 Fast @ 480p — same upstream classifier
-  //      as rung 1; skipped when rung 1 fails for copyright/named-IP.
-  //   3. AtlasCloud Seedance 2.0 @ 480p      — different account-level
+  // Per-scene provider chain (5-rung as of 2026-07-03):
+  //   1. Replicate Seedance 2.0 @ 480p       — PRIMARY. Full (non-Fast)
+  //      ByteDance Seedance 2.0, highest fidelity + native last_frame.
+  //   2. OpenRouter Seedance 1.5 Pro @ 480p  — cheapest 10s I2V fallback.
+  //   3. OpenRouter Seedance 2.0 Fast @ 480p — same upstream classifier
+  //      as rung 2; skipped when rung 2 fails for copyright/named-IP.
+  //   4. AtlasCloud Seedance 2.0 @ 480p      — different account-level
   //      moderation; catches named soccer / World Cup prompts that
-  //      OpenRouter Seedance refuses.
-  //   4. OpenRouter Kling Video O1 @ 480p    — terminal rung. Different
+  //      OpenRouter Seedance refuses. Returns 402 when out of credits.
+  //   5. OpenRouter Kling Video O1 @ 480p    — terminal rung. Different
   //      model family and classifier from Seedance; if it refuses too,
   //      the scene fails over to held-frame in the outer catch.
   //
@@ -506,29 +513,70 @@ async function _runCinematicVideo(
   //   • Hypereal Kling V3 Pro removed 2026-05-28 (OR Kling O1 is now
   //     the terminal rung; moderation refusals there go straight to
   //     held-frame via the outer catch).
+  //   • Replicate Seedance 2.0 re-added 2026-07-03 as the primary rung
+  //     (the 4-rung OpenRouter/AtlasCloud chain was leaving scenes on
+  //     held-frame under a pile-up of transient/moderation/402 failures).
   //
   // Any non-moderation, non-credits-exhausted error cascades. Moderation
   // rejection at the terminal rung bubbles to the outer catch and the
   // scene falls back to held-frame. [PROVIDER_CREDITS_EXHAUSTED] bubbles
   // immediately at any rung.
   try {
-    // The chain is ordered cheapest-first within each "policy family":
+    // Ordering: full Seedance 2.0 (Replicate) first for fidelity, then
+    // cheapest-first within each OpenRouter "policy family":
+    //   • Replicate Seedance 2.0       ($0.80/10s)   — full model, highest fidelity, native last_frame
     //   • OpenRouter Seedance 1.5 Pro  ($0.26/10s)   — ByteDance copyright filter rejects named-IP prompts
-    //   • OpenRouter Seedance 2.0 Fast ($1.20/10s)   — same upstream, SAME copyright filter (skip if rung 1 = copyright reject)
+    //   • OpenRouter Seedance 2.0 Fast ($1.20/10s)   — same upstream, SAME copyright filter (skip if OR 1.5 Pro = copyright reject)
     //   • AtlasCloud Seedance 2.0      (~$0.30/10s)  — different account-level moderation, accepts named soccer / World Cup
     //   • OpenRouter Kling Video O1    ($1.12/10s)   — terminal; different model family, different classifier
     //
-    // Copyright fast-path: if rung 1 fails with InputTextSensitiveContent
-    // Detected.PolicyViolation (or any string containing "copyright"),
-    // skipping rung 2 saves one wasted submit because OpenRouter routes
-    // both Seedance versions through the same ByteDance moderation
-    // pipeline. Any other rung-1 error still tries rung 2 — the prompt
-    // might be fine and the failure transient.
+    // Copyright fast-path: if the OR Seedance 1.5 Pro rung fails with
+    // InputTextSensitiveContentDetected.PolicyViolation (or any string
+    // containing "copyright"), skipping the OR Seedance 2.0 Fast rung
+    // saves one wasted submit because OpenRouter routes both Seedance
+    // versions through the same ByteDance moderation pipeline. Any other
+    // error still tries the next rung — the prompt might be fine and the
+    // failure transient.
     let rung1CopyrightReject = false;
 
-    // ── 1. OpenRouter Seedance 1.5 Pro @ 480p (PRIMARY) ──────────────
-    // Cheapest rung. Any failure cascades down.
+    // ── 1. Replicate Seedance 2.0 @ 480p (PRIMARY) ───────────────────
+    // Full (non-Fast) ByteDance Seedance 2.0. The service internally
+    // sanitizes the prompt for ByteDance's stricter safety classifier
+    // and supports native last_frame_image. Replicate output URLs are
+    // publicly fetchable, so no download auth header is needed. Any
+    // failure cascades to the OpenRouter/AtlasCloud rungs below.
     {
+      const repRes = await generateReplicateSeedance({
+        imageUrl,
+        endImageUrl,
+        prompt: `${finalPrompt}\n\n${motionGuardrails}`,
+        duration: 10,
+        aspectRatio: seedanceAspect,
+        resolution: "480p",
+        userId: userId ?? null,
+        generationId,
+        jobId,
+        pollMaxMs: 8 * 60 * 1000,
+        onSubmitted: async ({ providerJobId, pollUrl, model }) => {
+          await saveCheckpoint(jobId, checkpointKey, {
+            stage: "polling", providerJobId, pollUrl, model,
+          });
+        },
+      });
+      if (repRes.videoUrl) {
+        videoUrl = repRes.videoUrl;
+        videoUrlAuthHeader = undefined; // Replicate URLs are public
+        provider = "Replicate Seedance 2.0 @ 480p";
+      } else {
+        console.warn(
+          `[CinematicVideo] Scene ${sceneIndex}: Replicate Seedance 2.0 failed — falling back to OpenRouter Seedance 1.5 Pro: ${(repRes.error ?? "").slice(0, 200)}`,
+        );
+      }
+    }
+
+    // ── 2. OpenRouter Seedance 1.5 Pro @ 480p (FALLBACK 1) ───────────
+    // Cheapest rung. Any failure cascades down.
+    if (!videoUrl) {
       const orRes = await generateOpenRouterVideo({
         model: "bytedance/seedance-1-5-pro",
         imageUrl,
@@ -564,10 +612,10 @@ async function _runCinematicVideo(
       }
     }
 
-    // ── 2. OpenRouter Seedance 2.0 Fast @ 480p (FALLBACK 1) ──────────
-    // Skipped when rung 1 rejected for copyright (same ByteDance filter
-    // upstream). Otherwise tried because rung 1 may have hit a transient
-    // OpenRouter / ByteDance error that 2.0 Fast won't.
+    // ── 3. OpenRouter Seedance 2.0 Fast @ 480p (FALLBACK 2) ──────────
+    // Skipped when the OR Seedance 1.5 Pro rung rejected for copyright
+    // (same ByteDance filter upstream). Otherwise tried because that rung
+    // may have hit a transient OpenRouter / ByteDance error that 2.0 Fast won't.
     if (!videoUrl && !rung1CopyrightReject) {
       const orRes2 = await generateOpenRouterVideo({
         model: "bytedance/seedance-2.0-fast",
@@ -598,7 +646,7 @@ async function _runCinematicVideo(
       }
     }
 
-    // ── 3. AtlasCloud Seedance 2.0 (FALLBACK 2) ──────────────────────
+    // ── 4. AtlasCloud Seedance 2.0 (FALLBACK 3) ──────────────────────
     // Cheap when funded. Different account-level moderation than
     // OpenRouter — accepts named soccer player / World Cup prompts that
     // ByteDance rejects via OpenRouter. Returns 402 when out of credits;
@@ -632,7 +680,7 @@ async function _runCinematicVideo(
       }
     }
 
-    // ── 4. OpenRouter Kling Video O1 @ 480p (FALLBACK 3) ─────────────
+    // ── 5. OpenRouter Kling Video O1 @ 480p (FALLBACK 4) ─────────────
     // Resolution-free pricing ($1.12 / 10s). Different content
     // classifier from Seedance, so may accept prompts the Seedance
     // rungs all refused.
@@ -682,7 +730,7 @@ async function _runCinematicVideo(
           // queries watch for "cinematic_video_kling_fallback") even
           // though the message body has been updated for the 4-rung chain.
           eventType: "cinematic_video_kling_fallback",
-          message: `Scene ${sceneIndex}: all 4 rungs failed — falling back to held-frame`,
+          message: `Scene ${sceneIndex}: all 5 rungs failed — falling back to held-frame`,
           details: { sceneIndex },
         });
         throw new Error(
@@ -703,8 +751,8 @@ async function _runCinematicVideo(
         jobId, projectId, userId, generationId,
         category: "system_error",
         eventType: "provider_credits_exhausted",
-        message: `Provider chain exhausted — scene ${sceneIndex} could not render on OR Seedance 1.5 Pro, OR Seedance 2.0 Fast, AtlasCloud, OR Kling O1`,
-        details: { sceneIndex, provider: "or-seedance-1-5-pro + or-seedance-2-0-fast + atlascloud + or-kling-o1 chain", raw: errMsg.slice(0, 400) },
+        message: `Provider chain exhausted — scene ${sceneIndex} could not render on Replicate Seedance 2.0, OR Seedance 1.5 Pro, OR Seedance 2.0 Fast, AtlasCloud, OR Kling O1`,
+        details: { sceneIndex, provider: "replicate-seedance-2-0 + or-seedance-1-5-pro + or-seedance-2-0-fast + atlascloud + or-kling-o1 chain", raw: errMsg.slice(0, 400) },
       });
       throw err;
     }

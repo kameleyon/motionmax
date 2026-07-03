@@ -101,6 +101,19 @@ vi.mock("../services/atlasCloudSeedance.js", () => ({
   }),
 }));
 
+// Replicate Seedance 2.0 is the PRIMARY rung (2026-07-03). Default the
+// mock to a FAILURE so the existing fallback-chain tests (which assert
+// the OpenRouter / AtlasCloud rungs are exercised) still cascade past it.
+// The happy-path test below overrides this to exercise the primary.
+vi.mock("../services/replicateSeedance.js", () => ({
+  generateReplicateSeedance: vi.fn().mockResolvedValue({
+    videoUrl: null,
+    provider: "replicate",
+    model: "bytedance/seedance-2.0",
+    error: "mocked: primary not exercised in this test",
+  }),
+}));
+
 vi.mock("../services/imageGenerator.js", () => ({
   generateImage: vi.fn().mockResolvedValue("https://cdn.test/image.jpg"),
 }));
@@ -321,6 +334,42 @@ describe("handleCinematicVideo", () => {
 
       expect(pollHyperealJob).not.toHaveBeenCalled();
       expect(clearCheckpointKey).toHaveBeenCalledWith("job-scrub-2", expect.stringContaining("scene_"));
+    });
+  });
+
+  describe("provider chain — Replicate Seedance 2.0 (primary)", () => {
+    it("uses Replicate Seedance 2.0 first and skips the OpenRouter/AtlasCloud rungs on success", async () => {
+      const { supabase } = await import("../lib/supabase.js");
+      vi.mocked(supabase.from).mockImplementation((table: string) => {
+        if (table === "generations") {
+          return makeChain({ scenes: [{ imageUrl: "https://cdn.test/img.jpg", visualPrompt: "x" }] }) as never;
+        }
+        if (table === "projects") {
+          return makeChain({ format: "landscape", style: "realistic" }) as never;
+        }
+        if (table === "video_generation_jobs") {
+          return makeChain({ status: "processing", error_message: null }) as never;
+        }
+        return makeChain({}) as never;
+      });
+
+      const { generateReplicateSeedance } = await import("../services/replicateSeedance.js");
+      vi.mocked(generateReplicateSeedance).mockResolvedValueOnce({
+        videoUrl: "https://replicate.test/out.mp4",
+        provider: "replicate", model: "bytedance/seedance-2.0", durationSeconds: 10,
+      });
+      const { generateOpenRouterVideo } = await import("../services/openrouterVideo.js");
+      const { generateAtlasCloudSeedance } = await import("../services/atlasCloudSeedance.js");
+
+      const { handleCinematicVideo } = await import("./handleCinematicVideo.js");
+      await handleCinematicVideo("job-rung0-success", makePayload({ sceneIndex: 0 }), "user-1").catch(() => {});
+
+      expect(generateReplicateSeedance).toHaveBeenCalledWith(
+        expect.objectContaining({ resolution: "480p", duration: 10 }),
+      );
+      // Primary succeeded → no fallback rung should have been touched.
+      expect(generateOpenRouterVideo).not.toHaveBeenCalled();
+      expect(generateAtlasCloudSeedance).not.toHaveBeenCalled();
     });
   });
 

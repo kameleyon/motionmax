@@ -57,6 +57,60 @@ describe("generateOpenRouterVideo", () => {
     expect(res.downloadAuthHeader).toBe("Bearer or_test_key");
   }, 15_000);
 
+  it("clamps an over-long prompt to the Kling O1 2500-char cap on submit", async () => {
+    // Regression: Kling O1 returns `400 prompt: size must be between 0 and
+    // 2500`, which terminal-failed the last rung of the cinematic chain on
+    // length alone (a 3154-char cinematic prompt never reached the model).
+    const longPrompt = "word ".repeat(700).trim(); // ~3499 chars, > 2500
+    const submitJson = { id: "or-job-k", polling_url: "https://or.test/poll/or-job-k" };
+    const pollJson = {
+      id: "or-job-k", status: "completed",
+      unsigned_urls: ["https://or.test/out/or-job-k.mp4"], usage: { cost: 0.1 },
+    };
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => submitJson, text: async () => "" })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => pollJson,   text: async () => "" });
+    globalThis.fetch = fetchMock as never;
+
+    const { generateOpenRouterVideo } = await import("./openrouterVideo.js");
+    await generateOpenRouterVideo({
+      model: "kwaivgi/kling-video-o1",
+      imageUrl: "https://cdn.test/a.jpg",
+      prompt: longPrompt,
+      pollMaxMs: 30_000,
+    });
+
+    const submittedBody = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body);
+    expect(longPrompt.length).toBeGreaterThan(2500);            // guard the fixture
+    expect(submittedBody.prompt.length).toBeLessThanOrEqual(2500);
+    expect(submittedBody.prompt.endsWith(" ")).toBe(false);     // trimmed on word boundary
+  }, 15_000);
+
+  it("passes a Seedance prompt through unclamped when under its cap", async () => {
+    const prompt = "word ".repeat(500).trim(); // ~2499 chars, under Seedance's 5000 cap
+    const submitJson = { id: "or-job-s", polling_url: "https://or.test/poll/or-job-s" };
+    const pollJson = {
+      id: "or-job-s", status: "completed",
+      unsigned_urls: ["https://or.test/out/or-job-s.mp4"], usage: { cost: 0.1 },
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => submitJson, text: async () => "" })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => pollJson,   text: async () => "" });
+    globalThis.fetch = fetchMock as never;
+
+    const { generateOpenRouterVideo } = await import("./openrouterVideo.js");
+    await generateOpenRouterVideo({
+      model: "bytedance/seedance-1-5-pro",
+      imageUrl: "https://cdn.test/a.jpg",
+      prompt,
+      pollMaxMs: 30_000,
+    });
+
+    const submittedBody = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body);
+    expect(submittedBody.prompt).toBe(prompt);
+  }, 15_000);
+
   it("returns error on HTTP 4xx submit", async () => {
     globalThis.fetch = vi.fn().mockResolvedValueOnce({
       ok: false, status: 400,

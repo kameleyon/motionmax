@@ -39,6 +39,30 @@ export type OpenRouterVideoModel =
   | "bytedance/seedance-2.0-fast"
   | "kwaivgi/kling-video-o1";
 
+/** Per-model prompt length caps (characters). Providers reject over-long
+ *  prompts on SUBMIT — Kling O1 returns `400 prompt: size must be between
+ *  0 and 2500`, which was terminal-failing the last rung of the cinematic
+ *  chain on length alone (a 3154-char cinematic prompt never even reached
+ *  the model). Seedance accepts longer prompts, so it keeps a generous
+ *  ceiling. Any model not listed falls back to the strictest cap. */
+const MODEL_PROMPT_LIMIT: Record<OpenRouterVideoModel, number> = {
+  "bytedance/seedance-1-5-pro": 5000,
+  "bytedance/seedance-2.0-fast": 5000,
+  "kwaivgi/kling-video-o1": 2500,
+};
+const STRICTEST_PROMPT_LIMIT = 2500;
+
+/** Clamp `prompt` to `max` characters on a word boundary so a rung is
+ *  never rejected purely on length. Trims back to the last space when
+ *  that space is reasonably close to the cap (avoids lopping off most of
+ *  the prompt when the tail happens to be one very long token). */
+function clampPrompt(prompt: string, max: number): string {
+  if (prompt.length <= max) return prompt;
+  const slice = prompt.slice(0, max);
+  const lastSpace = slice.lastIndexOf(" ");
+  return (lastSpace > max * 0.6 ? slice.slice(0, lastSpace) : slice).trim();
+}
+
 export interface OpenRouterVideoOptions {
   model: OpenRouterVideoModel;
   imageUrl: string;
@@ -120,9 +144,17 @@ export async function generateOpenRouterVideo(
   const duration = opts.duration ?? 10;
   const pollMaxMs = opts.pollMaxMs ?? DEFAULT_POLL_MAX_MS;
 
+  const promptCap = MODEL_PROMPT_LIMIT[model] ?? STRICTEST_PROMPT_LIMIT;
+  const prompt = clampPrompt(opts.prompt, promptCap);
+  if (prompt.length < opts.prompt.length) {
+    console.warn(
+      `[OpenRouterVideo:${model}] prompt clamped ${opts.prompt.length}→${prompt.length} chars (model cap ${promptCap})`,
+    );
+  }
+
   const body: Record<string, unknown> = {
     model,
-    prompt: opts.prompt,
+    prompt,
     frame_images: [
       { type: "image_url", frame_type: "first_frame", image_url: { url: opts.imageUrl } },
       ...(opts.endImageUrl

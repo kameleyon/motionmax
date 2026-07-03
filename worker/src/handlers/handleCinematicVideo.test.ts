@@ -101,19 +101,6 @@ vi.mock("../services/atlasCloudSeedance.js", () => ({
   }),
 }));
 
-// Replicate Seedance 2.0 is the PRIMARY rung (2026-07-03). Default the
-// mock to a FAILURE so the existing fallback-chain tests (which assert
-// the OpenRouter / AtlasCloud rungs are exercised) still cascade past it.
-// The happy-path test below overrides this to exercise the primary.
-vi.mock("../services/replicateSeedance.js", () => ({
-  generateReplicateSeedance: vi.fn().mockResolvedValue({
-    videoUrl: null,
-    provider: "replicate",
-    model: "bytedance/seedance-2.0",
-    error: "mocked: primary not exercised in this test",
-  }),
-}));
-
 vi.mock("../services/imageGenerator.js", () => ({
   generateImage: vi.fn().mockResolvedValue("https://cdn.test/image.jpg"),
 }));
@@ -337,43 +324,7 @@ describe("handleCinematicVideo", () => {
     });
   });
 
-  describe("provider chain — Replicate Seedance 2.0 (primary)", () => {
-    it("uses Replicate Seedance 2.0 first and skips the OpenRouter/AtlasCloud rungs on success", async () => {
-      const { supabase } = await import("../lib/supabase.js");
-      vi.mocked(supabase.from).mockImplementation((table: string) => {
-        if (table === "generations") {
-          return makeChain({ scenes: [{ imageUrl: "https://cdn.test/img.jpg", visualPrompt: "x" }] }) as never;
-        }
-        if (table === "projects") {
-          return makeChain({ format: "landscape", style: "realistic" }) as never;
-        }
-        if (table === "video_generation_jobs") {
-          return makeChain({ status: "processing", error_message: null }) as never;
-        }
-        return makeChain({}) as never;
-      });
-
-      const { generateReplicateSeedance } = await import("../services/replicateSeedance.js");
-      vi.mocked(generateReplicateSeedance).mockResolvedValueOnce({
-        videoUrl: "https://replicate.test/out.mp4",
-        provider: "replicate", model: "bytedance/seedance-2.0", durationSeconds: 10,
-      });
-      const { generateOpenRouterVideo } = await import("../services/openrouterVideo.js");
-      const { generateAtlasCloudSeedance } = await import("../services/atlasCloudSeedance.js");
-
-      const { handleCinematicVideo } = await import("./handleCinematicVideo.js");
-      await handleCinematicVideo("job-rung0-success", makePayload({ sceneIndex: 0 }), "user-1").catch(() => {});
-
-      expect(generateReplicateSeedance).toHaveBeenCalledWith(
-        expect.objectContaining({ resolution: "480p", duration: 10 }),
-      );
-      // Primary succeeded → no fallback rung should have been touched.
-      expect(generateOpenRouterVideo).not.toHaveBeenCalled();
-      expect(generateAtlasCloudSeedance).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("provider chain — rung 1 (OpenRouter Seedance 1.5 Pro)", () => {
+  describe("provider chain — rung 1 (OpenRouter Seedance 2.0)", () => {
     it("uses rung 1 result when OpenRouter Seedance succeeds; does NOT call AtlasCloud", async () => {
       const { supabase } = await import("../lib/supabase.js");
       vi.mocked(supabase.from).mockImplementation((table: string) => {
@@ -397,10 +348,10 @@ describe("handleCinematicVideo", () => {
 
       expect(generateOpenRouterVideo).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: "bytedance/seedance-1-5-pro",
+          model: "bytedance/seedance-2.0-fast",
           resolution: "480p",
           duration: 10,
-          pollMaxMs: 4 * 60 * 1000,
+          pollMaxMs: 8 * 60 * 1000,
         }),
       );
       expect(generateAtlasCloudSeedance).not.toHaveBeenCalled();
@@ -422,10 +373,17 @@ describe("handleCinematicVideo", () => {
       });
 
       const { generateOpenRouterVideo } = await import("../services/openrouterVideo.js");
-      vi.mocked(generateOpenRouterVideo).mockResolvedValueOnce({
-        videoUrl: null, provider: "openrouter", model: "bytedance/seedance-1-5-pro",
-        error: "submit 502",
-      });
+      // Both OpenRouter Seedance rungs (2.0 primary, then 1.5 Pro fallback)
+      // must return null before the chain reaches AtlasCloud.
+      vi.mocked(generateOpenRouterVideo)
+        .mockResolvedValueOnce({
+          videoUrl: null, provider: "openrouter", model: "bytedance/seedance-2.0-fast",
+          error: "submit 502",
+        })
+        .mockResolvedValueOnce({
+          videoUrl: null, provider: "openrouter", model: "bytedance/seedance-1-5-pro",
+          error: "submit 502",
+        });
 
       const { generateAtlasCloudSeedance } = await import("../services/atlasCloudSeedance.js");
 
@@ -454,11 +412,16 @@ describe("handleCinematicVideo", () => {
       });
 
       const { generateOpenRouterVideo } = await import("../services/openrouterVideo.js");
-      // First call (rung 1) fails; second call (rung 3) succeeds.
+      // Both OpenRouter Seedance rungs (2.0 primary, 1.5 Pro fallback) fail,
+      // then AtlasCloud fails, then the terminal OR Kling O1 rung succeeds.
       vi.mocked(generateOpenRouterVideo)
         .mockResolvedValueOnce({
-          videoUrl: null, provider: "openrouter", model: "bytedance/seedance-1-5-pro",
+          videoUrl: null, provider: "openrouter", model: "bytedance/seedance-2.0-fast",
           error: "rung 1 submit 502",
+        })
+        .mockResolvedValueOnce({
+          videoUrl: null, provider: "openrouter", model: "bytedance/seedance-1-5-pro",
+          error: "rung 2 submit 502",
         })
         .mockResolvedValueOnce({
           videoUrl: "https://or.test/kling-o1.mp4",
@@ -475,15 +438,16 @@ describe("handleCinematicVideo", () => {
       const { handleCinematicVideo } = await import("./handleCinematicVideo.js");
       await handleCinematicVideo("job-rung3", makePayload({ sceneIndex: 0 }), "user-1").catch(() => {});
 
-      // Rung 1 + rung 4 (OR Kling O1) both called on OpenRouter; AtlasCloud called once.
-      // (Hypereal Kling V3 Pro removed from the chain on 2026-05-28; assertion dropped.)
-      expect(vi.mocked(generateOpenRouterVideo).mock.calls).toHaveLength(2);
-      expect(vi.mocked(generateOpenRouterVideo).mock.calls[1][0]).toEqual(
+      // Both Seedance rungs + terminal OR Kling O1 = 3 OpenRouter calls;
+      // AtlasCloud called once in between. (Hypereal Kling V3 Pro removed
+      // from the chain on 2026-05-28.)
+      expect(vi.mocked(generateOpenRouterVideo).mock.calls).toHaveLength(3);
+      expect(vi.mocked(generateOpenRouterVideo).mock.calls[2][0]).toEqual(
         expect.objectContaining({
           model: "kwaivgi/kling-video-o1",
           resolution: "480p",
           duration: 10,
-          pollMaxMs: 4 * 60 * 1000,
+          pollMaxMs: 8 * 60 * 1000,
         }),
       );
       expect(generateAtlasCloudSeedance).toHaveBeenCalledTimes(1);

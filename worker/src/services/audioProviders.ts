@@ -576,7 +576,15 @@ export async function generateLemonfoxTTS(
 ): Promise<{ url: string | null; durationSeconds?: number; provider?: string; error?: string }> {
   const sanitized = sanitizeVoiceover(text);
   if (!sanitized) return { url: null, error: "No text" };
-  const voice = voiceGender === "male" ? "adam" : "river";
+  // `voiceGender` accepts either a gender ("male"/"female") or an explicit
+  // voice name ("onyx"/"puck"/"river"/"adam"). "male" → adam; a known
+  // explicit voice passes through; anything else → river.
+  const KNOWN_VOICES = new Set(["adam", "river", "onyx", "puck"]);
+  const voice = voiceGender === "male"
+    ? "adam"
+    : KNOWN_VOICES.has(voiceGender)
+      ? voiceGender
+      : "river";
 
   // ─── Long-text path — chunked WAV rendering (master audio, etc.) ───
   // Mirrors generateGeminiFlashTTSChunked. The "Adam" English-male
@@ -767,7 +775,7 @@ async function fishOneShot(
         mp3_bitrate: 192,
         normalize: true,
         prosody: { speed: 1, normalize_loudness: true },
-        temperature: 0.65,
+        temperature: 0.8,
         top_p: 0.8,
         latency: "normal",
       }),
@@ -895,7 +903,7 @@ export async function generateFishAudioTTS(
           mp3_bitrate: 192,
           normalize: true,
           prosody: { speed: 1, normalize_loudness: true },
-          temperature: 0.65,
+          temperature: 0.8,
           top_p: 0.8,
           latency: "normal",
         }),

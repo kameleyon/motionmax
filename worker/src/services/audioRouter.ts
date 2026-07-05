@@ -175,6 +175,25 @@ export async function generateSceneAudio(
     return { url: null, error: `${speakerName} Fish Audio failed: ${result.error}` };
   }
 
+  // ========== CASE 2.5: Named OpenAI-style voices (Onyx, Puck) ==========
+  // Matched by speaker id BEFORE the English-male branch so they always
+  // render as themselves. Surfaced to the caller as the plain voice name.
+  if (speakerName === "Onyx" || speakerName === "Puck") {
+    if (!lemonfoxApiKey) {
+      return { url: null, error: `${speakerName} requires LEMONFOX_API_KEY` };
+    }
+    const lfVoice = speakerName.toLowerCase(); // "onyx" | "puck"
+    console.log(`[TTS] Scene ${scene.number}: ${speakerName} → (${lfVoice})`);
+    const result = await generateLemonfoxTTS(
+      voiceoverText, scene.number, lfVoice, lemonfoxApiKey, projectId, attribution,
+    );
+    if (result.url) {
+      console.log(`✅ Scene ${scene.number}: ${speakerName}`);
+      return { ...result, provider: speakerName };
+    }
+    return { url: null, error: `${speakerName} failed: ${result.error}` };
+  }
+
   // ========== CASE 3: English Male standard → LemonFox (Adam) ==========
   if (isEnglish && isMale) {
     if (!lemonfoxApiKey) {

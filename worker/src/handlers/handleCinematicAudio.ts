@@ -435,6 +435,8 @@ async function _runCinematicAudio(
       "Isabella": { gender: "female", language: "es" },
       "Adam":     { gender: "male",   language: "en" },
       "River":    { gender: "female", language: "en" },
+      "Onyx":     { gender: "male",   language: "en" },
+      "Puck":     { gender: "male",   language: "en" },
       // Named built-in Fish s2-pro voices — router picks them up via
       // AudioConfig.speakerName (see NAMED_FISH_VOICES in audioRouter.ts).
       "Zuri":     { gender: "female", language: "en" },

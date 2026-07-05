@@ -24,6 +24,7 @@ export type SpeakerVoice =
   | "Adam" | "River" | "Zuri" | "Morpheus" | "Jacynthe" | "Phoebe"
   | "Roselie" | "Emily" | "Melanie" | "Tatiana" | "Micha"
   | "Mikhal" | "Derrick" | "Eloise" | "Gabby" | "Sankofa"
+  | "Onyx" | "Puck"
   // Legacy Qwen3 types kept in the union so previously-saved projects that
   // reference them still typecheck when loaded. The worker routes them
   // through the standard audio chain (see handleCinematicAudio.ts).
@@ -216,8 +217,13 @@ const frenchSpeakers: SpeakerOption[] = [
 const spanishSpeakers: SpeakerOption[] = [...geminiFlashSpeakers];
 
 const englishSpeakers: SpeakerOption[] = [
-  // Gemini 3.1 Flash voices first — full 30-voice roster.
-  ...geminiFlashSpeakers,
+  // Gemini 3.1 Flash voices first — full roster, minus the Gemini "Puck"
+  // (superseded in English by the dedicated Puck voice below so the picker
+  // doesn't show two "Puck" entries).
+  ...geminiFlashSpeakers.filter((v) => v.id !== "gm:Puck"),
+  // Dedicated Puck / Onyx voices.
+  { id: "Puck",     label: "Puck",     description: "Male · Upbeat, expressive · social-media narration" },
+  { id: "Onyx",     label: "Onyx",     description: "Male · Deep, resonant · general-purpose narration" },
   // Adam stays — routes through LemonFox (English Male only).
   { id: "Adam",     label: "Adam",     description: "Male · Versatile, confident · general-purpose narration" },
   // Fish Audio s2-pro built-in voices. Routed via NAMED_FISH_VOICES in

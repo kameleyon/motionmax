@@ -60,6 +60,8 @@ const LEGACY_SPEAKER_MAP: Record<string, { gender: string; language: string }> =
   "Isabella": { gender: "female", language: "es" },
   "Adam":     { gender: "male",   language: "en" },
   "River":    { gender: "female", language: "en" },
+  "Onyx":     { gender: "male",   language: "en" },
+  "Puck":     { gender: "male",   language: "en" },
   "Pierre":   { gender: "male",   language: "ht" },
   "Marie":    { gender: "female", language: "ht" },
   // Named built-in Fish s2-pro voices — router picks them up via

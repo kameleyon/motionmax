@@ -14,7 +14,7 @@ function scene(over: Partial<Scene>): Scene {
 }
 
 describe("buildImagePrompt — cinematic title scoping", () => {
-  it("renders the cover title ONLY on the Scene 1 primary image", () => {
+  it("renders NO title on the cinematic cover — titles removed completely", () => {
     const out = buildImagePrompt(
       "A wide establishing shot",
       scene({ coverTitle: "THE THRONE" }),
@@ -22,8 +22,9 @@ describe("buildImagePrompt — cinematic title scoping", () => {
       0, // sceneIndex (cover)
       { ...baseOpts, isCinematic: true },
     );
-    expect(out).toContain("THE THRONE");
-    expect(out).toContain("COVER IMAGE TITLE");
+    expect(out).not.toContain("THE THRONE");
+    expect(out).not.toContain("COVER IMAGE TITLE");
+    expect(out).toContain("NO TITLE / NO TEXT");
   });
 
   it("renders NO title text on later cinematic scenes and tells the model to follow THIS scene", () => {
@@ -42,17 +43,18 @@ describe("buildImagePrompt — cinematic title scoping", () => {
     expect(out).toContain("A close-up of the hero at the docks");
   });
 
-  it("keeps the title block within the first 3900 chars so gpt-image-2 truncation can't drop it", () => {
-    // A realistically long per-scene description (cinematic temporal-consistency
-    // rules routinely push the full prompt past 4000 chars; gpt-image-2
-    // head-truncates to 3900, dropping the tail).
+  it("keeps a NON-cinematic cover title within the first 3900 chars so gpt-image-2 truncation can't drop it", () => {
+    // A realistically long per-scene description (temporal-consistency rules
+    // routinely push the full prompt past 4000 chars; gpt-image-2 head-
+    // truncates to 3900, dropping the tail). Explainer/non-cinematic still
+    // renders a cover title, so this guards that path.
     const longVisual = "A sweeping battle scene. ".repeat(80); // ~2000 chars
     const out = buildImagePrompt(
       longVisual,
       scene({ coverTitle: "THE THRONE" }),
       0,
       0,
-      { ...baseOpts, isCinematic: true },
+      { ...baseOpts, isCinematic: false }, // explainer keeps its cover title
     );
     // Title sits in the kept HEAD — before the ~2KB of boilerplate that the
     // truncation drops — so it survives.
@@ -80,8 +82,8 @@ describe("buildImagePrompt — cinematic title scoping", () => {
       1, // later scene
       { ...baseOpts, isCinematic: true },
     );
+    // The baked-in title text is stripped from the scene description.
     expect(out).not.toContain("THE JOURNEY BEGINS");
-    expect(out).not.toContain("typography");
     // The real visual content survives.
     expect(out).toContain("A woman steps into frame, coat billowing.");
   });

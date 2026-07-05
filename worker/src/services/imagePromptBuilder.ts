@@ -156,6 +156,37 @@ function buildTextInstructions(
   return "";
 }
 
+// ── Embedded overlay-title stripper ────────────────────────────────
+
+/** Remove on-screen TITLE / typography text that an older script LLM may
+ *  have baked into a scene's visualPrompt (e.g. "'THE JOURNEY BEGINS' in
+ *  bold typography fading in over mist."). Used for cinematic NON-cover
+ *  scenes only, so existing projects stop rendering a title on every
+ *  scene without needing a full script regeneration. Conservative: only
+ *  strips clauses that pair a quoted phrase with a typography/overlay
+ *  keyword, or explicit overlay directives ("text overlay", "title
+ *  card", "the words … appear") — diegetic signage/banners are left
+ *  alone. The cover (Scene 1 primary) keeps its title upstream. */
+export function stripOverlayTitleText(visualPrompt: string): string {
+  let p = visualPrompt;
+  // "'TITLE' in/as bold typography/lettering/title text …" → to sentence end
+  p = p.replace(
+    /['"‘’“”][^'"‘’“”\n]{1,80}['"‘’“”]\s+(?:in|as)\s+[^.?!\n]*?(?:typography|lettering|title text|headline text|bold text|large text)\b[^.?!\n]*[.?!]?\s*/gi,
+    "",
+  );
+  // Explicit overlay directives.
+  p = p.replace(
+    /\b(?:text overlay|title card|title text|headline text)\b\s*[:\-]?[^.?!\n]*[.?!]?\s*/gi,
+    "",
+  );
+  // "the words '…' appear/fade in/overlay …"
+  p = p.replace(
+    /\bthe words?\b[^.?!\n]*?(?:appear|fade|overlay|shown|written|display)[^.?!\n]*[.?!]?\s*/gi,
+    "",
+  );
+  return p.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 // ── Main builder ───────────────────────────────────────────────────
 
 export function buildImagePrompt(
@@ -171,6 +202,14 @@ export function buildImagePrompt(
   const textInstructions = buildTextInstructions(scene, subIndex, sceneIndex, style, format, videoTitle, isCinematic);
   const characterInstructions = buildCharacterInstructions(characterBible, characterDescription);
 
+  // Cinematic non-cover scenes: strip any on-screen title text the script
+  // LLM may have baked into the visualPrompt (older generations did this),
+  // so the title stays on the Scene-1 cover only. The cover keeps its text.
+  const isCoverImage = sceneIndex === 0 && subIndex === 0;
+  const sceneDescription = (isCinematic && !isCoverImage)
+    ? stripOverlayTitleText(visualPrompt)
+    : visualPrompt;
+
   // Character requirements go FIRST (after the create directive) so image models
   // weight them heavily. Style description comes AFTER character so style can't
   // override appearance (e.g. 3D style defaulting to generic 3D character looks).
@@ -182,7 +221,7 @@ export function buildImagePrompt(
   return `CREATE A HIGHLY DETAILED, PRECISE, AND ACCURATE ILLUSTRATION:
 ${characterInstructions}
 
-SCENE DESCRIPTION: ${visualPrompt}
+SCENE DESCRIPTION: ${sceneDescription}
 ${textInstructions}
 
 FORMAT REQUIREMENT: ${fmtDesc}. The image MUST be composed for this exact aspect ratio.

@@ -88,12 +88,17 @@ export function buildCoverTitleSection(examples: string, styleDesc?: string): st
   const styleMatch = styleDesc
     ? `\n- **STYLE-MATCHED TYPOGRAPHY:** The title text in the visualPrompt for Scene 1 MUST be rendered in the SAME art style as the rest of the image. If the style is "${styleDesc}", the title lettering must look like it belongs in that world (e.g., Lego style → blocky 3D brick letters, Anime → manga-style text, Watercolor → painted brush-stroke lettering, etc.). NEVER use generic plain text or a mismatched style for the title.`
     : "";
-  return `=== COVER IMAGE TITLE (CRITICAL FOR SCENE 1) ===
+  return `=== COVER IMAGE TITLE (CRITICAL — SCENE 1 ONLY) ===
 For Scene 1 ONLY, you MUST ALWAYS include a non-empty "coverTitle" field with a short, catchy, social media-style title (3-6 words max). This field is REQUIRED — never leave it blank.
 - This is the THUMBNAIL/COVER title that will be rendered prominently on the first image
 - Make it punchy, intriguing, and scroll-stopping (like a viral TikTok or YouTube thumbnail)
 - The title MUST physically appear written on the Scene 1 image, and it MUST FIT THE SCREEN: for a 9:16 vertical (portrait) video keep every word inside the central safe area with margins from all edges, wrapping onto 2-3 lines if needed so NO word is cut off or runs past the sides — fully readable on a phone screen.${styleMatch}
-- Examples: ${examples}`;
+- Examples: ${examples}
+
+⛔ TITLE TEXT IS SCENE 1 ONLY — ZERO TEXT ON EVERY OTHER SCENE:
+The cover title appears on Scene 1 and NOWHERE else. For Scene 2, 3, 4 … (every scene after the first), the "visualPrompt" MUST NOT contain ANY title, headline, caption, subtitle, label, typography, lettering, on-screen words, or "text fading in / appearing" of ANY kind. Those scenes depict ONLY their own action, subject, and setting — with NO rendered words at all.
+- Do NOT write phrases like "'SOME TITLE' in bold typography", "the words … appear", "text overlay", "title card", "caption reads", or any quoted on-screen text into a non-cover scene's visualPrompt.
+- The ONLY scene whose visualPrompt may describe on-screen title text is Scene 1. If you put title/typography text into any later scene, that is a HARD FAILURE.`;
 }
 
 // ── SEO Caption Section ────────────────────────────────────────────

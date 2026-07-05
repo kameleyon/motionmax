@@ -473,6 +473,13 @@ Return ONLY valid JSON (no markdown, no \`\`\`json blocks):
       "visualStyle": "Cinematic establishing shot with atmospheric depth",
       "coverTitle": "Catchy Cover Title",
       "duration": 11
+    },
+    {
+      "number": 2,
+      "voiceover": "The next beat of the story continues...",
+      "visualPrompt": "The same 32-year-old woman with shoulder-length black hair kneels at the water's edge, cupping her hands to drink, ripples spreading across the still surface. Reeds sway in the foreground, mountains hazy in the distance. NO on-screen text or title of any kind.\nCamera: Slow push-in on her hands and face.",
+      "visualStyle": "Intimate character moment, natural light",
+      "duration": 10
     }
   ],
   "seo": {

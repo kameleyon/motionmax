@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildImagePrompt, type Scene } from "./imagePromptBuilder.js";
+import { buildImagePrompt, stripOverlayTitleText, type Scene } from "./imagePromptBuilder.js";
 
 const baseOpts = {
   format: "landscape",
@@ -70,5 +70,49 @@ describe("buildImagePrompt — cinematic title scoping", () => {
     );
     expect(out).toContain('Render "Q2 Results"'); // overlay preserved
     expect(out).not.toContain("NO TITLE");
+  });
+
+  it("strips embedded overlay-title text from a later cinematic scene's description", () => {
+    const out = buildImagePrompt(
+      "'THE JOURNEY BEGINS' in bold typography fading in over morning mist. A woman steps into frame, coat billowing.",
+      scene({ title: "whatever" }),
+      0,
+      1, // later scene
+      { ...baseOpts, isCinematic: true },
+    );
+    expect(out).not.toContain("THE JOURNEY BEGINS");
+    expect(out).not.toContain("typography");
+    // The real visual content survives.
+    expect(out).toContain("A woman steps into frame, coat billowing.");
+  });
+});
+
+describe("stripOverlayTitleText", () => {
+  it("removes a quoted-title + typography lead-in", () => {
+    expect(
+      stripOverlayTitleText("'RISE TO POWER' in bold typography fading in. A castle on a cliff."),
+    ).toBe("A castle on a cliff.");
+  });
+
+  it("removes explicit text-overlay / title-card directives", () => {
+    expect(stripOverlayTitleText("Text overlay: The End. A sunset over the ocean.")).toBe(
+      "A sunset over the ocean.",
+    );
+  });
+
+  it('removes "the words … appear" overlay clauses', () => {
+    expect(
+      stripOverlayTitleText('The words "GAME OVER" appear on screen. A player drops the controller.'),
+    ).toBe("A player drops the controller.");
+  });
+
+  it("leaves a normal description (no overlay text) unchanged", () => {
+    const clean = "A weathered ship glides into a 1900s harbor at dawn, immigrants crowding the rails.";
+    expect(stripOverlayTitleText(clean)).toBe(clean);
+  });
+
+  it("leaves diegetic signage (a sign reading X) intact", () => {
+    const diegetic = "A storefront with a wooden sign reading 'BAKERY' above the door, warm light inside.";
+    expect(stripOverlayTitleText(diegetic)).toBe(diegetic);
   });
 });

@@ -37,6 +37,7 @@ const DEFAULT_POLL_MAX_MS = 8 * 60 * 1000;
 export type OpenRouterVideoModel =
   | "bytedance/seedance-1-5-pro"
   | "bytedance/seedance-2.0-fast"
+  | "bytedance/seedance-2.0"
   | "kwaivgi/kling-video-o1";
 
 /** Per-model prompt length caps (characters). Providers reject over-long
@@ -48,6 +49,7 @@ export type OpenRouterVideoModel =
 const MODEL_PROMPT_LIMIT: Record<OpenRouterVideoModel, number> = {
   "bytedance/seedance-1-5-pro": 5000,
   "bytedance/seedance-2.0-fast": 5000,
+  "bytedance/seedance-2.0": 5000,
   "kwaivgi/kling-video-o1": 2500,
 };
 const STRICTEST_PROMPT_LIMIT = 2500;

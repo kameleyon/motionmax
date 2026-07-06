@@ -324,7 +324,7 @@ describe("handleCinematicVideo", () => {
     });
   });
 
-  describe("provider chain — rung 1 (OpenRouter Seedance 2.0)", () => {
+  describe("provider chain — rung 1 (OpenRouter Seedance 1.5 Pro)", () => {
     it("uses rung 1 result when OpenRouter Seedance succeeds; does NOT call AtlasCloud", async () => {
       const { supabase } = await import("../lib/supabase.js");
       vi.mocked(supabase.from).mockImplementation((table: string) => {
@@ -348,7 +348,7 @@ describe("handleCinematicVideo", () => {
 
       expect(generateOpenRouterVideo).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: "bytedance/seedance-2.0-fast",
+          model: "bytedance/seedance-1-5-pro",
           resolution: "480p",
           duration: 10,
           pollMaxMs: 8 * 60 * 1000,
@@ -373,15 +373,19 @@ describe("handleCinematicVideo", () => {
       });
 
       const { generateOpenRouterVideo } = await import("../services/openrouterVideo.js");
-      // Both OpenRouter Seedance rungs (2.0 primary, then 1.5 Pro fallback)
+      // All three OpenRouter Seedance rungs (1.5 Pro, 2.0 Fast, 2.0 full)
       // must return null before the chain reaches AtlasCloud.
       vi.mocked(generateOpenRouterVideo)
+        .mockResolvedValueOnce({
+          videoUrl: null, provider: "openrouter", model: "bytedance/seedance-1-5-pro",
+          error: "submit 502",
+        })
         .mockResolvedValueOnce({
           videoUrl: null, provider: "openrouter", model: "bytedance/seedance-2.0-fast",
           error: "submit 502",
         })
         .mockResolvedValueOnce({
-          videoUrl: null, provider: "openrouter", model: "bytedance/seedance-1-5-pro",
+          videoUrl: null, provider: "openrouter", model: "bytedance/seedance-2.0",
           error: "submit 502",
         });
 
@@ -412,16 +416,20 @@ describe("handleCinematicVideo", () => {
       });
 
       const { generateOpenRouterVideo } = await import("../services/openrouterVideo.js");
-      // Both OpenRouter Seedance rungs (2.0 primary, 1.5 Pro fallback) fail,
-      // then AtlasCloud fails, then the terminal OR Kling O1 rung succeeds.
+      // All three OpenRouter Seedance rungs (1.5 Pro, 2.0 Fast, 2.0 full)
+      // fail, then AtlasCloud fails, then the terminal OR Kling O1 succeeds.
       vi.mocked(generateOpenRouterVideo)
         .mockResolvedValueOnce({
-          videoUrl: null, provider: "openrouter", model: "bytedance/seedance-2.0-fast",
+          videoUrl: null, provider: "openrouter", model: "bytedance/seedance-1-5-pro",
           error: "rung 1 submit 502",
         })
         .mockResolvedValueOnce({
-          videoUrl: null, provider: "openrouter", model: "bytedance/seedance-1-5-pro",
+          videoUrl: null, provider: "openrouter", model: "bytedance/seedance-2.0-fast",
           error: "rung 2 submit 502",
+        })
+        .mockResolvedValueOnce({
+          videoUrl: null, provider: "openrouter", model: "bytedance/seedance-2.0",
+          error: "rung 3 submit 502",
         })
         .mockResolvedValueOnce({
           videoUrl: "https://or.test/kling-o1.mp4",
@@ -438,11 +446,10 @@ describe("handleCinematicVideo", () => {
       const { handleCinematicVideo } = await import("./handleCinematicVideo.js");
       await handleCinematicVideo("job-rung3", makePayload({ sceneIndex: 0 }), "user-1").catch(() => {});
 
-      // Both Seedance rungs + terminal OR Kling O1 = 3 OpenRouter calls;
-      // AtlasCloud called once in between. (Hypereal Kling V3 Pro removed
-      // from the chain on 2026-05-28.)
-      expect(vi.mocked(generateOpenRouterVideo).mock.calls).toHaveLength(3);
-      expect(vi.mocked(generateOpenRouterVideo).mock.calls[2][0]).toEqual(
+      // Three Seedance rungs + terminal OR Kling O1 = 4 OpenRouter calls;
+      // AtlasCloud called once in between (after the Seedance rungs).
+      expect(vi.mocked(generateOpenRouterVideo).mock.calls).toHaveLength(4);
+      expect(vi.mocked(generateOpenRouterVideo).mock.calls[3][0]).toEqual(
         expect.objectContaining({
           model: "kwaivgi/kling-video-o1",
           resolution: "480p",

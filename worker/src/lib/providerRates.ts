@@ -233,14 +233,17 @@ export function replicateSeedanceCostUsd(
 /** Compute cost for an OpenRouter-hosted video clip. Seedance models
  *  are token-billed per resolution; Kling Video O1 is flat per-second. */
 export function openRouterVideoCostUsd(
-  model: "bytedance/seedance-1-5-pro" | "bytedance/seedance-2.0-fast" | "kwaivgi/kling-video-o1",
+  model: "bytedance/seedance-1-5-pro" | "bytedance/seedance-2.0-fast" | "bytedance/seedance-2.0" | "kwaivgi/kling-video-o1",
   resolution: "480p" | "720p" | "1080p",
   outputSeconds: number,
 ): number {
   if (model === "kwaivgi/kling-video-o1") {
     return Math.max(0, outputSeconds * PROVIDER_RATES_USD.openrouter_kling_video_o1.per_second);
   }
-  const r = model === "bytedance/seedance-2.0-fast"
+  // Full seedance-2.0 has no dedicated rate-card entry — fall back to the
+  // 2.0-fast rate for the estimate. The real cost comes from OpenRouter's
+  // usage.cost in the response; this function is only the fallback.
+  const r = (model === "bytedance/seedance-2.0-fast" || model === "bytedance/seedance-2.0")
     ? PROVIDER_RATES_USD.openrouter_seedance_2_0_fast
     : PROVIDER_RATES_USD.openrouter_seedance_1_5_pro;
   const perSec =

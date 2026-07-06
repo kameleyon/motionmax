@@ -103,6 +103,7 @@ const NAMED_FISH_VOICES: Record<string, string> = {
   Eloise:   "afe1e22fb655480fa79ea44fb645d6db", // English Female — conversational, social-media
   Gabby:    "99fac9414732413bbb76979cad2fc529", // English Female — confident narrator
   Sankofa:  "90f5ae6f88374e77824533dee0b99ee9", // English Female — conversational
+  Alfred:   "b35af308042b4033be7e6313eaf0e24f", // English Male — narration, calm, deep
 };
 
 // ── Router ─────────────────────────────────────────────────────────

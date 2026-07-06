@@ -89,7 +89,7 @@ function providerForId(id: string): CatalogVoice["provider"] {
   if (id === "Adam") return "lemonfox";
   // Named built-in Fish s2-pro voices (see NAMED_FISH_VOICES in
   // worker/src/services/audioRouter.ts — keep in sync).
-  if (id === "Zuri" || id === "Morpheus" || id === "Jacynthe" || id === "Phoebe" || id === "Eddy" || id === "Mario" || id === "Misko" || id === "Robert" || id === "Miriam" || id === "Roselie" || id === "Emily" || id === "Melanie" || id === "Tatiana" || id === "Micha" || id === "Ludovic" || id === "Richard" || id === "William" || id === "Claudel" || id === "Mikhal" || id === "Derrick" || id === "Eloise" || id === "Gabby" || id === "Sankofa") return "fish";
+  if (id === "Zuri" || id === "Morpheus" || id === "Jacynthe" || id === "Phoebe" || id === "Eddy" || id === "Mario" || id === "Misko" || id === "Robert" || id === "Miriam" || id === "Roselie" || id === "Emily" || id === "Melanie" || id === "Tatiana" || id === "Micha" || id === "Ludovic" || id === "Richard" || id === "William" || id === "Claudel" || id === "Mikhal" || id === "Derrick" || id === "Eloise" || id === "Gabby" || id === "Sankofa" || id === "Alfred") return "fish";
   return "gemini";
 }
 

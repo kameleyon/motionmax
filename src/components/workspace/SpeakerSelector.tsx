@@ -23,7 +23,7 @@ export type SpeakerVoice =
   // English (LemonFox / Fish Audio)
   | "Adam" | "River" | "Zuri" | "Morpheus" | "Jacynthe" | "Phoebe"
   | "Roselie" | "Emily" | "Melanie" | "Tatiana" | "Micha"
-  | "Mikhal" | "Derrick" | "Eloise" | "Gabby" | "Sankofa"
+  | "Mikhal" | "Derrick" | "Eloise" | "Gabby" | "Sankofa" | "Alfred"
   | "Onyx" | "Puck"
   // Legacy Qwen3 types kept in the union so previously-saved projects that
   // reference them still typecheck when loaded. The worker routes them
@@ -228,6 +228,7 @@ const englishSpeakers: SpeakerOption[] = [
   { id: "Adam",     label: "Adam",     description: "Male · Versatile, confident · general-purpose narration" },
   // Fish Audio s2-pro built-in voices. Routed via NAMED_FISH_VOICES in
   // audioRouter; not clones — no row in user_voices needed.
+  { id: "Alfred",   label: "Alfred",   description: "Male · Calm, deep · narration" },
   { id: "Zuri",     label: "Zuri",     description: "Female · Warm, natural · English narration" },
   { id: "Morpheus", label: "Morpheus", description: "Male · Bold, dynamic · sport chronicle" },
   { id: "Jacynthe", label: "Jacynthe", description: "Female · Clear, articulate · educational narration" },

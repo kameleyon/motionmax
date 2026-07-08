@@ -3,8 +3,11 @@
  *
  * Backs the "Pre-plan your content" panel inside the intake-form
  * ScheduleBlock: the user types a content area (e.g. "Daily Stoic
- * meditations for entrepreneurs") and we ask a fast LLM to produce
- * 15 distinct video-topic angles they can opt into queueing.
+ * meditations for entrepreneurs") and we produce up to 30 distinct
+ * video-topic angles they can opt into queueing. Distinctness is
+ * enforced by a two-step pipeline — discover N genuinely different
+ * subjects/aspects first, then write one title per subject — so it
+ * can't drift into 30 angles on a single subject.
  *
  * The result is written to `video_generation_jobs.result` as
  *   { topics: ["topic1", "topic2", ...] }
@@ -73,9 +76,9 @@ export interface GenerateTopicsResult {
   topics: string[];
 }
 
-const DEFAULT_COUNT = 15;
+const DEFAULT_COUNT = 30;
 const MIN_COUNT = 5;
-const MAX_COUNT = 25;
+const MAX_COUNT = 50;
 
 /**
  * Over-generation factor for semantic-dedup headroom. The LLM produces
@@ -411,38 +414,125 @@ Do NOT write titles. Do NOT pitch video ideas. Just the factual brief.`;
   // When research is empty, Claude falls back to writing from the
   // prompt + user-provided sources.
   const researchBlock = researchBrief.length > 0
-    ? `\n\nLATEST RESEARCH (live web context — use as factual grounding for titles):\n${researchBrief}\n`
+    ? `\n\nLATEST RESEARCH (live web context — use to surface REAL, specific, DISTINCT aspects, not to collapse everything onto one):\n${researchBrief}\n`
     : "";
 
-  const titleSystem = `You are a content strategist who generates compelling clickbait topic titles.
-Stay strictly on the requested subject and reject off-topic themes.${languageDirective}`;
+  // ── Step 2a: Distinct-aspect discovery ────────────────────────────
+  // Break the topic into `count` genuinely DIFFERENT subjects BEFORE any
+  // title is written, so "one distinct story/aspect per title" is a
+  // property of the pipeline rather than a plea in a prompt the generic
+  // wrapper used to override. A backfill loop re-asks with the accepted
+  // subjects excluded until we reach `count` distinct aspects — or the
+  // topic genuinely runs out (niche topics return fewer, by design).
+  interface DiscoveredAspect { subject: string; summary: string; }
 
-  const titleUser = `Today is ${todayHuman}.
+  const aspectSystem = `You are a topic strategist. Break a subject or brief into genuinely DISTINCT angles — each a DIFFERENT facet: a different person, event, story, case, principle, place, technique, era, or member of a set. NEVER take one facet and re-angle it; every entry stands on its own. Obey any uniqueness / diversity rules stated in the user's brief.${languageDirective}`;
 
-Topic:
-${seedPrompt}${sourcesBlock}${researchBlock}
-${exclusionBlock}
+  const buildAspectUser = (need: number, avoid: string[]): string => `Today is ${todayHuman}.
 
-Generate up to ${overGenCount} unique, SHORT, clickbait-worthy titles based on the inputs above. We will surface the first ${count} to the user; returning extras gives us room to drop any near-duplicates server-side before showing the list.
+TOPIC / BRIEF:
+${seedPrompt}${sourcesBlock}${researchBlock}${exclusionBlock}
 
-Requirements:
-- Each title MUST be UNDER 10 WORDS — short, punchy, irresistible
-- Use curiosity gaps, power words, unexpected angles
-- Create titles that make people NEED to click
-- Each title MUST cover a DISTINCT subject. If the topic describes a SET or collection (a card from a 52-card deck, zodiac signs, countries, historical figures, months, etc.), every title MUST feature a DIFFERENT member of that set — never reuse the same card / sign / person / item across two titles. Spread the ${overGenCount} titles across ${overGenCount} different members of the set.
-- Titles MUST be directly relevant to the requested subject
-- Vary the format: provocative statements, questions, revelations, challenges
-${researchBrief.length > 0 ? "- Ground every title in the LATEST RESEARCH above — reference real names, dates, and events, not generic angles" : ""}
-${langCode === "en" ? "" : `- Every title MUST be written in ${langName} (idiomatic, not translated)`}
+Find ${need} genuinely DIFFERENT aspects of the above — ${need} SEPARATE subjects, NOT ${need} angles on one subject. Pick the kind of "aspect" that fits the material:
+- A story channel / brief → each aspect is a DIFFERENT documented story: a specific named person + a specific event.
+- A broad concept → each aspect is a different principle, figure, case, technique, era, or dimension of it.
+- A set (cards, zodiac, countries, months) → each aspect is a different member.
 
-Alongside each title, return the CORE SUBJECT — the specific noun phrase the title is about (e.g. "Queen of Clubs", "Stoicism", "Tokyo", "GPT-5", "Marcus Aurelius"). NOT the angle, NOT the framing, NOT the verb — just the subject. Two titles with the same subject are duplicates even if their angles differ.
+Hard rules:
+- Every aspect MUST have a DIFFERENT core subject. Two aspects about the same person / event / item / idea are duplicates — forbidden even if framed differently. Do NOT take one aspect and split it into multiple angles.
+- "subject" = the specific noun phrase the aspect is about, named clearly and specifically (e.g. "Empress Wu Zetian", "the 1921 Tulsa massacre", "Stoicism on death", "Queen of Clubs") so two entries can never be mistaken for the same thing.${avoid.length > 0 ? `\n\nALREADY CHOSEN THIS RUN — do NOT repeat any of these subjects or a variant of them:\n${avoid.map((s) => `- ${s}`).join("\n")}` : ""}
+
+Return ONLY valid JSON (no prose, no code fences):
+{"aspects":[{"subject":"specific noun phrase","summary":"one line: the specific thing that happens / what this aspect covers"}]}`;
+
+  const acceptedAspects: DiscoveredAspect[] = [];
+  const usedSubjectKeys = new Set<string>(
+    existing.map((e) => normalizeSubject(extractSubject(e))).filter((s) => s.length > 0),
+  );
+  const MAX_ASPECT_ROUNDS = 4;
+  let dryRounds = 0;
+  for (let round = 0; round < MAX_ASPECT_ROUNDS && acceptedAspects.length < count; round++) {
+    const need = count - acceptedAspects.length;
+    let aspectRaw: string;
+    try {
+      aspectRaw = await callOpenRouterLLM(
+        { system: aspectSystem, user: buildAspectUser(need + 3, acceptedAspects.map((a) => a.subject)) },
+        { maxTokens: 8_000, temperature: 0.9, forceJson: true },
+      );
+    } catch (err) {
+      console.warn(`[GenerateTopics] aspect discovery round ${round + 1} failed: ${(err as Error).message}`);
+      break;
+    }
+    let parsedAspects: { aspects?: unknown };
+    try {
+      parsedAspects = JSON.parse(extractJson(aspectRaw));
+    } catch {
+      break; // malformed round — stop rather than spin
+    }
+    const roundAspects = Array.isArray(parsedAspects.aspects) ? parsedAspects.aspects : [];
+    let addedThisRound = 0;
+    for (const entry of roundAspects) {
+      if (acceptedAspects.length >= count) break;
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+      const obj = entry as Record<string, unknown>;
+      const subject = typeof obj.subject === "string" ? obj.subject.trim() : "";
+      if (subject.length === 0) continue;
+      const key = normalizeSubject(subject);
+      if (key.length === 0 || usedSubjectKeys.has(key)) continue; // dedup vs existing + this run
+      usedSubjectKeys.add(key);
+      acceptedAspects.push({
+        subject,
+        summary: typeof obj.summary === "string" ? obj.summary.trim() : "",
+      });
+      addedThisRound += 1;
+    }
+    if (addedThisRound === 0) {
+      dryRounds += 1;
+      if (dryRounds >= 2) break; // topic exhausted — stop over-asking the model
+    } else {
+      dryRounds = 0;
+    }
+  }
+
+  if (acceptedAspects.length === 0) {
+    throw new Error("generate_topics: aspect discovery returned zero distinct subjects");
+  }
+
+  await writeSystemLog({
+    jobId, userId,
+    category: "system_info",
+    eventType: "generate_topics_aspects",
+    message: `Discovered ${acceptedAspects.length}/${count} distinct aspects`,
+    details: { discovered: acceptedAspects.length, requested: count },
+  });
+
+  // ── Step 2b: Title each distinct aspect ───────────────────────────
+  // The user's brief is the authoritative title-craft guide (tone,
+  // length, "name the subject" rules). Hand it back verbatim and require
+  // exactly one title per aspect, each covering ONLY its own subject.
+  const titleSystem = `You write short, punchy, click-worthy titles. Follow the user's brief EXACTLY for tone, format, and every title rule it states. Write exactly one title per subject you are given; each title covers ONLY that subject and never merges, repeats, or invents subjects.${languageDirective}`;
+
+  const numberedSubjects = acceptedAspects
+    .map((a, i) => `${i + 1}. ${a.subject}${a.summary ? ` — ${a.summary}` : ""}`)
+    .join("\n");
+
+  const titleUser = `Follow this brief for tone, title format, and every title rule it states:
+${seedPrompt}${sourcesBlock}
+
+Write ONE title for each subject listed below, in the SAME order. Each title:
+- covers ONLY its own subject (never combine two subjects, never reuse one),
+- is UNDER 10 words, punchy and click-worthy,
+- names the subject clearly (per the brief) so the viewer knows exactly who/what it is about.${langCode === "en" ? "" : `\n- is written in ${langName} (idiomatic, not translated).`}
+
+SUBJECTS (${acceptedAspects.length} — one title each):
+${numberedSubjects}
 
 Return ONLY valid JSON in this exact shape (no prose, no code fences):
-{"topics": [{"title": "title 1", "subject": "subject 1"}, {"title": "title 2", "subject": "subject 2"}, "..."]}`;
+{"topics": [{"title": "title 1", "subject": "subject 1"}, {"title": "title 2", "subject": "subject 2"}]}`;
 
   const raw = await callOpenRouterLLM(
     { system: titleSystem, user: titleUser },
-    { maxTokens: 12_000, temperature: 0.85, forceJson: true },
+    { maxTokens: 12_000, temperature: 0.8, forceJson: true },
   );
 
   let parsed: { topics?: unknown };

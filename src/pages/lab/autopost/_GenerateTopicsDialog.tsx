@@ -40,7 +40,7 @@ interface GenerateTopicsDialogProps {
 }
 
 /** How many candidates the worker job is asked to return. */
-const TARGET_COUNT = 15;
+const TARGET_COUNT = 30;
 
 /** Polling cadence and ceiling for the topic-generation job. */
 const POLL_INTERVAL_MS = 1500;

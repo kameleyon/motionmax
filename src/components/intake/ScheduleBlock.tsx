@@ -299,7 +299,7 @@ export default function ScheduleBlock({
           payload: {
             prompt: intakeSummary.prompt.trim(),
             styleId: intakeSummary.styleId,
-            count: 15,
+            count: 30,
             sources,
             language: intakeSummary.language ?? 'en',
             // On regenerate we pass the previous batch so the worker

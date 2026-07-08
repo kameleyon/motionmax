@@ -74,10 +74,10 @@ function buildCharacterInstructions(
 
   if (characterDescription && characterDescription.trim()) {
     parts.push(
-      `USER CHARACTER APPEARANCE — HIGHEST PRIORITY (MUST MATCH EXACTLY):\n${characterDescription.trim()}\n\n` +
-      `This is the creator's explicit specification. Every character in this image MUST match these traits ` +
+      `USER CHARACTER APPEARANCE (apply to any character the SCENE DESCRIPTION calls for):\n${characterDescription.trim()}\n\n` +
+      `This is the creator's specification. Any character who appears in the scene MUST match these traits ` +
       `(skin tone, hair color/style, clothing, body type, species, age, distinguishing features). ` +
-      `If anything below contradicts this, THIS description wins.`
+      `Only render the characters the scene actually describes — do NOT add a person the scene doesn't mention, and do NOT turn the scene into a standalone character portrait.`
     );
   }
 
@@ -95,7 +95,7 @@ function buildCharacterInstructions(
   }
 
   if (parts.length === 0) return "";
-  return `\n\n=== CHARACTER REQUIREMENTS (NON-NEGOTIABLE) ===\n${parts.join("\n\n")}`;
+  return `\n\n=== CHARACTER CONSISTENCY (for any characters who APPEAR in the scene above) ===\n${parts.join("\n\n")}`;
 }
 
 // ── Cover / text overlay instructions ─────────────────────────────
@@ -206,16 +206,16 @@ export function buildImagePrompt(
     ? stripOverlayTitleText(visualPrompt)
     : visualPrompt;
 
-  // Character requirements go FIRST (after the create directive) so image models
-  // weight them heavily. Style description comes AFTER character so style can't
-  // override appearance (e.g. 3D style defaulting to generic 3D character looks).
-  // The title/no-title block (textInstructions) sits HIGH — right after the
-  // scene description — NOT at the end: gpt-image-2 truncates prompts to ~3900
-  // chars by keeping the HEAD, so a title instruction placed at the tail of a
-  // long cinematic prompt would be silently dropped (the Scene-1 cover title
-  // would vanish, and the per-scene no-title instruction would never apply).
+  // SCENE DESCRIPTION goes FIRST (right after the create directive) so the
+  // model composes the SCRIPTED ACTION, not a character portrait — image
+  // models weight the HEAD of the prompt most, and gpt-image-2 truncates to
+  // ~3900 chars by keeping the HEAD. Character info is a CONSISTENCY constraint
+  // on whoever the scene calls for, so it sits LOWER (after subject ID) —
+  // matching the explainer builder, which follows the script correctly.
+  // Putting the character block first is what made cinematic scenes render a
+  // portrait of the character instead of the scripted action. textInstructions
+  // (title/no-title) stays right under the scene so it's never truncated away.
   return `CREATE A HIGHLY DETAILED, PRECISE, AND ACCURATE ILLUSTRATION:
-${characterInstructions}
 
 SCENE DESCRIPTION: ${sceneDescription}
 ${textInstructions}
@@ -223,7 +223,7 @@ ${textInstructions}
 FORMAT REQUIREMENT: ${fmtDesc}. The image MUST be composed for this exact aspect ratio.
 
 VISUAL STYLE: ${styleDescription}
-(Style defines the rendering technique ONLY. It MUST NOT override the character requirements above — if the style suggests a generic look, still match the specified character traits.)
+(Style defines the rendering technique ONLY. It MUST NOT override the scene content above or the character consistency below — if the style suggests a generic look, still match the specified traits.)
 
 GENERATION REQUIREMENTS:
 - You have an in-depth knowledge about visual content and how to reach the target population
@@ -241,11 +241,12 @@ GENERATION REQUIREMENTS:
 - Make the scene feel NATURAL and BELIEVABLE within the chosen style
 
 SUBJECT IDENTIFICATION:
-- Identify the main TOPIC and PRIMARY SUBJECT of this scene
+- Identify the main TOPIC and PRIMARY SUBJECT of this scene — it is the ACTION / EVENT / MOMENT the SCENE DESCRIPTION describes, NOT a character portrait
 - Ensure all IMPORTANT ELEMENTS mentioned in the description are clearly visible
-- Maintain visual HIERARCHY - the main subject should be the focal point
+- Maintain visual HIERARCHY - the scripted scene is the focal point
+${characterInstructions}
 
-REMINDER: Re-read the CHARACTER REQUIREMENTS section at the top of this prompt before generating. Every character MUST match those traits exactly — this takes priority over style defaults.
+REMINDER: Depict the SCENE DESCRIPTION above — the scripted action, setting, and events are the subject of this image. Keep any characters who appear consistent with the character notes, but do NOT replace the scene with a standalone character portrait or ignore the action described.
 
 OUTPUT: Ultra high resolution, professional illustration with dynamic composition, clear visual hierarchy, cinematic quality, bold creativity, and meticulous attention to detail.`;
 }

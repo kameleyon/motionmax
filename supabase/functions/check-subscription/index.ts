@@ -87,22 +87,20 @@ export async function handler(req: Request): Promise<Response> {
       .eq("status", "active")
       .single();
 
-    if (dbSubscription?.is_manual_subscription) {
-      logStep("Found manual / comp subscription", {
+    // Trust the subscriptions table for ANY active subscription — the
+    // stripe-webhook keeps this row fresh on every Stripe event, so
+    // re-querying Stripe on every check (a 60s client poll) is redundant.
+    // Those two sequential Stripe API calls per poll were the dominant
+    // latency AND a failure point under load (Stripe 429/timeout → the
+    // whole check fails). We only fall through to Stripe when there is NO
+    // active DB row — a brand-new subscriber whose webhook hasn't landed
+    // yet, or to confirm a free-tier user.
+    if (dbSubscription) {
+      logStep("Serving plan from DB subscription (Stripe skipped)", {
         plan: dbSubscription.plan_name,
-        subscriptionEnd: dbSubscription.current_period_end,
+        manual: !!dbSubscription.is_manual_subscription,
       });
-      return new Response(JSON.stringify({
-        subscribed: true,
-        plan: dbSubscription.plan_name,
-        subscription_status: "active",
-        subscription_end: dbSubscription.current_period_end,
-        cancel_at_period_end: dbSubscription.cancel_at_period_end || false,
-        credits_balance: creditsBalance,
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      });
+      return buildDbFallbackResponse(corsHeaders, dbSubscription, creditsBalance);
     }
 
     // Attempt Stripe lookup — if key is absent or Stripe fails, fall back to DB data

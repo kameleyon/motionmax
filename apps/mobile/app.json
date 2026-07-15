@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "MotionMax",
+    "slug": "motionmax",
+    "version": "0.1.0",
+    "scheme": "motionmax",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "icon": "./assets/motionmax-logo.webp",
+    "splash": {
+      "backgroundColor": "#0A0E15",
+      "resizeMode": "contain",
+      "image": "./assets/motionmax-logo.webp"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "io.motionmax.app"
+    },
+    "android": {
+      "package": "io.motionmax.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0A0E15",
+        "foregroundImage": "./assets/motionmax-logo.webp"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-web-browser",
+      "expo-apple-authentication"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

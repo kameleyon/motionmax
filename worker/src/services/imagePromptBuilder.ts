@@ -128,21 +128,23 @@ function buildTextInstructions(
   videoTitle?: string,
   isCinematic?: boolean,
 ): string {
-  // CINEMATIC: titles are removed COMPLETELY — NO title/headline/overlay text
-  // on ANY cinematic image, INCLUDING the Scene-1 cover (user directive
-  // 2026-07-05). This MUST come before the cover-title and TEXT_OVERLAY
-  // branches so nothing re-adds text to a cinematic image.
-  if (isCinematic) {
-    return `\nNO TITLE / NO TEXT (STRICT — APPLIES TO EVERY SCENE INCLUDING THE COVER): Do NOT render ANY title, headline, cover title, thumbnail title, caption, subtitle, label, watermark, logo text, or overlaid words / letters / numbers / typography ANYWHERE on this image. The image must contain ZERO readable text. Depict ONLY the scene's visual content described above — do not reuse or echo any other scene.`;
-  }
-
-  // Non-cinematic (explainer / smartflow): Scene 1 primary gets a cover headline.
-  // Fall back coverTitle → scene.title → videoTitle so the cover isn't untitled.
+  // Scene 1 primary image → render the COVER TITLE (cinematic + explainer).
+  // Title lives on Scene 1 ONLY (user directive 2026-07-20). Fall back
+  // coverTitle → scene.title → videoTitle so the cover is never untitled.
   if (sceneIndex === 0 && subIndex === 0) {
     const title = (scene.coverTitle || scene.title || videoTitle || "").trim();
     if (title) {
       return buildCoverTitleInstruction(title, format);
     }
+  }
+
+  // CINEMATIC: the title lives on the Scene-1 cover ONLY (handled above).
+  // Every OTHER cinematic image must render NO title/overlay text — this
+  // stops the title bleeding onto every scene. MUST come before the
+  // TEXT_OVERLAY branch, which would otherwise stamp scene.title on every
+  // cinematic scene for a text-overlay style (minimalist/doodle/stick).
+  if (isCinematic) {
+    return `\nNO TITLE / NO TEXT: This is NOT the cover image. Do NOT render any title, headline, caption, subtitle, label, watermark, or any overlaid words / typography on this image. Depict ONLY the scene's visual content described above — do not reuse, repeat, or echo the cover or any other scene.`;
   }
 
   const includeTextOverlay = TEXT_OVERLAY_STYLES.includes(style.toLowerCase());
@@ -198,11 +200,12 @@ export function buildImagePrompt(
   const textInstructions = buildTextInstructions(scene, subIndex, sceneIndex, style, format, videoTitle, isCinematic);
   const characterInstructions = buildCharacterInstructions(characterBible, characterDescription);
 
-  // Cinematic: strip any on-screen title text the script LLM baked into the
-  // visualPrompt (older generations did this) from EVERY scene, cover
-  // included — cinematic images carry no title at all (user directive
-  // 2026-07-05). Non-cinematic prompts are left untouched.
-  const sceneDescription = isCinematic
+  // Cinematic NON-cover scenes: strip any on-screen title text the script
+  // LLM baked into the visualPrompt (older generations did this) so the
+  // title stays on the Scene-1 cover only. The cover keeps its title text;
+  // non-cinematic prompts are left untouched.
+  const isCoverImage = sceneIndex === 0 && subIndex === 0;
+  const sceneDescription = (isCinematic && !isCoverImage)
     ? stripOverlayTitleText(visualPrompt)
     : visualPrompt;
 

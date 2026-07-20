@@ -14,7 +14,7 @@ function scene(over: Partial<Scene>): Scene {
 }
 
 describe("buildImagePrompt — cinematic title scoping", () => {
-  it("renders NO title on the cinematic cover — titles removed completely", () => {
+  it("renders the cover title on the cinematic Scene-1 cover (title on scene 1 only)", () => {
     const out = buildImagePrompt(
       "A wide establishing shot",
       scene({ coverTitle: "THE THRONE" }),
@@ -22,9 +22,9 @@ describe("buildImagePrompt — cinematic title scoping", () => {
       0, // sceneIndex (cover)
       { ...baseOpts, isCinematic: true },
     );
-    expect(out).not.toContain("THE THRONE");
-    expect(out).not.toContain("COVER IMAGE TITLE");
-    expect(out).toContain("NO TITLE / NO TEXT");
+    expect(out).toContain("THE THRONE");
+    expect(out).toContain("COVER IMAGE TITLE");
+    expect(out).not.toContain("NO TITLE / NO TEXT");
   });
 
   it("renders NO title text on later cinematic scenes and tells the model to follow THIS scene", () => {

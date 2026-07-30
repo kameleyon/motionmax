@@ -94,12 +94,20 @@ export type { CinematicParams } from "./buildCinematic.js";
  * Call the OpenRouter chat-completions API.
  *
  * @param prompt  - `{ system, user }` strings produced by a builder.
- * @param options - `{ maxTokens, model? }`.  Defaults to claude-sonnet-4.
+ * @param options - `{ maxTokens, model? }`.  When no `model` is given it
+ *   defaults to the floating `claude-sonnet-latest` tag with an automatic
+ *   fallback to the pinned `claude-sonnet-4.6` (see DEFAULT_MODEL below).
  * @returns The raw text content from the LLM response.
  *
  * There is intentionally NO AbortController / timeout here — the worker
  * runs on Render with no execution-time cap, unlike Supabase Edge Functions.
  */
+/** Primary writing model — floating tag that tracks the newest Sonnet. */
+export const DEFAULT_MODEL = "anthropic/claude-sonnet-latest";
+/** Pinned fallback used via OpenRouter's `models` routing if the primary
+ *  is unavailable/errors (e.g. the `-latest` tag lags or is rate-limited). */
+export const DEFAULT_FALLBACK_MODEL = "anthropic/claude-sonnet-4.6";
+
 export interface OpenRouterLLMOptions {
   maxTokens: number;
   model?: string;
@@ -144,7 +152,11 @@ async function _callOpenRouterLLMInner(
   options: OpenRouterLLMOptions,
   apiKey: string,
 ): Promise<string> {
-  const model = options.model || "anthropic/claude-sonnet-4.6";
+  // Default writing model: the floating `-latest` Sonnet tag so we ride
+  // Anthropic's newest Sonnet without a code change, with the pinned
+  // 4.6 slug as an automatic fallback (see requestBody.models below).
+  const model = options.model || DEFAULT_MODEL;
+  const usingDefaultModel = !options.model;
   const temperature = options.temperature ?? 0.7;
   const startTime = Date.now();
   const hasImages = (options.imageUrls?.length ?? 0) > 0;
@@ -172,6 +184,14 @@ async function _callOpenRouterLLMInner(
       { role: "user", content: userContent },
     ],
   };
+
+  // Default writing path only: give OpenRouter an explicit fallback chain
+  // so a hiccup on the floating `-latest` tag (lag, rate-limit, provider
+  // outage) silently routes to the pinned 4.6 slug instead of hard-failing
+  // the job. Explicit-model callers (e.g. the Gemini search path) opt out.
+  if (usingDefaultModel) {
+    requestBody.models = [DEFAULT_MODEL, DEFAULT_FALLBACK_MODEL];
+  }
 
   // Force JSON output at the API level to prevent malformed responses
   if (options.forceJson) {

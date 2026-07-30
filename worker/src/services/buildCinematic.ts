@@ -1,6 +1,6 @@
 /**
  * Prompt builder for the Cinematic project type.
- * Runs through the worker via callOpenRouterLLM (anthropic/claude-sonnet-latest,
+ * Runs through the worker via callOpenRouterLLM (~anthropic/claude-sonnet-latest,
  * falling back to anthropic/claude-sonnet-4.6).
  *
  * Differences vs standard pipelines:

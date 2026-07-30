@@ -102,8 +102,10 @@ export type { CinematicParams } from "./buildCinematic.js";
  * There is intentionally NO AbortController / timeout here — the worker
  * runs on Render with no execution-time cap, unlike Supabase Edge Functions.
  */
-/** Primary writing model — floating tag that tracks the newest Sonnet. */
-export const DEFAULT_MODEL = "anthropic/claude-sonnet-latest";
+/** Primary writing model — OpenRouter's floating tag that tracks the newest
+ *  Sonnet. The leading `~` is required: it's OpenRouter's floating-variant
+ *  prefix (currently resolves to claude-sonnet-5); the bare slug 400s. */
+export const DEFAULT_MODEL = "~anthropic/claude-sonnet-latest";
 /** Pinned fallback used via OpenRouter's `models` routing if the primary
  *  is unavailable/errors (e.g. the `-latest` tag lags or is rate-limited). */
 export const DEFAULT_FALLBACK_MODEL = "anthropic/claude-sonnet-4.6";

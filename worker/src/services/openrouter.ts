@@ -102,10 +102,8 @@ export type { CinematicParams } from "./buildCinematic.js";
  * There is intentionally NO AbortController / timeout here — the worker
  * runs on Render with no execution-time cap, unlike Supabase Edge Functions.
  */
-/** Primary writing model — OpenRouter's floating tag that tracks the newest
- *  Sonnet. The leading `~` is required: it's OpenRouter's floating-variant
- *  prefix (currently resolves to claude-sonnet-5); the bare slug 400s. */
-export const DEFAULT_MODEL = "~anthropic/claude-sonnet-latest";
+/** Primary writing model — pinned to the newest Sonnet. */
+export const DEFAULT_MODEL = "anthropic/claude-sonnet-5";
 /** Pinned fallback used via OpenRouter's `models` routing if the primary
  *  is unavailable/errors (e.g. the `-latest` tag lags or is rate-limited). */
 export const DEFAULT_FALLBACK_MODEL = "anthropic/claude-sonnet-4.6";
@@ -198,6 +196,13 @@ async function _callOpenRouterLLMInner(
   // Force JSON output at the API level to prevent malformed responses
   if (options.forceJson) {
     requestBody.response_format = { type: "json_object" };
+    // Reasoning models (claude-sonnet-5) otherwise spend the turn on
+    // reasoning tokens and hand back an empty message.content on
+    // structured-JSON calls — which surfaced as "aspect discovery
+    // returned zero distinct subjects" in generate_topics. These are
+    // deterministic writing/extraction calls that don't need extended
+    // thinking, so disable it to keep content in the visible channel.
+    requestBody.reasoning = { enabled: false };
   }
 
   // OpenRouter's `web` plugin grounds the call on Exa-powered web

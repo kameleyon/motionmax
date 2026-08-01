@@ -8,21 +8,12 @@ import { useBeforeUnload } from '@/hooks/useBeforeUnload';
 
 const log = createScopedLogger('useExport');
 
-export type ExportPreset = 'master' | 'youtube' | 'tiktok' | 'reels';
-
 export interface ExportState {
   status: 'idle' | 'submitting' | 'rendering' | 'done' | 'error';
   progress: number;
   url?: string;
   error?: string;
 }
-
-const PRESET_MAP: Record<ExportPreset, { format: 'landscape' | 'portrait'; label: string; resolution: string }> = {
-  master:  { format: 'landscape', label: 'Master 4K',       resolution: '4K' },
-  youtube: { format: 'landscape', label: 'YouTube 4K',      resolution: '4K' },
-  tiktok:  { format: 'portrait',  label: 'TikTok 1080p',    resolution: '1080p' },
-  reels:   { format: 'portrait',  label: 'Reels 1080p',     resolution: '1080p' },
-};
 
 /** Reusable export submitter for the unified Editor. Submits an
  *  `export_video` job to the worker queue, polls for completion, and
@@ -153,7 +144,7 @@ export function useExport(state: EditorState | null) {
     jobIdRef.current = null;
   }, []);
 
-  const startExport = useCallback(async (preset: ExportPreset) => {
+  const startExport = useCallback(async () => {
     if (!user) { toast.error('Please sign in first.'); return; }
     if (!state?.project || state.phase !== 'ready') {
       toast.error('Your video isn\'t ready to export yet.');
@@ -176,18 +167,12 @@ export function useExport(state: EditorState | null) {
     const exportAbort = new AbortController();
     abortRef.current = exportAbort;
 
-    // Export format must FOLLOW the project's actual aspect. The old
-    // "master" preset hardcoded 'landscape' which meant portrait
-    // projects were exported as 16:9 (letterbox/center-crop disaster).
-    // Now we override presetCfg.format with whatever the project was
-    // generated in, unless the user explicitly picked a platform
-    // preset (tiktok / reels / youtube) that implies its own format.
-    const rawPreset = PRESET_MAP[preset];
+    // One export path: always a fresh master render that FOLLOWS the
+    // project's own aspect ratio (portrait projects export 9:16, not a
+    // letterboxed 16:9). No user-facing preset picker anymore.
     const projectFormat: 'landscape' | 'portrait' =
       state.project.format === 'portrait' ? 'portrait' : 'landscape';
-    const presetCfg = preset === 'master'
-      ? { ...rawPreset, format: projectFormat }
-      : rawPreset;
+    const presetCfg = { format: projectFormat, label: '4K' };
     const scenes = state.scenes
       .filter((s) => s.videoUrl || s.imageUrl)
       .map((s) => ({
@@ -355,7 +340,7 @@ export function useExport(state: EditorState | null) {
               format: presetCfg.format,
               scenes,
               caption_style: state.intake.captionStyle ?? 'none',
-              preset,
+              preset: 'master',
             } as unknown as never,
             status: 'pending',
           })
@@ -448,5 +433,3 @@ export function useExport(state: EditorState | null) {
     cancelExport: cancelPolling,
   };
 }
-
-export { PRESET_MAP };

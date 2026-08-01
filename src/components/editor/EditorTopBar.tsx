@@ -1,19 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Share2, Loader2, Menu, ChevronDown, SlidersHorizontal, RotateCw } from 'lucide-react';
+import { ArrowLeft, Download, Share2, Loader2, Menu, SlidersHorizontal, RotateCw } from 'lucide-react';
 import NotificationsPopover from '@/components/dashboard/NotificationsPopover';
 import HelpPopover from '@/components/dashboard/HelpPopover';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import type { EditorState } from '@/hooks/useEditorState';
-import { useExport, PRESET_MAP, type ExportPreset } from './useExport';
+import { useExport } from './useExport';
 import ShareModal from './ShareModal';
 import { useActiveJobs } from './useActiveJobs';
 
@@ -125,71 +119,45 @@ export default function EditorTopBar({
   const exporting = exportState.status === 'submitting' || exportState.status === 'rendering';
   const exportDone = exportState.status === 'done' && exportState.url;
 
-  // Track which export URLs we've already auto-downloaded so a re-render
-  // of EditorTopBar (e.g. after a state change) doesn't re-fire the
-  // browser save dialog. The export URL changes between exports, so
-  // queueing a fresh export with new edits will fire a new download
-  // exactly once. Also track whether the CURRENT export was kicked off
-  // by a user gesture in this session — Safari/Chrome allow programmatic
-  // anchor-clicks when the tab has had a recent user gesture, which the
-  // Export-button click satisfies.
-  const autoDownloadedRef = useRef<string | null>(null);
+  // Track which export URL we've already handled so a re-render doesn't
+  // re-fire the save. The URL changes per export, so a fresh render
+  // fires exactly once. `exportTriggeredByUserRef` marks that THIS
+  // session's export was user-initiated, so the completion effect only
+  // acts on exports the user started here — never a 'done' rehydrated
+  // from a previous visit on mount.
+  const handledUrlRef = useRef<string | null>(null);
   const exportTriggeredByUserRef = useRef(false);
 
-  /** Save the exported MP4. Three paths by platform:
-   *
-   *   1. iOS/iPadOS Safari — the `<a download>` attribute is ignored,
-   *      which is why users were seeing the video render in a tab and
-   *      never getting the "Save to Photos" action. Instead we use
-   *      `navigator.share({ files: [...] })` to open the native iOS
-   *      share sheet, which INCLUDES a "Save Video" action that
-   *      writes the clip straight to the Photos album.
-   *
-   *   2. Desktop + Android Chrome — fetch to a blob, create an
-   *      object URL, click a synthetic `<a download>` so the file
-   *      lands in the Downloads folder (same-origin bypass for
-   *      cross-origin MP4s that would otherwise stream inline).
-   *
-   *   3. Anything that rejects both paths — open the raw URL in a
-   *      new tab so the user can at least long-press / Save As. */
-  const downloadVideo = async (url: string, filename: string) => {
-    // Fetch the blob once; reuse for either share or download.
-    let blob: Blob;
+  // iOS/iPadOS Safari writes to Photos ONLY via navigator.share, and
+  // ONLY while a tap's transient activation is live. A render takes
+  // minutes (no gesture left when it finishes) AND any long `await
+  // fetch(blob)` inside the eventual tap ALSO burns the activation —
+  // which is why the old flow bounced to opening the raw MP4 in a tab.
+  // Fix: the moment the export completes, pre-fetch the finished MP4
+  // into a File (no gesture needed to fetch) and stash it. The "Save to
+  // Photos" tap then calls navigator.share SYNCHRONOUSLY with the cached
+  // File, so the gesture survives and the share sheet (→ "Save Video" →
+  // Photos) actually appears.
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !('MSStream' in window);
+  const [pendingSave, setPendingSave] = useState<{ url: string; file: File | null; filename: string } | null>(null);
+
+  const buildFilename = () =>
+    `${(project?.title ?? 'motionmax').replace(/[^a-z0-9-_]+/gi, '_').slice(0, 60)}.mp4`;
+
+  const fetchAsFile = async (url: string, filename: string): Promise<File | null> => {
     try {
       const res = await fetch(url, { mode: 'cors' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      blob = await res.blob();
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return new File([blob], filename, { type: blob.type || 'video/mp4' });
     } catch {
-      window.open(url, '_blank', 'noopener,noreferrer');
-      return;
+      return null;
     }
+  };
 
-    const file = new File([blob], filename, { type: blob.type || 'video/mp4' });
-
-    // iOS path — Web Share sheet → "Save Video" writes to Photos.
-    const nav = navigator as Navigator & {
-      canShare?: (data: { files?: File[] }) => boolean;
-      share?: (data: { files?: File[]; title?: string; text?: string }) => Promise<void>;
-    };
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !('MSStream' in window);
-    if (
-      (isIOS || !('download' in HTMLAnchorElement.prototype)) &&
-      nav.canShare?.({ files: [file] }) &&
-      typeof nav.share === 'function'
-    ) {
-      try {
-        await nav.share({ files: [file], title: filename });
-        return;
-      } catch (err) {
-        // AbortError just means the user cancelled the sheet — don't
-        // fall through to download in that case, they made a choice.
-        if ((err as Error)?.name === 'AbortError') return;
-        // Any other error → fall through to the anchor-download path.
-      }
-    }
-
-    // Desktop / Android path — synthetic anchor download.
-    const objectUrl = URL.createObjectURL(blob);
+  // Desktop / Android — synthetic anchor download of an in-memory File.
+  const saveViaAnchor = (file: File, filename: string) => {
+    const objectUrl = URL.createObjectURL(file);
     const a = document.createElement('a');
     a.href = objectUrl;
     a.download = filename;
@@ -200,48 +168,73 @@ export default function EditorTopBar({
     setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
   };
 
-  // Default download = master preset (re-export guarantees latest scene
-  // edits are included). If an export is already done we just hand the
-  // user the finished URL.
-  const handleDefaultExport = () => {
-    if (exportDone && exportState.url) {
-      const title = (project?.title ?? 'motionmax').replace(/[^a-z0-9-_]+/gi, '_').slice(0, 60);
-      void downloadVideo(exportState.url, `${title}.mp4`);
-      return;
+  // iOS "Save to Photos" tap. navigator.share MUST be reached with NO
+  // preceding await so the tap's activation is still valid — the File
+  // was already pre-fetched by the completion effect below.
+  const handleSaveToPhotos = async () => {
+    if (!pendingSave) return;
+    const { file, url, filename } = pendingSave;
+    const nav = navigator as Navigator & {
+      canShare?: (data: { files?: File[] }) => boolean;
+      share?: (data: { files?: File[]; title?: string }) => Promise<void>;
+    };
+    if (file && nav.canShare?.({ files: [file] }) && typeof nav.share === 'function') {
+      try {
+        await nav.share({ files: [file], title: filename });
+        setPendingSave(null); // saved (or dismissed) — button returns to Export
+        return;
+      } catch (err) {
+        // AbortError = user cancelled the sheet; leave the button as
+        // "Save to Photos" so they can retry. Any other error falls
+        // through to opening the raw file for a manual long-press save.
+        if ((err as Error)?.name === 'AbortError') return;
+      }
     }
-    // Mark that THIS session's export was user-initiated so the
-    // auto-download effect below is allowed to fire the file save
-    // without bouncing off Safari's user-gesture gate.
-    exportTriggeredByUserRef.current = true;
-    autoDownloadedRef.current = null;
-    startExport('master');
+    // Fallback (pre-fetch failed or share unsupported): open the MP4 so
+    // the user can long-press → "Save to Photos".
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  // Auto-download the exported MP4 the moment the job completes — no
-  // second click required. Chrome/Firefox always honour programmatic
-  // anchor-downloads; Safari is stricter but accepts them when the
-  // tab has had a recent user gesture, which our Export button click
-  // provides. iOS is the exception: `navigator.share({ files })`
-  // REQUIRES a live user gesture, so on iPhone/iPad we intentionally
-  // skip the auto-fire and leave the button as "Save / Download" for
-  // the user to tap — that's the only way iOS will let us open the
-  // share sheet for Save-to-Photos.
+  // On export completion: desktop/Android auto-downloads immediately;
+  // iOS pre-warms the File and flips the button to "Save to Photos".
+  // Only fires for a this-session, user-initiated export.
   useEffect(() => {
     if (!exportDone || !exportState.url) return;
-    if (autoDownloadedRef.current === exportState.url) return;
+    if (handledUrlRef.current === exportState.url) return;
     if (!exportTriggeredByUserRef.current) return;
 
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !('MSStream' in window);
-    if (isIOS) return; // iOS needs the second tap for Save-to-Photos.
-
-    autoDownloadedRef.current = exportState.url;
-    const title = (project?.title ?? 'motionmax').replace(/[^a-z0-9-_]+/gi, '_').slice(0, 60);
-    void downloadVideo(exportState.url, `${title}.mp4`);
-    // Clear the gesture flag so a stale completed state from another
-    // event source (e.g. realtime) doesn't re-fire downloads.
+    const url = exportState.url;
+    handledUrlRef.current = url;
     exportTriggeredByUserRef.current = false;
+    const filename = buildFilename();
+
+    let cancelled = false;
+    void (async () => {
+      const file = await fetchAsFile(url, filename);
+      if (cancelled) return;
+      if (isIOS) {
+        setPendingSave({ url, file, filename });
+      } else if (file) {
+        saveViaAnchor(file, filename);
+      } else {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+    })();
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exportDone, exportState.url]);
+
+  // Single Export button. Always renders a FRESH master export (ignoring
+  // any prior/rehydrated result), then the effect above pushes the save.
+  // On iOS the button flips to "Save to Photos" for the final album tap.
+  const handlePrimary = () => {
+    if (exporting) return;
+    if (pendingSave) { void handleSaveToPhotos(); return; }
+    exportTriggeredByUserRef.current = true;
+    handledUrlRef.current = null;
+    setPendingSave(null);
+    void startExport();
+  };
 
   return (
     <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 border-b border-white/10 bg-[#0A0D0F]/80 backdrop-blur-md h-16 sm:h-[54px] col-span-full overflow-hidden">
@@ -356,55 +349,33 @@ export default function EditorTopBar({
         {regenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCw className="w-4 h-4" />}
       </button>
 
-      {/* Export primary + preset dropdown */}
-      <div className="inline-flex items-stretch shrink-0 rounded-lg overflow-hidden shadow-[0_10px_30px_-14px_rgba(20,200,204,0.55)]">
-        <button
-          type="button"
-          onClick={handleDefaultExport}
-          disabled={exporting || projectLocked}
-          style={{ touchAction: 'manipulation' }}
-          className="inline-flex items-center gap-1.5 px-3 min-h-[44px] text-[12px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {exporting
-            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+      {/* Export — one button, no preset picker. Tapping renders a fresh
+          master export; on completion it auto-downloads (desktop/Android)
+          or flips to "Save to Photos" for the iOS album write. */}
+      <button
+        type="button"
+        onClick={handlePrimary}
+        // In the "Save to Photos" state the tap only saves an
+        // already-rendered file (no mutation), so a lingering
+        // project-lock must NOT disable it — only block a fresh render.
+        disabled={exporting || (!pendingSave && projectLocked)}
+        style={{ touchAction: 'manipulation' }}
+        className="inline-flex items-center gap-1.5 px-4 min-h-[44px] shrink-0 rounded-lg text-[12px] font-semibold text-[#0A0D0F] bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] hover:brightness-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_10px_30px_-14px_rgba(20,200,204,0.55)]"
+        aria-label={pendingSave ? 'Save to Photos' : 'Export video'}
+      >
+        {exporting
+          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          : pendingSave
+            ? <Share2 className="w-3.5 h-3.5" />
             : <Download className="w-3.5 h-3.5" />}
-          <span className="hidden sm:inline">
-            {exporting
-              ? `Exporting · ${exportState.progress}%`
-              : exportDone ? 'Download' : 'Export 4K'}
-          </span>
-        </button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              disabled={exporting || projectLocked}
-              style={{ touchAction: 'manipulation' }}
-              className="min-w-[44px] min-h-[44px] px-3 border-l border-[#0A0D0F]/20 bg-gradient-to-r from-[#14C8CC] via-[#0FA6AE] to-[#14C8CC] text-[#0A0D0F] hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
-              aria-label="Choose export preset"
-            >
-              <ChevronDown className="w-4 h-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            className="w-56 rounded-xl bg-[#10151A] border-white/10 text-[#ECEAE4] shadow-xl"
-          >
-            {(Object.entries(PRESET_MAP) as Array<[ExportPreset, typeof PRESET_MAP[ExportPreset]]>).map(([key, cfg]) => (
-              <DropdownMenuItem
-                key={key}
-                onClick={() => startExport(key)}
-                className="cursor-pointer rounded-lg text-[#ECEAE4] focus:bg-white/5 focus:text-[#ECEAE4] flex items-baseline gap-2"
-              >
-                <span className="font-medium">{cfg.label}</span>
-                <span className="text-[10px] font-mono tracking-wider text-[#5A6268] ml-auto">
-                  {cfg.format === 'portrait' ? '9:16' : '16:9'} · {cfg.resolution}
-                </span>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+        <span className="whitespace-nowrap">
+          {exporting
+            ? `Exporting · ${exportState.progress}%`
+            : pendingSave
+              ? 'Save to Photos'
+              : 'Export'}
+        </span>
+      </button>
 
       <div className="hidden md:inline-flex items-center gap-1">
         <NotificationsPopover />

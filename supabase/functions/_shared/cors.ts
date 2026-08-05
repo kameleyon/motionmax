@@ -109,8 +109,16 @@ export function isOriginAllowed(origin: string): boolean {
  */
 export function getCorsHeaders(requestOrigin?: string | null): Record<string, string> {
   const headers: Record<string, string> = {
+    // NOTE: `x-trace-id` MUST stay in this list. The frontend's
+    // invokeWithTrace() (src/lib/tracing.ts) attaches an `X-Trace-Id`
+    // header to every billing/edge call for end-to-end correlation.
+    // If it's missing here, the browser's CORS preflight rejects the
+    // request header and BLOCKS the POST entirely — the caller sees
+    // "Failed to send a request to the Edge Function" and no request
+    // ever reaches the function. This silently broke all Stripe
+    // checkout/portal/invoice calls (2026-08-05).
     "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type, x-connection-pooler, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+      "authorization, x-client-info, apikey, content-type, x-trace-id, x-connection-pooler, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",

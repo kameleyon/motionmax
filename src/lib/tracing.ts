@@ -105,10 +105,17 @@ export async function invokeWithTrace<T = unknown>(
   options: InvokeOptions = {},
 ): Promise<{ data: T | null; error: unknown; traceId: string }> {
   const traceId = options.traceId ?? generateTraceId();
-  const headers = {
-    ...(options.headers ?? {}),
-    "X-Trace-Id": traceId,
-  };
+  // We deliberately do NOT set a custom `X-Trace-Id` request header.
+  // A custom header forces the browser's CORS *preflight* to list it in
+  // Access-Control-Request-Headers, and if any edge function's
+  // Access-Control-Allow-Headers omits it, the browser BLOCKS the POST
+  // outright — the caller sees "Failed to send a request to the Edge
+  // Function" and nothing ever reaches the server. That silently broke
+  // ALL Stripe billing calls on 2026-08-05. The trace id instead rides
+  // in the request BODY as `_trace_id` (mirrored below), which every
+  // trace-aware edge function already reads (header || body || random).
+  // No custom header = no preflight surface = no CORS gap.
+  const headers = { ...(options.headers ?? {}) };
   // Mirror into body so edge functions that store the payload into a
   // worker job pass it along without extra header plumbing.
   let body = options.body;
@@ -122,7 +129,7 @@ export async function invokeWithTrace<T = unknown>(
     const result = await supabase.functions.invoke<T>(fnName, {
       ...(options.method ? { method: options.method } : {}),
       headers,
-      body,
+      body: body as Record<string, unknown> | undefined,
     });
     if (result.error) {
       Sentry.withScope((scope) => {

@@ -22,7 +22,7 @@ function eventTypeToSystem(stripeType: string): { event_type: string; category: 
     default: return { event_type: `pay.${stripeType.replace(/\./g, "_")}`, category: "system_info" };
   }
 }
-import * as Sentry from "https://deno.land/x/sentry/index.mjs";
+import * as Sentry from "https://deno.land/x/sentry@7.120.3/index.mjs";
 import { scrubSentryEvent } from "../_shared/sentry-scrubber.ts";
 
 Sentry.init({

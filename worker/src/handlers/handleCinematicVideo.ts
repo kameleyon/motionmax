@@ -490,16 +490,16 @@ async function _runCinematicVideo(
   const openRouterAspectRatio: "16:9" | "9:16" = seedanceAspect === "1:1" ? "16:9" : seedanceAspect;
 
   // Per-scene provider chain (5-rung as of 2026-07-06):
-  //   1. OpenRouter Seedance 1.5 Pro @ 480p  — PRIMARY. Cheapest 10s I2V;
+  //   1. OpenRouter Seedance 1.5 Pro @ 1080p  — PRIMARY. Cheapest 10s I2V;
   //      first OpenRouter Seedance rung, sets the copyright flag.
-  //   2. OpenRouter Seedance 2.0 Fast @ 480p — first+last frame via
+  //   2. OpenRouter Seedance 2.0 Fast @ 1080p — first+last frame via
   //      frame_images; skipped when rung 1 fails for copyright/named-IP.
-  //   3. OpenRouter Seedance 2.0 (full) @ 480p — highest-fidelity
+  //   3. OpenRouter Seedance 2.0 (full) @ 1080p — highest-fidelity
   //      Seedance; also skipped on a copyright reject.
-  //   4. AtlasCloud Seedance 2.0 @ 480p      — different account-level
+  //   4. AtlasCloud Seedance 2.0 @ 1080p      — different account-level
   //      moderation; catches named soccer / World Cup prompts OpenRouter
   //      Seedance refuses. 402 when unfunded. Tried regardless of copyright.
-  //   5. OpenRouter Kling Video O1 @ 480p    — terminal rung. Different
+  //   5. OpenRouter Kling Video O1 @ 1080p    — terminal rung. Different
   //      model family and classifier from Seedance; if it refuses too,
   //      the scene fails over to held-frame in the outer catch.
   //
@@ -531,7 +531,7 @@ async function _runCinematicVideo(
     // tried regardless.
     let copyrightReject = false;
 
-    // ── 1. OpenRouter Seedance 1.5 Pro @ 480p (PRIMARY) ──────────────
+    // ── 1. OpenRouter Seedance 1.5 Pro @ 1080p (PRIMARY) ──────────────
     // Cheapest 10s I2V; first OpenRouter Seedance rung — sets the
     // ByteDance copyright flag for the 2.0 rungs below. First+last frame
     // via frame_images. Any failure cascades down.
@@ -543,7 +543,7 @@ async function _runCinematicVideo(
         prompt: `${finalPrompt}\n\n${motionGuardrails}`,
         duration: 10,
         aspectRatio: openRouterAspectRatio,
-        resolution: "480p",
+        resolution: "1080p",
         userId: userId ?? null,
         generationId,
         // 8 min — OpenRouter queue depth can stall a scene before the
@@ -558,7 +558,7 @@ async function _runCinematicVideo(
       if (orRes1.videoUrl) {
         videoUrl = orRes1.videoUrl;
         videoUrlAuthHeader = orRes1.downloadAuthHeader;
-        provider = "OpenRouter Seedance 1.5 Pro @ 480p";
+        provider = "OpenRouter Seedance 1.5 Pro @ 1080p";
       } else {
         const err = orRes1.error ?? "";
         copyrightReject = /InputTextSensitiveContentDetected|copyright/i.test(err);
@@ -568,7 +568,7 @@ async function _runCinematicVideo(
       }
     }
 
-    // ── 2. OpenRouter Seedance 2.0 Fast @ 480p (FALLBACK 1) ──────────
+    // ── 2. OpenRouter Seedance 2.0 Fast @ 1080p (FALLBACK 1) ──────────
     // Skipped when rung 1 rejected for copyright (same ByteDance filter).
     if (!videoUrl && !copyrightReject) {
       const orRes2 = await generateOpenRouterVideo({
@@ -578,7 +578,7 @@ async function _runCinematicVideo(
         prompt: `${finalPrompt}\n\n${motionGuardrails}`,
         duration: 10,
         aspectRatio: openRouterAspectRatio,
-        resolution: "480p",
+        resolution: "1080p",
         userId: userId ?? null,
         generationId,
         // 8 min — see note on rung 1 above.
@@ -592,7 +592,7 @@ async function _runCinematicVideo(
       if (orRes2.videoUrl) {
         videoUrl = orRes2.videoUrl;
         videoUrlAuthHeader = orRes2.downloadAuthHeader;
-        provider = "OpenRouter Seedance 2.0 Fast @ 480p";
+        provider = "OpenRouter Seedance 2.0 Fast @ 1080p";
       } else {
         console.warn(
           `[CinematicVideo] Scene ${sceneIndex}: OpenRouter Seedance 2.0 Fast failed — falling back to OpenRouter Seedance 2.0: ${(orRes2.error ?? "").slice(0, 200)}`,
@@ -600,7 +600,7 @@ async function _runCinematicVideo(
       }
     }
 
-    // ── 3. OpenRouter Seedance 2.0 (full) @ 480p (FALLBACK 2) ────────
+    // ── 3. OpenRouter Seedance 2.0 (full) @ 1080p (FALLBACK 2) ────────
     // Full (non-Fast) ByteDance Seedance 2.0 — highest-fidelity Seedance,
     // first+last frame via frame_images. Same ByteDance filter as the
     // rungs above, so also skipped on a copyright reject.
@@ -612,7 +612,7 @@ async function _runCinematicVideo(
         prompt: `${finalPrompt}\n\n${motionGuardrails}`,
         duration: 10,
         aspectRatio: openRouterAspectRatio,
-        resolution: "480p",
+        resolution: "1080p",
         userId: userId ?? null,
         generationId,
         // 8 min — see note on rung 1 above.
@@ -626,7 +626,7 @@ async function _runCinematicVideo(
       if (orRes3.videoUrl) {
         videoUrl = orRes3.videoUrl;
         videoUrlAuthHeader = orRes3.downloadAuthHeader;
-        provider = "OpenRouter Seedance 2.0 @ 480p";
+        provider = "OpenRouter Seedance 2.0 @ 1080p";
       } else {
         console.warn(
           `[CinematicVideo] Scene ${sceneIndex}: OpenRouter Seedance 2.0 failed — falling back to AtlasCloud: ${(orRes3.error ?? "").slice(0, 200)}`,
@@ -645,7 +645,7 @@ async function _runCinematicVideo(
         duration: 10,
         endImageUrl,
         aspectRatio: seedanceAspect,
-        resolution: "480p",
+        resolution: "1080p",
         userId: userId ?? null,
         generationId,
         pollMaxMs: 4 * 60 * 1000,
@@ -657,7 +657,7 @@ async function _runCinematicVideo(
       });
       if (atlasRes.videoUrl) {
         videoUrl = atlasRes.videoUrl;
-        provider = "AtlasCloud Seedance 2.0 @ 480p";
+        provider = "AtlasCloud Seedance 2.0 @ 1080p";
       } else {
         const msg = atlasRes.error ?? "(no error)";
         console.warn(
@@ -666,7 +666,7 @@ async function _runCinematicVideo(
       }
     }
 
-    // ── 5. OpenRouter Kling Video O1 @ 480p (FALLBACK 4) ─────────────
+    // ── 5. OpenRouter Kling Video O1 @ 1080p (FALLBACK 4) ─────────────
     // Resolution-free pricing ($1.12 / 10s). Different content
     // classifier from Seedance, so may accept prompts the Seedance
     // rungs all refused.
@@ -678,7 +678,7 @@ async function _runCinematicVideo(
         prompt: `${finalPrompt}\n\n${motionGuardrails}`,
         duration: 10,
         aspectRatio: openRouterAspectRatio,
-        resolution: "480p",
+        resolution: "1080p",
         userId: userId ?? null,
         generationId,
         // 8 min — see note on rung 1 above. Kling O1 has historically
@@ -694,7 +694,7 @@ async function _runCinematicVideo(
       if (orKlingRes.videoUrl) {
         videoUrl = orKlingRes.videoUrl;
         videoUrlAuthHeader = orKlingRes.downloadAuthHeader;
-        provider = "OpenRouter Kling Video O1 @ 480p";
+        provider = "OpenRouter Kling Video O1 @ 1080p";
       } else {
         // OR Kling O1 is the terminal rung after the 2026-05-28 removal
         // of the Hypereal Kling V3 Pro rung. A non-thrown null videoUrl

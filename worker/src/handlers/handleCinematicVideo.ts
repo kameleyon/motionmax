@@ -546,9 +546,12 @@ async function _runCinematicVideo(
         resolution: "480p",
         userId: userId ?? null,
         generationId,
-        // 8 min — OpenRouter queue depth can stall a scene before the
-        // model starts; matches openrouterVideo.ts's DEFAULT_POLL_MAX_MS.
-        pollMaxMs: 8 * 60 * 1000,
+        // 12 min — Seedance 1.5 Pro (primary) is slow: successful renders
+        // take ~3-4 min and the tail exceeds 8 min. The old 480s cap was
+        // timing out ~35 good renders / 5 days and escalating them to the
+        // pricier 2.0 rung. Give the primary more headroom before falling
+        // through so we stay on the cheaper model.
+        pollMaxMs: 12 * 60 * 1000,
         onSubmitted: async ({ providerJobId, pollUrl, model }) => {
           await saveCheckpoint(jobId, checkpointKey, {
             stage: "polling", providerJobId, pollUrl, model,

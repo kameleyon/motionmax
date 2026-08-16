@@ -14,7 +14,7 @@
  */
 import path from "path";
 import fs from "fs";
-import { runFfmpeg, probeDuration, getExactAudioDuration, X264_MEM_FLAGS } from "./ffmpegCmd.js";
+import { runFfmpeg, probeDuration, getExactAudioDuration, x264MemFlags } from "./ffmpegCmd.js";
 import { streamToFile, removeFiles } from "./storageHelpers.js";
 import { concatFiles } from "./concatScenes.js";
 import {
@@ -142,7 +142,7 @@ async function encodeWithKenBurns(
     "-pix_fmt", "yuv420p",
     "-t", String(duration),
     "-movflags", "+faststart",
-    ...X264_MEM_FLAGS,
+    ...x264MemFlags(config.height),
     outputPath,
   ]);
 }
@@ -169,7 +169,7 @@ async function encodeSilentChunkStatic(
     "-r", String(config.fps),
     "-t", String(duration),
     "-movflags", "+faststart",
-    ...X264_MEM_FLAGS,
+    ...x264MemFlags(config.height),
     outputPath,
   ]);
 }
@@ -528,7 +528,7 @@ async function muxVideoAudio(
     "-ac", "2",
     "-t", String(clipDuration),
     "-movflags", "+faststart",
-    ...X264_MEM_FLAGS,
+    ...x264MemFlags(config.height),
     outputPath,
   ]);
 }
@@ -644,7 +644,7 @@ export async function processScene(
         "-crf", "23",
         "-pix_fmt", "yuv420p",
         "-movflags", "+faststart",
-        ...X264_MEM_FLAGS,
+        ...x264MemFlags(config.height),
         normalizedPath,
       ]);
       removeFiles(vidPath);

@@ -176,12 +176,44 @@ export function detectSilences(
   });
 }
 
-/** Memory-safe x264 flags — keeps libx264 under ~40 MB */
-export const X264_MEM_FLAGS = [
-  "-threads", "2",
-  "-refs", "1",
-  "-rc-lookahead", "0",
-  "-g", "24",
-  "-bf", "0",
-  "-x264-params", "rc-lookahead=0:threads=2",
-];
+/** x264 thread count.
+ *
+ *  Two threads was calibrated for 1080p, where it keeps libx264 under
+ *  ~40 MB. At 4K each thread's frame buffers are 4x larger AND there is
+ *  4x the work, so holding at 2 risks blowing EXPORT_SCENE_TIMEOUT_MS.
+ *
+ *  libx264's working set scales roughly with threads x frame area, so
+ *  raising this trades memory for wall-clock. Sizing it needs the
+ *  Railway container memory limit, which lives in the dashboard rather
+ *  than railway.json — hence the env override. Set X264_THREADS once
+ *  that number is known; until then 4K gets a conservative 4.
+ *
+ *  Budget check for the default: 4 threads x 4K ≈ 8x the 1080p working
+ *  set ≈ 320 MB per encode. With numReplicas 3 and MAX_EXPORT_JOBS 2
+ *  that is ~2 GB peak across the fleet. */
+function x264Threads(height: number): string {
+  const override = parseInt(process.env.X264_THREADS || "", 10);
+  if (Number.isFinite(override) && override > 0) return String(override);
+  return height >= 2000 ? "4" : "2";
+}
+
+/** Memory-safe x264 flags, sized for the output resolution.
+ *
+ *  @param height Output height. Defaults to 1080, which reproduces the
+ *                exact flag set this module shipped before 4K existed.
+ */
+export function x264MemFlags(height = 1080): string[] {
+  const threads = x264Threads(height);
+  return [
+    "-threads", threads,
+    "-refs", "1",
+    "-rc-lookahead", "0",
+    "-g", "24",
+    "-bf", "0",
+    "-x264-params", `rc-lookahead=0:threads=${threads}`,
+  ];
+}
+
+/** Back-compat alias — the 1080p flag set, unchanged.
+ *  Prefer `x264MemFlags(height)` in any path that can render 4K. */
+export const X264_MEM_FLAGS = x264MemFlags(1080);

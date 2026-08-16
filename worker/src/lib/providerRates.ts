@@ -94,12 +94,24 @@ export const PROVIDER_RATES_USD = {
   // image2 because we don't pay for first-frame synthesis.
   //
   // Hypereal bills this model by output resolution, so a flat per_image
-  // rate understates 4K spend by ~7x. `per_image` remains the 1k/2k rate
+  // rate understates 4K spend badly. `per_image` remains the 1k/2k rate
   // (the "Apply Edit" path); `per_image_4k` covers the export-time upres
   // pass, which is the single most expensive image call we make.
-  // Source: nanoBananaEdit.ts header — "1K/2K = $0.11, 4K = $0.22".
-  // NOTE: the 0.03 below predates that comment and is the contracted rate
-  // we actually observed; confirm both against Hypereal's live sheet.
+  //
+  // UNRESOLVED — three sources disagree, checked 2026-08-16:
+  //   - this table:              $0.03 flat  (contracted rate, origin unknown)
+  //   - nanoBananaEdit.ts:6:     $0.11 (1K/2K), $0.22 (4K)  — consistent with
+  //                              the "11 credits" note if 1 credit ≈ $0.01
+  //   - hypereal.cloud/pricing:  does NOT list `nano-banana-pro-edit` at all.
+  //                              Nearest entries are "Nano Banana Pro" $0.100
+  //                              flat and "Nano Banana 2" $0.040/$0.060/$0.090
+  //                              by resolution.
+  //   - Google's own list price for Nano Banana Pro 4K is ~$0.24.
+  //
+  // 0.22 is retained deliberately: it is the high end of the plausible
+  // range, and this table's stated policy is to bias fallback estimates
+  // toward over-estimation. Only a real Hypereal invoice settles it —
+  // reconcile api_call_logs against a billing period and correct here.
   hypereal_nano_banana_pro: {
     per_image: 0.03,
     per_image_4k: 0.22,

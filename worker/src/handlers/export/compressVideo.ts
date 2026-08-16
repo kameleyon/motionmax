@@ -8,7 +8,7 @@
  * replaced. `bitrateLadderFor()` picks the ceiling from output height.
  */
 import fs from "fs";
-import { runFfmpeg, X264_MEM_FLAGS } from "./ffmpegCmd.js";
+import { runFfmpeg, x264MemFlags } from "./ffmpegCmd.js";
 
 /** Files above this size trigger a compression re-encode before upload.
  *  Supabase Storage rejects files over ~500 MB even with TUS.
@@ -92,7 +92,7 @@ export async function compressIfNeeded(
     "-c:a", "aac",
     "-b:a", "128k",
     "-movflags", "+faststart",
-    ...X264_MEM_FLAGS,
+    ...x264MemFlags(height),
     compressedPath,
   ], COMPRESS_TIMEOUT_MS);
 

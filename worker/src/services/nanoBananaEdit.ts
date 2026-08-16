@@ -132,7 +132,7 @@ export async function editImageWithNanoBanana(
         jobId: attribution.jobId,
         provider: "hypereal", model: NANO_BANANA_PRO_MODEL,
         status: "success", totalDurationMs: Date.now() - startTime,
-        cost: imageCostUsd("hypereal_nano_banana_pro"),
+        cost: imageCostUsd("hypereal_nano_banana_pro", 1, resolution),
         error: undefined,
       }).catch((err) => { console.warn('[NanoBananaProEdit] background log failed:', (err as Error).message); });
       return finalUrl;
@@ -158,7 +158,7 @@ export async function editImageWithNanoBanana(
     jobId: attribution.jobId,
     provider: "hypereal", model: NANO_BANANA_PRO_MODEL,
     status: "success", totalDurationMs: Date.now() - startTime,
-    cost: imageCostUsd("hypereal_nano_banana_pro"),
+    cost: imageCostUsd("hypereal_nano_banana_pro", 1, resolution),
     error: undefined,
   }).catch((err) => { console.warn('[NanoBananaProEdit] background log failed:', (err as Error).message); });
   return finalUrl;

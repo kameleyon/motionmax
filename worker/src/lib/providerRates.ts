@@ -92,8 +92,17 @@ export const PROVIDER_RATES_USD = {
   },
   // Nano-Banana Pro edit (img-to-img) via Hypereal — cheaper than gpt-
   // image2 because we don't pay for first-frame synthesis.
+  //
+  // Hypereal bills this model by output resolution, so a flat per_image
+  // rate understates 4K spend by ~7x. `per_image` remains the 1k/2k rate
+  // (the "Apply Edit" path); `per_image_4k` covers the export-time upres
+  // pass, which is the single most expensive image call we make.
+  // Source: nanoBananaEdit.ts header — "1K/2K = $0.11, 4K = $0.22".
+  // NOTE: the 0.03 below predates that comment and is the contracted rate
+  // we actually observed; confirm both against Hypereal's live sheet.
   hypereal_nano_banana_pro: {
     per_image: 0.03,
+    per_image_4k: 0.22,
   },
   replicate_image: {
     per_image: 0.05,
@@ -193,11 +202,23 @@ export function asrMinutesCostUsd(minutes: number): number {
   return minutes * PROVIDER_RATES_USD.hypereal_asr.per_minute;
 }
 
-/** Compute cost for an image generation call (default 1 image). */
+/** Resolution tiers Nano-Banana Pro bills against. Only this model is
+ *  resolution-priced today; every other image provider ignores the arg. */
+export type ImageResolutionTier = "1k" | "2k" | "4k";
+
+/** Compute cost for an image generation call (default 1 image).
+ *
+ *  `resolution` only changes the result for `hypereal_nano_banana_pro`,
+ *  which Hypereal bills higher at 4K. Defaulting to "1k" keeps every
+ *  existing call site's cost unchanged. */
 export function imageCostUsd(
   rateKey: "hypereal_image" | "hypereal_gpt_image2" | "hypereal_nano_banana_pro" | "replicate_image",
   images = 1,
+  resolution: ImageResolutionTier = "1k",
 ): number {
+  if (rateKey === "hypereal_nano_banana_pro" && resolution === "4k") {
+    return images * PROVIDER_RATES_USD.hypereal_nano_banana_pro.per_image_4k;
+  }
   return images * PROVIDER_RATES_USD[rateKey].per_image;
 }
 

@@ -32,6 +32,7 @@ import { uploadToSupabase, removeFiles } from "./export/storageHelpers.js";
 import { generateAssSubtitles, writeAssFile, normalizeCaptionStyle, type ASRSceneResult } from "../services/captionBuilder.js";
 import { transcribeAllScenes } from "../services/audioASR.js";
 import { getTargetResolution } from "./export/kenBurns.js";
+import { upresScenesTo4K } from "./export/upres4k.js";
 import {
   initSceneProgress,
   updateSceneProgress,
@@ -253,16 +254,56 @@ function writeCheckpoint(tempDir: string, jobId: string, sceneResults: (string |
  */
 type WatermarkTier = "free" | "paid";
 
-async function fetchWatermarkTier(userId: string | undefined): Promise<WatermarkTier> {
-  if (!userId) return "free"; // No user = treat as free (visible burn-in)
-  const { data } = await supabase
-    .from("subscriptions")
-    .select("plan_name")
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .maybeSingle();
-  const paidPlans = ["creator", "starter", "professional", "studio", "enterprise"];
-  return paidPlans.includes(data?.plan_name ?? "") ? "paid" : "free";
+/** Normalised plan tiers. Mirrors normalizePlanName() in
+ *  src/lib/planLimits.ts — legacy names collapse onto the three tiers
+ *  we actually sell. */
+type PlanTier = "free" | "creator" | "studio";
+
+const PAID_PLANS = ["creator", "starter", "professional", "studio", "enterprise"];
+
+function normalizePlan(planName: string | null | undefined): PlanTier {
+  switch (planName) {
+    case "creator":
+    case "starter":
+      return "creator";
+    case "studio":
+    case "professional":
+    case "enterprise":
+      return "studio";
+    default:
+      return "free";
+  }
+}
+
+/** One subscriptions read serving both the AI Act watermark decision and
+ *  the 4K resolution gate.
+ *
+ *  Fails closed: any lookup error yields free/free, which burns the
+ *  visible disclosure mark and renders at 1080p. Never grant a paid
+ *  feature because a read failed. */
+async function fetchPlanTier(
+  userId: string | undefined,
+): Promise<{ plan: PlanTier; watermarkTier: WatermarkTier }> {
+  if (!userId) return { plan: "free", watermarkTier: "free" }; // No user = treat as free
+  try {
+    const { data } = await supabase
+      .from("subscriptions")
+      .select("plan_name")
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .maybeSingle();
+    const planName = data?.plan_name ?? "";
+    return {
+      plan: normalizePlan(planName),
+      watermarkTier: PAID_PLANS.includes(planName) ? "paid" : "free",
+    };
+  } catch (err) {
+    wlog.warn("[ExportVideo] plan lookup failed — failing closed to free tier", {
+      userId,
+      error: (err as Error).message,
+    });
+    return { plan: "free", watermarkTier: "free" };
+  }
 }
 
 /** drawtext filter spec for a given watermark tier. Free-tier mark sits
@@ -406,6 +447,104 @@ async function buildExportConfig(payload: any): Promise<ExportConfig> {
   };
 }
 
+// ──────────────────── 4K resolution gate ───────────────────────────
+
+/** Bitrate we consider the honest floor for 4K (see compressVideo's
+ *  ladder). Used only to predict whether a 4K master could fit under
+ *  the storage ceiling before we spend money upscaling it. */
+const UHD_BITRATE_BPS = 22_000_000;
+/** Supabase Storage upload ceiling, mirrored from compressVideo. */
+const UPLOAD_CEILING_BYTES = 500 * 1024 * 1024;
+/** Longest 4K master that can fit under the ceiling at UHD_BITRATE_BPS.
+ *  ~181s in theory; trimmed for container and audio overhead. */
+const MAX_4K_DURATION_SEC = Math.floor((UPLOAD_CEILING_BYTES * 8) / UHD_BITRATE_BPS) - 15;
+
+/** Best-effort per-scene duration in seconds, tolerant of the several
+ *  shapes scenes arrive in (DB rows vs payload fallback). */
+function sceneDurationSec(scene: any): number {
+  if (typeof scene?.duration === "number" && scene.duration > 0) return scene.duration;
+  if (typeof scene?.audioDurationMs === "number" && scene.audioDurationMs > 0) return scene.audioDurationMs / 1000;
+  if (typeof scene?.estDurationMs === "number" && scene.estDurationMs > 0) return scene.estDurationMs / 1000;
+  return 10; // matches the editor's own default
+}
+
+/**
+ * Decide whether this export renders at 4K and, if so, upscale the
+ * image-backed scenes in place.
+ *
+ * Mutates `exportConfig` (width/height) and `scenes` (imageUrl) — both
+ * are already treated as mutable working state by the caller.
+ *
+ * Bails back to 1080p, leaving both untouched, when:
+ *   - the plan isn't Studio
+ *   - the video is too long for a 4K master to fit under the storage
+ *     ceiling at an honest bitrate (checked BEFORE spending upres money)
+ *   - every upres call failed, so there'd be no real 4K detail anywhere
+ */
+async function maybeUpgradeTo4K(args: {
+  exportConfig: ExportConfig;
+  scenes: any[];
+  plan: PlanTier;
+  projectId: string;
+  jobId: string;
+  userId?: string;
+  log: ReturnType<typeof wlog.child>;
+}): Promise<void> {
+  const { exportConfig, scenes, plan, projectId, jobId, userId, log } = args;
+
+  if (plan !== "studio") {
+    log.info("4K skipped — plan not eligible", { plan });
+    return;
+  }
+
+  const totalDuration = scenes.reduce((sum, s) => sum + sceneDurationSec(s), 0);
+  if (totalDuration > MAX_4K_DURATION_SEC) {
+    // Checked up front so a too-long project never pays the upres bill
+    // only to be downgraded at the compression step.
+    log.warn("4K skipped — video too long to fit the storage ceiling at UHD bitrate", {
+      totalDurationSec: Math.round(totalDuration),
+      maxDurationSec: MAX_4K_DURATION_SEC,
+    });
+    return;
+  }
+
+  const apiKey = (process.env.HYPEREAL_API_KEY || "").trim();
+  const imageUrls = scenes.map((s: any) => (s?.videoUrl ? "" : s?.imageUrl ?? ""));
+  const imageSceneCount = imageUrls.filter((u) => u).length;
+
+  log.info("4K eligible — upscaling image scenes", {
+    plan,
+    totalDurationSec: Math.round(totalDuration),
+    imageScenes: imageSceneCount,
+    videoScenes: scenes.length - imageSceneCount,
+  });
+
+  const { urls, upscaled, failed } = await upresScenesTo4K(
+    imageUrls,
+    exportConfig.format,
+    apiKey,
+    projectId,
+    { userId: userId ?? null, generationId: exportConfig.generationId ?? null, jobId },
+  );
+
+  // No real 4K detail anywhere — a 4K container built purely from
+  // stretched 1536px frames is exactly the dishonest output this
+  // feature exists to avoid. Render an honest 1080p instead.
+  if (imageSceneCount > 0 && upscaled === 0) {
+    log.warn("4K abandoned — every upres call failed, falling back to 1080p", { failed });
+    return;
+  }
+
+  urls.forEach((url: string, i: number) => {
+    if (url && !scenes[i]?.videoUrl) scenes[i].imageUrl = url;
+  });
+
+  const { width, height } = getTargetResolution(exportConfig.format, true);
+  exportConfig.width = width;
+  exportConfig.height = height;
+  log.info("4K enabled", { resolution: `${width}x${height}`, upscaled, failed });
+}
+
 /** Defensive load of the project's intake_settings — older deploys
  *  may be missing the column entirely. Returns an empty object on any
  *  failure so the export still renders (just without grade/transition). */
@@ -494,7 +633,7 @@ async function _runExport(
   //   - paid tier → SKIP visible burn-in (the PublicShare disclosure badge +
   //                  XMP machine-readable provenance carry the obligation)
   // XMP metadata via `embedXmpProvenance` runs for BOTH tiers regardless.
-  const watermarkTier = await fetchWatermarkTier(userId);
+  const { plan, watermarkTier } = await fetchPlanTier(userId);
   const watermarkText = "AI-generated · motionmax";
   log.info("AI Act Art. 50 disclosure: visible burn-in policy resolved", {
     tier: watermarkTier,
@@ -591,6 +730,12 @@ async function _runExport(
       grade: projectGrade,
     });
   }
+
+  // ── 4K resolution gate (Studio only) ────────────────────────────
+  // Runs here rather than in buildExportConfig because it needs the
+  // resolved scene list: both the duration feasibility check and the
+  // upres pass operate on real scenes.
+  await maybeUpgradeTo4K({ exportConfig, scenes, plan, projectId: project_id, jobId, userId, log });
 
   // ── Initialize per-scene progress tracking ──────────────────────
   const sceneProgress = initSceneProgress(jobId, scenes.length, "encoding");
@@ -1140,7 +1285,10 @@ async function _runExport(
     sceneProgress.overallMessage = "Compressing final video...";
     await flushSceneProgress(jobId);
 
-    const uploadPath = await compressIfNeeded(finalOutputPath, tempDir);
+    // Height drives the bitrate ladder — a 4K master compressed at the
+    // 1080p ceiling (4 Mbps) would throw away the detail the upres pass
+    // just paid for.
+    const uploadPath = await compressIfNeeded(finalOutputPath, tempDir, exportConfig.height);
 
     sceneProgress.overallMessage = "Uploading final video...";
     await flushSceneProgress(jobId);

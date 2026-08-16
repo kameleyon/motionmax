@@ -202,12 +202,23 @@ export function buildKenBurnsVf(
   return `zoompan=${zoompan},format=yuv420p`;
 }
 
-/** Get the target resolution for a format string */
-export function getTargetResolution(format: string): { width: number; height: number } {
+/** Get the target resolution for a format string.
+ *
+ *  `is4K` doubles each axis to UHD. It defaults to false so every
+ *  existing single-argument call site keeps its 1080p behaviour — the
+ *  4K path is opt-in and gated on plan by the export handler.
+ *
+ *  Every downstream filter (scaleAndPad, zoompan, transitions, concat)
+ *  derives from these numbers, so this is the only place resolution is
+ *  decided. */
+export function getTargetResolution(
+  format: string,
+  is4K = false,
+): { width: number; height: number } {
   switch (format) {
-    case "portrait": return { width: 1080, height: 1920 };
-    case "square":   return { width: 1080, height: 1080 };
-    default:         return { width: 1920, height: 1080 }; // landscape
+    case "portrait": return is4K ? { width: 2160, height: 3840 } : { width: 1080, height: 1920 };
+    case "square":   return is4K ? { width: 2160, height: 2160 } : { width: 1080, height: 1080 };
+    default:         return is4K ? { width: 3840, height: 2160 } : { width: 1920, height: 1080 }; // landscape
   }
 }
 

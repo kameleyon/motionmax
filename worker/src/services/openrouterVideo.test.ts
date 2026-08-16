@@ -111,6 +111,65 @@ describe("generateOpenRouterVideo", () => {
     expect(submittedBody.prompt).toBe(prompt);
   }, 15_000);
 
+  it("omits aspect_ratio for Seedance 2.5, which derives it from the frames", async () => {
+    // Regression: ByteDance returns
+    //   InvalidParameter.TaskTypeConstraint — "The parameter ratio specified
+    //   in the request is not valid. For first-frame or first-last-frame …"
+    // when aspect_ratio accompanies frame_images on Seedance 2.5. We always
+    // send frame_images, so every rung-1 submit 400'd in production.
+    const submitJson = { id: "or-job-25", polling_url: "https://or.test/poll/or-job-25" };
+    const pollJson = {
+      id: "or-job-25", status: "completed",
+      unsigned_urls: ["https://or.test/out/or-job-25.mp4"], usage: { cost: 1.03 },
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => submitJson, text: async () => "" })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => pollJson,   text: async () => "" });
+    globalThis.fetch = fetchMock as never;
+
+    const { generateOpenRouterVideo } = await import("./openrouterVideo.js");
+    await generateOpenRouterVideo({
+      model: "bytedance/seedance-2.5",
+      imageUrl: "https://cdn.test/a.jpg",
+      endImageUrl: "https://cdn.test/b.jpg",
+      prompt: "a shot",
+      aspectRatio: "9:16",
+      pollMaxMs: 30_000,
+    });
+
+    const submittedBody = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body);
+    expect(submittedBody).not.toHaveProperty("aspect_ratio");
+    // The frames still go up — the ratio is derived from first_frame.
+    expect(submittedBody.frame_images).toHaveLength(2);
+    expect(submittedBody.resolution).toBe("480p");
+  }, 15_000);
+
+  it("still sends aspect_ratio for the older Seedance and Kling rungs", async () => {
+    for (const model of ["bytedance/seedance-1-5-pro", "bytedance/seedance-2.0-fast", "kwaivgi/kling-video-o1"] as const) {
+      const submitJson = { id: `or-${model}`, polling_url: `https://or.test/poll/${model}` };
+      const pollJson = {
+        id: `or-${model}`, status: "completed",
+        unsigned_urls: [`https://or.test/out/${model}.mp4`], usage: { cost: 0.1 },
+      };
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => submitJson, text: async () => "" })
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => pollJson,   text: async () => "" });
+      globalThis.fetch = fetchMock as never;
+
+      const { generateOpenRouterVideo } = await import("./openrouterVideo.js");
+      await generateOpenRouterVideo({
+        model,
+        imageUrl: "https://cdn.test/a.jpg",
+        prompt: "a shot",
+        aspectRatio: "9:16",
+        pollMaxMs: 30_000,
+      });
+
+      const submittedBody = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body);
+      expect(submittedBody.aspect_ratio, `${model} should still send aspect_ratio`).toBe("9:16");
+    }
+  }, 30_000);
+
   it("returns error on HTTP 4xx submit", async () => {
     globalThis.fetch = vi.fn().mockResolvedValueOnce({
       ok: false, status: 400,

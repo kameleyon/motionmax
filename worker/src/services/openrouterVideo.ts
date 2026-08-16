@@ -56,6 +56,21 @@ const MODEL_PROMPT_LIMIT: Record<OpenRouterVideoModel, number> = {
 };
 const STRICTEST_PROMPT_LIMIT = 2500;
 
+/** Models that derive the output aspect ratio from the supplied frame
+ *  images and REJECT a request that also specifies one explicitly.
+ *
+ *  ByteDance returns `InvalidParameter.TaskTypeConstraint` for these when
+ *  `aspect_ratio` accompanies `frame_images`. Observed on Seedance 2.5 in
+ *  production 2026-08-16, immediately after it was promoted to rung 1 —
+ *  every submit 400'd and the chain silently fell through to rung 2.
+ *
+ *  The older Seedance rungs and Kling O1 accept an explicit ratio, so
+ *  this is a per-model quirk rather than a general rule. Add a model here
+ *  only after seeing that error from it. */
+const RATIO_DERIVED_FROM_FRAMES: ReadonlySet<OpenRouterVideoModel> = new Set([
+  "bytedance/seedance-2.5",
+]);
+
 /** Clamp `prompt` to `max` characters on a word boundary so a rung is
  *  never rejected purely on length. Trims back to the last space when
  *  that space is reasonably close to the cap (avoids lopping off most of
@@ -166,9 +181,22 @@ export async function generateOpenRouterVideo(
         : []),
     ],
     duration,
-    aspect_ratio: aspectRatio,
     resolution,
   };
+
+  // Seedance 2.5 derives the output ratio from the first frame and hard-
+  // rejects a request that also specifies one:
+  //
+  //   InvalidParameter.TaskTypeConstraint — "The parameter ratio specified
+  //   in the request is not valid. For first-frame or first-last-frame …"
+  //
+  // We always send frame_images, so for that model the field is simply
+  // omitted. Nothing is lost: the source frame is already generated at the
+  // project's format, so the derived ratio is the one we wanted anyway.
+  // The older rungs accept an explicit ratio and keep sending it.
+  if (!RATIO_DERIVED_FROM_FRAMES.has(model)) {
+    body.aspect_ratio = aspectRatio;
+  }
 
   const headers = {
     Authorization: `Bearer ${apiKey}`,

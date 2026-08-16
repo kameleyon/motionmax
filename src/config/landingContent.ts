@@ -119,7 +119,7 @@ export const LANDING_FAQ: FaqItem[] = [
   {
     question: "What video formats and resolutions are supported?",
     answer:
-      "MotionMax supports 16:9 (landscape), 9:16 (portrait / Reels), and 1:1 (square) formats. Paid plans unlock 1080p and 4K exports.",
+      "MotionMax supports 16:9 (landscape), 9:16 (portrait / Reels), and 1:1 (square) formats. Every plan exports at 1080p. Studio adds 4K for videos up to 3 minutes — AI-generated stills are re-rendered at 4K, while AI video clips are upscaled from 1080p.",
   },
   {
     question: "Can I use my own voice?",

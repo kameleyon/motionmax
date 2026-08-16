@@ -264,7 +264,7 @@ export default function TabPlans() {
                     <Feat>
                       <span><b>{num(limits.creditsPerMonth)} credits / month</b></span>
                     </Feat>
-                    <Feat>4K exports + AutoPost Lab</Feat>
+                    <Feat>4K exports (up to 3 min) + AutoPost Lab</Feat>
                     <Feat>{limits.voiceClones} voice clone slots</Feat>
                     <Feat>Priority rendering · 24h SLA</Feat>
                     <Feat>Brand kits + character consistency</Feat>

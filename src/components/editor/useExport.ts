@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useSubscription } from '@/hooks/useSubscription';
 import { createScopedLogger } from '@/lib/logger';
 import type { EditorState } from '@/hooks/useEditorState';
 import { useBeforeUnload } from '@/hooks/useBeforeUnload';
@@ -22,6 +23,11 @@ export interface ExportState {
  *  caption_style in the payload). */
 export function useExport(state: EditorState | null) {
   const { user } = useAuth();
+  // Drives the export toast's resolution label. The worker decides the
+  // real resolution (worker/src/handlers/exportVideo.ts → maybeUpgradeTo4K),
+  // and 4K is Studio-only, so the label must follow the plan rather
+  // than a hard-coded string.
+  const { plan } = useSubscription();
   const [exportState, setExportState] = useState<ExportState>({ status: 'idle', progress: 0 });
   // Sanity-poll backstop: a 30s heartbeat that catches any updates the
   // realtime channel misses (network blips, stale subscriptions). The
@@ -172,7 +178,13 @@ export function useExport(state: EditorState | null) {
     // letterboxed 16:9). No user-facing preset picker anymore.
     const projectFormat: 'landscape' | 'portrait' =
       state.project.format === 'portrait' ? 'portrait' : 'landscape';
-    const presetCfg = { format: projectFormat, label: '4K' };
+    // Label what this user's plan actually renders. Only Studio reaches
+    // the worker's 4K path; every other tier renders 1080p. Studio 4K
+    // additionally requires the video to fit the storage ceiling at UHD
+    // bitrate (~3 min), so the label says "up to 4K" rather than
+    // promising a resolution we can't guarantee from the client.
+    const resolutionLabel = plan === 'studio' ? 'up to 4K' : '1080p';
+    const presetCfg = { format: projectFormat, label: resolutionLabel };
     const scenes = state.scenes
       .filter((s) => s.videoUrl || s.imageUrl)
       .map((s) => ({
@@ -425,7 +437,7 @@ export function useExport(state: EditorState | null) {
       // burst of duplicate INSERTs from a single rage-click sequence.
       startLockRef.current = false;
     }
-  }, [user, state, cancelPolling]);
+  }, [user, state, cancelPolling, plan]);
 
   return {
     exportState,

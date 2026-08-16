@@ -106,7 +106,7 @@ export const PLANS: PlanDef[] = [
       `${PLAN_LIMITS.studio.creditsPerMonth} credits/month + ${PLAN_LIMITS.studio.dailyFreeCredits} daily bonus`,
       "1 credit = 1 second (standard), 5x for cinematic",
       "All video types",
-      "4K quality",
+      "4K quality (videos up to 3 min)",
       "All formats",
       "All styles + premium effects",
       "All caption styles",

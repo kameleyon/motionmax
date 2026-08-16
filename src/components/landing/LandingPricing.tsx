@@ -139,7 +139,7 @@ export default function LandingPricing({ onCtaClick }: LandingPricingProps) {
             promoActive={promoActive}
             icon={Gem}
             onCta={() => handlePaidCta("studio")}
-            extras={["4K quality", "Brand kit", "Character consistency"]}
+            extras={["4K quality (up to 3 min)", "Brand kit", "Character consistency"]}
           />
         </div>
 

@@ -147,6 +147,30 @@ export const PROVIDER_RATES_USD = {
     per_second_720p: 0.18,
     per_second_1080p: 0.45,
   },
+  // OpenRouter-hosted ByteDance Seedance 2.5 — PRIMARY cinematic rung as
+  // of 2026-08-16. Newest ByteDance model: first+last frame control, up
+  // to 50 reference assets, optional generated audio, video extend.
+  //
+  // Pricing confidence is UNEVEN. OpenRouter's model page documents only
+  // "from $0.1028/second", which we take as the 480p floor — and 480p is
+  // the resolution the cinematic chain actually submits at, so the number
+  // that matters is the documented one. The 720p/1080p entries are
+  // EXTRAPOLATED using the same ratios observed on the two other OR
+  // Seedance entries below (720p = 2x 480p, 1080p ~= 4.5x 480p) and are
+  // deliberate over-estimates. For contrast, Hypereal lists its own
+  // Seedance 2.5 at $0.23/720p and $0.26/1080p — a much flatter curve —
+  // so the 1080p figure here may be substantially high.
+  //
+  // As with every OR entry, `usage.cost` from the response is
+  // authoritative and overrides this table; these are fallback estimates
+  // only. Run scripts/probe-openrouter-pricing.mjs (read-only, costs
+  // nothing) on Railway where OPENROUTER_API_KEY is set to replace the
+  // extrapolations with the real per-resolution SKU shape.
+  openrouter_seedance_2_5: {
+    per_second_480p: 0.103,   // ~$1.03 / 10s — documented floor
+    per_second_720p: 0.206,   // extrapolated
+    per_second_1080p: 0.460,  // extrapolated, likely high
+  },
   // OpenRouter-hosted ByteDance Seedance 1.5 Pro — primary cinematic
   // rung as of 2026-05-16. Token-billed without audio at half the
   // with-audio rate ($0.0000012/token vs $0.0000024/token). Empirical
@@ -266,7 +290,7 @@ export function replicateSeedanceCostUsd(
 /** Compute cost for an OpenRouter-hosted video clip. Seedance models
  *  are token-billed per resolution; Kling Video O1 is flat per-second. */
 export function openRouterVideoCostUsd(
-  model: "bytedance/seedance-1-5-pro" | "bytedance/seedance-2.0-fast" | "bytedance/seedance-2.0" | "kwaivgi/kling-video-o1",
+  model: "bytedance/seedance-2.5" | "bytedance/seedance-1-5-pro" | "bytedance/seedance-2.0-fast" | "bytedance/seedance-2.0" | "kwaivgi/kling-video-o1",
   resolution: "480p" | "720p" | "1080p",
   outputSeconds: number,
 ): number {
@@ -276,9 +300,12 @@ export function openRouterVideoCostUsd(
   // Full seedance-2.0 has no dedicated rate-card entry — fall back to the
   // 2.0-fast rate for the estimate. The real cost comes from OpenRouter's
   // usage.cost in the response; this function is only the fallback.
-  const r = (model === "bytedance/seedance-2.0-fast" || model === "bytedance/seedance-2.0")
-    ? PROVIDER_RATES_USD.openrouter_seedance_2_0_fast
-    : PROVIDER_RATES_USD.openrouter_seedance_1_5_pro;
+  const r =
+    model === "bytedance/seedance-2.5"
+      ? PROVIDER_RATES_USD.openrouter_seedance_2_5
+      : (model === "bytedance/seedance-2.0-fast" || model === "bytedance/seedance-2.0")
+        ? PROVIDER_RATES_USD.openrouter_seedance_2_0_fast
+        : PROVIDER_RATES_USD.openrouter_seedance_1_5_pro;
   const perSec =
     resolution === "1080p" ? r.per_second_1080p :
     resolution === "720p"  ? r.per_second_720p  :

@@ -324,7 +324,7 @@ describe("handleCinematicVideo", () => {
     });
   });
 
-  describe("provider chain — rung 1 (OpenRouter Seedance 1.5 Pro)", () => {
+  describe("provider chain — rung 1 (OpenRouter Seedance 2.5)", () => {
     it("uses rung 1 result when OpenRouter Seedance succeeds; does NOT call AtlasCloud", async () => {
       const { supabase } = await import("../lib/supabase.js");
       vi.mocked(supabase.from).mockImplementation((table: string) => {
@@ -348,10 +348,10 @@ describe("handleCinematicVideo", () => {
 
       expect(generateOpenRouterVideo).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: "bytedance/seedance-1-5-pro",
+          model: "bytedance/seedance-2.5",
           resolution: "480p",
           duration: 10,
-          pollMaxMs: 8 * 60 * 1000,
+          pollMaxMs: 12 * 60 * 1000,
         }),
       );
       expect(generateAtlasCloudSeedance).not.toHaveBeenCalled();
@@ -373,19 +373,19 @@ describe("handleCinematicVideo", () => {
       });
 
       const { generateOpenRouterVideo } = await import("../services/openrouterVideo.js");
-      // All three OpenRouter Seedance rungs (1.5 Pro, 2.0 Fast, 2.0 full)
+      // All three OpenRouter Seedance rungs (2.5, 1.5 Pro, 2.0 Fast)
       // must return null before the chain reaches AtlasCloud.
       vi.mocked(generateOpenRouterVideo)
+        .mockResolvedValueOnce({
+          videoUrl: null, provider: "openrouter", model: "bytedance/seedance-2.5",
+          error: "submit 502",
+        })
         .mockResolvedValueOnce({
           videoUrl: null, provider: "openrouter", model: "bytedance/seedance-1-5-pro",
           error: "submit 502",
         })
         .mockResolvedValueOnce({
           videoUrl: null, provider: "openrouter", model: "bytedance/seedance-2.0-fast",
-          error: "submit 502",
-        })
-        .mockResolvedValueOnce({
-          videoUrl: null, provider: "openrouter", model: "bytedance/seedance-2.0",
           error: "submit 502",
         });
 

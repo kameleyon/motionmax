@@ -35,6 +35,7 @@ const POLL_INTERVAL_MS = 5_000;
 const DEFAULT_POLL_MAX_MS = 8 * 60 * 1000;
 
 export type OpenRouterVideoModel =
+  | "bytedance/seedance-2.5"
   | "bytedance/seedance-1-5-pro"
   | "bytedance/seedance-2.0-fast"
   | "bytedance/seedance-2.0"
@@ -47,6 +48,7 @@ export type OpenRouterVideoModel =
  *  the model). Seedance accepts longer prompts, so it keeps a generous
  *  ceiling. Any model not listed falls back to the strictest cap. */
 const MODEL_PROMPT_LIMIT: Record<OpenRouterVideoModel, number> = {
+  "bytedance/seedance-2.5": 5000,
   "bytedance/seedance-1-5-pro": 5000,
   "bytedance/seedance-2.0-fast": 5000,
   "bytedance/seedance-2.0": 5000,

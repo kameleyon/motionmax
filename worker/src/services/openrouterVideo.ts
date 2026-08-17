@@ -56,18 +56,23 @@ const MODEL_PROMPT_LIMIT: Record<OpenRouterVideoModel, number> = {
 };
 const STRICTEST_PROMPT_LIMIT = 2500;
 
-/** Models that derive the output aspect ratio from the supplied frame
- *  images and REJECT a request that also specifies one explicitly.
+/** Models that require the literal ratio `"adaptive"` on first-frame /
+ *  first-last-frame tasks instead of a concrete ratio.
  *
- *  ByteDance returns `InvalidParameter.TaskTypeConstraint` for these when
- *  `aspect_ratio` accompanies `frame_images`. Observed on Seedance 2.5 in
- *  production 2026-08-16, immediately after it was promoted to rung 1 —
- *  every submit 400'd and the chain silently fell through to rung 2.
+ *  ByteDance returns `InvalidParameter.TaskTypeConstraint` — "The
+ *  parameter ratio specified in the request is not valid. For first-frame
+ *  or first-last-frame …" — when a concrete ratio accompanies
+ *  `frame_images`. `"adaptive"` tells the model to take its dimensions
+ *  from the first frame, which is what we want: the frame was already
+ *  generated at the project's format.
  *
- *  The older Seedance rungs and Kling O1 accept an explicit ratio, so
- *  this is a per-model quirk rather than a general rule. Add a model here
- *  only after seeing that error from it. */
-const RATIO_DERIVED_FROM_FRAMES: ReadonlySet<OpenRouterVideoModel> = new Set([
+ *  Do NOT simply omit the field. Omitting it does clear the 400, but
+ *  ByteDance then falls back to its own default and renders SQUARE —
+ *  shipped and reverted the same day, 2026-08-16/17.
+ *
+ *  The older Seedance rungs and Kling O1 accept a concrete ratio, so this
+ *  is a per-model quirk rather than a general rule. */
+const RATIO_MUST_BE_ADAPTIVE: ReadonlySet<OpenRouterVideoModel> = new Set([
   "bytedance/seedance-2.5",
 ]);
 
@@ -184,19 +189,12 @@ export async function generateOpenRouterVideo(
     resolution,
   };
 
-  // Seedance 2.5 derives the output ratio from the first frame and hard-
-  // rejects a request that also specifies one:
-  //
-  //   InvalidParameter.TaskTypeConstraint — "The parameter ratio specified
-  //   in the request is not valid. For first-frame or first-last-frame …"
-  //
-  // We always send frame_images, so for that model the field is simply
-  // omitted. Nothing is lost: the source frame is already generated at the
-  // project's format, so the derived ratio is the one we wanted anyway.
-  // The older rungs accept an explicit ratio and keep sending it.
-  if (!RATIO_DERIVED_FROM_FRAMES.has(model)) {
-    body.aspect_ratio = aspectRatio;
-  }
+  // Seedance 2.5 rejects a concrete ratio on first-frame / first-last-frame
+  // tasks (InvalidParameter.TaskTypeConstraint) and needs "adaptive", which
+  // takes the dimensions from the first frame. That frame is already
+  // generated at the project's format, so the result matches the project.
+  // Omitting the field instead renders square — see RATIO_MUST_BE_ADAPTIVE.
+  body.aspect_ratio = RATIO_MUST_BE_ADAPTIVE.has(model) ? "adaptive" : aspectRatio;
 
   const headers = {
     Authorization: `Bearer ${apiKey}`,

@@ -124,19 +124,43 @@ function releaseHypereal(): void {
 
 // ── Aspect ratio ──────────────────────────────────────────────────
 
+/** Canonicalise whatever reached us into one of the three format keys.
+ *
+ *  Callers are supposed to pass "landscape" | "portrait" | "square", but
+ *  aspect-ratio strings ("9:16") and orientation words ("vertical") leak
+ *  in from payloads and older rows. Previously an unrecognised value fell
+ *  through to SQUARE in toGptImage2Size — silently rendering 1:1 images
+ *  for a 9:16 project on the PRIMARY provider, while every other function
+ *  here defaulted to landscape. Anything still unknown now lands on
+ *  landscape, consistently, and says so in the log. */
+function normalizeFormat(format: string): "landscape" | "portrait" | "square" {
+  const f = (format || "").trim().toLowerCase();
+  if (f === "portrait" || f === "9:16" || f === "vertical") return "portrait";
+  if (f === "landscape" || f === "16:9" || f === "horizontal") return "landscape";
+  if (f === "square" || f === "1:1") return "square";
+  console.warn(`[ImageGen] Unrecognised format "${format}" — defaulting to landscape`);
+  return "landscape";
+}
+
 function toAspectRatio(format: string): string {
-  if (format === "portrait") return "9:16";
-  if (format === "square") return "1:1";
+  const f = normalizeFormat(format);
+  if (f === "portrait") return "9:16";
+  if (f === "square") return "1:1";
   return "16:9";
 }
 
 /** Map our format keys to gpt-image-2's allowed `size` values.
- *  Hypereal's gpt-image-2 accepts only these three sizes; anything
- *  else is rejected upstream. Square is the default. */
+ *  Hypereal's gpt-image-2 accepts only these three sizes.
+ *
+ *  NOTE: the portrait size is 1024x1536, which is 2:3 — NOT 9:16 (0.5625).
+ *  gpt-image-2 cannot render a true 9:16 frame, so a portrait project's
+ *  stills come back slightly wide and get padded to 1080x1920 by
+ *  scaleAndPad at export. That is a provider limitation, not a bug here. */
 function toGptImage2Size(format: string): "1024x1024" | "1536x1024" | "1024x1536" {
-  if (format === "portrait") return "1024x1536";
-  if (format === "landscape") return "1536x1024";
-  return "1024x1024";
+  const f = normalizeFormat(format);
+  if (f === "portrait") return "1024x1536";
+  if (f === "square") return "1024x1024";
+  return "1536x1024";
 }
 
 // ── Supabase Storage upload ────────────────────────────────────────

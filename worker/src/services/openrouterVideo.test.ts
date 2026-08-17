@@ -111,12 +111,14 @@ describe("generateOpenRouterVideo", () => {
     expect(submittedBody.prompt).toBe(prompt);
   }, 15_000);
 
-  it("omits aspect_ratio for Seedance 2.5, which derives it from the frames", async () => {
-    // Regression: ByteDance returns
-    //   InvalidParameter.TaskTypeConstraint — "The parameter ratio specified
-    //   in the request is not valid. For first-frame or first-last-frame …"
-    // when aspect_ratio accompanies frame_images on Seedance 2.5. We always
-    // send frame_images, so every rung-1 submit 400'd in production.
+  it("sends aspect_ratio 'adaptive' for Seedance 2.5, never a concrete ratio and never nothing", async () => {
+    // Two regressions guarded here, both shipped 2026-08-16/17:
+    //   1. A concrete ratio alongside frame_images 400s with
+    //      InvalidParameter.TaskTypeConstraint, so every rung-1 submit failed.
+    //   2. Omitting the field clears the 400 but ByteDance then falls back to
+    //      its own default and renders SQUARE regardless of project format.
+    // "adaptive" takes the dimensions from the first frame, which is already
+    // generated at the project's format.
     const submitJson = { id: "or-job-25", polling_url: "https://or.test/poll/or-job-25" };
     const pollJson = {
       id: "or-job-25", status: "completed",
@@ -138,7 +140,8 @@ describe("generateOpenRouterVideo", () => {
     });
 
     const submittedBody = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body);
-    expect(submittedBody).not.toHaveProperty("aspect_ratio");
+    expect(submittedBody.aspect_ratio).toBe("adaptive");
+    expect(submittedBody.aspect_ratio).not.toBe("9:16"); // the caller's value is overridden
     // The frames still go up — the ratio is derived from first_frame.
     expect(submittedBody.frame_images).toHaveLength(2);
     expect(submittedBody.resolution).toBe("480p");

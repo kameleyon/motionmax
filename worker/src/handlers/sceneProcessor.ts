@@ -77,21 +77,46 @@ export function sanitizeVoiceover(input: unknown): string {
 
 // ── Voiceover word cap ─────────────────────────────────────────────
 
-/** Max words per scene for "short" length (~15-16s at 2.5 words/sec). */
-const SHORT_MAX_WORDS = 28;
+/** Word ceiling per scene for "short" length (~18s at 2.5 words/sec).
+ *
+ *  This is deliberately well above the ~28-word target the script prompt asks
+ *  for (buildCinematic / buildDoc2Video). It is a runaway guard, not a budget
+ *  enforcer: the export sizes each clip to its own audio (see
+ *  sceneEncoder.imageAudioToClip), so a scene a few words over target just
+ *  runs ~1-2s long — it does not desync. Capping at the target itself is what
+ *  chopped scenes the LLM wrote in good faith at 29-31 words. */
+const SHORT_MAX_WORDS = 45;
 
-/** Truncate voiceover at a sentence boundary to fit the word cap. */
+const countWords = (s: string): number => s.trim().split(/\s+/).filter(Boolean).length;
+
+/**
+ * Trim an over-budget voiceover on a SENTENCE boundary — never mid-clause.
+ *
+ * A mid-sentence cut is unrecoverable: the narration audibly stops dead
+ * ("...and almost nobody in.") and no downstream stage can repair it. Running
+ * a scene long is merely a timing nuisance. So we drop only WHOLE trailing
+ * sentences, and only enough of them to get back under the ceiling — never
+ * the first sentence, so a single over-long sentence is returned intact
+ * rather than butchered.
+ */
 function capVoiceover(text: string, maxWords: number): string {
-  const words = text.split(/\s+/);
-  if (words.length <= maxWords) return text;
+  if (countWords(text) <= maxWords) return text;
 
-  // Find the last sentence boundary within the limit
-  const truncated = words.slice(0, maxWords).join(" ");
-  const lastPeriod = Math.max(truncated.lastIndexOf("."), truncated.lastIndexOf("!"), truncated.lastIndexOf("?"));
-  if (lastPeriod > truncated.length * 0.5) {
-    return truncated.substring(0, lastPeriod + 1);
+  // Split into sentences, keeping each terminator (and any closing quote or
+  // bracket) attached to the sentence it ends.
+  const sentences = text.match(/[^.!?]+[.!?]+["'”’)\]]*\s*/g);
+  if (!sentences || sentences.length < 2) return text; // nothing safe to drop
+
+  let kept = "";
+  let keptWords = 0;
+  for (const sentence of sentences) {
+    const n = countWords(sentence);
+    // Always keep the first sentence, whatever its length.
+    if (keptWords > 0 && keptWords + n > maxWords) break;
+    kept += sentence;
+    keptWords += n;
   }
-  return truncated + ".";
+  return kept.trim() || text;
 }
 
 // ── Scene Post-Processor ───────────────────────────────────────────
